@@ -19,6 +19,7 @@ import {
     TaskService,
     type TaskSummary,
     type VerdictAggregate,
+    WbsCollisionError,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
@@ -183,7 +184,25 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(`Created task ${result.ref.id}: ${result.ref.filePath}`);
                 }
             } catch (err) {
-                if (err instanceof DuplicateFollowUpError) {
+                if (err instanceof WbsCollisionError) {
+                    if (options.json) {
+                        context.output.write(
+                            toJson({
+                                ok: false,
+                                error: {
+                                    code: 'wbs-collision',
+                                    message: err.message,
+                                    wbs: err.wbs,
+                                    existingPath: err.existingPath,
+                                    attemptedPath: err.attemptedPath,
+                                },
+                            }),
+                        );
+                    } else {
+                        context.output.error(err.message);
+                    }
+                    context.setExitCode(3);
+                } else if (err instanceof DuplicateFollowUpError) {
                     if (options.json) {
                         context.output.write(
                             toJson({
@@ -679,8 +698,28 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     }
                 }
             } catch (err) {
-                context.output.error(String(err));
-                context.setExitCode(1);
+                if (err instanceof WbsCollisionError) {
+                    if (options.json) {
+                        context.output.write(
+                            toJson({
+                                ok: false,
+                                error: {
+                                    code: 'wbs-collision',
+                                    message: err.message,
+                                    wbs: err.wbs,
+                                    existingPath: err.existingPath,
+                                    attemptedPath: err.attemptedPath,
+                                },
+                            }),
+                        );
+                    } else {
+                        context.output.error(err.message);
+                    }
+                    context.setExitCode(3);
+                } else {
+                    context.output.error(String(err));
+                    context.setExitCode(1);
+                }
             }
         });
 
@@ -877,6 +916,26 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                         if (result.missingSections.length > 0) {
                             context.output.write(`  Missing: ${result.missingSections.join(', ')}`);
+                        }
+                    }
+                }
+
+                // Duplicate-WBS detection (task 0416 R6): when scanning the
+                // full corpus (no specific WBS), flag any WBS prefix that
+                // appears in more than one file across all configured folders.
+                if (!wbs) {
+                    const locator = await makeTaskLocator(context);
+                    const duplicates = await locator.findDuplicateWbs();
+                    for (const dup of duplicates) {
+                        const [first] = dup;
+                        if (first === undefined) continue;
+                        const msg =
+                            `Duplicate WBS ${first.wbs} found in ${dup.length} files:\n` +
+                            dup.map((h) => `  ${h.filePath}`).join('\n');
+                        if (json) {
+                            results.push({ wbs: first.wbs, pass: false, status: 'duplicate', findings: [msg] });
+                        } else {
+                            context.output.error(msg);
                         }
                     }
                 }

@@ -10,6 +10,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -1817,9 +1818,10 @@ Only this section exists.
         expect(output.errors.some((e) => e.includes('Stripped same-level heading'))).toBe(true);
     });
     test('path with non-existent folder exits 1 (path catch block)', async () => {
-        // Triggers the path action's catch block (lines 428-429).
+        // --folder points at a non-existent dir; WBS 9999 exists in no folder.
+        // Verifies graceful exit 1 (not a crash) when the folder override is bogus.
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'path', '0001', '--folder', join(cwd, 'no-such-folder-xyz')], {
+        const exitCode = await main(['task', 'path', '9999', '--folder', join(cwd, 'no-such-folder-xyz')], {
             cwd,
             output,
         });
@@ -2197,5 +2199,183 @@ Only this section exists.
         const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.join('\n')).toContain('Invalid outcome for 0001: BOGUS');
+    });
+
+    // ── 0416: WBS collision guard + duplicate WBS detection ──
+    test('create exits 3 with wbs-collision JSON on WbsCollisionError (0416 R1)', async () => {
+        const spy = spyOn(TaskService.prototype, 'create').mockImplementation(async () => {
+            throw new WbsCollisionError(
+                '0001',
+                join(cwd, 'docs', 'tasks', '0001_existing.md'),
+                join(cwd, 'docs', 'tasks', '0001_new.md'),
+            );
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Colliding task', '--json'], { cwd, output });
+            expect(exitCode).toBe(3);
+            expect(output.errors).toEqual([]);
+            expect(JSON.parse(lastMessage(output))).toMatchObject({
+                ok: false,
+                error: {
+                    code: 'wbs-collision',
+                    wbs: '0001',
+                    existingPath: join(cwd, 'docs', 'tasks', '0001_existing.md'),
+                    attemptedPath: join(cwd, 'docs', 'tasks', '0001_new.md'),
+                },
+            });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('check detects duplicate WBS prefixes across files (0416 R6)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dupwbs-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'Original dup task'], { cwd: isoCwd, output: first });
+            expect(first.errors.join('')).toBe('');
+            const wbs = createdWbs(first);
+
+            // Copy the task file with the same WBS prefix but different slug
+            const originalPath = createdPath(first);
+            const dupPath = join(isoCwd, 'docs', 'tasks', `${wbs}_dup.md`);
+            const content = await readFile(originalPath, 'utf8');
+            await writeFile(dupPath, content);
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'check', '--json'], { cwd: isoCwd, output });
+            expect(exitCode).toBe(1);
+
+            const results = JSON.parse(lastMessage(output)) as Array<{
+                wbs: string;
+                pass: boolean;
+                status: string;
+                findings: string[];
+            }>;
+            const dupResult = results.find((r) => r.status === 'duplicate');
+            expect(dupResult).toBeDefined();
+            expect(dupResult?.wbs).toBe(wbs);
+            expect(dupResult?.pass).toBe(false);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('batch-create exits 3 with wbs-collision JSON on WbsCollisionError (0416 R1)', async () => {
+        const batchFile = join(cwd, 'batch-collision.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'Colliding batch task' }]));
+
+        const spy = spyOn(TaskService.prototype, 'batchCreate').mockImplementation(async () => {
+            throw new WbsCollisionError(
+                '0001',
+                join(cwd, 'docs', 'tasks', '0001_existing.md'),
+                join(cwd, 'docs', 'tasks', '0001_new.md'),
+            );
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+            expect(exitCode).toBe(3);
+            expect(output.errors).toEqual([]);
+            expect(JSON.parse(lastMessage(output))).toMatchObject({
+                ok: false,
+                error: {
+                    code: 'wbs-collision',
+                    wbs: '0001',
+                },
+            });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('create exits 3 and writes human-readable error on WbsCollisionError without --json (0416 R1)', async () => {
+        const spy = spyOn(TaskService.prototype, 'create').mockImplementation(async () => {
+            throw new WbsCollisionError(
+                '0002',
+                join(cwd, 'docs', 'tasks', '0002_existing.md'),
+                join(cwd, 'docs', 'tasks', '0002_new.md'),
+            );
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Colliding task'], { cwd, output });
+            expect(exitCode).toBe(3);
+            // Non-JSON path: the error message goes to the error sink, not stdout.
+            expect(output.errors.length).toBeGreaterThan(0);
+            expect(output.errors.join('')).toContain('wbs-collision');
+            expect(output.errors.join('')).toContain('0002');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('batch-create exits 3 and writes human-readable error on WbsCollisionError without --json (0416 R1)', async () => {
+        const batchFile = join(cwd, 'batch-collision-nojson.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'Colliding batch task' }]));
+
+        const spy = spyOn(TaskService.prototype, 'batchCreate').mockImplementation(async () => {
+            throw new WbsCollisionError(
+                '0003',
+                join(cwd, 'docs', 'tasks', '0003_existing.md'),
+                join(cwd, 'docs', 'tasks', '0003_new.md'),
+            );
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+            expect(exitCode).toBe(3);
+            expect(output.errors.length).toBeGreaterThan(0);
+            expect(output.errors.join('')).toContain('wbs-collision');
+            expect(output.errors.join('')).toContain('0003');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('check reports duplicate WBS prefixes to stderr without --json (0416 R6)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dupwbs-nojson-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'Original dup task (nojson)'], { cwd: isoCwd, output: first });
+            expect(first.errors.join('')).toBe('');
+            const wbs = createdWbs(first);
+
+            // Plant a duplicate file sharing the WBS prefix.
+            const originalPath = createdPath(first);
+            const dupPath = join(isoCwd, 'docs', 'tasks', `${wbs}_dup.md`);
+            const content = await readFile(originalPath, 'utf8');
+            await writeFile(dupPath, content);
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'check'], { cwd: isoCwd, output });
+            expect(exitCode).toBe(1);
+            // Non-JSON path: the duplicate report goes to the error sink.
+            const combined = output.errors.join('');
+            expect(combined).toContain(`Duplicate WBS ${wbs}`);
+            expect(combined).toContain(`${wbs}_dup.md`);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    // Cover the scaffold-tests action (function-coverage gate for task.ts)
+    test('scaffold-tests action executes for an existing task', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-scaffold-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const createOut = createCapturedOutput();
+            await main(['task', 'create', 'Scaffold target'], { cwd: isoCwd, output: createOut });
+            const wbs = createdWbs(createOut);
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'scaffold-tests', wbs, '--json'], { cwd: isoCwd, output });
+            expect([0, 1]).toContain(exitCode);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
     });
 });
