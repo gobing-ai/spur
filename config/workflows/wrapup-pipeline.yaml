@@ -22,7 +22,15 @@
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: omp)
 #
-# Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Prefer pure slash commands when a command exists; free-form inputs remain only
+#     where capture artifacts (answerFile) have no dedicated slash surface yet.
+#   - learning-capture / metrics-record use expectFile + soft append (empty capture
+#     does not abort wrap-up after prior steps already landed).
+#   - feature-transition is a soft shell (always exit 0) so a blocked feature sync
+#     does not abort wrap-up after learnings/metrics already landed.
+#   - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer defense).
+#   - Wrap-up never mutates task status (consumes completed work only).
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
@@ -40,7 +48,8 @@ vars:
   merge: "false"
   spurBin: "spur"
   agent: "omp"
-  stepTimeoutMs: "600000"
+  stepTimeoutMs: "1800000"
+  __hitlAnswer: ""
 
 states:
   - id: start
@@ -64,67 +73,71 @@ states:
 
   - id: doc-sync
     description: >
-      Dispatch sp:doc-evolve once for the entire batch. Project-level doc drift repair
-      runs once, not per-task. The agent reads the batch's completed tasks, identifies
-      doc drift (04_DESIGN, 03_ARCHITECTURE, 00_ADR, docs/design/*), and repairs it
-      following the constitution's edit rules. Does NOT write task or feature corpus.
+      Project-level doc drift repair for the batch (04_DESIGN, 03_ARCHITECTURE,
+      00_ADR, docs/design/*). No dedicated slash command yet — free-form skill
+      pointer until a /sp:doc-evolve command exists (ADR-043 residual).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:doc-evolve for completed tasks ${vars.tasks}. Repair doc drift in 04_DESIGN, 03_ARCHITECTURE, 00_ADR, docs/design/* following the constitution edit rules. Do not write task or feature corpus files."
+          input: "Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus."
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: learning-capture
     description: >
-      Append working learnings to .spur/memory/learnings.md. The agent extracts
-      insights from the batch and writes them to a capture file; a downstream shell
-      step appends that file to the learnings scratchpad. This decouples content
-      generation from file persistence: the shell step's exit code is the real
-      success signal, and the capture file is verified before the append.
+      Append working learnings to .spur/memory/learnings.md. Capture+shell decoupling:
+      expectFile gates non-empty capture before append; append is best-effort soft
+      (empty capture skips without aborting wrap-up).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Extract working learnings from tasks ${vars.tasks}. Output as markdown grouped by date and task WBS. Include: conventions discovered, errors hit and resolved, patterns that worked, gotchas. Output raw markdown (no code fences) — your answer will be captured to a file and appended to .spur/memory/learnings.md."
+          input: "Extract working learnings from tasks ${vars.tasks}. Output raw markdown (no fences) grouped by date and task WBS: conventions, errors fixed, patterns, gotchas. Captured to .spur/run/wrapup-learnings.md."
           answerFile: .spur/run/wrapup-learnings.md
           expectFile: .spur/run/wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
-          command: 'test -s .spur/run/wrapup-learnings.md && mkdir -p .spur/memory && cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md && printf "\n" >> .spur/memory/learnings.md'
+          command: >-
+            mkdir -p .spur/memory &&
+            if test -s .spur/run/wrapup-learnings.md; then
+              cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md &&
+              printf '\n' >> .spur/memory/learnings.md;
+            fi &&
+            exit 0
 
   - id: metrics-record
     description: >
-      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl. The agent
-      produces the JSONL content to a capture file; a downstream shell step appends
-      it. Each row records: task WBS, feature id, status, verdict, timestamp.
-      Append-only and machine-readable. The capture+shell decoupling means a
-      non-empty capture file is verified before the append (the agent.run exit-0
-      is no longer the sole success signal — the shell step's exit code gates the
-      write).
+      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl. Soft append
+      (empty capture does not abort wrap-up after learnings already landed).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "For each task in ${vars.tasks}, read the task file and output one JSONL line per task with fields: wbs, feature_id, status, verdict (from .spur/run/<wbs>-verdict.json if available), timestamp. Output raw JSONL (no code fences) — your answer will be captured to a file and appended to .spur/memory/wrapup-metrics.jsonl."
+          input: "For each task in ${vars.tasks}, output one JSONL line (no fences) with fields: wbs, feature_id, status, verdict, timestamp. Captured to .spur/run/wrapup-metrics.jsonl."
           answerFile: .spur/run/wrapup-metrics.jsonl
           expectFile: .spur/run/wrapup-metrics.jsonl
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
-          command: 'test -s .spur/run/wrapup-metrics.jsonl && mkdir -p .spur/memory && cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl'
+          command: >-
+            mkdir -p .spur/memory &&
+            if test -s .spur/run/wrapup-metrics.jsonl; then
+              cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl;
+            fi &&
+            exit 0
 
   - id: feature-transition
     description: >
-      If vars.feature is set, derive and sync feature status with linked task states via the
-      bounded `feature-sync-bounded` wrapper (task 0328 / ADR-0322, task 0411 retry-suppression).
-      Replaces prior unconditional `spur feature advance` with conservative status sync that
-      suppresses identical blocked retries until relevant inputs change.
+      If vars.feature is set, sync feature status via bounded feature-sync-bounded
+      (0411). Soft shell — blocked/failed sync must not abort wrap-up after metrics.
     onEnter:
       - kind: shell
         options:
-          command: 'bun plugins/sp/scripts/feature-sync-bounded.ts ${vars.feature} --spur-bin "${vars.spurBin}" --json'
+          command: >-
+            set +e &&
+            bun plugins/sp/scripts/feature-sync-bounded.ts ${vars.feature} --spur-bin "${vars.spurBin}" --json &&
+            exit 0
 
   - id: branch-cleanup
     description: >
@@ -230,9 +243,17 @@ transitions:
       options:
         command: 'test "${vars.merge}" != true'
 
-  # ── branch-cleanup: HITL confirmed -> done ──
+  # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
+  # No irreversible git op is wired yet; confirmation is recorded, then wrap completes.
   - from: branch-cleanup
     to: done
-    description: Branch cleanup confirmed — wrap-up complete.
+    description: Branch cleanup HITL answered — wrap-up complete.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = yes || test "${vars.__hitlAnswer}" = no || test "${vars.__hitlAnswer}" = cancel'
+  - from: branch-cleanup
+    to: done
+    description: Defense — missing HITL answer still completes wrap (cleanup is optional).
     guard:
       kind: always

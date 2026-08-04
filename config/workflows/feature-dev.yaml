@@ -1,11 +1,19 @@
+# Feature development loop — brainstorm → plan → execute-tasks → feature-verify → done.
+#
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Soft precheck (featureId non-empty + agent doctor) → failed via transitions
+#   - Every agent.run input is a pure slash command (no free-form pipeline essays)
+#   - featureId must be supplied by the caller (workflow vars are not agent-mutated)
+#   - feature-verify is fail-closed on `spur feature check --strict`
+
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-dev
 description: >
-  End-to-end FEATURE development loop: brainstorm → plan (decompose) → execute-tasks →
-  feature-verify → done. Drives a whole feature (one description → a feature with BDD AC →
-  many tasks → all tasks done → feature verified), NOT a single task — for one deliverable
-  use task-pipeline.yaml directly.
+  End-to-end FEATURE development loop: precheck → brainstorm → plan (decompose) →
+  execute-tasks → feature-verify → done. Drives a whole feature (one description → a
+  feature with BDD AC → many tasks → all tasks done → feature verified), NOT a single
+  task — for one deliverable use task-pipeline.yaml directly.
 
   The engine has no native for-each over a dynamic task list, so the execute-tasks step
   DELEGATES the fan-out: a single agent.run instructs the agent to run every pending task
@@ -13,18 +21,22 @@ description: >
   This mirrors how /sp:dev-run --mode full delegates its inner work loop (ADR-022: orchestration
   is configuration — zero new engine code).
 
-  Shape: brainstorm → plan → execute-tasks(delegated loop) → feature-verify → done
-         (plan failure or a non-PASS task short-circuits to `failed`).
+  Shape: precheck → brainstorm → plan → execute-tasks[-auto](delegated loop) → feature-verify → done
+         (precheck/plan failure or a non-PASS feature check short-circuits to `failed`).
 
   Vars (passed as a JSON object via `--vars`):
     featureId — the feature ID this loop drives (required), e.g. `--vars '{"featureId":"B3"}'`
     agent     — agent the agent.run steps invoke; override `--vars '{"agent":"claude"}'`
-    profile   — `auto` skips the per-task HITL approval inside task-pipeline
+    profile   — `auto` selects execute-tasks-auto (`/sp:dev-runall … --auto`); otherwise
+                interactive execute-tasks (no --auto, per-task HITL remains)
     spurBin   — PATH-independent spur invocation (CLI overrides at run start; literal fallback)
+    stepTimeoutMs — agent.run budget (ms) for brainstorm/plan/runall
 
-  Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
+  Reliability (ADR-043): every agent.run input is a pure slash command. featureId must be
+  supplied by the caller (workflow vars cannot be mutated by the agent). profile is wired
+  via two execute hops (templates cannot branch a single input string).
 iterationBound: 20
-initialState: brainstorm
+initialState: precheck
 terminalStates:
   - done
   - failed
@@ -33,50 +45,78 @@ vars:
   agent: "omp"
   profile: "standard"
   spurBin: "spur"
+  stepTimeoutMs: "1800000"
 
 states:
+  - id: precheck
+    description: >
+      Soft precheck: non-empty featureId + agent doctor. Always exit 0 so failures
+      route to `failed` via transitions (not a raw lifecycle abort).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            set +e &&
+            test -n "${vars.featureId}"; id_rc=$?;
+            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            set -e &&
+            if [ "$id_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
+              printf 'PASS\n' > ".spur/run/feature-dev-precheck.status";
+            else
+              printf 'FAIL\n' > ".spur/run/feature-dev-precheck.status";
+            fi &&
+            exit 0
+      - kind: note
+        options:
+          message: "Feature-dev start for feature ${vars.featureId}."
+
   - id: brainstorm
     description: >
-      Turn vague intent into a validated feature with BDD acceptance criteria via
-      /sp:dev-brainstorm --feature. The grilling interview maps the decision space; the
-      --feature exit authors AC and loops `spur feature check` until clean. Record the
-      derived feature ID into ${vars.featureId} for the downstream steps.
+      Validate / expand the feature with BDD AC via pure slash /sp:dev-brainstorm.
+      Caller must pass vars.featureId (required for plan/runall).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-brainstorm --feature
+          input: /sp:dev-brainstorm --feature ${vars.featureId}
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: plan
     description: >
-      Decompose the validated feature into a CLI-validated task batch via /sp:dev-plan.
-      The batch-create gate (task-batch.schema.json) rejects a malformed decomposition,
-      so a bad plan never lands tasks.
+      Decompose the validated feature into a CLI-validated task batch via pure slash
+      /sp:dev-plan. The batch-create gate rejects a malformed decomposition.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
           input: /sp:dev-plan --feature ${vars.featureId}
+          timeoutMs: ${vars.stepTimeoutMs}
 
-  - id: execute-tasks
+  # Two pure-slash execute hops so vars.profile actually controls --auto (ADR-043).
+  # Engine templates cannot branch a single input string on profile; declaration-order
+  # transitions pick the correct hop (auto first, then interactive fallback).
+  - id: execute-tasks-auto
     description: >
-      Drive EVERY pending task under the feature to done (e.g. `/sp:dev-runall --feature ${featureId} --auto`).
-      The agent enumerates the work with `spur task list --feature ${featureId} --status todo --json`,
-      then runs each task through task-pipeline.yaml (precheck → implement → test → review → approve → verify → record → done).
-      It stops and reports on the first non-PASS verdict — a failing task fails the feature.
+      profile=auto — drive every pending task via pure slash /sp:dev-runall --auto
+      (skips per-task HITL inside task-pipeline).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: >
-            Run every pending task under feature ${vars.featureId} to done. Enumerate with
-            `${vars.spurBin} task list --feature ${vars.featureId} --status todo --json`; then
-            for each WBS run the standard single-task pipeline VERBATIM:
-            `${vars.spurBin} workflow run .spur/workflows/task-pipeline.yaml --vars
-            '{"wbs":"<wbs>","profile":"${vars.profile}","agent":"${vars.agent}"}' --async --json`,
-            polling `${vars.spurBin} workflow trace <run-id>` until terminal and inspecting
-            `.spur/run/<wbs>-verdict.json`. Stop and report on the first non-PASS verdict
-            (a failing task fails the feature).
+          input: /sp:dev-runall --feature ${vars.featureId} --auto
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: execute-tasks
+    description: >
+      Interactive — drive every pending task via pure slash /sp:dev-runall without
+      --auto (per-task HITL approve gates remain available).
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: /sp:dev-runall --feature ${vars.featureId}
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: feature-verify
     description: >
@@ -96,6 +136,19 @@ states:
     description: Terminal — plan rejected, a task failed verification, or the feature check did not pass.
 
 transitions:
+  - from: precheck
+    to: brainstorm
+    description: Precheck PASS — begin brainstorm.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/feature-dev-precheck.status 2>/dev/null)" = PASS'
+  - from: precheck
+    to: failed
+    description: Precheck FAIL (missing featureId and/or doctor red) — stop.
+    guard:
+      kind: always
+
   # Linear prefix: brainstorm → plan → execute-tasks
   - from: brainstorm
     to: plan
@@ -104,14 +157,26 @@ transitions:
       kind: always
 
   - from: plan
+    to: execute-tasks-auto
+    description: Tasks created; profile=auto — batch with --auto (no per-task HITL).
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto'
+  - from: plan
     to: execute-tasks
-    description: Tasks created; execute them
+    description: Tasks created; interactive — batch without --auto.
     guard:
       kind: always
 
+  - from: execute-tasks-auto
+    to: feature-verify
+    description: Auto batch finished — verify the feature.
+    guard:
+      kind: always
   - from: execute-tasks
     to: feature-verify
-    description: All tasks reported done; verify the feature
+    description: Interactive batch finished — verify the feature.
     guard:
       kind: always
 

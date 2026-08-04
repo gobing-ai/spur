@@ -23,17 +23,22 @@
 #   design_approved — "true" only when the operator explicitly approved the design in-session;
 #              lets profile=auto route around the design-approval taste gate (default "false")
 #
-# Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Soft start precheck (slug non-empty + agent doctor) → failed via transitions
+#   - feature-id + design-gen use expectFile so silent no-ops cannot proceed
+#   - HITL routing is exhaustive (yes/no/cancel) on phasing and design-approval
+#   - Free-form skill pointers remain only where no pure slash surface exists yet
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: planning-pipeline
-description: "Front-half planning pipeline (phasing → feature-ID → design-gen → design-approval → handoff)"
+description: "Front-half planning pipeline (start → phasing → feature-ID → design-gen → design-approval → handoff)"
 iterationBound: 20
 initialState: start
 terminalStates:
   - handoff
   - cancelled
+  - failed
 vars:
   slug: "draft"
   profile: "interactive"
@@ -42,14 +47,32 @@ vars:
   __hitlAnswer: ""
   spurBin: "spur"
   agent: "omp"
-  stepTimeoutMs: "600000"
+  stepTimeoutMs: "1800000"
 
 states:
   - id: start
     description: >
-      Entry pass-through. Routes to the phasing HITL gate (interactive) or straight to
-      feature-id (profile=auto), so the phasing onEnter hitl.confirm only fires when a
-      human is in the loop. No actions — a pure routing node.
+      Soft precheck + routing node. Validates slug and agent doctor (status file,
+      always exit 0), then routes to the phasing HITL gate (interactive) or straight
+      to feature-id (profile=auto) so hitl.confirm only fires when a human is in loop.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            set +e &&
+            test -n "${vars.slug}"; slug_rc=$?;
+            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            set -e &&
+            if [ "$slug_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
+              printf 'PASS\n' > .spur/run/plan-precheck.status;
+            else
+              printf 'FAIL\n' > .spur/run/plan-precheck.status;
+            fi &&
+            exit 0
+      - kind: note
+        options:
+          message: "Planning pipeline start for slug=${vars.slug}."
 
   - id: phasing
     description: >
@@ -64,29 +87,34 @@ states:
 
   - id: feature-id
     description: >
-      Allocate the feature id via the canonical `spur feature create` verb (it owns the
-      hierarchical ID rule per DD-14). The agent derives a feature name from ${vars.slug}
-      and invokes the verb; the new id is captured for the design-doc generation step.
+      Allocate the feature id via the canonical `spur feature create` verb (DD-14).
+      expectFile fails a silent no-op so design-gen never runs without an id.
     onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && rm -f .spur/run/plan-feature-id.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Allocate a feature id for slug ${vars.slug} via the canonical verb. Run `${vars.spurBin} feature create \"<human title derived from ${vars.slug}>\" --parent ${vars.feature} --json` and capture the new feature id from the JSON output into .spur/run/plan-feature-id.txt for the design-gen step. If an existing feature for ${vars.slug} is appropriate, use its id instead and write it to the same file. Do not re-implement id-allocation rules in prose; the verb owns them."
+          input: "Skill(skill=\"sp:spur-cli\", args=\"feature create for slug ${vars.slug}\"). Run `${vars.spurBin} feature create \"${vars.slug}\" --parent ${vars.feature} --json` (or reuse an existing id). Write the feature id alone to .spur/run/plan-feature-id.txt."
           expectFile: .spur/run/plan-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: design-gen
     description: >
-      Author the design doc at docs/design/${vars.slug}.md from the brainstormed feature
-      draft (docs/plans/${vars.slug}-drafted.md). ADVISORY: use the highest-quality coding
-      agent available (Q8 — tier rule is guidance, not enforced). Invokes sp:doc-evolve to
-      stage the 04_DESIGN index edit (never auto-write the authoritative index — Q3).
+      Author docs/design/${vars.slug}.md from docs/plans/${vars.slug}-drafted.md and
+      stage 04_DESIGN index via sp:doc-evolve (Q3 — never auto-write the index).
+      expectFile fails a silent no-op design gen.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Author the design doc at docs/design/${vars.slug}.md from docs/plans/${vars.slug}-drafted.md. Invoke sp:doc-evolve to stage the 04_DESIGN index edit."
+          input: "Skill(skill=\"sp:doc-evolve\", args=\"design-gen slug=${vars.slug}\"). Author docs/design/${vars.slug}.md from docs/plans/${vars.slug}-drafted.md; stage 04_DESIGN index edit only."
+          expectFile: docs/design/${vars.slug}.md
           timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: failed
+    description: Terminal — planning failed a hard gate (feature-id / design-gen / check).
 
   - id: design-approval
     description: >
@@ -116,20 +144,32 @@ states:
     description: Terminal — planning abandoned by the operator.
 
 transitions:
-  # ── start: route AROUND the phasing HITL gate when profile=auto ──
-  # Auto-skip guard tried FIRST: under profile=auto the run goes straight to
-  # feature-id and never ENTERS phasing (whose onEnter hitl.confirm would block).
-  # Otherwise fall through to phasing for the human gate.
+  # ── start: precheck FAIL → failed; else route around phasing when profile=auto ──
+  # Declaration order: FAIL first, then auto-skip, then interactive phasing.
   - from: start
-    to: feature-id
-    description: profile=auto — skip the phasing HITL gate.
+    to: failed
+    description: Precheck FAIL (empty slug and/or doctor red) — stop.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = FAIL'
+  - from: start
+    to: feature-id
+    description: profile=auto and precheck PASS — skip the phasing HITL gate.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = PASS'
   - from: start
     to: phasing
-    description: Interactive — enter the phasing HITL gate.
+    description: Interactive and precheck PASS — enter the phasing HITL gate.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = PASS'
+  - from: start
+    to: failed
+    description: Defense — corrupt/missing precheck status — failed.
     guard:
       kind: always
 

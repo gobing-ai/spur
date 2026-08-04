@@ -28,6 +28,14 @@
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: omp)
 #
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Soft agent doctor at start → failed via transitions (not raw lifecycle abort)
+#   - expectFile on feature-create / ac-generate / decompose artifacts (no silent no-ops)
+#   - Caped AC and batch-create retry loops with fail-closed escalation
+#   - HITL taste gates (idea-eval, design-approval) exhaustive yes/no/cancel
+#   - Free-form skill pointers remain only where no pure slash surface exists yet
+#     (discovery/sys-architecture/decompose internals — residual until dedicated commands)
+#
 # Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
@@ -55,20 +63,32 @@ vars:
   # R8 (0366): injected by WorkflowAppService.run(); stamps discovery artifact provenance.
   __runId: ""
   agent: "omp"
-  stepTimeoutMs: "600000"
+  stepTimeoutMs: "1800000"
 
 states:
   - id: start
     description: >
       Pipeline start. The idea text arrives as vars.idea. The pipeline stops at
-      handoff — no task execution.
+      handoff — no task execution. Soft agent doctor (status file) so doctor red
+      routes to `failed` via transitions instead of a raw lifecycle abort.
     onEnter:
       - kind: note
         options:
           message: "Idea pipeline start for idea: ${vars.idea}"
       - kind: shell
         options:
-          command: "${vars.spurBin} agent doctor ${vars.agent}"
+          command: >-
+            mkdir -p .spur/run &&
+            DOCTOR_FILE=".spur/run/idea-precheck-doctor.status" &&
+            set +e &&
+            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            set -e &&
+            if [ "$doctor_rc" -eq 0 ] && test -n "${vars.idea}"; then
+              printf 'PASS\n' > "$DOCTOR_FILE";
+            else
+              printf 'FAIL\n' > "$DOCTOR_FILE";
+            fi &&
+            exit 0
       - kind: shell
         options:
           command: 'mkdir -p .spur/run && { [ -f .spur/run/idea-eval-report.md ] || [ -f .spur/run/idea-needs-design.json ]; } && { a=".spur/run/idea-archive/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$a"; mv -f .spur/run/idea-eval-report.md "$a/" 2>/dev/null; mv -f .spur/run/idea-needs-design.json "$a/" 2>/dev/null; } ; rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed'
@@ -82,11 +102,13 @@ states:
       whether the system-design state runs. As its terminal artifact for the idea path,
       brainstorm also emits the idea-evaluation report to .spur/run/idea-eval-report.md
       (template: plugins/sp/skills/spur-dev/references/idea-evaluation.md).
+      expectFile fails a silent no-op discovery (no eval report).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
           input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
+          expectFile: .spur/run/idea-eval-report.md
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: idea-eval
@@ -205,6 +227,7 @@ states:
         options:
           agent: ${vars.agent}
           input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. Produce a task-batch JSON array at .spur/run/idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting."
+          expectFile: .spur/run/idea-task-batch.json
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: batch-create
@@ -258,7 +281,14 @@ transitions:
   # ── start -> discovery ──
   - from: start
     to: discovery
-    description: Begin discovery — brainstorm the idea.
+    description: Agent doctor PASS — begin discovery.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/idea-precheck-doctor.status 2>/dev/null)" = PASS'
+  - from: start
+    to: failed
+    description: Agent doctor FAIL — stop before discovery.
     guard:
       kind: always
 

@@ -86,6 +86,8 @@ Feature: Lifecycle and events
 | 0059 | W2: Feature lifecycle engine integration including verifying | done |
 | 0152 | Normalize task status before lifecycle transition; fix opaque FSMError on case-drift | done |
 | 0292 | Enforce verify verdict on done transition; record forced-done overrides | done |
+| 0418 | Feature lifecycle deadlock: two P0 features in active can never transition out | done |
+| 0419 | F4 acceptance traceability backfill (legacy scenarios) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

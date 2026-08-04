@@ -6,20 +6,28 @@
 # through the normal `spur task update <wbs> <status>` verb so the lifecycle guards
 # (0055) apply identically. Run linkage is written to `task_run_links` (kind=pipeline).
 #
-# Shape: precheck → implement → test → review → approve(HITL) → verify → record → done
+# Shape: precheck → implement → test[→test-fix↔test-recheck] → review → approve(HITL)
+#        → verify → record → done
 #        (precheck failure short-circuits to `failed`; approve routes to `failed` on
 #        operator rejection or `cancelled` on operator cancel — R1, bug-750).
+#        `test` is the project quality gate (shell + bounded /sp:dev-fixall), not
+#        /sp:dev-unit (coverage gap-fill; router C3/C5).
 #
 # Vars (passed as a JSON object via `--vars`):
-#   wbs      — the task WBS (required), e.g. `--vars '{"wbs":"0042"}'`
-#   profile  — set `--vars '{"profile":"auto"}'` to skip the HITL approve gate (R4)
+#   wbs                       — task WBS (required)
+#   profile                   — "auto" skips HITL approve (R4)
+#   agent / spurBin           — executor + spur binary (CLI overrides spurBin)
+#   stepTimeoutMs             — agent.run budget for review/verify/test-fix (ms)
+#   implementTimeoutMs        — implement agent.run budget (ms)
+#   qualityGateCmd            — project gate (default: bun run autofix && bun run spur-check)
+#   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
 #
-# Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
+# Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-pipeline
-description: "Standard task execution pipeline (precheck → implement → test → review → approve → verify → record → done)"
+description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
 #   blocked is bidirectional with todo/wip/testing; done may reopen to wip.
@@ -46,17 +54,11 @@ vars:
   # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
   # selection) so a broken/misconfigured agent on the box can't silently capture the run.
   agent: "omp"
-  # Step-level timeout for agent.run steps in milliseconds. A timed-out agent
-  # subprocess is killed (not abandoned) and the step fails → pipeline routes to
-  # `failed`. Override per run with `--vars '{"stepTimeoutMs":120000}'`.
-  # Raised 600s → 1800s (task 0398 R4). The H6 dogfood batch lost 3 of its 4
-  # timeouts on `test` steps hitting exactly the 600s wall (0391, 0395 test;
-  # `.spur/run/*-test-partial.md`), the same failure signature that justified
-  # implementTimeoutMs below. Agentic test/review/verify steps read the diff,
-  # run the suite, and write a section — that does not fit in 10 min on this
-  # corpus. Same honesty rule as implementTimeoutMs: 30 min is headroom, not a
-  # licence to run unbounded. If a step still hits this wall, STOP and record it
-  # rather than raising again without operator sign-off.
+  # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
+  # Soft quality-gate shells are unbounded by this var (host shell only).
+  # Raised 600s → 1800s (task 0398 R4 / H6 dogfood). Override:
+  # `--vars '{"stepTimeoutMs":"120000"}'`. 30 min is headroom, not a licence to
+  # run unbounded — if a hop still hits this wall, STOP and record it.
   stepTimeoutMs: "1800000"
   # Timeout for the `implement` step specifically (R2a). Implementation is the
   # heaviest agent.run step (full read/write/test-probe loop) and has timed out
@@ -67,16 +69,35 @@ vars:
   # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
   # Empty by default; only meaningful once the approve state has been entered.
   __hitlAnswer: ""
+  # Project quality gate for the `test` hop (probe + fixall + recheck). Override per project
+  # with the same package-manager surface (this monorepo is Bun-only):
+  # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
+  # and the fixall slash input all use this same var so the command stays single-sourced.
+  qualityGateCmd: "bun run autofix && bun run spur-check"
+  # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
+  # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
+  qualityGateMaxFixAttempts: "2"
 
 states:
   - id: precheck
     description: >
-      Pre-flight structural validation. The precheck→implement guard runs
-      `spur task check <wbs>`; a failure routes to `failed` (blocked report).
+      Pre-flight: soft agent doctor + transition guards for doctor PASS and
+      `spur task check <wbs>`. Failures route to the `failed` terminal state
+      (not a raw lifecycle abort mid-enter).
     onEnter:
+      # Soft doctor — write status and always exit 0 so transitions can branch to
+      # `failed` cleanly (same pattern as the quality-gate soft probe).
       - kind: shell
         options:
-          command: "${vars.spurBin} agent doctor ${vars.agent}"
+          command: >-
+            mkdir -p .spur/run &&
+            DOCTOR_FILE=".spur/run/${vars.wbs}-precheck-doctor.status" &&
+            if ${vars.spurBin} agent doctor ${vars.agent}; then
+              echo PASS > "$DOCTOR_FILE";
+            else
+              echo FAIL > "$DOCTOR_FILE";
+            fi &&
+            exit 0
       - kind: note
         options:
           # R4 task_run_links linkage (kind=pipeline) is written by a WorkflowService
@@ -101,12 +122,15 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: >-
-            /sp:dev-run --mode implement ${vars.wbs} --auto.
-            Work only in this working tree on task ${vars.wbs}; NEVER invoke
-            `spur workflow run` or `/sp:dev-run` without `--mode implement` —
-            this step IS the pipeline (bug-742).
+          # Pure slash command only (ADR-043). Anti-recursion / implement discipline
+          # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
+          input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.implementTimeoutMs}
+          # R3 (task 0424): empty-implement no-op guard — the agent.run action
+          # fails the step when exit 0 produced zero non-corpus file changes, so
+          # a silent no-op routes the run to `failed` here instead of drifting
+          # into test/review and being caught a full pass later.
+          requireDiff: true
       - kind: shell
         options:
           command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
@@ -120,21 +144,78 @@ states:
         options:
           command: "bun run format"
 
+  # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
+  # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
+  # a coverage target; it is not the project quality gate. Coverage gap-fill remains
+  # available via router C3/C5 (`/sp:dev-unit`) or inside implement — not this hop.
+  #
+  # Shape (engine has no per-action "run next only if previous failed" without
+  # `onError`, and Spur's action schema does not expose `onError`):
+  #   test         — soft probe: qualityGateCmd → PASS|FAIL status; always exit 0
+  #                  (green path: one gate run → review; no fixall/recheck tax)
+  #   test-fix     — increment attempt + pure slash /sp:dev-fixall (≤ max attempts)
+  #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
   - id: test
-    description: Test execution + coverage via /sp:dev-unit.
+    description: >
+      Soft quality-gate probe (single full gate on the green path). Runs
+      `${vars.qualityGateCmd}`, records PASS|FAIL under
+      `.spur/run/<wbs>-test-gate.status`, resets the fix attempt counter, always exit 0.
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/${vars.wbs}-test-gate.status" &&
+            ATTEMPT_FILE=".spur/run/${vars.wbs}-test-fix-attempt" &&
+            echo 0 > "$ATTEMPT_FILE" &&
+            set +e &&
+            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
+
+  - id: test-fix
+    description: >
+      Bounded auto-fix hop when the quality gate is red. Increments
+      `.spur/run/<wbs>-test-fix-attempt`, then pure slash (ADR-043)
+      `/sp:dev-fixall` against `${vars.qualityGateCmd}`.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            ATTEMPT_FILE=".spur/run/${vars.wbs}-test-fix-attempt" &&
+            n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
+            printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-unit ${vars.wbs} --auto
+          input: /sp:dev-fixall "${vars.qualityGateCmd}"
           timeoutMs: ${vars.stepTimeoutMs}
-      # Post-test gate: run the project's full lint gate (biome check + tsc). If the
-      # implement or test step left unformatted files or type errors, the run routes to
-      # `failed` rather than letting an agent-authored `## Testing` claim "all pass"
-      # against a red gate (dogfood bug-733).
+
+  - id: test-recheck
+    description: >
+      Soft recheck after fixall. Writes PASS|FAIL (always exit 0). Transitions
+      branch to review (PASS), another test-fix (FAIL and under max attempts),
+      or the pipeline `failed` state (FAIL and attempts exhausted) — never a
+      raw lifecycle abort that skips the terminal `failed` state.
+    onEnter:
       - kind: shell
         options:
-          command: "bun run lint"
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/${vars.wbs}-test-gate.status" &&
+            set +e &&
+            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
 
   - id: review
     description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
@@ -211,37 +292,86 @@ states:
           command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=${vars.wbs} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.wbs}-checkpoint.md'
 
   - id: failed
-    description: Terminal — precheck (or a gated step) failed; reported, not advanced.
+    description: >
+      Terminal — precheck, quality-gate exhaustion, verify non-PASS, record check
+      failure, or operator rejection; reported, not advanced.
 
   - id: cancelled
     description: Terminal — pipeline cancelled by operator at the approval gate (R1).
 
 transitions:
-  # ── precheck: shell guard runs `spur task check`; pass → implement, fail → failed ──
+  # ── precheck: doctor PASS + task check → implement; else → failed ──
   - from: precheck
     to: implement
-    description: Precheck passed — begin implementation.
+    description: Agent doctor PASS and task check green — begin implementation.
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} task check ${vars.wbs}"
+        command: 'test "$(cat .spur/run/${vars.wbs}-precheck-doctor.status 2>/dev/null)" = PASS && ${vars.spurBin} task check ${vars.wbs}'
   - from: precheck
     to: failed
-    description: Precheck failed — report and stop (no fall-through to implement).
+    description: Doctor FAIL and/or task check failed — stop before implement.
     guard:
-      kind: shell
-      options:
-        command: '! ${vars.spurBin} task check ${vars.wbs}'
+      kind: always
 
   # ── linear body ──
   - from: implement
     to: test
-    description: Implementation done — run tests.
+    description: Implementation done — quality-gate probe.
     guard:
       kind: always
+  # Soft probe branching (declaration order: PASS first, then FAIL, then defense).
   - from: test
     to: review
-    description: Tests done — run review.
+    description: Quality gate already green — one gate run only; skip fixall/recheck.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = PASS'
+  - from: test
+    to: test-fix
+    description: Quality gate red — start bounded fixall loop.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL'
+  # Defense: missing/corrupt status — treat as FAIL path, not silent PASS.
+  - from: test
+    to: test-fix
+    description: Probe status missing/corrupt — attempt fixall then recheck.
+    guard:
+      kind: always
+  - from: test-fix
+    to: test-recheck
+    description: Fixall finished — soft recheck the same quality gate.
+    guard:
+      kind: always
+  # Recheck branching (PASS first; under-max FAIL → fixall again; exhausted → failed).
+  - from: test-recheck
+    to: review
+    description: Quality gate green after fixall — proceed to review.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = PASS'
+  - from: test-recheck
+    to: test-fix
+    description: Still red and under qualityGateMaxFixAttempts — another fixall hop.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.wbs}-test-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+  - from: test-recheck
+    to: failed
+    description: Still red after max fixall attempts — stop at failed (not silent abort).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.wbs}-test-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
+  # Defense: corrupt recheck status — failed, not review.
+  - from: test-recheck
+    to: failed
+    description: Recheck status missing/corrupt — stop at failed.
     guard:
       kind: always
   # ── review → approve, OR skip the HITL gate entirely when profile=auto (R4) ──

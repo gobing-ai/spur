@@ -28,6 +28,8 @@ engine execution adapters, EventBus seam consumption.
 | --- | ---- | ------ |
 | 0150 | Realign .spur/workflows definitions with the enhanced sp plugin (SECU→SECUA, feature-dev delegation, stale copy re-sync) | done |
 | 0366 | Fix idea-pipeline HITL approval and pause/resume state loss | done |
+| 0421 | Fine-tune workflow execution progress logging and step reporter CLI UX | done |
+| 0423 | Fix task-0421 pipeline-wait and shell-runner regressions: --follow polling + /bin/sh -c guard | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

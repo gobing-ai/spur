@@ -1,15 +1,23 @@
 # Docs-only task pipeline — one run per documentation/design-doc deliverable.
 #
-# This sibling of task-pipeline.yaml handles tasks whose output is a document, not a
-# code change. It keeps docs deliverables out of the implement/test/verify code gate
-# and routes them through an explicit docs-review HITL gate.
+# Sibling of task-pipeline.yaml for tasks whose output is a document, not product
+# code. Keeps docs deliverables out of the full quality gate and routes them
+# through an explicit docs-review HITL gate.
+#
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Soft precheck (task check + status file) so red precheck → failed via transitions
+#   - draft agent.run is a pure slash command (docs discipline lives in
+#     /sp:dev-run --mode implement + sp:code-implementation, not YAML prose)
+#   - requireDiff fails silent no-op drafts
+#   - HITL answer routing is exhaustive (yes/no/cancel)
+#   - record → done is fail-closed on `spur task check`
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: docs-pipeline
-description: "Docs-only execution pipeline (draft -> docs-review -> record -> done)"
+description: "Docs-only execution pipeline (precheck -> draft -> docs-review -> record -> done)"
 iterationBound: 12
-initialState: draft
+initialState: precheck
 terminalStates:
   - done
   - failed
@@ -19,25 +27,47 @@ vars:
   profile: "standard"
   spurBin: "spur"
   agent: "omp"
-  stepTimeoutMs: "600000"
+  stepTimeoutMs: "1800000"
   __hitlAnswer: ""
 
 states:
+  - id: precheck
+    description: >
+      Soft precheck: task check + agent doctor. Status files always exit 0 so
+      failures route to `failed` via transitions (not a raw lifecycle abort).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            set +e &&
+            ${vars.spurBin} task check ${vars.wbs}; check_rc=$?;
+            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            set -e &&
+            if [ "$check_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
+              printf 'PASS\n' > ".spur/run/${vars.wbs}-docs-precheck.status";
+            else
+              printf 'FAIL\n' > ".spur/run/${vars.wbs}-docs-precheck.status";
+            fi &&
+            exit 0
+      - kind: note
+        options:
+          message: "Docs pipeline start for task ${vars.wbs}."
+
   - id: draft
     description: >
-      Author or update the documentation deliverable for task ${vars.wbs}. This is a
-      docs-only path: do not run implementation, unit-test generation, or code review
-      steps from task-pipeline.yaml.
+      Author or update the documentation deliverable for task ${vars.wbs}. Pure slash
+      implement hop (ADR-043). Docs-only scope is owned by the implement competency when
+      the task template/background is documentation — not by YAML essays.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: >-
-            /sp:dev-run --mode implement ${vars.wbs} --auto.
-            Treat this as a docs-only/design-doc deliverable: update the requested
-            documentation and do not add product code or tests unless the task
-            explicitly requires them.
+          # Pure slash only (ADR-043). Do not bolt docs-only prose onto the input line.
+          input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
+          # Fail a silent no-op draft (same empty-implement class as task-pipeline R3).
+          requireDiff: true
       - kind: shell
         options:
           command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
@@ -88,6 +118,19 @@ states:
     description: Terminal — docs pipeline cancelled by operator.
 
 transitions:
+  - from: precheck
+    to: draft
+    description: Precheck PASS — begin docs draft.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/${vars.wbs}-docs-precheck.status 2>/dev/null)" = PASS'
+  - from: precheck
+    to: failed
+    description: Precheck FAIL — stop before draft.
+    guard:
+      kind: always
+
   - from: draft
     to: record
     description: profile=auto — skip the docs-review HITL gate.

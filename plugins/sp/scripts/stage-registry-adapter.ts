@@ -324,8 +324,12 @@ export const REGISTERED_STAGES: StageRecord[] = [
     },
     {
         schema_version: CURRENT_SCHEMA_VERSION,
+        // Adaptive-routing stage for *coverage gap-fill* (router C3/C5 → /sp:dev-unit).
+        // Distinct from task-pipeline hops `test` / `test-fix` / `test-recheck`, which are
+        // the project quality gate (shell qualityGateCmd + bounded /sp:dev-fixall).
         id: 'test',
-        description: 'dev-unit: generate/extend tests to coverage target',
+        description: 'coverage gap-fill via /sp:dev-unit (C3/C5); pipeline quality gate is test/test-fix/test-recheck',
+        aliases: ['unit', 'coverage'],
         artifacts: [
             { kind: 'test-file', direction: 'output', required: true },
             { kind: 'coverage-report', direction: 'output', required: false },
@@ -339,6 +343,26 @@ export const REGISTERED_STAGES: StageRecord[] = [
         observability: [event('stage-started'), event('gate-passed'), event('coverage-measured')],
         execution: inlineInline(),
     },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        // Pipeline quality-gate family (task-pipeline test hop). Adaptive routing for
+        // red lint/type/suite gates uses fixall (TABLE C2 already points here).
+        id: 'quality-gate',
+        description: 'task-pipeline quality gate: shell qualityGateCmd + bounded /sp:dev-fixall',
+        aliases: ['test-fix', 'test-recheck', 'gate'],
+        artifacts: [{ kind: 'coverage-report', direction: 'output', required: false }],
+        reasoning_skill: 'sp:spur-dev',
+        gates: [
+            { name: 'project-quality-gate', timing: 'post', min_verdict: 'pass', description: 'qualityGateCmd exit 0' },
+        ],
+        mutation_class: 'code',
+        retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 600 },
+        model_policy: standardModel,
+        context_layers: [layer('task-state'), layer('run-state')],
+        observability: [event('stage-started'), event('gate-passed')],
+        execution: inlineInline(),
+    },
+
     {
         schema_version: CURRENT_SCHEMA_VERSION,
         id: 'verify',
@@ -503,7 +527,10 @@ export function listStages(): StageLookupEntry[] {
         refine: '/sp:dev-refine',
         plan: '/sp:dev-plan',
         implement: '/sp:dev-run --mode implement',
+        // Coverage gap-fill competency (not the pipeline quality-gate hops).
         test: '/sp:dev-unit',
+        // Pipeline test/test-fix/test-recheck family — shell gate + fixall.
+        'quality-gate': '/sp:dev-fixall',
         verify: '/sp:dev-verify',
         wrap: '/sp:dev-wrap',
         review: '/sp:dev-review',
@@ -955,6 +982,8 @@ function resolveTask(input: ResolutionInput): StageResolution {
             { pattern: /dev-run\b[^\n]*--continue/, stage: 'implement' },
             { pattern: /dev-unit/, stage: 'test' },
             { pattern: /dev-fixall/, stage: 'fixall' },
+            // Pipeline quality-gate hops share the fixall repair surface.
+            { pattern: /test-fix|test-recheck|quality-gate/, stage: 'quality-gate' },
         ];
         let stageId: string | undefined;
         if (dispatchCmd) {

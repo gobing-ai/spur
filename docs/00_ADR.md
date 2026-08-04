@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.2.0
+version: 1.3.0
 owner: Robin Min
-updated_at: 2026-08-01
+updated_at: 2026-08-04
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1083,3 +1083,64 @@ now rejects `inline`/`auto` as executor *names* to prevent sentinel collision wi
 `packages/config/src/index.ts` (`superRefine` sentinel rejection); `packages/app/src/services/agent-service.ts`
 (`resolveAgent` inline guard, `resolveExecutorSelector` unknown-name diagnostic);
 `plugins/sp/tests/inline-execution-contract.test.ts` (parity gate).
+
+## ADR-042: The Message Plane Consolidates into One Board Module with a Unified Per-Agent Timeline
+
+**Status:** Accepted · **Date:** 2026-08-04
+
+**Decision.** Consolidate the agent message plane into a single Board module `modules/inbox` that
+renders fixed `All` / `Supervisor` tabs plus one tab per team member over a **unified per-agent
+timeline** that interleaves durable queue messages with process stdout/stderr frames (merged
+client-side, no new endpoint or table). The Teams module drops its `Message` tab and the orphaned
+`observability/InboxTab.tsx` (plus its tests) is deleted. The supervisor surface is a **UI-only
+filter** in v1: no supervisor-hub routing hop, no new message-plane identity, no change to how
+messages are delivered (`TeamService.sendMessage` stays direct; `spur agent loop` still drains).
+
+**Why.** The message plane was split across three places (Teams feed, per-agent terminal, orphaned
+Observability tab); one Inbox module is the single surface. A unified timeline was chosen over
+queue-only (loses the IN/OUT process view) and over stdin-only (a near-duplicate of the shipped
+`MemberTerminal`). UI-only supervisor filtering ships the consolidation without a message-plane
+redesign.
+
+**Detail:** `03 §14 Web Board Modules & Message Plane`; surface in `docs/design/inbox-board-module.md`;
+feature map `docs/features/M4_…inbox…`. The supervisor relay hold toggle (M4 R8) and a supervisor
+message-plane identity remain open (feature map `## Notes`), out of scope here.
+
+## ADR-043: Workflow `agent.run` Inputs Prefer Pure Slash Commands; Discipline Lives in Skills
+
+**Status:** Accepted · **Date:** 2026-08-04
+
+**Decision.** Every `agent.run` `input` in a Spur workflow YAML should be a **pure slash command**
+(or the minimal argv the command already defines) — not free-form multi-paragraph agent essays.
+Structural and behavioral discipline (anti-recursion, scope, verification honesty, etc.) is owned by
+the **slash command** (thin wrapper) and its **backing skill**. Workflow YAML selects *which* hop
+runs; it does not restate the hop's playbook. When a gate fails because prose is "missing" from
+YAML `input:`, fix the command/skill (or the test contract), do **not** re-inflate the pipeline
+prompt.
+
+**Why.** Slash commands centralize agentic structure so the same hop behaves identically whether
+invoked from a pipeline, a human chat, or another skill. Duplicating guidance into YAML
+`input:` creates a second SSOT that drifts, defeats skill refinement, and turns workflows into
+ad-hoc prompt bags. Bug-742 (recursive full-pipeline launch from implement) is prevented by
+(1) the structural form `/sp:dev-run --mode implement <wbs> …` on the pipeline implement step and
+(2) explicit anti-recursion rules in `plugins/sp/commands/dev-run.md` +
+`plugins/sp/skills/code-implementation/SKILL.md` — not by prose bolted onto the slash line.
+
+**Detail:** `config/workflows/task-pipeline.yaml` implement `input`; `plugins/sp/commands/dev-run.md`;
+`plugins/sp/skills/code-implementation/SKILL.md`; structure gate in
+`plugins/sp/tests/skill-structure.test.ts` (R2c). Residual: older pipelines (e.g. idea/wrapup) still
+carry free-form `input` strings — migrate to pure slash commands as those hops gain dedicated
+commands.
+
+**Amendment (2026-08-04) — pipeline `test` hop is the quality gate, not `/sp:dev-unit`.** The
+task-pipeline `test` family is: soft shell probe of `${vars.qualityGateCmd}` → optional pure-slash
+`/sp:dev-fixall` → hard shell recheck. `/sp:dev-unit` (sp:code-testing) remains the **coverage
+gap-fill** competency for router C3 and standalone use; it is not the project quality gate and is
+not the primary `test` onEnter action.
+
+**Amendment (2026-08-04) — fleet reliability pass on `config/workflows/*`.** All workflows share:
+(1) pure slash `agent.run` inputs where a command exists; (2) soft status-file prechecks that
+branch to a terminal `failed` state instead of raw lifecycle aborts; (3) Bun-only gate examples;
+(4) exhaustive HITL answer routing. Residual free-form inputs remain only for capture-oriented
+steps without a slash surface (idea discovery/decompose, wrapup learnings/metrics, wayfinder
+research essays, planning design-gen) until dedicated commands land.

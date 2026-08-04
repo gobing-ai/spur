@@ -2,58 +2,132 @@
 # iteration bound is exhausted. Authored for the @gobing-ai/ts-dual-workflow-engine
 # state-machine schema (initialState / states[].id / onEnter / top-level transitions).
 # See Architecture Section 5 and Design Section 3.3.
+#
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - check is a soft probe (status file + always exit 0) so red gates route to fix
+#     via transitions, not a raw lifecycle abort that skips the failed terminal
+#   - fix is pure slash /sp:dev-fixall against the same qualityGateCmd (single-sourced)
+#   - qualityGateMaxFixAttempts bounds the fix loop; exhausted → failed (fail-closed)
+#   - Bun package scripts only for gate surface (no alternate package-manager CLIs)
+
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 name: basic
 kind: state-machine
 description: The canonical implement-check-fix-until-pass loop
-iterationBound: 2
+iterationBound: 8
 initialState: implement
 terminalStates:
   - done
   - failed
+vars:
+  # `task` is reserved by the engine runtime — use taskLabel for the free-form label.
+  taskLabel: "task"
+  agent: "omp"
+  stepTimeoutMs: "1800000"
+  # Override per project: `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`
+  qualityGateCmd: "bun run check"
+  # Max /sp:dev-fixall hops after a red gate (default 2). Counter: .spur/run/basic-fix-attempt.
+  qualityGateMaxFixAttempts: "2"
+
 states:
   - id: implement
-    description: Implement the requested task
+    description: Implement the requested task (note-only stub; real work uses task-pipeline)
     onEnter:
       - kind: note
         options:
-          message: 'Implementing task: ${task}'
+          message: 'Implementing task: ${vars.taskLabel}'
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            printf '0\n' > .spur/run/basic-fix-attempt
 
   - id: check
-    description: Verify the implementation passes all checks
+    description: >
+      Soft quality-gate probe. Runs qualityGateCmd, records PASS|FAIL under
+      .spur/run/basic-gate.status, always exit 0 so transitions branch cleanly.
     onEnter:
       - kind: shell
         options:
-          command: bun run check
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/basic-gate.status" &&
+            set +e &&
+            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
 
   - id: fix
-    description: Address failures from the check pass
+    description: >
+      Bounded auto-fix via pure slash /sp:dev-fixall (ADR-043) against qualityGateCmd.
     onEnter:
-      - kind: note
+      - kind: shell
         options:
-          message: 'Please fix the issues found'
+          command: >-
+            mkdir -p .spur/run &&
+            ATTEMPT_FILE=".spur/run/basic-fix-attempt" &&
+            n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
+            printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: /sp:dev-fixall "${vars.qualityGateCmd}"
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: done
     description: Terminal — workflow completed successfully
   - id: failed
-    description: Terminal — workflow failed
+    description: Terminal — quality gate still red after max fix attempts, or unrecoverable
 
 transitions:
   - from: implement
     to: check
     description: Hand the implemented task to the check pass
+    guard:
+      kind: always
 
-  # Check passed -> done; otherwise loop back to fix. Declaration order matters:
-  # the action-ok guard is tried first, so a passing check short-circuits to done.
+  # Soft probe branching: PASS first, FAIL → fix under cap, exhausted → failed.
   - from: check
     to: done
     description: Check passed — finish successfully
     guard:
-      kind: action-ok
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = PASS'
   - from: check
     to: fix
-    description: Check failed — route to a fix attempt
+    description: Check failed and under max fix attempts — route to fixall
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+  - from: check
+    to: failed
+    description: Check still red after max fix attempts — stop at failed
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
+  # Defense: missing/corrupt status — attempt fix if under cap, else failed.
+  - from: check
+    to: fix
+    description: Probe status missing/corrupt and under max attempts — attempt fixall
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+  - from: check
+    to: failed
+    description: Probe status missing/corrupt and attempts exhausted — failed
+    guard:
+      kind: always
 
   - from: fix
     to: check
-    description: Re-run the check after fixing
+    description: Re-run the soft check after fixing
+    guard:
+      kind: always

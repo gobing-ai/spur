@@ -143,20 +143,22 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(yaml.initialState).toBe('precheck');
     });
 
-    test('R1: precheck→implement is guarded by `spur task check`, with a fail fall-through', () => {
+    test('R1: precheck→implement is guarded by doctor status + `task check`, with fail-closed fall-through', () => {
         const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
         expect(toImpl?.guard?.kind).toBe('shell');
+        // Soft doctor status file + task check (fleet reliability: soft probe → status → branch).
         // Guard command must reference a task check — whether literal `spur` or
         // `${vars.spurBin}` (ADR-026 PATH-independent spur invocation).
-        expect(String(toImpl?.guard?.options?.command)).toMatch(/task check/);
-        // The fail path uses an inverted shell guard (ADR fix: `always` bypasses the
-        // shell guard because "always" matches regardless of order; `! … task check`
-        // inverts the exit code so only one of the two guards passes at a time).
+        const passCmd = String(toImpl?.guard?.options?.command ?? '');
+        expect(passCmd).toMatch(/task check/);
+        expect(passCmd).toMatch(/precheck-doctor\.status/);
+        // Declaration order: PASS first, then fail-closed `always` fall-through (soft probe
+        // pattern — doctor FAIL and/or task check red both land on `failed` without inverted
+        // shell guards that race set -e). `always` is safe only AFTER the PASS guard.
         const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
         const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');
         expect(idxFail).toBeGreaterThan(idxPass);
-        expect(yaml.transitions[idxFail]?.guard?.kind).toBe('shell');
-        expect(String(yaml.transitions[idxFail]?.guard?.options?.command)).toMatch(/^!\s/);
+        expect(yaml.transitions[idxFail]?.guard?.kind).toBe('always');
     });
 
     test('R2: record writes via `spur task record` + post-record feature sync (task 0328)', () => {

@@ -131,10 +131,13 @@ runner (see [validation-and-extension.md](validation-and-extension.md)).
 | Action | `note` | Record a message in the run's result data; the safe no-op for shaping/dry-running |
 | Action | `shell` | Run a shell command via the runtime `ProcessExecutor`; the action "succeeds" or "fails" by exit code |
 | Guard | `always` | Unconditional pass — the default edge condition / fallback transition |
-| Guard | `action-ok` | Pass iff the prior action on this state/node succeeded — the basis of the check→done short-circuit |
+| Guard | `action-ok` | Pass iff the prior action on this state/node succeeded — useful for a single hard shell check |
 
 Order matters for both guards and conditions: **the first that passes wins.** Put the discriminating
-guard (`action-ok`) before the unconditional fallback (`always` / no-guard edge).
+guard before the unconditional fallback (`always` / no-guard edge). For multi-condition gates (doctor
++ task check, quality gate + attempt cap), prefer a **soft probe** shell that writes PASS|FAIL and
+always exits 0, then branch with ordered status-file guards — see shipped `basic.yaml` /
+`task-pipeline.yaml` (more reliable than `action-ok` alone when more than one condition decides the edge).
 
 ## Template variables
 

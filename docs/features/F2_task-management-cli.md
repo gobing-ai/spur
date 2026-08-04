@@ -63,7 +63,8 @@ Feature: Task management CLI
 | 0052 | W1: spur task refresh, batch-create and resolve | done |
 | 0054 | W1: Task templates, config keys and init assets | done |
 | 0339 | spur task check: terminal-feature error fires on healthy tasks; content-free tasks pass | done |
-| 0416 | Guard WBS allocation: reject colliding task IDs before write and honor baseCounter | todo |
+| 0416 | Guard WBS allocation: reject colliding task IDs before write and honor baseCounter | done |
+| 0417 | Record F2 acceptance coverage: section editing, check reporting, batch-create gating, list filters | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

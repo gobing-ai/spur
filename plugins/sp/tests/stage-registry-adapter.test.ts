@@ -49,7 +49,7 @@ function tableAResolve(overrides: {
 // ─── Registry structure ───────────────────────────────────────────────────
 
 describe('stage registry — record structure', () => {
-    test('REGISTERED_STAGES contains all 12 canonical stages', () => {
+    test('REGISTERED_STAGES contains all 13 canonical stages', () => {
         const ids = REGISTERED_STAGES.map((s) => s.id).sort();
         expect(ids).toEqual([
             'brainstorm',
@@ -59,6 +59,7 @@ describe('stage registry — record structure', () => {
             'handover',
             'implement',
             'plan',
+            'quality-gate',
             'refine',
             'review',
             'test',
@@ -108,7 +109,7 @@ describe('stage registry — record structure', () => {
 
     test('listStages returns correct shape', () => {
         const stages = listStages();
-        expect(stages.length).toBe(12);
+        expect(stages.length).toBe(13);
         expect(stages[0]).toHaveProperty('stage_id');
         expect(stages[0]).toHaveProperty('command');
         expect(stages[0]).toHaveProperty('skill');
@@ -418,7 +419,7 @@ describe('discoverability and error behavior (R4)', () => {
         const r = runCli(['--list-stages']);
         expect(r.exitCode).toBe(0);
         const lines = r.stdout.trim().split('\n');
-        expect(lines.length).toBe(12);
+        expect(lines.length).toBe(13);
         const first = lines[0];
         expect(first).toBeDefined();
         expect(first).toContain('\t');
@@ -569,11 +570,18 @@ describe('additional coverage', () => {
         expect(r.exitCode).toBeGreaterThanOrEqual(0);
     });
 
-    test('listStages maps test to dev-unit', () => {
+    test('listStages maps test to dev-unit (coverage gap-fill, not pipeline quality gate)', () => {
         const stages = listStages();
         const testEntry = stages.find((s) => s.stage_id === 'test');
         expect(testEntry).toBeDefined();
         expect(testEntry?.command).toBe('/sp:dev-unit');
+    });
+
+    test('listStages maps quality-gate to dev-fixall (pipeline test hop family)', () => {
+        const stages = listStages();
+        const gateEntry = stages.find((s) => s.stage_id === 'quality-gate');
+        expect(gateEntry).toBeDefined();
+        expect(gateEntry?.command).toBe('/sp:dev-fixall');
     });
 
     test('listStages maps wrap to dev-wrap', () => {

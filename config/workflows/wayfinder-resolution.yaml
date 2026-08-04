@@ -1,3 +1,15 @@
+# Wayfinder resolution pipeline — research/specification tasks without the code
+# implementation pipeline (no task-pipeline / /sp:dev-run recursion).
+#
+# Reliability (aligned with task-pipeline / ADR-043):
+#   - Soft precheck (task check + show) → failed via transitions (status file, always exit 0)
+#   - collect fail-closed on non-empty input bundle
+#   - investigate→verify enforces Testing content floor (0300 R2) before independent verify
+#   - verify writes machine-readable PASS|PARTIAL|FAIL with expectFile
+#   - HITL approve routing is exhaustive (yes/no/cancel)
+#   - record → done is fail-closed on check + actual status=done
+#   - Free-form agent inputs are intentional: no pure-slash research surface yet
+
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wayfinder-resolution
@@ -13,7 +25,7 @@ vars:
   profile: "standard"
   spurBin: "spur"
   agent: "omp"
-  stepTimeoutMs: "900000"
+  stepTimeoutMs: "1800000"
   approval: "required"
   resolutionMode: "research"
   evidencePolicy: "spur-cli-first"
@@ -21,14 +33,24 @@ vars:
 
 states:
   - id: precheck
-    description: "Validate the task and confirm the requested resolution mode before delegation."
+    description: >
+      Soft precheck: task check + show, status files, always exit 0 so failures
+      route to `failed` via transitions (not a raw lifecycle abort).
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task check ${vars.wbs}"
-      - kind: shell
-        options:
-          command: "${vars.spurBin} task show ${vars.wbs} --json"
+          command: >-
+            mkdir -p .spur/run/wayfinder &&
+            set +e &&
+            ${vars.spurBin} task check ${vars.wbs}; check_rc=$?;
+            ${vars.spurBin} task show ${vars.wbs} --json > .spur/run/wayfinder/${vars.wbs}-show.json; show_rc=$?;
+            set -e &&
+            if [ "$check_rc" -eq 0 ] && [ "$show_rc" -eq 0 ]; then
+              printf 'PASS\n' > .spur/run/wayfinder/${vars.wbs}-precheck.status;
+            else
+              printf 'FAIL\n' > .spur/run/wayfinder/${vars.wbs}-precheck.status;
+            fi &&
+            exit 0
       - kind: note
         options:
           message: "Wayfinder resolution started for task ${vars.wbs} (mode=${vars.resolutionMode}, evidence=${vars.evidencePolicy}); no code implementation pipeline is permitted."
@@ -79,6 +101,9 @@ states:
   - id: verify
     description: "Perform an independent evidence and traceability check for the resolved research task."
     onEnter:
+      - kind: shell
+        options:
+          command: 'rm -f .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -92,6 +117,7 @@ states:
             Do not implement plugin code. Write the final verdict word (exactly PASS, PARTIAL,
             or FAIL, nothing else) to `.spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt`,
             then finish with the same verdict and stop.
+          expectFile: .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
@@ -130,18 +156,16 @@ states:
 transitions:
   - from: precheck
     to: collect
-    description: "Precheck passed — collect deterministic local inputs."
+    description: "Precheck PASS — collect deterministic local inputs."
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} task check ${vars.wbs}"
+        command: 'test "$(cat .spur/run/wayfinder/${vars.wbs}-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
-    description: "Precheck failed — stop before delegation."
+    description: "Precheck FAIL — stop before delegation."
     guard:
-      kind: shell
-      options:
-        command: "! ${vars.spurBin} task check ${vars.wbs}"
+      kind: always
   - from: collect
     to: investigate
     description: "Input bundle collected — resolve the research task."

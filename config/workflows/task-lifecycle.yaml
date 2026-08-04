@@ -1,3 +1,11 @@
+# Externally driven FSM (requestTransition) — not an auto-running pipeline.
+#
+# Reliability (aligned with task-pipeline / ADR-043 — lifecycle-only contract):
+#   - Hard shell guards only at wip→testing and testing→done (no soft probe needed:
+#     requestTransition fails closed when the guard shell is non-zero)
+#   - CLI done verdict guard is a second layer (0292) covering --no-lifecycle paths
+#   - No agent.run nodes (by design — pure status graph)
+#   - cancelled is the sole terminal; done is re-enterable (reopen → wip)
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-lifecycle

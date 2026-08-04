@@ -496,7 +496,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
     test('R38 — planning-pipeline declares agent dispatch vars used by agent.run steps', () => {
         const planning = readFileSync(join(WORKFLOWS_DIR, 'planning-pipeline.yaml'), 'utf8');
-        for (const line of ['  agent: "omp"', '  spurBin: "spur"', '  stepTimeoutMs: "600000"']) {
+        // stepTimeoutMs aligned with task-pipeline headroom (1800000), not the old 600s default.
+        for (const line of ['  agent: "omp"', '  spurBin: "spur"', '  stepTimeoutMs: "1800000"']) {
             expect(planning).toContain(line);
         }
         const varsAgent = `$${'{vars.agent}'}`;
@@ -505,6 +506,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(planning).toContain(`agent: ${varsAgent}`);
         expect(planning).toContain(`timeoutMs: ${varsStepTimeout}`);
         expect(planning).toContain(`${varsSpurBin} feature create`);
+        // Soft precheck + expectFile reliability contract (fleet reliability pass).
+        expect(planning).toContain('plan-precheck.status');
+        expect(planning).toContain('expectFile: .spur/run/plan-feature-id.txt');
+        // Design artifact path uses engine template vars.slug — build without bare ${...}
+        // so biome noTemplateCurlyInString stays quiet on the test source.
+        const designExpect = ['expectFile: docs/design/', '$', '{vars.slug}', '.md'].join('');
+        expect(planning).toContain(designExpect);
     });
 
     test('R39 — idea-pipeline discovery delegates needs_design criteria to sp:brainstorm', () => {
@@ -592,10 +600,44 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
         expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
 
-        // R2c — anti-recursion guard: the implement prompt must warn against invoking
-        // the pipeline (or full-mode dev-run) from inside the implement step itself.
-        expect(implementBlock).toContain('NEVER invoke');
-        expect(implementBlock).toContain('--mode implement');
+        // R2c — anti-recursion (bug-742) is structural + skill-level, not YAML prose (ADR-043).
+        // 1) Pipeline agent.run input is a pure slash command that already selects implement mode.
+        // 2) The recursive-launch prohibition lives in the command/skill SSOT, not multi-line
+        //    essays bolted onto the slash line (that fights centralized agentic structure).
+        // Pure slash form (literal ${vars.wbs} in the YAML source).
+        const pureImplementInput = `input: /sp:dev-run --mode implement $${'{vars.wbs}'} --auto`;
+        expect(implementBlock).toContain(pureImplementInput);
+        expect(implementBlock).toContain('requireDiff: true');
+        // Input must not re-introduce free-form anti-recursion prose next to the slash.
+        const inputLine =
+            implementBlock
+                .split('\n')
+                .map((l) => l.trim())
+                .find((l) => l.startsWith('input:')) ?? '';
+        expect(inputLine).toBe(pureImplementInput);
+
+        const codeImplSkill = readFileSync(join(SKILLS_DIR, 'code-implementation', 'SKILL.md'), 'utf8');
+        const devRunCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-run.md'), 'utf8');
+        expect(codeImplSkill).toContain('NEVER invoke');
+        expect(codeImplSkill).toContain('bug-742');
+        expect(devRunCmd).toContain('NEVER invoke');
+        expect(devRunCmd).toContain('--mode implement');
+
+        // Quality-gate hop family (not /sp:dev-unit): soft probe + fixall + soft recheck.
+        expect(taskPipeline).toContain('  - id: test-fix\n');
+        expect(taskPipeline).toContain('  - id: test-recheck\n');
+        expect(taskPipeline).toContain('qualityGateCmd:');
+        expect(taskPipeline).toContain('qualityGateMaxFixAttempts:');
+        const testBlock = taskPipeline.split('  - id: test\n')[1]?.split('  - id: test-fix\n')[0] ?? '';
+        expect(testBlock).not.toContain('/sp:dev-unit');
+        const testFixBlock = taskPipeline.split('  - id: test-fix\n')[1]?.split('  - id: test-recheck\n')[0] ?? '';
+        // Pure slash fixall form (literal ${vars.qualityGateCmd} in YAML).
+        const pureFixall = `input: /sp:dev-fixall "$${'{vars.qualityGateCmd}'}"`;
+        expect(testFixBlock).toContain(pureFixall);
+        // Green path: PASS probe → review without forcing a second full gate.
+        expect(taskPipeline).toContain('from: test\n    to: review\n');
+        // Exhausted fix attempts land on the failed terminal state.
+        expect(taskPipeline).toContain('from: test-recheck\n    to: failed\n');
     });
 
     test('R42 — skill description budgets stay within the 0187 aggregate/per-skill caps', () => {
