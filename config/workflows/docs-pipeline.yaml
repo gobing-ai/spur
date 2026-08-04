@@ -22,6 +22,9 @@ terminalStates:
   - done
   - failed
   - cancelled
+failureStates:
+  - failed
+  - cancelled
 vars:
   wbs: "0000"
   profile: "standard"

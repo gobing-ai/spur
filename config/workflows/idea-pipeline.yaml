@@ -51,6 +51,9 @@ terminalStates:
   - handoff
   - cancelled
   - failed
+failureStates:
+  - failed
+  - cancelled
 vars:
   idea: ""
   profile: "standard"
@@ -79,7 +82,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            DOCTOR_FILE=".spur/run/idea-precheck-doctor.status" &&
+            DOCTOR_FILE=".spur/run/${vars.__runId}-idea-precheck-doctor.status" &&
             set +e &&
             ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
             set -e &&
@@ -89,32 +92,29 @@ states:
               printf 'FAIL\n' > "$DOCTOR_FILE";
             fi &&
             exit 0
-      - kind: shell
-        options:
-          command: 'mkdir -p .spur/run && { [ -f .spur/run/idea-eval-report.md ] || [ -f .spur/run/idea-needs-design.json ]; } && { a=".spur/run/idea-archive/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$a"; mv -f .spur/run/idea-eval-report.md "$a/" 2>/dev/null; mv -f .spur/run/idea-needs-design.json "$a/" 2>/dev/null; } ; rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed'
 
   - id: discovery
     description: >
       Dispatch sp:brainstorm to explore the idea, generate approaches with trade-offs,
       and record a design summary. The brainstorm ALWAYS records a design summary
       ("nothing is too simple" pattern). The brainstorm also emits a needs_design
-      boolean signal written to .spur/run/idea-needs-design.json — this determines
+      boolean signal written to .spur/run/${vars.__runId}-idea-needs-design.json — this determines
       whether the system-design state runs. As its terminal artifact for the idea path,
-      brainstorm also emits the idea-evaluation report to .spur/run/idea-eval-report.md
+      brainstorm also emits the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md
       (template: plugins/sp/skills/spur-dev/references/idea-evaluation.md).
       expectFile fails a silent no-op discovery (no eval report).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
-          expectFile: .spur/run/idea-eval-report.md
+          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
+          expectFile: .spur/run/${vars.__runId}-idea-eval-report.md
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: idea-eval
     description: >
       HITL taste gate. Discovery has produced the idea-evaluation report
-      (.spur/run/idea-eval-report.md) with urgency/necessity scores, premises,
+      (.spur/run/${vars.__runId}-idea-eval-report.md) with urgency/necessity scores, premises,
       pros/cons, and a recommendation. The operator reviews and approves or
       rejects. This gate is NOT auto-clicked by --auto (taste gate, like
       design-approval). Only routes around when vars.idea_approved=true
@@ -123,24 +123,24 @@ states:
     onEnter:
       - kind: hitl.confirm
         options:
-          prompt: "Review the idea evaluation report (.spur/run/idea-eval-report.md). Approve to create a feature, or reject to cancel? (Reject creates no feature.)"
+          prompt: "Review the idea evaluation report (.spur/run/${vars.__runId}-idea-eval-report.md). Approve to create a feature, or reject to cancel? (Reject creates no feature.)"
 
   - id: feature-create
     description: >
       Create a feature via spur feature create, or select an existing feature id.
-      The agent writes the feature id to .spur/run/idea-feature-id.txt for subsequent
-      states to read. Prefer the enhanced idea from .spur/run/idea-eval-report.md as
+      The agent writes the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt for subsequent
+      states to read. Prefer the enhanced idea from .spur/run/${vars.__runId}-idea-eval-report.md as
       context; do not overwrite vars.idea.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
-          expectFile: .spur/run/idea-feature-id.txt
+          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
+          expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
         options:
-          path: .spur/run/idea-feature-id.txt
+          path: .spur/run/${vars.__runId}-idea-feature-id.txt
           var: featureId
 
   - id: ac-generate
@@ -150,7 +150,7 @@ states:
       --from-file`. The agent authors R-numbered Gherkin scenarios tied to the
       design summary into a captured file; the shell step verifies the file is
       non-empty, writes it through the CLI, and writes a completion sentinel
-      (.spur/run/idea-ac-done.txt). AC quality checking lives in the transition
+      (.spur/run/${vars.__runId}-idea-ac-done.txt). AC quality checking lives in the transition
       guards (`spur feature check`), NOT in this action chain — a failing
       check must route through the capped retry loop, not fail the run (the engine's
       default onError policy is `fail`, so an in-action check failure would kill the
@@ -158,17 +158,29 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/idea-ac-retry-count; rm -f .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt'
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/${vars.__runId}-idea-ac-retry-count; rm -f .spur/run/${vars.__runId}-idea-ac-content.md .spur/run/${vars.__runId}-idea-ac-done.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
           input: "Generate acceptance criteria for feature ${vars.featureId}. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading."
-          answerFile: .spur/run/idea-ac-content.md
-          expectFile: .spur/run/idea-ac-content.md
+          answerFile: .spur/run/${vars.__runId}-idea-ac-content.md
+          expectFile: .spur/run/${vars.__runId}-idea-ac-content.md
           timeoutMs: ${vars.stepTimeoutMs}
+      # Empty capture is a RETRYABLE outcome, not a run abort. `answerFile` always
+      # creates the file (so `expectFile` above cannot catch an empty answer), and the
+      # old `test -s … && …` chain exited 1 on empty content — killing the run under
+      # the default `fail` policy before the capped retry edges were ever evaluated,
+      # contradicting this state's own contract. Empty now falls through with exit 0
+      # so `spur feature check` in the guards routes it back here (cap: 3). A failing
+      # CLI *write* still exits non-zero and aborts — that one is not retryable.
       - kind: shell
         options:
-          command: 'test -s .spur/run/idea-ac-content.md && ${vars.spurBin} feature update ${vars.featureId} --section "Acceptance Criteria" --from-file .spur/run/idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/idea-ac-done.txt'
+          command: >-
+            if test -s .spur/run/${vars.__runId}-idea-ac-content.md; then
+              ${vars.spurBin} feature update ${vars.featureId} --section "Acceptance Criteria" --from-file .spur/run/${vars.__runId}-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-ac-done.txt;
+            else
+              exit 0;
+            fi
 
   - id: feature-check
     description: >
@@ -218,16 +230,16 @@ states:
     description: >
       Dispatch sp:spec-decomposition with the brainstorm artifact, feature AC, and
       design doc as input. The agent produces a task-batch JSON file at
-      .spur/run/idea-task-batch.json, validated against task-batch.schema.json.
+      .spur/run/${vars.__runId}-idea-task-batch.json, validated against task-batch.schema.json.
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/idea-decompose-retry-count; rm -f .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed'
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/${vars.__runId}-idea-decompose-retry-count; rm -f .spur/run/${vars.__runId}-idea-task-batch.json .spur/run/${vars.__runId}-idea-batch-create.done .spur/run/${vars.__runId}-idea-batch-create.failed'
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. Produce a task-batch JSON array at .spur/run/idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting."
-          expectFile: .spur/run/idea-task-batch.json
+          input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. Produce a task-batch JSON array at .spur/run/${vars.__runId}-idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting."
+          expectFile: .spur/run/${vars.__runId}-idea-task-batch.json
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: batch-create
@@ -252,7 +264,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'if test -f .spur/run/idea-batch-create.done; then exit 0; fi; rm -f .spur/run/idea-batch-create.failed; if ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json; then date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/idea-batch-create.done; else date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/idea-batch-create.failed; fi'
+          command: 'if test -f .spur/run/${vars.__runId}-idea-batch-create.done; then exit 0; fi; rm -f .spur/run/${vars.__runId}-idea-batch-create.failed; if ${vars.spurBin} task batch-create --file .spur/run/${vars.__runId}-idea-task-batch.json; then date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-batch-create.done; else date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-batch-create.failed; fi'
 
   - id: handoff
     description: >
@@ -285,7 +297,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/idea-precheck-doctor.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/${vars.__runId}-idea-precheck-doctor.status 2>/dev/null)" = PASS'
   - from: start
     to: failed
     description: Agent doctor FAIL — stop before discovery.
@@ -353,7 +365,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" != false'
   # Auto-skip 2: pass + skip-design route → decompose
   - from: ac-generate
     to: decompose
@@ -361,7 +373,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" = false))'
   # Auto-skip 3: check failed, retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
@@ -369,7 +381,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   # Auto-skip 4: check failed, retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
@@ -377,7 +389,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check
@@ -393,28 +405,28 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" != false'
   - from: feature-check
     to: decompose
     description: Feature check passed, skip-design route — go directly to decompose.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" = false))'
   - from: feature-check
     to: ac-generate
     description: "Feature check failed — revise AC (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: feature-check
     to: failed
     description: Feature check failed after 3 retries — escalate to failed.
     guard:
       kind: shell
       options:
-        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   - from: feature-check
     to: cancelled
     description: Operator cancelled the feature-check gate.
@@ -505,18 +517,18 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/idea-batch-create.done'
+        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.done'
   - from: batch-create-run
     to: decompose
     description: "Batch-create failed — revise decomposition (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/idea-batch-create.failed && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.failed && test "$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: batch-create-run
     to: failed
     description: Batch-create failed after 3 retries — escalate to failed.
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/idea-batch-create.failed && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.failed && test "$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'

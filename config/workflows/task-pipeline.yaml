@@ -43,6 +43,9 @@ terminalStates:
   - done
   - failed
   - cancelled
+failureStates:
+  - failed
+  - cancelled
 vars:
   wbs: "0000"
   profile: "standard"
@@ -77,6 +80,10 @@ vars:
   # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
   # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
   qualityGateMaxFixAttempts: "2"
+  # Post-implement auto-format. Overridable like qualityGateCmd so a non-Bun seeded
+  # project can point it at its own formatter; invoked best-effort (a missing or
+  # failing formatter must never abort a run — the quality gate is the real gate).
+  formatCmd: "bun run format"
 
 states:
   - id: precheck
@@ -140,9 +147,12 @@ states:
       # the test stage from tripping on a purely mechanical formatting defect (dogfood
       # bug-733 — omp left agent-run.test.ts unformatted, causing a spurious lint gate
       # failure that the ## Testing section mis-attributed to "pre-existing gaps").
+      # Best-effort: `; exit 0` (not `&&`) so a missing/failing formatter in a seeded
+      # non-Bun project cannot abort a run mid-implement. Formatting is a convenience;
+      # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
       - kind: shell
         options:
-          command: "bun run format"
+          command: '${vars.formatCmd} ; exit 0'
 
   # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
   # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
@@ -270,9 +280,27 @@ states:
       - kind: shell
         options:
           command: "${vars.spurBin} task record ${vars.wbs} --solution-from-diff --transition testing"
+      # Best-effort, and portable across layouts. `feature-sync-bounded.ts` is a
+      # Spur-monorepo path — `spur init` never scaffolds `plugins/sp/`, so a seeded
+      # project must fall back to the plain `spur feature sync` verb rather than
+      # abort a run that already produced a PASS verdict. Trailing `exit 0` keeps the
+      # whole step advisory for the same reason (feature status sync is a follow-up,
+      # not a completion gate — `record → done` runs `spur task check`).
       - kind: shell
         options:
-          command: 'FID=$(${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r ".feature_id // .frontmatter.feature_id // empty"); if [ -n "$FID" ]; then bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "${vars.spurBin}" --json; else echo "Orphan task ${vars.wbs} — no feature_id linked; proposal: consider linking to a parent feature." >> .spur/run/${vars.wbs}-report.txt; fi'
+          command: >-
+            FID=$(${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null |
+            jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null);
+            if [ -n "$FID" ]; then
+              if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
+                bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "${vars.spurBin}" --json;
+              else
+                ${vars.spurBin} feature sync "$FID" --json;
+              fi;
+            else
+              echo "Orphan task ${vars.wbs} — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/${vars.wbs}-report.txt";
+            fi;
+            exit 0
 
   - id: done
     description: >

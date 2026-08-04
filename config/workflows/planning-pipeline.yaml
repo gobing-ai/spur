@@ -39,6 +39,9 @@ terminalStates:
   - handoff
   - cancelled
   - failed
+failureStates:
+  - failed
+  - cancelled
 vars:
   slug: "draft"
   profile: "interactive"
@@ -48,6 +51,8 @@ vars:
   spurBin: "spur"
   agent: "omp"
   stepTimeoutMs: "1800000"
+  # Injected by WorkflowAppService.run(); scopes .spur/run artifacts per run (0425 R4).
+  __runId: ""
 
 states:
   - id: start
@@ -65,9 +70,9 @@ states:
             ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
             set -e &&
             if [ "$slug_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > .spur/run/plan-precheck.status;
+              printf 'PASS\n' > .spur/run/${vars.__runId}-plan-precheck.status;
             else
-              printf 'FAIL\n' > .spur/run/plan-precheck.status;
+              printf 'FAIL\n' > .spur/run/${vars.__runId}-plan-precheck.status;
             fi &&
             exit 0
       - kind: note
@@ -92,12 +97,15 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && rm -f .spur/run/plan-feature-id.txt'
+          command: 'mkdir -p .spur/run && rm -f .spur/run/${vars.__runId}-plan-feature-id.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Skill(skill=\"sp:spur-cli\", args=\"feature create for slug ${vars.slug}\"). Run `${vars.spurBin} feature create \"${vars.slug}\" --parent ${vars.feature} --json` (or reuse an existing id). Write the feature id alone to .spur/run/plan-feature-id.txt."
-          expectFile: .spur/run/plan-feature-id.txt
+          # `vars.feature` is optional and defaults to "" — the parent flag must be
+          # described conditionally, never interpolated bare. `--parent <empty> --json`
+          # makes commander swallow `--json` as the parent value.
+          input: "Skill(skill=\"sp:spur-cli\", args=\"feature create for slug ${vars.slug}\"). Run `${vars.spurBin} feature create \"${vars.slug}\" --json` (or reuse an existing id); append `--parent \"${vars.feature}\"` ONLY if the parent id between those quotes is non-empty — if it is empty, omit the --parent flag entirely. Write the feature id alone to .spur/run/${vars.__runId}-plan-feature-id.txt."
+          expectFile: .spur/run/${vars.__runId}-plan-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: design-gen
@@ -152,21 +160,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = FAIL'
+        command: 'test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = FAIL'
   - from: start
     to: feature-id
     description: profile=auto and precheck PASS — skip the phasing HITL gate.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "${vars.profile}" = auto && test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = PASS'
   - from: start
     to: phasing
     description: Interactive and precheck PASS — enter the phasing HITL gate.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/plan-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = PASS'
   - from: start
     to: failed
     description: Defense — corrupt/missing precheck status — failed.

@@ -20,6 +20,9 @@ terminalStates:
   - done
   - failed
   - cancelled
+failureStates:
+  - failed
+  - cancelled
 vars:
   wbs: "0000"
   profile: "standard"
@@ -61,9 +64,13 @@ states:
       - kind: shell
         options:
           command: "mkdir -p .spur/run/wayfinder && ${vars.spurBin} task show ${vars.wbs} --json > .spur/run/wayfinder/${vars.wbs}-input.json"
+      # `.spur/workflows/` is the runtime read path in every layout — a symlink to
+      # config/workflows/ inside the Spur monorepo, a real directory in a seeded
+      # project. The previous `config/workflows/…` literal only resolved in the
+      # monorepo and hard-failed `collect` anywhere else.
       - kind: shell
         options:
-          command: "${vars.spurBin} workflow validate config/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/${vars.wbs}-workflow-check.txt"
+          command: "${vars.spurBin} workflow validate .spur/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/${vars.wbs}-workflow-check.txt"
       - kind: shell
         options:
           command: "${vars.spurBin} task check ${vars.wbs} > .spur/run/wayfinder/${vars.wbs}-precheck.txt"
@@ -131,14 +138,20 @@ states:
   - id: record
     description: "Record the resolution through the canonical task CLI and transition only after checks pass."
     onEnter:
+      # Both steps are soft (`; exit 0`) BY DESIGN, not laxity: the real gate is the
+      # `record → done` guard below, which re-runs `spur task check` AND asserts the
+      # status actually reached done. Hard-failing here aborted the run inside the
+      # state, so the declared `record → failed` edge was unreachable and a blocked
+      # lifecycle transition surfaced as a bare "Command exited with 1" instead of
+      # the terminal `failed` this workflow documents.
       - kind: shell
         options:
-          command: "${vars.spurBin} task check ${vars.wbs}"
+          command: "${vars.spurBin} task check ${vars.wbs} ; exit 0"
       - kind: shell
         options:
           # PASS-only completion (preserve-list P4): lifecycle guards stay on; a forced
           # done without verdict evidence is the 0280 regression this replaces (see 0292).
-          command: "${vars.spurBin} task update ${vars.wbs} done"
+          command: "${vars.spurBin} task update ${vars.wbs} done ; exit 0"
 
   - id: done
     description: "Research task resolved and ready to feed the implementation backlog."

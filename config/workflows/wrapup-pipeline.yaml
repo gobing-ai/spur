@@ -132,11 +132,21 @@ states:
       If vars.feature is set, sync feature status via bounded feature-sync-bounded
       (0411). Soft shell — blocked/failed sync must not abort wrap-up after metrics.
     onEnter:
+      # Genuinely soft: the terminating `exit 0` must be reached on BOTH branches, so
+      # the sync is chained with `;` — with `&&` a non-zero sync skipped `exit 0` and
+      # aborted the run at this state, discarding the learnings/metrics that already
+      # landed and never reaching branch-cleanup/done (the exact failure the state
+      # description promises against). `feature-sync-bounded.ts` is a Spur-monorepo
+      # path (`spur init` does not scaffold `plugins/sp/`), so seeded projects fall
+      # back to the plain `spur feature sync` verb.
       - kind: shell
         options:
           command: >-
-            set +e &&
-            bun plugins/sp/scripts/feature-sync-bounded.ts ${vars.feature} --spur-bin "${vars.spurBin}" --json &&
+            if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
+              bun plugins/sp/scripts/feature-sync-bounded.ts "${vars.feature}" --spur-bin "${vars.spurBin}" --json;
+            else
+              ${vars.spurBin} feature sync "${vars.feature}" --json;
+            fi;
             exit 0
 
   - id: branch-cleanup
@@ -174,21 +184,30 @@ transitions:
     guard:
       kind: always
 
-  # ── task-resolve: non-empty -> doc-sync, empty -> skipped ──
+  # ── task-resolve: non-empty -> doc-sync, empty/unparseable -> skipped ──
+  # `|| echo 0` is load-bearing: a malformed vars.tasks (or a box without `jq`) makes
+  # `jq length` emit nothing, and bare `test "" -gt 0` exits 2 — so BOTH edges failed
+  # and the run died with an opaque `no-passing-transition` instead of skipping. The
+  # trailing `always` edge is the belt-and-braces defense for any other guard fault.
   - from: task-resolve
     to: doc-sync
     description: Task list resolved and non-empty — begin doc-sync.
     guard:
       kind: shell
       options:
-        command: 'test "$(echo "${vars.tasks}" | jq length)" -gt 0'
+        command: 'test "$(echo "${vars.tasks}" | jq length 2>/dev/null || echo 0)" -gt 0'
   - from: task-resolve
     to: skipped
     description: Task list is empty — skip wrap-up.
     guard:
       kind: shell
       options:
-        command: 'test "$(echo "${vars.tasks}" | jq length)" -eq 0'
+        command: 'test "$(echo "${vars.tasks}" | jq length 2>/dev/null || echo 0)" -eq 0'
+  - from: task-resolve
+    to: skipped
+    description: Defense — task list unparseable; skip rather than fail with no-passing-transition.
+    guard:
+      kind: always
 
   # ── linear body: doc-sync -> learning-capture -> metrics-record ──
   - from: doc-sync

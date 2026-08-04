@@ -19,6 +19,8 @@ initialState: implement
 terminalStates:
   - done
   - failed
+failureStates:
+  - failed
 vars:
   # `task` is reserved by the engine runtime — use taskLabel for the free-form label.
   taskLabel: "task"
@@ -26,8 +28,10 @@ vars:
   stepTimeoutMs: "1800000"
   # Override per project: `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`
   qualityGateCmd: "bun run check"
-  # Max /sp:dev-fixall hops after a red gate (default 2). Counter: .spur/run/basic-fix-attempt.
+  # Max /sp:dev-fixall hops after a red gate (default 2). Counter: .spur/run/${vars.__runId}-basic-fix-attempt.
   qualityGateMaxFixAttempts: "2"
+  # Injected by WorkflowAppService.run(); scopes .spur/run artifacts per run (0425 R4).
+  __runId: ""
 
 states:
   - id: implement
@@ -40,18 +44,18 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            printf '0\n' > .spur/run/basic-fix-attempt
+            printf '0\n' > .spur/run/${vars.__runId}-basic-fix-attempt
 
   - id: check
     description: >
       Soft quality-gate probe. Runs qualityGateCmd, records PASS|FAIL under
-      .spur/run/basic-gate.status, always exit 0 so transitions branch cleanly.
+      .spur/run/${vars.__runId}-basic-gate.status, always exit 0 so transitions branch cleanly.
     onEnter:
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/basic-gate.status" &&
+            STATUS_FILE=".spur/run/${vars.__runId}-basic-gate.status" &&
             set +e &&
             ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
@@ -69,7 +73,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            ATTEMPT_FILE=".spur/run/basic-fix-attempt" &&
+            ATTEMPT_FILE=".spur/run/${vars.__runId}-basic-fix-attempt" &&
             n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
             printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
       - kind: agent.run
@@ -97,21 +101,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = PASS'
   - from: check
     to: fix
     description: Check failed and under max fix attempts — route to fixall
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
   - from: check
     to: failed
     description: Check still red after max fix attempts — stop at failed
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
   # Defense: missing/corrupt status — attempt fix if under cap, else failed.
   - from: check
     to: fix
@@ -119,7 +123,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
   - from: check
     to: failed
     description: Probe status missing/corrupt and attempts exhausted — failed
