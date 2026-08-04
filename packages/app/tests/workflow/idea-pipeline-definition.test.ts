@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
@@ -90,63 +88,38 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
 });
 
 /**
- * R8 (0366): the start state's reset action must ARCHIVE a prior run's discovery
- * report, never silently overwrite or delete it. The command is lifted from the
- * YAML rather than copied, so editing the workflow to reintroduce a blind `rm -f`
- * fails this test instead of quietly regressing the retain policy.
+ * R4 (0425): non-entity-scoped idea artifacts are `${vars.__runId}`-prefixed so
+ * concurrent runs cannot share gate files / retry counters / discovery reports.
+ * The start-state archive-and-reset block that papered over the collision is gone.
  */
-describe('idea-pipeline definition — discovery artifact retain policy (R8 of 0366)', () => {
-    /** The start-state reset command, taken straight from the shipped definition. */
-    function resetCommand(): string {
+describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () => {
+    test('start state no longer archives/resets shared idea-* paths', () => {
         const start = DEF.states.find((s) => s.id === 'start');
-        const cmd = start?.onEnter?.find(
-            (a) => a.kind === 'shell' && (a.options?.command ?? '').includes('idea-archive'),
-        )?.options?.command;
-        if (cmd === undefined) throw new Error('start state has no idea-archive reset command');
-        return cmd;
-    }
-
-    async function runInTemp(command: string, dir: string): Promise<number> {
-        const proc = Bun.spawn(['sh', '-c', command], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
-        return await proc.exited;
-    }
-
-    test('a prior idea-eval report is moved into a timestamped archive, not deleted', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-idea-archive-'));
-        const runDir = join(dir, '.spur', 'run');
-        await mkdir(runDir, { recursive: true });
-        await writeFile(join(runDir, 'idea-eval-report.md'), 'PRIOR RUN REPORT\n');
-        await writeFile(join(runDir, 'idea-needs-design.json'), '{"needs_design":true}');
-        // Ephemeral markers that the reset is expected to clear.
-        await writeFile(join(runDir, 'idea-feature-id.txt'), 'X1');
-        await writeFile(join(runDir, 'idea-batch-create.done'), 'ts');
-
-        expect(await runInTemp(resetCommand(), dir)).toBe(0);
-
-        // The report survives — relocated under .spur/run/idea-archive/<timestamp>/.
-        const archives = await readdir(join(runDir, 'idea-archive'));
-        expect(archives.length).toBe(1);
-        const archived = join(runDir, 'idea-archive', archives[0] ?? '', 'idea-eval-report.md');
-        expect(await readFile(archived, 'utf8')).toBe('PRIOR RUN REPORT\n');
-
-        // ...and is cleared from the live path so the next run starts clean.
-        expect(await Bun.file(join(runDir, 'idea-eval-report.md')).exists()).toBe(false);
-        expect(await Bun.file(join(runDir, 'idea-needs-design.json')).exists()).toBe(false);
-        // Ephemeral markers are removed outright (no archival value).
-        expect(await Bun.file(join(runDir, 'idea-feature-id.txt')).exists()).toBe(false);
-        expect(await Bun.file(join(runDir, 'idea-batch-create.done')).exists()).toBe(false);
-
-        await rm(dir, { recursive: true, force: true });
+        const cmds = (start?.onEnter ?? []).filter((a) => a.kind === 'shell').map((a) => a.options?.command ?? '');
+        expect(cmds.some((c) => c.includes('idea-archive'))).toBe(false);
+        expect(cmds.some((c) => c.includes('rm -f .spur/run/idea-'))).toBe(false);
     });
 
-    test('a first run with no prior artifacts creates no archive and still succeeds', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-idea-archive-'));
-        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
-
-        expect(await runInTemp(resetCommand(), dir)).toBe(0);
-        expect(await Bun.file(join(dir, '.spur', 'run', 'idea-archive')).exists()).toBe(false);
-
-        await rm(dir, { recursive: true, force: true });
+    test('discovery/eval/gate paths are __runId-scoped', () => {
+        const raw = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
+        // Every former fixed idea-* run path must carry the run-id prefix.
+        for (const stem of [
+            'idea-precheck-doctor.status',
+            'idea-eval-report.md',
+            'idea-needs-design.json',
+            'idea-feature-id.txt',
+            'idea-ac-retry-count',
+            'idea-ac-content.md',
+            'idea-ac-done.txt',
+            'idea-decompose-retry-count',
+            'idea-task-batch.json',
+            'idea-batch-create.done',
+            'idea-batch-create.failed',
+        ]) {
+            expect(raw).toContain(`.spur/run/\${vars.__runId}-${stem}`);
+            // No unscoped live path remains (comments may still mention idea-*).
+            expect(raw).not.toMatch(new RegExp(`\\.spur/run/${stem.replace('.', '\\.')}`));
+        }
     });
 
     test('discovery instructs a run_id provenance footer on the emitted report', () => {
@@ -155,5 +128,10 @@ describe('idea-pipeline definition — discovery artifact retain policy (R8 of 0
 
         expect(input).toContain(`run_id: \${vars.__runId}`);
         expect(input).toContain('generated_at');
+    });
+
+    test('failed and cancelled are declared failure terminals', () => {
+        const failureStates = (DEF as unknown as { failureStates?: string[] }).failureStates ?? [];
+        expect(failureStates).toEqual(expect.arrayContaining(['failed', 'cancelled']));
     });
 });

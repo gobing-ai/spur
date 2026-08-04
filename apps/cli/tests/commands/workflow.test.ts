@@ -296,6 +296,157 @@ terminalStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    // ── 0425 R2: failure terminal → status failed + non-zero exit ──────────────
+    const FAILURE_TERMINAL_YAML = `name: cli-fail-term
+kind: state-machine
+initialState: start
+states:
+  - id: start
+  - id: done
+  - id: failed
+transitions:
+  - from: start
+    to: failed
+    guard: { kind: always }
+terminalStates:
+  - done
+  - failed
+failureStates:
+  - failed
+`;
+
+    test('run landing in a failure terminal exits non-zero and reports status failed (0425 R2)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'fail-term.yaml');
+        await writeFile(workflowFile, FAILURE_TERMINAL_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--run-id', 'cli-fail-term-1', workflowFile, '--json'], {
+            output,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            status?: string;
+            finalState?: string;
+            reason?: string;
+        };
+        expect(parsed.status).toBe('failed');
+        expect(parsed.finalState).toBe('failed');
+        expect(parsed.reason).toBe('terminal:failed');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run without failureStates still reports done when landing on a terminal named failed', async () => {
+        // Backward-compat: absent failureStates keeps today's lifecycle.done behaviour.
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'legacy-fail-name.yaml');
+        await writeFile(workflowFile, FAILURE_TERMINAL_YAML.replace(/\nfailureStates:\n {2}- failed\n/, '\n'));
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', '--run-id', 'cli-legacy-fail-name', workflowFile, '--json'], {
+            output,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            status?: string;
+            finalState?: string;
+        };
+        expect(parsed.status).toBe('done');
+        expect(parsed.finalState).toBe('failed');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    // ── 0425 R4: concurrent runs do not share gate artifacts ──────────────────
+    /**
+     * A workflow template placeholder. The escaped `\${` keeps TypeScript from interpolating,
+     * so the literal `${vars.<name>}` text reaches the YAML for the engine to resolve.
+     */
+    const yamlVar = (name: string) => `\${vars.${name}}`;
+
+    const RUN_SCOPED_GATE_YAML = [
+        'name: cli-run-scoped-gate',
+        'kind: state-machine',
+        'initialState: probe',
+        'states:',
+        '  - id: probe',
+        '    onEnter:',
+        '      - kind: shell',
+        '        options:',
+        '          command: >-',
+        '            mkdir -p .spur/run &&',
+        `            printf '%s\\n' "${yamlVar('outcome')}" > ".spur/run/${yamlVar('__runId')}-gate.status"`,
+        '  - id: done',
+        '  - id: failed',
+        'transitions:',
+        '  - from: probe',
+        '    to: done',
+        '    guard:',
+        '      kind: shell',
+        '      options:',
+        `        command: 'test "$(cat .spur/run/${yamlVar('__runId')}-gate.status 2>/dev/null)" = PASS'`,
+        '  - from: probe',
+        '    to: failed',
+        '    guard:',
+        '      kind: always',
+        'terminalStates: [done, failed]',
+        'failureStates: [failed]',
+        'vars:',
+        '  outcome: "PASS"',
+        '  __runId: ""',
+        '',
+    ].join('\n');
+
+    test('concurrent runs with opposite gate outcomes each read only their own artifacts (0425 R4)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'run-scoped-gate.yaml');
+        await writeFile(workflowFile, RUN_SCOPED_GATE_YAML);
+        // Separate DB files per run: the regression under test is .spur/run artifact
+        // isolation (both runs share `cwd: dir`), NOT DB migration concurrency. Two
+        // in-process `main()` calls migrating the same fresh file race UNIQUE on
+        // __spur_cli_migrations — pre-existing infra behaviour, out of scope here.
+        const passDb = join(dir, 'pass.db');
+        const failDb = join(dir, 'fail.db');
+
+        const passOut = createCapturedOutput();
+        const failOut = createCapturedOutput();
+        const [passExit, failExit] = await Promise.all([
+            main(['workflow', 'run', '--run-id', 'gate-pass', '--vars', '{"outcome":"PASS"}', workflowFile, '--json'], {
+                output: passOut,
+                cwd: dir,
+                dbUrl: passDb,
+            }),
+            main(['workflow', 'run', '--run-id', 'gate-fail', '--vars', '{"outcome":"FAIL"}', workflowFile, '--json'], {
+                output: failOut,
+                cwd: dir,
+                dbUrl: failDb,
+            }),
+        ]);
+
+        expect(passExit).toBe(0);
+        expect(failExit).toBe(1);
+        const passParsed = JSON.parse(passOut.messages.at(-1) ?? '{}') as {
+            status?: string;
+            finalState?: string;
+        };
+        const failParsed = JSON.parse(failOut.messages.at(-1) ?? '{}') as {
+            status?: string;
+            finalState?: string;
+        };
+        expect(passParsed).toMatchObject({ status: 'done', finalState: 'done' });
+        expect(failParsed).toMatchObject({ status: 'failed', finalState: 'failed' });
+
+        // Each run wrote its own status file; neither overwrote the other.
+        const passStatus = await readFile(join(dir, '.spur', 'run', 'gate-pass-gate.status'), 'utf8');
+        const failStatus = await readFile(join(dir, '.spur', 'run', 'gate-fail-gate.status'), 'utf8');
+        expect(passStatus.trim()).toBe('PASS');
+        expect(failStatus.trim()).toBe('FAIL');
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run output modes preserve final summary, silence, verbose detail, and JSON isolation', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
