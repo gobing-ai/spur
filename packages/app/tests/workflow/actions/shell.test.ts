@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
-import type { PipeProcess, PipeProcessOptions, ProcessExecutor, ProcessResult } from '@gobing-ai/ts-runtime';
+import {
+    NodeProcessExecutor,
+    type PipeProcess,
+    type PipeProcessOptions,
+    type ProcessExecutor,
+    type ProcessResult,
+} from '@gobing-ai/ts-runtime';
 import { StreamingShellActionRunner } from '../../../src/workflow/actions/shell';
 import type { WorkflowActionOutputEvent, WorkflowObservabilityBus } from '../../../src/workflow/observability';
 
@@ -207,5 +216,63 @@ describe('StreamingShellActionRunner', () => {
         const chunk = first?.chunk ?? '';
         expect(chunk).toContain('[REDACTED]');
         expect(chunk).not.toContain('sk-abcd1234efgh5678ijkl');
+    });
+
+    test('exports workflow vars as process env (env-var handoff)', async () => {
+        let capturedOptions: PipeProcessOptions | undefined;
+        const fakeExecutor: ProcessExecutor = {
+            run: async () => ({ exitCode: 0 }) as ProcessResult,
+            runStreaming: (options) => {
+                capturedOptions = options;
+                return {
+                    pid: 9,
+                    stdout: null,
+                    stderr: null,
+                    exited: Promise.resolve(0),
+                    writeStdin: () => undefined,
+                    endStdin: () => undefined,
+                    kill: () => undefined,
+                };
+            },
+        };
+        const runner = new StreamingShellActionRunner(fakeExecutor);
+        await runner.execute({ command: 'echo hi' }, makeCtx({ vars: { idea: 'free text', __runId: 'r1' } }));
+
+        // Resolved vars are handed to the subprocess as env, referenced by name in the command.
+        expect(capturedOptions?.env?.idea).toBe('free text');
+        expect(capturedOptions?.env?.__runId).toBe('r1');
+        // The ambient process environment is inherited so the shell can still resolve tools.
+        expect(capturedOptions?.env?.PATH).toBe(process.env.PATH);
+    });
+
+    test('treats a var carrying shell metacharacters as data — no injection (R3)', async () => {
+        const value = '`printf INJECTED` $(printf INJECTED) "dq" \\bs';
+        const runner = new StreamingShellActionRunner(new NodeProcessExecutor());
+        const result = await runner.execute({ command: 'printf \'%s\' "$idea"' }, makeCtx({ vars: { idea: value } }));
+
+        expect(result.ok).toBe(true);
+        expect(result.data?.exitCode).toBe(0);
+        // Observed literally: had backticks / $() executed, stdout would hold the command
+        // outputs, not the inert text — and a second process would have been spawned.
+        expect(result.data?.stdout).toBe(value);
+    });
+
+    test('doctor-status write survives a backtick idea and does not hang (R4)', async () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'spur-shell-'));
+        const runId = 'run-0432';
+        const idea = 'Use `cat .spur/run/x` and $(ls) and "q" and \\path in prose';
+        const runner = new StreamingShellActionRunner(new NodeProcessExecutor());
+        const command = [
+            'mkdir -p .spur/run',
+            'DOCTOR_FILE=".spur/run/$__runId-idea-precheck-doctor.status"',
+            'if test -n "$idea"; then printf "PASS\\n" > "$DOCTOR_FILE"; else printf "FAIL\\n" > "$DOCTOR_FILE"; fi',
+            'exit 0',
+        ].join(' && ');
+        const result = await runner.execute({ command, cwd: tmp }, makeCtx({ vars: { __runId: runId, idea } }));
+
+        expect(result.ok).toBe(true);
+        expect(result.data?.exitCode).toBe(0);
+        const statusFile = join(tmp, '.spur/run', `${runId}-idea-precheck-doctor.status`);
+        expect(readFileSync(statusFile, 'utf8')).toBe('PASS\n');
     });
 });

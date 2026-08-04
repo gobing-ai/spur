@@ -82,11 +82,11 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            DOCTOR_FILE=".spur/run/${vars.__runId}-idea-precheck-doctor.status" &&
+            DOCTOR_FILE=".spur/run/$__runId-idea-precheck-doctor.status" &&
             set +e &&
-            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            $spurBin agent doctor $agent; doctor_rc=$?;
             set -e &&
-            if [ "$doctor_rc" -eq 0 ] && test -n "${vars.idea}"; then
+            if [ "$doctor_rc" -eq 0 ] && test -n "$idea"; then
               printf 'PASS\n' > "$DOCTOR_FILE";
             else
               printf 'FAIL\n' > "$DOCTOR_FILE";
@@ -158,7 +158,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/${vars.__runId}-idea-ac-retry-count; rm -f .spur/run/${vars.__runId}-idea-ac-content.md .spur/run/${vars.__runId}-idea-ac-done.txt'
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-ac-retry-count; rm -f .spur/run/$__runId-idea-ac-content.md .spur/run/$__runId-idea-ac-done.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -176,8 +176,8 @@ states:
       - kind: shell
         options:
           command: >-
-            if test -s .spur/run/${vars.__runId}-idea-ac-content.md; then
-              ${vars.spurBin} feature update ${vars.featureId} --section "Acceptance Criteria" --from-file .spur/run/${vars.__runId}-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-ac-done.txt;
+            if test -s .spur/run/$__runId-idea-ac-content.md; then
+              $spurBin feature update $featureId --section "Acceptance Criteria" --from-file .spur/run/$__runId-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-ac-done.txt;
             else
               exit 0;
             fi
@@ -234,7 +234,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/${vars.__runId}-idea-decompose-retry-count; rm -f .spur/run/${vars.__runId}-idea-task-batch.json .spur/run/${vars.__runId}-idea-batch-create.done .spur/run/${vars.__runId}-idea-batch-create.failed'
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed'
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -264,7 +264,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'if test -f .spur/run/${vars.__runId}-idea-batch-create.done; then exit 0; fi; rm -f .spur/run/${vars.__runId}-idea-batch-create.failed; if ${vars.spurBin} task batch-create --file .spur/run/${vars.__runId}-idea-task-batch.json; then date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-batch-create.done; else date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/${vars.__runId}-idea-batch-create.failed; fi'
+          command: 'if test -f .spur/run/$__runId-idea-batch-create.done; then exit 0; fi; rm -f .spur/run/$__runId-idea-batch-create.failed; if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json; then date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.done; else date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.failed; fi'
 
   - id: handoff
     description: >
@@ -278,7 +278,7 @@ states:
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: idea-pipeline handoff feature=${vars.featureId} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/idea-checkpoint.md'
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: idea-pipeline handoff feature=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/idea-checkpoint.md'
 
   - id: cancelled
     description: Terminal — pipeline cancelled by operator or error.
@@ -297,7 +297,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-idea-precheck-doctor.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-idea-precheck-doctor.status 2>/dev/null)" = PASS'
   - from: start
     to: failed
     description: Agent doctor FAIL — stop before discovery.
@@ -314,7 +314,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "${vars.idea_approved}" = true'
+        command: 'test "$profile" = auto && test "$idea_approved" = true'
   - from: discovery
     to: idea-eval
     description: Discovery complete — gate on idea evaluation taste decision.
@@ -329,21 +329,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "${vars.idea_approved}" = true'
+        command: 'test "$profile" = auto && test "$idea_approved" = true'
   - from: idea-eval
     to: feature-create
     description: Idea evaluation approved — create or select a feature.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: idea-eval
     to: cancelled
     description: Idea evaluation rejected or cancelled — no feature created.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no || test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = no || test "$__hitlAnswer" = cancel'
 
   # ── feature-create -> ac-generate ──
   - from: feature-create
@@ -365,7 +365,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "$profile" = auto && $spurBin feature check $featureId && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
   # Auto-skip 2: pass + skip-design route → decompose
   - from: ac-generate
     to: decompose
@@ -373,7 +373,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "$profile" = auto && $spurBin feature check $featureId && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
   # Auto-skip 3: check failed, retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
@@ -381,7 +381,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: 'test "$profile" = auto && ! $spurBin feature check $featureId && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   # Auto-skip 4: check failed, retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
@@ -389,7 +389,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check ${vars.featureId} && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: 'test "$profile" = auto && ! $spurBin feature check $featureId && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check
@@ -405,35 +405,35 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "$__hitlAnswer" = yes && $spurBin feature check $featureId && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
   - from: feature-check
     to: decompose
     description: Feature check passed, skip-design route — go directly to decompose.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/${vars.__runId}-idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "$__hitlAnswer" = yes && $spurBin feature check $featureId && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
   - from: feature-check
     to: ac-generate
     description: "Feature check failed — revise AC (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check $featureId) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: feature-check
     to: failed
     description: Feature check failed after 3 retries — escalate to failed.
     guard:
       kind: shell
       options:
-        command: '(test "${vars.__hitlAnswer}" = no || ! ${vars.spurBin} feature check ${vars.featureId}) && test "$(cat .spur/run/${vars.__runId}-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check $featureId) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   - from: feature-check
     to: cancelled
     description: Operator cancelled the feature-check gate.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   # ── system-design: -> design-approval (normal) OR -> decompose (auto + prior approval) ──
   # Declaration order: auto-skip guard tried FIRST (like task-pipeline's review->verify pattern).
@@ -443,7 +443,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "${vars.design_approved}" = true'
+        command: 'test "$profile" = auto && test "$design_approved" = true'
   - from: system-design
     to: design-approval
     description: System design done — gate on design approval.
@@ -457,21 +457,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: design-approval
     to: system-design
     description: Design rejected — revise system design.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: design-approval
     to: cancelled
     description: Operator cancelled design approval.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   # ── decompose: auto-skip (profile=auto) OR enter batch-create HITL gate (interactive) ──
   - from: decompose
@@ -480,7 +480,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "$profile" = auto'
   # Interactive fallback: enter batch-create HITL gate
   - from: decompose
     to: batch-create
@@ -494,21 +494,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: batch-create
     to: decompose
     description: Operator requested decomposition revisions.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: batch-create
     to: cancelled
     description: Operator cancelled batch creation.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   # ── batch-create-run: success -> handoff, failure -> decompose (retry cap: 3), failure+cap -> failed ──
   - from: batch-create-run
@@ -517,18 +517,18 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.done'
+        command: 'test -f .spur/run/$__runId-idea-batch-create.done'
   - from: batch-create-run
     to: decompose
     description: "Batch-create failed — revise decomposition (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.failed && test "$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: 'test -f .spur/run/$__runId-idea-batch-create.failed && test "$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: batch-create-run
     to: failed
     description: Batch-create failed after 3 retries — escalate to failed.
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/${vars.__runId}-idea-batch-create.failed && test "$(cat .spur/run/${vars.__runId}-idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: 'test -f .spur/run/$__runId-idea-batch-create.failed && test "$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'

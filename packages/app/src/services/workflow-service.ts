@@ -28,7 +28,7 @@ import {
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, type ProcessExecutor, parseYamlObject } from '@gobing-ai/ts-runtime';
-import type { RunOutputSinkConfig } from '../observability/run-output-sink';
+import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
@@ -278,8 +278,8 @@ export interface WorkflowTraceTimeline {
     run: WorkflowTraceEntry;
     events: TimelineEvent[];
     /**
-     * Relative path to the per-run agent-output artifact
-     * (`.spur/run/<runId>-output.log`, task 0414) when the capture file exists.
+     * Relative path to the per-run consolidated all-in-one log
+     * (`.spur/run/<runId>.log`, feature D2 / task 0426) when the file exists.
      */
     outputArtifact?: string;
 }
@@ -784,9 +784,6 @@ export class WorkflowAppService {
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
             ...(processExec !== undefined ? { processExecutor: processExec } : {}),
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
-            // Per-run live output capture is always on for agent.run steps (task 0414),
-            // with bounds from `.spur/config.yaml` `agent.output` (defaults when unset).
-            outputLog: await resolveOutputLogConfig(this.ctx.cwd),
         });
         const db = await this.ctx.getDb();
         let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
@@ -832,11 +829,11 @@ async function resolveDefaultAgentVar(
 }
 
 /**
- * Resolve per-run output capture bounds from `.spur/config.yaml` `agent.output`
- * (task 0414 R4). Best-effort: any config failure degrades to defaults rather
- * than failing the workflow run (R5).
+ * Resolve per-run consolidated-log bounds from `.spur/config.yaml` `agent.output`
+ * (feature D2 / task 0426). Best-effort: any config failure degrades to defaults
+ * rather than failing the workflow run (R8).
  */
-async function resolveOutputLogConfig(cwd: string): Promise<RunOutputSinkConfig> {
+export async function resolveOutputLogConfig(cwd: string): Promise<WorkflowRunLogConfig> {
     try {
         const output = (await loadSpurConfig(cwd)).agent?.output;
         if (output === undefined) return {};
@@ -851,11 +848,11 @@ async function resolveOutputLogConfig(cwd: string): Promise<RunOutputSinkConfig>
 }
 
 /**
- * Relative path to a run's agent-output capture artifact
- * (`.spur/run/<runId>-output.log`, task 0414), when the file exists.
+ * Relative path to a run's consolidated all-in-one log
+ * (`.spur/run/<runId>.log`, feature D2 / task 0426), when the file exists.
  */
 async function outputArtifactForRun(cwd: string, runId: string): Promise<string | undefined> {
-    const relative = join('.spur', 'run', `${runId}-output.log`);
+    const relative = join('.spur', 'run', `${runId}.log`);
     return (await fileExists(join(cwd, relative))) ? relative : undefined;
 }
 

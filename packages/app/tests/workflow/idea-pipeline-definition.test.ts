@@ -59,7 +59,9 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
         const guard = DEF.transitions[edgeIndex('discovery', 'feature-create')]?.guard;
 
         expect(guard?.kind).toBe('shell');
-        expect(guard?.options?.command).toBe(`test "\${vars.profile}" = auto && test "\${vars.idea_approved}" = true`);
+        // Guards reference vars by name so values reach the shell as env, never as command text
+        // (task 0435) — the invariant asserted is still "both conditions, ANDed".
+        expect(guard?.options?.command).toBe(`test "$profile" = auto && test "$idea_approved" = true`);
     });
 
     test('design bypass to decompose is declared before the always edge to design-approval', () => {
@@ -76,9 +78,9 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
         const guard = DEF.transitions[edgeIndex('system-design', 'decompose')]?.guard;
 
         expect(guard?.kind).toBe('shell');
-        expect(guard?.options?.command).toBe(
-            `test "\${vars.profile}" = auto && test "\${vars.design_approved}" = true`,
-        );
+        // Guards reference vars by name so values reach the shell as env, never as command text
+        // (task 0435) — the invariant asserted is still "both conditions, ANDed".
+        expect(guard?.options?.command).toBe(`test "$profile" = auto && test "$design_approved" = true`);
     });
 
     test('__runId is declared so discovery artifacts can carry run provenance (R8)', () => {
@@ -116,7 +118,13 @@ describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () =>
             'idea-batch-create.done',
             'idea-batch-create.failed',
         ]) {
-            expect(raw).toContain(`.spur/run/\${vars.__runId}-${stem}`);
+            // Two spellings are both run-scoped and both valid: engine template resolution
+            // (`${vars.__runId}`) in non-shell options, and the env-var handoff (`$__runId`) in
+            // shell action and guard commands, where embedding a value would make it executable
+            // (tasks 0432 / 0435). The invariant is that the path is scoped, not how it is spelled.
+            const scoped =
+                raw.includes(`.spur/run/\${vars.__runId}-${stem}`) || raw.includes(`.spur/run/$__runId-${stem}`);
+            expect(scoped, `${stem} must be run-id scoped in either spelling`).toBe(true);
             // No unscoped live path remains (comments may still mention idea-*).
             expect(raw).not.toMatch(new RegExp(`\\.spur/run/${stem.replace('.', '\\.')}`));
         }

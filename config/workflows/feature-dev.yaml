@@ -62,13 +62,13 @@ states:
           command: >-
             mkdir -p .spur/run &&
             set +e &&
-            test -n "${vars.featureId}"; id_rc=$?;
-            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            test -n "$featureId"; id_rc=$?;
+            $spurBin agent doctor $agent; doctor_rc=$?;
             set -e &&
             if [ "$id_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > ".spur/run/${vars.__runId}-feature-dev-precheck.status";
+              printf 'PASS\n' > ".spur/run/$__runId-feature-dev-precheck.status";
             else
-              printf 'FAIL\n' > ".spur/run/${vars.__runId}-feature-dev-precheck.status";
+              printf 'FAIL\n' > ".spur/run/$__runId-feature-dev-precheck.status";
             fi &&
             exit 0
       - kind: note
@@ -134,7 +134,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: feature-dev done featureId=${vars.featureId} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.featureId}-checkpoint.md'
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: feature-dev done featureId=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$featureId-checkpoint.md'
 
   - id: failed
     description: Terminal — plan rejected, a task failed verification, or the feature check did not pass.
@@ -146,7 +146,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-feature-dev-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-feature-dev-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
     description: Precheck FAIL (missing featureId and/or doctor red) — stop.
@@ -166,7 +166,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "$profile" = auto'
   - from: plan
     to: execute-tasks
     description: Tasks created; interactive — batch without --auto.
@@ -192,11 +192,11 @@ transitions:
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} feature check ${vars.featureId} --strict"
+        command: "$spurBin feature check $featureId --strict"
   - from: feature-verify
     to: failed
     description: Strict feature check failed — block before done; investigate incomplete tasks or AC.
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} feature check ${vars.featureId} --strict'
+        command: '! $spurBin feature check $featureId --strict'

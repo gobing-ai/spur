@@ -45,13 +45,13 @@ states:
           command: >-
             mkdir -p .spur/run/wayfinder &&
             set +e &&
-            ${vars.spurBin} task check ${vars.wbs}; check_rc=$?;
-            ${vars.spurBin} task show ${vars.wbs} --json > .spur/run/wayfinder/${vars.wbs}-show.json; show_rc=$?;
+            $spurBin task check $wbs; check_rc=$?;
+            $spurBin task show $wbs --json > .spur/run/wayfinder/$wbs-show.json; show_rc=$?;
             set -e &&
             if [ "$check_rc" -eq 0 ] && [ "$show_rc" -eq 0 ]; then
-              printf 'PASS\n' > .spur/run/wayfinder/${vars.wbs}-precheck.status;
+              printf 'PASS\n' > .spur/run/wayfinder/$wbs-precheck.status;
             else
-              printf 'FAIL\n' > .spur/run/wayfinder/${vars.wbs}-precheck.status;
+              printf 'FAIL\n' > .spur/run/wayfinder/$wbs-precheck.status;
             fi &&
             exit 0
       - kind: note
@@ -63,17 +63,17 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "mkdir -p .spur/run/wayfinder && ${vars.spurBin} task show ${vars.wbs} --json > .spur/run/wayfinder/${vars.wbs}-input.json"
+          command: "mkdir -p .spur/run/wayfinder && $spurBin task show $wbs --json > .spur/run/wayfinder/$wbs-input.json"
       # `.spur/workflows/` is the runtime read path in every layout — a symlink to
       # config/workflows/ inside the Spur monorepo, a real directory in a seeded
       # project. The previous `config/workflows/…` literal only resolved in the
       # monorepo and hard-failed `collect` anywhere else.
       - kind: shell
         options:
-          command: "${vars.spurBin} workflow validate .spur/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/${vars.wbs}-workflow-check.txt"
+          command: "$spurBin workflow validate .spur/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt"
       - kind: shell
         options:
-          command: "${vars.spurBin} task check ${vars.wbs} > .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+          command: "$spurBin task check $wbs > .spur/run/wayfinder/$wbs-precheck.txt"
 
   - id: investigate
     description: "Resolve the task's research/specification requirements and author evidence-backed sections through Spur CLI."
@@ -110,7 +110,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'rm -f .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt'
+          command: 'rm -f .spur/run/wayfinder/$wbs-resolution-verdict.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -146,12 +146,12 @@ states:
       # the terminal `failed` this workflow documents.
       - kind: shell
         options:
-          command: "${vars.spurBin} task check ${vars.wbs} ; exit 0"
+          command: "$spurBin task check $wbs ; exit 0"
       - kind: shell
         options:
           # PASS-only completion (preserve-list P4): lifecycle guards stay on; a forced
           # done without verdict evidence is the 0280 regression this replaces (see 0292).
-          command: "${vars.spurBin} task update ${vars.wbs} done ; exit 0"
+          command: "$spurBin task update $wbs done ; exit 0"
 
   - id: done
     description: "Research task resolved and ready to feed the implementation backlog."
@@ -173,7 +173,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/wayfinder/${vars.wbs}-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/wayfinder/$wbs-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
     description: "Precheck FAIL — stop before delegation."
@@ -185,35 +185,35 @@ transitions:
     guard:
       kind: shell
       options:
-        command: "test -s .spur/run/wayfinder/${vars.wbs}-input.json && test -s .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+        command: "test -s .spur/run/wayfinder/$wbs-input.json && test -s .spur/run/wayfinder/$wbs-precheck.txt"
   - from: collect
     to: failed
     description: "Input collection failed — stop before delegation."
     guard:
       kind: shell
       options:
-        command: "! test -s .spur/run/wayfinder/${vars.wbs}-input.json || ! test -s .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+        command: "! test -s .spur/run/wayfinder/$wbs-input.json || ! test -s .spur/run/wayfinder/$wbs-precheck.txt"
   - from: investigate
     to: verify
     description: "Research resolution authored — verify evidence and traceability. Guard enforces the evidence content floor (0300 R2): the task's Testing section must be non-placeholder (>5 lines, >60 words) before independent verification may begin."
     guard:
       kind: shell
       options:
-        command: 'test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -gt 5 && test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -gt 60'
+        command: 'test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -gt 5 && test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -gt 60'
   - from: investigate
     to: failed
     description: "Evidence content floor not met (0300 R2) — investigate authored a placeholder Testing section; stop before verification rather than certify hollow evidence."
     guard:
       kind: shell
       options:
-        command: 'test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -le 5 || test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -le 60'
+        command: 'test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -le 5 || test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -le 60'
   - from: verify
     to: record
     description: "Auto profile — record only on a machine-readable PASS verdict (fail-closed to the approve gate otherwise)."
     guard:
       kind: shell
       options:
-        command: 'test "${vars.approval}" = auto && grep -qx PASS .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt'
+        command: 'test "$approval" = auto && grep -qx PASS .spur/run/wayfinder/$wbs-resolution-verdict.txt'
   - from: verify
     to: approve
     description: "Verification completed — require explicit review approval."
@@ -225,32 +225,32 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: approve
     to: cancelled
     description: "Operator cancelled the research resolution."
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
   - from: approve
     to: failed
     description: "Operator rejected the research resolution."
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: record
     to: done
     description: "Task check passed and the task status is actually done (the lifecycle transition succeeded)."
     guard:
       kind: shell
       options:
-        command: '${vars.spurBin} task check ${vars.wbs} && test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r .status)" = done'
+        command: '$spurBin task check $wbs && test "$($spurBin task show $wbs --json | jq -r .status)" = done'
   - from: record
     to: failed
     description: "Recording/check failed or the task never reached done — stop without claiming completion."
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} task check ${vars.wbs} || test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r .status)" != done'
+        command: '! $spurBin task check $wbs || test "$($spurBin task show $wbs --json | jq -r .status)" != done'

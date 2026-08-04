@@ -57,7 +57,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '${vars.spurBin} feature check ${vars.featureId} --as verifying'
+        command: '$spurBin feature check $featureId --as verifying'
   - from: verifying
     to: done
     description: >
@@ -65,7 +65,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '${vars.spurBin} feature check ${vars.featureId} --strict --as done'
+        command: '$spurBin feature check $featureId --strict --as done'
 
   # Rework: verifying → active (mandatory History entry)
   - from: verifying

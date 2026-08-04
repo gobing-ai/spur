@@ -5,7 +5,6 @@ import {
     NodeProcessExecutor,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
-import type { RunOutputSinkConfig } from '../observability/run-output-sink';
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner } from './actions/agent-run';
@@ -19,6 +18,7 @@ import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from 
 import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
 import { StreamingShellActionRunner } from './actions/shell';
+import { EnvShellGuardRunner } from './guards/shell';
 import type { WorkflowObservabilityBus } from './observability';
 import type { WorkflowSteeringController } from './steering';
 /** Dependencies injected into spur-specific built-in action runners. */
@@ -34,20 +34,13 @@ export interface SpurWorkflowBuiltinsOptions {
     steeringController?: WorkflowSteeringController;
     /** Process executor for shell actions (task 0421 R9). Defaults to a fresh NodeProcessExecutor. */
     processExecutor?: ProcessExecutor;
-    /** Per-run live output capture bounds (task 0414); when set, agent.run steps write `.spur/run/<runId>-output.log`. */
-    outputLog?: RunOutputSinkConfig;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
 export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWorkflowBuiltinsOptions): void {
     const fileSystem = options.fileSystem ?? createNodeFileSystem();
     host.registerAction(
-        new AgentRunActionRunner(
-            options.agentService,
-            options.observabilityBus,
-            options.steeringController,
-            options.outputLog,
-        ),
+        new AgentRunActionRunner(options.agentService, options.observabilityBus, options.steeringController),
         'builtin',
     );
     // Streaming shell runner — replaces the engine's buffered shell runner by kind.
@@ -57,6 +50,10 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
         new StreamingShellActionRunner(options.processExecutor ?? new NodeProcessExecutor(), options.observabilityBus),
         'builtin',
     );
+    // Env-var shell guard — replaces the engine's `shell` guard by kind, so guard commands
+    // reference vars as `$NAME` instead of having values embedded in the command string
+    // (task 0435; the guard-side counterpart to the action handoff in task 0432).
+    host.registerGuard(new EnvShellGuardRunner(options.processExecutor ?? new NodeProcessExecutor()), 'builtin');
     host.registerAction(new RuleCheckActionRunner(options.ruleService), 'builtin');
     host.registerAction(new FileExistsActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadActionRunner(fileSystem), 'builtin');

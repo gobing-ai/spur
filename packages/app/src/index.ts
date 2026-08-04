@@ -18,6 +18,12 @@ export {
     configuredSecretValues,
     redactAndBound,
 } from './observability/agent-execution';
+// Consolidated all-in-one per-run workflow run log (feature D2 / task 0426)
+export {
+    DEFAULT_RUN_LOG_MAX_BYTES,
+    type WorkflowRunLogConfig,
+    WorkflowRunLogSink,
+} from './observability/workflow-run-log-sink';
 export type {
     AgentConfig,
     AgentExecutorConfig,
@@ -330,7 +336,7 @@ export type {
     WorkflowTraceTimeline,
     WorkflowValidateResult,
 } from './services/workflow-service';
-export { WorkflowAppService } from './services/workflow-service';
+export { resolveOutputLogConfig, WorkflowAppService } from './services/workflow-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';

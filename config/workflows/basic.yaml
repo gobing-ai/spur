@@ -44,7 +44,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            printf '0\n' > .spur/run/${vars.__runId}-basic-fix-attempt
+            printf '0\n' > .spur/run/$__runId-basic-fix-attempt
 
   - id: check
     description: >
@@ -55,9 +55,9 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/${vars.__runId}-basic-gate.status" &&
+            STATUS_FILE=".spur/run/$__runId-basic-gate.status" &&
             set +e &&
-            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            ( $qualityGateCmd ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
@@ -73,7 +73,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            ATTEMPT_FILE=".spur/run/${vars.__runId}-basic-fix-attempt" &&
+            ATTEMPT_FILE=".spur/run/$__runId-basic-fix-attempt" &&
             n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
             printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
       - kind: agent.run
@@ -101,21 +101,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-basic-gate.status 2>/dev/null)" = PASS'
   - from: check
     to: fix
     description: Check failed and under max fix attempts — route to fixall
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/$__runId-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$__runId-basic-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"'
   - from: check
     to: failed
     description: Check still red after max fix attempts — stop at failed
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/$__runId-basic-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$__runId-basic-fix-attempt 2>/dev/null || echo 0)" -ge "$qualityGateMaxFixAttempts"'
   # Defense: missing/corrupt status — attempt fix if under cap, else failed.
   - from: check
     to: fix
@@ -123,7 +123,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-basic-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/$__runId-basic-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"'
   - from: check
     to: failed
     description: Probe status missing/corrupt and attempts exhausted — failed

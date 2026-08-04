@@ -4,10 +4,9 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
-import type { AgentExecutionOptions } from '../../src/observability/agent-execution';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
-import { WorkflowAppService } from '../../src/services/workflow-service';
+import { resolveOutputLogConfig, WorkflowAppService } from '../../src/services/workflow-service';
 
 const MINIMAL_WORKFLOW_YAML = `name: test-flow
 kind: state-machine
@@ -562,7 +561,7 @@ describe('WorkflowAppService', () => {
             await rm(dir, { recursive: true, force: true });
         });
 
-        test('surfaces the per-run agent-output artifact when present (task 0414)', async () => {
+        test('surfaces the per-run consolidated run log when present (task 0426)', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
             const path = join(dir, 'test.yaml');
             await writeFile(path, MINIMAL_WORKFLOW_YAML);
@@ -570,23 +569,23 @@ describe('WorkflowAppService', () => {
             const svc = new WorkflowAppService(makeCtx(dir));
             await svc.run(path, { runId: 'trace-artifact-1' });
 
-            // Simulate the live-output sink having written the capture file.
+            // Simulate the consolidated run-log sink having written the log file.
             const artifactDir = join(dir, '.spur', 'run');
             await mkdir(artifactDir, { recursive: true });
             await writeFile(
-                join(artifactDir, 'trace-artifact-1-output.log'),
-                '[2026-08-02T00:00:01.000Z] stdout: phase A\n',
+                join(artifactDir, 'trace-artifact-1.log'),
+                '# spur workflow run trace-artifact-1 — test-flow — started 2026-08-02T00:00:01.000Z\n',
             );
 
             const result = await svc.trace('trace-artifact-1');
             expect('events' in result).toBe(true);
             if ('events' in result) {
-                expect(result.outputArtifact).toBe(join('.spur', 'run', 'trace-artifact-1-output.log'));
+                expect(result.outputArtifact).toBe(join('.spur', 'run', 'trace-artifact-1.log'));
             }
             await rm(dir, { recursive: true, force: true });
         });
 
-        test('omits outputArtifact when no capture file exists (task 0414)', async () => {
+        test('omits outputArtifact when no run log exists (task 0426)', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
             const path = join(dir, 'test.yaml');
             await writeFile(path, MINIMAL_WORKFLOW_YAML);
@@ -1396,80 +1395,37 @@ terminalStates:
     });
 });
 
-describe('agent.output config bounds flow to the per-run sink (task 0414 R4)', () => {
-    test('config max-lines truncates the artifact through the full chain', async () => {
+describe('agent.output config bounds flow to the consolidated run-log sink (task 0426 R7)', () => {
+    test('resolveOutputLogConfig reads max-bytes/max-lines from .spur/config.yaml agent.output', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-wf-output-config-'));
-        // Config with an `agent.output` bound — the provenance chain under test:
-        // .spur/config.yaml → AgentOutputConfigSchema → resolveOutputLogConfig
-        // → RunOutputSink → visible truncation in the artifact.
+        // .spur/config.yaml → AgentOutputConfigSchema → resolveOutputLogConfig → WorkflowRunLogConfig.
         await mkdir(join(dir, '.spur'), { recursive: true });
         await writeFile(
             join(dir, '.spur', 'config.yaml'),
-            `version: "1"\nname: config-bound\nagent:\n  output:\n    max-lines: 1\n`,
-        );
-        const workflowPath = join(dir, 'test.yaml');
-        await writeFile(
-            workflowPath,
-            `name: config-bound-flow
-kind: state-machine
-initialState: start
-states:
-  - id: start
-    onEnter:
-      - kind: agent.run
-        options:
-          input: hello
-  - id: done
-transitions:
-  - from: start
-    to: done
-terminalStates:
-  - done
-`,
+            `version: "1"\nname: config-bound\nagent:\n  output:\n    max-bytes: 2048\n    max-lines: 1\n`,
         );
 
-        const ctx = makeCtx(dir);
-        ctx.agentService = () =>
-            ({
-                runTraced: async (
-                    _input: string | undefined,
-                    _flags: Record<string, string | boolean>,
-                    _deps?: unknown,
-                    execution?: AgentExecutionOptions,
-                ) => {
-                    const observer = execution?.observer;
-                    if (observer !== undefined) {
-                        for (const chunk of ['first chunk', 'second chunk']) {
-                            observer({
-                                kind: 'output',
-                                schemaVersion: 1,
-                                eventId: 'e-out',
-                                sequence: 1,
-                                runId: 'config-bound-run',
-                                executionId: 'execution-1',
-                                actionId: 'start',
-                                at: '2026-08-02T00:00:01.000Z',
-                                stream: 'stdout',
-                                chunk,
-                            });
-                        }
-                    }
-                    return {
-                        exitCode: 0,
-                        stdout: '',
-                        invocation: { agent: 'pi', argv: [], outputMode: 'buffered', stdinInteractive: false },
-                    };
-                },
-            }) as unknown as AgentService;
+        const config = await resolveOutputLogConfig(dir);
+        expect(config.maxBytes).toBe(2048);
+        expect(config.maxLines).toBe(1);
+        await rm(dir, { recursive: true, force: true });
+    });
 
-        const svc = new WorkflowAppService(ctx);
-        await svc.run(workflowPath, { runId: 'config-bound-run' });
+    test('resolveOutputLogConfig degrades to defaults when agent.output is absent', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-output-config-'));
+        const config = await resolveOutputLogConfig(dir);
+        expect(config.maxBytes).toBeUndefined();
+        expect(config.maxLines).toBeUndefined();
+        await rm(dir, { recursive: true, force: true });
+    });
 
-        const artifact = await readFile(join(dir, '.spur', 'run', 'config-bound-run-output.log'), 'utf8');
-        // The config-driven max-lines: 1 bound fired — truncation is visible in the artifact.
-        expect(artifact).toContain('[truncated]');
-        // Nothing after the marker may read as a complete capture.
-        expect(artifact).not.toContain('second chunk');
+    test('resolveOutputLogConfig degrades to defaults when config is unreadable', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-output-config-'));
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), `this is: not: valid: yaml: [unclosed\n`);
+        const config = await resolveOutputLogConfig(dir);
+        expect(config.maxBytes).toBeUndefined();
+        expect(config.maxLines).toBeUndefined();
         await rm(dir, { recursive: true, force: true });
     });
 });

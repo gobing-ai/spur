@@ -66,13 +66,13 @@ states:
           command: >-
             mkdir -p .spur/run &&
             set +e &&
-            test -n "${vars.slug}"; slug_rc=$?;
-            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            test -n "$slug"; slug_rc=$?;
+            $spurBin agent doctor $agent; doctor_rc=$?;
             set -e &&
             if [ "$slug_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > .spur/run/${vars.__runId}-plan-precheck.status;
+              printf 'PASS\n' > .spur/run/$__runId-plan-precheck.status;
             else
-              printf 'FAIL\n' > .spur/run/${vars.__runId}-plan-precheck.status;
+              printf 'FAIL\n' > .spur/run/$__runId-plan-precheck.status;
             fi &&
             exit 0
       - kind: note
@@ -97,7 +97,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && rm -f .spur/run/${vars.__runId}-plan-feature-id.txt'
+          command: 'mkdir -p .spur/run && rm -f .spur/run/$__runId-plan-feature-id.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -146,7 +146,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: planning-pipeline handoff slug=${vars.slug} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.slug}-checkpoint.md'
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: planning-pipeline handoff slug=$slug ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$slug-checkpoint.md'
 
   - id: cancelled
     description: Terminal — planning abandoned by the operator.
@@ -160,21 +160,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = FAIL'
+        command: 'test "$(cat .spur/run/$__runId-plan-precheck.status 2>/dev/null)" = FAIL'
   - from: start
     to: feature-id
     description: profile=auto and precheck PASS — skip the phasing HITL gate.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$profile" = auto && test "$(cat .spur/run/$__runId-plan-precheck.status 2>/dev/null)" = PASS'
   - from: start
     to: phasing
     description: Interactive and precheck PASS — enter the phasing HITL gate.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.__runId}-plan-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-plan-precheck.status 2>/dev/null)" = PASS'
   - from: start
     to: failed
     description: Defense — corrupt/missing precheck status — failed.
@@ -188,14 +188,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes || test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = yes || test "$__hitlAnswer" = no'
   - from: phasing
     to: cancelled
     description: Operator cancelled planning.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   # ── linear body ──
   - from: feature-id
@@ -214,7 +214,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && test "${vars.design_approved}" = true'
+        command: 'test "$profile" = auto && test "$design_approved" = true'
   - from: design-gen
     to: design-approval
     description: Design doc drafted — gate on human approval.
@@ -228,18 +228,18 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: design-approval
     to: design-gen
     description: Rework — operator requested design revisions.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: design-approval
     to: cancelled
     description: Operator cancelled planning.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'

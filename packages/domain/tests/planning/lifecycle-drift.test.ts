@@ -185,13 +185,20 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             .flatMap((s) => s.onEnter ?? [])
             .filter((a) => a.kind === 'shell')
             .map((a) => String(a.options?.command ?? ''));
-        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} wip/.test(c))).toBe(true);
+        // Variable spelling: task 0432/0434 exports workflow vars as process env, so shell
+        // commands reference `wbs` by bare name (`$wbs`) instead of the engine's inline
+        // `${vars.wbs}` template. Accept both spellings — the invariant is the verb shape
+        // (`task update <wbs> <status>` / `task record <wbs>`), not the variable syntax.
+        const wbsRef = /(?:\$\{vars\.wbs\}|\$wbs)/;
+        expect(allCmds.some((c) => new RegExp(`task update ${wbsRef.source} wip`).test(c))).toBe(true);
         // The testing transition is now inside `task record --transition testing` (a single verb),
         // not a separate shell step. Record owns the transition; the gate guard still verifies.
-        expect(allCmds.some((c) => /task record \$\{vars\.wbs\}/.test(c) && c.includes('--transition testing'))).toBe(
-            true,
-        );
-        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} done/.test(c))).toBe(true);
+        expect(
+            allCmds.some(
+                (c) => new RegExp(`task record ${wbsRef.source}`).test(c) && c.includes('--transition testing'),
+            ),
+        ).toBe(true);
+        expect(allCmds.some((c) => new RegExp(`task update ${wbsRef.source} done`).test(c))).toBe(true);
     });
 
     test('R4: approve is a HITL gate (hitl.confirm)', () => {

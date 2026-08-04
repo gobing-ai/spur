@@ -486,7 +486,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(transitionBlocks).not.toContain('> .spur/run/idea-ac-retry-count');
         expect(transitionBlocks).not.toContain('> .spur/run/idea-decompose-retry-count');
 
-        const hitlAnswer = `$${'{vars.__hitlAnswer}'}`;
+        // Guards reference vars by name so the value reaches the shell as env rather than as
+        // command text (task 0435). The routing invariants asserted below are unchanged.
+        const hitlAnswer = '$__hitlAnswer';
         for (const text of [idea, planning]) {
             expect(text).toContain(`test "${hitlAnswer}" = yes`);
             expect(text).toContain(`test "${hitlAnswer}" = no`);
@@ -565,7 +567,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const approveBlock =
             transitionBlocks.split('# ── approve:')[1]?.split('# ── completion gate')[0] ?? transitionBlocks;
 
-        const hitlAnswer = `$${'{vars.__hitlAnswer}'}`;
+        // Guards reference vars by name so the value reaches the shell as env rather than as
+        // command text (task 0435). The routing invariants asserted below are unchanged.
+        const hitlAnswer = '$__hitlAnswer';
         expect(approveBlock).toContain(`test "${hitlAnswer}" = yes`);
         expect(approveBlock).toContain(`test "${hitlAnswer}" = no`);
         expect(approveBlock).toContain(`test "${hitlAnswer}" = cancel`);

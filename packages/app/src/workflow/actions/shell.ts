@@ -48,10 +48,22 @@ export class StreamingShellActionRunner implements ActionRunner {
         const usesShell = explicitArgs.length === 0;
         const spawn = usesShell ? { command: '/bin/sh', args: ['-c', command] } : { command, args: explicitArgs };
         const cwd = stringOption(options, 'cwd', context.workdir);
+        // Env-var handoff (task 0432): workflow vars are exported as process environment so a
+        // command references them by name (`$idea`, `$__runId`) instead of the engine's inline
+        // `${vars.*}` templates. A shell variable-expansion result is never re-parsed for shell
+        // metacharacters, so a var carrying backticks / `$()` / quotes / backslashes is observed
+        // as data — it cannot become code in the action's subprocess. Embedding var values into
+        // the command string (engine template pre-resolution) is the bug this replaces; the
+        // engine still pre-resolves `${vars.*}` in any option, so shell commands must use `$NAME`.
+        const env: Record<string, string> = {};
+        for (const [key, value] of Object.entries({ ...process.env, ...context.vars })) {
+            if (value !== undefined) env[key] = value;
+        }
         const pipe = this.processExecutor.runStreaming({
             command: spawn.command,
             args: spawn.args,
             ...(cwd !== undefined ? { cwd } : {}),
+            env,
         });
         let stdout = '';
         let stderr = '';

@@ -1306,9 +1306,9 @@ describe('formatTraceTimeline output artifact (task 0414)', () => {
         };
     }
 
-    test('points the operator at the live output artifact when present', () => {
-        const out = formatTraceTimeline(makeTimeline({ outputArtifact: '.spur/run/r1-output.log' }));
-        expect(out).toContain('Agent output: .spur/run/r1-output.log');
+    test('points the operator at the live run log when present', () => {
+        const out = formatTraceTimeline(makeTimeline({ outputArtifact: '.spur/run/r1.log' }));
+        expect(out).toContain('Run log: .spur/run/r1.log');
         expect(out).toContain('tail -f');
     });
 

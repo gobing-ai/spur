@@ -44,13 +44,13 @@ states:
           command: >-
             mkdir -p .spur/run &&
             set +e &&
-            ${vars.spurBin} task check ${vars.wbs}; check_rc=$?;
-            ${vars.spurBin} agent doctor ${vars.agent}; doctor_rc=$?;
+            $spurBin task check $wbs; check_rc=$?;
+            $spurBin agent doctor $agent; doctor_rc=$?;
             set -e &&
             if [ "$check_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > ".spur/run/${vars.wbs}-docs-precheck.status";
+              printf 'PASS\n' > ".spur/run/$wbs-docs-precheck.status";
             else
-              printf 'FAIL\n' > ".spur/run/${vars.wbs}-docs-precheck.status";
+              printf 'FAIL\n' > ".spur/run/$wbs-docs-precheck.status";
             fi &&
             exit 0
       - kind: note
@@ -73,7 +73,7 @@ states:
           requireDiff: true
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
+          command: "$spurBin task update $wbs wip --no-lifecycle"
 
   - id: docs-review
     description: >
@@ -93,7 +93,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task record ${vars.wbs} --solution-from-diff --transition testing"
+          command: "$spurBin task record $wbs --solution-from-diff --transition testing"
 
   - id: done
     description: Terminal — docs deliverable reviewed and recorded.
@@ -105,11 +105,11 @@ states:
         options:
           command: >
             mkdir -p .spur/run &&
-            printf '%s\n' "{\"wbs\":\"${vars.wbs}\",\"verdict\":\"PASS\",\"source\":\"docs-pipeline\",\"requirements\":[{\"id\":\"docs-deliverable\",\"status\":\"MET\",\"evidence\":\"docs-pipeline record step\"}],\"acceptanceCriteria\":[],\"checks\":[{\"name\":\"docs-only\",\"status\":\"pass\",\"evidence\":\"docs-pipeline\"}]}"
-            > ".spur/run/${vars.wbs}-verdict.json"
+            printf '%s\n' "{\"wbs\":\"$wbs\",\"verdict\":\"PASS\",\"source\":\"docs-pipeline\",\"requirements\":[{\"id\":\"docs-deliverable\",\"status\":\"MET\",\"evidence\":\"docs-pipeline record step\"}],\"acceptanceCriteria\":[],\"checks\":[{\"name\":\"docs-only\",\"status\":\"pass\",\"evidence\":\"docs-pipeline\"}]}"
+            > ".spur/run/$wbs-verdict.json"
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} done --no-lifecycle"
+          command: "$spurBin task update $wbs done --no-lifecycle"
       - kind: note
         options:
           message: "Docs pipeline complete for task ${vars.wbs}."
@@ -127,7 +127,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-docs-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$wbs-docs-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
     description: Precheck FAIL — stop before draft.
@@ -140,7 +140,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "$profile" = auto'
   - from: draft
     to: docs-review
     description: Interactive — enter docs-review.
@@ -153,21 +153,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: docs-review
     to: failed
     description: Docs rejected — stop for revision.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: docs-review
     to: cancelled
     description: Operator cancelled docs review.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   - from: record
     to: done
@@ -175,11 +175,11 @@ transitions:
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} task check ${vars.wbs}"
+        command: "$spurBin task check $wbs"
   - from: record
     to: failed
     description: Task check failed — block before done.
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} task check ${vars.wbs}'
+        command: '! $spurBin task check $wbs'

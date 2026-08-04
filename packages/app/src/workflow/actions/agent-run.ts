@@ -2,7 +2,6 @@ import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentExecutionObserver } from '../../observability/agent-execution';
-import { RunOutputSink, type RunOutputSinkConfig } from '../../observability/run-output-sink';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
@@ -75,11 +74,12 @@ const KIND = 'agent.run';
  * resume mode rejects a new prompt (codex), the action retries once as a fresh dispatch
  * and writes `__agentSession: "no-resume"` so subsequent steps skip the latch.
  *
- * Live output capture (task 0414): when an `outputLog` config is provided, the
- * redacted incremental lifecycle events are appended to
- * `.spur/run/<runId>-output.log` (bounded, best-effort) so the run is observable
- * mid-flight via `spur workflow trace`. The child's output policy stays buffered
- * and stdin stays `'ignore'` — the sink consumes the `onOutput` relay as-is.
+ * Live output capture (feature D2 / task 0426): the redacted incremental
+ * lifecycle events are emitted to the observability bus as `workflow.agent`;
+ * the consolidated run-log sink (`.spur/run/<runId>.log`) subscribes there and
+ * captures the child's stdout/stderr (bounded, best-effort) for `spur workflow
+ * trace`. The child's output policy stays buffered and stdin stays `'ignore'`
+ * — the observer consumes the `onOutput` relay as-is.
  */
 export class AgentRunActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -90,7 +90,6 @@ export class AgentRunActionRunner implements ActionRunner {
         agentService: AgentService,
         private readonly observabilityBus?: WorkflowObservabilityBus,
         private readonly steeringController?: WorkflowSteeringController,
-        private readonly outputLog?: RunOutputSinkConfig,
     ) {
         this.agentService = agentService;
     }
@@ -153,25 +152,17 @@ export class AgentRunActionRunner implements ActionRunner {
         // trace (R1). The legacy capture/non-capture branch collapses into a
         // single dispatch path — `capture` now only controls whether the
         // stdout is surfaced as `data.answer`.
-        // Live output capture (task 0414): the sink appends redacted lifecycle
-        // events to `.spur/run/<runId>-output.log` so a supervisor can tail the
-        // run mid-flight. The observer fans out to the sink AND the J3
-        // observability bus — both are consumers of the same bounded relay.
-        const outputLog = this.outputLog;
-        const sink =
-            outputLog === undefined
-                ? undefined
-                : new RunOutputSink({
-                      dir: join(cwd, '.spur', 'run'),
-                      runId: context.runId,
-                      ...(outputLog.maxBytes !== undefined ? { maxBytes: outputLog.maxBytes } : {}),
-                      ...(outputLog.maxLines !== undefined ? { maxLines: outputLog.maxLines } : {}),
-                  });
+        // Child-agent lifecycle is fanned out to the observability bus as the
+        // `workflow.agent` event; the consolidated run-log sink (feature D2) is a
+        // subscriber on that bus, so the agent's stdout/stderr reach the log without
+        // a per-step file sink here.
+        // `workflow.agent` event; the consolidated run-log sink (feature D2) is a
+        // subscriber on that bus, so the agent's stdout/stderr reach the log without
+        // a per-step file sink here.
         const observer: AgentExecutionObserver | undefined =
-            this.observabilityBus === undefined && sink === undefined
+            this.observabilityBus === undefined
                 ? undefined
                 : (event) => {
-                      sink?.observe(event);
                       void this.observabilityBus?.emit('workflow.agent', event);
                   };
         const actionId = context.actionId ?? `${context.runId}:${context.stateOrNodeId}`;
@@ -307,7 +298,8 @@ export class AgentRunActionRunner implements ActionRunner {
                     : undefined,
             };
         } finally {
-            sink?.close();
+            // Nothing to clean up per-step: agent output is owned by the consolidated
+            // run-log sink via the observability bus (feature D2 / task 0426).
         }
     }
 }

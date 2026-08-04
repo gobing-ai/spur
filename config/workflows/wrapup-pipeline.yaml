@@ -143,9 +143,9 @@ states:
         options:
           command: >-
             if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
-              bun plugins/sp/scripts/feature-sync-bounded.ts "${vars.feature}" --spur-bin "${vars.spurBin}" --json;
+              bun plugins/sp/scripts/feature-sync-bounded.ts "$feature" --spur-bin "$spurBin" --json;
             else
-              ${vars.spurBin} feature sync "${vars.feature}" --json;
+              $spurBin feature sync "$feature" --json;
             fi;
             exit 0
 
@@ -171,7 +171,7 @@ states:
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: wrapup-pipeline done tasks=${vars.tasks} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/wrapup-checkpoint.md'
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: wrapup-pipeline done tasks=$tasks ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/wrapup-checkpoint.md'
 
   - id: skipped
     description: Terminal — wrap-up skipped (empty task list or operator abort).
@@ -195,14 +195,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(echo "${vars.tasks}" | jq length 2>/dev/null || echo 0)" -gt 0'
+        command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0'
   - from: task-resolve
     to: skipped
     description: Task list is empty — skip wrap-up.
     guard:
       kind: shell
       options:
-        command: 'test "$(echo "${vars.tasks}" | jq length 2>/dev/null || echo 0)" -eq 0'
+        command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -eq 0'
   - from: task-resolve
     to: skipped
     description: Defense — task list unparseable; skip rather than fail with no-passing-transition.
@@ -230,21 +230,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test -n "${vars.feature}"'
+        command: 'test -n "$feature"'
   - from: metrics-record
     to: branch-cleanup
     description: No feature id, but merge is requested — go to branch cleanup.
     guard:
       kind: shell
       options:
-        command: 'test -z "${vars.feature}" && test "${vars.merge}" = true'
+        command: 'test -z "$feature" && test "$merge" = true'
   - from: metrics-record
     to: done
     description: No feature id and no merge — wrap-up is done.
     guard:
       kind: shell
       options:
-        command: 'test -z "${vars.feature}" && test "${vars.merge}" != true'
+        command: 'test -z "$feature" && test "$merge" != true'
 
   # ── feature-transition: -> branch-cleanup (if merge) or done ──
   - from: feature-transition
@@ -253,14 +253,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.merge}" = true'
+        command: 'test "$merge" = true'
   - from: feature-transition
     to: done
     description: Feature advanced — no merge requested.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.merge}" != true'
+        command: 'test "$merge" != true'
 
   # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
   # No irreversible git op is wired yet; confirmation is recorded, then wrap completes.
@@ -270,7 +270,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes || test "${vars.__hitlAnswer}" = no || test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = yes || test "$__hitlAnswer" = no || test "$__hitlAnswer" = cancel'
   - from: branch-cleanup
     to: done
     description: Defense — missing HITL answer still completes wrap (cleanup is optional).

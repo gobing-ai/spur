@@ -98,8 +98,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            DOCTOR_FILE=".spur/run/${vars.wbs}-precheck-doctor.status" &&
-            if ${vars.spurBin} agent doctor ${vars.agent}; then
+            DOCTOR_FILE=".spur/run/$wbs-precheck-doctor.status" &&
+            if $spurBin agent doctor $agent; then
               echo PASS > "$DOCTOR_FILE";
             else
               echo FAIL > "$DOCTOR_FILE";
@@ -140,7 +140,7 @@ states:
           requireDiff: true
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
+          command: "$spurBin task update $wbs wip --no-lifecycle"
       # Post-implement cleanup: auto-format any unformatted output the agent produced.
       # The agent may leave files that don't pass `biome check`, which then fails
       # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
@@ -152,7 +152,7 @@ states:
       # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
       - kind: shell
         options:
-          command: '${vars.formatCmd} ; exit 0'
+          command: '$formatCmd ; exit 0'
 
   # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
   # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
@@ -175,11 +175,11 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/${vars.wbs}-test-gate.status" &&
-            ATTEMPT_FILE=".spur/run/${vars.wbs}-test-fix-attempt" &&
+            STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
+            ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             echo 0 > "$ATTEMPT_FILE" &&
             set +e &&
-            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            ( $qualityGateCmd ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
@@ -197,7 +197,7 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            ATTEMPT_FILE=".spur/run/${vars.wbs}-test-fix-attempt" &&
+            ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
             printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
       - kind: agent.run
@@ -217,9 +217,9 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/${vars.wbs}-test-gate.status" &&
+            STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
             set +e &&
-            ( ${vars.qualityGateCmd} ); gate_rc=$?; set -e &&
+            ( $qualityGateCmd ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
@@ -266,7 +266,7 @@ states:
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
         options:
-          command: "${vars.spurBin} task verdict ${vars.wbs} --from-answer .spur/run/${vars.wbs}-verify-answer.txt"
+          command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
 
   - id: record
     description: >
@@ -279,7 +279,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task record ${vars.wbs} --solution-from-diff --transition testing"
+          command: "$spurBin task record $wbs --solution-from-diff --transition testing"
       # Best-effort, and portable across layouts. `feature-sync-bounded.ts` is a
       # Spur-monorepo path — `spur init` never scaffolds `plugins/sp/`, so a seeded
       # project must fall back to the plain `spur feature sync` verb rather than
@@ -289,16 +289,16 @@ states:
       - kind: shell
         options:
           command: >-
-            FID=$(${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null |
+            FID=$($spurBin task show $wbs --json 2>/dev/null |
             jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null);
             if [ -n "$FID" ]; then
               if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
-                bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "${vars.spurBin}" --json;
+                bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json;
               else
-                ${vars.spurBin} feature sync "$FID" --json;
+                $spurBin feature sync "$FID" --json;
               fi;
             else
-              echo "Orphan task ${vars.wbs} — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/${vars.wbs}-report.txt";
+              echo "Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt";
             fi;
             exit 0
 
@@ -310,14 +310,14 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} done --no-lifecycle"
+          command: "$spurBin task update $wbs done --no-lifecycle"
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=${vars.wbs} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.wbs}-checkpoint.md'
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$wbs-checkpoint.md'
 
   - id: failed
     description: >
@@ -335,7 +335,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-precheck-doctor.status 2>/dev/null)" = PASS && ${vars.spurBin} task check ${vars.wbs}'
+        command: 'test "$(cat .spur/run/$wbs-precheck-doctor.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
   - from: precheck
     to: failed
     description: Doctor FAIL and/or task check failed — stop before implement.
@@ -355,14 +355,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
   - from: test
     to: test-fix
     description: Quality gate red — start bounded fixall loop.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL'
   # Defense: missing/corrupt status — treat as FAIL path, not silent PASS.
   - from: test
     to: test-fix
@@ -381,21 +381,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
   - from: test-recheck
     to: test-fix
     description: Still red and under qualityGateMaxFixAttempts — another fixall hop.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.wbs}-test-fix-attempt 2>/dev/null || echo 0)" -lt "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"'
   - from: test-recheck
     to: failed
     description: Still red after max fixall attempts — stop at failed (not silent abort).
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/${vars.wbs}-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/${vars.wbs}-test-fix-attempt 2>/dev/null || echo 0)" -ge "${vars.qualityGateMaxFixAttempts}"'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -ge "$qualityGateMaxFixAttempts"'
   # Defense: corrupt recheck status — failed, not review.
   - from: test-recheck
     to: failed
@@ -413,7 +413,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "$profile" = auto'
   - from: review
     to: approve
     description: Review done — gate on human approval.
@@ -431,21 +431,21 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes'
+        command: 'test "$__hitlAnswer" = yes'
   - from: approve
     to: failed
     description: Operator rejected at the approval gate — report and stop.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = no'
+        command: 'test "$__hitlAnswer" = no'
   - from: approve
     to: cancelled
     description: Operator cancelled at the approval gate.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = cancel'
+        command: 'test "$__hitlAnswer" = cancel'
 
   # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
   # The verify step emits .spur/run/<wbs>-verdict.json. Only `verdict: PASS` clears
@@ -457,14 +457,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null)" = PASS'
+        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS'
   - from: verify
     to: failed
     description: Verification verdict is not PASS (PARTIAL/FAIL/missing) — block before done.
     guard:
       kind: shell
       options:
-        command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null)" != PASS'
+        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" != PASS'
   # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23) ──
   # The record step guarantees every done-required section ([Solution, Testing, Review])
   # has real content (each owned by its pipeline step). This guard is defense-in-depth —
@@ -476,11 +476,11 @@ transitions:
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} task check ${vars.wbs}"
+        command: "$spurBin task check $wbs"
   - from: record
     to: failed
     description: Task check failed — block before done; investigate missing sections.
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} task check ${vars.wbs}'
+        command: '! $spurBin task check $wbs'

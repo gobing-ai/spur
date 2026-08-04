@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
@@ -7,6 +7,7 @@ import {
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
+    resolveOutputLogConfig,
     type StepEvent,
     type SystemEventBus,
     type TimelineEvent,
@@ -15,6 +16,7 @@ import {
     type WorkflowListResult,
     type WorkflowObservabilityBus,
     type WorkflowOutputDetail,
+    WorkflowRunLogSink,
     WorkflowSteeringController,
     type WorkflowTraceListResult,
     type WorkflowTraceTimeline,
@@ -283,16 +285,32 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 traceWriter = new WorkflowTraceWriter(context.cwd, runId);
                 traceWriter.attach(bus);
             }
+            // Plan preview (R2): rendered once from the parsed definition, shared by the
+            // human renderer and the consolidated run log. Advisory — a parse failure
+            // must not block the run.
+            let planPreview: string | undefined;
+            if (options.plan !== false) {
+                try {
+                    const def = await loadWorkflowDef(resolve(context.cwd, file), { validateSchema: false });
+                    planPreview = renderRunPlan(def);
+                } catch {
+                    // Preview is advisory — a parse failure must not block the run.
+                }
+            }
+            // Consolidated all-in-one run log (feature D2 / task 0426): a read-only
+            // subscriber on the bus that appends `.spur/run/<RUNID>.log` from creation
+            // to terminal status. Built unconditionally (retained by default; `--no-log`
+            // is task 0427) so the detached `--async` worker writes it in-process too.
+            const runLog = new WorkflowRunLogSink({
+                bus,
+                dir: join(context.cwd, '.spur', 'run'),
+                runId,
+                ...(planPreview !== undefined ? { planPreview } : {}),
+                ...(await resolveOutputLogConfig(context.cwd)),
+            });
             if (humanProgress) {
                 context.output.write(`Run: ${runId}`);
-                if (options.plan !== false) {
-                    try {
-                        const def = await loadWorkflowDef(resolve(context.cwd, file), { validateSchema: false });
-                        context.output.write(renderRunPlan(def));
-                    } catch {
-                        // Preview is advisory — a parse failure must not block the run.
-                    }
-                }
+                if (planPreview !== undefined) context.output.write(planPreview);
                 // Single-run CLI (one `workflow run` = one runId): the run id is
                 // already printed in the header, so progress lines omit the
                 // `[run <id>]` prefix (R1). showRunId can be re-enabled for
@@ -380,6 +398,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 for (const timer of heartbeats.values()) clearInterval(timer);
                 heartbeats.clear();
                 await traceWriter?.flush();
+                runLog.close();
                 await ledger.flush();
                 ledger.unsubscribe();
                 steeringInput?.close();
@@ -658,7 +677,7 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     // Per-run agent-output capture (task 0414): point the operator at the live
     // artifact so a long-running agent.run step is observable mid-flight.
     if (result.outputArtifact !== undefined) {
-        lines.push(`Agent output: ${result.outputArtifact} (tail -f for live view)`);
+        lines.push(`Run log: ${result.outputArtifact} (tail -f for live view)`);
         lines.push('');
     }
     for (const event of events) {

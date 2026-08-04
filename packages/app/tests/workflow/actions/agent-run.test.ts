@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
+import { EventBus } from '@gobing-ai/ts-infra';
 import type {
     AgentExecutionEvent,
     AgentExecutionObserver,
@@ -11,6 +12,7 @@ import type {
 } from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
 import { AgentRunActionRunner } from '../../../src/workflow/actions/agent-run';
+import type { WorkflowObservabilityBus, WorkflowObservabilityEventMap } from '../../../src/workflow/observability';
 import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
 
 function makeCtx(overrides: Partial<ActionRunContext> = {}): ActionRunContext {
@@ -1138,7 +1140,8 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: task 0414 — live output capture into `.spur/run/<runId>-output.log`
+// Tests: feature D2 / task 0426 — child-agent lifecycle fans out to the
+// observability bus; the consolidated run-log sink subscribes there.
 // ---------------------------------------------------------------------------
 
 /** Build a fake AgentService whose `runTraced` invokes the execution observer with lifecycle events. */
@@ -1208,56 +1211,55 @@ function finishedEvent(): AgentExecutionEvent {
     };
 }
 
-describe('AgentRunActionRunner live output capture (task 0414)', () => {
-    test('writes observed chunks to the per-run artifact while the run is in flight', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+function recordingBus(): { bus: WorkflowObservabilityBus; events: AgentExecutionEvent[] } {
+    const bus = new EventBus<WorkflowObservabilityEventMap>();
+    const events: AgentExecutionEvent[] = [];
+    bus.on('workflow.agent', (event) => events.push(event));
+    return { bus, events };
+}
+
+describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () => {
+    test('emits started/output/finished lifecycle events to the observability bus', async () => {
         const svc = svcInvokingObserver((observer) => {
             observer(startedEvent());
             observer(outputEvent());
             observer(finishedEvent());
         });
-        const runner = new AgentRunActionRunner(svc, undefined, undefined, { maxBytes: 1024 });
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        const { bus, events } = recordingBus();
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
-
-        const artifact = readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8');
-        expect(artifact).toContain('claude -p hi');
-        expect(artifact).toContain('[2026-08-02T00:00:02.000Z] stdout: working on phase A');
-        expect(artifact).toContain('run done (exit 0)');
-        rmSync(dir, { recursive: true, force: true });
+        expect(events.map((e) => e.kind)).toEqual(['started', 'output', 'finished']);
+        expect(events[0]).toMatchObject({ agent: 'claude', invocation: 'claude -p hi' });
+        expect(events[1]).toMatchObject({ stream: 'stdout', chunk: 'working on phase A' });
+        expect(events[2]).toMatchObject({ outcome: 'done', exitCode: 0 });
     });
 
-    test('chunks observed during a buffered run reach the artifact even without an observability bus', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+    test('emits output chunks to the bus during a buffered run', async () => {
         const svc = svcInvokingObserver((observer) => {
             observer(outputEvent({ chunk: 'mid-run progress' }));
         });
-        const runner = new AgentRunActionRunner(svc, undefined, undefined, {});
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        const { bus, events } = recordingBus();
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
-        expect(readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8')).toContain('mid-run progress');
-        rmSync(dir, { recursive: true, force: true });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ kind: 'output', chunk: 'mid-run progress' });
     });
 
-    test('no outputLog config creates no artifact', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+    test('runs without a bus — the observer is omitted and no-op', async () => {
         const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: '' }));
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        expect(result.ok).toBe(true);
+    });
+
+    test('writes no per-step artifact file (subsumed by the consolidated run log)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0426-'));
+        const { bus } = recordingBus();
+        const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: '' }), bus);
         await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
         expect(existsSync(join(dir, '.spur', 'run', 'test-1-output.log'))).toBe(false);
-        rmSync(dir, { recursive: true, force: true });
-    });
-
-    test('volume bound truncates visibly in the artifact', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
-        const svc = svcInvokingObserver((observer) => {
-            observer(outputEvent({ chunk: 'x'.repeat(5000) }));
-            observer(outputEvent({ chunk: 'after-bound' }));
-        });
-        const runner = new AgentRunActionRunner(svc, undefined, undefined, { maxBytes: 64 });
-        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
-        const artifact = readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8');
-        expect(artifact).toContain('[truncated]');
-        expect(artifact).not.toContain('after-bound');
+        expect(existsSync(join(dir, '.spur', 'run', 'test-1.log'))).toBe(false);
         rmSync(dir, { recursive: true, force: true });
     });
 });

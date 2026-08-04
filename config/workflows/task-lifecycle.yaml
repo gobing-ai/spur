@@ -69,14 +69,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '${vars.spurBin} task check ${vars.wbs}'
+        command: '$spurBin task check $wbs'
   - from: testing
     to: done
     description: Testing passed — task complete
     guard:
       kind: shell
       options:
-        command: '${vars.spurBin} task check ${vars.wbs} --strict-core'
+        command: '$spurBin task check $wbs --strict-core'
 
   # Reopen: done → wip (warned, mandatory History entry)
   - from: done

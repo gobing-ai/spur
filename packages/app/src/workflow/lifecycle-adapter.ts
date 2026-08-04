@@ -20,9 +20,10 @@ import {
     loadWorkflowDef,
     type StateMachineWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
+import { EnvShellGuardRunner } from './guards/shell';
 
 /**
  * The per-lifecycle configuration that distinguishes task from feature runs.
@@ -107,7 +108,13 @@ export class LifecycleAdapter implements LifecyclePort {
     async requestTransition(ref: EntityRef, currentStatus: string, to: string): Promise<TransitionResult> {
         const { profile } = this.opts;
         const db = await this.opts.getDb();
-        const svc = new EngineWorkflowService(createDefaultWorkflowEngineHost(), new DbWorkflowPersistenceAdapter(db));
+        // The lifecycle workflows' shell guards reference vars by name (`$featureId`) rather than
+        // embedding resolved values in the command string (task 0435). That handoff lives in
+        // Spur's guard runner, so this host must register it — the engine's default guard spawns
+        // with no `env`, which would expand every `$NAME` to empty and deny every transition.
+        const host = createDefaultWorkflowEngineHost();
+        host.registerGuard(new EnvShellGuardRunner(new NodeProcessExecutor()), 'builtin');
+        const svc = new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(db));
         const workflow = this.bindGuardVar(await this.loadWorkflow(), ref.id);
         const externalKey = `${profile.entityPrefix}:${ref.id}`;
         const now = new Date().toISOString();

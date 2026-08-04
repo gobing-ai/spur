@@ -157,6 +157,35 @@ Actions receive resolved templates. Available substitutions:
 `env.allow` is an allowlist: a `${env.X}` whose `X` is not listed resolves to empty, not an error — a
 common silent surprise. Add the name to `env.allow` for it to resolve.
 
+### Shell commands take vars by name, never by template
+
+**In a `shell` command — action *or* transition guard — reference a var as `$NAME`, not
+`${vars.NAME}`.**
+
+| Where | Spelling | Why |
+| ----- | -------- | --- |
+| `shell` action `command:` | `$NAME` | Value arrives as process env |
+| `shell` guard `command:` | `$NAME` | Same |
+| Everything else (`agent.run` `input:`, `note` `message:`, `description:`, paths in non-shell options) | `${vars.NAME}` | Engine template resolution; never shell-interpreted |
+
+`${vars.NAME}` in a shell command is resolved by the engine **into the command string** before the
+shell runs, so any backtick, `$(…)`, or quote in the value is parsed as shell code. That was a live
+arbitrary-execution defect in both actions (task 0432) and guards (task 0435) — and in a guard it is
+especially quiet, because the injected side effect fires while the comparison still returns an
+ordinary boolean. Spur's runners hand resolved vars to the subprocess as environment instead, and a
+shell variable expansion is never re-parsed for metacharacters, so `$NAME` is always data.
+
+```yaml
+# WRONG — value becomes part of the command
+command: 'test "${vars.profile}" = auto'
+# RIGHT — value arrives as env
+command: 'test "$profile" = auto'
+```
+
+This only works where Spur's runners are registered (`registerSpurBuiltins`, and the lifecycle
+adapter's host). A bare `createDefaultWorkflowEngineHost()` keeps the engine's env-less runners,
+where `$NAME` would expand to empty — register the Spur runners on any new host.
+
 ## Error policy (`onError`)
 
 `onError` is a current **library/runtime capability**, not a normal quoted-`$schema` YAML authoring
