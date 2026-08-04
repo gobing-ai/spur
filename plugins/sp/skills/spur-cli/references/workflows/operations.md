@@ -94,9 +94,11 @@ The shared verification core. Inputs: a workflow file path + the expected termin
    The most common errors are an unquoted `$schema` (`@` is YAML-reserved) and a missing
    `kind: transition-flow` on a flow definition.
 2. **Dry-run** — `spur workflow run <file> --dry-run --run-id dryrun-<unique> --json`. Use a throwaway, unique
-   `--run-id` (a duplicate raises `RunCollisionError`). **Expect `status: 'done'` and
-   `finalState === <expected>`.** A `status: 'failed'` or a wrong `finalState` means the workflow does
-   not behave as intended — read the trace.
+   `--run-id` (a duplicate raises `RunCollisionError`). **`status` is authoritative for pass/fail**
+   (`done` = success, `failed` = failure; CLI exit is non-zero unless `status === 'done'`). Then
+   assert `finalState === <expected>` to confirm *which* terminal was reached. A `status: 'failed'`
+   (including a declared failure terminal such as `failed`/`cancelled`) or a wrong success
+   `finalState` means the workflow does not behave as intended — read the trace.
 3. **Read the trace** — confirm the run entered the intended states/nodes and took the intended
    transitions/edges. A run that stalls short of the expected terminal points at a guard/condition that
    never passed, a mistyped target, or an exhausted `iterationBound`. Fix the **specific** definition
@@ -135,18 +137,22 @@ Deterministic single-verb CLI calls. Run them straight; the skill interprets res
 dry-run step of the harness loop, and operators run it directly to execute a real workflow. Procedure:
 
 1. `spur workflow run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] --json`.
-2. Sync path: read `status` (`done` | `failed` | …) and `finalState` from the JSON. Exit code is
-   non-zero unless `status === 'done'`.
+2. Sync path: **`status` is authoritative for pass/fail** (`done` | `failed` | `paused` | …).
+   Exit code is non-zero unless `status === 'done'`. Read `finalState` only to identify which
+   terminal was reached (e.g. `failed` vs `cancelled` after a failure-terminal finalize). Do not
+   treat `status: 'done'` + a failure-named `finalState` as success — declared `failureStates`
+   finalize as `status: 'failed'` (0425).
 3. `--dry-run`: walk transitions without executing actions (preferred for the authoring harness loop).
 4. `--async`: spawn a detached worker, exit immediately with `runId`; monitor via
    `spur workflow trace <run-id>`. Cancel with `spur workflow cancel <run-id>`.
 5. On `failed`, read the run trace (states/nodes entered, transitions taken) to locate the offending
-   step — a failed action, a guard with no passing transition, an exhausted `iterationBound`.
+   step — a failed action, a declared failure terminal, a guard with no passing transition, or an
+   exhausted `iterationBound`.
 6. A failed run is data, not an exception — the run record is preserved. Fix the definition (for the
    dry-run loop) or the environment/action (for a real run), then re-run with a fresh `--run-id`.
 
-Output contract (sync): `status` + `finalState` + parsed trace + the offending-step diagnosis on failure.
-Async: `{ runId, status: 'started', workflowName }`.
+Output contract (sync): `status` (authoritative pass/fail) + `finalState` + parsed trace + the
+offending-step diagnosis on failure. Async: `{ runId, status: 'started', workflowName }`.
 
 ## add
 

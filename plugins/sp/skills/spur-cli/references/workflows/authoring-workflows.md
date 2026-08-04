@@ -47,6 +47,7 @@ description: Implement → check → fix until the check passes or the bound is 
 iterationBound: 2              # bounds any loop; required when a transition points backward
 initialState: implement
 terminalStates: [done, failed]
+failureStates: [failed]          # optional; ⊆ terminalStates → status failed (0425)
 vars:
   reviewer: robin              # ${vars.reviewer}
 env:
@@ -178,8 +179,9 @@ Authoring is not done until the workflow is proven. The core (full steps in
 [operations.md](operations.md#sub-procedure-validate-and-dry-run)):
 
 1. `spur workflow validate <file> --json` — schema + semantic. Fix until clean.
-2. `spur workflow run <file> --run-id dryrun-<unique> --json` — expect `status: 'done'` and
-   `finalState === <expected>`. Use a fresh `--run-id` (duplicates raise `RunCollisionError`).
+2. `spur workflow run <file> --run-id dryrun-<unique> --json` — **`status` is authoritative for
+   pass/fail** (`done` success / `failed` failure); then assert `finalState === <expected>`.
+   Use a fresh `--run-id` (duplicates raise `RunCollisionError`).
 3. Read the trace; on a stall or wrong terminal, fix the specific guard/target/bound and re-run.
 
 A `shell` action runs for real during the dry-run — keep it idempotent and side-effect-light while

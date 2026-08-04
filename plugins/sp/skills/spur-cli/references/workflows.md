@@ -122,11 +122,19 @@ spur workflow validate <file> --json          ← schema + semantic gate
         ▼
 spur workflow run <file> --dry-run --run-id <throwaway> --json   ← dry-run
         │
-   status === 'done' AND finalState === <expected>? ──no──▶ read trace,
-        │ yes                                                 fix the offending
-        ▼                                                     state/node/guard, re-run
+   status authoritative for pass/fail? ──no──▶ read trace,
+   (done = success; failed = failure)           fix the offending
+        │ yes  AND finalState === <expected>    state/node/guard, re-run
+        ▼
    trust the workflow
 ```
+
+**Reader contract (0425):** `status` alone is authoritative for pass/fail. A run that lands in a
+declared `failureStates` terminal reports `status: 'failed'` (CLI exit non-zero) even when
+`finalState` is a named terminal like `failed` or `cancelled`. Do **not** treat
+`status === 'done' && finalState === 'failed'` as a success — that was the pre-0425 silent-success
+hazard. Use `finalState` only to identify *which* terminal was reached after `status` has been
+checked. Absent `failureStates`, every terminal still finalizes as `done` (backward compatible).
 
 Two signals, two purposes: `validate` proves the definition is *well-formed and self-consistent*;
 `run --dry-run` proves it *walks* — reaching the intended terminal state along the intended path
@@ -151,9 +159,10 @@ spur workflow run ./workflows/approval.yaml --dry-run --run-id dryrun-$(date +%s
 ```
 
 Prefer **`--dry-run`** so actions are not executed. Use a throwaway `--run-id` so the dry-run does
-not collide with a real run (duplicate ids raise `RunCollisionError`). Read `status` and `finalState`
-from the JSON. A failed run returns `status: 'failed'` in the result — it does **not** throw; read
-the trace (`spur workflow trace <run-id>`) to find the offending step.
+not collide with a real run (duplicate ids raise `RunCollisionError`). Read **`status` first**
+(authoritative for pass/fail), then `finalState` (which terminal). A failed run returns
+`status: 'failed'` in the result — it does **not** throw; read the trace
+(`spur workflow trace <run-id>`) to find the offending step.
 
 ### Step 3: Read the trace and fix
 

@@ -34,7 +34,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 **Flags:**
 
-- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work; here that is the pipeline's stages, so the value is merged into `vars.agent` and `agent.run` steps run under it while the orchestrator loop continues in this session. Same rule as every other command, not an exception. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. In `--mode implement` that is this session, so `inline` is honored literally. In `--mode full` the model-bearing work is the pipeline's `agent.run` stages, which **always dispatch a subprocess** (triggers 2 and 3) — `inline` is therefore not merged into `vars.agent`, because `spur agent run` rejects the literal and every stage would fail. A named executor or `auto` **is** merged into `vars.agent`; omitting `--agent` leaves the stages on the configured `agent.default`. Either way the orchestrator loop continues in this session. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 **Mode split (load-bearing — bug-742)**
 

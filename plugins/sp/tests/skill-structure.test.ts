@@ -507,8 +507,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(planning).toContain(`timeoutMs: ${varsStepTimeout}`);
         expect(planning).toContain(`${varsSpurBin} feature create`);
         // Soft precheck + expectFile reliability contract (fleet reliability pass).
+        // 0425 R4: non-entity-scoped artifacts are ${vars.__runId}-prefixed.
         expect(planning).toContain('plan-precheck.status');
-        expect(planning).toContain('expectFile: .spur/run/plan-feature-id.txt');
+        const planFeatureExpect = ['expectFile: .spur/run/', '$', '{vars.__runId}', '-plan-feature-id.txt'].join('');
+        expect(planning).toContain(planFeatureExpect);
         // Design artifact path uses engine template vars.slug — build without bare ${...}
         // so biome noTemplateCurlyInString stays quiet on the test source.
         const designExpect = ['expectFile: docs/design/', '$', '{vars.slug}', '.md'].join('');

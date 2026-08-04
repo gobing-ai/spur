@@ -15,7 +15,7 @@ Wraps the **sp:spur-dev** skill.
 | `"<description>"` | Feature description to plan. | required |
 | `--feature` `<id>` | Attach to an existing feature. | omitted |
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. `inline` applies to hops this session runs; the pipeline's `agent.run` stages always dispatch and fall back to `agent.default`. | inline |
 | `--skip-design` | Omit the system-design hop. | off |
 | `--auto` | Skip objective HITL gates. | off |
 | `--approve-taste` | With --auto: skip design-approval pause. | off |

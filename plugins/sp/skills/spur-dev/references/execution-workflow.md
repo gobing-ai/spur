@@ -109,9 +109,15 @@ Synchronous invocation (`--json` without `--async`) is acceptable **only** for s
 When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
 `--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
 for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
-to its canonical agent name before merging; omitting the flag forwards nothing, so the spawned
-step resolves to the configured default executor (`vars.agent` defaults to `"omp"` in the
-pipeline YAML).
+to its canonical agent name before merging; omitting the flag forwards nothing, so the spawned step
+resolves to `agent.default` from `.spur/config.yaml` (project layer, then `~/.config/spur/config.yaml`),
+which `spur workflow run` injects as the `agent` var. The literal `agent: "omp"` each pipeline YAML
+declares is only the last-resort fallback when no `agent.default` is configured anywhere. Precedence:
+`--agent` / explicit `--vars` → `agent.default` → YAML literal.
+
+**`--agent inline` never reaches a stage.** `agent.run` always dispatches a subprocess, and
+`spur agent run` rejects the literal `inline` with an exit-2 diagnostic, so merging it would fail
+every stage. `inline` governs the orchestrator loop and single-competency commands only.
 
 **Mode is explicit before dispatch.** The full pipeline is selected by default or by `--mode full`;
 the implement step is selected only by `--mode implement`. `--next` controls lifecycle chaining and

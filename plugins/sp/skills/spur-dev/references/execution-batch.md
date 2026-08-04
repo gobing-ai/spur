@@ -36,7 +36,9 @@ agent judgment between runs that a flat FSM cannot express.
 task's pipeline in order by default, optionally fan out a proven-independent subset, inspect terminal
 state, decide continue/halt, and emit the batch report. It does **not** decide how an individual
 `agent.run` step (implement/test/review) executes — that stays the pipeline's concern via
-`vars.agent` (default `omp`, pinned in `task-pipeline.yaml`).
+`vars.agent`, which resolves from `agent.default` in `.spur/config.yaml` unless the caller pins an
+executor; the `agent: "omp"` literal in `task-pipeline.yaml` is only the fallback when nothing is
+configured.
 
 ## Step 1 — Selector resolution (R1)
 
