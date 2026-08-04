@@ -12,7 +12,7 @@ priority: P1
 tags: ["meta"]
 dependencies: []
 created_at: "2026-08-03T23:27:07.797Z"
-updated_at: "2026-08-04T00:11:46.156Z"
+updated_at: "2026-08-04T00:12:22.587Z"
 ---
 
 ## 0423. Fix task-0421 pipeline-wait and shell-runner regressions: --follow polling + /bin/sh -c guard
@@ -116,22 +116,56 @@ A: Guidance (R3) plus a code-level regression test (R2). A hook forcing "read en
 Q: What is the expected time saving?
 A: ~110 min per pipeline-driven session from B1; 87 min one-time from B2's diagnosis (prevented from recurring by the regression test). Combined ~3.3h of the ~7.7h across the two sessions.
 ### Design
-Evidence and fix design per finding.
+Fix design per root cause. RC1 and RC2 map to R1/R2 (landed); RC3 maps to R3 (open).
 
-**RC1 — pipeline-wait (B1, S0, ~110 min):**
-- Evidence: 47 `sleep` bash calls totaling 109.7 min; 55 `workflow trace` calls; 6 poll episodes (largest 17.7 min with sleeps 240/240/300/280, another 16.8 min with 240/290/240/240) polling run `9c0a707d`.
-- Root cause: driver reimplemented polling with escalating `sleep` instead of using `workflow trace --follow`.
-- Fix: guidance — in pipeline-driving references (sp-spur-dev/references/execution-workflow.md) state "after launching --async, observe with `workflow trace <run-id> --follow` (blocking until terminal), not a manual sleep-poll loop."
+#### RC1 — shell-runner `/bin/sh -c` (landed, keep the guard)
 
-**RC2 — shell-runner /bin/sh -c regression (B2, S1, 87 min):**
-- Evidence: 65 bash calls over 21:08–22:35 (git worktree baseline at /tmp/spur-baseline, direct execa and ts-runtime probes). Root cause: `StreamingShellActionRunner` called `runStreaming({ command: 'sleep 30' })` which spawns a single executable, while the engine's `ShellActionRunner` runs bare commands via `/bin/sh -c`.
-- Fix (already applied): `packages/app/src/workflow/actions/shell.ts` now computes `usesShell = args.length === 0` and spawns `/bin/sh -c <command>` or `command <args>`. Add regression test asserting both paths (mirroring `tests/workflow/actions/shell.test.ts` relay test which now checks `command === '/bin/sh'`, `args === ['-c','bun build']`).
+Evidence: 65 bash calls over 21:08–22:35 building git-worktree baselines under `/tmp/spur-baseline`
+plus direct execa and ts-runtime probes, all to explain why a bare `command` failed instantly with a
+null exit code while the same workflow passed on the engine's own runner.
 
-**RC3 — idle subagent wait (B3, S1, ~258 min in 14:02 session):**
-- Evidence: 7 gaps >5 min, largest 137.7 min; 258.7 min idle of 299 min total. Root cause: blocking on pipeline subagent stages without parallel work.
-- Fix: advisory — when driving a pipeline that spawns long subagent stages, batch unrelated independent work or use --follow and step away; note in execution-workflow.md. Lower priority than RC1/RC2.
+Root cause: the override called `runStreaming({ command: 'sleep 30' })`, spawning a program whose
+name contained a space, where the engine's `ShellActionRunner` runs bare commands through
+`/bin/sh -c`.
 
-**What worked well:** the `/bin/sh -c` fix restored the baseline async-test pass (71 CLI workflow tests green), and the full monorepo suite (4438→4439 tests) plus `spur-check` rules passed after the fix. Preserve the regression test and the --follow guidance.
+Fix (applied): `packages/app/src/workflow/actions/shell.ts:48-49` computes
+`usesShell = explicitArgs.length === 0` and spawns `/bin/sh -c <command>` or `command <args>` —
+logic identical to the engine's. Guarded by `packages/app/tests/workflow/actions/shell.test.ts`,
+which asserts the `/bin/sh` spawn shape for the bare form and the direct spawn for the args form.
+
+**Do not remove either assertion.** They are the only thing preventing a silent re-break; the
+failure mode produces no error at the action layer, just a null exit code, so a regression surfaces
+as an unexplained workflow failure hours later.
+
+#### RC2 — override site documents its source (landed)
+
+`packages/app/src/workflow/actions/shell.ts:44-47` names the engine's `ShellActionRunner` and states
+why a bare command line needs a shell. This is what turns "mirror the engine" from tribal knowledge
+into something the next editor reads before changing the spawn logic.
+
+#### RC3 — pipeline-wait guidance (open, the only work left)
+
+Evidence: 47 `sleep` calls totalling 109.7 min, 55 `workflow trace` calls, 6 poll episodes — the
+largest 17.7 min with sleeps of 240/240/300/280s, another 16.8 min with 240/290/240/240s, all
+polling one run.
+
+Root cause: the driver reimplemented polling with escalating `sleep` instead of using the blocking
+`workflow trace --follow` the CLI already provides.
+
+Fix: add guidance to `plugins/sp/skills/spur-dev/references/execution-workflow.md` — after launching
+with `--async`, observe via a single `spur workflow trace <run-id> --follow` call, which polls
+persisted state until the run is terminal; a manual `sleep N && workflow trace` loop is the
+anti-pattern it replaces. Guidance only: a hook forcing the behaviour would be overbearing, and the
+concrete verifiable guard for the correctness half already exists as the RC1 regression test.
+
+**Authoring source only.** The `.rulesync/skills/sp-spur-dev/references/…` copies are generated by
+`superskill install`; hand edits there are silently overwritten on the next install.
+
+#### What worked well — preserve it
+
+Restoring the `/bin/sh -c` semantics brought the CLI workflow suite back to green (71 tests) and the
+full monorepo suite and `spur-check` rules passed after the fix. The regression tests and the
+`--follow` guidance are the durable residue worth keeping from this investigation.
 ### Plan
 1. **R1 / R2 — confirm, do not redo.** Both landed. Verify with
    `bun test packages/app/tests/workflow/actions/shell.test.ts` and confirm the two spawn-shape

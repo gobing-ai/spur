@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-08-03T23:00:42.623Z"
-updated_at: "2026-08-03T23:01:59.235Z"
+updated_at: "2026-08-04T00:05:08.680Z"
 ---
 
 # M4: Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)
@@ -99,6 +99,46 @@ Feature: Inbox Board module — unified agent message plane
     When a message is sent to an agent
     Then the message remains in "queued" status and is not drained to the backend process
     And when the toggle is switched ON the held messages are drained in order
+
+  Scenario: R9 — Process-stream helpers are shared, not duplicated
+    Given the frame parsing buffering backoff and stream-url helpers are extracted to a shared module
+    When both the Teams member terminal and the Inbox agent timeline consume them
+    Then both import the helpers from the shared module rather than redeclaring them
+    And the pre-existing member-terminal tests pass unchanged against the new import path
+
+  Scenario: R10 — Inbox surfaces resolve DESIGN.md tokens through a module scope
+    Given the Inbox module root carries its own scoping class
+    When Inbox surfaces render
+    Then the DESIGN.md token values resolve only within that scope
+    And the shared theme token values are left unmodified
+    And no hard-coded hex value or framework palette class appears in the module
+
+  Scenario: R11 — Inbox controls resolve a single chromatic accent
+    Given the Inbox renders shared UI primitives that map onto component-library variants
+    When a primary or accent control renders inside the Inbox
+    Then it resolves the DESIGN.md accent rather than the component library's own default hue
+    And the accent is used only for focus selection or link emphasis
+    And no row card or tab uses the accent as a fill
+
+  Scenario: R12 — Inbox cards and type follow the DESIGN.md ladder and scale
+    Given an Inbox timeline row or panel renders
+    Then its background sits one surface-ladder step above its container
+    And it carries a hairline border and the DESIGN.md card corner radius
+    And body text timestamps and identifiers follow the DESIGN.md type scale
+    And display type is not introduced
+
+  Scenario: R13 — Other board modules are unregressed by the Inbox palette
+    Given the Inbox defines DESIGN.md token values in its own scope
+    When the Teams and Observability modules render
+    Then they resolve the unchanged shared palette
+    And their existing tests pass
+
+  Scenario: R14 — Switching agent tabs tears down the previous stream
+    Given an agent tab is mounted with an open event stream and an in-flight fetch
+    When the operator switches to a different agent tab
+    Then the previous stream is closed and its in-flight fetch aborted
+    And exactly one stream remains open for the newly mounted tab
+    And unmounting the module leaves no open stream or in-flight fetch
 ```
 ## Tasks
 
