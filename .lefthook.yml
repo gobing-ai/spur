@@ -1,7 +1,7 @@
 commit-msg:
   commands:
     cog:
-      run: cog verify --file {1}
+      run: cog verify --file {0}
 
 pre-commit:
   parallel: true

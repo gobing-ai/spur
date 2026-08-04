@@ -84,17 +84,24 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 
 ## Step 2: Pipeline run
 
-**Launch async and poll the trace.** A pipeline with `agent.run` stages runs for many minutes
-(each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous invocation blocks
-the caller for the entire duration and risks an orphaned run if the caller is interrupted
-(sync-orphan, see task 0127). Always use `--async` + `spur workflow trace` polling:
+**Launch async, observe with a single `--follow` call.** A pipeline with `agent.run` stages runs
+for many minutes (each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous
+invocation blocks the caller for the entire duration and risks an orphaned run if the caller is
+interrupted (sync-orphan, see task 0127). Always launch with `--async`, then wait with
+`spur workflow trace --follow`:
 
 ```bash
-# Async launch + trace polling (recommended)
+# Async launch + single blocking --follow call (recommended)
 RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml \
   --vars '{"wbs":"<wbs>"}' --async --json | jq -r '.runId')
-spur workflow trace "$RUN" --json   # poll until status is terminal (done/failed)
+spur workflow trace "$RUN" --follow   # replays the run and polls persisted state until terminal (done/failed)
 ```
+
+**`--follow` is the default wait mechanism — never a manual sleep-poll loop.** A
+`sleep N && spur workflow trace` loop with escalating sleeps reimplements `--follow` badly:
+task 0421's sessions burned ~110 min in 47 sleeps and 55 trace polls waiting on one run.
+`--follow` is a blocking human-streaming mode (no `--json`); run it in the session background
+and let its exit report the terminal verdict.
 
 Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
 (< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.

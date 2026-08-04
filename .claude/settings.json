@@ -3,6 +3,9 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
-    "failIfUnavailable": true
+    "failIfUnavailable": true,
+    "filesystem": {
+      "allowWrite": [".git/hooks"]
+    }
   }
 }
