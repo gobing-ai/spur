@@ -119,6 +119,18 @@ worker + any `agent.run` grandchild it spawned. Monitor with `spur workflow trac
 }
 ```
 
+**Pass/fail:** `status` is authoritative. `done` → exit 0; `failed` / `paused` / other non-done
+→ non-zero. Workflows may declare `failureStates` (a subset of `terminalStates`); landing in one
+finalizes as `status: "failed"` with `reason: "terminal:<state>"` and `finalState` set to that
+terminal. Without `failureStates`, every terminal still reports `status: "done"` (backward
+compatible). Use `finalState` only to see *which* terminal was reached after checking `status`.
+
+**Run-scoped artifacts (debuggability):** non-entity-scoped files under `.spur/run/` are prefixed
+with the run id (e.g. `.spur/run/<runId>-basic-gate.status`, `.spur/run/<runId>-idea-eval-report.md`).
+`__runId` is injected by every `spur workflow run`. To locate a finished run's artifacts without
+opening the DB: take the `runId` from the JSON envelope (or `spur workflow trace --last N`) and
+glob `.spur/run/<runId>-*`. Entity-scoped paths (`.spur/run/<wbs>-*`) are unchanged.
+
 > **Dry-run note:** `--dry-run` walks the transition graph, but `shell` actions may still
 > execute on some engine versions. The dry-run validates the state graph and transition
 > paths.

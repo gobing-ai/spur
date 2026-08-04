@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.12.0
+version: 1.13.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-04
@@ -45,6 +45,7 @@ When collaborating with the design team:
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md) | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410) | implemented |
 | [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
 | [`inbox-board-module.md`](design/inbox-board-module.md) | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented |
+| [`workflow-run-log.md`](design/workflow-run-log.md) | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045) | accepted design (not yet built) |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -289,7 +290,13 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]`
+
+> **Planned surface (ADR-045 / feature D2, not yet built):** `run --no-log` opts out of the
+> consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
+> streams that log as a tail -f-equivalent source and is rejected with `--json`; `spur workflow
+> clean` gains a log-reclamation scope under `workflow.logRetentionDays`. Do not invoke as if they
+> exist. Shapes: [`design/workflow-run-log.md`](design/workflow-run-log.md).
 
 - `validate <file>` — load + Zod-validate a workflow definition.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
@@ -361,7 +368,7 @@ Sync feature status with linked task states via conservative forward-only deriva
 - `--dry-run` — report proposed status sync transitions without applying writes.
 - `--force` — force applying reopen proposals (`done/cancelled -> active` when non-terminal tasks are linked) without confirmation.
 - `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns an explicit error ("Push sync not implemented").
-- Pipeline integration (task 0328): `task-pipeline.yaml` post-record step conditionally runs `spur feature sync <id> --json` if task has `feature_id`, or appends an orphan proposal to the run report if unlinked. `wrapup-pipeline.yaml` feature-transition step uses `spur feature sync ${vars.feature} --json` for status derivation. Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
+- Pipeline integration (task 0328; bounded by 0411): `task-pipeline.yaml`'s post-record step syncs the feature when the task carries a `feature_id`, or appends an orphan proposal to the run report if unlinked; `wrapup-pipeline.yaml`'s feature-transition step syncs `${vars.feature}`. Both prefer the retry-suppressing wrapper `bun plugins/sp/scripts/feature-sync-bounded.ts <id> --spur-bin <bin> --json` and fall back to the plain `spur feature sync <id> --json` verb when that script is absent — `spur init` seeds `.spur/workflows/` but never `plugins/sp/`, so a scaffolded project must not depend on the monorepo-relative path. Both steps are **advisory** (`; exit 0`): feature-status sync is a follow-up, never a completion gate, and must not abort a run that already produced a PASS verdict. Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
 
 #### `spur task scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]`
 
@@ -902,28 +909,52 @@ needed). `feature-dev.yaml` uses the same resolvable ref.
 
 **Task execution pipeline** — `config/workflows/task-pipeline.yaml` (design §6, ADR-022
 "orchestration is configuration": YAML over the existing engine, zero engine code). `kind:
-state-machine`, `vars: { wbs, profile }`, shape `precheck → implement → test → review → approve(HITL)
-→ verify → record → done` (precheck failure short-circuits to `failed`). Invariants: it never touches
-files directly — `precheck` is a `spur task check <wbs>` shell guard; `implement/test/review/verify` are
-`agent.run` steps carrying `sp:dev-*` inputs; status moves use the normal `spur task update <wbs>
-`spur task record` (0108); `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
-`spur task update --section`;`approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
-**Step→command mapping (ADR-026):**`implement` → `/sp:dev-run --mode implement` (NOT `/sp:dev-run --mode full` — that
-would drive this pipeline, so calling it in full mode inside recurses); `test` → `/sp:dev-unit`;`review` →
-`/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement`;
-the review step fans out to three dimensions — SECUA / functional / architecture — via the super-reviewer agent, task 0227);`verify` → `/sp:dev-verify` (→ `sp:code-verification` verify mode). **Completion gate (ADR-026):** the `verify` step emits
-`.spur/run/<wbs>-verdict.json`; the`verify → record` transition is a shell guard asserting
-`jq -r .verdict … = PASS`, with a sibling`verify → failed` on the negation — so a PARTIAL/FAIL/missing
-verdict blocks `done`. This is the spur-native replacement for rd3's default-on`--postflight-verify`.
-**Follow-up:**`task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
-— there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
-**Step timeout (ADR-026 amendment, 2026-06-23, task 0107):** each `agent.run` step carries a
-`timeoutMs: ${vars.stepTimeoutMs}` option (default `"600000"` — 10 min). On elapse the ts-libs
-`ProcessExecutor` kills the subprocess (never abandons it); the agent step exits non-zero
-→ `ok:false` → pipeline routes to `failed`. Overridable per run via
-`--vars '{"stepTimeoutMs":"120000"}'`. The`agent.run` action surface accepts `timeoutMs`
+state-machine`, shape `precheck → implement → test [→ test-fix ↔ test-recheck] → review →
+approve(HITL) → verify → record → done` (precheck failure short-circuits to `failed`; `approve`
+routes to `failed` on rejection or `cancelled` on cancel). Invariants: it never touches files
+directly — status moves use the normal `spur task update <wbs> <status>` verb and section writes go
+through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
+identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
+
+**Vars.** `wbs`, `profile`, `spurBin`, `agent`, `stepTimeoutMs`, `implementTimeoutMs`,
+`qualityGateCmd`, `qualityGateMaxFixAttempts`, `formatCmd`, `__hitlAnswer`. The three command-shaped
+vars are the per-project override surface: `qualityGateCmd` (default `bun run autofix && bun run
+spur-check`) is single-sourced across the soft probe, the `/sp:dev-fixall` input and the recheck;
+`formatCmd` (default `bun run format`) is the post-implement auto-format. `formatCmd` is invoked
+best-effort (`${vars.formatCmd} ; exit 0`) — a missing or failing formatter must not abort a run,
+because `qualityGateCmd` at `test` is the gate that actually decides.
+
+**Step→command mapping (ADR-026, amended by ADR-043):** `implement` → `/sp:dev-run --mode implement`
+(NOT `--mode full` — that drives this pipeline, so calling it here recurses); `test` → **the project
+quality gate**, a soft shell probe of `${vars.qualityGateCmd}` plus a bounded pure-slash
+`/sp:dev-fixall` loop — *not* `/sp:dev-unit`, which is the coverage gap-fill competency (router
+C3/C5); `review` → `/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` +
+`sp:functional-review` + `sp:code-improvement`; three dimensions — SECUA / functional /
+architecture, task 0227); `verify` → `/sp:dev-verify` (→ `sp:code-verification` verify mode).
+
+**Completion gate (ADR-026):** the `verify` step emits `.spur/run/<wbs>-verdict.json`; the
+`verify → record` transition is a shell guard asserting `jq -r .verdict … = PASS`, with a sibling
+`verify → failed` on the negation — so a PARTIAL/FAIL/missing verdict blocks `done`. This is the
+spur-native replacement for rd3's default-on `--postflight-verify`.
+**Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start
+hook — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
+**Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4):** each `agent.run`
+step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/test-fix and
+`${vars.implementTimeoutMs}` for the heavier implement hop, both defaulting to `"1800000"` (30 min).
+On elapse the ts-libs `ProcessExecutor` kills the subprocess (never abandons it); the agent step
+exits non-zero → `ok:false` → pipeline routes to `failed`, and a partial-work handoff artifact is
+written to `.spur/run/<runId>-<state>-partial.md`. Overridable per run via
+`--vars '{"stepTimeoutMs":"120000"}'`. The `agent.run` action surface accepts `timeoutMs`
 (number parsed from the workflow option or CLI string flag `--timeout`), forwarded through
 `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`.
+
+**Run status (ADR-044):** terminal states partition into success and failure via an optional
+`failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing
+in a failure terminal finalizes the run as `status: "failed"` through `lifecycle.fail` — the persisted
+run row, the `workflow.run.failed` event, and the CLI exit code all agree, so **`status` alone is
+authoritative for pass/fail**. Judge a run by `status === 'done'`, never by string-matching a
+`finalState` name the caller does not own. Workflows declaring no `failureStates` still finalize every
+terminal as `done` (backward compatible).
 
 **Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
 `done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:
@@ -931,26 +962,6 @@ verdict blocks `done`. This is the spur-native replacement for rd3's default-on`
 | Required section | Owning step | When |
 | ------------------ | ------------- | ------ |
 | `Solution` (change-map) | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
-| `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
-| `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
-
-The `record` step provides a **Solution safety-net**: if the implement step didn't write
-`## Solution`, `record` backfills a minimal change-map from `git diff --name-only`. A
-`sectionIsBare` predicate (in `packages/app/src/services/task-service.ts`) detects absent,
-empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
-writes.
-
-**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>`
-with a `record → failed` sibling on negation — mirroring the `verify → record` verdict gate
-exactly. The guard passes because every required section was guaranteed upstream; a genuinely
-non-compliant task routes to `failed` instead of a silent bad `done`.
-
-**Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
-`done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:
-
-| Required section | Owning step | When |
-| ------------------ | ------------- | ------ |
-| `Solution` (change-map) | `/sp:dev-implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
 | `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
 | `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
 

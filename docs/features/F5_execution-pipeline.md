@@ -2,11 +2,11 @@
 schema_version: 1
 id: F5
 name: Execution pipeline
-status: backlog
+status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-04T04:44:27.652Z"
+updated_at: "2026-08-04T18:08:59.025Z"
 ---
 
 # F5: Execution pipeline
@@ -66,6 +66,7 @@ Feature: Execution pipeline
 | 0062 | W3: task-pipeline.yaml — execution workflow with guards and record step | done |
 | 0063 | W3: spur workflow continue — HITL resume | done |
 | 0424 | Task-pipeline implement step: continuation for large tasks + empty-implement no-op guard | done |
+| 0425 | Make workflow terminal failure a failed run status and run-scope shared .spur/run artifacts | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -82,3 +83,6 @@ shippable evaluation tracks the open 0424 slice with PASS+MET verdict rows.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-08-04T18:07:08.898Z backlog → active (system)
+- 2026-08-04T18:07:09.018Z active → verifying (system)
+- 2026-08-04T18:08:59.025Z verifying → done (system)

@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.3.0
+version: 1.4.0
 owner: Robin Min
 updated_at: 2026-08-04
 read_before: any structural change; before diverging from a decision
@@ -1144,3 +1144,93 @@ branch to a terminal `failed` state instead of raw lifecycle aborts; (3) Bun-onl
 (4) exhaustive HITL answer routing. Residual free-form inputs remain only for capture-oriented
 steps without a slash surface (idea discovery/decompose, wrapup learnings/metrics, wayfinder
 research essays, planning design-gen) until dedicated commands land.
+
+**Amendment (2026-08-04) — advisory steps must be soft; retryable failures must reach their
+retry edge.** A workflow step whose output is *advisory* (post-record feature sync, post-implement
+formatting, wrap-up feature transition) must terminate with `; exit 0`, never `&& exit 0` — the
+latter skips the terminating `exit 0` on the failure path and aborts the run under the default
+`fail` policy, discarding work that already landed. Conversely, a failure a workflow *declares* as
+retryable (idea-pipeline's empty AC capture, capped at 3) must exit 0 so the capped retry edge is
+evaluated; only genuinely unrecoverable failures (a CLI corpus write) may exit non-zero. Corollary:
+a monorepo-relative helper (`plugins/sp/scripts/*.ts`) invoked from a *scaffolded* workflow needs a
+`[ -f … ]` guard plus a plain-CLI fallback — `spur init` seeds `.spur/workflows/` but never
+`plugins/sp/`. Applies to `config/workflows/{task,wrapup,idea}-pipeline.yaml`,
+`wayfinder-resolution.yaml`.
+
+## ADR-044: Workflow Terminal Failure Is a Run Status, and Shared Run Artifacts Are Run-Scoped
+
+**Status:** Accepted · **Date:** 2026-08-04
+
+**Decision.** Two gaps found by the 2026-08-04 review of `config/workflows/*` are real defects, not
+accepted trade-offs, and are resolved in the engine/CLI seam — **not** by patching each YAML:
+
+1. **Terminal failure must surface as a failed run.** `StateMachineDriver` finalizes *every*
+   declared terminal state through `lifecycle.done()`, so a pipeline that correctly routes to its
+   `failed` state reports `status: "done"`, `finalState: "failed"` and the CLI exits **0**. The fix
+   is a declarative classification in the workflow schema — terminal states are partitioned into
+   success and failure sets (e.g. `terminalStates` + `failureStates`, or a per-state `outcome:
+   success|failure`) — with the driver finalizing failure terminals via `lifecycle.fail()` so
+   `status`, the persisted run row, the `workflow.run.failed` event, and the process exit code all
+   agree. Until it lands, the reader contract stays **`status === 'done' AND finalState ===
+   <expected>`** (already the documented rule in `sp:spur-cli`), and no workflow may rely on the
+   exit code alone.
+2. **Shared run artifacts are run-scoped.** Fixed paths under `.spur/run/` that are not already
+   entity-scoped (`basic-gate.status`, `basic-fix-attempt`, `feature-dev-precheck.status`,
+   `plan-precheck.status`, the whole `idea-*` set) collide between concurrent runs of the same
+   workflow: two runs share one status file and one attempt counter, so one run's red gate can
+   satisfy the other's PASS guard. They become `${vars.__runId}`-scoped. Entity-scoped paths
+   (`.spur/run/<wbs>-*`) are already collision-free and stay as they are.
+
+**Why.** (1) An orchestrator cannot distinguish "the pipeline succeeded" from "the pipeline
+diagnosed its own failure and stopped cleanly" without string-matching a state name it does not
+own. Every batch driver, CI wrapper, and `&&` chain reads exit codes; a fail-closed pipeline that
+exits 0 is a silent-success hazard exactly where the design took the most care to be fail-closed.
+The alternative — giving each `failed` state an `onEnter` that exits non-zero — does produce a
+failed run, but by conflating "the run reached its failure terminal" with "an action broke",
+discarding the terminal state's identity and the reason string, and adding a shell hop to ten files.
+The schema is the right seam: which terminals mean failure is workflow *configuration* (ADR-022),
+not driver logic. (2) `idea-pipeline` already archives and resets its fixed artifacts at `start`,
+which is an admission that the paths are singleton-only; that admission does not survive the first
+concurrent idea run. `/sp:dev-parallel` is safe today only because it fans out `task-pipeline`,
+whose artifacts are `<wbs>`-scoped — a property no one declared and nothing enforces.
+
+**Rejected: leave both as documented sharp edges.** The `status`/`finalState` split is already
+documented, and single-run-at-a-time is the current usage. Rejected because both defects fail
+*silently and in the unsafe direction* (a failed pipeline reads as success; a cross-run artifact
+read reads as PASS), and both are cheap to close at the seam versus expensive to debug after a
+wrong `done`.
+
+**Detail:** engine `state-machine.ts` (`terminal.has(current.id) → lifecycle.done`), schema
+`apps/cli/schemas/state-machine-workflow.schema.json`, CLI `apps/cli/src/commands/workflow.ts`
+(`setExitCode(result.status === 'done' ? 0 : 1)`), reader contract in
+`plugins/sp/skills/spur-cli/references/workflows.md`. `__runId` is already injected into every run's
+vars by `WorkflowAppService.run()` and survives pause/resume via the effective-vars snapshot, so (2)
+needs no new plumbing — only a declared `__runId: ""` var per workflow and path rewrites.
+Implemented by task 0425 (feature F5).
+
+---
+
+## ADR-045: All-in-One Per-Run Workflow Run Log; Retain-by-Default; Follow via `trace --follow`
+
+**Status:** Accepted (design) · **Date:** 2026-08-04
+
+**Decision.** `spur workflow run` writes a single all-in-one log per run at `.spur/run/<RUNID>.log`
+covering creation → terminal status: the run's foreground rendering (plan preview, per-step progress,
+transitions, final summary), every child agent's stdout/stderr, and consumed stdin (steering
+commands). The log is **retained by default**, with a `--no-log` opt-out; reclamation belongs to a
+retention policy on the existing `spur workflow clean` housekeeping verb. Real-time following is
+delivered by **extending `spur workflow trace <RUNID> --follow`** with a log-streaming source
+(`--output`); there is **no** new `monitor` verb. The existing `<RUNID>-output.log` sink consolidates
+into `<RUNID>.log` as a compatibility decision, not a refactor — consumers checked before repointing;
+the `.spur/runs/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage remain
+distinct authorities.
+
+**Why.** The exact mode where an operator most needs to watch a run — `--async` (detached nohup, std
+streams to `/dev/null`) — discards the run's narration outright; foreground rendering is otherwise
+terminal-only, stdin is never captured, and the existing sinks are split across `.spur/run/` and
+`.spur/runs/`. A run log is most valuable after a failed run ends, so retain-by-default beats
+delete-by-default (the operator's original polarity, overridden 2026-08-04), and a plain `tail -f`
+caps the marginal value of a dedicated monitor verb.
+
+**Detail:** `docs/design/workflow-run-log.md`; `docs/03_ARCHITECTURE.md §6`; feature `D2`
+(`docs/features/D2_all-in-one-per-run-workflow-run-log.md`).

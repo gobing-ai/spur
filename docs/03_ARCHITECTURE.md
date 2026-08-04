@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.5.0
+version: 1.6.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-04
@@ -165,7 +165,10 @@ configuration — adding one edits YAML, not code. Flags and surface: `04 §1.1`
 Two execution models behind one host (ADR-009):
 
 - **State-machine** — states, transitions, guards; a single readable driver loop for linear/looping
-  workflows.
+  workflows. Terminal states partition into success/failure via an optional `failureStates` subset of
+  `terminalStates` (ADR-044): the driver finalizes a failure terminal via `lifecycle.fail()`, so the
+  run's status, persisted row, `workflow.run.failed` event, and CLI exit code all agree; absent
+  `failureStates`, every terminal finalizes as `done` (backward compatible).
 - **Transition-flow** — DAG with conditional branching for multi-phase pipelines.
 
 Definitions are YAML (Zod-validated, variable interpolation). Persistence is via a SQLite adapter
@@ -173,6 +176,37 @@ Definitions are YAML (Zod-validated, variable interpolation). Persistence is via
 wires the host + persistence and exposes validate/run/list; persisted runs power
 `spur workflow trace`. The planning layer's task/feature lifecycles run as workflow definitions
 on this engine (§12.2) — its first long-lived, externally-triggered consumer (ADR-022).
+
+### 6.1 Consolidated per-run run log (accepted design — ADR-045; not yet built)
+
+A single all-in-one per-run log at `.spur/run/<RUNID>.log` will make every `spur workflow run`
+observable from creation to terminal status. The consolidated sink is a **new read-only subscriber**
+on the existing `WorkflowObservabilityBus` (which ADR-035 keeps a read-only projection) that appends
+the already-redacted, already-bounded event stream to the log file. It subsumes the current
+`RunOutputSink` — the same `observe`/`close` contract, byte/line bounds (default 1 MiB / unbounded,
+configurable), visible truncation marker, and best-effort-writes-never-fail-the-run semantics — but
+emits a richer event set: the run's foreground rendering (plan preview, per-step progress,
+transitions, final summary), child agent stdout/stderr chunks, consumed stdin (steering), and engine
+shell/HITL action lifecycle lines. Because the sink writes in-process to a file, the `--async`
+detached worker (which points its own std streams at `/dev/null`) still produces the log.
+
+Invariants (enforceable):
+
+1. No prompt body or shell command text ever enters the log; prompt bodies become `[prompt N chars]`,
+   shell commands `[shell command redacted]`, configured secrets `[REDACTED]` — the consolidated log
+   is not a redaction leak.
+2. The log never exceeds its configured byte/line bound; hitting a bound appends a visible truncation
+   marker, never a silent cut.
+3. An unwritable `.spur/run/` dir or failing disk degrades the log, never the run.
+4. `spur workflow clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30);
+   the log is retained by default and removed only by that policy.
+
+`spur workflow trace <RUNID> --follow --output` streams `.spur/run/<RUNID>.log` (tail -f equivalent)
+as a distinct source, exiting at terminal status; the structured DB timeline remains the default and
+`--output` does not interleave with it. Removed-and-repointed surfaces are compatibility changes:
+`<RUNID>-output.log` folds into `<RUNID>.log`, and the timed-out-implement runbook tails the new path;
+the `.spur/runs/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage stay distinct
+authorities. Surface shapes: `docs/design/workflow-run-log.md`; decision: `00 ADR-045`; feature `D2`.
 
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 
