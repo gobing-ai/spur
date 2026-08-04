@@ -5,3 +5,8 @@
 {"wbs":"0170","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
 {"wbs":"0171","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
 {"wbs":"0172","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
+Captured to `.spur/run/wrapup-metrics.jsonl`:
+
+{"wbs":"0425","feature_id":"F5","status":"done","verdict":"PASS","timestamp":"2026-08-04T17:57:43Z"}
+
+Source notes: `feature_id` = `F5` from the `0425-verify-answer.txt` footer ("Feature: F5"); `status` = `done` (terminal lifecycle state after PASS verdict + Shippable PASS); `timestamp` = the verify-answer mtime `2026-08-04T10:57:43-07:00` → UTC `17:57:43Z`, the closest recorded point where the task reached its verified/done state. `wbs`/`verdict` taken directly from `0425-verdict.json`.

@@ -5,7 +5,12 @@
     "allowUnsandboxedCommands": false,
     "failIfUnavailable": true,
     "filesystem": {
-      "allowWrite": [".git/hooks"]
+      "allowWrite": [
+        ".git/hooks",
+        "~/xprojects/ts-libs",
+        "~/.omp",
+        "~/tools/dot_files/config/omp"
+      ]
     }
   }
 }
