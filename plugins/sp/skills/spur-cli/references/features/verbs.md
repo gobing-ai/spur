@@ -64,8 +64,32 @@ change — never hand-edit an ID, which would orphan descendants and break edges
 
 ## `refresh`
 
-Rebuild the features INDEX, the tree, and each feature's `## Tasks` block from the files on disk.
-**Files win.** Run after hand-edits.
+Rebuild **derived docs only**: `INDEX.md` and each feature's `## Tasks` auto-gen region from task
+`feature_id` edges (WBS / title / status). **Files win** for that region; Goal/Scope/AC and feature
+`status` are untouched. Run after task create/link/done or hand-edits that leave the roster stale.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--feature <id>` | Rewrite only that feature's `## Tasks` (INDEX.md still fully regenerated). |
+| `--folder` / `--json` | Standard. |
+
+**vs `sync`:** `refresh` never changes lifecycle status and never runs transition guards.
+
+## `sync [id]`
+
+Align a feature's **frontmatter status** with linked task states. Derives a proposal and, unless
+`--dry-run`, applies legal lifecycle hops (e.g. all tasks terminal → toward `done`; reopened work →
+reopen). Real transitions — gates (dogfood for self-referential workflow features, one-active-goal,
+L4 readiness) may deny a hop.
+
+| Flag | Effect |
+| ---- | ------ |
+| `[id]` / `--all` | One feature, or every feature that has linked tasks (one required). |
+| `--dry-run` | Report proposal only; no write. |
+| `--force` | Apply a *reopen* (backward) proposal without interactive confirmation. |
+| `--folder` / `--json` | Standard. JSON: `{ proposal, applied, appliedHops[] }`. |
+
+**vs `refresh`:** `sync` never rewrites INDEX.md or `## Tasks` tables.
 
 ## `check [id]`
 
@@ -92,6 +116,7 @@ spur feature update  <id> [status] [--field <k> --value <v>] [--section <n> --fr
 spur feature advance <id> [--to <status>] [--folder] [--json]
 spur feature list    [--status <s>] [--priority <p>] [--folder] [--json]
 spur feature move    <id> [--parent <id>] [--dry-run] [--folder] [--json]
-spur feature refresh [--folder] [--json]
+spur feature refresh [--feature <id>] [--folder] [--json]
+spur feature sync    [id] | --all [--dry-run] [--force] [--folder] [--json]
 spur feature check   [id] [--strict] [--folder] [--json]
 ```

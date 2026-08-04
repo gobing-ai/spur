@@ -27,9 +27,18 @@ what* or *how to write a scenario*, this skill.
 | `advance <id>` | Walk forward along the legal lifecycle path to a target status | `--to <status>` (default `done`) `--folder` `--json` |
 | `list` | List features, filtered | `--status <s>` `--priority <p>` `--folder` `--json` |
 | `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
-| `refresh` | Rebuild INDEX + tree + each feature's `## Tasks` (files win) | `--feature <id>` `--folder` `--json` |
+| `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate | `--strict` `--folder` `--json` |
-| `sync [id]` | Sync feature status with linked task states | `--all` `--dry-run` `--force` `--folder` `--json` |
+| `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) | `--all` `--dry-run` `--force` `--folder` `--json` |
+
+**`refresh` vs `sync` (do not conflate):**
+
+| Need | Verb |
+| ---- | ---- |
+| Stale `## Tasks` roster / INDEX after tasks finished or linked | `refresh` |
+| Feature frontmatter `status` should follow task statuses | `sync` (preview with `--dry-run`) |
+
+`refresh` never runs lifecycle gates. `sync` never rewrites the Tasks table — run both when you need both.
 
 All verbs accept `--json` and `--folder <path>`.
 
@@ -141,7 +150,8 @@ the AC coverage map. Habits that keep it green:
   titles, so keep titles stable even as you renumber-around them.
 - **Before `verifying`**, run `spur feature check <id> --json` and clear: orphan scenarios (AC with
   no task), coverage orphans (tasks claiming AC that doesn't exist), and broken edges.
-- **Run `refresh` after hand-edits** so the `## Tasks` block and tree reflect the files (files win).
+- **Run `refresh` after hand-edits or task status changes** so the `## Tasks` block and tree reflect
+  the files (files win). This is **not** `sync` — it does not change feature status.
 - **Scope `refresh` to one feature** with `--feature <id>` when only one feature's task links changed
   (INDEX.md is still regenerated for the whole tree): `spur feature refresh --feature H2`.
 
@@ -173,9 +183,14 @@ restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop run
 
 ## Status sync - `sync`
 
-`spur feature sync` keeps a feature's lifecycle status honest against the states of its linked
-tasks - if all tasks are `done`, the feature should advance to `done`; if tasks reopen, the feature
-reopens. It computes a proposal (`from -> to` with a `reason`) and, unless `--dry-run`, applies it.
+`spur feature sync` keeps a feature's **lifecycle status** honest against the states of its linked
+tasks — if all tasks are `done`, the feature should advance to `done`; if tasks reopen, the feature
+reopens. It computes a proposal (`from → to` with a `reason`) and, unless `--dry-run`, applies it
+via real lifecycle transitions (dogfood / one-active-goal / L4 gates may deny a hop).
+
+**Not for roster tables.** A stale `## Tasks` line (e.g. task still listed `todo` after it is `done`)
+is fixed with `spur feature refresh`, not `sync`. Use `sync --dry-run` first when you only want to
+see the proposed status hop.
 
 ```bash
 spur feature sync H2 --json                    # one feature

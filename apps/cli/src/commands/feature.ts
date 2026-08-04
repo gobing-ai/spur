@@ -273,9 +273,21 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         });
 
     // ── refresh ──
+    // Distinct from `sync`: refresh rewrites derived docs only (INDEX + ## Tasks).
+    // It never changes feature lifecycle status or runs transition guards.
     feature
         .command('refresh')
-        .summary('Regenerate INDEX.md (ID-encoded tree) and repopulate each feature ## Tasks region.')
+        .summary('Rebuild INDEX.md and each feature ## Tasks table from task edges (docs only — no status change).')
+        .description(
+            [
+                'Regenerate derived views so feature markdown matches the task graph:',
+                '  • docs/features/INDEX.md (ID-encoded tree)',
+                '  • each feature ## Tasks auto-gen region (WBS / title / status from feature_id edges)',
+                '',
+                'Does NOT change feature frontmatter status. For lifecycle alignment use `spur feature sync`.',
+                'Use after task create/link/done when the ## Tasks table is stale.',
+            ].join('\n'),
+        )
         .option('--feature <id>', 'Restrict the ## Tasks rewrite to one feature (INDEX.md still regenerated)')
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
@@ -364,8 +376,21 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
 
     // ── sync ──
     feature
+        // Distinct from `refresh`: sync proposes/applies real lifecycle transitions
+        // (and their guards). It does not rewrite INDEX.md or ## Tasks tables.
         .command('sync')
-        .summary('Sync feature status with linked task states.')
+        .summary('Align feature lifecycle status with linked task states (status only — runs transition guards).')
+        .description(
+            [
+                'Derive a feature status proposal from linked task statuses and apply legal hops',
+                '(e.g. all tasks done → advance toward done; reopened work → reopen the feature).',
+                '',
+                'Applies real lifecycle transitions — gates such as dogfood, one-active-goal, and',
+                'L4 AC readiness may deny a hop. Preview with --dry-run first.',
+                '',
+                'Does NOT rewrite INDEX.md or ## Tasks tables. For stale rosters use `spur feature refresh`.',
+            ].join('\n'),
+        )
         .argument('[id]', 'Feature ID to sync (optional if --all is passed)')
         .option('--all', 'Sync all features with linked tasks')
         .option('--dry-run', 'Report proposed status sync transitions without applying')
