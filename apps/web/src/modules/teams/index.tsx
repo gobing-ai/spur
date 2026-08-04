@@ -16,4 +16,6 @@ export const module: WebModule = {
     route: 'teams',
     component: TeamsShell,
     sidebarLabel: 'Teams',
+    // 0422 R1: declared order keeps Inbox (order 1) immediately adjacent.
+    order: 2,
 };

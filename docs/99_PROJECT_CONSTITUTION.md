@@ -468,6 +468,13 @@ if it recurs, a new rule in §6.
   `helpText()` renderers) survived two doc passes after the superseding ADR landed, directly
   contradicting the section above it. When an ADR is superseded, grep the derived docs for its
   mechanism vocabulary in the same change.
+- [2026-08-04] spur-new: A UI/UX web module (Inbox, 0422) shipped with its *visual* design
+  correctly routed to root `DESIGN.md`, but the module's **system-boundary surface** — module
+  registration (`id`/`route`/`order`), the two-channel message plane, the shared
+  `process-stream` lib — was never recorded in `04`/`03`/ADR until a follow-up doc-evolve pass.
+  A UI change still carries non-UI surface facts (§4.1 routing) that `DESIGN.md` does not cover.
+  When a UI module ships, check for system-boundary surface and record it in `04`/`03`/ADR in
+  the same change (ADR-042 repaired this in a follow-up).
 
 ### Lessons for `docs/05_FEATURES.md`
 

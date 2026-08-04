@@ -23,10 +23,11 @@ describe('TEAMS_TABS', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains the 5 v1 tabs in stable order with Supervisor first (0378 R1)', () => {
+    test('contains the 4 v1 tabs in stable order with Supervisor first (0378 R1; 0422 R7)', () => {
         // 0378: Supervisor added as first+default tab. Append-only/id-stable.
+        // 0422 R7: `messages` moved to the Inbox module.
         const ids = TEAMS_TABS.map((t) => t.id);
-        expect(ids).toEqual(['supervisor', 'terminal', 'processes', 'messages', 'activity']);
+        expect(ids).toEqual(['supervisor', 'terminal', 'processes', 'activity']);
     });
 
     test('component fields are resolvable React component types', () => {

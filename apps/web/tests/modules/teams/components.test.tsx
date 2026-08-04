@@ -4,6 +4,7 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import * as RealUI from '@/ui';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
+import AllTab, { parseMessagesFeed } from '../../../src/modules/inbox/AllTab';
 import ActivityTab, {
     buildRosterIndex,
     enrichRowFromRoster,
@@ -11,7 +12,6 @@ import ActivityTab, {
     prependActivityRow,
     toRow,
 } from '../../../src/modules/teams/ActivityTab';
-import MessagesTab, { parseMessagesFeed } from '../../../src/modules/teams/MessagesTab';
 import ProcessesTab, { buildWatchRows, filterWatchRows } from '../../../src/modules/teams/ProcessesTab';
 import SupervisorTab from '../../../src/modules/teams/SupervisorTab';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
@@ -138,15 +138,16 @@ afterAll(async () => {
 });
 
 describe('teams module components', () => {
-    test('TeamsShell renders exactly the 5 v1 tabs with stable labels (0378)', async () => {
+    test('TeamsShell renders exactly the 4 v1 tabs with stable labels (0378; 0422 R7)', async () => {
         setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
         const { getByRole, container } = render(<TeamsShell />);
 
-        for (const label of ['Supervisor', 'Terminal', 'Process', 'Message', 'Activity']) {
+        // 0422 R7: `Message` moved to the Inbox module.
+        for (const label of ['Supervisor', 'Terminal', 'Process', 'Activity']) {
             expect(getByRole('tab', { name: label })).toBeDefined();
         }
-        // The shell renders no more and no fewer than the 5 declared tabs.
-        expect(container.querySelectorAll('[role="tab"]').length).toBe(5);
+        // The shell renders no more and no fewer than the 4 declared tabs.
+        expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
         // 0269 R1: shared TeamControlStrip is gone from the shell.
         expect(container.querySelector('[data-team-control-strip]')).toBeNull();
     });
@@ -446,11 +447,11 @@ describe('teams module components', () => {
     });
 
     // Regression guard for the 0260 Roster removal: RosterTab was the only writer of
-    // the shared TeamsContext selection, so a MessagesTab that filters on that
+    // the shared TeamsContext selection, so a AllTab that filters on that
     // selection can never leave its empty state in production. This renders the tab
     // exactly as the shell does — no provider, no preset selection — so a
     // reintroduced selection gate fails here instead of shipping a dead tab.
-    test('MessagesTab renders the global feed with no selection present (0260 R3)', async () => {
+    test('AllTab renders the global feed with no selection present (0260 R3)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/messages')) {
@@ -474,7 +475,7 @@ describe('teams module components', () => {
             }
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
-        const { getByText, queryByText, container } = render(<MessagesTab />);
+        const { getByText, queryByText, container } = render(<AllTab />);
 
         await waitFor(() => expect(getByText('across-members')).toBeDefined());
         // The dead-end placeholder pointed at a tab that no longer exists.
@@ -514,7 +515,7 @@ describe('teams module components', () => {
         expect(parseMessagesFeed({ messages: 'nope' })).toBeNull();
     });
 
-    test('MessagesTab shows identity, delivery chip, and Replied badge (0269 R8)', async () => {
+    test('AllTab shows identity, delivery chip, and Replied badge (0269 R8)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/messages')) {
@@ -550,7 +551,7 @@ describe('teams module components', () => {
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
-        const { container, getByText } = render(<MessagesTab />);
+        const { container, getByText } = render(<AllTab />);
         await waitFor(() => expect(getByText('do the thing')).toBeDefined());
         const route = container.querySelector('[data-message-route]');
         expect(route?.textContent).toContain('Alpha');
@@ -563,7 +564,7 @@ describe('teams module components', () => {
         expect(reply?.textContent).toContain('2');
     });
 
-    test('MessagesTab reads the unfiltered feed, not a per-agent inbox (0260 R3)', async () => {
+    test('AllTab reads the unfiltered feed, not a per-agent inbox (0260 R3)', async () => {
         const urls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
@@ -571,7 +572,7 @@ describe('teams module components', () => {
             return jsonResponse({ messages: [], count: 0 });
         }) as unknown as typeof fetch);
 
-        render(<MessagesTab />);
+        render(<AllTab />);
 
         await waitFor(() => expect(urls.length).toBeGreaterThan(0));
         // An `?agent=` query would re-couple the tab to a per-member selection.
@@ -579,7 +580,7 @@ describe('teams module components', () => {
         expect(urls.some((u) => u.includes('agent='))).toBe(false);
     });
 
-    test('MessagesTab refetches the global feed on a message.sent SSE event (0254 AC5/R6)', async () => {
+    test('AllTab refetches the global feed on a message.sent SSE event (0254 AC5/R6)', async () => {
         let secondVisible = false;
         const feedCalls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
@@ -621,7 +622,7 @@ describe('teams module components', () => {
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
-        const { getByText } = render(<MessagesTab />);
+        const { getByText } = render(<AllTab />);
 
         await waitFor(() => expect(getByText('first')).toBeDefined());
         const before = feedCalls.length;

@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import ActivityTab from './ActivityTab';
-import MessagesTab from './MessagesTab';
 import ProcessesTab from './ProcessesTab';
 import SupervisorTab from './SupervisorTab';
 import TerminalTab from './TerminalTab';
@@ -12,11 +11,10 @@ export interface TeamsTab {
     readonly component: ComponentType;
 }
 
-/** v1 tabs: Supervisor (default, 0378 R1), Terminal, Processes, Messages, Activity. */
+/** v1 tabs: Supervisor (default, 0378 R1), Terminal, Processes, Activity. Messages moved to Inbox (0422 R7). */
 export const TEAMS_TABS: readonly TeamsTab[] = [
     { id: 'supervisor', label: 'Supervisor', component: SupervisorTab },
     { id: 'terminal', label: 'Terminal', component: TerminalTab },
     { id: 'processes', label: 'Process', component: ProcessesTab },
-    { id: 'messages', label: 'Message', component: MessagesTab },
     { id: 'activity', label: 'Activity', component: ActivityTab },
 ];

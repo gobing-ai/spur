@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Inbox Board module v1: All / Supervisor / per-agent tabs over a unified message+process timeline"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M4
@@ -11,8 +11,8 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-08-03T23:02:05.562Z"
-updated_at: "2026-08-04T00:07:00.232Z"
+created_at: 2026-08-03T23:02:05.562Z
+updated_at: "2026-08-04T04:44:04.560Z"
 ---
 
 ## 0422. Inbox Board module v1: All / Supervisor / per-agent tabs over a unified message+process timeline
@@ -64,19 +64,19 @@ Requirement numbers are **M4's** — task R{n} implements M4 R{n}, one namespace
 **R8 is intentionally absent**: it is M4's supervisor relay hold toggle, excluded from this task
 (see `## Background`). Every requirement below has a matching Acceptance Criteria scenario.
 
-- [ ] R1. Register `apps/web/src/modules/inbox/` as a Board module — `index.tsx` exporting a named `module: WebModule` (`id: 'inbox'`, `route: 'inbox'`, `sidebarLabel: 'Inbox'`, icon, and an `order` placing it adjacent to Teams; discovery is automatic, no registry edit) — plus `InboxShell.tsx` mirroring `TeamsShell`'s aria wiring (`tablist`/`tab`/`tabpanel`, `aria-selected`, `aria-controls`), with `All` fixed at position 1 and `Supervisor` fixed at position 2, both present even when no team is running.
-- [ ] R2. Move `teams/MessagesTab.tsx` to `inbox/AllTab.tsx`, preserving behaviour: `GET /api/messages`, newest-first, sender/recipient/status/timestamp per row, SSE-driven refetch on `message.sent|replied`, and defensive parsing that survives a malformed row.
-- [ ] R3. Add `inbox/SupervisorTab.tsx` rendering the same feed filtered to rows whose `fromId` or `toId` is the supervisor endpoint. Read-only filtering — no routing change, no new backend identity, no extra call. Resolve the endpoint from a single named constant so the open M4 identity question has one place to land.
-- [ ] R4. Render one tab per member of the selected (or default) team after the two fixed tabs, sourced from `useTeamsData()`; the tab set updates when the team selection changes.
-- [ ] R5. Render a unified per-agent timeline: durable messages to/from that agent interleaved with its process frames, ordered by timestamp ascending, each entry showing its kind (message vs. `stdout`/`stderr` frame) and its direction (inbound to the agent vs. outbound from it). Merge client-side; no server change.
-- [ ] R6. Render an explicit boundary marker at the oldest available process frame, since the ring buffer is bounded and ephemeral while messages are durable. Never synthesize frames for the period before the marker; an agent with no frames at all renders a message-only timeline, not an error.
-- [ ] R7. Consolidate the message surfaces: drop `messages` from `TEAMS_TABS`, and delete `apps/web/src/modules/observability/InboxTab.tsx` (orphaned from `OBSERVABILITY_TABS` since 0254) together with its tests in `apps/web/tests/modules/observability/components.test.tsx`. No dangling imports; suite stays green.
-- [ ] R9. Extract `parseFrame`, `appendFrame`, `nextBackoff`, and `streamUrl` from `teams/MemberTerminal.tsx` into `apps/web/src/lib/process-stream.ts`, imported by both `MemberTerminal` and the Inbox agent timeline. Behaviour-preserving move — no logic change, existing tests repointed.
-- [ ] R10. Scope the `DESIGN.md` palette to the module: declare the DESIGN.md token values under an `.inbox` container class on the module root, leaving the shared `@theme` `spur-*` values byte-identical (13+ files across Features/Teams/Observability consume them). Mirrors `.task-kanban` (0420 R6, `apps/web/src/styles/global.css:78`). No hex literal and no Tailwind palette class (`bg-green-500`, `text-slate-400`, …) anywhere in the module — every surface resolves a `spur-*` token.
-- [ ] R11. Keep the module single-hued: inside the `.inbox` scope pin `--color-primary`, `--color-primary-content`, `--color-accent`, `--color-accent-content` to the DESIGN.md lavender `#5e6ad2` on `#ffffff`. Required because `@/ui` primitives render daisyUI variants (`Button variant="primary"` → `btn-primary` → `var(--color-primary)`), which otherwise resolve daisyUI's own indigo/teal and place a second chromatic accent on screen — 0420 finding F-01. Accent is used only for focus ring, selection, and link/CTA emphasis; never a row, card, or tab fill.
-- [ ] R12. Apply the DESIGN.md surface ladder and type scale: cards sit one ladder step above their container with a 1px hairline border, `rounded-xl` (12px) corners for cards and `rounded-lg` (8px) for controls, no drop shadows for hierarchy; body text 14px/w500, timestamps and identifiers as mono caption (`text-xs font-mono`), no display type.
-- [ ] R13. Leave the other board modules unregressed by the Inbox palette — the Teams and Observability modules continue to resolve the unchanged shared palette, and their existing suites stay green.
-- [ ] R14. Keep resources bounded: one in-flight `AbortController` per fetch path and one `EventSource` per mounted agent tab, both torn down on unmount and on agent switch, matching the existing `MemberTerminal`/`MessagesTab` pattern. Switching tabs must not leak a stream.
+- [x] R1. Register `apps/web/src/modules/inbox/` as a Board module — `index.tsx` exporting a named `module: WebModule` (`id: 'inbox'`, `route: 'inbox'`, `sidebarLabel: 'Inbox'`, icon, and an `order` placing it adjacent to Teams; discovery is automatic, no registry edit) — plus `InboxShell.tsx` mirroring `TeamsShell`'s aria wiring (`tablist`/`tab`/`tabpanel`, `aria-selected`, `aria-controls`), with `All` fixed at position 1 and `Supervisor` fixed at position 2, both present even when no team is running.
+- [x] R2. Move `teams/MessagesTab.tsx` to `inbox/AllTab.tsx`, preserving behaviour: `GET /api/messages`, newest-first, sender/recipient/status/timestamp per row, SSE-driven refetch on `message.sent|replied`, and defensive parsing that survives a malformed row.
+- [x] R3. Add `inbox/SupervisorTab.tsx` rendering the same feed filtered to rows whose `fromId` or `toId` is the supervisor endpoint. Read-only filtering — no routing change, no new backend identity, no extra call. Resolve the endpoint from a single named constant so the open M4 identity question has one place to land.
+- [x] R4. Render one tab per member of the selected (or default) team after the two fixed tabs, sourced from `useTeamsData()`; the tab set updates when the team selection changes.
+- [x] R5. Render a unified per-agent timeline: durable messages to/from that agent interleaved with its process frames, ordered by timestamp ascending, each entry showing its kind (message vs. `stdout`/`stderr` frame) and its direction (inbound to the agent vs. outbound from it). Merge client-side; no server change.
+- [x] R6. Render an explicit boundary marker at the oldest available process frame, since the ring buffer is bounded and ephemeral while messages are durable. Never synthesize frames for the period before the marker; an agent with no frames at all renders a message-only timeline, not an error.
+- [x] R7. Consolidate the message surfaces: drop `messages` from `TEAMS_TABS`, and delete `apps/web/src/modules/observability/InboxTab.tsx` (orphaned from `OBSERVABILITY_TABS` since 0254) together with its tests in `apps/web/tests/modules/observability/components.test.tsx`. No dangling imports; suite stays green.
+- [x] R9. Extract `parseFrame`, `appendFrame`, `nextBackoff`, and `streamUrl` from `teams/MemberTerminal.tsx` into `apps/web/src/lib/process-stream.ts`, imported by both `MemberTerminal` and the Inbox agent timeline. Behaviour-preserving move — no logic change, existing tests repointed.
+- [x] R10. Scope the `DESIGN.md` palette to the module: declare the DESIGN.md token values under an `.inbox` container class on the module root, leaving the shared `@theme` `spur-*` values byte-identical (13+ files across Features/Teams/Observability consume them). Mirrors `.task-kanban` (0420 R6, `apps/web/src/styles/global.css:78`). No hex literal and no Tailwind palette class (`bg-green-500`, `text-slate-400`, …) anywhere in the module — every surface resolves a `spur-*` token.
+- [x] R11. Keep the module single-hued: inside the `.inbox` scope pin `--color-primary`, `--color-primary-content`, `--color-accent`, `--color-accent-content` to the DESIGN.md lavender `#5e6ad2` on `#ffffff`. Required because `@/ui` primitives render daisyUI variants (`Button variant="primary"` → `btn-primary` → `var(--color-primary)`), which otherwise resolve daisyUI's own indigo/teal and place a second chromatic accent on screen — 0420 finding F-01. Accent is used only for focus ring, selection, and link/CTA emphasis; never a row, card, or tab fill.
+- [x] R12. Apply the DESIGN.md surface ladder and type scale: cards sit one ladder step above their container with a 1px hairline border, `rounded-xl` (12px) corners for cards and `rounded-lg` (8px) for controls, no drop shadows for hierarchy; body text 14px/w500, timestamps and identifiers as mono caption (`text-xs font-mono`), no display type.
+- [x] R13. Leave the other board modules unregressed by the Inbox palette — the Teams and Observability modules continue to resolve the unchanged shared palette, and their existing suites stay green.
+- [x] R14. Keep resources bounded: one in-flight `AbortController` per fetch path and one `EventSource` per mounted agent tab, both torn down on unmount and on agent switch, matching the existing `MemberTerminal`/`MessagesTab` pattern. Switching tabs must not leak a stream.
 ### Acceptance Criteria
 Scenario numbers are **M4's** — this task covers M4 R1–R7 and R9–R14. **M4 R8** (supervisor relay
 hold toggle) is out of this task and has no scenario here; see `## Background`.
@@ -334,17 +334,113 @@ Teams/Observability suites stay green, which proves the shared palette is untouc
   if components are built first and scoped afterwards, every surface needs re-checking against the
   ladder (this is what 0420 had to do).
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/web/src/modules/teams/MemberTerminal.tsx:0` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:14` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:17` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:182` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:3` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:46` |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:5` |
+| `apps/web/src/modules/teams/index.tsx:19` |
+| `apps/web/src/modules/teams/tabs.ts:14` |
+| `apps/web/src/modules/teams/tabs.ts:18` |
+| `apps/web/src/modules/teams/tabs.ts:2` |
+| `apps/web/tests/modules/observability/components.test.tsx:3` |
+| `apps/web/tests/modules/observability/components.test.tsx:920` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:114` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:116` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:120` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:122` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:7` |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:91` |
+| `apps/web/tests/modules/teams/components.test.tsx:14` |
+| `apps/web/tests/modules/teams/components.test.tsx:141` |
+| `apps/web/tests/modules/teams/components.test.tsx:145` |
+| `apps/web/tests/modules/teams/components.test.tsx:149` |
+| `apps/web/tests/modules/teams/components.test.tsx:450` |
+| `apps/web/tests/modules/teams/components.test.tsx:454` |
+| `apps/web/tests/modules/teams/components.test.tsx:478` |
+| `apps/web/tests/modules/teams/components.test.tsx:518` |
+| `apps/web/tests/modules/teams/components.test.tsx:554` |
+| `apps/web/tests/modules/teams/components.test.tsx:567` |
+| `apps/web/tests/modules/teams/components.test.tsx:575` |
+| `apps/web/tests/modules/teams/components.test.tsx:583` |
+| `apps/web/tests/modules/teams/components.test.tsx:625` |
+| `apps/web/tests/modules/teams/components.test.tsx:7` |
+| `apps/web/tests/modules/teams/tabs.test.ts:26` |
+| `apps/web/tests/modules/teams/tabs.test.ts:28` |
+| `apps/web/tests/modules/teams/tabs.test.ts:30` |
 ### Testing
+**Verdict: PASS** (2026-08-04 `/sp-dev-verify 0422 --force --focus all --fix all`)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Prior FAIL was environment-blocked. This run re-executed gates.
 
+**Commands**
+- `bun test apps/web` → **651 pass / 0 fail**
+- focused inbox/process-stream/teams/observability subset → **148 pass / 0 fail**
+- `spur task check 0422` after section writes
+- Coverage: `process-stream.ts` / `inbox/tabs.ts` / `inbox/timeline.ts` 100% in suite; component `.tsx` excluded from per-file gate
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `apps/web/src/modules/inbox/index.tsx:12-21`; `apps/web/src/modules/inbox/tabs.ts:12-15`; `apps/web/src/modules/inbox/InboxShell.tsx:85-111`; test R1 in `apps/web/tests/modules/inbox/inbox.test.tsx` |
+| R2 | MET | `apps/web/src/modules/inbox/AllTab.tsx:52-78`, `94-149`, `223-243`; `apps/web/tests/modules/inbox/inbox.test.tsx` R2 |
+| R3 | MET | `apps/web/src/modules/inbox/SupervisorTab.tsx:10-15`, `24-45`; inbox.test.tsx R3 |
+| R4 | MET | `apps/web/src/modules/inbox/InboxShell.tsx:34-55`; inbox.test.tsx R4 |
+| R5 | MET | `apps/web/src/modules/inbox/timeline.ts:36-56`; `apps/web/src/modules/inbox/AgentTab.tsx:16-70`; timeline.test.ts + inbox.test.tsx R5 |
+| R6 | MET | `apps/web/src/modules/inbox/timeline.ts:51-55`; `apps/web/src/modules/inbox/AgentTab.tsx:17-26`, `166-169`; inbox.test.tsx R6 |
+| R7 | MET | `apps/web/src/modules/teams/tabs.ts:15-20`; MessagesTab + observability/InboxTab deleted; `apps/web/tests/modules/teams/tabs.test.ts` |
+| R9 | MET | `apps/web/src/lib/process-stream.ts:33-78`; `apps/web/src/modules/teams/MemberTerminal.tsx:3`; `apps/web/tests/lib/process-stream.test.ts` |
+| R10 | MET | `apps/web/src/styles/global.css:128-147` `.inbox` scope; `apps/web/src/modules/inbox/InboxShell.tsx:58`; rg clean under modules/inbox |
+| R11 | MET | `apps/web/src/styles/global.css:143-146` daisyUI primary/accent pins |
+| R12 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:33`, `59`; `apps/web/src/modules/inbox/AllTab.tsx:175-208` |
+| R13 | MET | `@theme` unmodified in `git diff apps/web/src/styles/global.css`; `bun test apps/web` 651 pass |
+| R14 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:88-129`; `apps/web/src/modules/inbox/AllTab.tsx:112-146`; inbox.test.tsx R14 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R1 — Inbox registers as a Board module with two fixed leading tabs | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R1; `apps/web/tests/modules/inbox/tabs.test.ts` |
+| R2 — The All tab shows message traffic across every agent | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R2 |
+| R3 — The Supervisor tab filters the feed to supervisor traffic | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R3 |
+| R4 — Per-agent tabs are derived from the team roster | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R4 |
+| R5 — A per-agent tab renders a unified IN/OUT timeline | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R5; `apps/web/tests/modules/inbox/timeline.test.ts` |
+| R6 — The process-frame history boundary is visible | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R6; timeline.test.ts |
+| R7 — Message surfaces are consolidated, not duplicated | MET | test | `apps/web/tests/modules/teams/tabs.test.ts`; deleted paths; observability green |
+| R9 — Process-stream helpers are shared, not duplicated | MET | test | `apps/web/tests/lib/process-stream.test.ts` + MemberTerminal suite |
+| R10 — Inbox surfaces resolve DESIGN.md tokens through a module scope | MET | command | rg clean module; `apps/web/src/styles/global.css:128-147`; `apps/web/src/modules/inbox/InboxShell.tsx:58` |
+| R11 — Inbox controls resolve a single chromatic accent | MET | static-ref | `apps/web/src/styles/global.css:143-146` |
+| R12 — Inbox cards and type follow the DESIGN.md ladder and scale | MET | static-ref | `apps/web/src/modules/inbox/AgentTab.tsx:33,59` |
+| R13 — Other board modules are unregressed by the Inbox palette | MET | test | `bun test apps/web` 651 pass |
+| R14 — Switching agent tabs tears down the previous stream | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R14 |
+
+**Design conformance:** DONE (process-stream extract, mergeTimeline, fixed tabs, SUPERVISOR_ENDPOINT_ID, `.inbox` scope, R8 excluded).
+
+**SECUA:** no P1–P3. Minor: selected tab `bg-spur-accent` (TeamsShell parity); light `.inbox` omits daisyUI primary pins (task-kanban parity).
+
+**Fix pass:** no code mutations; artifacts `.spur/run/0422-verdict.json`, `.spur/run/0422-verify-answer.txt`.
 ### Review
+**SECUA + functional review** (verify mode + record; verdict PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Correctness | apps/web (suite) | `bun test apps/web` 651 pass / 0 fail — R1–R7,R9–R14 covered |
+| P4 | Architecture | apps/web/src/lib/process-stream.ts:1 | Shared stream helpers extracted; MemberTerminal + AgentTab import same module (R9) |
+| P4 | Security | apps/web/src/modules/inbox/AllTab.tsx:52 | `parseMessagesFeed` / `parseFrame` narrow untrusted network input |
+| P4 | Usability | apps/web/src/modules/inbox/InboxShell.tsx:85 | tablist/tab/tabpanel aria wiring mirrors TeamsShell |
+| P4 | Efficiency | apps/web/src/modules/inbox/AgentTab.tsx:88-129 | One EventSource per agent; teardown on unmount/switch (R14) |
+| P4 | Architecture | apps/web/src/modules/inbox/InboxShell.tsx:103 | minor: selected tab uses `bg-spur-accent` fill — same as TeamsShell selection pattern; AC allows selection emphasis |
+| P4 | Architecture | apps/web/src/styles/global.css:149 | minor: light `.inbox` omits daisyUI primary pins (mirrors `.task-kanban` light) |
 
+**Disposition:** accept minors; no blockers. Residual: M4 R8 (relay hold) deliberately out of this task.
 ### References
 #### Feature
 
@@ -381,3 +477,12 @@ Teams/Observability suites stay green, which proves the shared palette is untouc
 - Root `DESIGN.md` — UI/UX SSOT (REQ-10).
 - `docs/design/workspace-design.md:84` — notes the earlier tab-component reuse pattern.
 ### History
+- 2026-08-04T03:36:55.234Z todo → wip (system)
+- 2026-08-04T03:52:17.746Z wip → testing (system)
+- 2026-08-04T03:53:05.876Z testing → done (system)
+- 2026-08-04T04:04:01.012Z done → wip (system) — **reopened**: wrapup-pipeline hung/cancelled after PASS verify; re-run wrap (or full pipeline) before claiming done again.
+  - Resume: `spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"[\"0422\"]","profile":"auto","merge":"false"}'`
+  - Or: `/sp-dev-next 0422 --auto --next` (A5 implement hop if needed) / re-verify then done when wrap is ready
+  - Verdict artifact still PASS at `.spur/run/0422-verdict.json` (do not discard without re-verify)
+- 2026-08-04T04:44:04.261Z wip → testing (system)
+- 2026-08-04T04:44:04.560Z testing → done (system)

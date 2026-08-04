@@ -116,6 +116,48 @@
     --color-spur-text-faint: #7c8699;
 }
 
+/* ── Inbox — DESIGN.md retoken (0422 R10/R11) ──
+   Mirrors the task-kanban scoping (0420): the Inbox module resolves DESIGN.md's
+   Linear surface ladder and single lavender accent inside its own `.inbox` scope,
+   leaving the shared `@theme` `spur-*` values byte-identical for the 13+ files
+   across Features/Teams/Observability that consume them (R13).
+   The daisyUI `--color-primary` / `--color-accent` pins (R11) are the 0420 F-01
+   fix: `@/ui` primitives map variants onto daisyUI classes that resolve *their own*
+   hue unless pinned, which would place a second chromatic accent beside the
+   DESIGN.md lavender. */
+.inbox {
+    /* DESIGN.md surface ladder — canvas / surface-1 / surface-2 / surface-3 */
+    --color-spur-bg: #010102;
+    --color-spur-surface: #0f1011;
+    --color-spur-surface-2: #141516;
+    --color-spur-surface-3: #18191a;
+    /* Hairline borders — DESIGN.md hairline */
+    --color-spur-border: #23252a;
+    /* Lavender-blue primary — scarce accent (R11) */
+    --color-spur-accent: #5e6ad2;
+    /* Type — DESIGN.md ink / ink-muted / ink-subtle */
+    --color-spur-text: #f7f8f8;
+    --color-spur-text-muted: #d0d6e0;
+    --color-spur-text-faint: #8a8f98;
+    /* daisyUI control hues (R11 single-accent) */
+    --color-primary: #5e6ad2;
+    --color-primary-content: #ffffff;
+    --color-accent: #5e6ad2;
+    --color-accent-content: #ffffff;
+}
+
+[data-theme="light"] .inbox {
+    --color-spur-bg: #ffffff;
+    --color-spur-surface: #ffffff;
+    --color-spur-surface-2: #f8fafc;
+    --color-spur-surface-3: #f1f5f9;
+    --color-spur-border: #e2e8f0;
+    --color-spur-accent: #5e6ad2;
+    --color-spur-text: #0f172a;
+    --color-spur-text-muted: #64748b;
+    --color-spur-text-faint: #7c8699;
+}
+
 /* ── Detail panel markdown (0100/0101) ──
    The body renders in the normal/light theme (data-color-mode="light" in
    MarkdownBody.tsx). Only fenced code blocks get a dark treatment below. */

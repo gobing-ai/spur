@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.11.0
+version: 1.12.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-01
+updated_at: 2026-08-04
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -44,6 +44,7 @@ When collaborating with the design team:
 | [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md) | Features detail action progress — F83 job-queue runner, queue.job.* SSE correlation, floating progress layer (implements F81/0352–0354) | design |
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md) | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410) | implemented |
 | [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
+| [`inbox-board-module.md`](design/inbox-board-module.md) | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

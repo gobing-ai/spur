@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.4.0
+version: 1.5.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-01
+updated_at: 2026-08-04
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -375,3 +375,49 @@ Invariants:
 6. No generated command registry or committed platform adapter participates in validation.
 
 Concrete shapes and rollout: `docs/design/dev-command-argument-contract.md`.
+
+## 14. Web Board Modules & Message Plane (ADR-042)
+
+`apps/web` renders the Board as a set of **auto-discovered modules**: `apps/web/src/modules/discover.ts`
+eagerly globs sibling directories that export a named `module: WebModule` (`id`, `route`,
+`sidebarLabel`, `order`, `component`). A new module needs **no registry edit** — discovery is
+automatic; `order` only places it in the sidebar. Current modules: `teams`, `inbox`, `task-kanban`,
+`observability`, `features`, plus shell-level pieces (sidebar, project switcher).
+
+### 14.1 The message plane is two channels, merged client-side (ADR-042)
+
+Spur has **two independent channels** between the Board and a backend coding agent. They are merged
+*for display* by the Inbox module; they are never merged in storage and delivery is unchanged.
+
+| | Durable message queue | Process pipe |
+| --- | --- | --- |
+| Write path | `TeamService.sendMessage` → DAO `enqueue` | `POST /api/team/processes/:id/stdin` |
+| Read path | `TeamService.getInbox` / `listRecent` / `drainPending` | `GET /api/team/processes/:id/stream` (SSE) |
+| Delivery to agent | `spur agent loop` calls `drainPending`, prepends to prompt | written straight to `PipeProcess` stdin |
+| Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
+| Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
+
+The merge is a **pure function** in `apps/web/src/modules/inbox/timeline.ts`:
+`mergeTimeline(messages, frames, agentId) → TimelineEntry[]` — a discriminated union
+(`kind: message | frame`, `direction: in | out`). Pure keeps R5/R6 testable without mounting a
+component. The oldest frame's `ts` is the process-frame **history boundary** (R6): entries older
+than it are messages only, rendered behind a marker; an agent with no frames renders a message-only
+timeline, not an error.
+
+### 14.2 Shared process-stream helpers (R9)
+
+`parseFrame`, `appendFrame`, `nextBackoff`, and `streamUrl` live once in
+`apps/web/src/lib/process-stream.ts` and are imported by both `teams/MemberTerminal` and the Inbox
+agent timeline. No duplicated frame-parsing logic.
+
+### 14.3 Module-scoped DESIGN.md palette (R10–R13)
+
+Each DESIGN.md-consistent Board module scopes its palette to its root rather than remapping the
+shared `@theme` `spur-*` values (consumed by 13+ files across Features/Teams/Observability — they
+must stay byte-identical). `global.css` carries a `.inbox { … }` block (and
+`[data-theme="light"] .inbox`) declaring the DESIGN.md ladder, hairline, ink, and the four daisyUI
+variables (`--color-primary/--color-primary-content/--color-accent/--color-accent-content` pinned to
+the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `@/ui` primitives map
+variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
+accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
+classes** — every surface resolves a `spur-*` token.
