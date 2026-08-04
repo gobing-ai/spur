@@ -32,24 +32,24 @@ Default: all product work goes through the harness unless the operator explicitl
 
 Agents need not know “plugin packing.” Use these **entry surfaces**:
 
-| Need                                                   | Route to                                                            | Avoid                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------- |
-| Plan a feature (intake → AC → tasks)                   | `/sp:dev-plan`, `/sp:dev-idea`                                      | Freeform feature files without gates     |
-| Drive one task end-to-end                              | `/sp:dev-run <wbs>` or **`sp:super-planner`**                      | Implement with no task / no pipeline     |
-| Batch or parallel task runs                            | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-planner`**        | Unordered multi-task thrash              |
-| Batch-refine tasks under a feature                     | `/sp:dev-refineall --feature <id> --auto`                           | Hand-looping `/sp:dev-refine` per WBS    |
-| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`**                                                | Raw Write/Edit on corpus files           |
-| Look up `spur` verbs / flags / `--json`                | Skill **`sp:spur-cli`**                                             | Inventing flags from memory              |
-| Create/edit/list tasks or features                     | **`spur task` / `spur feature`** (`--section --from-file`)          | Direct-writing task/feature corpus files |
-| Verify requirements / AC                               | `/sp:dev-verify`                                                    | Self-reported “done”                     |
-| Review (SECUA + traceability + architecture)           | `/sp:dev-review` or **`sp:super-reviewer`**                         | Unstructured “LGTM”                      |
-| Tests / coverage                                       | `/sp:dev-unit`                                                      | Untested production paths as done        |
-| Constraint gate / rule authoring                       | **`spur rule`**; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run`                 |
-| Workflow author / run                                  | **`spur workflow`**; `/sp:workflow-add`, `/sp:workflow-refine`      | Ad-hoc shell as the lifecycle            |
-| Docs drift / sync / lessons                            | Skill **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md`       | Patching derived docs over authority     |
-| Wrap completed work                                    | `/sp:dev-wrap`, `/sp:dev-wrapall`                                   | Skipping learnings / doc sync            |
-| Session index / memory                                 | Skill **`sp:indexed-context`** + `.spur/context/`                   | Full-tree re-reads every turn            |
-| Install / sync a plugin across coding agents           | **`superskill install <plugin>`**                                   | Hand-copying per-platform adapters       |
+| Need                                                   | Route to                                                                       | Avoid                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| Plan a feature (intake → AC → tasks)                   | `/sp:dev-plan`, `/sp:dev-idea`                                                 | Freeform feature files without gates               |
+| Drive one task end-to-end                              | `/sp:dev-run <wbs>` or **`sp:super-planner`**                                  | Implement with no task / no pipeline               |
+| Batch or parallel task runs                            | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-planner`**                  | Unordered multi-task thrash                        |
+| Batch-refine tasks under a feature                     | `/sp:dev-refineall --feature <id> --auto`                                      | Hand-looping `/sp:dev-refine` per WBS              |
+| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`**                                                           | Raw Write/Edit on corpus files                     |
+| Look up `spur` verbs / flags / `--json`                | Skill **`sp:spur-cli`**                                                        | Inventing flags from memory                        |
+| Create/edit/list tasks or features                     | **`spur task` / `spur feature`** (`--section --from-file`)                     | Direct-writing task/feature corpus files           |
+| Verify requirements / AC                               | `/sp:dev-verify`                                                               | Self-reported “done”                               |
+| Review (SECUA + traceability + architecture)           | `/sp:dev-review` or **`sp:super-reviewer`**                                    | Unstructured “LGTM”                                |
+| Tests / coverage                                       | `/sp:dev-unit`                                                                 | Untested production paths as done                  |
+| Constraint gate / rule authoring                       | **`spur rule`**; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine`            | Skipping `spur rule run`                           |
+| Workflow author / run                                  | **`spur workflow`**; `/sp:workflow-add`, `/sp:workflow-refine`                 | Ad-hoc shell as the lifecycle                      |
+| Docs drift / sync / lessons                            | Skill **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md`                  | Patching derived docs over authority               |
+| Wrap completed work                                    | `/sp:dev-wrap`, `/sp:dev-wrapall`                                              | Skipping learnings / doc sync                      |
+| Session index / memory                                 | Skill **`sp:indexed-context`** + `.spur/context/`                              | Full-tree re-reads every turn                      |
+| Install / sync a plugin across coding agents           | **`superskill install <plugin>`**                                              | Hand-copying per-platform adapters                 |
 | Capability authoring / quality lifecycle               | **`superskill <noun> --help`** (`agent`, `skill`, `command`, `hook`, `magent`) | Bypassing the noun's validation / evaluation gates |
 
 **Non-negotiable (unless operator overrides):**
@@ -211,20 +211,20 @@ bun run apps/cli/src/index.ts <noun> <verb> … --json   # monorepo dev
 spur <noun> --help
 ```
 
-| Noun       | Purpose                           |
-| ---------- | --------------------------------- |
-| `init`     | Scaffold a Spur project           |
-| `agent`    | Run / list / doctor / agent specs |
-| `history`  | Import / analyze agent history    |
-| `rule`     | Constraints → **`sp:spur-cli`**   |
+| Noun       | Purpose                                          |
+| ---------- | ------------------------------------------------ |
+| `init`     | Scaffold a Spur project                          |
+| `agent`    | Run / list / doctor / agent specs                |
+| `history`  | Import / analyze agent history                   |
+| `rule`     | Constraints → **`sp:spur-cli`**                  |
 | `workflow` | Engine + run progress/follow → **`sp:spur-cli`** |
-| `message`  | Inter-agent messages              |
-| `team`     | Assign / start / stop / status    |
-| `task`     | Task corpus → **`sp:spur-cli`**   |
-| `feature`  | Feature tree + AC gates → **`sp:spur-cli`** |
-| `status`   | Project / Git status              |
-| `migrate`  | CLI schema migrations             |
-| `serve`    | Local web server                  |
+| `message`  | Inter-agent messages                             |
+| `team`     | Assign / start / stop / status                   |
+| `task`     | Task corpus → **`sp:spur-cli`**                  |
+| `feature`  | Feature tree + AC gates → **`sp:spur-cli`**      |
+| `status`   | Project / Git status                             |
+| `migrate`  | CLI schema migrations                            |
+| `serve`    | Local web server                                 |
 
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
@@ -327,3 +327,13 @@ when the task used the pipeline.
 6. `token-ledger.jsonl` — auto; never hand-edit
 
 Absent context dir: continue; do not block.
+
+## System Design Best Practices
+
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
+- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works. Never trade a working product for unfinished complexity.
+- Keep components modular and concerns clearly separated.
+- Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
+- Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
+- Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
