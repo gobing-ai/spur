@@ -293,17 +293,26 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         // Preview is advisory — a parse failure must not block the run.
                     }
                 }
+                // Single-run CLI (one `workflow run` = one runId): the run id is
+                // already printed in the header, so progress lines omit the
+                // `[run <id>]` prefix (R1). showRunId can be re-enabled for
+                // multi-run/verbose consumers.
+                const stepOptions = { detail, showRunId: false } as const;
                 const report = (event: StepEvent): void => {
-                    const line = renderStepLine(event, { detail });
+                    const line = renderStepLine(event, stepOptions);
                     if (line !== null) context.output.write(line);
                 };
                 bus.on('workflow.phase', report);
-                if (detail === 'full') bus.on('workflow.transition', report);
+                // R7: transitions render in `invocation` (default) and `full`; only
+                // `minimal` suppresses them. The renderer owns the detail gate
+                // (`step-reporter.ts` `isTransition` branch), so subscribe whenever
+                // detail is not minimal.
+                if (detail !== 'minimal') bus.on('workflow.transition', report);
                 bus.on('workflow.action.started', (event) => {
                     report(event);
                     const startedAt = Date.parse(event.at);
                     const timer = setInterval(() => {
-                        const line = renderActionHeartbeat(event, Math.max(0, Date.now() - startedAt), { detail });
+                        const line = renderActionHeartbeat(event, Math.max(0, Date.now() - startedAt), stepOptions);
                         if (line !== null) context.output.write(line);
                     }, 30_000);
                     timer.unref?.();
@@ -323,6 +332,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     }
                     report(event);
                 });
+                // Live shell output chunks (task 0421 R9): streamed stdout/stderr
+                // from shell actions render as indented child lines while the
+                // command is still running.
+                bus.on('workflow.action.output', report);
             }
             const steeringController =
                 options.steer === true

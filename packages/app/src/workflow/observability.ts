@@ -101,7 +101,18 @@ export interface WorkflowActionFinishedEvent extends WorkflowEventBase {
     /** Action kind copied from the correlated start event. */
     kind: string;
     /** Trace-safe result summary; absent when the action returned no result. */
-    result?: { error?: string; usage: 'unavailable' };
+    result?: { error?: string; usage: string };
+}
+/** One live stdout/stderr chunk emitted by a non-agent action (e.g. `shell`) during execution. */
+export interface WorkflowActionOutputEvent extends WorkflowEventBase {
+    /** The action kind (e.g. `shell`). */
+    kind: string;
+    /** State/node the action runs in. */
+    node: string;
+    /** Which child stream produced the chunk. */
+    stream: 'stdout' | 'stderr';
+    /** One bounded, redacted output chunk. */
+    chunk: string;
 }
 
 /**
@@ -115,6 +126,8 @@ export type WorkflowObservabilityEventMap = {
     'workflow.transition': (event: WorkflowTransitionEvent) => void;
     'workflow.action.started': (event: WorkflowActionStartedEvent) => void;
     'workflow.action.finished': (event: WorkflowActionFinishedEvent) => void;
+    /** Live stdout/stderr chunk from a non-agent action (e.g. `shell`) during execution. */
+    'workflow.action.output': (event: WorkflowActionOutputEvent) => void;
     /** Unified agent lifecycle emitted by both direct and workflow dispatch paths. */
     'workflow.agent': (event: AgentExecutionEvent) => void;
     'workflow.steering': (event: SteeringAck) => void;
@@ -127,9 +140,10 @@ const now = (): string => new Date().toISOString();
 const MAX_FIELD_LENGTH = 256;
 const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
 
-function bounded(value: string): string {
+/** Bound a string to a max length, redacting secret-like patterns, for trace-safe event fields. */
+export function bounded(value: string, maxLength = MAX_FIELD_LENGTH): string {
     const redacted = value.replace(SECRET_PATTERN, '[REDACTED]');
-    return redacted.length <= MAX_FIELD_LENGTH ? redacted : `${redacted.slice(0, MAX_FIELD_LENGTH)}…`;
+    return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength)}…`;
 }
 
 /**
@@ -151,17 +165,33 @@ export function projectActionMetadata(
     if (kind === 'agent.run' && input !== '') {
         const command = input.startsWith('/') ? input.split(/\s+/, 1)[0] : undefined;
         metadata.invocation = command === undefined ? `[prompt ${input.length} chars]` : bounded(command);
-    } else if (kind === 'shell' && typeof options.command === 'string') {
-        metadata.invocation = '[shell command redacted]';
+    } else if (kind === 'shell' && typeof options.command === 'string' && options.command.trim() !== '') {
+        metadata.invocation = bounded(sanitizeCommand(options.command), 80);
+    } else if (kind === 'note' && typeof options.message === 'string' && options.message.trim() !== '') {
+        metadata.invocation = bounded(options.message.trim(), 80);
     }
     return Object.keys(metadata).length === 0 ? undefined : metadata;
 }
 
-function projectResult(result: unknown): { error?: string; usage: 'unavailable' } | undefined {
+function sanitizeCommand(cmd: string): string {
+    const trimmed = cmd.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/(?:authorization|bearer|password|secret|token|api_key|private_key)/i.test(trimmed)) {
+        return '[shell command redacted]';
+    }
+    return trimmed;
+}
+
+function projectResult(result: unknown): { error?: string; usage: string } | undefined {
     if (result === undefined) return undefined;
     if (typeof result !== 'object' || result === null) return { usage: 'unavailable' };
-    const error = 'error' in result && typeof result.error === 'string' ? bounded(result.error) : undefined;
-    return { ...(error !== undefined ? { error } : {}), usage: 'unavailable' };
+    const obj = result as Record<string, unknown>;
+    const error = typeof obj.error === 'string' ? bounded(obj.error) : undefined;
+    const stderr =
+        typeof obj.stderr === 'string' && obj.stderr.trim() !== '' ? bounded(obj.stderr.trim(), 120) : undefined;
+    const stdout =
+        typeof obj.stdout === 'string' && obj.stdout.trim() !== '' ? bounded(obj.stdout.trim(), 120) : undefined;
+    const detail = error ?? stderr ?? stdout;
+    return { ...(detail !== undefined ? { error: detail } : {}), usage: 'unavailable' };
 }
 
 /**

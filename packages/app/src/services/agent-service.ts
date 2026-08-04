@@ -30,7 +30,9 @@ import {
     createNodeFileSystem,
     NodeProcessExecutor,
     type OutputPolicy,
+    type ProcessOptions,
     type ProcessRegistry,
+    type ProcessResult,
 } from '@gobing-ai/ts-runtime';
 import {
     AgentExecutionLifecycle,
@@ -231,6 +233,33 @@ export interface AgentServiceContext {
      * supervisor loops. CLI callers leave this unset.
      */
     processRegistry?: ProcessRegistry;
+}
+
+/**
+ * Process executor that reports each dispatched subprocess's OS pid.
+ *
+ * `AiRunner` owns the `run()` options for an agent dispatch, so the pid sink
+ * cannot be threaded through the call site — it is injected here instead, at
+ * the one place Spur constructs the executor. Any `onSpawn` the caller supplied
+ * still runs; this only appends an observer.
+ */
+export class PidObservingProcessExecutor extends NodeProcessExecutor {
+    constructor(
+        config: ConstructorParameters<typeof NodeProcessExecutor>[0],
+        private readonly publishPid: (pid: number) => void,
+    ) {
+        super(config);
+    }
+
+    override async run(options: ProcessOptions): Promise<ProcessResult> {
+        return super.run({
+            ...options,
+            onSpawn: (pid: number) => {
+                options.onSpawn?.(pid);
+                this.publishPid(pid);
+            },
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -509,16 +538,25 @@ export class AgentService {
               : { mode: 'stream', isTTY: isatty(1) };
         const outputMode = outputPolicy.mode;
 
+        // Bridges the dispatched subprocess's pid to the lifecycle, which is
+        // constructed below (it spans the whole escalation chain, so it cannot be
+        // built before the runner). Assigned once that lifecycle exists; until
+        // then a spawn simply has no observer.
+        let publishPid: ((pid: number) => void) | undefined;
+
         // deps or defaults. When the service has a server EventBus, thread it
         // onto the runner so `agent.invoke.*` emits also reach the system_events
         // tap (task 0221 R3).
         const runner =
             deps?.runner ??
             new AiRunner({
-                processExecutor: new NodeProcessExecutor({
-                    output: outputPolicy,
-                    ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
-                }),
+                processExecutor: new PidObservingProcessExecutor(
+                    {
+                        output: outputPolicy,
+                        ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
+                    },
+                    (pid) => publishPid?.(pid),
+                ),
                 ...(this.ctx.events !== undefined ? { events: bridgeEventBus(this.ctx.events) } : {}),
                 ...(this.ctx.events !== undefined ? { processEvents: bridgeEventBus(this.ctx.events) } : {}),
             });
@@ -567,6 +605,7 @@ export class AgentService {
             configuredSecretValues(this.ctx.env),
             options.execution?.heartbeatMs,
         );
+        publishPid = (pid) => lifecycle.setPid(pid);
         process.on('SIGTERM', onTerminate);
         process.on('SIGINT', onTerminate);
         options.execution?.signal?.addEventListener('abort', onExternalAbort, { once: true });

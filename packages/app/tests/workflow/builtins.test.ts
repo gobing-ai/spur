@@ -22,6 +22,7 @@ describe('registerSpurBuiltins', () => {
 
         const actions = host.listActions();
         expect(actions).toContain('agent.run');
+        expect(actions).toContain('shell');
         expect(actions).toContain('rule.check');
         expect(actions).toContain('file.exists');
         expect(actions).toContain('file.read');

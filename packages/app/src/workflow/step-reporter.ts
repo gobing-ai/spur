@@ -17,6 +17,7 @@ import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentExecutionEvent } from '../observability/agent-execution';
 import type {
     WorkflowActionFinishedEvent,
+    WorkflowActionOutputEvent,
     WorkflowActionStartedEvent,
     WorkflowPhaseEvent,
     WorkflowTransitionEvent,
@@ -25,6 +26,7 @@ import type {
 /** The subset of observability events the CLI reporter renders as progress lines. */
 export type StepEvent =
     | AgentExecutionEvent
+    | WorkflowActionOutputEvent
     | WorkflowActionStartedEvent
     | WorkflowActionFinishedEvent
     | WorkflowPhaseEvent
@@ -34,16 +36,28 @@ export type WorkflowOutputDetail = 'minimal' | 'invocation' | 'full';
 /** Options accepted by pure workflow progress renderers. */
 export interface StepRenderOptions {
     detail?: WorkflowOutputDetail;
+    /** Whether to prepend `[run <runId>]` to output lines (default: true). */
+    showRunId?: boolean;
 }
 
 /** A reporter maps one event to a display line, or `null` to emit nothing. */
 export type StepLineRenderer = (event: StepEvent) => string | null;
 
 const isAgentExecution = (e: StepEvent): e is AgentExecutionEvent => 'executionId' in e;
+const isActionOutput = (e: StepEvent): e is WorkflowActionOutputEvent =>
+    'stream' in e && 'chunk' in e && !('executionId' in e);
 const isActionStarted = (e: StepEvent): e is WorkflowActionStartedEvent => 'kind' in e && 'node' in e;
 const isActionFinished = (e: StepEvent): e is WorkflowActionFinishedEvent => 'durationMs' in e && 'ok' in e;
 const isPhase = (e: StepEvent): e is WorkflowPhaseEvent => 'phase' in e;
 const isTransition = (e: StepEvent): e is WorkflowTransitionEvent => 'from' in e && 'to' in e;
+
+function runPrefix(runId: string, options: StepRenderOptions): string {
+    if (options.showRunId === false) return '';
+    // Single-run CLI output omits the run id entirely (it is printed once in the
+    // header). When shown, condense the 36-char GUID to its first 8 chars so the
+    // id is never repeated verbatim across 30+ progress lines (R1).
+    return `[run ${runId.slice(0, 8)}] `;
+}
 
 /**
  * Render a single progress line for a workflow observability event, or `null`
@@ -52,11 +66,13 @@ const isTransition = (e: StepEvent): e is WorkflowTransitionEvent => 'from' in e
  */
 export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}): string | null {
     const detail = options.detail ?? 'invocation';
+    const pfx = runPrefix(event.runId, options);
+
     if (isAgentExecution(event)) {
         if (event.kind === 'output') {
             if (detail === 'minimal') return null;
             const label = event.stream === 'stderr' ? 'stderr' : 'stdout';
-            return `[run ${event.runId}]   ${label}> ${event.chunk.replace(/\s+$/, '')}`;
+            return `${pfx}  ${label}> ${event.chunk.replace(/\s+$/, '')}`;
         }
         if (event.kind === 'heartbeat') {
             if (detail === 'minimal') return null;
@@ -64,50 +80,65 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
                 event.timeoutMs === undefined
                     ? 'unbounded'
                     : `${formatDuration(Math.max(0, event.timeoutMs - event.elapsedMs))} remaining`;
-            return `[run ${event.runId}] … agent execution · elapsed=${formatDuration(event.elapsedMs)} · budget=${budget}`;
+            const pidPart = event.pid === undefined ? '' : ` · pid=${event.pid}`;
+            return `${pfx}  … agent execution · elapsed=${formatDuration(event.elapsedMs)} · budget=${budget}${pidPart}`;
         }
         if (event.kind === 'dropped') {
-            return detail === 'minimal'
-                ? null
-                : `[run ${event.runId}] … output pressure · dropped=${event.chunks} chunks`;
+            return detail === 'minimal' ? null : `${pfx}… output pressure · dropped=${event.chunks} chunks`;
         }
         if (event.kind === 'started') {
             if (detail === 'minimal') return null;
             const model = event.model === undefined ? '' : `(${event.model})`;
+            const pidPart = event.pid === undefined ? '' : ` · pid=${event.pid}`;
             const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
-            return `[run ${event.runId}]   agent=${event.agent}${model} => ${event.invocation}${full}`;
+            return `${pfx}  agent=${event.agent}${model} => ${event.invocation}${pidPart}${full}`;
         }
         const mark = event.outcome === 'done' ? '✓' : '✗';
         const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
+        const exitPart = event.exitCode !== null && event.exitCode !== undefined ? ` · exit ${event.exitCode}` : '';
         return detail === 'minimal'
             ? null
-            : `[run ${event.runId}] ${mark} agent ${event.outcome} (${formatDuration(event.durationMs)}) · usage ${event.usage}${event.reason ? ` · ${event.reason}` : ''}${full}`;
+            : `${pfx}${mark} agent ${event.outcome} (${formatDuration(event.durationMs)})${exitPart} · usage ${event.usage}${event.reason ? ` · ${event.reason}` : ''}${full}`;
+    }
+    if (isActionOutput(event)) {
+        if (detail === 'minimal') return null;
+        const label = event.stream === 'stderr' ? 'stderr' : 'stdout';
+        // 2-space child indent under the parent action block (R8/R9 streaming).
+        return `${pfx}  ${label}> ${event.chunk.replace(/\s+$/, '')}`;
     }
     if (isActionFinished(event)) {
         const mark = event.ok ? '✓' : '✗';
         if (detail === 'minimal') return `  ${mark} ${event.status} (${formatDuration(event.durationMs)})`;
         const failure = event.result?.error === undefined ? '' : ` · ${event.result.error}`;
+        const usagePart =
+            event.result?.usage !== undefined && event.result.usage !== 'unavailable'
+                ? ` · usage ${event.result.usage}`
+                : '';
         const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
-        return `[run ${event.runId}] ${mark} ${event.node}/${event.kind} (${formatDuration(event.durationMs)}) · usage ${event.result?.usage ?? 'unavailable'}${failure}${full}`;
+        return `${pfx}${mark} ${event.node}/${event.kind} (${formatDuration(event.durationMs)})${usagePart}${failure}${full}`;
     }
     if (isActionStarted(event)) {
         if (detail === 'minimal') return `  → ${event.node}: ${event.kind}…`;
-        const agent = event.metadata?.agent ?? 'unavailable';
-        const model = event.metadata?.model ?? 'unavailable';
-        const invocation = event.metadata?.invocation ?? 'unavailable';
+        const agentPart =
+            event.metadata?.agent && event.metadata.agent !== 'unavailable' ? ` · agent=${event.metadata.agent}` : '';
+        const modelPart =
+            event.metadata?.model && event.metadata.model !== 'unavailable' ? ` · model=${event.metadata.model}` : '';
+        const invocationPart =
+            event.metadata?.invocation && event.metadata.invocation !== 'unavailable'
+                ? ` => ${event.metadata.invocation}`
+                : '';
         const timeout =
             event.metadata?.timeoutMs === undefined ? 'unbounded' : formatDuration(event.metadata.timeoutMs);
         const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
-        return `[run ${event.runId}] → ${event.node}/${event.kind} · agent=${agent} · model=${model} => ${invocation} · timeout=${timeout}${full}`;
+        return `${pfx}→ ${event.node}/${event.kind}${agentPart}${modelPart}${invocationPart} · timeout=${timeout}${full}`;
     }
     if (isPhase(event)) {
-        return detail === 'minimal'
-            ? `▶ ${event.phase} [${event.status}]`
-            : `[run ${event.runId}] ▶ ${event.phase} [${event.status}]`;
+        return detail === 'minimal' ? `▶ ${event.phase} [${event.status}]` : `${pfx}▶ ${event.phase} [${event.status}]`;
     }
     if (isTransition(event)) {
-        if (detail !== 'full') return null;
-        return `[run ${event.runId}] ↪ ${event.from} → ${event.to}${event.trigger ? ` [${event.trigger}]` : ''} · seq=${event.sequence}`;
+        if (detail === 'minimal') return null;
+        const seqPart = detail === 'full' ? ` · seq=${event.sequence}` : '';
+        return `${pfx}↪ ${event.from} → ${event.to}${event.trigger ? ` [${event.trigger}]` : ''}${seqPart}`;
     }
     return null;
 }
@@ -126,7 +157,7 @@ export function renderActionHeartbeat(
             ? 'unbounded'
             : `${formatDuration(Math.max(0, event.metadata.timeoutMs - elapsedMs))} remaining`;
     const full = detail === 'full' ? ` · action=${event.actionId}` : '';
-    return `[run ${event.runId}] … ${event.node}/${event.kind} · elapsed=${elapsed} · budget=${budget}${full}`;
+    return `${runPrefix(event.runId, options)}… ${event.node}/${event.kind} · elapsed=${elapsed} · budget=${budget}${full}`;
 }
 
 /**

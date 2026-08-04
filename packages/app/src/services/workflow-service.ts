@@ -770,6 +770,7 @@ export class WorkflowAppService {
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
+            ...(processExec !== undefined ? { processExecutor: processExec } : {}),
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
             // Per-run live output capture is always on for agent.run steps (task 0414),
             // with bounds from `.spur/config.yaml` `agent.output` (defaults when unset).

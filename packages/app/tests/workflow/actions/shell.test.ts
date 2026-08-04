@@ -54,7 +54,9 @@ describe('StreamingShellActionRunner', () => {
         const runner = new StreamingShellActionRunner(fakeExecutor, bus);
         const result = await runner.execute({ command: 'bun build' }, makeCtx());
 
-        expect(capturedOptions?.command).toBe('bun build');
+        // Bare command → runs via `/bin/sh -c` (mirrors the engine's shell runner).
+        expect(capturedOptions?.command).toBe('/bin/sh');
+        expect(capturedOptions?.args).toEqual(['-c', 'bun build']);
         expect(result.ok).toBe(true);
         expect(result.data?.exitCode).toBe(0);
         const stdoutChunks = output.filter((e) => e.stream === 'stdout').map((e) => e.chunk);
@@ -90,6 +92,96 @@ describe('StreamingShellActionRunner', () => {
         expect(result.error).toContain('exited with 1');
         // stderr accumulated for the R10 failure snippet.
         expect(result.data?.stderr).toContain('command not found');
+    });
+
+    test('runs command as a program when args are provided (no /bin/sh -c)', async () => {
+        let capturedOptions: PipeProcessOptions | undefined;
+        const fakeExecutor: ProcessExecutor = {
+            run: async () => ({ exitCode: 0 }) as ProcessResult,
+            runStreaming: (options) => {
+                capturedOptions = options;
+                return {
+                    pid: 5,
+                    stdout: streamOf(['built ok\n']),
+                    stderr: null,
+                    exited: Promise.resolve(0),
+                    writeStdin: () => undefined,
+                    endStdin: () => undefined,
+                    kill: () => undefined,
+                };
+            },
+        };
+        const runner = new StreamingShellActionRunner(fakeExecutor);
+        const result = await runner.execute({ command: 'bun', args: ['build', 'src/index.ts'] }, makeCtx());
+
+        // Explicit args → command is the program itself, not /bin/sh -c.
+        expect(capturedOptions?.command).toBe('bun');
+        expect(capturedOptions?.args).toEqual(['build', 'src/index.ts']);
+        expect(result.ok).toBe(true);
+        expect(result.data?.exitCode).toBe(0);
+        expect(result.data?.stdout).toContain('built ok');
+    });
+
+    test('throws when command option is missing', async () => {
+        const runner = new StreamingShellActionRunner({
+            run: async () => ({}) as ProcessResult,
+            runStreaming: () => ({}) as PipeProcess,
+        });
+        await expect(runner.execute({}, makeCtx())).rejects.toThrow('Action option "command" must be a string');
+    });
+
+    test('throws when command option is not a string', async () => {
+        const runner = new StreamingShellActionRunner({
+            run: async () => ({}) as ProcessResult,
+            runStreaming: () => ({}) as PipeProcess,
+        });
+        await expect(runner.execute({ command: 42 }, makeCtx())).rejects.toThrow(
+            'Action option "command" must be a string',
+        );
+    });
+
+    test('throws when args option is not a string array', async () => {
+        const runner = new StreamingShellActionRunner({
+            run: async () => ({}) as ProcessResult,
+            runStreaming: () => ({}) as PipeProcess,
+        });
+        await expect(runner.execute({ command: 'bun', args: 'build' }, makeCtx())).rejects.toThrow(
+            'Action option "args" must be a string array',
+        );
+    });
+
+    test('flushes a partial trailing multibyte sequence as a tail chunk', async () => {
+        const bus: WorkflowObservabilityBus = new EventBus();
+        const output: WorkflowActionOutputEvent[] = [];
+        bus.on('workflow.action.output', (e) => output.push(e));
+        const fakeExecutor: ProcessExecutor = {
+            run: async () => ({ exitCode: 0 }) as ProcessResult,
+            runStreaming: () => ({
+                pid: 3,
+                // 'c' + a dangling 2-byte lead (0xc3); the stream closes without the continuation byte.
+                stdout: new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new Uint8Array([0x63, 0xc3]));
+                        controller.close();
+                    },
+                }),
+                stderr: null,
+                exited: Promise.resolve(0),
+                writeStdin: () => undefined,
+                endStdin: () => undefined,
+                kill: () => undefined,
+            }),
+        };
+        const runner = new StreamingShellActionRunner(fakeExecutor, bus);
+        const result = await runner.execute({ command: 'echo partial' }, makeCtx());
+
+        // The final decode() flush surfaces the buffered lead byte as U+FFFD.
+        expect(result.data?.stdout).toContain('\ufffd');
+        const chunks = output
+            .filter((e) => e.stream === 'stdout')
+            .map((e) => e.chunk)
+            .join('');
+        expect(chunks).toContain('\ufffd');
     });
 
     test('redacts secrets from streamed chunks', async () => {

@@ -14,6 +14,8 @@ export interface AgentExecutionBase {
     readonly executionId: string;
     readonly actionId?: string;
     readonly at: string;
+    /** OS subprocess pid when known (may be absent for buffered/pipe runs). */
+    readonly pid?: number;
 }
 
 /** Emitted after agent/model/invocation resolution and before process dispatch. */
@@ -104,6 +106,7 @@ export class AgentExecutionLifecycle {
     private heartbeat: ReturnType<typeof setInterval> | undefined;
     private startedAt = 0;
     private timeoutMs: number | undefined;
+    private pid: number | undefined;
     private readonly outputCarry: Record<ProcessOutputChunk['stream'], string> = { stdout: '', stderr: '' };
 
     constructor(
@@ -120,6 +123,16 @@ export class AgentExecutionLifecycle {
 
     get identity(): AgentRunCorrelation {
         return this.correlation;
+    }
+
+    /**
+     * Record the OS pid of the dispatched subprocess. Every event emitted after
+     * this call carries it, so progress lines can name the process while it is
+     * still running. Called from the executor's spawn observer; ignored for
+     * dispatches that never report one, which keeps `pid` genuinely optional.
+     */
+    setPid(pid: number): void {
+        if (Number.isInteger(pid) && pid > 0) this.pid = pid;
     }
 
     start(detail: LifecycleStart): void {
@@ -230,6 +243,7 @@ export class AgentExecutionLifecycle {
             runId: this.correlation.runId,
             executionId: this.correlation.executionId,
             ...(this.correlation.actionId !== undefined ? { actionId: this.correlation.actionId } : {}),
+            ...(this.pid !== undefined ? { pid: this.pid } : {}),
             at: new Date().toISOString(),
         };
     }

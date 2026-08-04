@@ -40,11 +40,17 @@ export class StreamingShellActionRunner implements ActionRunner {
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const command = stringOption(options, 'command');
-        const args = arrayOption(options, 'args');
+        const explicitArgs = arrayOption(options, 'args');
+        // Mirror the engine's ShellActionRunner semantics (ts-dual-workflow-engine
+        // host.ts): with explicit args, run `command` as a program; with a bare
+        // command line, run it via `/bin/sh -c` so shell features (`&&`, `|`,
+        // quoting, globs) work as in `bun run autofix && bun run spur-check`.
+        const usesShell = explicitArgs.length === 0;
+        const spawn = usesShell ? { command: '/bin/sh', args: ['-c', command] } : { command, args: explicitArgs };
         const cwd = stringOption(options, 'cwd', context.workdir);
         const pipe = this.processExecutor.runStreaming({
-            command,
-            ...(args.length > 0 ? { args } : {}),
+            command: spawn.command,
+            args: spawn.args,
             ...(cwd !== undefined ? { cwd } : {}),
         });
         let stdout = '';

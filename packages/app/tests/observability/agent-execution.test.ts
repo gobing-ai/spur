@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
     type AgentExecutionEvent,
     AgentExecutionLifecycle,
     configuredSecretValues,
     redactAndBound,
 } from '../../src/observability/agent-execution';
+import { PidObservingProcessExecutor } from '../../src/services/agent-service';
 
 describe('AgentExecutionLifecycle', () => {
     test('emits one correlated lifecycle and retains redacted bounded output', () => {
@@ -112,5 +114,138 @@ describe('agent observability redaction', () => {
         expect(secrets).toContain('configured-secret');
         expect(value).not.toContain('configured-secret');
         expect(value.length).toBeLessThanOrEqual(25);
+    });
+});
+
+describe('agent execution pid propagation (0421 R5)', () => {
+    test('every event emitted after setPid carries the subprocess pid', () => {
+        const events: AgentExecutionEvent[] = [];
+        const lifecycle = new AgentExecutionLifecycle(
+            (event) => events.push(event),
+            { runId: 'run-1', executionId: 'execution-1' },
+            [],
+            0,
+        );
+
+        // Spawn order: the dispatch reports its pid before the lifecycle starts,
+        // mirroring the executor's onSpawn firing at spawn time.
+        lifecycle.setPid(49_281);
+        lifecycle.start({ agent: 'pi', invocation: 'pi -p hello' });
+        lifecycle.finish({ exitCode: 0, durationMs: 5 });
+
+        expect(events.length).toBeGreaterThanOrEqual(2);
+        for (const event of events) {
+            expect(event.pid).toBe(49_281);
+        }
+    });
+
+    test('pid stays absent when the dispatch never reports one', () => {
+        const events: AgentExecutionEvent[] = [];
+        const lifecycle = new AgentExecutionLifecycle(
+            (event) => events.push(event),
+            { runId: 'run-1', executionId: 'execution-1' },
+            [],
+            0,
+        );
+
+        lifecycle.start({ agent: 'pi', invocation: 'pi -p hello' });
+        lifecycle.finish({ exitCode: 0, durationMs: 5 });
+
+        // `pid` is optional precisely because some dispatches cannot report one;
+        // it must be omitted rather than rendered as a placeholder.
+        for (const event of events) {
+            expect(event.pid).toBeUndefined();
+        }
+    });
+
+    test('rejects non-pid values so a bad producer cannot poison the line', () => {
+        const events: AgentExecutionEvent[] = [];
+        const lifecycle = new AgentExecutionLifecycle(
+            (event) => events.push(event),
+            { runId: 'run-1', executionId: 'execution-1' },
+            [],
+            0,
+        );
+
+        lifecycle.setPid(0);
+        lifecycle.setPid(-1);
+        lifecycle.setPid(Number.NaN);
+        lifecycle.start({ agent: 'pi', invocation: 'pi -p hello' });
+
+        expect(events[0]?.pid).toBeUndefined();
+    });
+});
+
+describe('process executor pid contract (0421 R5 producer)', () => {
+    test('onSpawn reports the real OS pid of the spawned child', async () => {
+        const executor = new NodeProcessExecutor({});
+        const reported: number[] = [];
+
+        // `echo $$` makes the child print its own pid, so the value the executor
+        // reports can be checked against the process itself rather than merely
+        // asserted to "look like" a pid. This is what distinguishes a genuine
+        // runtime producer from a hard-coded seam.
+        const result = await executor.run({
+            command: '/bin/sh',
+            args: ['-c', 'echo $$'],
+            onSpawn: (pid) => reported.push(pid),
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(reported.length).toBe(1);
+        const pid = reported[0] as number;
+        expect(Number.isInteger(pid)).toBe(true);
+        expect(pid).toBeGreaterThan(0);
+        expect(Number.parseInt(result.stdout.trim(), 10)).toBe(pid);
+    });
+
+    test('onSpawn fires before the process exits, so heartbeats can carry the pid', async () => {
+        const executor = new NodeProcessExecutor({});
+        let pidSeenAt = 0;
+
+        const started = Date.now();
+        await executor.run({
+            command: '/bin/sh',
+            args: ['-c', 'sleep 0.2'],
+            onSpawn: () => {
+                pidSeenAt = Date.now();
+            },
+        });
+        const finishedAt = Date.now();
+
+        // The pid must be observable while the child is alive — a value only
+        // available after exit would be useless for progress output.
+        expect(pidSeenAt).toBeGreaterThan(0);
+        expect(pidSeenAt).toBeLessThan(started + 200);
+        expect(finishedAt - started).toBeGreaterThanOrEqual(150);
+    });
+});
+
+describe('PidObservingProcessExecutor wiring (0421 R5 glue)', () => {
+    test('publishes the spawned pid to the lifecycle sink', async () => {
+        const seen: number[] = [];
+        const executor = new PidObservingProcessExecutor({}, (pid) => seen.push(pid));
+
+        const result = await executor.run({ command: '/bin/sh', args: ['-c', 'echo $$'] });
+
+        expect(seen.length).toBe(1);
+        expect(Number.parseInt(result.stdout.trim(), 10)).toBe(seen[0] as number);
+    });
+
+    test('composes with a caller-supplied onSpawn instead of replacing it', async () => {
+        const sink: number[] = [];
+        const caller: number[] = [];
+        const executor = new PidObservingProcessExecutor({}, (pid) => sink.push(pid));
+
+        // AiRunner does not set onSpawn today, but silently dropping a caller's
+        // observer would be a trap for whoever adds one later.
+        await executor.run({
+            command: '/bin/sh',
+            args: ['-c', 'true'],
+            onSpawn: (pid) => caller.push(pid),
+        });
+
+        expect(sink.length).toBe(1);
+        expect(caller).toEqual(sink);
     });
 });

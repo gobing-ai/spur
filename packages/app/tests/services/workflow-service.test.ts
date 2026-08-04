@@ -25,7 +25,13 @@ terminalStates:
 import { execSync } from 'node:child_process';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { PipeProcess, ProcessExecutor, ProcessOptions, ProcessResult } from '@gobing-ai/ts-runtime';
+import type {
+    PipeProcess,
+    PipeProcessOptions,
+    ProcessExecutor,
+    ProcessOptions,
+    ProcessResult,
+} from '@gobing-ai/ts-runtime';
 
 class TestProcessExecutor implements ProcessExecutor {
     async run(options: ProcessOptions): Promise<ProcessResult> {
@@ -109,8 +115,27 @@ class TestProcessExecutor implements ProcessExecutor {
         }
     }
 
-    runStreaming(): PipeProcess {
-        throw new Error('Streaming process execution is not required in workflow unit tests.');
+    runStreaming(options: PipeProcessOptions): PipeProcess {
+        const pending = this.run(options);
+        const makeStream = (pick: (r: ProcessResult) => string): ReadableStream<Uint8Array> | null =>
+            new ReadableStream<Uint8Array>({
+                start(controller) {
+                    void pending.then((result) => {
+                        const text = pick(result);
+                        if (text !== '') controller.enqueue(new TextEncoder().encode(text));
+                        controller.close();
+                    });
+                },
+            });
+        return {
+            pid: null,
+            stdout: makeStream((r) => r.stdout),
+            stderr: makeStream((r) => r.stderr),
+            exited: pending.then((r) => r.exitCode),
+            writeStdin: () => undefined,
+            endStdin: () => undefined,
+            kill: () => undefined,
+        };
     }
 }
 
