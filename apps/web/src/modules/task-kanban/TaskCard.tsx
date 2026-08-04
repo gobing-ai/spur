@@ -45,7 +45,7 @@ export default function TaskCard({ task, onClick }: Props) {
         <Card
             variant="compact"
             asChild
-            className={`bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-spur-border w-full text-left ${
+            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border cursor-pointer transition-colors w-full text-left ${
                 isDragging ? 'opacity-30' : ''
             }`}
         >
@@ -80,7 +80,7 @@ export default function TaskCard({ task, onClick }: Props) {
                             </Badge>
                         )}
                         {task.updatedAt && (
-                            <span className="text-[10px] text-spur-text-muted ml-auto" title={task.updatedAt}>
+                            <span className="text-xs font-mono text-spur-text-muted ml-auto" title={task.updatedAt}>
                                 {relativeTime(task.updatedAt, now)}
                             </span>
                         )}

@@ -17,6 +17,13 @@
     --color-spur-text-faint: #5f6978;
     --color-spur-border: #334155;
 
+    /* DESIGN.md surface ladder (0420) — steps above --color-spur-surface.
+       New tokens: unused outside the task-kanban module, so their @theme
+       defaults are inert elsewhere; the .task-kanban scoped block below pins
+       the values the module actually resolves (R6 module-scoped confinement). */
+    --color-spur-surface-2: #141516;
+    --color-spur-surface-3: #18191a;
+
     /* Semantic colors — align with daisyUI badge/alert tokens */
     --color-spur-success: #22c55e;
     --color-spur-warning: #f59e0b;
@@ -44,11 +51,69 @@
     --color-spur-text-faint: #7c8699;
     --color-spur-border: #e2e8f0;
 
+    /* DESIGN.md surface ladder — light equivalents (0420). */
+    --color-spur-surface-2: #f1f5f9;
+    --color-spur-surface-3: #e2e8f0;
+
     /* Semantic colors — tuned for the light canvas (0335 R1); the @theme values
        above are tuned for dark and must not be inherited here. */
     --color-spur-success: #15803d;
     --color-spur-warning: #b45309;
     --color-spur-error: #dc2626;
+}
+
+/* ── Task Kanban — DESIGN.md retoken (0420) ──
+   The task-kanban module is token-mapped onto DESIGN.md's Linear-inspired
+   surface ladder via the existing spur-* tokens (R1/R2/R4). The remap is
+   SCOPED to the Tasks module (R6) rather than remapping the shared spur-*
+   palette, because the shared values are consumed by 13+ files (Features,
+   Teams, Observability, sidebar) — a global remap would visibly change those
+   modules and violate R5's "no visual regression". Scoping the custom-property
+   values under .task-kanban lets the module resolve the DESIGN.md ladder while
+   Teams + Observability keep the shared palette untouched.
+
+   Dark theme resolves DESIGN.md's Linear dark ladder; light theme keeps the
+   module usable with Linear-appropriate light surfaces (DESIGN.md documents no
+   light mode; these mirror the shared [data-theme="light"] slate family). */
+.task-kanban {
+    /* DESIGN.md surface ladder — canvas / surface-1 / surface-2 / surface-3 */
+    --color-spur-bg: #010102;
+    --color-spur-surface: #0f1011;
+    --color-spur-surface-2: #141516;
+    --color-spur-surface-3: #18191a;
+    /* Hairline borders — DESIGN.md hairline / hairline-strong */
+    --color-spur-border: #23252a;
+    /* Lavender-blue primary — scarce accent (R3) */
+    --color-spur-accent: #5e6ad2;
+    --color-spur-accent-hover: #828fff;
+    /* Type — DESIGN.md ink / ink-muted / ink-subtle */
+    --color-spur-text: #f7f8f8;
+    --color-spur-text-muted: #d0d6e0;
+    --color-spur-text-faint: #8a8f98;
+    /* daisyUI control hues (R3 single-accent). The module renders daisyUI
+       primary/accent variants (Button variant="primary"/"accent"), which resolve
+       daisyUI's own --color-primary / --color-accent rather than the spur tokens
+       — leaving a second chromatic accent on screen. Pinning both onto the one
+       DESIGN.md lavender (button-primary = {colors.primary} on {colors.on-primary})
+       keeps the module single-hued. Scoped, so daisyUI defaults are untouched
+       everywhere else (R6). */
+    --color-primary: #5e6ad2;
+    --color-primary-content: #ffffff;
+    --color-accent: #5e6ad2;
+    --color-accent-content: #ffffff;
+}
+
+[data-theme="light"] .task-kanban {
+    --color-spur-bg: #ffffff;
+    --color-spur-surface: #ffffff;
+    --color-spur-surface-2: #f8fafc;
+    --color-spur-surface-3: #f1f5f9;
+    --color-spur-border: #e2e8f0;
+    --color-spur-accent: #5e6ad2;
+    --color-spur-accent-hover: #4f46e5;
+    --color-spur-text: #0f172a;
+    --color-spur-text-muted: #64748b;
+    --color-spur-text-faint: #7c8699;
 }
 
 /* ── Detail panel markdown (0100/0101) ──

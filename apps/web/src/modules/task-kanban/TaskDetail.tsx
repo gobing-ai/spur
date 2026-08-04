@@ -243,9 +243,9 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
     const implProgress = frontmatter.impl_progress as Record<string, string> | undefined;
     const IMPL_PHASES = ['planning', 'design', 'implementation', 'review', 'testing'] as const;
     const implProgressColor = (state: string): string => {
-        if (state === 'done') return 'bg-green-500';
-        if (state === 'in_progress') return 'bg-amber-500';
-        return 'bg-gray-400';
+        if (state === 'done') return 'bg-spur-success';
+        if (state === 'in_progress') return 'bg-spur-warning';
+        return 'bg-spur-border';
     };
     return (
         <div className="flex flex-col h-full">
@@ -264,12 +264,12 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             {taskStatusIcon(task.status)} {task.status}
                         </span>
                         {task.priority && (
-                            <span className="px-2 py-0.5 rounded-full bg-spur-accent/15 text-xs text-spur-accent">
+                            <span className="px-2 py-0.5 rounded-full bg-spur-surface-2 border border-spur-border text-xs text-spur-text-muted">
                                 {task.priority}
                             </span>
                         )}
                         {task.featureId && (
-                            <span className="px-2 py-0.5 rounded-full bg-spur-info/15 text-xs text-spur-info">
+                            <span className="px-2 py-0.5 rounded-full bg-spur-surface-2 border border-spur-border text-xs text-spur-text-muted">
                                 {task.featureId}
                             </span>
                         )}
@@ -545,7 +545,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                         if (e.key === 'Escape') setShowCancelModal(false);
                     }}
                 >
-                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full">
+                    <div className="bg-spur-surface border border-spur-border rounded-xl shadow-xl p-4 mx-4 max-w-xs w-full">
                         <p className="text-sm text-spur-text mb-4">
                             Cancel task <strong>{task.wbs}</strong>? This marks it as cancelled and cannot be undone
                             from the board.
@@ -584,7 +584,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                         if (e.key === 'Escape') setActionModal(null);
                     }}
                 >
-                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full">
+                    <div className="bg-spur-surface border border-spur-border rounded-xl shadow-xl p-4 mx-4 max-w-sm w-full">
                         <h4 className="text-sm font-semibold text-spur-text mb-3">
                             {ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
                         </h4>

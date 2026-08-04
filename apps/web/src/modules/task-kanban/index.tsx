@@ -18,7 +18,7 @@ export function transition(wbs: string, toStatus: string): void {
 function TaskKanbanView() {
     const { filters, selectTask, setFilter } = useTaskParams();
     return (
-        <div className="flex flex-col h-full">
+        <div className="task-kanban flex flex-col h-full">
             <div data-kanban-board className="flex-1 overflow-hidden">
                 <KanbanBoard onSelectTask={selectTask} filters={filters} onFilterChange={setFilter} />
             </div>

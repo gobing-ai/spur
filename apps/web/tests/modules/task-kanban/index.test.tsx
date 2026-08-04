@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
 import '../../test-helpers/rpc-client-mock';
@@ -10,6 +11,13 @@ registerHappyDom();
 
 afterAll(teardownHappyDom);
 
+// Stub the board so the module-root scoping test can render TaskKanbanView without
+// pulling in dnd-kit or the board's API surface. The `.task-kanban` class is on the
+// wrapper div (index.tsx), independent of the child board's internals.
+mock.module('../../../src/modules/task-kanban/KanbanBoard', () => ({
+    default: () => <div data-testid="board-stub" />,
+}));
+
 describe('TaskKanbanDetail', () => {
     afterEach(cleanup);
 
@@ -18,6 +26,26 @@ describe('TaskKanbanDetail', () => {
         // rightPanelComponent is deliberately absent — task details are shown in the
         // KanbanBoard popup overlay (auto-opened from URL WBS), not in the RightPanel.
         expect(mod.module.rightPanelComponent).toBeUndefined();
+    });
+});
+
+describe('TaskKanbanView scoping', () => {
+    afterEach(cleanup);
+
+    test('module root carries the task-kanban class that confines the DESIGN.md palette', async () => {
+        const mod = await import('../../../src/modules/task-kanban');
+        const View = mod.module.component;
+
+        const { container } = render(
+            <MemoryRouter>
+                <View />
+            </MemoryRouter>,
+        );
+
+        // R6 scoping hook: the module root must keep `.task-kanban` so the scoped
+        // custom-property block in global.css does not leak the DESIGN.md surface
+        // ladder onto the shared palette (which would regress Teams + Observability).
+        expect(container.firstElementChild?.className).toContain('task-kanban');
     });
 });
 

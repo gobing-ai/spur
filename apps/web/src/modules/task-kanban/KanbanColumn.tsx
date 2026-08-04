@@ -22,8 +22,8 @@ export default function KanbanColumn({ status, label, tasks, onCardClick, sortDi
         <section
             ref={setNodeRef}
             aria-label={`${label} column`}
-            className={`flex flex-col flex-1 min-w-[16rem] rounded-lg border transition-colors duration-200 ${
-                isOver ? 'bg-spur-accent/10 border-spur-accent/40 shadow-lg' : 'bg-spur-surface border-spur-border'
+            className={`flex flex-col flex-1 min-w-[16rem] rounded-xl border transition-colors duration-200 ${
+                isOver ? 'bg-spur-surface-2 border-spur-accent shadow-lg' : 'bg-spur-surface border-spur-border'
             }`}
         >
             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border shrink-0">

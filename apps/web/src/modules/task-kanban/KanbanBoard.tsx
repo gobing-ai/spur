@@ -232,7 +232,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         title={connected ? 'Live updates active' : 'Polling (stream disconnected)'}
                     >
                         <span
-                            className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
+                            className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
                         />
                         <span className="text-xs text-spur-text-muted">{connected ? 'Live' : 'Polling'}</span>
                     </div>
