@@ -1058,6 +1058,90 @@ terminalStates:
         });
     });
 
+    describe('run — agent var resolves from agent.default', () => {
+        // Every pipeline YAML hardcodes `agent: "omp"`, which bypassed `.spur/config.yaml`
+        // entirely: config only reached an `agent.run` step when a caller passed the literal
+        // `auto`, which the pipelines never do. An operator whose default executor was failing
+        // therefore had no supported way to redirect them.
+        const AGENT_YAML = `name: agent-var
+kind: state-machine
+initialState: start
+vars:
+  agent: "omp"
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'echo "\${vars.agent}" > captured-agent.txt'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+        async function seedWorkflow(prefix: string, configuredAgent?: string): Promise<string> {
+            const dir = await mkdtemp(join(tmpdir(), prefix));
+            await writeFile(join(dir, 'test.yaml'), AGENT_YAML);
+            if (configuredAgent !== undefined) {
+                await mkdir(join(dir, '.spur'), { recursive: true });
+                await writeFile(join(dir, '.spur', 'config.yaml'), `agent:\n  default: ${configuredAgent}\n`);
+            }
+            return dir;
+        }
+
+        async function capturedAgent(dir: string): Promise<string> {
+            return (await readFile(join(dir, 'captured-agent.txt'), 'utf8')).trim();
+        }
+
+        test('configured agent.default overrides the YAML literal', async () => {
+            const dir = await seedWorkflow('spur-wf-agent-cfg-', 'configured-executor');
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'agent-cfg-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgent(dir)).toBe('configured-executor');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('an explicit caller agent wins over agent.default', async () => {
+            const dir = await seedWorkflow('spur-wf-agent-explicit-', 'configured-executor');
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), {
+                runId: 'agent-explicit-1',
+                vars: { agent: 'chosen-by-operator' },
+            });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgent(dir)).toBe('chosen-by-operator');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('the YAML literal stands when no agent.default is configured', async () => {
+            // Config resolution layers project → user (`~/.config/spur/config.yaml`), so a
+            // developer's own global default would otherwise decide this test's outcome.
+            const dir = await seedWorkflow('spur-wf-agent-nocfg-');
+            const previous = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+            try {
+                const svc = new WorkflowAppService(makeCtx(dir));
+
+                const result = await svc.run(join(dir, 'test.yaml'), { runId: 'agent-nocfg-1' });
+
+                expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+                expect(await capturedAgent(dir)).toBe('omp');
+            } finally {
+                if (previous === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+                else process.env.SPUR_SKIP_GLOBAL_CONFIG = previous;
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
     describe('run — pipeline link (R1, task 0071)', () => {
         const PIPELINE_YAML = `name: task-pipeline
 kind: state-machine

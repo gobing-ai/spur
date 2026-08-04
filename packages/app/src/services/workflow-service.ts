@@ -404,7 +404,19 @@ export class WorkflowAppService {
         // R8 (0366): inject __runId so discovery artifacts can stamp run provenance.
         // Survives pause/resume via the effective-vars snapshot (R1–R3). Inert for
         // workflows that don't reference ${vars.__runId}.
-        const runVars = { ...(opts.vars ?? {}), __runId: runId };
+        //
+        // `agent` is injected on the same seam: every pipeline YAML declares a literal
+        // `agent: "omp"` vars default, which bypassed `.spur/config.yaml` `agent.default`
+        // entirely — config only ever reached an `agent.run` step when a caller passed the
+        // literal `auto`, which the pipelines never do. That made the config knob dead for
+        // pipelines: an operator whose default executor was failing had no supported way to
+        // redirect them. Caller-supplied vars still win, so an explicit `--agent`/`--vars`
+        // choice overrides config, and config in turn overrides the YAML literal.
+        const runVars = {
+            ...(await resolveDefaultAgentVar(this.ctx.cwd, opts.vars)),
+            ...(opts.vars ?? {}),
+            __runId: runId,
+        };
         const result = await svc.runFile(file, {
             workdir: this.ctx.cwd,
             runId,
@@ -795,6 +807,28 @@ export class WorkflowAppService {
 async function fileExists(path: string): Promise<boolean> {
     const fs = createNodeFileSystem();
     return await fs.exists(path);
+}
+
+/**
+ * Resolve the `agent` run var from `.spur/config.yaml` `agent.default`, so the configured
+ * default executor reaches a workflow's `agent.run` steps instead of the literal `agent: "omp"`
+ * each pipeline YAML hardcodes.
+ *
+ * Returns an empty object — leaving the YAML default in force — when the caller already chose an
+ * agent, when no `agent.default` is configured, or when config cannot be read. Best-effort by
+ * design: executor selection must never be the reason a workflow fails to start.
+ */
+async function resolveDefaultAgentVar(
+    cwd: string,
+    callerVars: Record<string, string> | undefined,
+): Promise<Record<string, string>> {
+    if (callerVars?.agent !== undefined) return {};
+    try {
+        const configured = (await loadSpurConfig(cwd)).agent?.default;
+        return typeof configured === 'string' && configured.length > 0 ? { agent: configured } : {};
+    } catch {
+        return {};
+    }
 }
 
 /**
