@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type {
     AgentExecutionEvent,
@@ -550,6 +551,105 @@ describe('AgentRunActionRunner expectFile', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner empty-implement guard (requireDiff, task 0424)
+// ---------------------------------------------------------------------------
+
+/** Initialise a throwaway git repo (local identity only — no global config). */
+function gitInit(dir: string): void {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+}
+
+function gitCommitAll(dir: string, message: string): void {
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['commit', '-qm', message], { cwd: dir });
+}
+
+describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('exit-0 + requireDiff with zero changes → ok:false with empty-implement error', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-nodiff-'));
+        // Not a git repo — `git status --porcelain` reports nothing → gate fires.
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('empty implement');
+        expect(result.error).toContain('zero non-corpus file changes');
+    });
+
+    test('exit-0 + requireDiff with only corpus changes → rejected (docs/tasks3 excluded)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-corpus-'));
+        gitInit(dir);
+        const taskFile = join(dir, 'docs/tasks3/0000_probe.md');
+        mkdirSync(dirname(taskFile), { recursive: true });
+        writeFileSync(taskFile, 'base');
+        gitCommitAll(dir, 'base');
+        writeFileSync(taskFile, 'changed');
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('empty implement');
+    });
+
+    test('exit-0 + requireDiff with a non-corpus change → ok:true', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-diff-'));
+        gitInit(dir);
+        const srcFile = join(dir, 'src/probe.ts');
+        mkdirSync(dirname(srcFile), { recursive: true });
+        writeFileSync(srcFile, 'base');
+        gitCommitAll(dir, 'base');
+        writeFileSync(srcFile, 'changed');
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(true);
+    });
+
+    test('untracked new non-corpus files count as changes (git diff would miss them)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-untracked-'));
+        gitInit(dir);
+        writeFileSync(join(dir, 'base.txt'), 'base');
+        gitCommitAll(dir, 'base');
+        const newModule = join(dir, 'new-module/index.ts');
+        mkdirSync(dirname(newModule), { recursive: true });
+        writeFileSync(newModule, 'new');
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(true);
+    });
+
+    test('exit-0 without requireDiff → ok:true even with zero changes', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-optout-'));
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', cwd: dir }, makeCtx());
+        expect(result.ok).toBe(true);
+    });
+
+    test('subprocess failure error names the partial-work artifact path and the resume runbook (R2)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-r2-'));
+        gitInit(dir);
+        writeFileSync(join(dir, 'base.txt'), 'base');
+        gitCommitAll(dir, 'base');
+        const svc = svcWithRunTraced({ exitCode: 3, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 3');
+        expect(result.error).toContain('.spur/run/test-1-s1-partial.md');
+        expect(result.error).toContain('execution-workflow.md');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentRunActionRunner timeoutMs
 // ---------------------------------------------------------------------------
 
@@ -987,7 +1087,11 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'go' }, makeCtx());
         expect(result.ok).toBe(false);
-        expect(result.error).toBe("agent.run 's1' (<default>) exited with code 5");
+        expect(result.error).toContain("agent.run 's1' (<default>) exited with code 5");
+        // R2 (task 0424): subprocess failures name the partial-work artifact
+        // path and the resume runbook — a timed-out implement must not dead-end.
+        expect(result.error).toContain('.spur/run/test-1-s1-partial.md');
+        expect(result.error).toContain('execution-workflow.md');
         expect(result.error).not.toContain('signal');
         expect(result.error).not.toContain('dispatch');
     });

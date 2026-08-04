@@ -50,6 +50,10 @@ const KIND = 'agent.run';
  *   agent run, assert the file exists. If absent, downgrade to `ok:false` with a
  *   clear error. Catches "agent exited 0 but didn't produce the expected artifact"
  *   defects (R6-S2a). Relative paths resolve against `cwd`.
+ * - `requireDiff` (boolean): post-exit verification — after a successful (exit-0)
+ *   agent run, fail the step unless the working tree has non-corpus changes
+ *   (untracked/staged/unstaged, docs/tasks3|docs/features excluded). Catches the
+ *   silent no-op defect — "agent exited 0 but did nothing" (R3, task 0424).
  * - `timeoutMs` (number): subprocess timeout in milliseconds. Forwarded via
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
@@ -140,6 +144,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // e.g. the verify step writing its PASS/FAIL verdict artifact).
         const answerFile = asOptionalString(options.answerFile);
         const expectFile = asOptionalString(options.expectFile);
+        const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
         const agentLabel = agent ?? '<default>';
 
@@ -246,6 +251,25 @@ export class AgentRunActionRunner implements ActionRunner {
                 }
             }
 
+            const stepLabel = context.stateOrNodeId;
+
+            // R3 (task 0424): empty-implement no-op guard. After exit-0, fail the
+            // step when the agent produced no non-corpus working-tree changes — a
+            // silent no-op must not drift into test/review where it is caught only
+            // after a full pipeline pass. Mirrors expectFile's post-exit check, but
+            // over `git status --porcelain` (covers untracked new files too, which
+            // `git diff` misses) with the corpus dirs excluded (the pipeline itself
+            // writes docs/tasks3|docs/features). Tree-level approximation: a
+            // pre-existing dirty tree reads as non-empty — safe direction, a false
+            // pass would silently certify an empty implement.
+            if (ok && requireDiff === true && !(await gitHasNonCorpusChanges(cwd))) {
+                return {
+                    ok: false,
+                    data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                    error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside docs/tasks3|docs/features; fix the implement input and re-run the pipeline.`,
+                };
+            }
+
             if (!ok) {
                 await writePartialWorkArtifact(context, agentLabel, model, traced, cwd);
             }
@@ -253,16 +277,19 @@ export class AgentRunActionRunner implements ActionRunner {
             // Actionable failure message (R4 / task 0295): identify the workflow
             // step and configured timeout, then distinguish signal termination from
             // dispatch failure and a plain non-zero exit.
-            const stepLabel = context.stateOrNodeId;
+            // R2 (task 0424): subprocess failures name the partial-work artifact
+            // path and the resume action — a timed-out implement must not be a dead
+            // end that leaves the partial tree undiscoverable.
+            const partialWorkHint = `partial work (if any) preserved at .spur/run/${context.runId}-${stepLabel}-partial.md; resume from that tree per the timed-out-implement runbook (plugins/sp/skills/spur-dev/references/execution-workflow.md)`;
             const error = ok
                 ? undefined
                 : traced.signal !== undefined
                   ? timeoutMs !== undefined
-                      ? `agent.run '${stepLabel}' (${agentLabel}) terminated by signal ${traced.signal} (configured timeout: ${timeoutMs}ms; timeout or cancellation); see partial-work artifact`
-                      : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; see partial-work artifact`
+                      ? `agent.run '${stepLabel}' (${agentLabel}) terminated by signal ${traced.signal} (configured timeout: ${timeoutMs}ms; timeout or cancellation); ${partialWorkHint}`
+                      : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; ${partialWorkHint}`
                   : traced.message !== undefined
                     ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
-                    : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}`;
+                    : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}; ${partialWorkHint}`;
 
             return {
                 ok,
@@ -416,6 +443,30 @@ async function gitDiffStat(cwd: string): Promise<string> {
         return result.exitCode === 0 ? result.stdout.trim() : '';
     } catch {
         return '';
+    }
+}
+
+/**
+ * Empty-implement gate probe (R3, task 0424): does the working tree have any
+ * non-corpus changes? `git status --porcelain` — covers untracked new files
+ * (which `git diff` misses) plus staged and unstaged modifications — with the
+ * corpus pathspecs excluded. Non-git or unreadable trees read as "no changes"
+ * so the gate rejects (conservative: a false rejection is a diagnostic, a false
+ * pass would certify an empty implement).
+ */
+async function gitHasNonCorpusChanges(cwd: string): Promise<boolean> {
+    try {
+        const result = await new NodeProcessExecutor().run({
+            command: 'git',
+            args: ['status', '--porcelain', '--', '.', ':(exclude)docs/tasks3/*', ':(exclude)docs/features/*'],
+            cwd,
+            maxOutput: 1024 * 1024,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        return result.exitCode === 0 && result.stdout.trim() !== '';
+    } catch {
+        return false;
     }
 }
 

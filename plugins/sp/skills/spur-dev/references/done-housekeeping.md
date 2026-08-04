@@ -69,6 +69,14 @@ partly on disk. Force-done with a provenance override is the sanctioned recovery
 the verify FSM, so it carries obligations. Added by task 0398 R5 after the H6 batch used this
 path six times as tribal knowledge.
 
+**Prefer resume over force-done when the implement step timed out with substantial partial
+work (task 0424):** instead of discarding the partial tree and force-doning, follow the
+timed-out-implement resume runbook in
+[`execution-workflow.md`](execution-workflow.md#large-tasks-and-timed-out-implement-resume-task-0424)
+— establish green from the partial files, complete the remaining requirements against that
+tree, and only then force-done if the pipeline is not worth re-driving. F6 below remains the
+recovery when the partial work is not worth keeping or the manual path is already complete.
+
 **1. Recognise it.** A timeout leaves `.spur/run/<runId>-<step>-partial.md` and the run reports
 `exited with code 3`. That is a killed subprocess, not a failed assertion - do not read the
 partial file as a verdict.

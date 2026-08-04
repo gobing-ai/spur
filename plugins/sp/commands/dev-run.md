@@ -36,6 +36,23 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 - `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work; here that is the pipeline's stages, so the value is merged into `vars.agent` and `agent.run` steps run under it while the orchestrator loop continues in this session. Same rule as every other command, not an exception. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
+**Mode split (load-bearing — bug-742)**
+
+| Mode | What runs | Must not do |
+| --- | --- | --- |
+| `--mode full` (default) | Launches `task-pipeline.yaml` via `sp:spur-dev` | — |
+| `--mode implement` | Single implement competency via `sp:code-implementation` | Re-launch the full pipeline, `spur workflow run …task-pipeline…`, or `/sp:dev-run` **without** `--mode implement` |
+
+The pipeline's `implement` step invokes this command **only** as:
+
+```text
+/sp:dev-run --mode implement <wbs> --auto
+```
+
+That pure slash form is intentional (ADR-043): workflow `agent.run` `input` is a command pointer, not an inline essay. Anti-recursion, scope, and Solution authorship live in this command + `sp:code-implementation`, not in YAML prose bolted onto the slash line.
+
+**When `--mode implement` is active (including as a pipeline subprocess):** work only in the current working tree on `<wbs>`. **NEVER invoke** `spur workflow run` for the task pipeline, and **NEVER invoke** `/sp:dev-run` without an explicit `--mode implement` — this step *is* the pipeline's implement stage; re-entering full mode recurses (bug-742).
+
 > **⚠ Redefinition (feature H8, 2026-07-31).** `--next` previously selected implement-only mode on
 > this command. It no longer does — use `--mode implement`. The replacement already existed and is
 > what `routing-table.md` row A5 dispatches, which is evidence the overload was accidental. This

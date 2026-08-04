@@ -35,6 +35,22 @@ Do **not** use this skill for:
 - **System design / architecture decisions** — that is `sp:sys-architecture` (decide the shape first).
 - **Review / verification** — that is `sp:code-verification`.
 - **Driving the lifecycle** — that is the spine, `sp:spur-dev`.
+- **Re-launching the task pipeline from inside implement** — see anti-recursion below (bug-742).
+
+## Anti-recursion (pipeline implement step — bug-742)
+
+When this skill is entered via `/sp:dev-run --mode implement <wbs>` (the form
+`task-pipeline.yaml` `implement` uses as a **pure slash command** — ADR-043):
+
+1. Work **only** in the current working tree on that WBS. Implement code + author `## Solution`.
+2. **NEVER invoke** `spur workflow run` for `task-pipeline.yaml` (or any full task pipeline).
+3. **NEVER invoke** `/sp:dev-run` **without** an explicit `--mode implement`. Omitting the mode
+   defaults to full pipeline and **recurses** into another `implement` step (bug-742).
+4. Do **not** call `/sp:dev-runall`, `/sp:dev-verify`, or other lifecycle stages from inside this
+   skill — the pipeline (or `--next` chain) owns those hops.
+
+The structural guard is the slash form itself (`--mode implement`). Prose in the workflow YAML
+`agent.run` `input` is the wrong place for this rule; it belongs here and in `dev-run.md`.
 
 ## Behavior
 
@@ -79,6 +95,8 @@ reproduce → isolate → minimal fix → regression guard.
 - The diff touches files unrelated to the task's scope.
 - "Done" claimed with no test run pasted.
 - Silently changing an AC's meaning to match what was built.
+- From implement mode: launching `spur workflow run …task-pipeline…` or `/sp:dev-run` without
+  `--mode implement` (recursive pipeline — bug-742).
 
 ## Gotchas
 
@@ -89,6 +107,9 @@ reproduce → isolate → minimal fix → regression guard.
    and Review with the follow-up WBS.
 4. **The spine owns the lifecycle.** This skill writes `## Solution`; status transitions and the
    other sections are the spine's / other competencies' concern.
+5. **Implement is not the pipeline driver.** Pipeline YAML may only pass the pure slash
+   `/sp:dev-run --mode implement <wbs> …` (ADR-043). If anti-recursion text is missing from the
+   skill/command and you are tempted to paste it into YAML `input:`, put it here instead.
 
 ## See also
 

@@ -30,11 +30,11 @@ This file owns **how operations sequence** in the pipeline. What each operation 
 
 > **`/sp:dev-run` drives the pipeline — it is NEVER a pipeline step.** The command
 > `/sp:dev-run <wbs>` means "run this whole pipeline" (default `--mode full`). The pipeline's
-> internal stages call `/sp:dev-run --mode implement`, `/sp:dev-unit`, `/sp:dev-review`,
-> `/sp:dev-verify` — never `/sp:dev-run` in full mode. Calling `/sp:dev-run --mode full` from
-> inside the `implement` step would recurse into another full pipeline run. The `implement`
-> step is the **implement operation** (dev-operations.md §4); the verify step is
-> `sp:code-verification`.
+> internal stages call `/sp:dev-run --mode implement`, shell quality gate + optional
+> `/sp:dev-fixall`, `/sp:dev-review`, `/sp:dev-verify` — never `/sp:dev-run` in full mode.
+> Calling `/sp:dev-run --mode full` from inside the `implement` step would recurse into another
+> full pipeline run. The `implement` step is the **implement operation** (dev-operations.md §4);
+> the verify step is `sp:code-verification`.
 
 ## The pipeline's internal stages
 
@@ -44,7 +44,7 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | Stage | Operation | Defined in |
 | ------- | ----------- | ------------ |
 | `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) → `sp:code-implementation` |
-| `test` | `/sp:dev-unit <target> --auto` — extend/generate tests to the coverage target. | [dev-operations.md §1 unit](dev-operations.md) → `sp:code-testing` |
+| `test` → (`test-fix` ↔ `test-recheck`) → `review` \| `failed` | **Project quality gate** (not `/sp:dev-unit`). Soft shell probe of `${vars.qualityGateCmd}` (default `bun run autofix && bun run spur-check`) — green path pays **one** full gate run. On FAIL: bounded `/sp:dev-fixall` loop (`qualityGateMaxFixAttempts`, default 2) with soft recheck; exhausted attempts route to pipeline `failed`. `/sp:dev-unit` remains **coverage gap-fill** (router C3/C5 / standalone). | [dev-operations.md §10 fixall](dev-operations.md); unit op still §1 |
 | `review` | `/sp:dev-review <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
@@ -115,11 +115,12 @@ pipeline (bug-742).
 The pipeline (`kind: state-machine`) runs the work loop:
 
 ```
-precheck → implement → test → review → approve(HITL) → verify → record → done
+precheck → implement → test [→ test-fix → test-recheck] → review → approve(HITL) → verify → record → done
 ```
 
-Each step is an `agent.run` action carrying `sp:dev-*` command inputs. The skill monitors
-the run:
+Agentic steps use pure slash `agent.run` inputs (ADR-043). The `test` hop is primarily
+**deterministic shell** (quality gate); only the optional `test-fix` hop is agentic
+(`/sp:dev-fixall`). The skill monitors the run:
 
 - **On HITL pause** (`approve` state): surface the review output to the operator.
   `spur workflow continue <run-id> --yes` to approve, or provide feedback to loop back.
@@ -190,8 +191,10 @@ Mode is decided mechanically from `$ARGUMENTS`; `--next` is not part of mode res
 | `--mode implement` (with or without `--next`) | `implement` | `implement $ARGUMENTS` |
 | neither (default) | `full` | `run $ARGUMENTS` |
 
-Pipeline stage prompts always carry `--mode implement`; relying on `--next` to select the step is
-the recursive-pipeline defect fixed by bug-742.
+Pipeline stage **`agent.run` inputs** are pure slash commands (ADR-043) that always carry
+`--mode implement` on implement; relying on `--next` to select the step is the recursive-pipeline
+defect fixed by bug-742. Anti-recursion prose lives in `/sp:dev-run` + `sp:code-implementation`,
+not in YAML `input:` essays.
 
 ## Infrastructure failure recognition (mandatory)
 
@@ -221,6 +224,44 @@ cannot detect token quota exhaustion, model deprecation, or rate limits. An exec
 configured with `agent: omp` + `model: <provider/model>` passes doctor if `omp` is
 installed, even if the model is unavailable. If an `agent.run` times out with no useful
 diagnostic, suspect the model, not the agent binary.
+
+## Large tasks and timed-out implement resume (task 0424)
+
+Two obligations when driving a task that may not fit one implement pass.
+
+**1. Split oversized tasks before pipeline execution.** A single `implement` `agent.run`
+has a bounded budget (`implementTimeoutMs`); a task whose requirements cannot plausibly fit
+that pass must be split into multiple tasks before `spur workflow run`, not found out at the
+timeout wall. Heuristics: > 10 requirements, a change spanning > 8 files, or a multi-module
+frontend/backend surface → decompose. The plan step owns this; if a task is already running
+and oversized, stop and split rather than raise the budget (task 0398 R4: "stop and record
+rather than raise again without sign-off").
+
+**2. Timed-out implement — resume from the partial tree, don't restart.** A timeout kills the
+implement `agent.run` (exit 3), the pipeline routes to `failed`, and the task stays `todo` with
+the partial work still in the working tree. The failure output names the partial-work artifact
+(`.spur/run/<runId>-implement-partial.md`) and this runbook. Recovery:
+
+1. **Recognise.** `.spur/run/<runId>-implement-partial.md` exists, the run reported `exited
+   with code 3`, the task is at `todo`. The artifact's `git diff --stat` section is the partial
+   work inventory.
+2. **Establish green from the partial files.** `bun run format` then `bun run lint` + `bun
+   test` (or the affected packages). Fix mechanical formatting/type fallout first; the partial
+   tree is the baseline, not a code review target.
+3. **Resume the remaining requirements against that tree.** Re-run the implement step with the
+   partial diff as explicit context — hand the continuation agent `git diff` (the partial
+   changes) and the remaining requirement list, and tell it to complete, not restart. The
+   task's `## Solution` is then backfilled from `git diff --name-only`.
+4. **Finish via the normal gate, or force-done.** If the resumed implement completes, run it
+   through the pipeline/verify gate normally. If the work is manually completed and the
+   pipeline is not worth re-driving, use the force-done recovery in
+   [`done-housekeeping.md`](done-housekeeping.md) F6 — it carries the provenance obligations
+   (honest `done_reason`, verdict regeneration).
+
+The empty-implement guard (`requireDiff` on the task-pipeline `implement` step, R3) fails the
+run fast when an implement exits 0 with zero non-corpus changes — a no-op never drifts into
+`test`/`review`. A no-op is an implement-input defect, not a resume case: fix the input and
+re-run.
 
 ## Checkpoint read on resume
 
