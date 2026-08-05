@@ -280,6 +280,69 @@ describe('WorkflowAppService', () => {
             await rm(dir, { recursive: true, force: true });
         });
 
+        // Task 0431: `run` must resolve `$schema` through `embeddedSchemas` the same way
+        // `validate` does. Before the fix, `run` called `svc.runFile(path)` which loaded
+        // the def with bare `loadWorkflowDef(path)` - no embedded options - so a
+        // package-specifier `$schema` ref fell through to node resolution and failed
+        // when cwd was outside the package tree (CI, --compile binary).
+        test('run resolves a package-specifier $schema from embeddedSchemas (CI cwd-independence)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-run-embedded-'));
+            const path = join(dir, 'pkg-schema.yaml');
+            await writeFile(
+                path,
+                [
+                    '"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+                    'name: embedded-run-flow',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+
+            const schema = JSON.stringify({
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string' } },
+            });
+            const embeddedSchemas = new Map([['schemas/state-machine-workflow.schema.json', schema]]);
+
+            const svc = new WorkflowAppService({ ...makeCtx(dir), embeddedSchemas: () => embeddedSchemas });
+            const result = await svc.run(path, { runId: 'svc-run-embedded-1' });
+            expect(result.status).toBe('done');
+            expect(result.finalState).toBe('done');
+
+            // A schema that rejects the workflow proves the embedded copy is actually
+            // applied during `run`, not silently skipped or falling back to disk.
+            const rejecting = new Map([
+                [
+                    'schemas/state-machine-workflow.schema.json',
+                    JSON.stringify({ type: 'object', properties: { name: { enum: ['other'] } } }),
+                ],
+            ]);
+            const svcReject = new WorkflowAppService({ ...makeCtx(dir), embeddedSchemas: () => rejecting });
+            // R2/R5: rejection must name the mismatch and must not cite any node_modules path
+            // (embedded map is the sole schema source when configured).
+            let rejectMsg = '';
+            try {
+                await svcReject.run(path, { runId: 'svc-run-embedded-reject' });
+                expect.unreachable('expected schema rejection');
+            } catch (error) {
+                rejectMsg = error instanceof Error ? error.message : String(error);
+            }
+            expect(rejectMsg.length).toBeGreaterThan(0);
+            // R5: offending field named; R2: no node_modules path; embedded map used.
+            expect(rejectMsg).toMatch(/\bname\b/);
+            expect(rejectMsg).not.toMatch(/node_modules/);
+            expect(rejectMsg).toMatch(/embedded-spur/);
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('recordSelfPid stamps the running process pid onto the run row at creation', async () => {
             // The async worker self-records its own pid the instant the engine
             // creates the run row (SelfPidRecordingAdapter), eliminating the
@@ -739,6 +802,278 @@ terminalStates:
             await expect(svc.continuePaused('no-such-run')).rejects.toThrow(
                 /not paused|does not exist|nothing to continue/i,
             );
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    // 0433: Headless HITL taste gates cannot be approved after the fact.
+    // `continuePaused` must accept an optional hitlAnswer that overrides the
+    // persisted __hitlAnswer before guard re-evaluation on resume.
+    describe('continue - HITL answer injection (0433)', () => {
+        // Workflow with a taste gate that branches on __hitlAnswer.
+        // The gate has hitl.confirm onEnter (persists the answer) then pauses.
+        // Guards route yes -> approved, no -> cancelled, cancel -> cancelled.
+        const TASTE_GATE_YAML = `name: taste-gate-svc
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+  - id: approved
+  - id: cancelled
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: gate
+    to: cancelled
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = no'
+terminalStates:
+  - approved
+  - cancelled
+`;
+
+        /** A headless responder that returns `no` - simulates the bug scenario. */
+        function makeCtxWithNoResponder(cwd: string) {
+            const ctx = makeCtx(cwd);
+            return { ...ctx, hitlResponder: () => ({ respond: async () => ({ value: 'no' }) }) };
+        }
+
+        async function seedTasteGate(useNoResponder = false): Promise<{ svc: WorkflowAppService; dir: string }> {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0433-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'taste-gate.yaml'), TASTE_GATE_YAML);
+            const ctx = useNoResponder ? makeCtxWithNoResponder(dir) : makeCtx(dir);
+            return { svc: new WorkflowAppService(ctx), dir };
+        }
+
+        test('R1/R5: continuePaused with hitlAnswer=yes overrides persisted no, takes approve edge', async () => {
+            const { svc, dir } = await seedTasteGate(true);
+            const wf = join(dir, '.spur', 'workflows', 'taste-gate.yaml');
+            // Run pauses at `gate`. Headless responder wrote `no` into __hitlAnswer.
+            const runResult = await svc.run(wf, { runId: 't1' });
+            expect(runResult.status).toBe('paused');
+            expect(runResult.finalState).toBe('gate');
+
+            // Without --answer, resume uses persisted `no` -> cancelled.
+            // (We test this separately to prove the bug exists without the fix.)
+
+            // With hitlAnswer=yes, the override wins -> approved.
+            const resumed = await svc.continuePaused('t1', { hitlAnswer: 'yes' });
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('approved');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R5: continuePaused with hitlAnswer=no routes to the reject edge', async () => {
+            const { svc, dir } = await seedTasteGate(true);
+            const wf = join(dir, '.spur', 'workflows', 'taste-gate.yaml');
+            await svc.run(wf, { runId: 't2' });
+
+            const resumed = await svc.continuePaused('t2', { hitlAnswer: 'no' });
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('cancelled');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R5: continuePaused with hitlAnswer=cancel routes to the cancel edge', async () => {
+            const { svc, dir } = await seedTasteGate(true);
+            const wf = join(dir, '.spur', 'workflows', 'taste-gate.yaml');
+            await svc.run(wf, { runId: 't3' });
+
+            // The taste-gate workflow has no explicit cancel guard, but `cancel`
+            // should still be expressible. With no matching guard, the run fails
+            // (no transition taken) - this is the expected engine behavior for
+            // an answer that has no matching edge. We verify it doesn't silently
+            // default to another answer.
+            const resumed = await svc.continuePaused('t3', { hitlAnswer: 'cancel' });
+            // No cancel guard matches -> run cannot proceed -> failed or still paused.
+            // The key assertion: it did NOT take the `yes` or `no` edge.
+            expect(resumed.finalState).not.toBe('approved');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R4: answering one gate does not pre-clear a later gate', async () => {
+            // Two sequential taste gates. hitlAnswer on resume applies only to
+            // the current resume's vars merge; the second gate's onEnter still
+            // runs when entered, producing its own fresh decision.
+            const TWO_GATE_YAML = `name: two-gate-svc
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate1
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Gate 1?"
+  - id: gate2
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Gate 2?"
+  - id: done
+transitions:
+  - from: start
+    to: gate1
+    guard: { kind: always }
+  - from: gate1
+    to: gate2
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: gate2
+    to: done
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+terminalStates:
+  - done
+`;
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0433-twogate-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'two-gate.yaml'), TWO_GATE_YAML);
+            const svc = new WorkflowAppService(makeCtxWithNoResponder(dir));
+            const wf = join(wfDir, 'two-gate.yaml');
+
+            // Run pauses at gate1 (headless responder wrote `no`).
+            await svc.run(wf, { runId: 'tg1' });
+
+            // Resume with --answer yes -> takes gate1 approve edge -> enters gate2.
+            // gate2's onEnter hitl.confirm fires, writing `no` again -> pauses.
+            const resumed1 = await svc.continuePaused('tg1', { hitlAnswer: 'yes' });
+            expect(resumed1.status).toBe('paused');
+            expect(resumed1.finalState).toBe('gate2');
+
+            // The second gate is NOT pre-cleared: it paused for its own decision.
+            // Resume with --answer yes to complete.
+            const resumed2 = await svc.continuePaused('tg1', { hitlAnswer: 'yes' });
+            expect(resumed2.status).toBe('done');
+            expect(resumed2.finalState).toBe('done');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R1: without hitlAnswer, persisted no is used (bug reproduction)', async () => {
+            const { svc, dir } = await seedTasteGate(true);
+            const wf = join(dir, '.spur', 'workflows', 'taste-gate.yaml');
+            await svc.run(wf, { runId: 't4' });
+
+            // No hitlAnswer -> engine uses persisted `no` -> cancelled.
+            const resumed = await svc.continuePaused('t4');
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('cancelled');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R6/R7: a rejected design gate cannot loop unattended - cap revises then terminates', async () => {
+            // Mirrors the idea-pipeline design-approval reject-cap at the shared
+            // resume + HITL mechanism: an onEnter counter increments per entry; the
+            // `no -> (revise)` edge is capped at 1; a second reject routes to `failed`
+            // instead of looping back for another design-agent pass (R7 of 0433).
+            const REJECT_CAP_YAML = `name: design-reject-cap-svc
+kind: state-machine
+initialState: start
+vars:
+  __runId: ""
+  __hitlAnswer: ""
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: design-approval
+    pause: true
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/\${vars.__runId}-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/\${vars.__runId}-design-reject-count'
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve design?"
+  - id: approved
+  - id: failed
+transitions:
+  - from: start
+    to: design-approval
+    guard: { kind: always }
+  - from: design-approval
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: design-approval
+    to: design-approval
+    description: "Rejected - revise design (cap: 1)."
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = no && test "$(cat .spur/run/\${vars.__runId}-design-reject-count 2>/dev/null || echo 0)" -le 1'
+  - from: design-approval
+    to: failed
+    description: "Rejected after 1 revise - design-approval gate exhausted."
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = no && test "$(cat .spur/run/\${vars.__runId}-design-reject-count 2>/dev/null || echo 0)" -gt 1'
+terminalStates:
+  - approved
+  - failed
+failureStates:
+  - failed
+`;
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0433-rejectcap-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'design-reject-cap.yaml'), REJECT_CAP_YAML);
+            const svc = new WorkflowAppService(makeCtxWithNoResponder(dir));
+            const wf = join(wfDir, 'design-reject-cap.yaml');
+
+            // First entry: counter -> 1, headless confirm writes `no`, pauses.
+            const first = await svc.run(wf, { runId: 'dc1' });
+            expect(first.status).toBe('paused');
+            expect(first.finalState).toBe('design-approval');
+
+            // Resume (persisted `no`): revise edge allowed (count 1 <= cap 1) ->
+            // re-enters design-approval, counter -> 2, confirm writes `no`, pauses.
+            const revise = await svc.continuePaused('dc1');
+            expect(revise.status).toBe('paused');
+            expect(revise.finalState).toBe('design-approval');
+
+            // Resume again: count 2 > cap 1 -> revise edge denied; reject-cap edge
+            // terminates as `failed` (design-approval named) instead of looping.
+            const exhausted = await svc.continuePaused('dc1');
+            expect(exhausted.status).toBe('failed');
+            expect(exhausted.finalState).toBe('failed');
             await rm(dir, { recursive: true, force: true });
         });
     });

@@ -413,7 +413,17 @@ export class WorkflowAppService {
         }
     }
 
-    /** Load and run a workflow file. Returns the engine run result. */
+    /**
+     * Load and run a workflow file. Returns the engine run result.
+     *
+     * The workflow def is pre-loaded here with the same {@link embeddedSchemaOptions}
+     * used by {@link validate}, then handed to the engine's `run(WorkflowDef)`. This
+     * ensures `run` and `validate` share a single `$schema` resolution contract:
+     * when `embeddedSchemas` is configured, a `@gobing-ai/spur/schemas/...` ref is
+     * served from the embedded map regardless of cwd or `node_modules` state.
+     * Without this, `runFile(path)` falls through to bare node resolution and can
+     * cite a stale published-package schema path that `validate` never sees (task 0431).
+     */
     async run(file: string, opts: WorkflowRunOptions = {}): Promise<WorkflowRunResult> {
         const eventsBus = this.ctx.events?.();
         const svc = await this.createEngineService({
@@ -429,7 +439,7 @@ export class WorkflowAppService {
         //
         // `agent` is injected on the same seam: every pipeline YAML declares a literal
         // `agent: "omp"` vars default, which bypassed `.spur/config.yaml` `agent.default`
-        // entirely — config only ever reached an `agent.run` step when a caller passed the
+        // entirely - config only ever reached an `agent.run` step when a caller passed the
         // literal `auto`, which the pipelines never do. That made the config knob dead for
         // pipelines: an operator whose default executor was failing had no supported way to
         // redirect them. Caller-supplied vars still win, so an explicit `--agent`/`--vars`
@@ -439,7 +449,18 @@ export class WorkflowAppService {
             ...(opts.vars ?? {}),
             __runId: runId,
         };
-        const result = await svc.runFile(file, {
+        // Pre-load with embedded-schema options so `run` resolves `$schema` through
+        // the same map as `validate` (task 0431 R1/R4). `svc.runFile` would call
+        // `loadWorkflowDef(path)` with no options, falling back to node resolution.
+        // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
+        // diverge on whether schema validation is on (task 0431 R4/R5).
+        const absolute = resolve(this.ctx.cwd, file);
+        const embedded = this.embeddedSchemaOptions();
+        const workflow = await loadWorkflowDef(absolute, {
+            validateSchema: true,
+            ...(embedded !== undefined ? embedded : {}),
+        });
+        const result = await svc.run(workflow, {
             workdir: this.ctx.cwd,
             runId,
             vars: runVars,
@@ -455,7 +476,7 @@ export class WorkflowAppService {
         // `no-passing-transition` (and siblings) rather than only the command result.
         await this.stampFailureReason(runId, result);
         // R1 (task 0071): record a kind='pipeline' task_run_links row when a
-        // task-pipeline run carries vars.wbs — links execution results back to
+        // task-pipeline run carries vars.wbs - links execution results back to
         // the task. Idempotent: a re-run with the same runId does not duplicate.
         await this.maybeLinkPipelineRun(file, runId, opts);
         return result as WorkflowRunResult;
@@ -469,13 +490,17 @@ export class WorkflowAppService {
         const wbs = opts.vars?.wbs;
         if (wbs === undefined || wbs === '') return;
 
-        // Load the def to check the workflow name (cheap YAML parse).
+        // Load the def to check the workflow name (cheap YAML parse). The def was
+        // already loaded and schema-validated by `run()`; skip re-validation here so
+        // `maybeLinkPipelineRun` never falls back to bare node resolution for the
+        // `$schema` ref (task 0431 R6). A parse failure means it's not a runnable
+        // workflow file - nothing to link.
         let workflowName: string | undefined;
         try {
-            const def = await loadWorkflowDef(resolve(this.ctx.cwd, file));
+            const def = await loadWorkflowDef(resolve(this.ctx.cwd, file), { validateSchema: false });
             workflowName = def.name;
         } catch {
-            return; // Not a runnable workflow file — nothing to link.
+            return;
         }
         if (workflowName !== TASK_PIPELINE_WORKFLOW) return;
 
@@ -621,9 +646,19 @@ export class WorkflowAppService {
      * resume from where it paused. Throws a clear error if the run is missing or
      * not paused.
      *
+     * When `hitlAnswer` is supplied (R1 of 0433), the answer is injected into the
+     * resume vars as `__hitlAnswer` (or the named `hitlVar`) **before** guards
+     * re-evaluate. This overrides any stale headless default persisted by
+     * `DefaultHitlResponder`. `--yes` on the CLI does NOT set this - it only
+     * skips the CLI's own resume confirmation (R3).
+     *
      * @param runId The run to resume.
+     * @param opts Optional HITL answer to inject before guard re-evaluation.
      */
-    async continuePaused(runId: string): Promise<WorkflowRunResult> {
+    async continuePaused(
+        runId: string,
+        opts?: { hitlAnswer?: 'yes' | 'no' | 'cancel'; hitlVar?: string },
+    ): Promise<WorkflowRunResult> {
         // Same dual-bus wiring as run() (task 0370): adapter verb-form events via
         // observabilityBus inside createEngineService, engine-native names via the
         // resume options `events` field. CLI attaches a SystemEventDao tap to both.
@@ -632,7 +667,7 @@ export class WorkflowAppService {
         const run = await svc.listPausedRuns();
         const target = run.find((r) => r.id === runId);
         if (target === undefined) {
-            throw new Error(`Run "${runId}" is not paused (or does not exist) — nothing to continue.`);
+            throw new Error(`Run "${runId}" is not paused (or does not exist) - nothing to continue.`);
         }
         const workflow = await this.resolveWorkflowDefByName(target.workflow_name);
         if (workflow === null) {
@@ -640,8 +675,15 @@ export class WorkflowAppService {
                 `Cannot resume run "${runId}": workflow definition "${target.workflow_name}" not found in the workflow search paths.`,
             );
         }
+        // R1 of 0433: inject the operator's HITL answer into resume vars so guard
+        // re-evaluation sees the override, not the stale headless default. The
+        // engine's resumeRun merges options.vars over the persisted snapshot
+        // (caller overrides win - ts-dual-workflow-engine service.ts:127).
+        const hitlVar = opts?.hitlVar ?? '__hitlAnswer';
+        const resumeVars = opts?.hitlAnswer !== undefined ? { [hitlVar]: opts.hitlAnswer } : undefined;
         const result = await svc.resumeRun(workflow, runId, {
             workdir: this.ctx.cwd,
+            ...(resumeVars !== undefined ? { vars: resumeVars } : {}),
             ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
         });
         await this.stampFailureReason(runId, result);

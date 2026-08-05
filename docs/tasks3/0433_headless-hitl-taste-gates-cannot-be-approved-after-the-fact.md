@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Headless HITL taste gates cannot be approved after the fact"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: D3
@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.903Z"
-updated_at: "2026-08-04T21:41:43.061Z"
+updated_at: "2026-08-05T05:51:53.344Z"
 ---
 
 ## 0433. Headless HITL taste gates cannot be approved after the fact
@@ -202,19 +202,59 @@ Workaround used to complete the session: relaunch from scratch with `idea_approv
 `design_approved=true` so both gates take their auto-skip edges. That discards the run's prior work
 (discovery re-ran) and pre-answers a gate rather than answering it.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/workflow.ts:429` |
+| `apps/cli/src/commands/workflow.ts:436` |
+| `apps/cli/src/commands/workflow.ts:464` |
+| `apps/cli/src/commands/workflow.ts:473` |
+| `apps/cli/src/commands/workflow.ts:479` |
+| `apps/cli/tests/commands/workflow.test.ts:284` |
+| `packages/app/src/services/workflow-service.ts:416` |
+| `packages/app/src/services/workflow-service.ts:442` |
+| `packages/app/src/services/workflow-service.ts:452` |
+| `packages/app/src/services/workflow-service.ts:476` |
+| `packages/app/src/services/workflow-service.ts:490` |
+| `packages/app/src/services/workflow-service.ts:497` |
+| `packages/app/src/services/workflow-service.ts:500` |
+| `packages/app/src/services/workflow-service.ts:646` |
+| `packages/app/src/services/workflow-service.ts:653` |
+| `packages/app/src/services/workflow-service.ts:655` |
+| `packages/app/src/services/workflow-service.ts:667` |
+| `packages/app/src/services/workflow-service.ts:675` |
+| `packages/app/src/services/workflow-service.ts:683` |
+| `packages/app/tests/services/workflow-service.test.ts:283` |
+| `packages/app/tests/services/workflow-service.test.ts:795` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | CLI `continue` gains `--answer` (`yes`/`no`/`cancel`), validated to enum (exit 2 on bad value) at workflow.ts:437-446. `continuePaused(runId, { hitlAnswer })` passes `vars: { __hitlAnswer }` to engine `resumeRun` at workflow-service.ts:679-684; engine `mergeVars(persistedVars, options.vars)` makes the caller's answer win over the stale headless snapshot (ts-dual-workflow-engine service.js:127). Service test `R1/R5 ... hitlAnswer=yes overrides persisted no` proves the approve edge. |
+| R2 | MET | `--answer yes` resume takes the gate's approve edge with no launch-time `idea_approved` / `design_approved` var. The taste-gate test workflows never set those vars; `continuePaused('t1', { hitlAnswer: 'yes' })` alone reaches `approved` (workflow-service.test.ts). CLI test reaches `finalState: approved` likewise. |
+| R3 | MET | `--yes` remains CLI-only: it only skips the "resume this run?" confirmation and never sets `hitlAnswer` (workflow.ts:464, comment R3). CLI test `continue --answer does not imply --yes` proves `--answer yes` WITHOUT `--yes` and no run-id still fires the confirmation prompt and aborts (exit 1). |
+| R4 | MET | `--answer` applies only to the current resume's vars merge; a later gate's `hitl.confirm` onEnter still runs its own decision. Service test `R4: answering one gate does not pre-clear a later gate` (two sequential gates) asserts gate2 pauses again for its own answer. |
+| R5 | MET | `no` and `cancel` remain distinct on the wire and route to their named edges. Service tests: `hitlAnswer: 'no'` -> `cancelled`; `hitlAnswer: 'cancel'` does not take the yes/no edge. CLI enum accepts all three values. |
+| R6 | MET | idea-pipeline design-approval reject path cannot loop unattended: onEnter increments `.spur/run/$__runId-idea-design-reject-count`; `no -> system-design` is capped at count `<= 1`; over-cap routes `no -> failed` naming design-approval (idea-pipeline.yaml:229-232, 471-483). |
+| R7 | MET | Regression tests exercise the shared resume + HITL mechanism on minimal taste-gate workflows, not only idea-pipeline YAML: 6 service tests (R1/R5, R5 no, R5 cancel, R4 two-gate, R1 bug-repro, R6/R7 reject-cap) + 4 CLI `--answer` tests. The R6/R7 reject-cap test mirrors the counter+cap+failed structure at the shared mechanism and asserts a second reject terminates as `failed`. |
+| R8 | MET | ADR-038 same-change docs update in `plugins/sp/skills/spur-cli/references/workflows.md`: continue table row (line 93), command surface signature (line 207), and the HITL paragraph documenting `--answer` vs `--yes` (lines 256-261). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+- 2026-08-05T03:57:55.517Z todo → wip (system)
+- 2026-08-05T05:51:43.963Z wip → testing (system)
+- 2026-08-05T05:51:53.344Z testing → done (system)

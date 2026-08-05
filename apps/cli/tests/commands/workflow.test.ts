@@ -281,6 +281,145 @@ terminalStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    // ── continue --answer (0433: HITL answer injection) ──
+    const TASTE_GATE_CLI_YAML = `name: cli-taste-gate
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+  - id: approved
+  - id: rejected
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: gate
+    to: rejected
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = no'
+terminalStates:
+  - approved
+  - rejected
+`;
+
+    test('continue --answer yes overrides persisted default and takes approve edge', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'taste-gate.yaml'), TASTE_GATE_CLI_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        const wf = join(wfDir, 'taste-gate.yaml');
+
+        // Run pauses at gate. Under --json the DefaultHitlResponder fires;
+        // SPUR_HITL_AUTO_APPROVE is NOT set, so it answers "no" by default.
+        await main(['workflow', 'run', '--run-id', 'ans-1', wf, '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+
+        // Resume with --answer yes -> approved (exit 0 because done).
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'ans-1', '--yes', '--answer', 'yes', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(exit).toBe(0);
+        const parsed = JSON.parse(out.messages.at(-1) ?? '{}');
+        expect(parsed.status).toBe('done');
+        expect(parsed.finalState).toBe('approved');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue --answer no takes the reject edge', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'taste-gate.yaml'), TASTE_GATE_CLI_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        const wf = join(wfDir, 'taste-gate.yaml');
+
+        await main(['workflow', 'run', '--run-id', 'ans-2', wf, '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+            env: { SPUR_HITL_AUTO_APPROVE: '1' }, // auto-approve -> gate persists "yes" then pauses
+        });
+
+        // Resume with --answer no -> rejected (done, but not the approved path).
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'ans-2', '--yes', '--answer', 'no', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(exit).toBe(0);
+        const parsed = JSON.parse(out.messages.at(-1) ?? '{}');
+        expect(parsed.status).toBe('done');
+        expect(parsed.finalState).toBe('rejected');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue --answer with invalid value exits 2', async () => {
+        const dir = await createTempProject();
+        const exit = await main(['workflow', 'continue', 'some-run', '--yes', '--answer', 'maybe', '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exit).toBe(2);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue --answer does not imply --yes (still asks confirmation when run-id omitted)', async () => {
+        // R3: --answer is distinct from --yes. Without --yes and without a run-id,
+        // the CLI asks for resume confirmation. Under --json the DefaultHitlResponder
+        // denies -> exit 1. --answer alone must not bypass this.
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'taste-gate.yaml'), TASTE_GATE_CLI_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        const wf = join(wfDir, 'taste-gate.yaml');
+
+        await main(['workflow', 'run', '--run-id', 'ans-3', wf, '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+
+        // --answer yes WITHOUT --yes and without run-id -> confirmation prompt fires.
+        // DefaultHitlResponder (under --json) denies -> "Aborted" -> exit 1.
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', '--answer', 'yes', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(exit).toBe(1);
+        expect(out.errors.some((e) => e.includes('Aborted'))).toBe(true);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run subcommand formats a completed workflow in plain mode', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');

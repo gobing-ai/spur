@@ -220,8 +220,17 @@ states:
       rejects it. This gate is NOT auto-clicked by --auto (Auto-Decision Principle
       #5: taste-decision -> surface to human). Only routes around when
       vars.design_approved=true (explicit prior approval).
+
+      R7 (0433): a headless `no` persisted by DefaultHitlResponder would loop
+      design-approval -> system-design -> design-approval, burning unbounded
+      agent passes. The onEnter shell increments a reject counter; the `no`
+      edge to system-design is capped at 1 revise, after which the run
+      terminates as `failed` naming this gate.
     pause: true
     onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-design-reject-count'
       - kind: hitl.confirm
         options:
           prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition?"
@@ -460,11 +469,18 @@ transitions:
         command: 'test "$__hitlAnswer" = yes'
   - from: design-approval
     to: system-design
-    description: Design rejected — revise system design.
+    description: "Design rejected - revise system design (cap: 1 revise)."
     guard:
       kind: shell
       options:
-        command: 'test "$__hitlAnswer" = no'
+        command: 'test "$__hitlAnswer" = no && test "$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)" -le 1'
+  - from: design-approval
+    to: failed
+    description: "Design rejected after 1 revise - design-approval gate exhausted (R7 0433)."
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = no && test "$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)" -gt 1'
   - from: design-approval
     to: cancelled
     description: Operator cancelled design approval.

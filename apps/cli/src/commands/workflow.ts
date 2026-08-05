@@ -426,9 +426,24 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('Resume a paused (HITL) workflow run. Omit run-id to resume the most recent paused run.')
         .argument('[run-id]', 'Run ID to resume (default: the most recent paused run)')
         .option('--yes', 'Skip the CLI resume confirmation (does not set the persisted HITL answer)')
+        .option(
+            '--answer <yes|no|cancel>',
+            'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
+        )
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (runId, options) => {
             const json = options.json === true;
+            // Validate --answer enum (R1): commander does not natively enforce choices.
+            let hitlAnswer: 'yes' | 'no' | 'cancel' | undefined;
+            if (options.answer !== undefined) {
+                const v = String(options.answer).toLowerCase();
+                if (v !== 'yes' && v !== 'no' && v !== 'cancel') {
+                    context.output.error(`Invalid --answer value "${options.answer}" - must be yes, no, or cancel.`);
+                    context.setExitCode(2);
+                    return;
+                }
+                hitlAnswer = v;
+            }
             // Resume path shares the 0370 ledger bridge so continued runs also
             // surface workflow.* rows (adapter verb-form + engine-native).
             const bus: WorkflowObservabilityBus = new EventBus();
@@ -446,6 +461,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     }
                     targetId = latest.runId;
                     // Confirm unless --yes (or a non-interactive responder auto-accepts).
+                    // R3: --answer does NOT skip this confirmation - it is a distinct concern.
                     if (options.yes !== true) {
                         const answer = await context.hitlResponder(json).respond({
                             kind: 'confirm',
@@ -454,13 +470,15 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             node: 'continue',
                         });
                         if (answer.value !== 'yes') {
-                            context.output.error(`Aborted — run ${latest.runId} not resumed.`);
+                            context.output.error(`Aborted - run ${latest.runId} not resumed.`);
                             context.setExitCode(1);
                             return;
                         }
                     }
                 }
-                const result = await svc.continuePaused(targetId);
+                const result = await svc.continuePaused(targetId, {
+                    ...(hitlAnswer !== undefined ? { hitlAnswer } : {}),
+                });
                 context.output.write(
                     json ? toJson(result) : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
                 );
