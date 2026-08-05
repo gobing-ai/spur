@@ -846,6 +846,12 @@ transitions:
       kind: shell
       options:
         command: 'test "\${vars.__hitlAnswer}" = no'
+  - from: gate
+    to: cancelled
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = cancel'
 terminalStates:
   - approved
   - cancelled
@@ -900,15 +906,11 @@ terminalStates:
             const wf = join(dir, '.spur', 'workflows', 'taste-gate.yaml');
             await svc.run(wf, { runId: 't3' });
 
-            // The taste-gate workflow has no explicit cancel guard, but `cancel`
-            // should still be expressible. With no matching guard, the run fails
-            // (no transition taken) - this is the expected engine behavior for
-            // an answer that has no matching edge. We verify it doesn't silently
-            // default to another answer.
+            // R5 rejection parity: `cancel` is distinct on the wire and takes its
+            // own guard edge (not coerced to yes/no).
             const resumed = await svc.continuePaused('t3', { hitlAnswer: 'cancel' });
-            // No cancel guard matches -> run cannot proceed -> failed or still paused.
-            // The key assertion: it did NOT take the `yes` or `no` edge.
-            expect(resumed.finalState).not.toBe('approved');
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('cancelled');
             await rm(dir, { recursive: true, force: true });
         });
 
