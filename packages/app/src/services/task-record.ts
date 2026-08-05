@@ -60,7 +60,9 @@ export interface RecordOptions {
     verdictFile?: string;
     /** When true AND Solution is bare, backfill from `git diff -U0` hunk headers. */
     solutionFromDiff?: boolean;
-    /** Optional lifecycle transition (e.g. `'testing'`). Never transitions to `done`. */
+    /** Optional lifecycle transition (e.g. `'testing'`). A `'done'` target with
+     *  a PASS verdict auto-walks `wip → testing → done` and auto-creates the
+     *  pipeline run-link (task 0436 R4); a non-PASS verdict to `done` errors. */
     transition?: string;
 }
 

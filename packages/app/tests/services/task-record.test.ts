@@ -10,8 +10,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MarkdownDocument } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { GuardDeniedError } from '../../src/errors';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import {
     escapeTablePipe,
@@ -515,6 +517,181 @@ describe('TaskService.record', () => {
         expect(raw).toContain('SECU findings** (review agent)');
         expect(raw).toContain('| P4 | U | `Modal.tsx:43`');
         expect(raw).not.toContain('pipeline verify step');
+    });
+
+    test('R4: auto-walks wip→testing→done and creates a pipeline run-link on PASS to done', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-r4-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const writeService = new PlanningWriteService({ fs });
+        const svcWithDb = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            getDb: async () => db,
+        });
+        try {
+            // Create + move to wip (as the pipeline's implement step does).
+            const created = await svcWithDb.create({ title: 'Record R4 auto-walk' });
+            const wbs = created.ref.id;
+            await svcWithDb.updateStatus(wbs, 'wip');
+
+            // PASS verdict file.
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            const result = await svcWithDb.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            expect(result.transitionedTo).toBe('done');
+
+            // File status walked forward to done.
+            const raw = await fs.readFile(`${dir}/${wbs}_record-r4-auto-walk.md`);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.status).toBe('done');
+
+            // A `pipeline` run-link was auto-created (provenance gate satisfied).
+            const links = await new TaskRunLinkDao(db).listByWbs(wbs, 20);
+            expect(links.some((l) => l.kind === 'pipeline')).toBe(true);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: idempotent — re-recording PASS to done does not duplicate the run-link', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-r4b-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const writeService = new PlanningWriteService({ fs });
+        const svcWithDb = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            getDb: async () => db,
+        });
+        try {
+            const created = await svcWithDb.create({ title: 'Record R4 idempotent' });
+            const wbs = created.ref.id;
+            await svcWithDb.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            await svcWithDb.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+            await svcWithDb.record(wbs, { verdictFile: verdictPath, transition: 'done' });
+
+            const links = await new TaskRunLinkDao(db).listByWbs(wbs, 20);
+            expect(links.filter((l) => l.kind === 'pipeline')).toHaveLength(1);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: surfaces a single clear GuardDeniedError when verdict is not PASS and target is done', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-r4c-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const writeService = new PlanningWriteService({ fs });
+        const svcWithDb = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            getDb: async () => db,
+        });
+        try {
+            const created = await svcWithDb.create({ title: 'Record R4 non-pass' });
+            const wbs = created.ref.id;
+            await svcWithDb.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'FAIL', requirements: [], checks: [] }));
+
+            await expect(
+                svcWithDb.record(wbs, { verdictFile: verdictPath, transition: 'done' }),
+            ).rejects.toBeInstanceOf(GuardDeniedError);
+
+            // No run-link created for a non-PASS verdict, and status did not advance.
+            const links = await new TaskRunLinkDao(db).listByWbs(wbs, 20);
+            expect(links.some((l) => l.kind === 'pipeline')).toBe(false);
+            const raw = await fs.readFile(`${dir}/${wbs}_record-r4-non-pass.md`);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.status).toBe('wip');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R4 residual: run-link is not created until the hop to done (failed earlier hop leaves zero links)', async () => {
+        // Lifecycle adapter that denies wip→testing so the walk never reaches done.
+        // Ensures ensurePipelineRunLink is deferred past intermediate hops.
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-r4d-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+
+        const writeService = new PlanningWriteService({
+            fs,
+            lifecycle: {
+                requestTransition(_ref, from, to) {
+                    if (to === 'testing') {
+                        return {
+                            allowed: false,
+                            from,
+                            to,
+                            report: 'simulated wip→testing guard denial',
+                        };
+                    }
+                    return { allowed: true, from, to };
+                },
+            },
+        });
+        const svcWithDb = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            getDb: async () => db,
+        });
+        try {
+            const created = await svcWithDb.create({ title: 'Record R4 deferred link' });
+            const wbs = created.ref.id;
+            // Bypass lifecycle for the setup hop to wip.
+            await fs.writeFile(
+                created.ref.filePath,
+                (await fs.readFile(created.ref.filePath)).replace('status: backlog', 'status: wip'),
+            );
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            await expect(
+                svcWithDb.record(wbs, { verdictFile: verdictPath, transition: 'done' }),
+            ).rejects.toBeInstanceOf(GuardDeniedError);
+
+            // Critical residual fix: no pipeline link when the walk never reached done.
+            const links = await new TaskRunLinkDao(db).listByWbs(wbs, 20);
+            expect(links.some((l) => l.kind === 'pipeline')).toBe(false);
+
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.status).toBe('wip');
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 });
 

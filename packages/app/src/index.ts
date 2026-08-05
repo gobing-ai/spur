@@ -115,6 +115,11 @@ export type {
 export { HistoryService } from './services/history-service';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
+export type {
+    EnsurePipelineRunLinkOptions,
+    EnsurePipelineRunLinkResult,
+} from './services/pipeline-run-link';
+export { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './services/pipeline-run-link';
 export { BusPlanningEventEmitter, type PlanningEventMap } from './services/planning-events';
 export type {
     CapturingEmitter,

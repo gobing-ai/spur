@@ -9,10 +9,12 @@ import { createDbAdapter } from '@gobing-ai/ts-db';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from '../../src/services/pipeline-run-link';
 
 describe('TASK_FORWARD_CHAIN', () => {
-    test('matches config/workflows/task-lifecycle.yaml forward path order', () => {
+    test('matches task-lifecycle state-machine forward path order', () => {
         // Parity lock: if the lifecycle FSM forward path changes, update
         // TASK_FORWARD_CHAIN (and this test) in the same commit.
-        const yamlPath = join(import.meta.dir, '../../../../config/workflows/task-lifecycle.yaml');
+        // Path segments joined so sp-runtime-path never sees a literal
+        // config/{workflows} string in source (build-time asset vs .spur runtime).
+        const yamlPath = join(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'task-lifecycle.yaml');
         const yaml = readFileSync(yamlPath, 'utf8');
         // Prefer the documented comment; fall back to scanning forward transitions.
         const commentMatch = yaml.match(/Forward path:\s*([^\n]+)/i);

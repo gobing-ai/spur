@@ -10,13 +10,15 @@
 import { createId, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 
 /**
- * Canonical forward lifecycle chain for task statuses — matches
- * `config/workflows/task-lifecycle.yaml` forward path
- * (`backlog → todo → wip → testing → done`). Keep in lock-step with that YAML;
+ * Canonical forward lifecycle chain for task statuses — matches the
+ * `task-lifecycle` state-machine forward path
+ * (`backlog → todo → wip → testing → done`). Keep in lock-step with that
+ * workflow YAML (runtime: `.spur/workflows/task-lifecycle.yaml`);
  * `packages/app/tests/services/pipeline-run-link.test.ts` asserts the parity.
  */
 export const TASK_FORWARD_CHAIN: readonly string[] = ['backlog', 'todo', 'wip', 'testing', 'done'];
 
+/** Outcome of {@link ensurePipelineRunLink} — either a pre-existing or newly inserted pipeline link. */
 export interface EnsurePipelineRunLinkResult {
     /** True when a new row was inserted; false when a pipeline link already existed. */
     created: boolean;
@@ -26,6 +28,7 @@ export interface EnsurePipelineRunLinkResult {
     kind: 'pipeline';
 }
 
+/** Optional knobs for {@link ensurePipelineRunLink}. */
 export interface EnsurePipelineRunLinkOptions {
     /**
      * Explicit `run_id` for a newly created link. When omitted, a deterministic

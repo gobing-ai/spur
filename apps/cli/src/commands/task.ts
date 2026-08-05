@@ -6,6 +6,7 @@ import {
     CorpusMigrator,
     DependencyMutationError,
     DuplicateFollowUpError,
+    ensurePipelineRunLink,
     evaluateDoneTransition,
     type MigrationReport,
     PlanningWriteService,
@@ -23,12 +24,10 @@ import {
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
-    createId,
     extractTemplateBodies,
     normalizeTaskStatus,
     TASK_STATUSES,
     TASK_VARIANTS,
-    TaskRunLinkDao,
     type TaskSection,
     taskStatusIcon,
     UNIVERSAL_SECTIONS,
@@ -1016,40 +1015,25 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, options) => {
             try {
                 const db = await context.getDb();
-                const dao = new TaskRunLinkDao(db);
-                // Idempotent: skip if any pipeline link already exists for this WBS.
-                const existing = await dao.listByWbs(wbs, 20);
-                if (existing.some((row) => row.kind === 'pipeline')) {
-                    const entry = existing.find((row) => row.kind === 'pipeline');
-                    if (!entry) {
-                        context.output.error(`Pipeline link lookup inconsistent for ${wbs}`);
-                        context.setExitCode(1);
-                        return;
-                    }
-                    const result = {
-                        id: entry.id,
-                        wbs: entry.wbs,
-                        runId: entry.run_id,
-                        kind: entry.kind,
-                        existed: true,
-                    };
-                    if (options.json) {
-                        context.output.write(toJson(result));
-                    } else {
-                        context.output.write(`Pipeline run-link already exists for ${wbs} (${entry.id}). Skipped.`);
-                    }
-                    return;
-                }
-                const id = createId('trl');
-                const runId = options.runId ?? `chain:${options.source}:${wbs}:${Date.now()}`;
-                await dao.insert({ id, wbs, run_id: runId, kind: 'pipeline', created_at: new Date().toISOString() });
-                const result = { id, wbs, runId, kind: 'pipeline' };
+                // Shared helper with TaskService.record (task 0436 residual — single owner).
+                const ensured = await ensurePipelineRunLink(db, wbs, {
+                    runId: options.runId ?? `chain:${options.source}:${wbs}:${Date.now()}`,
+                });
+                const result = {
+                    id: ensured.id,
+                    wbs: ensured.wbs,
+                    runId: ensured.runId,
+                    kind: ensured.kind,
+                    existed: !ensured.created,
+                };
                 if (options.json) {
                     context.output.write(toJson(result));
-                } else {
+                } else if (ensured.created) {
                     context.output.write(
-                        `Recorded pipeline run-link ${id} for task ${wbs} (source: ${options.source})`,
+                        `Recorded pipeline run-link ${ensured.id} for task ${wbs} (source: ${options.source})`,
                     );
+                } else {
+                    context.output.write(`Pipeline run-link already exists for ${wbs} (${ensured.id}). Skipped.`);
                 }
             } catch (err) {
                 context.output.error(String(err));
@@ -1108,6 +1092,7 @@ async function makeService(context: CliContext, folderOverride?: string, noLifec
         fs: context.fs,
         tasksDir,
         writeService,
+        getDb: () => context.getDb(),
         sectionMatrix: await loadSectionMatrix(context.cwd),
         resolveTemplate: (variant: string) => loadTemplateContent(context.cwd, variant),
         resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
