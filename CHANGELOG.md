@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.33] — 2026-08-05
+
+### Added
+
+- Run-scoped session affinity (default-on): `agent.run` pins sessions per `runId` across hops under `.spur/run/<runId>/agent-sessions/<agent>`; `discoverSessionId` helper; post-run sidecar JSON; disable knob (`sessionAffinity: false` in config or vars) (H83 / 45f5748c)
+- Live pipe streaming for pipeline `agent.run`: non-interactive output policy switched from `buffered` to `pipe` (live `onOutput` callbacks, no child TTY) preserving mid-run log relay (H83 R5 / 45f5748c)
+- Unified `--agent inline` on all mode-aware commands: `inline` accepted everywhere as synonym for omit/`agent.default`; ADR-046-era sentinel reject withdrawn (ADR-047 / 45f5748c)
+- `sessionAffinity: z.boolean().optional()` added to `AgentConfigSchema` and `AgentConfig` interface (45f5748c)
+
+### Fixed
+
+- Pipeline latch no longer bare-global-resumes the host coding-agent session when affinity is off; `continueFlag` guarded by `affinityOn` check (45f5748c)
+- `--agent inline` on headless dispatch surfaces (`spur agent run` / workflow `agent.run`) now resolves to `agent.default` executor rather than exiting with code 2 (45f5748c)
+
+### Changed
+
+- ADR-047 contract: all mode-aware commands (`dev-plan`, `dev-runall`, `dev-run`, `dev-gtd`) updated to `<inline|auto|name>` selector; plugin contract tests and flag-validation script aligned (45f5748c)
+- `cross-cutting.md`, `flag-glossary.md`, `workflows.md`, `dev-operations.md`, and `execution-workflow.md` updated to reflect unified ADR-047 surface (no Workflow-driven exception caveat) (45f5748c)
+
 ## [0.3.32] — 2026-08-05
 
 ### Added
