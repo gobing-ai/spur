@@ -15,8 +15,9 @@
 | `advance <id>` | Walk a feature through the legal forward lifecycle path to a target status |
 | `list` | List features sorted by ID, with status/priority filters |
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
-| `refresh` | Regenerate `INDEX.md` and repopulate each feature's `## Tasks` region |
+| `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change) |
 | `check [id]` | Validate feature file(s) through the four-layer check |
+| `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) |
 
 ## spur feature create
 
@@ -211,16 +212,46 @@ spur feature refresh [options]
 
 | Flag | Description |
 |---|---|
+| `--feature <id>` | Restrict the `## Tasks` rewrite to one feature (INDEX.md still regenerated) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
 Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative
 link) and repopulate each feature's `## Tasks` auto-gen marker region from task
 `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and
-all task files are byte-preserved.
+all task files are byte-preserved. **Does not change feature lifecycle status** (that is
+`sync`).
 
 > Run `spur feature refresh` when closing a task to keep feature `## Tasks` blocks tracking
 > real task status.
+
+## spur feature sync
+
+```
+spur feature sync [options] [id]
+```
+
+| Argument | Description |
+|---|---|
+| `id` | Feature ID (optional if `--all`) |
+
+| Flag | Description |
+|---|---|
+| `--all` | Sync all features with linked tasks |
+| `--dry-run` | Report proposed status transitions without applying |
+| `--force` | Apply reopen proposals without confirmation |
+| `--folder <path>` | Custom features folder |
+| `--json` | Output machine-readable JSON |
+
+Align a feature's **lifecycle status** with the states of its linked tasks (real status
+transitions + guards). Prefer `--dry-run` first. **Does not** rewrite INDEX/`## Tasks` —
+use `refresh` for roster docs.
+
+```bash
+spur feature sync H2 --dry-run --json
+spur feature sync H2 --json
+spur feature sync --all --json
+```
 
 ## spur feature check
 

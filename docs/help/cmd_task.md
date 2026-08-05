@@ -12,15 +12,20 @@
 | `create <title>` | Create a new task with race-safe WBS allocation |
 | `show <wbs>` | Show a task by WBS (frontmatter at top level under `--json`) |
 | `update <wbs> [status]` | Lifecycle transition, or `--section`/`--feature`/`--priority` mutation |
+| `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter (`set` \| `add` \| `remove` \| `clear`) |
+| `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (`init` \| `add` \| `list`) |
 | `list` | List tasks with optional filtering (status / parent / feature) |
 | `refresh` | Re-scan the task corpus and report counts (`kanban.md` retired — A17 cutover) |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block inside its `## Plan` |
 | `batch-create` | Create many tasks from validated JSON (all-or-nothing) |
 | `record <wbs>` | Write Testing/Review from verify verdict; optional Solution backfill + status move |
-| `verdict <wbs>` | Derive PASS/PARTIAL/FAIL gate verdict from a verify answer file |
+| `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN gate verdict from a verify answer file |
+| `verifyall-aggregate` | Aggregate per-task verify outcomes into a deterministic batch verdict |
 | `check [wbs]` | Validate a task file (or all tasks) through the four-layer check |
 | `resolve <file-path>` | Map a file path to its owning task WBS |
 | `path <wbs>` | Resolve a WBS to its absolute task file path |
+| `run-link <wbs>` | Record a pipeline provenance link (for `--next` chains / testing→done guard) |
+| `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria |
 | `migrate` | Run the A17 task corpus normalization report/apply pass |
 
 ## spur task create
@@ -316,6 +321,93 @@ spur task path [options] <wbs>
 | `--json` | Output machine-readable JSON |
 
 Resolve a WBS to its absolute task file path. The inverse of `spur task resolve`.
+
+## spur task deps
+
+```
+spur task deps [options] <wbs> <op> [values...]
+```
+
+| Argument | Description |
+|---|---|
+| `wbs` | Task WBS number |
+| `op` | `set` \| `add` \| `remove` \| `clear` |
+| `values...` | Dependency WBS values (`set`/`add`/`remove` only) |
+
+| Flag | Description |
+|---|---|
+| `--folder <path>` | Custom tasks folder |
+| `--json` | Output machine-readable JSON |
+
+Mutate the `dependencies[]` frontmatter array. CLI-gated — never hand-edit the task file.
+
+```bash
+spur task deps 0042 set 0040 0041
+spur task deps 0042 add 0043
+spur task deps 0042 remove 0040
+spur task deps 0042 clear
+```
+
+## spur task sections
+
+```
+spur task sections [options] <wbs> <op> [name]
+```
+
+| Argument | Description |
+|---|---|
+| `wbs` | Task WBS number |
+| `op` | `init` \| `add` \| `list` |
+| `name` | Canonical section name (required for `add`) |
+
+| Flag | Description |
+|---|---|
+| `--folder <path>` | Custom tasks folder |
+| `--json` | Output machine-readable JSON |
+
+Matrix-enforced section mutation. Prefer `update --section --from-file` for body content.
+
+## spur task verifyall-aggregate
+
+```
+spur task verifyall-aggregate [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--from-file <path>` | JSON array of `{wbs,outcome[,reason]}` rows |
+| `--json` | Output machine-readable JSON |
+
+Deterministic batch rollup for `/sp:dev-verifyall` (replaces agent-discretion prose). Outcomes:
+`PASS` / `PARTIAL` / `FAIL` / `NOT-STARTED` / `UNKNOWN`.
+
+## spur task run-link
+
+```
+spur task run-link [options] <wbs>
+```
+
+| Flag | Description |
+|---|---|
+| (see `--help`) | Provenance source / run-id flags for pipeline linkage |
+| `--json` | Output machine-readable JSON |
+
+Record a pipeline provenance link used by `--next` auto chains so the testing→done guard can
+prove a real verify/record path ran.
+
+## spur task scaffold-tests
+
+```
+spur task scaffold-tests [options] <wbs>
+```
+
+| Flag | Description |
+|---|---|
+| `--file <path>` | Output path for generated stubs |
+| `--folder <path>` | Custom tasks folder |
+| `--json` | Output machine-readable JSON |
+
+Generate BDD test stubs from the task's `## Acceptance Criteria` scenarios.
 
 ## spur task migrate
 

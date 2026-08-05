@@ -12,6 +12,7 @@
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
 | `list` | List detected coding agents; with `--specs`, list team agent specs |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
+| `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` |
 | `edit <id>` | Open an agent spec in `$EDITOR` (or print its path) |
 | `delete <id>` | Remove an agent spec (requires `--force`) |
@@ -24,7 +25,7 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 |---|---|
-| `--agent <name>` | Agent name, `auto`, or `current` (default: `auto`) |
+| `--agent <name>` | Agent name or `auto` (default: `auto`). Literal `inline` is **rejected** (exit 2) — `spur agent run` always starts a subprocess; use `agent.default` / `--agent auto` / `--agent <name>` for pipeline stages (ADR-046) |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
 | `--mode <mode>` | Agent output mode: `text` \| `json` (default: `text`) |
@@ -146,6 +147,26 @@ Auth is informational (its own column, not a state label — liveness-only gate,
     { "agent": "claude", "installed": true, "authenticated": true, "usable": true, "tier": 1, "version": "...", "error": null }
   ]
 }
+```
+
+## spur agent loop
+
+```
+spur agent loop [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--agent <id>` | Agent spec id / message recipient (required for meaningful drain) |
+| `--poll <ms>` | Idle poll interval in milliseconds (default `2000`) |
+
+Persistent self-draining inbox loop used by the team supervisor (`spur team up` / `start`).
+Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
+→ idle-poll until the next message. Runs until `SIGINT` / `SIGTERM`.
+
+```bash
+spur agent loop --agent worker-1
+spur agent loop --agent worker-1 --poll 1000
 ```
 
 ## spur agent create

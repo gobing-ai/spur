@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-08-05T06:30:00.218Z"
-updated_at: "2026-08-05T06:34:42.894Z"
+updated_at: "2026-08-05T07:10:36.422Z"
 ---
 
 ## 0436. Fix spur dev pipeline performance: compaction churn, repeated full-suite runs, engine reverse-engineering overhead
@@ -35,6 +35,7 @@ recur on any long `--next` chain, not just this run.
 - [ ] R1. Long `--next` chains should avoid compaction churn: either run each task as its own session (separate `/sp-dev-run <wbs>` invocation) or have the next-router emit a compact per-task handoff. Target: `spur-dev` next-router / `cross-cutting.md` chaining guidance. Measurable: a three-task chain completes with ≤1 compaction instead of 4.
 - [ ] R2. Targeted-test-first discipline on the verification loop: run the narrow `bun test <file> --test-name-pattern <test>` before any full `spur-check`. Target: `sp-code-testing` / `code-testing` reference + the AGENTS.md verification-gate wording. Measurable: full `spur-check` runs ≤2 per task instead of 4 across a chain.
 - [ ] R3. Document the workflow engine's `resumeRun` vars-merge + shell-guard contract in-repo so agents stop reverse-engineering `node_modules`. Target: `docs/03_ARCHITECTURE.md` § workflow, or a `sp:spur-cli` reference note. Measurable: an agent resumes a paused workflow and guards evaluate correctly with zero `node_modules` reads.
+- [ ] R4. The record/lifecycle guard flow should not stall on bookkeeping: `spur task record` should auto-create the missing run-link and auto-walk `wip → testing → done` instead of surfacing a `GuardDeniedError` that requires the agent to re-issue `run-link` + intermediate status transitions. Target: `apps/cli` `task record` / lifecycle guard. Measurable: a completed task records + transitions to `done` in ≤1 attempt with zero `GuardDeniedError` retries.
 ### Acceptance Criteria
 Feature: Spur dev-pipeline performance has bounded compaction and verification cost
 
@@ -58,6 +59,13 @@ Feature: Spur dev-pipeline performance has bounded compaction and verification c
     When it verifies guard evaluation
     Then it does not read `node_modules` to learn the `resumeRun` vars-merge contract
     And the in-repo reference names the merge-wins rule and the guard template path
+
+  @core
+  Scenario: R4 — recording a completed task does not stall on lifecycle bookkeeping
+    Given a task whose pipeline run completed with a PASS verdict
+    When the agent records and transitions it to done
+    Then `spur task record` creates the run-link and walks `wip → testing → done` automatically
+    And the agent issues zero `GuardDeniedError` retries for the transition
 ### Q&A
 **Q1: Is compaction really the dominant cost?** The session logged 4 compactions in 2.9h. Each is a context rebuild the model must re-ingest and re-reason over; early compactions clustered ~20 min apart (03:45, 04:04, 04:23, 04:52) as the `--next` chain accumulated cross-task context. For a single-session multi-task run this is the structural driver of perceived slowness, not tool latency.
 
@@ -97,11 +105,21 @@ Feature: Spur dev-pipeline performance has bounded compaction and verification c
 
 **Target:** `docs/03_ARCHITECTURE.md` § workflow (or a `sp:spur-cli` `workflows.md` reference note).
 **Expected saving:** ~10–15 min per workflow-engineering task.
+
+## R4 — Remove record/lifecycle bookkeeping stalls
+
+**Evidence:** 10 `GuardDeniedError` mentions; 7 `task record` + 5 `task run-link` + 11 status updates across 3 tasks. `spur task record --transition done` denied `wip→done` ("No pipeline run recorded" / "No transition from wip to done"), forcing the agent to re-issue `run-link` then `wip→testing→done`. Recurred on every task (0431, 0433, 0434).
+
+**Fix:** `spur task record` should auto-create the run-link when absent (it already knows the pipeline provenance from the run) and auto-walk `wip → testing → done` through the FSM when the verdict is PASS — surfacing a single clear error only when the verdict is not PASS. Keeps the guard on the verdict, not on bookkeeping.
+
+**Target:** `apps/cli` `task record` (lifecycle guard integration).
+**Expected saving:** ~3–5 min per task (avoided 3+ retries); removes the most recurring mechanical friction.
 ### Plan
 - [ ] R1: Add compaction-bounding guidance (per-task sessions or compact handoff) to cross-cutting / next-router reference.
 - [ ] R2: Add targeted-test-first rule to the verification gate + `sp-code-testing` reference.
 - [ ] R3: Document the engine `resumeRun` vars-merge + shell-guard contract in-repo.
-- [ ] Gate: `bun run lint` + `bun run test` green; verify R1–R3 against a fresh short chain.
+- [ ] R4: Make `spur task record` auto-create the run-link and auto-walk `wip → testing → done`.
+- [ ] Gate: `bun run lint` + `bun run test` green; verify R1–R4 against a fresh short chain.
 ### Solution
 
 <!-- Filled during implementation: changed files/sections and concise rationale. -->
@@ -122,25 +140,24 @@ Feature: Spur dev-pipeline performance has bounded compaction and verification c
 - Relevant docs: `plugins/sp/skills/spur-dev/references/cross-cutting.md`, `docs/03_ARCHITECTURE.md` § workflow
 ### History
 ### Notes
+**Per-task execution summary (evidence — session `2026-08-05T03-34-24-170Z_*.jsonl`).** Tokens/cost from
+per-message `message.usage` (input additive; input includes context re-send; `cost` = authoritative USD).
 
-**RC1 — Compaction churn (dominant slowness driver).** The `--next` chain accumulated cross-task
-context in one session; 4 compactions forced repeated context rebuilds. Forensic evidence: 4
-`compaction` events (03:45, 04:04, 04:23, 04:52) in a 2.9h session; inter-tool gaps show a 308s
-max stall (compaction + re-exploration). This is the structural reason a 3-task chain "feels"
-extremely slow — most wall time is context management, not tool execution.
+| Task | Wall (min) | Tools | Input tok | Output tok | Cost | % wall | % cost |
+|------|-----------|-------|-----------|------------|------|--------|--------|
+| 0431 · workflow run schema | 24 | 118 | 153k | 17k | $2.73 | 14% | 25% |
+| 0433 · HITL `--answer` | 114 | 220 | 10.6M | 57k | $5.25 | 65% | 47% |
+| 0434 · inline surface (ADR-046) | 22 | 75 | 16.1M | 32k | $2.26 | 13% | 20% |
+| findissue + gitmsg | 15 | 24 | 6.4M | 12k | $0.89 | 8% | 8% |
+| **TOTAL** | **175** | **437** | **33.2M** | **117k** | **$11.13** | 100% | 100% |
 
-**RC2 — Repeated full-suite verification.** The agent ran 4 full `spur-check` (≈35s each) and 12
-`bun test` runs while iterating on the 0433 test-file brace + guard-syntax defects. Forensic
-evidence: 8 `bun test workflow-service.test.ts` invocations, 4 `spur-check`, 6 lint/autofix.
-Root cause: the verification gate does not mandate targeted-first, so the agent re-ran the full
-suite on each iteration instead of a narrow test.
+0433 dominates (65% wall, 47% cost, 50% tools) — the compaction churn + repeated test iteration +
+engine reverse-engineering concentrate there. Avg cost ≈ $0.064/min.
 
-**RC3 — Engine contract reverse-engineering.** 39 `node_modules` bash commands (`cat`/`grep`/`sed`
-on `ts-dual-workflow-engine`) plus heavy reads to learn `resumeRun` var-merge, guard template
-resolution, and resume-skip-onEnter. Root cause: the workflow engine's runtime contract is not
-documented in-repo; 0433/0434 required this reverse-engineering to reason about correctness.
+**Repeated issues (cost time + tokens; all recur):**
+- **RC1/RC2 (compaction churn, verification loop)** — as before; 4 compactions, 4 full `spur-check`, 12 `bun test`.
+- **RC4 · lifecycle/record guard friction** — 10 `GuardDeniedError` mentions; 7 `task record` + 5 `task run-link` + 11 status updates across 3 tasks. `record --transition done` denies `wip→done`; requires a run-link + intermediate `testing`. Recurred on every task.
+- **RC5 · carried-over test-file defect + guard-syntax** — 8 `bun test workflow-service.test.ts` runs: a pre-existing broken brace insertion (prior session) caused a syntax error, and `$__hitlAnswer` (env) vs `\${vars.__hitlAnswer}` (template) guard syntax failed under the test executor. Fold guard-template documentation into RC3/R3.
+- **RC3 · engine reverse-engineering** — 39 `node_modules` reads; fixed by R3 in-repo docs.
 
-**What worked well (preserve):** targeted `--test-name-pattern` runs were used for the new
-tests once added; CLI/service test isolation was effective; the `spur task` CLI-gated section
-writes kept corpus integrity.
-
+**What worked (preserve):** task 0431 and 0434 were efficient; targeted `--test-name-pattern` runs used once added; CLI/service test isolation effective.

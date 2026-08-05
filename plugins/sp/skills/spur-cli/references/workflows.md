@@ -260,6 +260,13 @@ use `--answer yes|no|cancel` to inject the operator's gate answer before guard r
 gate answer. Cancel one live/paused run with `cancel <run-id>`; bulk-finalize orphans stuck in
 `running`/`pending` with `clean` (`--older-than` default 30 minutes, or `--force`).
 
+**Schema resolution parity (0431):** `validate` and `run` both load the workflow through
+`WorkflowAppService` with the same `embeddedSchemaOptions()` map the CLI injects for
+`@gobing-ai/spur/schemas/...` refs. `run` pre-loads then calls the engine with the loaded def
+(not bare `runFile` → node resolution). Schema errors under an embedded map never cite a
+`node_modules` path. Prefer a project `agent.default` (or explicit `--vars '{"agent":…}'`) when
+redirecting `agent.run` stages — not `--agent inline` on workflow-driven slash commands (ADR-046).
+
 ### `clean` — housekeeping scopes (0429)
 
 `spur workflow clean` is the housekeeping one-liner: it runs **both** scopes unless scoped by flag.
@@ -308,6 +315,11 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
    schemas used by quoted `$schema` validation do not yet include `onError` / `defaultOnError`.
    Do not author those fields in normal CLI YAML unless you intentionally validate with `--no-schema`
    and own the compatibility tradeoff.
+9. **Do not rely on a workspace `node_modules/@gobing-ai/spur` symlink for schema truth.**
+   Validate/run use the embedded map when the CLI provides it. A manual
+   `ln -sfn … node_modules/@gobing-ai/spur` is a session workaround, not a fix (0431).
+10. **`--answer` does not imply `--yes`.** Omitting `run-id` without `--yes` still prompts to
+    confirm which paused run to resume, even when `--answer yes` is set.
 
 ## Additional Resources
 

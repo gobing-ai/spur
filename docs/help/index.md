@@ -44,12 +44,12 @@ Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected 
 | `spur status`   | Show project, Git, and optional path status                       |
 | `spur agent`    | Run and inspect supported coding agents + team agent specs        |
 | `spur rule`     | Manage constraint rules and presets                               |
-| `spur workflow` | Validate, execute, observe, cancel, and clean workflow YAML files |
-| `spur task`     | Manage tasks (WBS-numbered, markdown-backed) — 12 verbs           |
-| `spur feature`  | Manage features (hierarchical IDs) — 8 verbs                      |
+| `spur workflow` | Validate, run, continue (`--answer`), trace, cancel, clean workflow YAML |
+| `spur task`     | Manage tasks (WBS-numbered, markdown-backed) — 18 verbs           |
+| `spur feature`  | Manage features (hierarchical IDs) — 9 verbs (incl. `sync`)       |
 | `spur history`  | Import and analyze coding-agent history                           |
 | `spur message`  | Send and inspect durable inter-agent messages                     |
-| `spur team`     | Coordinate team agent assignments and status                      |
+| `spur team`     | Team assign / status / up / down / start / stop (needs serve)     |
 | `spur serve`    | Start the Spur web server (local fallback)                        |
 | `spur migrate`  | Apply CLI-owned schema migrations                                 |
 
