@@ -76,6 +76,8 @@ vars:
   # with the same package-manager surface (this monorepo is Bun-only):
   # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
   # and the fixall slash input all use this same var so the command stays single-sourced.
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
+  # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
   qualityGateCmd: "bun run autofix && bun run spur-check"
   # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
   # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
@@ -179,7 +181,9 @@ states:
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             echo 0 > "$ATTEMPT_FILE" &&
             set +e &&
-            ( $qualityGateCmd ); gate_rc=$?; set -e &&
+            # sh -c re-parses multi-command gates (&&, ;); do NOT use bare `$qualityGateCmd`
+            # word-split (breaks on &&). qualityGateCmd is pipeline-owned trusted config only.
+            ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
@@ -219,7 +223,8 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
             set +e &&
-            ( $qualityGateCmd ); gate_rc=$?; set -e &&
+            # See test probe: sh -c for multi-command; qualityGateCmd is trusted config only.
+            ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
