@@ -6,17 +6,19 @@ import { MemoryRouter } from 'react-router';
 import '../../test-helpers/rpc-client-mock';
 
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
+import { mockDndKit } from '../../test-helpers/dnd-kit-mock';
 
 registerHappyDom();
 
 afterAll(teardownHappyDom);
 
-// Stub the board so the module-root scoping test can render TaskKanbanView without
-// pulling in dnd-kit or the board's API surface. The `.task-kanban` class is on the
-// wrapper div (index.tsx), independent of the child board's internals.
-mock.module('../../../src/modules/task-kanban/KanbanBoard', () => ({
-    default: () => <div data-testid="board-stub" />,
-}));
+// The module-root scoping test mounts the REAL board against the shared
+// rpc-client mock + dnd-kit mock. We deliberately do NOT mock KanbanBoard here:
+// Bun's mock.module is process-global and last-wins per path, so a module-scope
+// KanbanBoard mock leaks into board.test.tsx when both files share a worker
+// (the 4-vCPU GitHub runner), rendering `board-stub` there. The real board
+// renders the `.task-kanban` wrapper (index.tsx) regardless of its own internals.
+mockDndKit();
 
 describe('TaskKanbanDetail', () => {
     afterEach(cleanup);

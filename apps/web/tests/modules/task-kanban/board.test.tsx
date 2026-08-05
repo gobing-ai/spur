@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
+import { dndState, mockDndKit, resetDndState } from '../../test-helpers/dnd-kit-mock';
 import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
 
 // ── api stub: the board imports `{ api }` from lib/rpc-client directly, so mock the module. ──
@@ -51,46 +52,9 @@ const defaultBoardApi = {
 mock.module('../../../src/lib/rpc-client', () => buildFullRpcMock({ api: defaultBoardApi }));
 
 // Capture the onDragEnd callback so tests can simulate dnd-kit drops.
-let capturedOnDragEnd:
-    | ((event: { active: { id: string | number }; over: { id: string | number } | null }) => void)
-    | null = null;
-let capturedOnDragStart: ((event: { active: { id: string | number } }) => void) | null = null;
-mock.module('@dnd-kit/core', () => ({
-    DndContext: ({
-        children,
-        onDragEnd,
-        onDragStart,
-    }: {
-        children: unknown;
-        onDragEnd?: (event: { active: { id: string | number }; over: { id: string | number } | null }) => void;
-        onDragStart?: (event: { active: { id: string | number } }) => void;
-    }) => {
-        capturedOnDragEnd = onDragEnd ?? null;
-        capturedOnDragStart = onDragStart ?? null;
-        return children;
-    },
-    DragOverlay: ({ children }: { children: unknown }) => children,
-    PointerSensor: class {},
-    KeyboardSensor: class {},
-    useSensor: (..._args: unknown[]) => ({}),
-    useSensors: (...s: unknown[]) => s,
-    useDraggable: () => ({
-        attributes: {},
-        listeners: {},
-        setNodeRef: () => {},
-        transform: null,
-        isDragging: false,
-        active: null,
-    }),
-    useDroppable: () => ({
-        setNodeRef: () => {},
-        isOver: false,
-    }),
-}));
-
-mock.module('@dnd-kit/utilities', () => ({
-    CSS: { Transform: { toString: () => '' } },
-}));
+// The dnd-kit mock lives in the shared helper so every test file registers the
+// SAME process-global mock (Bun mock.module is last-wins per path).
+mockDndKit();
 
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
@@ -109,7 +73,7 @@ afterEach(() => {
     createCalls.length = 0;
     actionCalls.length = 0;
     transitionImpl = async () => ({ ok: true });
-    capturedOnDragStart = null;
+    resetDndState();
     restoreMock();
 });
 
@@ -138,8 +102,8 @@ describe('KanbanBoard', () => {
         await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
         // Simulate dnd-kit onDragEnd: drag '0001' into the 'done' column.
-        expect(capturedOnDragEnd).not.toBeNull();
-        (capturedOnDragEnd as NonNullable<typeof capturedOnDragEnd>)({
+        expect(dndState.onDragEnd).not.toBeNull();
+        (dndState.onDragEnd as NonNullable<typeof dndState.onDragEnd>)({
             active: { id: '0001' },
             over: { id: 'done' },
         });
@@ -157,8 +121,8 @@ describe('KanbanBoard', () => {
         const { getByText, container } = renderBoard();
         await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-        expect(capturedOnDragEnd).not.toBeNull();
-        (capturedOnDragEnd as NonNullable<typeof capturedOnDragEnd>)({
+        expect(dndState.onDragEnd).not.toBeNull();
+        (dndState.onDragEnd as NonNullable<typeof dndState.onDragEnd>)({
             active: { id: '0001' },
             over: { id: 'done' },
         });
@@ -448,8 +412,8 @@ test('onDragStart captures the active drag id', async () => {
     const { getByText } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-    expect(capturedOnDragStart).not.toBeNull();
-    (capturedOnDragStart as NonNullable<typeof capturedOnDragStart>)({
+    expect(dndState.onDragStart).not.toBeNull();
+    (dndState.onDragStart as NonNullable<typeof dndState.onDragStart>)({
         active: { id: '0001' },
     });
     // The DragOverlay renders when activeDragId is set — verify via the TaskCard inside
@@ -549,8 +513,8 @@ test('DragOverlay renders a TaskCard when a drag is active', async () => {
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Trigger drag start to set activeDragId
-    expect(capturedOnDragStart).not.toBeNull();
-    (capturedOnDragStart as NonNullable<typeof capturedOnDragStart>)({
+    expect(dndState.onDragStart).not.toBeNull();
+    (dndState.onDragStart as NonNullable<typeof dndState.onDragStart>)({
         active: { id: '0001' },
     });
 
