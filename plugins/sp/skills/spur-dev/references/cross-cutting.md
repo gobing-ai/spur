@@ -144,6 +144,32 @@ because it runs the equivalent checks as its own workflow transitions (and to av
 lifecycle runs). Never add `--no-lifecycle` to an interactive chain transition — doing so bypasses
 the very guard the chain relies on for its review-pending stop.
 
+### Bounding context compaction in `--next` chains
+
+Long `--next` chains that run several tasks in **one session** accumulate cross-task context (each
+task's full tool transcript, diff, and re-ingested files) and trigger repeated LLM context
+compactions. Each compaction is a context rebuild the model must re-ingest and re-reason over; on a
+three-task chain this clustered 4 compactions in a single 2.9h run (task 0436 forensics). The
+compaction mechanism is an LLM-window property, not a harness bug — the lever is to bound how much
+one session accumulates, not to fight the window.
+
+**Guidance for multi-task chains:**
+
+1. **Prefer one `/sp:dev-run <wbs>` per session.** Each invocation starts a fresh context window,
+   so a chain of independent tasks naturally bounds compaction. This is the v1, lowest-blast-radius
+   change — split the chain by invoking each task separately.
+2. **If `--next` chaining must stay in-session**, accept at most one compaction per long session
+   and emit a **compact per-task handoff** — a short `local://`-style note carrying only the
+   next task's goal + the completed task's done-set (not its full transcript) — so the session does
+   not re-accumulate the finished task's context.
+3. **Do not re-run full verification for already-done tasks** in a chain (see
+   [targeted-test-first](#targeted-test-first-verification-loop)). Re-running the full suite per
+   task is the other dominant session-cost driver.
+
+**Target:** a three-task chain completes with **≤1 compaction** instead of 4. This is operator
+guidance in the reference, not a codified hook — auto-splitting `--next` is a possible follow-up
+but loses in-session continuity for later gates, so it is deliberately not done here.
+
 ## Section-editing workflow
 
 The dominant agent write pattern (hot path 2):
@@ -244,6 +270,23 @@ line is a claim to re-verify, not evidence to forward. Re-run and paste.
 This rule is behavioral, not CLI-enforced — the competency skills carry it into their own steps: the
 verify step (`sp:code-verification`) enforces it hardest, and the implement (`sp:code-implementation`)
 and test (`sp:code-testing`) steps apply it before claiming their work complete.
+
+### Targeted-test-first verification loop
+
+The verification loop must run the **narrow** test before any full-suite gate, so iterating on a
+failing test does not re-run the entire workspace on every attempt. This is the single biggest
+verification-loop cost driver (task 0436 forensics: 12 `bun test` + 4 full `spur-check` runs while
+iterating one task).
+
+**The rule.** When a test fails and you are iterating to green:
+
+1. Run the narrow target first: `bun test <file> --test-name-pattern <test>`.
+2. Loop on that narrow target until green.
+3. **Then** run the single full `spur-check` (or `bun run check`) as the final gate.
+
+Do not re-run the full suite per iteration, and do not `spur-check` before you have a green narrow
+target. **Target:** full `spur-check` runs ≤2 per task (one during iteration, one final) instead of
+4 across a chain.
 
 ## Auto-Decision Principles
 

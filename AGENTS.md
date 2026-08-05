@@ -265,6 +265,11 @@ Before “done”:
 5. `bun run build` green
 6. `git status` intentional only
 
+**Targeted-test-first while iterating:** when a test fails, run the narrow target
+`bun test <file> --test-name-pattern <test>` to green before any full-suite gate, and run the full
+`spur-check` at most twice per task (task 0436 R2). Do not re-run the whole suite on every
+iteration — it is the dominant verification-loop cost.
+
 Never `--no-verify` / silent `biome-ignore` to force green. Harness task done ⇒ real verify **PASS**
 when the task used the pipeline.
 

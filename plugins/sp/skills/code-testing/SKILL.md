@@ -49,6 +49,20 @@ When a test is red, apply the **[test-loop breaker](references/test-loop-breaker
 re-running it. Keep command output bounded without hiding the exit status by following
 **[test-output discipline](references/test-output-discipline.md)**.
 
+## Targeted-test-first verification loop
+
+When iterating on a red test, run the **narrow** target before any full-suite gate so the loop does
+not re-run the entire workspace on every attempt (task 0436 R2). Full-suite re-runs during a fix
+loop are the dominant verification cost on a long chain.
+
+1. Run the narrow target: `bun test <file> --test-name-pattern <test>` (or the stack-equivalent
+   single-test filter in the matching adapter).
+2. Loop on that narrow target until green.
+3. **Then** run the single full `spur-check` (or `bun run check`) as the final gate.
+
+Do not re-run the full suite per iteration, and do not run a full gate before the narrow target is
+green. Target: full `spur-check` runs ≤2 per task.
+
 ## Composition with the discipline + implementation skills
 
 - **`sp:test-driven-development`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,
