@@ -175,7 +175,7 @@ all dimensions.
 **Anchor:** `#flag-scope`.
 
 Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
-`dev-gitmsg`, `dev-simplify`) to bound the working set.
+`dev-gitmsg`, `dev-gtd`, `dev-simplify`) to bound the working set.
 
 ### `--dry-run` — print the plan without executing
 
@@ -272,7 +272,7 @@ pauses, even under `--auto`.
 
 **Anchor:** `#flag-max-retry`.
 
-Bound the retry loop on fix-family commands (`dev-fixall`, `dev-dogfood`). After `n` consecutive
+Bound the retry loop on fix-family commands (`dev-dogfood`, `dev-fixall`, `dev-gtd`). After `n` consecutive
 failed fix attempts, stop and ask the operator rather than looping indefinitely.
 
 ### `--full` — rewrite a `--next` run as full pipeline
