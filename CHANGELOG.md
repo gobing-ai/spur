@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.32] — 2026-08-05
+
+### Added
+
+- Run-scoped agent session affinity (default-on): a single workflow `runId` pins a durable coding-agent session across `agent.run` hops for omp, claude, codex, agy, grok, and pi; config knob to disable after dogfood (H83)
+- Live agent streaming: `AgentService.runTraced` pipes agent stdout/stderr live into the workflow run log (`trace --follow --output`, no child TTY) (H83)
+- Unified `--agent inline` semantics: `inline` resolves to `agent.default` on `spur agent run` / workflow vars, superseding ADR-046's "inline unrepresentable" reject (ADR-047)
+- `spur task record` owns the `done` lifecycle walk: a PASS verdict auto-walks `wip → testing → done` and auto-creates the pipeline provenance run-link (ADR-048)
+
+### Fixed
+
+- Pipeline latch no longer bare-global-resumes / hijacks the host coding-agent session; run-scoped `--session-dir` + resume-by-id when supported (H83)
+- Multi-command quality gates re-parsed via `sh -c` so `&&` / `;` gate strings execute correctly; `qualityGateCmd` locked to trusted config only (SECUA residual, no untrusted interpolation)
+- Dev-pipeline compaction churn / repeated resume-guard churn from unowned run-link writes (single `ensurePipelineRunLink` owner)
+
+### Changed
+
+- ADR-047 supersedes ADR-046: unified `--agent` semantics, run-scoped session affinity, live non-interactive pipe output; Phase D (true host-stage control inversion) explicitly deferred
+- ADR-048: `spur task record` owns the `done` walk and pipeline run-link; `ensurePipelineRunLink` shared helper between CLI and service (task 0436 residual — single owner)
+
+### Other
+
+- Update cross-cutting, flag-glossary, dev-run/plan/runall docs and observation runbook (`trace --follow --output`, never `| tail`) for the unified surface (H83)
+- Add H52 / H83 feature files and multi-agent affinity/stream dogfood smoke tasks (0445, 0450)
+
 ## [0.3.31] — 2026-08-05
 
 ### Added
