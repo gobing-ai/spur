@@ -132,6 +132,7 @@ Feature: Unified --agent execution-surface selector
 | --- | ---- | ------ |
 | 0413 | Collapse --agent/--inline/--subprocess into a single --agent selector with inline as the default value | done |
 | 0415 | Mechanical consistency gate for sp contract surfaces: cross-surface flag parity, replacing prose-literal test assertions | done |
+| 0434 | Decide and implement true inline execution for workflow-driven pipeline stages | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

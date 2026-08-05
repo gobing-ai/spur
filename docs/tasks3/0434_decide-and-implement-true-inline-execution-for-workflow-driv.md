@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0433"]
 created_at: "2026-08-04T19:04:35.799Z"
-updated_at: "2026-08-04T19:06:24.579Z"
+updated_at: "2026-08-04T21:42:59.628Z"
 ---
 
 ## 0434. Decide and implement true inline execution for workflow-driven pipeline stages
@@ -111,9 +111,19 @@ promoted into feature-level scenarios before implementation starts.
 - `bun run lint` and `bun run test` are green, with the standing sandbox-only network failures
   identified as environmental rather than silently accepted.
 ### Q&A
+**Q (R1, --auto synthesis):** Which branch should the ADR record?
 
-<!-- Clarifications and decisions made during refinement. Keep empty if none. -->
+**Recommendation: (b)** — declare `inline` inapplicable to workflow-driven commands and make the surface say so.
 
+Reasoning:
+1. Triggers 2/3 in the inline-default contract already mark pipeline stages as durable, timed, independently audited units — subprocess is the correct surface, not an accident.
+2. The practical "broken executor / wrong default agent" pain is already fixed by `agent.default` injection into `vars.agent` (2026-08-04); operators redirect without control inversion.
+3. Branch (a) is a large inversion (host session ↔ engine pause), depends on 0433's resume-with-payload path, and must fail-fast for every headless caller — high blast radius for a corner the redirect already covers.
+4. Branch (b) is honest docs + flag parity + reject-with-diagnostic; small, testable, aligns EXCLUDED_COMMANDS with a real rule instead of historical accident.
+
+What (b) gives up: an operator cannot force a pipeline stage to consume the current session's chat context. Accept that trade-off explicitly in the ADR; if a future product need appears, open a new task for (a) rather than leaving the default unhonorable.
+
+Operator may override before implement by amending the ADR to (a); then follow the Plan's (a) checklist after 0433 is done.
 ### Design
 **The structural obstacle.** `spur workflow run` is a CLI process. The coding-agent session that
 typed the command is its parent, not its child. A workflow `agent.run` stage therefore has no
@@ -151,9 +161,24 @@ on 2026-08-04 already addresses without any inversion.
 **Do not** resolve this by making `AgentService` accept `inline` and shell out to the host session —
 that reintroduces a subprocess under a name that promises the opposite.
 ### Plan
-
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
-
+- [ ] **R1 decision (blocking).** Record a dated ADR entry (new, or amendment to ADR-041 / H82 R6) choosing exactly one branch:
+  - **(a)** true in-session execution of pipeline `agent.run` stages, or
+  - **(b)** `inline` unrepresentable on workflow-driven commands; surface + tests tell the truth.
+  Do not implement until the ADR lands. Recommended lean under this refine: **(b)** — see Q&A.
+- [ ] If **(b)** (recommended path):
+  - [ ] Enumerate every workflow-backed command (`dev-idea`, `dev-wrap`, `dev-wrapall`, full `dev-run` pipeline path, `dev-runall`, and any other EXCLUDED / Skill→workflow wrappers).
+  - [ ] Flag tables / arg-hints: drop `inline` from the accepted set for those commands (`--agent <auto|name>` only); document that stages always dispatch and `agent.default` is the redirect.
+  - [ ] Runtime: reject `--agent inline` on those paths with a diagnostic naming `agent.default` (and optionally `--agent <name>` / `--agent auto`).
+  - [ ] Update `plugins/sp/tests/inline-execution-contract.test.ts` so EXCLUDED/mode-aware split and accepted values encode the ADR.
+  - [ ] Update `plugins/sp/tests/command-flag-parity.test.ts` accepted sets accordingly.
+  - [ ] Cross-cutting / flag glossary / ADR-041 amendment: one sentence that pipeline stages never honor `inline`.
+- [ ] If **(a)** (only if ADR chooses it — after 0433 lands):
+  - [ ] Spec control inversion: stage marks in-session eligibility → persist prompt → pause → host session executes → CLI write-back → resume (reuse HITL pause seam; **0433 `--answer`/payload resume is prerequisite**).
+  - [ ] Fail-fast when no host session can own the step (`--async`, scheduled, headless) — trigger 2.
+  - [ ] Keep `AgentService` rejecting literal `inline` (R4).
+  - [ ] Tests: host-session completion path + async fail-fast path.
+- [ ] Either branch: re-verify executor-redirect invariants (2026-08-04) — `agent.default` → stages; caller `--vars`/`--agent` wins; YAML literal last. Existing `workflow-service` tests must stay green.
+- [ ] Gate: `bun run lint` + `plugins/sp` contract tests + app workflow-service tests green.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
