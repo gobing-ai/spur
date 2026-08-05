@@ -229,11 +229,15 @@ empty — headings only.
 ```text
 /sp:dev-refine <wbs>          # single task — fills blank Design/AC/Plan if L3 gaps
 /sp:dev-refineall --feature X --auto
+/sp:dev-refineall --feature X --auto --depth ready   # implement-ready freeze (no L3-only SKIP)
 ```
 
-Under `--auto`, refine **SKIP**s when target sections (Background, Requirements, AC, Design, Plan)
-already have no L3 findings. If Design is still placeholder, synthesis runs (standard tier by
-default; escalates only on gate-fail).
+Under `--auto` + **`--depth standard`** (default), refine **SKIP**s when target sections
+(Background, Requirements, AC, Design, Plan) already have no L3 findings. If Design is still
+placeholder, synthesis runs (standard tier by default; escalates only on gate-fail). Under
+**`--depth ready`**, do not SKIP on L3-clean alone — run the implement-ready checklist in
+[dev-operations.md](dev-operations.md) § refine (frozen APIs, anti-patterns, file targets, handoffs)
+so another agent can implement without inventing design.
 
 **Check the variant before you write.** Which sections a task carries is decided by its `template:`
 frontmatter against `.spur/tasks/section-matrix.yaml` — NOT a fixed list. Before authoring any
@@ -272,9 +276,10 @@ shared flags on `/sp:dev-refineall`):
 | Argument | Effect |
 |----------|--------|
 | `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. See the `sp:dev-refine` skill for the full value table (`all`, `requirements`, `background`, `constraints`, `acceptance`, `quick`). Default `all`. |
+| `--depth <standard\|ready>` | Spec depth bar. `standard` (default) = L3 structural completeness + L3 SKIP under `--auto`. `ready` = implement-ready freeze (never L3-only SKIP). See [flag-glossary.md](flag-glossary.md#flag-depth). |
 | `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. **Required for practical batch use** via `dev-refineall`. |
 
-**Pre-synthesis skip gate (under `--auto`).** Before synthesizing, run `spur task check <wbs> --json`. When the **refine target sections** show no L3 findings, emit a structured SKIP instead of calling the synthesis agent.
+**Pre-synthesis skip gate (under `--auto` + `--depth standard`).** Before synthesizing, run `spur task check <wbs> --json`. When the **refine target sections** show no L3 findings, emit a structured SKIP instead of calling the synthesis agent. **Not applied when `--depth ready`.**
 
 **Refine target sections (anti-drift lock):** `{Background, Requirements, Acceptance Criteria, Design, Plan}`.  
 These must be solid enough that a cheaper implementer cannot invent another path. **Solution is not a refine target** — it is written by implement as the as-built change-map.

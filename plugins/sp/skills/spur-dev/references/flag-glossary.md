@@ -296,6 +296,29 @@ Supply a description (`dev-refine` / `dev-refineall` focus description). Used wh
 wants to inject a specific framing rather than derive it from context. `dev-idea` takes its idea as
 a positional argument, not via this flag.
 
+### `--depth <…>` — depth control (context-specific values)
+
+**Anchor:** `#flag-depth`.
+
+**Context-specific — two unrelated value sets; do not collapse them.** Declared on
+`dev-brainstorm`, `dev-refine`, and `dev-refineall`.
+
+**`dev-brainstorm`:** `--depth <basic|detailed|comprehensive>` — breadth vs depth of the ideation
+tree (default `detailed`). Unrelated to task-section readiness.
+
+**`dev-refine` / `dev-refineall`:** `--depth <standard|ready>` — how deep refine must take target
+sections (Background, Requirements, Acceptance Criteria, Design, Plan) before SKIP/success.
+Orthogonal to `--focus` (which *narrows* domains) and to `--mode` on other commands.
+
+| Value (refine family) | Bar | `--auto` SKIP behavior |
+|---|---|---|
+| `standard` (default when omitted) | L3 structural completeness (not empty/placeholder; check-clean for target sections) | **SKIP** when no L3 findings on target sections |
+| `ready` | **Implement-ready** freeze: another agent can implement without inventing design (frozen names/APIs or explicit "no new API", anti-patterns, file targets, handoffs, out-of-scope) | **Do not SKIP** on L3-clean alone — run the ready checklist; rewrite sections until the bar is met |
+
+Default for refine stays `standard` so ordinary `refineall --auto` remains cheap. Use `ready` for
+multi-package / multi-agent handoffs and flaky-pipeline features where a wrong implement is costly.
+Full checklist: [dev-operations.md](dev-operations.md) § refine (depth ready).
+
 ### `--bdd` — use BDD scenarios as the verification lens
 
 **Anchor:** `#flag-bdd`.

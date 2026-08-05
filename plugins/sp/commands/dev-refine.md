@@ -1,13 +1,14 @@
 ---
-description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
-argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--agent <inline|auto|name>] [--auto] [--next]"
+description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; optional implement-ready depth
+argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Refine
 
 Wraps the **sp:spur-dev** skill. Prefer Design at plan/create (default); refine is the **fallback**
-for blank Design/AC/Plan after `--skip-design` or incomplete create.
+for blank Design/AC/Plan after `--skip-design` or incomplete create. Use `--depth ready` when another
+agent will implement and L3-clean is not enough (frozen APIs, anti-patterns, file targets, handoffs).
 
 ## Argument Flags
 
@@ -16,6 +17,7 @@ for blank Design/AC/Plan after `--skip-design` or incomplete create.
 | `<wbs>` | Task WBS to refine. | required |
 | `--focus` `<mode>` | Refinement focus mode. | omitted |
 | `--description` `<text>` | Override the task description. | omitted |
+| `--depth` `<standard\|ready>` | Spec depth bar (see flag glossary). | `standard` |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |
 | `--auto` | Skip objective HITL gates. | off |
 | `--next` | Hand off to the next-router on success. | off |
@@ -25,12 +27,15 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Usage
 
 ```
-/sp:dev-refine <wbs> [--focus <mode>] [--description <text>] [--agent <inline|auto|name>] [--auto] [--next]
+/sp:dev-refine <wbs> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--next]
 ```
 
-Under `--auto`, SKIP only when target sections have no L3 findings: Background, Requirements,
-Acceptance Criteria, Design, Plan. Solution is not a refine target. Stage floor: `standard`
-(fallback `capable-2`).
+Under `--auto` with **`--depth standard`** (default), SKIP only when target sections have no L3
+findings: Background, Requirements, Acceptance Criteria, Design, Plan. Solution is not a refine
+target. Under **`--depth ready`**, do **not** SKIP on L3-clean alone — run the implement-ready
+checklist (dev-operations § refine) and rewrite Design/Requirements/Plan until another agent can
+implement without inventing design. Stage floor: `standard` (fallback `capable-2`); ready synthesis
+may use a higher tier when the task spans packages/seams.
 
 ## Implementation
 

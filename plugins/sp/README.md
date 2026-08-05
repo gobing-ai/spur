@@ -94,7 +94,7 @@ list this README is checked against.
 | `dev-idea` | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff |
 | `dev-plan` | Plan a feature from a written description — intake → feature create → AC generation → feature check gate → decomposition → batch-create |
 | `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring |
-| `dev-refine` | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria |
+| `dev-refine` | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; `--depth ready` for implement-ready freeze |
 
 #### Lifecycle — execution
 
@@ -115,7 +115,7 @@ list this README is checked against.
 | --- | --- |
 | `dev-runall` | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report |
 | `dev-parallel` | Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results |
-| `dev-refineall` | Batch-refine tasks (feature or selector) — planning-half bulk fill of Background/Requirements/AC/Design/Plan before runall |
+| `dev-refineall` | Batch-refine tasks (feature or selector) — planning-half bulk fill of Background/Requirements/AC/Design/Plan before runall; `--depth ready` for implement-ready freeze |
 | `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report |
 | `dev-wrapall` | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup |
 

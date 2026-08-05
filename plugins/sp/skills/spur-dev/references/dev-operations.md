@@ -58,8 +58,8 @@ each would be scope creep for one-liner procedures.
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]` |
 | 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <inline\|auto\|name>] [--auto] [--next] [--wrap] [--continue]` |
-| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--agent <inline\|auto\|name>] [--auto] [--next]` |
-| 5a | refineall | `dev-refineall` | `Skill()` | `sp:spur-dev` (`refineall`) | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json]` |
+| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--next]` |
+| 5a | refineall | `dev-refineall` | `Skill()` | `sp:spur-dev` (`refineall`) | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json]` |
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <auto\|name>] [--skip-design] [--auto] [--approve-taste]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
 | 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
@@ -130,11 +130,11 @@ must not be changed without updating the backing skill.
 
 ### 5. refine
 
-- **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
-- **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. Execution defaults to inline (in-session); `--agent <inline|auto|name>` is the single selector — `inline` runs in this session, `auto` tier-resolves a subprocess executor, a name pins that executor. Named escalation triggers override inline (see [cross-cutting.md](cross-cutting.md#inline-default-execution-surface)). `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM **idempotently** (only when `status == backlog`; a task already at `todo` or past it skips the transition and chains anyway — `status >= todo` ⇒ already advanced) and invoke `/sp:dev-run <wbs> --mode implement --auto --next`. On a guard/refine failure, stop as review-pending.
+- **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution. Optional **implement-ready** depth freezes Design/Requirements/Plan so another agent can implement without inventing design.
+- **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--depth <standard|ready>` (default **`standard`**) sets the depth bar — see [flag-glossary.md](flag-glossary.md#flag-depth). Execution defaults to inline (in-session); `--agent <inline|auto|name>` is the single selector — `inline` runs in this session, `auto` tier-resolves a subprocess executor, a name pins that executor. Named escalation triggers override inline (see [cross-cutting.md](cross-cutting.md#inline-default-execution-surface)). `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM **idempotently** (only when `status == backlog`; a task already at `todo` or past it skips the transition and chains anyway — `status >= todo` ⇒ already advanced) and invoke `/sp:dev-run <wbs> --mode implement --auto --next`. On a guard/refine failure, stop as review-pending.
 - **Backing:** `sp:spur-dev` skill, `refine` operation. Q&A clarifications are presented as decision briefs per [decision-brief.md](decision-brief.md).
-- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
-- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the **refine target sections** only:
+- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A (or auto-synthesis) → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
+- **Pre-synthesis skip gate (under `--auto` + `--depth standard` only):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the **refine target sections** only:
   `{Background, Requirements, Acceptance Criteria, Design, Plan}`.
   These are the anti-drift surfaces: constraints + planning that cheaper implementers must follow.
   **Solution is not a refine target** (as-built change-map owned by implement). If there are no L3
@@ -152,35 +152,63 @@ must not be changed without updating the backing skill.
   (observe-only) driver need not re-run `spur task check` to reconstruct it:
 
   ```json
-  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"], "reason": "no L3 findings for target sections", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
+  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"], "reason": "no L3 findings for target sections", "depth": "standard", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
   ```
 
-  Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
+  Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto` + `standard`; it is not a failure.
   **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Acceptance Criteria, Design, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`, `### Solution`) do not block the SKIP — refine does not own those sections.
   **Variant note:** for templates that omit Design or AC (e.g. `review`, `meta`, `issue`), only apply the target sections that the section-matrix allows at the current status (`spur task check` `requiredSections` / optional list).
+- **`--depth ready` (implement-ready — never L3-SKIP alone):** When `--depth ready` is set, **do not**
+  apply the L3-only SKIP gate above, even under `--auto`. Instead evaluate the **implement-ready
+  checklist** against target sections (read codebases, ADRs, dependent WBS, dogfood evidence as
+  needed). If any item fails, synthesize and rewrite via CLI-gated section updates until all pass
+  (or surface a blocked Q&A with a concrete question). Outcome vocabulary: `refined` (wrote) |
+  `ready` (checklist already met, no write — optional alias of refined with zero writes) | `failed`.
+  Prefer reporting `refined` when any section changed; if checklist already fully met, emit:
+
+  ```
+  SKIP — sections already meet implement-ready checklist: depth=ready, sections-considered=[…]
+  ```
+
+  **Implement-ready checklist (all must hold for allowed target sections):**
+  1. **Requirements** — R-items are observable outcomes; explicit out-of-scope / non-goals; no
+     ambiguous “wire it up” without a named seam or file area.
+  2. **Design** — WHAT / WHY / WHERE; **frozen names** (types, flags, vars, paths) **or** explicit
+     “no new API”; precedence / algorithm when behavior is non-obvious; **anti-patterns** (what not
+     to implement); primary file/package targets; handoff to dependent tasks (WBS) if any.
+  3. **Plan** — ordered checklist mappable to R-items; test/verification intent called out.
+  4. **Acceptance Criteria** — scenarios still match feature R-titles when `feature_id` is set;
+     Given/When/Then still executable as a verify lens.
+  5. **Q&A / References** — open decisions closed or explicitly deferred with owner; links to ADR /
+     feature / upstream tasks present when the design depends on them.
+  6. **Cross-task** — if `dependencies[]` exist, Design states what this task assumes from deps and
+     what it must leave for dependents (no silent re-ownership of upstream contracts).
+
+  Ready depth is for multi-package work, multi-agent implement handoffs, and costly pipeline
+  failures — not for every small task. Default remains `standard`.
 - **SKIP short-circuits synthesis, not `--next`.** A SKIP means no synthesis was needed — it does **not** cancel the `--next` chain. Under `--auto --next`, a SKIP still flows into the (idempotent) status transition and the chained `/sp:dev-run --mode implement`. "`refine --auto --next` on a well-specified task" is therefore effectively "run the implement→verify chain"; an operator who wanted refinement only should drop `--next`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
 ### 5a. refineall
 
-- **Purpose:** Batch-refine a set of tasks (or all refine-eligible tasks under a feature) — resolve a set, topo-sort by dependencies, run per-task `refine`, emit a summary report. Planning-half counterpart of `verifyall` / `runall` for the just-in-time spec-completion gate.
+- **Purpose:** Batch-refine a set of tasks (or all refine-eligible tasks under a feature) — resolve a set, topo-sort by dependencies, run per-task `refine`, emit a summary report. Planning-half counterpart of `verifyall` / `runall` for the just-in-time spec-completion gate. With `--depth ready`, batch **implement-ready** freeze before multi-agent implement or runall.
 - **Inputs:**
   - `--feature <id>` **or** `--tasks <selector>` (required — at least one). `--feature` is sugar for `--tasks feature:<id>` (shared selector grammar: explicit WBS list, `feature:<id>`, `ready`, status pseudo-list — [execution-batch.md](execution-batch.md) Step 1). If both are present, `--tasks` wins (one-line note in the report).
-  - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--agent <inline|auto|name>`, `--auto`, `--next`.
+  - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--depth <standard|ready>`, `--agent <inline|auto|name>`, `--auto`, `--next`.
   - Batch-only flags: `--keep-going` (continue independents after a failure; default halt), `--status <s>` (filter resolved membership; default **`backlog,todo`** — planning-side fill candidates), `--json` (machine-readable batch report).
 - **Backing:** `sp:spur-dev` skill, `refineall` operation (orchestrates; per-task body is the single-task `refine` operation — never a second refine implementation).
 - **Behavior:**
   1. Resolve + **freeze** the set at kickoff (never re-query membership mid-batch).
   2. Apply `--status` filter (default `backlog,todo`). Tasks already `done`/`cancelled`/`testing` are excluded unless the operator widens `--status`. Report each exclusion with reason.
   3. Topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break). Cycle → abort entire batch before any refine. Out-of-set deps: `done` → allow; else → block subtree (same as runall).
-  4. For each WBS in order: invoke single-task refine with shared flags. Under `--auto`, the per-task **pre-synthesis SKIP gate** still applies (no L3 gap in Background/Requirements/Acceptance Criteria/Design/Plan → SKIP, not failure).
+  4. For each WBS in order: invoke single-task refine with shared flags **including `--depth`**. Under `--auto` + **`--depth standard`** (default), the per-task **L3 pre-synthesis SKIP gate** still applies. Under **`--depth ready`**, each task runs the implement-ready checklist (no L3-only SKIP).
   5. Failure policy: **stop-the-batch** (default) or `--keep-going` (skip in-batch dependents of a failed refine; continue independents).
-  6. Emit a batch report (markdown or `--json`).
-- **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already L3-clean under `--auto`) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
+  6. Emit a batch report (markdown or `--json`) that records `depth` once at the header.
+- **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already meets the active depth bar under `--auto`) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
 - **Batch verdict:** `clean` (all attempted tasks `refined` or `SKIP`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
 - **`--next` warning:** Passing `--next` chains **each** successful refine into `/sp:dev-run <wbs> --mode implement --auto --next`, which can balloon into implement+verify execution for every task. Prefer refineall without `--next`, then `/sp:dev-runall --feature <id>` for execution. Document the risk in the batch report header when `--next` is set.
-- **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`.
-- **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")`.
+- **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`. For implement handoffs: `/sp:dev-refineall --feature <id> --auto --depth ready`.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")` (shared flags include `--depth` when set).
 
 ### 6. plan
 

@@ -116,7 +116,7 @@ const GLOSSARY_KEEP_GOING_CORRECT = GLOSSARY_KEEP_GOING_DRIFTED.replace(
 const KEEP_GOING_HINTS = new Map<string, string>([
     [
         'dev-refineall',
-        '--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json]',
+        '--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json]',
     ],
     [
         'dev-runall',

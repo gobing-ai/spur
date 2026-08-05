@@ -213,8 +213,8 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 invoke the skill directly via `Skill(skill="sp:spur-dev", args="plan <description>")` for
 planning, `args="run <wbs>"` for execution, `args="unit <target>"` for test generation,
 or `args="refine <wbs>"` for task refinement, or `args="refineall --feature <id> --auto"` for
-batch refine under a feature. Use `spur agent run` for isolated LLM invocations within pipeline
-steps.
+batch refine under a feature (add `--depth ready` for implement-ready freeze). Use `spur agent run`
+for isolated LLM invocations within pipeline steps.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 
