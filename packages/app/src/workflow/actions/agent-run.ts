@@ -97,9 +97,35 @@ export class AgentRunActionRunner implements ActionRunner {
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
+        const cfg = (context as unknown as { config?: { agent?: { default?: string; sessionAffinity?: boolean } } })
+            .config;
+        // ADR-047 (0449 R2): `inline` on a headless dispatch surface ≡ omit → agent.default.
+        // Normalize to the configured default executor name before dispatch so session
+        // affinity / labels key off the real executor, never the literal `inline`.
+        const dispatchAgent = agent === 'inline' ? (cfg?.agent?.default ?? undefined) : agent;
         const model = asOptionalString(options.model);
         const mode = asOptionalString(options.mode) ?? 'text';
         const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';
+
+        const sessionAffinityVar = context.vars.sessionAffinity;
+        const affinityDisabled =
+            sessionAffinityVar === 'false' ||
+            (typeof sessionAffinityVar === 'boolean' && !sessionAffinityVar) ||
+            options.sessionAffinity === false ||
+            cfg?.agent?.sessionAffinity === false;
+        const affinityOn = !affinityDisabled;
+
+        const agentLabel = dispatchAgent ?? '<default>';
+        const targetAgentDir = dispatchAgent ?? cfg?.agent?.default ?? 'omp';
+        const prevAgent = asOptionalString(context.vars.__agentSessionAgent);
+
+        let sessionDir = asOptionalString(context.vars.__agentSessionDir);
+        if (affinityOn) {
+            if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
+                sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
+            }
+        }
+        const storedSessionId = asOptionalString(context.vars.__agentSessionId);
 
         // Session latch (Q8): auto-determine continue from vars.__agentSession
         // unless the step author set `continue` explicitly.
@@ -110,7 +136,11 @@ export class AgentRunActionRunner implements ActionRunner {
         // resume mode rejects a new prompt (task 0406 — codex incompatibility).
         const latchAutoContinued = continueFlag === undefined && latch === 'open';
         if (latchAutoContinued) {
-            continueFlag = true;
+            if (affinityOn) {
+                continueFlag = true;
+            } else {
+                continueFlag = undefined;
+            }
         }
 
         // Input required unless continue is effectively true on a resume-only agent.
@@ -122,10 +152,17 @@ export class AgentRunActionRunner implements ActionRunner {
         }
 
         const flags: Record<string, string | boolean> = {};
-        if (agent !== undefined) flags.agent = agent;
+        if (dispatchAgent !== undefined) flags.agent = dispatchAgent;
         if (model !== undefined) flags.model = model;
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;
+
+        if (affinityOn && sessionDir) {
+            flags.sessionDir = sessionDir;
+            if (storedSessionId) {
+                flags.sessionId = storedSessionId;
+            }
+        }
 
         const timeoutMs = asOptionalNumber(options.timeoutMs);
         if (timeoutMs !== undefined && timeoutMs <= 0) {
@@ -145,7 +182,6 @@ export class AgentRunActionRunner implements ActionRunner {
         const expectFile = asOptionalString(options.expectFile);
         const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
-        const agentLabel = agent ?? '<default>';
 
         // Always dispatch via runTraced: forces non-interactive buffered output
         // (R3 / task 0295) and returns the resolved invocation for the run
@@ -282,6 +318,34 @@ export class AgentRunActionRunner implements ActionRunner {
                     ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
                     : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}; ${partialWorkHint}`;
 
+            let discoveredSessionId = storedSessionId;
+            if (ok && affinityOn && sessionDir && !discoveredSessionId) {
+                discoveredSessionId = await discoverSessionId(sessionDir);
+            }
+
+            if (ok && affinityOn && sessionDir) {
+                try {
+                    const sidecarPath = join(cwd, '.spur', 'run', `${context.runId}-agent-session.json`);
+                    const fs = createNodeFileSystem(cwd);
+                    await fs.ensureDir(dirname(sidecarPath));
+                    await fs.writeFile(
+                        sidecarPath,
+                        JSON.stringify(
+                            {
+                                agent: agentLabel,
+                                sessionId: discoveredSessionId ?? null,
+                                sessionDir,
+                                openedAt: new Date().toISOString(),
+                            },
+                            null,
+                            2,
+                        ),
+                    );
+                } catch {
+                    // best-effort
+                }
+            }
+
             return {
                 ok,
                 data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
@@ -293,6 +357,11 @@ export class AgentRunActionRunner implements ActionRunner {
                 setVars: ok
                     ? {
                           __agentSession: resumeRetried ? 'no-resume' : 'open',
+                          ...(affinityOn && sessionDir ? { __agentSessionDir: sessionDir } : {}),
+                          ...(affinityOn && (discoveredSessionId || storedSessionId)
+                              ? { __agentSessionId: discoveredSessionId || storedSessionId }
+                              : {}),
+                          ...(affinityOn ? { __agentSessionAgent: targetAgentDir } : {}),
                           ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                       }
                     : undefined,
@@ -301,6 +370,29 @@ export class AgentRunActionRunner implements ActionRunner {
             // Nothing to clean up per-step: agent output is owned by the consolidated
             // run-log sink via the observability bus (feature D2 / task 0426).
         }
+    }
+}
+
+async function discoverSessionId(sessionDir: string): Promise<string | undefined> {
+    try {
+        const fs = createNodeFileSystem();
+        if (!(await fs.exists(sessionDir))) return undefined;
+        const entries = await fs.readDir(sessionDir);
+        if (entries.length === 0) return undefined;
+        let newestFile: string | undefined;
+        let newestMtime = 0;
+        for (const entry of entries) {
+            const fullPath = join(sessionDir, entry);
+            const st = await fs.stat(fullPath);
+            if (st?.isFile() && st.mtimeMs > newestMtime) {
+                newestMtime = st.mtimeMs;
+                newestFile = entry;
+            }
+        }
+        if (!newestFile) return undefined;
+        return newestFile.replace(/\.json$/i, '');
+    } catch {
+        return undefined;
     }
 }
 

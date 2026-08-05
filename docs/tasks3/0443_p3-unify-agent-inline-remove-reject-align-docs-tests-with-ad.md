@@ -31,14 +31,13 @@ R6. dev-plan/dev-runall may keep advertising inline as accepted synonym for defa
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R6 — Unified --agent inline
+Scenario: R6 (cancelled) — Unified --agent inline
   Given --agent inline on spur agent run
   When resolution runs
   Then agent.default is selected and a subprocess starts
-  And plugin docs no longer claim inline is unrepresentable on workflow-driven commands
 
 @core
-Scenario: R7 — Docs and tests agree
+Scenario: R7 (cancelled) — Docs and tests agree
   Given cross-cutting.md, flag-glossary, dev-run/plan/runall, ADR-047, and plugin contract tests
   When the surface is inspected
   Then there is no dual "inline is default" vs "inline is unrepresentable" split

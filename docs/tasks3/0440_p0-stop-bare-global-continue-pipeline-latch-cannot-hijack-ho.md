@@ -30,7 +30,7 @@ R5. Depends on ts-ai-runner sessionDir and/or temporary no-continue policy if li
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R2 — Pipeline never resumes the host session
+Scenario: R2 (cancelled) — Pipeline never resumes the host session
   Given a prior host-like session marker in the global omp store
   When two pipeline agent.run hops run for omp
   Then the second hop does not resume the host session

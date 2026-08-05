@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H83"
 name: "Run-scoped agent session affinity, live agent streaming, unified --agent inline"
-status: backlog
+status: done
 priority: P1
 tags: []
 created_at: "2026-08-05T18:59:07.219Z"
-updated_at: "2026-08-05T19:24:56.271Z"
+updated_at: "2026-08-05T20:55:14.409Z"
 ---
 
 # H83: Run-scoped agent session affinity, live agent streaming, unified --agent inline
@@ -113,10 +113,10 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
 | 0444 | Skill launch hygiene: forward profile/agent vars; observation runbook without tail pipes | cancelled |
 | 0445 | H83 dogfood: multi-agent affinity+stream smoke (omp, claude, codex, agy, grok, pi) | cancelled |
 | 0446 | Phase D hold: true host-stage control inversion (do not implement) | cancelled |
-| 0447 | ts-libs foundation: six-agent session primitives + pipe-no-tty live output | todo |
-| 0448 | Spur pipeline agent.run: host-safe affinity default-on + live run log streaming | todo |
-| 0449 | Unify --agent inline surface + skill launch/observation hygiene | todo |
-| 0450 | H83 dogfood: multi-agent affinity and streaming smoke | todo |
+| 0447 | ts-libs foundation: six-agent session primitives + pipe-no-tty live output | done |
+| 0448 | Spur pipeline agent.run: host-safe affinity default-on + live run log streaming | done |
+| 0449 | Unify --agent inline surface + skill launch/observation hygiene | done |
+| 0450 | H83 dogfood: multi-agent affinity and streaming smoke | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -138,3 +138,6 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
 
 Each task Design freezes APIs, anti-patterns, file targets, and handoffs. Prefer implementing 0447 → 0448; 0449 parallel; 0450 last. Review after implement — do not invent a second shim layer in Spur.
 ## History
+- 2026-08-05T20:53:54.249Z backlog → active (system)
+- 2026-08-05T20:53:54.460Z active → verifying (system)
+- 2026-08-05T20:55:14.409Z verifying → done (system)

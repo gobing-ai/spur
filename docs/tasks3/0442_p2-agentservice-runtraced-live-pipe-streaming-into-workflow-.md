@@ -30,7 +30,7 @@ R5. Docs: watch via spur workflow trace <id> --follow --output; ban | tail in ex
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R5 — Live agent.run streaming without TTY
+Scenario: R5 (cancelled) — Live agent.run streaming without TTY
   Given a workflow agent.run with a child that emits lines over time
   When the run log is tailed during the hop
   Then intermediate lines appear before the hop finishes

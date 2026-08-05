@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <auto|name>] [--skip-design] [--auto] [--approve-taste]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>] [--skip-design] [--auto] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -15,7 +15,7 @@ Wraps the **sp:spur-dev** skill.
 | `"<description>"` | Feature description to plan. | required |
 | `--feature` `<id>` | Attach to an existing feature. | omitted |
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
-| `--agent` `<auto\|name>` | Who runs the model-bearing planning. The planning pipeline's `agent.run` stages always dispatch a subprocess; `inline` is not an acceptable value here (ADR-046). Omit to leave stages on the configured `agent.default`; `auto` tier-resolves an executor; a name pins that executor. | agent.default |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. The planning pipeline's `agent.run` stages always dispatch a subprocess; `inline` is accepted there as a synonym for omit, resolving to `agent.default` (ADR-047). `auto` tier-resolves an executor; a name pins that executor. | agent.default |
 | `--skip-design` | Omit the system-design hop. | off |
 | `--auto` | Skip objective HITL gates. | off |
 | `--approve-taste` | With --auto: skip design-approval pause. | off |
@@ -26,7 +26,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ```
 /sp:dev-plan "<description>"
-  [--feature <id>] [--parent <feature-id>] [--agent <auto|name>]
+  [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>]
   [--auto]              # skip objective HITL where the plan path supports it
   [--skip-design]       # design package off (satellite + task Design)
   [--approve-taste]     # with --auto: skip design-approval taste pause when applicable

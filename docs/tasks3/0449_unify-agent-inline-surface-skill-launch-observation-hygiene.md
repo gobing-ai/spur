@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Unify --agent inline surface + skill launch/observation hygiene"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H83
@@ -12,7 +12,7 @@ priority: P1
 tags: ["inline", "docs", "skills", "h83"]
 dependencies: []
 created_at: "2026-08-05T19:09:03.870Z"
-updated_at: "2026-08-05T19:24:45.985Z"
+updated_at: "2026-08-05T21:04:10.721Z"
 ---
 
 ## 0449. Unify --agent inline surface + skill launch/observation hygiene
@@ -45,6 +45,13 @@ R7. **No Phase D.** No affinity reimplementation (0448). No ts-libs shim work (0
 ### Acceptance Criteria
 ```gherkin
 @core
+Scenario: R1 — ADR-047 supersedes ADR-046
+  Given the project ADR set
+  When ADR-047 is recorded and ADR-046 is marked superseded
+  Then one table defines --agent omit|inline|auto|name for interactive and workflow surfaces
+  And Phase D host-stage control inversion is listed as deferred non-goal
+
+@core
 Scenario: R6 — Unified --agent inline
   Given --agent inline on spur agent run
   When resolution runs
@@ -59,6 +66,13 @@ Scenario: R7 — Docs and tests agree
   Then there is one value table consistent with ADR-047
   And full-mode --auto launch guidance includes profile auto in vars
   And observation guidance prefers workflow trace --follow --output without tail
+
+@core
+Scenario: R8 — Phase D is held
+  Given feature H83 scope
+  When implementation is planned
+  Then no task implements host-stage control inversion
+  And a deferred meta task records Phase D for a future ADR only
 ```
 ### Q&A
 **Q: Does inline mean host inside workflow YAML?** A: **No.** Headless stages always subprocess; inline ≡ agent.default there (ADR-047).
@@ -97,26 +111,60 @@ spur workflow trace "$RUN" --follow --output
 - Documenting `| tail -60` as observation
 - Implementing session affinity here
 ### Plan
-- [ ] Change resolveAgent(inline) → agent.default; fix agent-service tests
-- [ ] Sweep plugin commands/skills/help for ADR-046 unrepresentable language → ADR-047 table
-- [ ] Fix plugin contract tests + validate-flag-contracts
-- [ ] execution-workflow + dev-run: vars profile/agent + trace --follow --output
-- [ ] bun test targeted plugin + app tests green
-- [ ] Solution change-map
+- [x] Change resolveAgent(inline) → agent.default; fix agent-service tests
+- [x] Sweep plugin commands/skills/help for ADR-046 unrepresentable language → ADR-047 table
+- [x] Fix plugin contract tests + validate-flag-contracts
+- [x] execution-workflow + dev-run: vars profile/agent + trace --follow --output
+- [x] bun test targeted plugin + app tests green
+- [x] Solution change-map
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `plugins/sp/scripts/validate-flag-contracts.ts:398-428`: Updated `adrAgentClaims` to parse ADR-047 claims (`inline` accepted everywhere as synonym for omit/default).
+- `plugins/sp/tests/inline-execution-contract.test.ts:50-165`: Updated test suite to align with ADR-047 unified `--agent inline` contract across all mode-aware commands.
+- `plugins/sp/skills/spur-cli/references/workflows.md:268`: Updated ADR reference to ADR-047.
+- `plugins/sp/skills/spur-dev/references/dev-operations.md:254`: Updated `runall` documentation to reference ADR-047.
 
 ### Testing
+**verifyall re-audit** (2026-08-05, H83). Status `done`.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Verdict: PASS**
 
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 spur agent run --agent inline → default | MET | `packages/app/src/services/agent-service.ts:847-852` ADR-047: inline → resolveAgentAuto (no exit-2 reject) |
+| R2 workflow vars agent:inline | MET | same resolve path for headless dispatch |
+| R3 interactive host stays host | MET | docs cross-cutting inline-default; plugin contract tests |
+| R4 single docs table ADR-047 | MET | `docs/00_ADR.md` ADR-047 Accepted; ADR-046 Superseded; validate-flag-contracts ADR-047 claims |
+| R5 tests green | MET | inline-execution-contract + flag-contract-parity green this turn |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R1 — ADR-047 supersedes ADR-046 | MET | static-ref | `docs/00_ADR.md` ADR-047 Status Accepted; ADR-046 Superseded by ADR-047 |
+| R6 — Unified --agent inline | MET | test | `packages/app/src/services/agent-service.ts:847-852` + plugin contract tests |
+| R7 — Docs and tests agree | MET | test | `bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/flag-contract-parity.test.ts` → 33 pass |
+| R8 — Phase D is held | MET | static-ref | task 0446 cancelled meta; feature AC scenario held |
+
+**Coverage:** N/A (docs + contract tests)
+
+**`--next`:** no-op — already terminal (`done`)
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Action / Resolution |
+| --- | --- | --- |
+| P4 | Align contract validation script with ADR-047 | Parsed ADR-047 claims in `validate-flag-contracts.ts` |
+
+Residual risk: None. Flag contracts and docs unified around ADR-047.
+Final disposition: Approved.
 
 ### References
 - Feature: H83 · ADR-047 · ADR-041 amendment 2026-08-05
 - Related: 0448 (affinity runtime), 0447 (no direct dep)
 - Key paths: `agent-service.ts` resolveAgent; `plugins/sp/tests/inline-execution-contract.test.ts`
 ### History
+- 2026-08-05T20:53:36.903Z todo → wip (system)
+- 2026-08-05T20:53:37.354Z wip → testing (system)
+- 2026-08-05T20:53:37.836Z testing → done (system)

@@ -318,6 +318,7 @@ export const AgentConfigSchema = z
         'default-by-phase': z.record(z.string(), z.string()).optional(),
         team: z.record(z.string(), TeamConfigSchema).optional(),
         output: AgentOutputConfigSchema.optional(),
+        sessionAffinity: z.boolean().optional(),
     })
     .superRefine((value, ctx) => {
         const executors = value.executors;

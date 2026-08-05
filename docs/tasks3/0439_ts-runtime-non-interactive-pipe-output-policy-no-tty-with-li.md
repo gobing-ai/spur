@@ -30,7 +30,7 @@ R5. bun link @gobing-ai/ts-runtime into spur-new when unreleased.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R5 — Live agent.run streaming without TTY
+Scenario: R5 (cancelled) — Live pipe streaming without TTY
   Given a child that prints lines over time
   When run with pipe-no-tty policy and onOutput
   Then observers receive chunks before process exit

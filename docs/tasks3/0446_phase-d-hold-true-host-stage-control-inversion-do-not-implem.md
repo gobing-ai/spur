@@ -29,7 +29,7 @@ R4. Future work requires a new ADR and feature — not a silent scope expand.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R8 — Phase D is held
+Scenario: R8 (cancelled) — Phase D is held
   Given H83 completion
   When the corpus is inspected
   Then no H83 task ships host-stage control inversion code

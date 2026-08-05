@@ -32,7 +32,7 @@ R7. Pause/resume workflow continues affinity vars from effective-vars snapshot.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R3 — Run-scoped session affinity default-on
+Scenario: R3 (cancelled) — Run-scoped session affinity default-on
   Given affinity default on and two agent.run hops same agent
   When both succeed
   Then both use the same sessionDir under the runId

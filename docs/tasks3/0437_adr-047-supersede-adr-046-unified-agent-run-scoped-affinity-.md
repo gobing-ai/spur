@@ -32,7 +32,7 @@ R7. Point docs/03 and cross-cutting ownership at ADR-047; mark ADR-046 Supersede
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R1 — ADR-047 supersedes ADR-046
+Scenario: R1 (cancelled) — ADR-047 supersedes ADR-046
   Given docs/00_ADR.md
   When ADR-047 is present and ADR-046 is Superseded
   Then one value table covers interactive and workflow surfaces

@@ -265,7 +265,7 @@ gate answer. Cancel one live/paused run with `cancel <run-id>`; bulk-finalize or
 `@gobing-ai/spur/schemas/...` refs. `run` pre-loads then calls the engine with the loaded def
 (not bare `runFile` → node resolution). Schema errors under an embedded map never cite a
 `node_modules` path. Prefer a project `agent.default` (or explicit `--vars '{"agent":…}'`) when
-redirecting `agent.run` stages — not `--agent inline` on workflow-driven slash commands (ADR-046).
+redirecting `agent.run` stages (ADR-047).
 
 ### `clean` — housekeeping scopes (0429)
 

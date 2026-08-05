@@ -47,10 +47,9 @@ const EXCLUDED_COMMANDS = [
     'dev-wrapall',
 ] as const;
 
-// Mode-aware commands that are workflow-driven (ADR-046): their model-bearing work is
-// workflow `agent.run` stages that always dispatch a subprocess, so `--agent inline` is
-// unrepresentable and the accepted value set is `<auto|name>`. Distinct from EXCLUDED
-// (no --agent at all) and from inline-capable mode-aware commands.
+// Mode-aware commands that are workflow-driven: their model-bearing work is
+// workflow `agent.run` stages that dispatch a subprocess, so `--agent inline` is
+// accepted as a synonym for omit/default (ADR-047).
 const WORKFLOW_DRIVEN_AGENT_COMMANDS = ['dev-plan', 'dev-runall'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
@@ -110,56 +109,29 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: missing central execution-surface contract`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
             );
-            // The old standalone --inline / --subprocess flags must not appear as
-            // independent command flags (they may appear only in migration/deprecation prose).
-            // Check the argument-hint line specifically: workflow-driven commands accept
-            // <auto|name> (no inline, ADR-046); inline-capable commands use <inline|auto|name>.
             const hintMatch = raw.match(/argument-hint:\s*(.+)/);
             if (hintMatch) {
-                const selector = (WORKFLOW_DRIVEN_AGENT_COMMANDS as readonly string[]).includes(command)
-                    ? 'auto|name'
-                    : 'inline|auto|name';
                 expect(hintMatch[1], `${command}: argument-hint must use the correct --agent selector`).toContain(
-                    selector,
+                    'inline|auto|name',
                 );
-                if ((WORKFLOW_DRIVEN_AGENT_COMMANDS as readonly string[]).includes(command)) {
-                    expect(
-                        hintMatch[1],
-                        `${command}: workflow-driven command must not advertise inline in the --agent selector`,
-                    ).not.toContain('inline');
-                }
             }
             expect(raw, `${command}: domain vocabulary leaked into the operator surface`).not.toContain('--executor');
         }
     });
 
-    test('ADR-046 — workflow-driven commands drop inline from the --agent value set', () => {
-        // Branch (b) of task 0434: commands whose model-bearing work is pipeline agent.run
-        // stages never honor `inline`; their argument-hint and flag table carry <auto|name>.
+    test('ADR-047 — workflow-driven commands accept inline as a synonym for default', () => {
         for (const command of WORKFLOW_DRIVEN_AGENT_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must be mode-aware to carry --agent`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
             );
-            expect(raw, `${command}: must document the <auto|name> selector`).toContain('<auto|name>');
-            expect(raw, `${command}: must not advertise inline as an --agent value`).not.toContain(
-                '<inline|auto|name>',
-            );
+            expect(raw, `${command}: must document the <inline|auto|name> selector`).toContain('<inline|auto|name>');
             expect(raw, `${command}: must name agent.default as the redirect`).toContain('agent.default');
         }
 
-        // dev-run is mode-split (ADR-046): implement mode honors inline, full mode never
-        // merges it into vars.agent. Its table must carry inline AND the full-mode restriction.
         const devRun = readFileSync(join(COMMANDS_DIR, 'dev-run.md'), 'utf8');
         expect(devRun).toContain('<inline|auto|name>');
-        expect(devRun).toContain('--mode full');
         expect(devRun).toContain('agent.default');
-
-        // The contract docs state the exception so the gate is not the only authority.
-        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
-        expect(crossCutting).toContain('Workflow-driven commands never honor');
-        const glossary = readFileSync(GLOSSARY, 'utf8');
-        expect(glossary).toContain('Workflow-driven exception');
     });
 
     test('excluded commands must not delegate model-bearing work without the contract', () => {

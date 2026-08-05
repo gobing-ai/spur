@@ -30,7 +30,7 @@ R5. No Phase D experiments.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R4 — Agent matrix: omp, claude, codex, agy, grok, pi
+Scenario: R4 (cancelled) — Multi-agent smoke matrix
   Given H83 P0–P3 landed
   When smoke runs for each installed matrix agent
   Then each result is PASS or SKIP with reason

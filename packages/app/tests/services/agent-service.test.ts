@@ -1445,7 +1445,7 @@ describe('AgentService.runTraced', () => {
         expect(serialized).not.toContain('do-not-persist-this');
         expect(result.invocation?.argv).toContain('/skill:sp-dev-run 0295 --auto [redacted] [redacted]');
         expect(result.invocation?.translatedFrom).toBe('/sp:dev-run 0295 --auto [redacted] [redacted]');
-        expect(result.invocation?.outputMode).toBe('buffered');
+        expect(result.invocation?.outputMode).toBe('pipe');
         expect(result.invocation?.stdinInteractive).toBe(false);
     });
 
@@ -1537,7 +1537,8 @@ describe('AgentService.runTraced', () => {
         });
         expect(fresh.invocation).toMatchObject({
             continue: false,
-            outputMode: 'buffered',
+            // H83 R5 / 0448: nonInteractive uses pipe-no-TTY (live onOutput), not stream.
+            outputMode: 'pipe',
             stdinInteractive: false,
         });
 
@@ -1569,15 +1570,15 @@ describe('AgentService.runTraced', () => {
         expect(typeof callArgs[2]?.onOutput).toBe('function');
     });
 
-    // R3 mutation check (task 0414): the pipeline path must never re-expose a
-    // TTY to the child. If nonInteractive were dropped (or output policy
-    // switched to inherit), outputMode flips to 'stream' and stdinInteractive
-    // becomes true — these assertions fail, catching the 0295 regression.
+    // R3 mutation check (task 0414 / H83 R5): the pipeline path must never
+    // re-expose a TTY to the child. nonInteractive uses pipe-no-TTY; if that
+    // contract is dropped for stream-inherit, outputMode flips and
+    // stdinInteractive may become true — these assertions catch the regression.
     test('non-interactive contract keeps the child TTY-blind (R3 mutation check)', async () => {
         const svc = makeService();
         const deps = makeSimpleDeps('pi');
         const result = await svc.runTraced('/sp:dev-run 0414 --mode implement --auto', { agent: 'pi' }, deps);
-        expect(result.invocation?.outputMode).toBe('buffered');
+        expect(result.invocation?.outputMode).toBe('pipe');
         expect(result.invocation?.stdinInteractive).toBe(false);
     });
 
@@ -1911,20 +1912,18 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         expect(diag).toContain('claude');
     });
 
-    test('task 0413: --agent inline reaching spur agent run fails with a clear diagnostic', async () => {
+    test('ADR-047: --agent inline on spur agent run resolves to agent.default (subprocess)', async () => {
         const { errors, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'inline', json: true }, deps);
-        // inline selects in-session execution; spur agent run always starts a
-        // subprocess, so it must refuse rather than silently dispatching.
-        expect(code).toBe(2);
-        expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        const diag = errors.join('\n');
-        expect(diag).toContain("'inline'");
-        expect(diag).toContain('cannot be passed');
-        expect(diag).toContain('agent.default');
-        expect(diag).toContain('--agent auto');
+        // inline ≡ omit on a headless surface → agent.default executor, subprocess.
+        // Not exit 2 solely because the value was inline (ADR-047 supersedes the
+        // ADR-046 reject-inline guard).
+        expect(code).toBe(0);
+        expect(runner.runPromptCommand).toHaveBeenCalled();
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(errors.join('\n')).not.toContain('cannot be passed');
     });
 });
 

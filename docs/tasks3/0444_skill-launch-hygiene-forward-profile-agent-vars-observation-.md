@@ -28,7 +28,7 @@ R3. Optional: dev-run command prose names the exact jq vars construction.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R7 — Docs and tests agree
+Scenario: R7 (cancelled) — Launch and observation hygiene
   Given /sp:dev-run full mode guidance with --auto
   When the documented launch command is followed
   Then --vars includes profile auto and wbs

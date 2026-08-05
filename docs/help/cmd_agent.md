@@ -25,7 +25,7 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 |---|---|
-| `--agent <name>` | Agent name or `auto` (default: `auto`). Literal `inline` is **rejected** (exit 2) — `spur agent run` always starts a subprocess; use `agent.default` / `--agent auto` / `--agent <name>` for pipeline stages (ADR-046) |
+| `--agent <name>` | Agent name, `auto`, or `inline` (default: `auto`). `inline` resolves like omitting the flag to `agent.default` (ADR-047); `auto` tier-resolves an executor; a name pins that executor. `spur agent run` always starts a subprocess. |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
 | `--mode <mode>` | Agent output mode: `text` \| `json` (default: `text`) |

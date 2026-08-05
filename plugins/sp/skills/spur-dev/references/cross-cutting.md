@@ -34,7 +34,7 @@ in scripts and audit output but does not change the default.
 
 | Value | Who does the work | Derived surface |
 |---|---|---|
-| `inline` (default when omitted) | Whoever is running this session | Inline — by definition |
+| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline (host session); headless: subprocess of `agent.default` |
 | `auto` | Tier-resolved from the stage's `min_tier` + `fallback` | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
 | `<name>` (coding agent or configured executor) | That executor | Inline when it resolves to the current session's agent; subprocess otherwise |
 
@@ -45,8 +45,9 @@ form is no longer part of the command surface.
 This is a prompt-runtime rule owned by the command wrapper and its backing skill, not a branch in
 `AgentService`: the current coding agent is already executing the command, so inline means continuing
 in that session. Threading an `inline` option through `AiRunner` would still start a subprocess and
-would therefore be a false implementation. `spur agent run` always dispatches, so it rejects the
-literal `inline`.
+would therefore be a false implementation. On a headless surface (`spur agent run` / workflow
+`agent.run`) `inline` is **not** rejected (ADR-047): it resolves exactly like omitting the flag to a
+subprocess of `agent.default`.
 
 ### Objective triggers override the answer
 
@@ -92,12 +93,13 @@ This is **the same rule, not an exception**: `--agent` names who does the thinki
 the thinking happens in the stages. Selecting an executor for a loop that runs no prompts would be
 meaningless.
 
-**Workflow-driven commands never honor `inline` (ADR-046).** When a command's model-bearing work is
-a workflow pipeline's `agent.run` stages, those stages always dispatch a subprocess — `inline` is not
-an honorable value and is not accepted. `dev-plan` and `dev-runall` accept `--agent <auto|name>`
-only; `dev-run --mode full` (the default) never merges `inline` into `vars.agent`. `dev-run --mode
-implement` runs a single competency in-session and does honor `inline`. Omit `--agent` on a
-workflow-driven command to leave the stages on the configured `agent.default`.
+**Workflow-driven commands accept `inline` as `agent.default` (ADR-047).** When a command's
+model-bearing work is a workflow pipeline's `agent.run` stages, those stages always dispatch a
+subprocess; `inline` is accepted there as a synonym for omitting `--agent` — the stages run under a
+subprocess of the configured `agent.default`, never in the host session. `dev-plan`, `dev-runall`,
+and `dev-run --mode full` merge `--agent` (including an explicit `inline`) into per-task `vars.agent`;
+on dispatch that value resolves like omit to `agent.default`. `dev-run --mode implement` runs a single
+competency in-session and does honor `inline` as the host session.
 
 ### Explicit subprocess surfaces are unchanged
 
@@ -106,8 +108,8 @@ are always subprocess execution. Those surfaces already express an explicit proc
 retain their existing resolution, output, timeout, and trace contracts. A full workflow-backed
 operation naturally selects subprocess when it requires trigger 2 or 3; the individual command's
 inline default does not rewrite workflow YAML or fabricate an inline `AgentRunTracedResult`.
-`spur agent run` itself retains its own default of `auto` — the unified `--agent` selector on the
-dev command surface does not change the CLI's default.
+`spur agent run` itself resolves omit/`inline` to `agent.default` and `--agent auto` tier-resolves —
+the unified `--agent` selector on the dev command surface does not change the CLI's resolution.
 
 ### Inline trade-off
 

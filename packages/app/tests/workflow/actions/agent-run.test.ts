@@ -383,7 +383,7 @@ describe('AgentRunActionRunner capture mode', () => {
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'ok', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
-        expect(result.setVars).toEqual({ __agentSession: 'open' });
+        expect(result.setVars).toMatchObject({ __agentSession: 'open' });
     });
 
     test('capture:true does not set session latch on failure', async () => {
@@ -1261,5 +1261,63 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
         expect(existsSync(join(dir, '.spur', 'run', 'test-1-output.log'))).toBe(false);
         expect(existsSync(join(dir, '.spur', 'run', 'test-1.log'))).toBe(false);
         rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+describe('Task 0448 — run-scoped session affinity and host protection', () => {
+    test('affinity default on passes sessionDir and sets affinity vars', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({ runId: 'run-123', workdir: '/tmp/w1' });
+        const result = await runner.execute({ input: 'hello', agent: 'omp' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/omp');
+        expect(result.setVars).toMatchObject({
+            __agentSession: 'open',
+            __agentSessionAgent: 'omp',
+        });
+        expect((result.setVars as Record<string, unknown>).__agentSessionDir).toContain(
+            '.spur/run/run-123/agent-sessions/omp',
+        );
+    });
+
+    test('setting sessionAffinity false disables cross-hop sessionDir without bare continue', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({ runId: 'run-123', vars: { sessionAffinity: 'false', __agentSession: 'open' } });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toBeUndefined();
+        expect(capturedFlags.continue).toBeUndefined();
+    });
+
+    test('later hop inherits sessionDir and sessionId when set in vars', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-123',
+            vars: {
+                __agentSession: 'open',
+                __agentSessionDir: '/tmp/sdir',
+                __agentSessionId: 'sess-456',
+                __agentSessionAgent: 'omp',
+            },
+        });
+        const result = await runner.execute({ input: 'hello', agent: 'omp' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toBe('/tmp/sdir');
+        expect(capturedFlags.sessionId).toBe('sess-456');
     });
 });

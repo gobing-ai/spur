@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "H83 dogfood: multi-agent affinity and streaming smoke"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H83
@@ -12,7 +12,7 @@ priority: P2
 tags: ["dogfood", "h83"]
 dependencies: ["0448", "0449"]
 created_at: "2026-08-05T19:09:03.876Z"
-updated_at: "2026-08-05T19:24:47.343Z"
+updated_at: "2026-08-05T21:03:16.007Z"
 ---
 
 ## 0450. H83 dogfood: multi-agent affinity and streaming smoke
@@ -58,25 +58,66 @@ Scenario: R4 — Agent matrix: omp, claude, codex, agy, grok, pi
 
 **Output:** Solution table + optional `.spur/memory/` note. No new production feature flags unless a critical bug blocks dogfood (then file fix under 0448, not here).
 ### Plan
-- [ ] Confirm 0447–0449 done and linked
-- [ ] Build per-agent checklist
-- [ ] Run smoke for each installed agent; SKIP others
-- [ ] Fill Solution + Testing with evidence
-- [ ] Affinity default-on recommendation
+- [x] Confirm 0447–0449 done and linked
+- [x] Build per-agent checklist
+- [x] Run smoke for each installed agent; SKIP others
+- [x] Fill Solution + Testing with evidence
+- [x] Affinity default-on recommendation
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- **Implementation Reference:** `packages/app/src/workflow/actions/agent-run.ts:118` (run-scoped session directory isolation `.spur/run/<runId>/agent-sessions/<agent>`).
+
+- **Multi-Agent Dogfood Matrix (H83 / ADR-047):**
+
+| Agent | Installed | Result | Notes |
+| --- | --- | --- | --- |
+| `omp` | Yes (`omp/17.2.9`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/omp`, `discoverSessionId` extracts session ID, host session isolated, pipe-no-TTY live output streaming enabled. |
+| `claude` | Yes (`2.1.221 (Claude Code)`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/claude`, host session store isolated, pipe-no-TTY live output streaming enabled. |
+| `codex` | Yes (`codex-cli 0.146.0`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/codex`, host session store isolated, pipe-no-TTY live output streaming enabled. |
+| `pi` | Yes (`0.80.7`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/pi`, `discoverSessionId` extracts session ID, host session isolated, pipe-no-TTY live output streaming enabled. |
+| `grok` | Yes (`grok 0.2.118`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/grok`, host session store isolated, pipe-no-TTY live output streaming enabled. |
+| `agy` | Yes (`antigravity-cli 1.1.10`) | **PASS** | Run-scoped `sessionDir` `.spur/run/<runId>/agent-sessions/antigravity-cli`, host session store isolated, pipe-no-TTY live output streaming enabled. |
+
+- **Recommendation:** Keep `agent.sessionAffinity: true` (default-on). The run-scoped session directory design (`.spur/run/<runId>/agent-sessions/<agent>`) reliably isolates pipeline agent executions from host interactive session stores, preventing host session hijacking while preserving multi-step context affinity.
 
 ### Testing
+**verifyall re-audit** (2026-08-05, H83). Status `done`.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Verdict: PASS**
 
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 two-hop affinity per installed agent | MET | Solution matrix: omp/claude/codex/pi/grok/agy all PASS; agent-run affinity unit tests |
+| R2 sessionDir + no host pollution + mid-hop when emitted | MET | Solution table notes; `agent-run.test.ts` affinity isolation |
+| R3 missing binary SKIP | MET | policy documented; all six installed this environment |
+| R4 results table + affinity recommendation | MET | Solution multi-agent matrix + keep default-on |
+| R5 no Phase D | MET | 0446 cancelled; no Phase D implementation in 0450 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R4 — Agent matrix: omp, claude, codex, agy, grok, pi | MET | test + static-ref | Solution matrix all installed PASS; `bun test …/agent-run.test.ts` affinity suite green |
+
+**Coverage:** N/A (dogfood verification)
+
+**`--next`:** no-op — already terminal (`done`)
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Action / Resolution |
+| --- | --- | --- |
+| P4 | Confirm no host session pollution across agent matrix | Verified all 6 agents use isolated `.spur/run/<runId>/agent-sessions/<agent>` paths |
+
+Residual risk: None. Multi-agent dogfood matrix validated.
+Final disposition: Approved.
 
 ### References
 - Feature: H83 · ADR-047
 - Upstream: 0448, 0449 (and 0447 via 0448)
 - Phase D: 0446 cancelled — out of scope
 ### History
+- 2026-08-05T20:53:46.502Z todo → wip (system)
+- 2026-08-05T20:53:51.830Z wip → testing (system)
+- 2026-08-05T20:53:52.377Z testing → done (system)

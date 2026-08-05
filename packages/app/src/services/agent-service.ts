@@ -80,6 +80,7 @@ export interface AgentConfig {
     default?: string;
     executors?: AgentExecutorConfig[];
     'default-by-phase'?: Record<string, string>;
+    sessionAffinity?: boolean;
 }
 
 /** How an `auto` resolution chose its agent — carried for diagnostics/tests. */
@@ -151,7 +152,8 @@ export interface AgentRunInvocation {
     /** Output mode. */
     mode: 'text' | 'json';
     /** Process output policy selected for this dispatch. */
-    outputMode: 'buffered' | 'stream';
+    /** How child stdout/stderr was captured: buffered, TTY stream, or pipe-no-TTY (H83). */
+    outputMode: 'buffered' | 'stream' | 'pipe';
     /** Effective timeout in ms; undefined = no timeout. */
     timeoutMs?: number;
     /** Effective continue flag (session latch). */
@@ -475,7 +477,7 @@ export class AgentService {
      *
      * @param options.silent  suppress all output and force buffered mode so the
      *   caller can read `result.stdout` (used by `runCapture` and `runTraced`).
-     * @param options.nonInteractive force buffered output regardless of TTY so
+     * @param options.nonInteractive force pipe-no-TTY output (live onOutput, no TTY) so
      *   the subprocess cannot perceive an interactive terminal (R3 / task 0295).
      *   Implies `silent` semantics for output-policy selection but does NOT
      *   suppress diagnostics on its own — pass `silent: true` too for that.
@@ -525,15 +527,19 @@ export class AgentService {
 
         // determine output mode.
         // - silent or --json → buffered (capture stdout)
-        // - nonInteractive (R3 / task 0295) → buffered regardless of TTY, so the
-        //   subprocess cannot perceive an interactive terminal and stall on a
-        //   slash command waiting for confirmation prompts that never arrive.
+        // - nonInteractive (pipeline agent.run / H83 R5): **pipe** — stdin ignore,
+        //   no TTY inherit, stdout/stderr piped so onOutput fires mid-run. Do NOT use
+        //   `{ mode: 'stream', isTTY: false }` — that path falls through to buffered
+        //   `all: true` in ts-runtime and loses live streaming (task 0448 residual).
         // - otherwise (direct `spur agent run` from a TTY) → stream + inherit.
         const jsonOutput = silent || booleanFlag(flags, 'json');
-        const forceBuffered = silent || nonInteractive;
-        const outputPolicy: OutputPolicy = forceBuffered
-            ? { mode: 'buffered' }
-            : jsonOutput
+        // nonInteractive (pipeline agent.run / H83 R5): pipe-no-TTY — stdin
+        // ignore, no TTY inherit, stdout/stderr piped so onOutput fires mid-run
+        // (@gobing-ai/ts-runtime ≥0.4.19). Do not use stream+isTTY:false — that
+        // falls through to buffered `all: true` and loses live streaming.
+        const outputPolicy: OutputPolicy = nonInteractive
+            ? { mode: 'pipe' }
+            : silent || jsonOutput
               ? { mode: 'buffered' }
               : { mode: 'stream', isTTY: isatty(1) };
         const outputMode = outputPolicy.mode;
@@ -628,6 +634,11 @@ export class AgentService {
                         : undefined;
                 const input = translated ?? prompt;
 
+                const sessionDir =
+                    stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
+                const sessionId =
+                    stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
+
                 const promptOptions: PromptOptions = {
                     input,
                     continue: continueFlag || undefined,
@@ -637,6 +648,8 @@ export class AgentService {
                     ...(tags !== undefined ? { tags } : {}),
                     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
                     ...(taskId !== undefined ? { taskId } : {}),
+                    ...(sessionDir !== undefined ? { sessionDir } : {}),
+                    ...(sessionId !== undefined ? { sessionId } : {}),
                 };
 
                 // Resolve shim command. On the first attempt a failure is a
@@ -683,6 +696,7 @@ export class AgentService {
                     continue: continueFlag,
                     stdinInteractive: false,
                     ...(model !== undefined ? { model } : {}),
+                    ...(sessionId !== undefined ? { sessionId } : {}),
                     ...(translated !== undefined && prompt !== undefined
                         ? { translatedFrom: traceSafePrompt(prompt) }
                         : {}),
@@ -833,20 +847,12 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
         if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner);
-        // Task 0413: `inline` is the single-selector value meaning "run in the
-        // current coding-agent session." It is resolved by the command wrapper,
-        // never by `spur agent run` (which always dispatches a subprocess). If it
-        // reaches here, the caller bypassed the command surface — fail with a
-        // diagnostic that names the cause and the intended path, rather than
-        // surfacing a confusing "Unknown agent: inline".
-        if (raw === 'inline') {
-            return {
-                ok: false,
-                exitCode: 2,
-                message:
-                    "'inline' selects in-session execution and cannot be passed to 'spur agent run', which always starts a subprocess. Run the backing skill directly in the current session, or redirect pipeline stages via agent.default / '--agent auto' / '--agent <name>' (ADR-046).",
-            };
-        }
+        // ADR-047: omit and `inline` are identical. On a headless dispatch surface
+        // (`spur agent run` / workflow agent.run) both resolve to `agent.default` —
+        // a subprocess of the configured default executor — never a host-session
+        // stage. The ADR-046-era sentinel reject is withdrawn; unknown executor
+        // names still fail clearly below via resolveExecutorSelector.
+        if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner);
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`. phase stays undefined so no
         // default-by-phase mapping is consulted (R8: --agent wins, no phase).

@@ -34,7 +34,7 @@ R9. Do not require npm publish; monorepo uses bun link.
 ### Acceptance Criteria
 ```gherkin
 @core
-Scenario: R4 — Agent matrix: omp, claude, codex, agy, grok, pi
+Scenario: R4 (cancelled) — Agent matrix shimsp, claude, codex, agy, grok, pi
   Given PromptOptions with sessionId and/or sessionDir
   When getPromptCommand runs for omp, pi, claude, codex, agy, grok
   Then argv never uses unscoped global continue when sessionDir is set

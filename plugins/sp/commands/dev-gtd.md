@@ -49,7 +49,17 @@ fails, diagnose the root cause and fix it, then re-run `act` until every job is 
 executes the workflow inside a **root** container, so a test that asserts an OS permission error
 (e.g. `EACCES` after `chmod 0000`) may fail under root even though it passes on GitHub's non-root
 runner — treat that as a container-environment artifact and do **not** weaken a correct test to
-satisfy the root container. Skip this stage entirely when `--skip-act` is given.
+satisfy the root container.
+
+If the build failure includes `TS2307: Cannot find module` on a workspace package (e.g.
+`@gobing-ai/ts-*`), this is a container-environment artifact: `act`'s `tsc` (Node.js) cannot
+resolve Bun workspace packages because Bun does not create `node_modules/@scope/` symlinks.
+The real GitHub CI runner passes. **Do not** modify the build infrastructure to work around this
+`act`-specific issue. Instead, emit a clear message:
+`⚠ act CI simulation failed on workspace resolution — this is a container-environment artifact. Re-run with --skip-act to skip this step.`
+Then stop the run (this stage failed). The operator can use `--skip-act` to proceed.
+
+Skip this stage entirely when `--skip-act` is given.
 
 **3 — Generate a conventional commit message.** Follow the gitmsg procedure (the same one
 `/sp:dev-gitmsg` runs). Run `git diff --cached --stat` (add `-- <path>` when `--scope` is given) for

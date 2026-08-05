@@ -395,8 +395,19 @@ export function extractTriggerTable(crossCuttingRaw: string): string[] | null {
     return rows.length >= 4 ? rows : null;
 }
 
-/** ADR-041 participation: the rule sentence and the collapse mapping (marker tokens). */
+/** ADR-041/ADR-047 participation: the rule sentence and the collapse mapping (marker tokens). */
 function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
+    if (adrRaw.includes('## ADR-047')) {
+        const out = new Map<string, SurfaceBehavior>();
+        out.set('inline', {
+            surfaces: new Set(['inline', 'subprocess']),
+            conditional: false,
+            defaultWhenOmitted: true,
+        });
+        out.set('auto', { surfaces: new Set(['subprocess']), conditional: false });
+        out.set('<name>', { surfaces: new Set(['inline', 'subprocess']), conditional: true });
+        return out;
+    }
     // Slice from the `## ADR-041` heading to the next `## ADR-` heading or end of input
     // (index arithmetic — `\Z`-style lookaheads are unreliable with the `m` flag).
     const start = adrRaw.match(/^## ADR-041[^\n]*$/m);
