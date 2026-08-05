@@ -13,7 +13,9 @@ describe('git context', () => {
         const ctx = await gitContext(process.cwd());
         expect(ctx.root).toBeString();
         expect(ctx.root?.length).toBeGreaterThan(0);
-        expect(typeof ctx.branch).toBe('string');
+        // branch is null in detached HEAD (CI PR checkouts) — the dedicated
+        // "branch is null or non-empty string" test below covers the contract.
+        expect(ctx.branch === null || typeof ctx.branch === 'string').toBe(true);
         expect(typeof ctx.dirty).toBe('boolean');
     });
 
