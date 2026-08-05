@@ -6,13 +6,13 @@ description: ""
 status: done
 type: meta
 profile: standard
-feature_id: null
+feature_id: H52
 parent_wbs: null
 priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-08-05T06:30:00.218Z"
-updated_at: "2026-08-05T19:41:42.436Z"
+updated_at: "2026-08-05T19:50:26.032Z"
 ---
 
 ## 0436. Fix spur dev pipeline performance: compaction churn, repeated full-suite runs, engine reverse-engineering overhead
@@ -144,8 +144,16 @@ Feature: Spur dev-pipeline performance has bounded compaction and verification c
 - `packages/app/tests/services/task-record.test.ts:522-636` — 3 R4 tests: PASS→done walks wip→testing→done + creates a pipeline run-link; re-record is idempotent (one run-link); non-PASS→done throws `GuardDeniedError` without creating a link or advancing status.
 
 Verified: `bun run lint` clean, `bun run test` 4534 pass / 0 fail, `bun run build` green; task-service.ts 96% line / 99.66% function coverage. Smoke: `spur task record --transition done` on a scratch PASS task auto-created the `pipeline` run-link (`run_id: record:<wbs>:…`, kind `pipeline`) and began the FSM walk.
+
+**Residual fix pass (same task, post-verify)**
+
+- `packages/app/src/services/pipeline-run-link.ts` — shared `ensurePipelineRunLink` + `TASK_FORWARD_CHAIN` (CLI `run-link` + `record` single owner).
+- `task-service.ts` record walk — create pipeline run-link only immediately before hop to `done`; hop failures rethrow with status-reached context.
+- `config/workflows/task-pipeline.yaml` — `eval` → `sh -c "$qualityGateCmd"`; trusted-config-only comments.
+- Feature **H52** + dogfood `docs/dogfood/2026-08-05-H52-0436-dev-pipeline-performance-dogfood.md`.
+- Tests: `pipeline-run-link.test.ts` (parity + idempotent ensure); residual deferred-link test in `task-record.test.ts`.
 ### Testing
-**Force re-verify** (2026-08-05, `/sp:dev-verify 0436 --force --fix all --focus all --auto --next`). Status was already `done`; independent re-audit this turn. No fix pass required (all R/AC MET).
+**Force re-verify + residual fix pass** (2026-08-05). Status `done`; feature **H52**.
 
 **Verdict: PASS**
 
@@ -153,74 +161,59 @@ Verified: `bun run lint` clean, `bun run test` 4534 pass / 0 fail, `bun run buil
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:147-171` — "Bounding context compaction in `--next` chains": prefer one `/sp:dev-run` per session; if in-session `--next`, ≤1 compaction + compact handoff; no re-verify of done tasks. Re-read this turn. |
-| R2 | MET | Targeted-test-first in 3 places (re-read this turn): `plugins/sp/skills/spur-dev/references/cross-cutting.md:274-289`; `plugins/sp/skills/code-testing/SKILL.md:52-64`; `AGENTS.md:268-271`. Runtime support: `config/workflows/task-pipeline.yaml:182,222` (`eval "$qualityGateCmd"`). |
-| R3 | MET | `docs/03_ARCHITECTURE.md:212-244` §6.2 "Resume and guard vars contract" — caller-wins `mergeVars(persistedVars, options.vars)`, skip on-enter, `${vars.*}` template resolution, `EnvShellGuardRunner` env export. Re-read this turn. |
-| R4 | MET | `packages/app/src/services/task-service.ts:512-518,1151-1220` — PASS→done auto-walk via `FORWARD_CHAIN` + `ensurePipelineRunLink`; non-PASS throws `GuardDeniedError`. Contract: `packages/app/src/services/task-record.ts:63-65`. Wiring: `apps/cli/src/commands/task.ts:1108-1111` (`getDb`). Surface: `docs/04_DESIGN.md:725,950-951`. |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:147-171` — Bounding context compaction in `--next` chains |
+| R2 | MET | Targeted-test-first: `plugins/sp/skills/spur-dev/references/cross-cutting.md:274-289`; `plugins/sp/skills/code-testing/SKILL.md:52-64`; `AGENTS.md:268-271`. Runtime: `config/workflows/task-pipeline.yaml` uses `( sh -c "$qualityGateCmd" )` (trusted config only) |
+| R3 | MET | `docs/03_ARCHITECTURE.md:212-244` §6.2 Resume and guard vars contract |
+| R4 | MET | `packages/app/src/services/task-service.ts` record auto-walk; `packages/app/src/services/pipeline-run-link.ts` shared `ensurePipelineRunLink` (deferred until hop to `done`); CLI `run-link` reuses helper |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| R1 — chain ≤1 compaction [docs-only] | MET | static-ref | `plugins/sp/skills/spur-dev/references/cross-cutting.md:147-171` guidance (runtime effect needs a live chain; deliverable is doc) |
-| R2 — targeted test before full suite, ≤2 spur-check [docs-only] | MET | static-ref | Rule in 3 doc locations + `config/workflows/task-pipeline.yaml:182,222` `eval "$qualityGateCmd"` |
-| R3 — no node_modules; merge-wins + guard path named [docs-only] | MET | static-ref | `docs/03_ARCHITECTURE.md:212-244` names merge-wins + EnvShellGuardRunner + template path |
-| R4 — record auto-creates run-link + walks wip→testing→done | MET | test | `bun test packages/app/tests/services/task-record.test.ts --test-name-pattern "R4:"` → **3 pass / 0 fail** (this turn, exit 0). Tests at `packages/app/tests/services/task-record.test.ts:522-636` |
+| R1 — chaining three tasks does not trigger compaction churn | MET | static-ref | `plugins/sp/skills/spur-dev/references/cross-cutting.md:147-171` [docs-only] |
+| R2 — targeted tests precede the full suite | MET | static-ref | `plugins/sp/skills/spur-dev/references/cross-cutting.md:274-289`; `plugins/sp/skills/code-testing/SKILL.md:52-64`; `AGENTS.md:268-271`; `config/workflows/task-pipeline.yaml` `sh -c` [docs-only] |
+| R3 — resume/guard behavior is discoverable without engine spelunking | MET | static-ref | `docs/03_ARCHITECTURE.md:212-244` [docs-only] |
+| R4 — recording a completed task does not stall on lifecycle bookkeeping | MET | test | `bun test packages/app/tests/services/task-record.test.ts packages/app/tests/services/pipeline-run-link.test.ts` → 53 pass / 0 fail this turn |
 
-**Design conformance:** R1–R4 Design claims DONE against Solution + live sources (docs + record auto-walk). No silent NOT DONE.
+**Residuals fixed this pass**
 
-**SECUA (focus=all):** no blockers, no majors. Residual minors (accepted): run-link before walk; per-hop non-transactional walk; `eval "$qualityGateCmd"` only safe as pipeline-owned var.
+| Residual | Fix |
+|----------|-----|
+| L4.missing-feature-id | Linked to **H52**; feature AC matches task scenarios; dogfood artifact present |
+| Run-link before whole walk | `ensurePipelineRunLink` only immediately before hop to `done` |
+| Non-transactional walk opacity | Hop failures rethrow `GuardDeniedError` with status-reached + failed hop |
+| Duplicated run-link CLI/service | Shared `pipeline-run-link.ts`; exported from `@gobing-ai/spur-app` |
+| FORWARD_CHAIN vs lifecycle YAML | `TASK_FORWARD_CHAIN` + parity unit test |
+| `eval "$qualityGateCmd"` | `sh -c` + trusted-config-only comments |
 
-**Coverage:** N/A (docs + targeted lifecycle path; R4 unit tests only — no new runtime coverage measurement this re-verify).
+**Coverage:** N/A for docs paths; R4 unit coverage via task-record + pipeline-run-link tests.
 
-**Shippable:** N/A (no feature context — `feature_id: null`)
+**Shippable:** PASS — Feature H52 done; `spur feature check H52` pass:true findings:[]
 
 **`--next`:** no-op — task already terminal (`done`)
 ### Review
-**P1–P4 Findings** (independent re-review, 2026-08-05; no blockers, no majors)
+**Residuals cleared** (2026-08-05 residual-fix pass). No open SECUA issues.
 
 | Severity | File | Finding | Recommendation |
 |----------|------|---------|----------------|
-| P3 | packages/app/src/services/task-service.ts:1174 | `ensurePipelineRunLink` inserts the pipeline run-link before the transition walk; a mid-walk FSM guard failure leaves a link for a task not at `done` | Accept — PASS verdict is real provenance; transient link/status disagreement on a mid-chain guard failure is the only residual |
-| P3 | packages/app/src/services/task-service.ts:1181-1184 | Per-hop walk is not transactional: `wip→testing` may succeed while `testing→done` denies, stranding at `testing` | FSM per-hop guards are atomic; the failure surfaces rather than silently passing — acceptable |
-| P4 | packages/app/src/services/task-service.ts:1174-1176 | When `current` is outside `FORWARD_CHAIN` (`cancelled`/`blocked`), a single `transition(ref,'done')` is attempted and the FSM guard governs | Safe fallback; no bypass. Keep as-is |
-| P4 | packages/app/src/services/task-service.ts:1207-1217 | `ensurePipelineRunLink` is a private `TaskService` method reaching into `TaskRunLinkDao` via lazily-injected `getDb` | Future `RunLinkService` seam if run-link logic grows; not worth extracting today |
+| P1 | — | None | — |
+| P2 | — | None | — |
+| P3 | packages/app/src/services/task-service.ts (record walk) | ~~Run-link before walk / opaque mid-walk failure~~ **Fixed** | Deferred `ensurePipelineRunLink` to hop-to-`done`; hop failures rethrow with status-reached context |
+| P4 | packages/app/src/services/pipeline-run-link.ts | ~~CLI/service run-link duplication + FORWARD_CHAIN drift~~ **Fixed** | Shared helper + lifecycle YAML parity test |
 
-**Functional Traceability** (re-verified against source this turn)
+**Prior residual disposition**
 
-| Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:147-172` — "Bounding context compaction in `--next` chains": per-task-session guidance, ≤1-compaction target, compact per-task handoff, no re-verification of done tasks |
-| R2 | MET | `cross-cutting.md` "Targeted-test-first verification loop" (~line 271); `plugins/sp/skills/code-testing/SKILL.md:52-65`; `AGENTS.md:268-272` — narrow `bun test <file> --test-name-pattern <test>` before any full `spur-check`, full gate ≤2/task |
-| R3 | MET | `docs/03_ARCHITECTURE.md:212-248` §6.2 "Resume and guard vars contract" — claims independently re-verified against engine source this turn: `resumeRun` (src/service.ts:154-190) restores `effectiveVars` and merges caller `options.vars` over it (caller wins, `mergeVars(persistedVars, options.vars)` = `{...base, ...override}`), resumes from paused state; `resolveTemplates` (variables.ts) resolves `${vars.*}` against `context.vars`; `EnvShellGuardRunner` (packages/app/src/workflow/guards/shell.ts:30-37) passes `context.vars` merged over `process.env` into `/bin/sh -c` |
-| R4 | MET | `packages/app/src/services/task-service.ts:1149-1217` — `record()` auto-walks `wip→testing→done` on PASS + `ensurePipelineRunLink`; `task-record.ts:60-65` contract doc; `apps/cli/src/commands/task.ts:1111` `getDb` wiring; `docs/04_DESIGN.md:722,947` |
+| Residual | Disposition |
+|----------|-------------|
+| Run-link before whole walk | **Fixed** — deferred to hop-to-`done`; regression test in `task-record.test.ts` |
+| Per-hop non-transactional walk | **Mitigated** — explicit `GuardDeniedError` with reached status + failed hop |
+| Outside FORWARD_CHAIN single hop | Intentional FSM-governed fallback; no bypass |
+| CLI/service run-link duplication | **Fixed** — `ensurePipelineRunLink` shared |
+| FORWARD_CHAIN vs lifecycle YAML | **Fixed** — parity unit test |
+| `eval qualityGateCmd` | **Fixed** — `sh -c` + trusted-config-only |
+| L4.missing-feature-id | **Fixed** — feature **H52** (done) + dogfood artifact |
 
-**Acceptance Criteria Verification**
-
-| AC | Status | Evidence Type | Evidence |
-|----|--------|---------------|----------|
-| R1 — chain ≤1 compaction | MET | static (doc) | `cross-cutting.md:147-172` guidance; doc-only deliverable (runtime effect requires a live chain) |
-| R2 — targeted test before full suite, ≤2 `spur-check` | MET | static (doc) + command | Rule documented in 3 locations; `config/workflows/task-pipeline.yaml:179,219` uses `eval "$qualityGateCmd"` so a variable-held targeted-test command runs correctly |
-| R3 — no `node_modules` reads; merge-wins + guard template path named | MET | test (source-verified) | §6.2 names `mergeVars` caller-wins + `EnvShellGuardRunner`; independently re-verified against engine source this turn |
-| R4 — record auto-creates run-link + walks wip→testing→done, zero GuardDeniedError retries | MET | test | `packages/app/tests/services/task-record.test.ts:520-636` — 3 tests (auto-walk + run-link, idempotent re-record = 1 run-link, non-PASS→done throws `GuardDeniedError` with no link/advance). Ran this turn: `bun test packages/app/tests/services/task-record.test.ts --test-name-pattern "R4:"` → 3 pass / 7 expect; full file → 49 pass / 103 expect |
-
-**SECUA Review** (ranked; none blocking)
-
-- **minor** `task-service.ts:1174` — run-link inserted before the transition walk; a later FSM hop guard failure leaves a link for a task not at `done`. Legitimate (PASS verdict is real provenance); link/status can transiently disagree on a mid-chain guard failure.
-- **minor** `task-service.ts:1181-1184` — per-hop walk not transactional; `wip→testing` may succeed while `testing→done` denies, stranding at `testing`. This is the FSM's own per-hop atomicity, not a new defect; failure surfaces rather than silently passing.
-- **minor** `task-service.ts:1174` — `current` outside `FORWARD_CHAIN` falls to a single `transition(ref,'done')`; the FSM's own guard governs the denial. Safe fallback; no bypass.
-- **minor** `config/workflows/task-pipeline.yaml:179,219` — `eval "$qualityGateCmd"` executes a variable-held command. Safe only because `qualityGateCmd` is set by the pipeline's own config, not external/untrusted input; keep it that way (no user-controlled interpolation into that var).
-
-**Architecture** (advisory — no blocker/major)
-
-- **advisory** `task-service.ts:1207-1217` vs `apps/cli/src/commands/task.ts:1017-1021` — pipeline run-link creation (idempotent `kind === 'pipeline'` check + insert) is duplicated across the CLI `run-link` command and the service's private `ensurePipelineRunLink`. A shared `RunLinkService` would co-locate it; not worth the seam while it stays on the record path.
-- **advisory** `task-service.ts:517` — `FORWARD_CHAIN` duplicates the `task-lifecycle.yaml` forward path in code. Independently re-verified: `['backlog','todo','wip','testing','done']` matches the YAML `initialState`/forward-path exactly today. Cross-reference comment present; a guard test is warranted if the FSM chain is ever widened.
-
-**Scope check** — `config/workflows/task-pipeline.yaml` (2-line `eval "$qualityGateCmd"`) is not listed in Solution but is a direct R2 support change (lets a variable-held targeted-test command run). In-scope, not scope creep.
-
-**Disposition** — No blockers, no majors. Verdict: PASS. R1–R4 fully implemented; R3 contract claims independently re-verified against engine source this turn; R4 code typechecks, biome-clean, and covered by 3 targeted tests (49-file suite green).
-
-Functional Verdict: PASS
+**Functional Verdict:** PASS — R1–R4 MET; strict-core findings empty after residual pass.
 ### References
 - Session JSONL: `~/.omp/agent/sessions/-xprojects-spur-new/2026-08-05T03-34-24-170Z_019fcffc-92aa-7000-ad5f-d05c194e1229.jsonl` (+ `*.bash.log` subagent tool logs in its dir)
 - Source/agent: omp (High fidelity)
