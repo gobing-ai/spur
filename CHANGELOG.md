@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.3.31] — 2026-08-05
+
+### Added
+
+- Add all-in-one per-run workflow run log with `trace --follow` (96312b01)
+- Resolve agent run var from `agent.default` config (26a973c1)
+- Add `failureStates` schema and cover terminal-failure in tests (f1644ce2)
+- Add soft-probe quality gates and pure-slash pipeline inputs (1a4b7659)
+- Guard empty implements and resume timed-out steps (c8d60be6)
+- Consolidate message surfaces into unified Inbox board module (c6f74312)
+- Refine progress logging UX and stream shell output (da46e301)
+- Retoken task-kanban onto DESIGN.md surface ladder (8cf97ddf)
+
+### Fixed
+
+- Name `agent.default` in inline reject diagnostic (0434) (e065672a)
+- Resolve run schemas via embedded map and inject HITL answer on resume (3173cb1a)
+- Evaluate shell-guard vars as data, not code (88a32a63)
+- Declare failure terminals and run-scope shared artifacts (ceac9a4a)
+
+### Changed
+
+- Make `inline` unrepresentable on workflow-driven commands (d785668f)
+
+### Other
+
+- Document new agent loop, feature sync, and workflow run/continue verbs (32b6f7c3)
+- Add issue-finding task for spur dev-pipeline performance (3ca12d29)
+- Record H82 decision on inline inapplicability for workflow-driven commands (ab86e9b0)
+- Refine D3 task specs for schema-resolution and headless-HITL defects (4e18683b)
+- Add system design best practices to AGENTS.md (34d56c19)
+- Add allowWrite path to config (308bc6fe)
+- Extend sandbox allowWrite and record 0425 wrapup metrics (cf79daaf)
+- Record ADR-044/045 and sync workflow and feature surface docs (b36fff40)
+- Distinguish feature refresh from sync (ed724d54)
+- Make workflow status authoritative and document agent.default (37485ad5)
+- Bump ts-libs to 0.4.18 for engine failureStates (f83275b7)
+- Record wrapup learnings for task 0425 / ADR-044 (ff9dfb44)
+- Add feature D3 workflow reliability-defect issues (ecf385aa)
+- Add feature D2 all-in-one workflow run-log planning artifacts (e92dc811)
+- Allow .git/hooks writes in sandbox (b149224c)
+- Cover cancel edge on HITL continue resume / 0433 (e175301c)
+- Prune agent models and drop `--strict` feature gate (6c900249)
+- Bump @gobing-ai/ts-\* packages to 0.4.17 (e3756ccb)
+- Refresh feature and task docs for kanban, workflow UX, inbox (36b0e1bf)
+- Add task kanban, workflow logging, and inbox board planning docs (3d929370)
+
 ## [0.3.29] — 2026-08-02
 
 ### Added
