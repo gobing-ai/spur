@@ -177,13 +177,14 @@ wires the host + persistence and exposes validate/run/list; persisted runs power
 `spur workflow trace`. The planning layer's task/feature lifecycles run as workflow definitions
 on this engine (§12.2) — its first long-lived, externally-triggered consumer (ADR-022).
 
-### 6.1 Consolidated per-run run log (accepted design — ADR-045; not yet built)
+### 6.1 Consolidated per-run run log (built — ADR-045 / feature D2)
 
-A single all-in-one per-run log at `.spur/run/<RUNID>.log` will make every `spur workflow run`
-observable from creation to terminal status. The consolidated sink is a **new read-only subscriber**
+A single all-in-one per-run log at `.spur/run/<RUNID>.log` makes every `spur workflow run`
+observable from creation to terminal status. The consolidated sink is a **read-only subscriber**
 on the existing `WorkflowObservabilityBus` (which ADR-035 keeps a read-only projection) that appends
-the already-redacted, already-bounded event stream to the log file. It subsumes the current
-`RunOutputSink` — the same `observe`/`close` contract, byte/line bounds (default 1 MiB / unbounded,
+the already-redacted, already-bounded event stream to the log file. It subsumes the former
+`RunOutputSink` (now `workflow-run-log-sink.ts`) — the same `observe`/`close` contract, byte/line
+bounds (default 1 MiB / unbounded,
 configurable), visible truncation marker, and best-effort-writes-never-fail-the-run semantics — but
 emits a richer event set: the run's foreground rendering (plan preview, per-step progress,
 transitions, final summary), child agent stdout/stderr chunks, consumed stdin (steering), and engine

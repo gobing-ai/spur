@@ -89,12 +89,12 @@ The skill's logic divides by **whether the LLM adds value**:
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
-| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
+| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
 | `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes]` | Resume a paused HITL run (omit id → most recent paused) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
-| `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed |
+| `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflow.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
-| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>]` | Run history list or per-run timeline |
+| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output]` | Run history list or per-run timeline |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -173,8 +173,9 @@ restructuring — then re-run. Loop until the run reaches the expected terminal 
 
 ### Run output and observability flags
 
-The `run` verb has six output/observability flags beyond the core `--dry-run`/`--async`/`--no-plan`.
-All six are ignored under `--json` (machine output stays byte-identical):
+The `run` verb has seven output/observability flags beyond the core `--dry-run`/`--async`/`--no-plan`.
+The six human-output flags are ignored under `--json` (machine output stays byte-identical);
+`--no-log` applies regardless of output mode (it controls the side-effect log file, not the stdout shape):
 
 ```bash
 spur workflow run ./workflows/approval.yaml --quiet                # final summary only
@@ -182,6 +183,7 @@ spur workflow run ./workflows/approval.yaml --silent               # errors only
 spur workflow run ./workflows/approval.yaml --verbose              # transitions + correlation diagnostics
 spur workflow run ./workflows/approval.yaml --detail minimal       # tersest human output
 spur workflow run ./workflows/approval.yaml --trace-file           # persist redacted JSONL trace
+spur workflow run ./workflows/approval.yaml --no-log               # opt out of the consolidated .spur/run/<RUNID>.log
 spur workflow run ./workflows/approval.yaml --steer                # interactive steering on stdin
 ```
 
@@ -191,6 +193,9 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
   per-step headers), `full` (transitions + correlation). `--verbose` is shorthand for `--detail full`.
 - **`--trace-file`** appends a redacted, schema-versioned JSONL trace under `.spur/runs/workflow/`
   for post-run analysis - independent of human/JSON output.
+- **`--no-log`** opts out of writing the consolidated all-in-one run log (`.spur/run/<RUNID>.log`).
+  By default the log is written **and retained** after the run ends; this flag skips it entirely
+  (propagates to the `--async` detached worker). No `--keep-log` / delete-by-default exists.
 - **`--steer`** is synchronous and in-process: it cannot combine with `--json` or `--async` (exit `2`).
   It accepts steering commands on stdin at declared action boundaries for interactive control.
 
@@ -198,12 +203,12 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
 
 ```
 spur workflow validate <file> [--no-schema] [--json]
-spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--steer] [--json]
+spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer] [--json]
 spur workflow continue [run-id] [--yes] [--json]
 spur workflow cancel   <run-id> [--json]
-spur workflow clean    [--older-than <minutes>] [--force] [--dry-run] [--json]
+spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
 spur workflow list     [--json]
-spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--json]
+spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
 ```
 
 | Flag (on `run`) | Effect |
@@ -217,6 +222,7 @@ spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso
 | `--verbose` | Include transitions and correlation diagnostics in human progress (implies `--detail full`). |
 | `--detail <level>` | Human detail level: `minimal`, `invocation` (default), or `full`. |
 | `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/runs/workflow/`. |
+| `--no-log` | Opt out of writing the consolidated `.spur/run/<RUNID>.log` (retained by default; propagates to `--async` workers). |
 | `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only; incompatible with `--json`/`--async`). |
 
 `validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
@@ -233,16 +239,38 @@ Follow a live run to terminal (human streaming mode):
 ```bash
 spur workflow trace <run-id> --follow            # stream until terminal (default 1000ms poll)
 spur workflow trace <run-id> --follow --poll 500 # poll every 500ms
+spur workflow trace <run-id> --follow --output   # stream .spur/run/<RUNID>.log instead of the DB timeline
 ```
 
 - **`--follow`** replays a run timeline and polls persisted state until it becomes terminal. It
   requires a `run-id` (exit `2` without one) and cannot combine with `--json` (exit `2` - it is a
   human streaming mode).
 - **`--poll <ms>`** sets the follow polling interval (default `1000`, minimum `50`; exit `2` otherwise).
+- **`--output`** swaps the follow source from the structured DB timeline to the consolidated all-in-one
+  log (`.spur/run/<RUNID>.log`, tail -f equivalent), streaming new lines as they land and exiting at
+  terminal status. It requires `--follow` and a `run-id`, is a human stream (rejects `--json`), and is
+  a **distinct source** — it never interleaves with the DB timeline. If the log never appears (e.g. the
+  run was started with `--no-log`), a clear message is printed at terminal status rather than hanging.
+  No `spur workflow monitor` verb exists; `--output` is the log-streaming surface.
 
 HITL pause/resume: a run that hits a HITL action pauses; resume with `spur workflow continue [run-id]`
 (`--yes` skips confirmation). Cancel one live/paused run with `cancel <run-id>`; bulk-finalize
 orphans stuck in `running`/`pending` with `clean` (`--older-than` default 30 minutes, or `--force`).
+
+### `clean` — housekeeping scopes (0429)
+
+`spur workflow clean` is the housekeeping one-liner: it runs **both** scopes unless scoped by flag.
+
+- **Stale-run finalization** (existing): bulk-finalizes orphaned `running`/`pending` runs as `failed`.
+  `--older-than <minutes>` (default 30) and `--force` (all non-terminal regardless of age) apply here only.
+- **Run-log reclamation** (0429): removes retained `.spur/run/<RUNID>.log` files whose mtime is older
+  than `workflow.logRetentionDays` in `.spur/config.yaml` (default 30 days; integer days, not minutes).
+  Age is the only gate; best-effort deletes never abort the rest. Never touches
+  `.spur/runs/workflow/<RUNID>.jsonl` or `*-partial.md`.
+- **`--logs`** scopes to log reclamation only (skips stale-run finalization). `--dry-run` applies to
+  both scopes (lists what would be removed, writes nothing). `--json` returns
+  `{ olderThanMinutes, dryRun, cleaned, logs: { retentionDays, dryRun, reclaimed, failures } }` (with
+  `--logs`, the reclamation object alone).
 ## Behavior
 
 This skill behaves as an **author** (choose mode → write a correct definition → prove it runs) feeding

@@ -10,6 +10,7 @@ import {
     RedactionConfigSchema,
     RulesConfigSchema,
     spurConfigSchema,
+    WorkflowConfigSchema,
     WorkflowsConfigSchema,
 } from '../src/index';
 import {
@@ -191,6 +192,26 @@ describe('app-section schemas', () => {
     test('AgentConfigSchema rejects non-integer max-lines (task 0414 R4)', () => {
         const result = AgentConfigSchema.safeParse({ output: { 'max-lines': 2.5 } });
         expect(result.success).toBe(false);
+    });
+
+    test('WorkflowConfigSchema parses logRetentionDays and defaults to 30 (task 0429)', () => {
+        expect(WorkflowConfigSchema.parse({ logRetentionDays: 7 }).logRetentionDays).toBe(7);
+        expect(WorkflowConfigSchema.parse({}).logRetentionDays).toBe(30);
+    });
+
+    test('WorkflowConfigSchema rejects non-positive or non-integer logRetentionDays (task 0429)', () => {
+        for (const bad of [0, -1, 2.5]) {
+            const result = WorkflowConfigSchema.safeParse({ logRetentionDays: bad });
+            expect(result.success).toBe(false);
+        }
+    });
+
+    test('spurConfigSchema accepts the workflow section (task 0429)', () => {
+        const result = spurConfigSchema.safeParse({ workflow: { logRetentionDays: 14 } });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.workflow?.logRetentionDays).toBe(14);
+        }
     });
 
     test('executor tier accepts capable-1/2/3 and normalizes legacy bare capable (0343)', () => {

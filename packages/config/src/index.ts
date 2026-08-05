@@ -404,6 +404,18 @@ export const WorkflowsConfigSchema = z.object({
     paths: z.array(z.string()).optional(),
 });
 
+/**
+ * Schema for the `workflow` section (feature D2 / task 0429).
+ *
+ * - `logRetentionDays` — how old a retained `.spur/run/<RUNID>.log` must be
+ *   (mtime) before `spur workflow clean` reclaims it. Default 30. Config
+ *   units are days here because retention is a policy; the stale-run
+ *   `--older-than` flag stays minutes and is never reused for log age.
+ */
+export const WorkflowConfigSchema = z.object({
+    logRetentionDays: z.number().int().positive().default(30),
+});
+
 /** Schema for the `redaction` section. */
 export const RedactionConfigSchema = z.object({
     enabled: z.boolean().optional(),
@@ -414,7 +426,7 @@ export const RedactionConfigSchema = z.object({
 /**
  * Zod schema for the top-level `.spur/config.yaml` — the single project configuration
  * surface (design §9). Merges BOTH the planning section (`tasks`/`features`) and the
- * app section (`agent`/`rules`/`workflows`/`redaction`) into one validated shape.
+ * app section (`agent`/`rules`/`workflows`/`workflow`/`redaction`) into one validated shape.
  *
  * All fields are optional — a missing key means "use the default" rather than "error",
  * preserving partial-config tolerance and forward-compatible additions. YAML keys are
@@ -429,6 +441,7 @@ export const spurConfigSchema = z.object({
     agent: AgentConfigSchema.optional(),
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
+    workflow: WorkflowConfigSchema.optional(),
     redaction: RedactionConfigSchema.optional(),
     tasks: tasksConfigSchema.optional(),
     features: featuresConfigSchema.optional(),
@@ -443,11 +456,17 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 /** Inferred type for the `agent.output` config section (per-run output capture bounds). */
 export type AgentOutputConfig = z.infer<typeof AgentOutputConfigSchema>;
 
+/** Inferred type for the `workflow` config section (run-log retention policy, task 0429). */
+export type WorkflowConfig = z.infer<typeof WorkflowConfigSchema>;
+
 /**
  * Back-compat type for the app-layer (non-planning) section of the config.
  * Kept so existing consumers that operate on `SpurAppConfig` continue to type-check.
  */
-export type SpurAppConfig = Pick<SpurConfig, 'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'redaction'>;
+export type SpurAppConfig = Pick<
+    SpurConfig,
+    'version' | 'name' | 'agent' | 'rules' | 'workflows' | 'workflow' | 'redaction'
+>;
 
 // ---- App-layer (runtime) config ----
 

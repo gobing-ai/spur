@@ -336,7 +336,11 @@ export type {
     WorkflowTraceTimeline,
     WorkflowValidateResult,
 } from './services/workflow-service';
-export { resolveOutputLogConfig, WorkflowAppService } from './services/workflow-service';
+export {
+    resolveOutputLogConfig,
+    resolveWorkflowLogRetentionDays,
+    WorkflowAppService,
+} from './services/workflow-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';

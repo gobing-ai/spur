@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
-import { resolveOutputLogConfig, WorkflowAppService } from '../../src/services/workflow-service';
+import {
+    resolveOutputLogConfig,
+    resolveWorkflowLogRetentionDays,
+    WorkflowAppService,
+} from '../../src/services/workflow-service';
 
 const MINIMAL_WORKFLOW_YAML = `name: test-flow
 kind: state-machine
@@ -1272,6 +1276,65 @@ terminalStates:
         });
     });
 
+    describe('cleanRunLogs (retained run-log reclamation, 0429)', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+
+        async function seedLog(dir: string, runId: string, mtimeMs: number): Promise<string> {
+            const logPath = join(dir, '.spur', 'run', `${runId}.log`);
+            await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+            await writeFile(logPath, `log for ${runId}`);
+            await utimes(logPath, new Date(mtimeMs), new Date(mtimeMs));
+            return logPath;
+        }
+
+        test('reclaims logs older than the retention threshold, keeps fresh ones', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            const oldLog = await seedLog(dir, 'run_old', Date.now() - 40 * DAY);
+            await seedLog(dir, 'run_fresh', Date.now() - 5 * 60 * 1000);
+
+            const result = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, false);
+
+            expect(result.retentionDays).toBe(30);
+            expect(result.dryRun).toBe(false);
+            expect(result.failures).toEqual([]);
+            expect(result.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
+            await expect(readFile(oldLog, 'utf8')).rejects.toThrow(); // unlinked
+            expect(await readFile(join(dir, '.spur', 'run', 'run_fresh.log'), 'utf8')).toContain('run_fresh');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('dry-run lists candidates without deleting', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            const oldLog = await seedLog(dir, 'run_old', Date.now() - 40 * DAY);
+
+            const result = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, true);
+
+            expect(result.dryRun).toBe(true);
+            expect(result.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
+            expect(await readFile(oldLog, 'utf8')).toContain('run_old'); // still present
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('missing run dir is a no-op', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            const result = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, false);
+            expect(result).toEqual({ retentionDays: 30, dryRun: false, reclaimed: [], failures: [] });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('ignores non-log files in the run dir', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            await seedLog(dir, 'run_old', Date.now() - 40 * DAY);
+            await writeFile(join(dir, '.spur', 'run', 'README.md'), 'keep me');
+
+            const result = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, false);
+
+            expect(result.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
+            expect(await readFile(join(dir, '.spur', 'run', 'README.md'), 'utf8')).toBe('keep me');
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
     describe('cancel (single-run finalization by id)', () => {
         async function seedRun(
             db: Awaited<ReturnType<ReturnType<typeof makeCtx>['getDb']>>,
@@ -1426,6 +1489,31 @@ describe('agent.output config bounds flow to the consolidated run-log sink (task
         const config = await resolveOutputLogConfig(dir);
         expect(config.maxBytes).toBeUndefined();
         expect(config.maxLines).toBeUndefined();
+        await rm(dir, { recursive: true, force: true });
+    });
+});
+
+describe('workflow.logRetentionDays config flows to clean (task 0429)', () => {
+    test('resolveWorkflowLogRetentionDays reads workflow.logRetentionDays from .spur/config.yaml', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), 'version: "1"\nworkflow:\n  logRetentionDays: 7\n');
+
+        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(7);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when unset', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
+        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(30);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when config is unreadable', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), `this is: not: valid: yaml: [unclosed\n`);
+        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(30);
         await rm(dir, { recursive: true, force: true });
     });
 });

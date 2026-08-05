@@ -2,14 +2,21 @@
  * Thin-wrapper integration tests for apps/cli/src/commands/workflow.ts.
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
-import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type TimelineEvent, WorkflowSteeringController, type WorkflowTraceTimeline } from '@gobing-ai/spur-app';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
-import { followTrace, formatActionCost, formatTraceTimeline, submitSteeringLine } from '../../src/commands/workflow';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import {
+    followRunLog,
+    followTrace,
+    formatActionCost,
+    formatTraceTimeline,
+    submitSteeringLine,
+} from '../../src/commands/workflow';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject, runCli } from '../helpers';
@@ -643,6 +650,40 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('run retains the consolidated run log by default after a terminal run (0427 R6)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+
+        const exitCode = await main(['workflow', 'run', '--run-id', 'retain-log-run', workflowFile], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const logPath = join(dir, '.spur', 'run', 'retain-log-run.log');
+        expect((await readFile(logPath, 'utf8')).length).toBeGreaterThan(0);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run --no-log opts out of writing the consolidated run log (0427 R7)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+
+        const exitCode = await main(['workflow', 'run', '--no-log', '--run-id', 'no-log-run', workflowFile], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const logPath = join(dir, '.spur', 'run', 'no-log-run.log');
+        await expect(readFile(logPath, 'utf8')).rejects.toThrow();
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run rejects steering in machine and detached modes', async () => {
         for (const incompatible of ['--json', '--async']) {
             const output = createCapturedOutput();
@@ -798,6 +839,22 @@ failureStates:
         expect(exitCode).toBe(1);
     });
 
+    test('trace --output requires --follow and rejects --json', async () => {
+        expect(
+            await main(['workflow', 'trace', 'run-1', '--output'], { output: nullOutput(), dbUrl: ':memory:' }),
+        ).toBe(1);
+        expect(
+            await main(['workflow', 'trace', 'run-1', '--follow', '--output', '--json'], {
+                output: nullOutput(),
+                dbUrl: ':memory:',
+            }),
+        ).toBe(1);
+        // --follow --output without a run-id is rejected by the shared follow rule.
+        expect(
+            await main(['workflow', 'trace', '--follow', '--output'], { output: nullOutput(), dbUrl: ':memory:' }),
+        ).toBe(1);
+    });
+
     test('trace subcommand accepts --status done', async () => {
         const exitCode = await main(['workflow', 'trace', '--status', 'done'], {
             output: nullOutput(),
@@ -897,26 +954,34 @@ failureStates:
     // ── clean subcommand (lines 172-189) ──
 
     test('clean subcommand reports no stale runs on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         expect(output.messages).toContain('No stale runs older than 30m.');
+        // Dual-scope housekeeping: the log-reclamation scope also ran.
+        expect(output.messages).toContain('No retained run logs older than 30d.');
     });
 
     test('clean --dry-run works on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean', '--dry-run'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean', '--dry-run'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         expect(output.messages).toContain('No stale runs older than 30m.');
     });
 
     test('clean --json works on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean', '--json'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean', '--json'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(output.messages[0] ?? '{}');
         expect(parsed).toHaveProperty('cleaned');
         expect(Array.isArray(parsed.cleaned)).toBe(true);
+        // Dual-scope JSON: log reclamation rides along under `logs`.
+        expect(parsed.logs).toHaveProperty('reclaimed');
+        expect(Array.isArray(parsed.logs.reclaimed)).toBe(true);
     });
 
     test('clean rejects invalid --older-than', async () => {
@@ -927,6 +992,86 @@ failureStates:
         });
         expect(exitCode).toBe(2);
         expect(output.errors.some((e) => e.includes('Invalid --older-than'))).toBe(true);
+    });
+
+    test('clean --logs scopes to log reclamation and skips stale-run finalization', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const oldLog = join(runDir, 'wf_old.log');
+        const freshLog = join(runDir, 'wf_fresh.log');
+        await writeFile(oldLog, 'old');
+        await writeFile(freshLog, 'fresh');
+        const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+        await utimes(oldLog, oldMtime, oldMtime);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--logs'], { output, cwd, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        // Only the log scope ran — no stale-run line at all.
+        expect(output.messages.some((m) => m.includes('stale run'))).toBe(false);
+        expect(output.messages.some((m) => m.includes('Reclaimed 1 retained run log(s) (>30d):'))).toBe(true);
+        expect(await exists(oldLog)).toBe(false);
+        expect(await exists(freshLog)).toBe(true);
+    });
+
+    test('clean --logs --dry-run lists old logs without deleting', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const oldLog = join(runDir, 'wf_old.log');
+        await writeFile(oldLog, 'old');
+        const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+        await utimes(oldLog, oldMtime, oldMtime);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--logs', '--dry-run'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('Would reclaim 1 retained run log(s) (>30d):'))).toBe(true);
+        expect(await exists(oldLog)).toBe(true); // dry-run unlinked nothing
+    });
+
+    test('clean without --logs runs both scopes in one invocation', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const oldLog = join(runDir, 'wf_old.log');
+        await writeFile(oldLog, 'old');
+        const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+        await utimes(oldLog, oldMtime, oldMtime);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean'], { output, cwd, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages).toContain('No stale runs older than 30m.'); // stale scope ran
+        expect(output.messages.some((m) => m.includes('Reclaimed 1 retained run log(s) (>30d):'))).toBe(true); // log scope ran
+        expect(await exists(oldLog)).toBe(false);
+    });
+
+    test('clean honors workflow.logRetentionDays from .spur/config.yaml', async () => {
+        const cwd = await createTempProject();
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        const log = join(runDir, 'wf_mid.log');
+        await writeFile(log, 'mid');
+        // 10 days old: within the default 30d, past a 7d override.
+        const mtime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        await utimes(log, mtime, mtime);
+        await writeFile(join(cwd, '.spur', 'config.yaml'), 'workflow:\n  logRetentionDays: 7\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--logs'], { output, cwd, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('Reclaimed 1 retained run log(s) (>7d):'))).toBe(true);
+        expect(await exists(log)).toBe(false);
     });
 
     // ── list shows invalid workflow (lines 283-285, formatListHuman ❌ path) ──
@@ -1041,26 +1186,52 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('run --async propagates --no-log to the detached worker argv (0427 R3)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockResolvedValue({ exitCode: 0 } as never);
+        try {
+            const exitCode = await main(['workflow', 'run', '--async', '--no-log', workflowFile], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(0);
+            expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
+            expect(runSpy).toHaveBeenCalledTimes(1);
+            const args = runSpy.mock.calls[0]?.[0]?.args as string[] | undefined;
+            expect(args?.join(' ')).toContain('--no-log');
+        } finally {
+            runSpy.mockRestore();
+        }
+        await rm(dir, { recursive: true, force: true });
+    });
+
     // ── clean --force (0116) ──
 
     test('clean --force reports no stale runs on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean', '--force'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean', '--force'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         // --force sets minutes=0, so the message has no age qualifier
         expect(output.messages).toContain('No stale runs.');
     });
 
     test('clean --force --dry-run works on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean', '--force', '--dry-run'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean', '--force', '--dry-run'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         expect(output.messages).toContain('No stale runs.');
     });
 
     test('clean --force --json works on empty DB', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const exitCode = await main(['workflow', 'clean', '--force', '--json'], { output, dbUrl: ':memory:' });
+        const exitCode = await main(['workflow', 'clean', '--force', '--json'], { output, cwd, dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(output.messages[0] ?? '{}');
         expect(parsed).toHaveProperty('cleaned');
@@ -1068,10 +1239,12 @@ failureStates:
     });
 
     test('clean --force overrides --older-than', async () => {
+        const cwd = await createTempProject();
         const output = createCapturedOutput();
         // --force overrides --older-than: minutes=0 regardless
         const exitCode = await main(['workflow', 'clean', '--force', '--older-than', '999'], {
             output,
+            cwd,
             dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
@@ -1177,6 +1350,80 @@ failureStates:
         });
         expect(exitCode).toBe(1);
         expect(output.errors).toContain('Run nonexistent-run-id not found.');
+    });
+
+    // ── clean with actual stale runs (covers cleaned.map formatter) ──
+
+    test('clean finalizes stale non-terminal runs and lists them in human output', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        // Insert a non-terminal run that listStaleRuns will match.
+        await db.run(
+            'INSERT INTO runs (id, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            ['stale-run-1', 'running', now, '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean'], { output, cwd, dbUrl: dbPath });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('Finalized 1 stale run(s)'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('stale-run-1'))).toBe(true);
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    // ── trace --follow via CLI (covers inline write arrows in the follow branch) ──
+
+    test('trace --follow writes timeline for an already-terminal run and exits', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ['terminal-run-1', 'test-flow', 'sync', 'done', now, now, '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'trace', '--follow', 'terminal-run-1', '--poll', '50'], {
+            output,
+            cwd,
+            dbUrl: dbPath,
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.length).toBeGreaterThan(0);
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    test('trace --follow --output emits no-log message for a terminal run without a log file', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ['terminal-run-2', 'test-flow', 'sync', 'done', now, now, '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'trace', '--follow', '--output', 'terminal-run-2', '--poll', '50'], {
+            output,
+            cwd,
+            dbUrl: dbPath,
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('No run log') && m.includes('--no-log'))).toBe(true);
+        await rm(cwd, { recursive: true, force: true });
     });
 });
 
@@ -1371,5 +1618,75 @@ describe('followTrace', () => {
         expect(writes[0]).toContain('agent.run');
         expect(writes.some((line) => line.includes('60000ms'))).toBe(true);
         expect(writes.at(-1)).toBe('Run finalized: done');
+    });
+});
+
+describe('followRunLog', () => {
+    /** status: 'running' until `terminal` flips true. */
+    function serviceTrace(terminal: () => boolean) {
+        return async () => ({ run: { status: terminal() ? 'done' : 'running' } }) as never;
+    }
+
+    test('tails appended lines and exits at terminal status', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        const logPath = join(dir, '.spur', 'run', 'r9.log');
+        await writeFile(logPath, 'first\n');
+
+        const writes: string[] = [];
+        let appended = false;
+        const wait = async () => {
+            if (!appended) {
+                appended = true;
+                await appendFile(logPath, 'second\n\nthird\n');
+            }
+        };
+        let traceCalls = 0;
+        const trace = async () => {
+            traceCalls++;
+            return { run: { status: traceCalls >= 3 ? 'done' : 'running' } } as never;
+        };
+
+        await followRunLog({ trace }, 'r9', dir, 5, (line) => writes.push(line), wait);
+
+        expect(writes).toEqual(['first', 'second', '', 'third']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('holds back a trailing partial line until a newline lands', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        const logPath = join(dir, '.spur', 'run', 'r10.log');
+        await writeFile(logPath, 'complete\npartial');
+
+        const writes: string[] = [];
+        let appended = false;
+        const wait = async () => {
+            if (!appended) {
+                appended = true;
+                await appendFile(logPath, '-finished\n');
+            }
+        };
+        let traceCalls = 0;
+        const trace = async () => {
+            traceCalls++;
+            return { run: { status: traceCalls >= 3 ? 'done' : 'running' } } as never;
+        };
+
+        await followRunLog({ trace }, 'r10', dir, 5, (line) => writes.push(line), wait);
+
+        expect(writes).toEqual(['complete', 'partial-finished']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('emits a clear message when the log never appears and the run ends terminal', async () => {
+        const dir = await createTempProject();
+        const writes: string[] = [];
+        await followRunLog({ trace: serviceTrace(() => true) }, 'r11', dir, 5, (line) => writes.push(line));
+
+        expect(writes).toHaveLength(1);
+        expect(writes[0]).toContain('.spur/run/r11.log');
+        expect(writes[0]).toContain('--no-log');
+        await rm(dir, { recursive: true, force: true });
     });
 });

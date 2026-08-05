@@ -1,3 +1,4 @@
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -8,6 +9,7 @@ import {
     renderRunPlan,
     renderStepLine,
     resolveOutputLogConfig,
+    resolveWorkflowLogRetentionDays,
     type StepEvent,
     type SystemEventBus,
     type TimelineEvent,
@@ -178,6 +180,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--verbose', 'Include transitions and correlation diagnostics in human progress')
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
         .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/runs/workflow/')
+        .option('--no-log', 'Opt out of writing the consolidated .spur/run/<RUNID>.log')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
@@ -233,6 +236,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 }
                 if (options.traceFile) {
                     cmd.push('--trace-file');
+                }
+                if (options.log === false) {
+                    cmd.push('--no-log');
                 }
                 try {
                     // Detached via ProcessExecutor + nohup (SPUR_ASYNC_WORKER set in env).
@@ -299,15 +305,18 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             }
             // Consolidated all-in-one run log (feature D2 / task 0426): a read-only
             // subscriber on the bus that appends `.spur/run/<RUNID>.log` from creation
-            // to terminal status. Built unconditionally (retained by default; `--no-log`
-            // is task 0427) so the detached `--async` worker writes it in-process too.
-            const runLog = new WorkflowRunLogSink({
-                bus,
-                dir: join(context.cwd, '.spur', 'run'),
-                runId,
-                ...(planPreview !== undefined ? { planPreview } : {}),
-                ...(await resolveOutputLogConfig(context.cwd)),
-            });
+            // to terminal status. Built by default (retained after the run ends);
+            // `--no-log` (task 0427) opts out entirely so no file is opened or written.
+            const runLog =
+                options.log === false
+                    ? undefined
+                    : new WorkflowRunLogSink({
+                          bus,
+                          dir: join(context.cwd, '.spur', 'run'),
+                          runId,
+                          ...(planPreview !== undefined ? { planPreview } : {}),
+                          ...(await resolveOutputLogConfig(context.cwd)),
+                      });
             if (humanProgress) {
                 context.output.write(`Run: ${runId}`);
                 if (planPreview !== undefined) context.output.write(planPreview);
@@ -398,7 +407,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 for (const timer of heartbeats.values()) clearInterval(timer);
                 heartbeats.clear();
                 await traceWriter?.flush();
-                runLog.close();
+                runLog?.close();
                 await ledger.flush();
                 ledger.unsubscribe();
                 steeringInput?.close();
@@ -468,14 +477,19 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     workflow
         .command('clean')
         .description(
-            'Finalize orphaned runs stuck in running/pending past a staleness threshold (mark as failed). ' +
-                'To cancel a single live run by id, use `spur workflow cancel <run-id>` instead.',
+            'Housekeeping: finalize orphaned runs stuck in running/pending past a staleness threshold ' +
+                '(mark as failed) and reclaim retained run logs older than workflow.logRetentionDays. ' +
+                '`--logs` scopes to log reclamation only. To cancel a single live run by id, use ' +
+                '`spur workflow cancel <run-id>` instead.',
         )
-        .option('--older-than <minutes>', 'Staleness threshold in minutes', '30')
+        .option('--older-than <minutes>', 'Staleness threshold in minutes (stale-run scope only)', '30')
         .option('--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)')
-        .option('--dry-run', 'List what would be cleaned without writing')
+        .option('--logs', 'Scope to retained run-log reclamation only (skip stale-run finalization)')
+        .option('--dry-run', 'List what would be cleaned without writing (applies to both scopes)')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (options) => {
+            const dryRun = options.dryRun === true;
+            const logsOnly = options.logs === true;
             const force = options.force === true;
             const minutes = force ? 0 : Number.parseInt(options.olderThan ?? '30', 10);
             if (!Number.isFinite(minutes) || minutes < 0) {
@@ -483,20 +497,37 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(2);
                 return;
             }
-            const result = await makeSvc(options.json).clean(minutes, options.dryRun === true);
+            const svc = makeSvc(options.json);
+            const result = logsOnly ? undefined : await svc.clean(minutes, dryRun);
+            const retentionDays = await resolveWorkflowLogRetentionDays(context.cwd);
+            const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
             if (options.json) {
-                context.output.write(toJson(result));
+                context.output.write(toJson(logsOnly ? logResult : { ...result, logs: logResult }));
             } else {
-                const verb = result.dryRun ? 'Would finalize' : 'Finalized';
-                if (result.cleaned.length === 0) {
-                    const ageMsg = force ? '' : ` older than ${minutes}m`;
-                    context.output.write(`No stale runs${ageMsg}.`);
+                if (result !== undefined) {
+                    const verb = dryRun ? 'Would finalize' : 'Finalized';
+                    if (result.cleaned.length === 0) {
+                        const ageMsg = force ? '' : ` older than ${minutes}m`;
+                        context.output.write(`No stale runs${ageMsg}.`);
+                    } else {
+                        const ageMsg = force ? ' (all non-terminal)' : ` (>${minutes}m)`;
+                        context.output.write(
+                            `${verb} ${result.cleaned.length} stale run(s)${ageMsg}:\n` +
+                                result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
+                        );
+                    }
+                }
+                const logVerb = dryRun ? 'Would reclaim' : 'Reclaimed';
+                if (logResult.reclaimed.length === 0) {
+                    context.output.write(`No retained run logs older than ${retentionDays}d.`);
                 } else {
-                    const ageMsg = force ? ' (all non-terminal)' : ` (>${minutes}m)`;
                     context.output.write(
-                        `${verb} ${result.cleaned.length} stale run(s)${ageMsg}:\n` +
-                            result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
+                        `${logVerb} ${logResult.reclaimed.length} retained run log(s) (>${retentionDays}d):\n` +
+                            logResult.reclaimed.map((l) => `  ${l.runId} (mtime ${l.mtime})`).join('\n'),
                     );
+                }
+                for (const failure of logResult.failures) {
+                    context.output.error(`Failed to remove run log ${failure.path}: ${failure.error}`);
                 }
             }
         });
@@ -551,6 +582,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--last <n>', 'Limit results (default 20)', '20')
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
         .option('--poll <ms>', 'Follow polling interval in milliseconds', '1000')
+        .option('--output', 'With --follow: stream .spur/run/<RUNID>.log instead of the DB timeline')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (runId, options) => {
             const svc = makeSvc();
@@ -576,13 +608,27 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
+            if (options.output === true && options.follow !== true) {
+                context.output.error('--output requires --follow');
+                context.setExitCode(1);
+                return;
+            }
+            if (options.output === true && options.json === true) {
+                context.output.error('--output is a human streaming mode and cannot be combined with --json');
+                context.setExitCode(1);
+                return;
+            }
             if (options.status !== undefined && !['done', 'failed', 'running'].includes(options.status)) {
                 context.output.error('--status must be one of: done, failed, running');
                 context.setExitCode(1);
                 return;
             }
             if (options.follow === true && runId !== undefined) {
-                await followTrace(svc, runId, pollMs, (line) => context.output.write(line));
+                if (options.output === true) {
+                    await followRunLog(svc, runId, context.cwd, pollMs, (line) => context.output.write(line));
+                } else {
+                    await followTrace(svc, runId, pollMs, (line) => context.output.write(line));
+                }
                 return;
             }
             const result = runId
@@ -755,6 +801,80 @@ export async function followTrace(
 
 function isTerminalTraceStatus(status: string): boolean {
     return status !== 'running' && status !== 'pending';
+}
+
+/**
+ * Read complete lines appended to the run log since `offset`, holding back a
+ * trailing partial line (line buffering) until a newline lands. Returns whether
+ * the file exists, the new complete lines, and the next byte offset to resume
+ * from. Read-only — never writes to the log.
+ */
+function readRunLogChunk(logPath: string, offset: number): { exists: boolean; lines: string[]; offset: number } {
+    let fd: number;
+    try {
+        fd = openSync(logPath, 'r');
+    } catch {
+        return { exists: false, lines: [], offset };
+    }
+    try {
+        const size = fstatSync(fd).size;
+        if (size <= offset) return { exists: true, lines: [], offset };
+        const buffer = Buffer.alloc(size - offset);
+        readSync(fd, buffer, 0, buffer.length, offset);
+        const text = buffer.toString('utf8');
+        const lastNewline = text.lastIndexOf('\n');
+        const consumed = lastNewline >= 0 ? lastNewline + 1 : 0;
+        // split then drop only the trailing empty element from the final newline,
+        // preserving intentional blank separator lines inside the chunk.
+        const parts = consumed === 0 ? [] : text.slice(0, consumed).split('\n');
+        const lines = parts.length > 0 && parts.at(-1) === '' ? parts.slice(0, -1) : parts;
+        return { exists: true, lines, offset: offset + consumed };
+    } finally {
+        closeSync(fd);
+    }
+}
+
+/**
+ * Tail `.spur/run/<RUNID>.log` (read-only) as the run progresses, then exit once
+ * the run reaches a terminal status. Best-effort: if the log never appears
+ * (e.g. the run was started with `--no-log`), surface a clear message after
+ * terminal status rather than hanging forever. This is a distinct source from
+ * `followTrace`'s DB timeline — the two never interleave.
+ */
+export async function followRunLog(
+    service: Pick<WorkflowAppService, 'trace'>,
+    runId: string,
+    dir: string,
+    pollMs: number,
+    write: (line: string) => void,
+    wait: (ms: number) => Promise<unknown> = (ms) => sleep(ms),
+): Promise<void> {
+    const logPath = join(dir, '.spur', 'run', `${runId}.log`);
+    let offset = 0;
+    let everRead = false;
+    while (true) {
+        const chunk = readRunLogChunk(logPath, offset);
+        if (chunk.exists && (chunk.lines.length > 0 || chunk.offset > offset)) {
+            everRead = true;
+            for (const line of chunk.lines) write(line);
+            offset = chunk.offset;
+        }
+
+        let terminal = false;
+        try {
+            terminal = isTerminalTraceStatus((await service.trace(runId)).run.status);
+        } catch (error) {
+            // Run not persisted yet — keep waiting inside the follow window.
+            if (!String(error).includes('Run not found')) throw error;
+        }
+        if (terminal) {
+            if (!everRead) {
+                write(`No run log at ${logPath} — the run may have been started with --no-log.`);
+            }
+            return;
+        }
+        await wait(pollMs);
+    }
 }
 
 /**

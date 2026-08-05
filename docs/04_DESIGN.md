@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.13.0
+version: 1.14.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-04
@@ -45,7 +45,7 @@ When collaborating with the design team:
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md) | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410) | implemented |
 | [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
 | [`inbox-board-module.md`](design/inbox-board-module.md) | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented |
-| [`workflow-run-log.md`](design/workflow-run-log.md) | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045) | accepted design (not yet built) |
+| [`workflow-run-log.md`](design/workflow-run-log.md) | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045) | built |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -290,13 +290,13 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
 
-> **Planned surface (ADR-045 / feature D2, not yet built):** `run --no-log` opts out of the
+> **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
 > streams that log as a tail -f-equivalent source and is rejected with `--json`; `spur workflow
-> clean` gains a log-reclamation scope under `workflow.logRetentionDays`. Do not invoke as if they
-> exist. Shapes: [`design/workflow-run-log.md`](design/workflow-run-log.md).
+> clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30 days). Shapes:
+> [`design/workflow-run-log.md`](design/workflow-run-log.md).
 
 - `validate <file>` — load + Zod-validate a workflow definition.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
@@ -330,7 +330,15 @@ Backed by `ts-rule-engine`. Help dispatch per §1.0.
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
   `--follow` requires a run id, replays that durable timeline, polls every `--poll` milliseconds
   (default 1000; minimum 50), emits changed action rows, and exits at terminal status. It is a
-  human stream and cannot be combined with `--json`.
+  human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
+  follow source to a raw tail of `.spur/run/<RUNID>.log` (tail -f equivalent), also a human stream
+  rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
+  status instead of hanging.
+- `clean [--older-than <minutes>] [--force] [--logs] [--dry-run]` — housekeeping: finalize orphaned
+  runs stuck in `running`/`pending` past a staleness threshold (default 30 min) as failed, and
+  reclaim retained run logs older than `workflow.logRetentionDays` (`.spur/config.yaml`, default 30
+  days). `--logs` scopes to log reclamation only; `--dry-run` lists what would be cleaned without
+  writing; `--force` overrides `--older-than`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
   **Per-step cost (0311):** `agent.run` lines also carry token cost + cache-hit joined from imported
   history ETL rows — `· $X.XXX · cache Y%` for an exact session-id join (R1a), `· ~$…` when the

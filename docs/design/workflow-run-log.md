@@ -1,7 +1,7 @@
 ---
 doc: design/workflow-run-log
 area: spur workflow run log — consolidated per-run log, retention, trace follow source
-status: accepted design (ADR-045; not yet built)
+status: built (feature D2)
 authority: derived
 owner: Robin Min
 updated_at: 2026-08-04
@@ -13,8 +13,8 @@ sync: [T3, T9]
 # Workflow run log (all-in-one per-run log)
 
 **Area:** `spur workflow run`, `spur workflow trace --follow`, `spur workflow clean`.
-**Status:** accepted design (ADR-045), **not yet built** — do not invoke the flags below as if they
-exist. Rationale lives in `00_ADR ADR-045`; mechanism in `03_ARCHITECTURE §6`.
+**Status:** built (feature D2, tasks 0426–0429). Rationale lives in `00_ADR ADR-045`; mechanism in
+`03_ARCHITECTURE §6.1`.
 
 ## Log contract
 
@@ -35,17 +35,18 @@ retention policy.
 | Consumed stdin (steering) | steering controller consumed-command feed | note text redacted before 1,024-char bound |
 | Engine shell / HITL steps | adapter action lifecycle lines | prompt content absent; redacted action lifecycle only |
 
-The log carries the same content the foreground human renderer emits plus the agent-output chunks
-the `RunOutputSink` today writes — no new prompt or shell text enters it. Prompt bodies become
-`[prompt N chars]`; shell commands become `[shell command redacted]`; common/configured secrets
-become `[REDACTED]`.
+The log carries the same content the foreground human renderer emits plus the child-agent output
+chunks the sink captures — no new prompt or shell text enters it. Prompt bodies become
+`[prompt N chars]`; shell commands matching secret-token patterns (authorization/bearer/password/
+secret/token/api_key/private_key) become `[shell command redacted]` and other command text is
+whitespace-normalized as the renderer shows it; common/configured secrets become `[REDACTED]`.
 
 ## Producer: consolidated sink
 
 A new read-only subscriber on the existing `WorkflowObservabilityBus` (`ADR-035` keeps the bus a
 read-only projection) receives the already-redacted, already-bounded events and appends them to
 `.spur/run/<RUNID>.log`. It subsumes the current `RunOutputSink`
-(`packages/app/src/observability/run-output-sink.ts`) — the same `observe(AgentExecutionEvent)` /
+(`packages/app/src/observability/workflow-run-log-sink.ts`) — the same `observe(AgentExecutionEvent)` /
 `close()` contract, same bounds defaults, same best-effort semantics, but emitting the richer event
 set above into one file instead of the agent-output-only `<RUNID>-output.log`.
 
@@ -102,7 +103,7 @@ Removing or repointing any existing sink is a compatibility decision. Before rem
 `.spur/runs/workflow/<RUNID>.jsonl` (`--trace-file`) and `.spur/run/<RUNID>-STEP-partial.md` salvage
 remain distinct authorities and are **not** folded into `<RUNID>.log`.
 
-## Surface additions (all planned, ADR-045)
+## Surface additions (shipped, ADR-045)
 
 | Command | Addition | Conflict |
 |---|---|---|
@@ -111,5 +112,6 @@ remain distinct authorities and are **not** folded into `<RUNID>.log`.
 | `spur workflow clean` | log reclamation scope (`--logs`, `--dry-run`), retention age from config | composes with existing `--force`/`--older-than` |
 | `.spur/config.yaml` | `workflow.logRetentionDays` (default 30) | — |
 
-CLI signatures above are transcribed from this design, not from code (unbuilt). ADR-038 obligates a
-same-change `plugins/sp/skills/spur-cli` reference update when the flags ship.
+CLI signatures above match the shipped code (`spur workflow run|trace|clean --help`, task 0430
+verify pass). ADR-038 parity with `plugins/sp/skills/spur-cli/references/workflows.md` holds
+end-to-end.

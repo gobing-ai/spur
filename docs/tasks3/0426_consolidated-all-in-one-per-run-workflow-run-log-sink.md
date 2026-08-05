@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Consolidated all-in-one per-run workflow run log sink"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: D2
@@ -12,7 +12,7 @@ priority: P2
 tags: ["workflow", "observability", "log", "sink"]
 dependencies: []
 created_at: "2026-08-04T17:25:04.906Z"
-updated_at: "2026-08-04T19:29:21.387Z"
+updated_at: "2026-08-05T02:13:49.442Z"
 ---
 
 ## 0426. Consolidated all-in-one per-run workflow run log sink
@@ -136,67 +136,60 @@ Implemented the consolidated all-in-one per-run workflow run log (feature D2 / t
 
 R9 runbook repoint: verified the timed-out-implement runbook (`plugins/sp/skills/spur-dev/references/execution-workflow.md`) references only `<RUNID>-<step>-partial.md`, not `-output.log` — no runbook change needed.
 ### Testing
-**Per-requirement traceability**
+**Re-verify results** (2026-08-05T02:13:49Z, `/sp-dev-verifyall --feature D2 --force --fix all`)
 
-| Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | Sink writes single `.spur/run/<RUNID>.log` from creation to terminal: header on run.started with duplicate-projection guard (`workflow-run-log-sink.ts:123`), final summary on run.finalized (`:148`). Tests `workflow-run-log-sink.test.ts:87` (single log + header) and `:109` (exactly-once). |
-| R2 | MET | Foreground rendering via `renderStepLine(..., {detail:'full', showRunId:true})` (`workflow-run-log-sink.ts:132`) + plan preview written once (`:124`). Test `:124` (progress/transitions/summary). |
-| R3 | MET | Child-agent stdout/stderr via the RunOutputSink chunk contract (`onAgent` `:153`); chunks redacted at source `agent-execution.ts:206`. Test `:163`. |
-| R4 | MET | Steering note redacted+bounded: `bounded(note, 1024)` (`onSteering` `:146`; `observability.ts:144` SECRET_PATTERN). Test `:181`. |
-| R5 | MET | Detached async worker re-enters the shared run path (`workflow.ts:50`/`:227` spawn `--run-id` with `SPUR_ASYNC_WORKER=1`, `:307` builds the sink in-process) — independent of nohup `/dev/null`. CLI test `apps/cli/tests/commands/workflow.test.ts:277` exercises the `--run-id` path to exit 0. |
-| R6 | MET | Redaction end-to-end: prompts→`[prompt N chars]`, shell→`sanitizeCommand`, secrets→SECRET_PATTERN (`observability.ts:144`/`:150`). Test `:197` (no prompt/shell leak). |
-| R7 | MET | Byte+line bounds with visible truncation marker (`append` bound check + marker `:203`). Tests `:226` (byte), `:241` (line). |
-| R8 | MET | Best-effort: ctor try→fd undefined, append catches write errors. Test `:264` (unwritable dir degrades, never run). |
-| R9 | MET | Subsumes `-output.log`: `RunOutputSink` + `outputLog` threading removed (agent-run observer bus-emit only `agent-run.ts:166`; builtins/service), `outputArtifactForRun` repointed, CLI label "Run log:". Service+agent-run tests 122 pass. |
-| R10 | MET | No prompt/shell leak (R6 test `:197`); plan preview = node/state IDs only (`step-reporter.ts:169`). |
-| R11 | MET | Bounded + truncation marker (R7 tests `:226`/`:241`). |
-| R12 | MET | Unwritable `.spur/run/` degrades log, never run (R8 test `:264`). |
+- Verdict: PASS
+- Fresh tests this run: `bun test packages/app/tests/observability/workflow-run-log-sink.test.ts` → 11 pass / 0 fail; `bun test apps/cli/tests/commands/workflow.test.ts` → 88 pass / 0 fail.
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:66-76,125-126`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:87,:109` |
+| R2 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:129-136`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:124` |
+| R3 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:145-168`; `packages/app/src/workflow/actions/agent-run.ts:156-166`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:163` |
+| R4 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:140-143`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:181` |
+| R5 | MET | `apps/cli/src/commands/workflow.ts:218-266,306-320`; CLI suite 88/88 |
+| R6 | MET | retain-by-default; `packages/app/src/observability/agent-execution.ts:271`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:197` |
+| R7 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:169-185`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:226,:241` |
+| R8 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:70-75`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:264` |
+| R9 | MET | `packages/app/src/services/workflow-service.ts:938-942`; service tests `:568,:592` (file `packages/app/tests/services/workflow-service.test.ts`) |
+| R10 | MET | `packages/app/tests/observability/workflow-run-log-sink.test.ts:197`; `packages/app/src/workflow/observability.ts:176-181` |
+| R11 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:169-185`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:226,:241` |
+| R12 | MET | `packages/app/src/observability/workflow-run-log-sink.ts:70-75`; `packages/app/tests/observability/workflow-run-log-sink.test.ts:264` |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario R1 | MET | test | `workflow-run-log-sink.test.ts:87`, `:109` |
-| Scenario R2 | MET | test | `workflow-run-log-sink.test.ts:124` |
-| Scenario R3 | MET | test | `workflow-run-log-sink.test.ts:163` |
-| Scenario R4 | MET | test | `workflow-run-log-sink.test.ts:181` |
-| Scenario R5 | MET | test+static | CLI `workflow.test.ts:277` (exercises `--run-id` re-entry); `workflow.ts:50/227/307` |
-| Scenario R10 | MET | test | `workflow-run-log-sink.test.ts:197` |
-| Scenario R11 | MET | test | `workflow-run-log-sink.test.ts:226`, `:241` |
-| Scenario R12 | MET | test | `workflow-run-log-sink.test.ts:264` |
+| R1 — single all-in-one log | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:87,:109` exit 0 |
+| R2 — foreground rendering | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:124` exit 0 |
+| R3 — child agent stdout/stderr | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:163` exit 0 |
+| R4 — steering commands | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:181` exit 0 |
+| R5 — --async narration retained | MET | test+static | `apps/cli/src/commands/workflow.ts:218-266,306-320`; CLI 88/88 |
+| R10 — no prompt/shell leak | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:197` exit 0 |
+| R11 — bounded + truncation marker | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:226,:241` exit 0 |
+| R12 — unwritable dir degrades log only | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:264` exit 0 |
 
-**Coverage:** `workflow-run-log-sink.ts` 100% line / 95% funcs (sole module under per-file gate). Affected suites run this turn: 11 (sink) + 122 (app agent-run/workflow-service) + 74 (CLI workflow) = **207 pass, 0 fail**.
-
-**Checks:** tests-pass=pass (207/0); lint-clean=pass (biome check clean on 6 changed source files); design-conformance=pass (all 5 Design claims DONE — read-only bus sink, reuse redaction/rendering, single in-process file, bounds+best-effort, subsumption); cli-golden-path-present=pass (`workflow.test.ts:277` golden `workflow run --run-id` → exit 0).
-
-**SECUA Review** (answer-file only, not a task section)
-
-- P3 (advisory, defense-in-depth): `onAgent` `output` branch writes `event.chunk` verbatim, relying solely on upstream redaction (`agent-execution.ts:206` `redactAndBound`). The sink is a durable disk boundary; recommend re-applying `bounded(chunk)` there as belt-and-braces. Not blocking — source verified redacted this run, and the no-leak test (`:197`) guards it. No action taken under `--fix all` (minor/advisory, not a major finding).
-- No P1/P2 findings.
+Coverage: N/A (sink 100% lines in targeted suite).
+Fix-pass: `.spur/run/0426-verdict.json` scenario-title ids for ship gate; Testing paths fully qualified.
 ### Review
-Reviewed the implemented work for 0426 (sp-dev-review, independent of the pipeline's own review). Reviewed files: `packages/app/src/observability/workflow-run-log-sink.ts`, `workflow-service.ts` (resolveOutputLogConfig/outputArtifactForRun), `workflow/actions/agent-run.ts`, `workflow/builtins.ts`, `apps/cli/src/commands/workflow.ts`, plus the sink/agent-run/service/CLI tests.
+Reviewed the implemented work for 0426 (sp-dev-review). Reviewed files: `packages/app/src/observability/workflow-run-log-sink.ts`, `workflow-service.ts` (resolveOutputLogConfig/outputArtifactForRun), `workflow/actions/agent-run.ts`, `workflow/builtins.ts`, `apps/cli/src/commands/workflow.ts`, plus the sink/agent-run/service/CLI tests.
 
-**Functional traceability — PASS (R1–R12).**
-- R1 single `<RUNID>.log` from creation to terminal: header on `workflow.run.started` (duplicate-started guard), final summary on `workflow.run.finalized`. Verified `workflow.ts:299` builds the sink unconditionally; `finally` at `:401` closes it.
-- R2 foreground rendering: `renderStepLine(..., {detail:'full', showRunId:true})` for progress/transitions/action lifecycle; `renderRunPlan` preview shared with the human renderer.
-- R3 agent stdout/stderr: `onAgent` output chunks written; chunks redacted+bounded at source (`agent-execution.ts:206` `redactAndBound`).
-- R4 steering: `onSteering` applies `bounded(note, 1024)` — redacts secrets (SECRET_PATTERN) before the 1024-char bound. Correct.
-- R5 async: detached worker re-enters the same run path (`SPUR_ASYNC_WORKER=1` → `workflow run --run-id`), so the in-process sink writes independent of nohup `/dev/null` redirect.
-- R6/R10 redaction end-to-end: prompt bodies → `[prompt N chars]`, shell commands → `sanitizeCommand`+bounded (never copied), secrets → SECRET_PATTERN. `renderRunPlan` emits only node/state IDs — no command/prompt body reaches the header. No-leak test asserts.
-- R7/R11 bounds: `append` enforces `maxBytes` (1 MiB) + optional `maxLines` with visible `TRUNCATION_MARKER`; never silent.
-- R8/R12 best-effort: constructor `try` → fd undefined on unwritable dir; `append` catches write errors; run never affected. Tested.
-- R9 subsumption: `RunOutputSink` + `outputLog` threading removed from agent-run/builtins/service; `outputArtifactForRun`/trace repoint to `.spur/run/<RUNID>.log`; CLI trace label "Agent output:" → "Run log:"; runtime-boundaries sync-FD allowlist repointed. Runbook verified to reference only `-partial.md`, not `-output.log`.
+**Functional traceability — PASS (R1–R12).** All twelve requirements verified MET with code and test evidence (single `<RUNID>.log` sink creation→terminal, foreground rendering, child-agent stdout/stderr fan-out, steering capture, `--async` narration, no-leak end-to-end, byte+line bounds with truncation marker, best-effort degradation, RunOutputSink subsumption).
 
-**SECUA findings.**
-- P3 (defense-in-depth, non-blocking): `onAgent` `output` writes `event.chunk` verbatim, relying solely on upstream redaction (`agent-execution.ts:206`). The sink is a durable disk boundary; a future agent-service change emitting a raw chunk would leak into the persisted log undetected. Recommend the sink re-apply `bounded(chunk)` on the output branch as belt-and-braces. Low practical risk today (source verified redacted; no-leak test guards it).
-- No P1/P2. No command-text or prompt-body leak path found in the sink or its wiring.
+**SECUA findings table.**
+
+| Priority | File:Line | Finding | Disposition |
+|----------|-----------|---------|-------------|
+| P1 | — | — | — |
+| P2 | — | — | — |
+| P3 | packages/app/src/observability/workflow-run-log-sink.ts:153 | `onAgent` output writes `event.chunk` verbatim, relying solely on upstream redaction (`agent-execution.ts:206` `redactAndBound`). The sink is a durable disk boundary; a future agent-service change emitting a raw chunk would leak into the persisted log undetected. Recommend re-applying `bounded(chunk)` on the output branch as belt-and-braces. | Non-blocking (defense-in-depth) — source verified redacted; no-leak test guards it |
+| P4 | — | — | — |
 
 **Architecture — sound.** Cohesive single observability module; read-only bus subscriber (never mutates the run, never throws, never changes exit code); replaces per-agent.run file sink with one consolidated writer; exports added at the app index; no new FSM; `--json`/board paths untouched.
 
 **Verification (run during this review):** `workflow-run-log-sink.test.ts` 11 pass / 100% line on the sink module; `agent-run.test.ts` + `workflow-service.test.ts` 122 pass; `apps/cli/tests/commands/workflow.test.ts` 74 pass; `biome check` clean on the 6 changed source files.
 
-**Disposition:** APPROVE. Single P3 defense-in-depth suggestion; no blocking findings.
+**Disposition:** APPROVE. Single P3 defense-in-depth suggestion; no P1/P2 blocking findings.
 ### References
 
 D2
@@ -205,3 +198,5 @@ D2
 
 ### History
 - 2026-08-04T19:15:32.129Z todo → wip (system)
+- 2026-08-04T21:51:25.012Z wip → testing (system)
+- 2026-08-04T21:52:19.362Z testing → done (system)

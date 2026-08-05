@@ -196,6 +196,28 @@ export interface WorkflowCleanResult {
     cleaned: CleanedRun[];
 }
 
+/** A retained run log reclaimed by `spur workflow clean` (feature D2 / task 0429). */
+export interface ReclaimedRunLog {
+    /** Run id derived from the log file name (`<runId>.log`). */
+    runId: string;
+    /** Path of the removed (or would-be-removed) log file. */
+    path: string;
+    /** File mtime at scan time (ISO 8601). */
+    mtime: string;
+}
+
+/** Result of retained run-log reclamation (`.spur/run/<RUNID>.log`, task 0429). */
+export interface RunLogReclamationResult {
+    /** Retention threshold applied, in days. */
+    retentionDays: number;
+    /** Whether this was a dry run (no writes). */
+    dryRun: boolean;
+    /** The logs that were (or would be) removed. */
+    reclaimed: ReclaimedRunLog[];
+    /** Removal failures — best-effort: one file failing never aborts the rest. */
+    failures: Array<{ path: string; error: string }>;
+}
+
 /** Result of `spur workflow cancel <run-id>` — one non-terminal run finalized as `failed`. */
 export interface WorkflowCancelResult {
     /** The run id requested. */
@@ -509,6 +531,49 @@ export class WorkflowAppService {
             dryRun,
             cleaned: stale.map((r) => ({ runId: r.id, startedAt: r.started_at })),
         };
+    }
+
+    /**
+     * Reclaim retained run logs (`.spur/run/<RUNID>.log`, feature D2 / task 0429):
+     * remove every log whose mtime is older than the retention threshold. Age is
+     * the only gate — a still-running run whose log is old enough is reclaimed
+     * too (rare, and acceptable under the policy). A missing run dir is a no-op.
+     *
+     * @param retentionDays Logs older than this many days are reclaimed. Default 30.
+     * @param dryRun When true, report what would be removed without unlinking.
+     */
+    async cleanRunLogs(retentionDays = 30, dryRun = false): Promise<RunLogReclamationResult> {
+        const runDir = join(this.ctx.cwd, '.spur', 'run');
+        const fs = createNodeFileSystem();
+        const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+        const reclaimed: ReclaimedRunLog[] = [];
+        const failures: RunLogReclamationResult['failures'] = [];
+
+        let entries: string[];
+        try {
+            entries = (await fs.readDir(runDir)).filter((name) => name.endsWith('.log'));
+        } catch {
+            // No run dir yet — nothing to reclaim.
+            return { retentionDays, dryRun, reclaimed, failures };
+        }
+
+        for (const name of entries) {
+            const path = join(runDir, name);
+            const stat = await fs.stat(path);
+            if (stat === null || !stat.isFile() || stat.mtimeMs >= cutoffMs) continue;
+            const entry = { runId: name.slice(0, -'.log'.length), path, mtime: new Date(stat.mtimeMs).toISOString() };
+            if (dryRun) {
+                reclaimed.push(entry);
+                continue;
+            }
+            try {
+                await fs.deleteFile(path);
+                reclaimed.push(entry);
+            } catch (err) {
+                failures.push({ path, error: String(err) });
+            }
+        }
+        return { retentionDays, dryRun, reclaimed, failures };
     }
 
     /**
@@ -832,6 +897,25 @@ async function resolveDefaultAgentVar(
  * Resolve per-run consolidated-log bounds from `.spur/config.yaml` `agent.output`
  * (feature D2 / task 0426). Best-effort: any config failure degrades to defaults
  * rather than failing the workflow run (R8).
+ */
+/**
+ * Resolve the run-log retention threshold (days) from `.spur/config.yaml`
+ * `workflow.logRetentionDays` (feature D2 / task 0429). Best-effort: any config
+ * failure degrades to the 30-day default rather than failing the housekeeping
+ * verb (same degrade-to-defaults pattern as `resolveOutputLogConfig`).
+ */
+export async function resolveWorkflowLogRetentionDays(cwd: string): Promise<number> {
+    try {
+        return (await loadSpurConfig(cwd)).workflow?.logRetentionDays ?? 30;
+    } catch {
+        return 30;
+    }
+}
+
+/**
+ * Resolve run-log size limits (`maxBytes`, `maxLines`) from `agent.output`
+ * in the project config. Returns an empty object when the section is absent
+ * or config loading fails - observability config must never break a run.
  */
 export async function resolveOutputLogConfig(cwd: string): Promise<WorkflowRunLogConfig> {
     try {

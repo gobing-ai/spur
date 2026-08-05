@@ -9,4 +9,14 @@ Captured to `.spur/run/wrapup-metrics.jsonl`:
 
 {"wbs":"0425","feature_id":"F5","status":"done","verdict":"PASS","timestamp":"2026-08-04T17:57:43Z"}
 
-Source notes: `feature_id` = `F5` from the `0425-verify-answer.txt` footer ("Feature: F5"); `status` = `done` (terminal lifecycle state after PASS verdict + Shippable PASS); `timestamp` = the verify-answer mtime `2026-08-04T10:57:43-07:00` → UTC `17:57:43Z`, the closest recorded point where the task reached its verified/done state. `wbs`/`verdict` taken directly from `0425-verdict.json`.
+Source notes: `feature_id` = `F5` from the `0425-verify-answer.txt` footer ("Feature: F5"); `status` = `done` (terminal lifecycle state after PASS verdict + Shippable PASS); `timestamp` = the verify-answer mtime `2026-08-04T10:57:43-07:00` → UTC `17:57:43Z`, the closest recorded point where the task reached its verified/done state. `wbs`/`verdict` taken directly from `0425-verdict.json`.Write declined at the permission prompt — the file capture is pending your approval. The deliverable, raw (no fences):
+
+{"wbs":"0426","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T21:52:19Z"}
+{"wbs":"0427","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T22:38:30Z"}
+{"wbs":"0428","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T22:59:12Z"}
+{"wbs":"0429","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T23:26:58Z"}
+{"wbs":"0430","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-05T00:11:15Z"}
+
+Sources: `wbs`/`verdict` from each `<wbs>-verdict.json` (all PASS); `feature_id` = `D2` from task frontmatter; `status` = `done` from task frontmatter (terminal state, all five); `timestamp` = frontmatter `updated_at`, the last corpus write recording the done state (0430 crossed midnight into 2026-08-05).
+
+Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry, same format) still needs your approval.

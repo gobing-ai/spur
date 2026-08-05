@@ -87,7 +87,8 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `spur workflow validate` (YAML + Zod) | ✅ | rejects invalid definitions |
 | `spur workflow run` (FSM driver + persistence) | ✅ | runs to terminal state; persists run |
 | `spur workflow list` | ✅ | lists persisted runs |
-| `spur workflow trace [run-id]` (run history + timeline) | ✅ | filters `--workflow/--status/--since/--last`; per-run detail on id |
+| `spur workflow trace [run-id]` (run history + timeline) | ✅ | filters `--workflow/--status/--since/--last`; per-run detail on id; `--follow [--poll ms] [--output]` streams a live timeline or the run log (D2, ADR-045) |
+| All-in-one per-run run log (`.spur/run/<RUNID>.log`) + `--no-log` opt-out | ✅ | consolidated sink writes plan/progress/transitions/summary + child agent output, retained by default; reclaimed by `spur workflow clean --logs` under `workflow.logRetentionDays` (D2, ADR-045) |
 | State-machine + transition-flow modes | 🔶 | both present; parallel/decision depth pending |
 | Guards as transition predicates + iteration bounding | ✅ | guards live in shipped workflows (`basic.yaml`, `feature-dev.yaml`); `iterationBound` counts all transitions — corrected 2026-06-12 (was ⏳) |
 | Parallel/decision nodes, resume from last successful phase | ⏳ | Phase 3; pause/continue + HITL arrive with the ADR-022 upstream work |

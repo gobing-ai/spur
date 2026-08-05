@@ -60,6 +60,7 @@ rules:
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher
             - "packages/app/src/services/project-registry.ts" # atomic projects.json persistence
             - "packages/app/src/observability/workflow-run-log-sink.ts" # sync FD append for mid-run tail-able all-in-one run log (task 0426 / feature D2); append() is sync from the observability bus
+            - "apps/cli/src/commands/workflow.ts" # FD byte-window tail of the mid-run run log for `workflow trace --follow` streaming (task 0428 / feature D2); readSync at offset over the observability sink's FDs
             - "apps/web/src/modules/discover.ts" # Vite/Astro module scanner fallback under bun test
 
             # Synchronous bootstrap & path resolution:
