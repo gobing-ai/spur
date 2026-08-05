@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0433"]
 created_at: "2026-08-04T19:04:35.799Z"
-updated_at: "2026-08-05T06:14:18.545Z"
+updated_at: "2026-08-05T07:04:26.465Z"
 ---
 
 ## 0434. Decide and implement true inline execution for workflow-driven pipeline stages
@@ -53,32 +53,13 @@ Evidence trail: `plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-d
 `plugins/sp/tests/inline-execution-contract.test.ts` (`EXCLUDED_COMMANDS` names `dev-idea`,
 `dev-wrap`, `dev-wrapall` as workflow-backed and deliberately not mode-aware).
 ### Requirements
-- [ ] R1. **Decide first, build second.** Produce a recorded decision (ADR entry or an amendment to
-      ADR-041/H82 R6) choosing exactly one of: (a) implement true in-session execution of pipeline
-      stages; (b) formally declare `inline` inapplicable to workflow-driven commands and make the
-      surface say so. Do not begin implementation before the decision is recorded — the two branches
-      have very different blast radii.
-- [ ] R2. If (a): define the control-inversion mechanism by which a workflow `agent.run` stage hands
-      its prompt to the host coding-agent session and resumes with the result. The existing HITL
-      pause/resume machinery (`pause: true`, persisted `__hitlAnswer`, `spur workflow continue`) is
-      the closest existing seam — evaluate reusing it before inventing a second suspension path.
-- [ ] R3. If (a): the mechanism must degrade honestly when no host session can own the step —
-      a detached `--async` worker, a scheduled run, or any headless caller must not silently hang
-      waiting for a session that will never answer (this is objective trigger 2).
-- [ ] R4. If (a): `spur agent run` must keep rejecting the literal `inline` — in-session execution is
-      resolved by the command/workflow layer, never by the subprocess dispatcher. The fix must not
-      make `AgentService` pretend to run something in-process.
-- [ ] R5. If (b): make the operator surface honest — the `--agent` value set for workflow-backed
-      commands becomes `<auto|name>`, the contract states plainly that pipeline stages always
-      dispatch, and `agent.default` is documented as the supported redirect. Update
-      `inline-execution-contract.test.ts` so the excluded/mode-aware split encodes the decision
-      rather than merely tolerating it.
-- [ ] R6. Either branch: resolve the surface inconsistency where `dev-run` / `dev-plan` advertise
-      `--agent` default `inline` while their full-pipeline path cannot honor it. The flag table and
-      the runtime behavior must agree.
-- [ ] R7. Either branch: no regression in the executor-redirect path landed 2026-08-04 —
-      `agent.default` must continue to reach `agent.run` stages, with caller-supplied `--vars`/
-      `--agent` still winning over config, and the pipeline YAML literal remaining the last fallback.
+- [x] R1. **Decide first, build second.** Produce a recorded decision (ADR entry or an amendment to ADR-041/H82 R6) choosing exactly one of: (a) implement true in-session execution of pipeline stages; (b) formally declare `inline` inapplicable to workflow-driven commands and make the surface say so. Do not begin implementation before the decision is recorded — the two branches have very different blast radii.
+- [x] R2. If (a): define the control-inversion mechanism by which a workflow `agent.run` stage hands its prompt to the host coding-agent session and resumes with the result. *(N/A — branch (b) chosen in ADR-046.)*
+- [x] R3. If (a): the mechanism must degrade honestly when no host session can own the step. *(N/A — branch (b).)*
+- [x] R4. If (a): `spur agent run` must keep rejecting the literal `inline`. *(Satisfied under (b) as well — AgentService still rejects; diagnostic now names `agent.default`.)*
+- [x] R5. If (b): make the operator surface honest — the `--agent` value set for workflow-backed commands becomes `<auto|name>`, the contract states plainly that pipeline stages always dispatch, and `agent.default` is documented as the supported redirect. Update `inline-execution-contract.test.ts` so the excluded/mode-aware split encodes the decision rather than merely tolerating it.
+- [x] R6. Either branch: resolve the surface inconsistency where `dev-run` / `dev-plan` advertise `--agent` default `inline` while their full-pipeline path cannot honor it. The flag table and the runtime behavior must agree.
+- [x] R7. Either branch: no regression in the executor-redirect path landed 2026-08-04 — `agent.default` must continue to reach `agent.run` stages, with caller-supplied `--vars`/`--agent` still winning over config, and the pipeline YAML literal remaining the last fallback.
 ### Acceptance Criteria
 Completion conditions. Deliberately not expressed as BDD scenarios: this task's first deliverable is
 a recorded decision, and its observable behavior depends on which branch that decision takes — so it
@@ -161,76 +142,111 @@ on 2026-08-04 already addresses without any inversion.
 **Do not** resolve this by making `AgentService` accept `inline` and shell out to the host session —
 that reintroduces a subprocess under a name that promises the opposite.
 ### Plan
-- [ ] **R1 decision (blocking).** Record a dated ADR entry (new, or amendment to ADR-041 / H82 R6) choosing exactly one branch:
-  - **(a)** true in-session execution of pipeline `agent.run` stages, or
-  - **(b)** `inline` unrepresentable on workflow-driven commands; surface + tests tell the truth.
-  Do not implement until the ADR lands. Recommended lean under this refine: **(b)** — see Q&A.
-- [ ] If **(b)** (recommended path):
-  - [ ] Enumerate every workflow-backed command (`dev-idea`, `dev-wrap`, `dev-wrapall`, full `dev-run` pipeline path, `dev-runall`, and any other EXCLUDED / Skill→workflow wrappers).
-  - [ ] Flag tables / arg-hints: drop `inline` from the accepted set for those commands (`--agent <auto|name>` only); document that stages always dispatch and `agent.default` is the redirect.
-  - [ ] Runtime: reject `--agent inline` on those paths with a diagnostic naming `agent.default` (and optionally `--agent <name>` / `--agent auto`).
-  - [ ] Update `plugins/sp/tests/inline-execution-contract.test.ts` so EXCLUDED/mode-aware split and accepted values encode the ADR.
-  - [ ] Update `plugins/sp/tests/command-flag-parity.test.ts` accepted sets accordingly.
-  - [ ] Cross-cutting / flag glossary / ADR-041 amendment: one sentence that pipeline stages never honor `inline`.
-- [ ] If **(a)** (only if ADR chooses it — after 0433 lands):
-  - [ ] Spec control inversion: stage marks in-session eligibility → persist prompt → pause → host session executes → CLI write-back → resume (reuse HITL pause seam; **0433 `--answer`/payload resume is prerequisite**).
-  - [ ] Fail-fast when no host session can own the step (`--async`, scheduled, headless) — trigger 2.
-  - [ ] Keep `AgentService` rejecting literal `inline` (R4).
-  - [ ] Tests: host-session completion path + async fail-fast path.
-- [ ] Either branch: re-verify executor-redirect invariants (2026-08-04) — `agent.default` → stages; caller `--vars`/`--agent` wins; YAML literal last. Existing `workflow-service` tests must stay green.
-- [ ] Gate: `bun run lint` + `plugins/sp` contract tests + app workflow-service tests green.
+- [x] **R1 decision (blocking).** ADR-046 (2026-08-04) records branch **(b)** — `inline` unrepresentable on workflow-driven commands.
+- [x] If **(b)** (shipped):
+  - [x] Enumerate workflow-backed commands (`dev-plan`, `dev-runall`, full `dev-run`; EXCLUDED wrappers remain no-`--agent`).
+  - [x] Flag tables / arg-hints: `--agent <auto|name>` for `dev-plan` / `dev-runall`; `dev-run` documents mode split.
+  - [x] Runtime: `AgentService` rejects literal `inline` with diagnostic naming `agent.default` (ADR-046); command prose forbids merge into `vars.agent` on full path.
+  - [x] Update `plugins/sp/tests/inline-execution-contract.test.ts` (`WORKFLOW_DRIVEN_AGENT_COMMANDS` + ADR-046 test).
+  - [x] Flag-parity suite remains green (`command-flag-parity.test.ts` mode-aware --agent contract).
+  - [x] Cross-cutting / flag glossary / dev-operations + ADR-046 same-change.
+- [x] If **(a)** — not chosen.
+- [x] Either branch: executor-redirect invariants green (`workflow-service` agent.default suite).
+- [x] Gate: contract tests + agent-service inline reject + agent.default suite green this verify run.
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Change-map for branch (b) — `inline` unrepresentable on workflow-driven commands (ADR-046).
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/workflow.ts:429` |
-| `apps/cli/src/commands/workflow.ts:436` |
-| `apps/cli/src/commands/workflow.ts:464` |
-| `apps/cli/src/commands/workflow.ts:473` |
-| `apps/cli/src/commands/workflow.ts:479` |
-| `apps/cli/tests/commands/workflow.test.ts:284` |
-| `packages/app/src/services/workflow-service.ts:416` |
-| `packages/app/src/services/workflow-service.ts:442` |
-| `packages/app/src/services/workflow-service.ts:452` |
-| `packages/app/src/services/workflow-service.ts:476` |
-| `packages/app/src/services/workflow-service.ts:490` |
-| `packages/app/src/services/workflow-service.ts:497` |
-| `packages/app/src/services/workflow-service.ts:500` |
-| `packages/app/src/services/workflow-service.ts:646` |
-| `packages/app/src/services/workflow-service.ts:653` |
-| `packages/app/src/services/workflow-service.ts:655` |
-| `packages/app/src/services/workflow-service.ts:667` |
-| `packages/app/src/services/workflow-service.ts:675` |
-| `packages/app/src/services/workflow-service.ts:683` |
-| `packages/app/tests/services/workflow-service.test.ts:283` |
-| `packages/app/tests/services/workflow-service.test.ts:795` |
-| `plugins/sp/tests/inline-execution-contract.test.ts:115` |
-| `plugins/sp/tests/inline-execution-contract.test.ts:119` |
-| `plugins/sp/tests/inline-execution-contract.test.ts:125` |
-| `plugins/sp/tests/inline-execution-contract.test.ts:136` |
-| `plugins/sp/tests/inline-execution-contract.test.ts:50` |
+| Change (`file:line`) | What / why |
+|----------------------|------------|
+| `docs/00_ADR.md:1238` | ADR-046: choose branch (b); name trade-off and reasoning |
+| `plugins/sp/commands/dev-plan.md:3,18` | `--agent <auto\|name>`; default `agent.default`; no inline |
+| `plugins/sp/commands/dev-runall.md:3,20` | Same workflow-driven selector |
+| `plugins/sp/commands/dev-run.md:17,37` | Mode split: implement honors inline; full never merges inline; diagnostic names agent.default |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:95` | "Workflow-driven commands never honor inline" |
+| `plugins/sp/skills/spur-dev/references/flag-glossary.md:62` | Workflow-driven exception (ADR-046) |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md` | plan/runall Inputs prose drop inline |
+| `plugins/sp/tests/inline-execution-contract.test.ts:50-160` | `WORKFLOW_DRIVEN_AGENT_COMMANDS` + ADR-046 test |
+| `packages/app/src/services/agent-service.ts:842-848` | Keep reject literal `inline`; diagnostic names `agent.default` (verify fix-pass) |
+| `packages/app/tests/services/agent-service.test.ts:1924-1927` | Assert diagnostic contains `agent.default` |
 ### Testing
-**Pipeline verify results**
+**Force re-verify** 2026-08-05 (`/sp-dev-verify 0434 --auto --next --force --focus all --fix all`)
 
-- Verdict: PASS (from verdict artifact)
+**Verdict: PASS** (branch **b**)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 (decide first) | MET | ADR-046 appended to `docs/00_ADR.md` (2026-08-04) choosing branch (b), naming what is given up and the reasoning (pipeline stages are durable/auditable/timed units; the practical pain is closed by `agent.default` injection). |
-| R2-R4 (branch a) | N/A | Branch (b) chosen; no in-session control inversion built, `AgentService` still rejects literal `inline`. |
-| R5 (surface honest) | MET | `dev-plan` and `dev-runall` carry `--agent <auto\|name>` with default `agent.default`; bodies state stages always dispatch and `inline` is not acceptable (ADR-046). `inline-execution-contract.test.ts` gains a `WORKFLOW_DRIVEN_AGENT_COMMANDS` set and an ADR-046 test. |
-| R6 (surface/runtime agree) | MET | `dev-run` keeps `inline` (implement mode) but its flag-table default + body make the full-mode restriction explicit: full mode never merges `inline` into `vars.agent`; explicit `--agent inline` on the full path surfaces a diagnostic naming `agent.default`. dev-operations.md rows 6/13 + Inputs prose updated. |
-| R7 (executor-redirect no regression) | MET | Existing workflow-service tests for `agent.default` reaching `agent.run` stages still pass (68 tests). Caller `--vars`/`--agent` still win over config; YAML literal last fallback unchanged. |
-| R8 (ADR same-change docs) | MET | `cross-cutting.md`, `flag-glossary.md`, `dev-operations.md`, and ADR-046 updated same-change. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | ADR-046 Accepted 2026-08-04 chooses branch (b), names what is given up (session chat context for stages) and why (triggers 2/3 + agent.default redirect). `docs/00_ADR.md:1238-1285` (re-read this run). |
+| R2 | N/A | Branch (a) not chosen — control inversion not built. |
+| R3 | N/A | Branch (a) not chosen. |
+| R4 | MET | `AgentService` still rejects `raw === 'inline'` exit 2; does not pretend in-process. `packages/app/src/services/agent-service.ts:842-848`. Diagnostic names `agent.default` (fix-pass this run). |
+| R5 | MET | `dev-plan`/`dev-runall` use `<auto\|name>` + `agent.default` redirect prose. Contract test ADR-046: `plugins/sp/tests/inline-execution-contract.test.ts:136-160`. |
+| R6 | MET | `dev-run` keeps inline for implement; full-mode prose forbids merge + diagnostic. Flag tables agree with path. `plugins/sp/commands/dev-run.md:17,37`. |
+| R7 | MET | `agent.default` suite: config overrides YAML; caller wins; YAML last. `packages/app/tests/services/workflow-service.test.ts:1439-1476` — 3 pass this run. |
+
+**Acceptance Criteria Verification** (Done-when checklist; not Gherkin)
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Dated decision in docs/00_ADR.md naming branch + trade-off | MET | static-ref | ADR-046 `docs/00_ADR.md:1238-1273` |
+| Flag table and runtime agree for every declaring command | MET | test + static-ref | `inline-execution-contract` mode-aware + ADR-046 tests; command tables |
+| Contract tests encode decision and pass | MET | test | `bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts` — 78 pass |
+| Branch (a) host-session / async fail-fast | N/A | n/a | Branch (b) shipped |
+| Branch (b): inline unrepresentable + diagnostic names agent.default | MET | test + static-ref | Flag tables drop inline; AgentService diag contains `agent.default` (`agent-service.test.ts` inline case) |
+| Executor-redirect still holds | MET | test | workflow-service agent.default describe — 3 pass |
+| Lint/test gate | MET | test | Targeted suites green this run (full monorepo suite not re-run; standing network env failures out of scope) |
+
+**Command evidence (this run)**
+
+```
+$ bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts
+78 pass, 0 fail
+
+$ bun test plugins/sp/tests/inline-execution-contract.test.ts -t "ADR-046"
+1 pass
+
+$ bun test packages/app/tests/services/agent-service.test.ts -t "inline"
+1 pass (asserts agent.default in diagnostic)
+
+$ bun test packages/app/tests/services/workflow-service.test.ts -t "agent"
+6 pass (includes agent.default suite)
+```
+
+**Design conformance**
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| R1 decision before build | DONE | ADR-046 before surface edits (commit d785668f) |
+| Branch (b) surface honesty | DONE | commands + cross-cutting + glossary |
+| Do not make AgentService accept inline | DONE | still rejects |
+| agent.default redirect preserved | DONE | R7 tests |
+
+**Checks**
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| design-conformance | pass | Branch (b) claims DONE; (a) N/A |
+| evidence-rule-pass | pass | Behavior AC rows use test evidence |
+| tests-pass | pass | Contract + agent + agent.default suites exit 0 |
+| scope-creep | pass | Change set matches ADR-046 file list (+ diagnostic wording) |
+
+**Coverage:** N/A (docs/contract surface; no new runtime coverage target).
+
+**Fix-pass artifacts:**
+- `.spur/run/0434-verdict.json` rewritten with AC rows (prior empty acceptanceCriteria)
+- AgentService inline diagnostic names `agent.default` (`packages/app/src/services/agent-service.ts:847`)
+- Solution change-map corrected (was polluted with 0433 HITL files)
+- Requirements/Plan checklists completed; Review P1–P4 table
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECUA review** (standalone verify --force) — aggregate: PASS
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+|----------|-----------|----------|---------|
+| P1 | — | — | None |
+| P2 | — | — | None |
+| P3 | U | `packages/app/src/services/agent-service.ts:842-848` | Pre-fix diagnostic omitted `agent.default`; fixed this verify to match ADR-046 / AC wording. |
+| P4 | A | `plugins/sp/commands/dev-run.md:17,37` | Mode-split keeps `inline` representable on implement path only — correct but requires operators to read mode semantics. Acceptable. |
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->

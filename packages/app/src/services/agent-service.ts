@@ -844,7 +844,7 @@ export class AgentService {
                 ok: false,
                 exitCode: 2,
                 message:
-                    "'inline' selects in-session execution and cannot be passed to 'spur agent run', which always starts a subprocess. Run the backing skill directly in the current session, or use '--agent auto' for subprocess dispatch with a tier-resolved executor.",
+                    "'inline' selects in-session execution and cannot be passed to 'spur agent run', which always starts a subprocess. Run the backing skill directly in the current session, or redirect pipeline stages via agent.default / '--agent auto' / '--agent <name>' (ADR-046).",
             };
         }
         // Executor-aware (0346): explicit `--agent <name>` reuses the same

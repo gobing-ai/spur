@@ -1923,6 +1923,7 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         const diag = errors.join('\n');
         expect(diag).toContain("'inline'");
         expect(diag).toContain('cannot be passed');
+        expect(diag).toContain('agent.default');
         expect(diag).toContain('--agent auto');
     });
 });
