@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.4.0
+version: 1.5.0
 owner: Robin Min
-updated_at: 2026-08-04
+updated_at: 2026-08-05
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1084,6 +1084,12 @@ now rejects `inline`/`auto` as executor *names* to prevent sentinel collision wi
 (`resolveAgent` inline guard, `resolveExecutorSelector` unknown-name diagnostic);
 `plugins/sp/tests/inline-execution-contract.test.ts` (parity gate).
 
+**Amendment (2026-08-05).** The who/where rule stands. The claim that `resolveAgent()` must
+**reject** the literal `inline` on `spur agent run` is withdrawn: under ADR-047, omit/`inline` on a
+headless dispatch surface resolve to `agent.default` (subprocess of the configured default), while
+interactive slash still treats omit/`inline` as host-session. Sentinel rejection of `inline`/`auto`
+as **executor names** in config remains.
+
 ## ADR-042: The Message Plane Consolidates into One Board Module with a Unified Per-Agent Timeline
 
 **Status:** Accepted · **Date:** 2026-08-04
@@ -1237,7 +1243,7 @@ caps the marginal value of a dedicated monitor verb.
 
 ## ADR-046: `--agent inline` Is Inapplicable to Workflow-Driven Pipeline Stages
 
-**Status:** Accepted · **Date:** 2026-08-04 · **Feature:** H82 · **Amends:** ADR-041 / H82 R6
+**Status:** Superseded by ADR-047 · **Date:** 2026-08-04 · **Feature:** H82 · **Amends:** ADR-041 / H82 R6
 
 **Decision (branch b, task 0434).** `inline` is not an honorably executable `--agent` value on a
 workflow-driven command — one whose model-bearing work is a workflow pipeline's `agent.run` stages.
@@ -1283,3 +1289,70 @@ command: workflow-driven commands accept `<auto|name>`, `dev-run` documents the 
 `plugins/sp/skills/spur-dev/references/flag-glossary.md`,
 `plugins/sp/skills/spur-dev/references/dev-operations.md`; `plugins/sp/tests/inline-execution-contract.test.ts`,
 `plugins/sp/tests/command-flag-parity.test.ts`; `plugins/sp/scripts/validate-flag-contracts.ts`.
+
+**Superseded (2026-08-05).** ADR-047 replaces the "inline unrepresentable + reject sentinel" surface
+with a single value table and run-scoped session affinity. Historical rationale above remains for
+audit; do not implement new behavior from this entry.
+
+## ADR-047: Unified `--agent` Semantics, Run-Scoped Session Affinity, and Live Non-Interactive Agent Output
+
+**Status:** Accepted (design) · **Date:** 2026-08-05 · **Feature:** H83 · **Supersedes:** ADR-046 ·
+**Amends:** ADR-041
+
+**Decision.** One `--agent` value table applies everywhere. **Omit** and **`inline` are identical.**
+Interactive slash commands keep model-bearing work in the **host** session. Workflow `agent.run`
+(and `spur agent run`) always use a **subprocess** of the resolved executor: omit/`inline` →
+`agent.default`, `auto` → tier resolve, `<name>` → that executor. The literal `inline` is **not**
+rejected by `spur agent run`; it resolves like omit. Pipeline stages remain subprocess for durable
+audit and independent timeout (triggers 2 and 3) — that boundary is kept, not inverted.
+
+**Run-scoped session affinity (default on).** All `agent.run` hops for the same resolved agent inside
+one workflow `runId` share one coding-agent session under
+`.spur/run/<runId>/agent-sessions/<agent>`, resumed by session id when the agent supports it.
+Bare global continue/last-session resume is forbidden for pipeline hops — it must not attach to the
+operator's interactive session. Affinity may be disabled via config/vars after dogfood without a
+code change. Agent matrix for affinity/isolation primitives: **omp, claude, codex, agy, grok, pi**
+(capability degrade to isolated-fresh when resume-by-id is unavailable).
+
+**Live non-interactive output.** Non-interactive dispatch means stdin ignored and **no TTY inherit**,
+not end-buffered silence. Pipeline `agent.run` pipes stdout/stderr so chunks reach
+`.spur/run/<runId>.log` before the hop exits. Observation uses `spur workflow trace <id> --follow
+--output` (not `| tail`).
+
+**Deferred (Phase D — non-goal for H83).** True host-stage control inversion (pipeline stages
+executing inside the operator's interactive chat) is **not** authorized by this ADR. It needs a
+future ADR and feature if dogfood still requires it after affinity and streaming ship.
+
+**Why.** ADR-046 left dual legacy (`inline` default vs `inline` unrepresentable) and did not stop
+same-agent nesting from resuming the host session via bare continue; that polluted dogfood runs and
+wasted tokens across stages. Wrong contracts are fixed, not defended. Subprocess stages stay for
+audit/timeout; affinity and pipe streaming fix cost and observability without Phase D.
+
+**Detail:** feature H83; tasks 0447–0450 (0446 Phase D hold cancelled); `cross-cutting.md` /
+`flag-glossary` (post-H83 surface); `AgentRunActionRunner` / `AgentService.runTraced`;
+`@gobing-ai/ts-ai-runner` PromptOptions session fields; `@gobing-ai/ts-runtime` pipe-no-TTY policy;
+ADR-041 (who/where rule retained, reject-`inline` path withdrawn); ADR-045 (run log remain the live
+surface). Implementation lands under H83; this entry is the decision authority until status is
+promoted from design to fully shipped.
+
+## ADR-048: `spur task record` Owns the `done` Lifecycle Walk and Pipeline Run-Link (R4)
+
+**Status:** Accepted · **Date:** 2026-08-05 · **Task:** 0436 R4
+
+**Decision.** `spur task record --transition done` with a **PASS** verify verdict auto-walks the forward
+FSM (`wip → testing → done`) and auto-creates the `pipeline` provenance run-link in the same call,
+instead of denying `wip→done` and forcing the agent to re-issue `run-link` + intermediate status
+transitions. A non-PASS verdict to `done` throws a single `GuardDeniedError`. The guard stays on the
+**verdict**, not on bookkeeping.
+
+**Why.** `record` is itself the pipeline's record step, so a PASS verdict is real pipeline provenance —
+creating the link there is legitimate, not a bypass, and it removes the most recurring mechanical
+friction (10 `GuardDeniedError` retries across a 3-task chain, task 0436).
+
+**Detail:** `03 §12.2` (lifecycle/guards); `04 §7.1` `spur task record` row + `task_run_links` note;
+`packages/app/src/services/task-service.ts` `record()` / `ensurePipelineRunLink`;
+`packages/app/tests/services/task-record.test.ts`.
+
+**Supersedes the 04 follow-up premise:** `task_run_links` linkage was previously recorded as needing a
+`WorkflowService` run-start hook (no link-writing CLI verb); the record-owned walk makes that hook
+unnecessary. The 04 note is now marked resolved.

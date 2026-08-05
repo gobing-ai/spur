@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.6.0
+version: 1.7.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-04
+updated_at: 2026-08-05
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -208,6 +208,40 @@ as a distinct source, exiting at terminal status; the structured DB timeline rem
 `<RUNID>-output.log` folds into `<RUNID>.log`, and the timed-out-implement runbook tails the new path;
 the `.spur/runs/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage stay distinct
 authorities. Surface shapes: `docs/design/workflow-run-log.md`; decision: `00 ADR-045`; feature `D2`.
+
+### 6.2 Resume and guard vars contract
+
+This is the exact contract agents rely on when resuming a paused workflow or authoring guard
+commands — it is documented in-repo so no one has to reverse-engineer the engine (`node_modules`).
+Source of truth: `@gobing-ai/ts-dual-workflow-engine` `WorkflowService.resumeRun` /
+`evaluateAndCommit`, and spur's `EnvShellGuardRunner` (`packages/app/src/workflow/guards/shell.ts`).
+
+**`resumeRun` vars merge (caller wins).** When a paused run is resumed
+(`spur workflow continue <run-id>` / `WorkflowService.resumeRun`):
+
+1. The run must be `paused`; it is re-opened as `running`, and execution starts from the persisted
+   current state **skipping that state's on-enter**.
+2. The runtime vars are restored from the `effectiveVars` snapshot persisted in the last state
+   snapshot (e.g. `__hitlAnswer`, `profile`), so a resume continues with the same runtime variables.
+3. Caller-supplied `options.vars` are **merged over** that persisted snapshot — **caller wins** on a
+   key collision (`mergeVars(persistedVars, options.vars)`). Inject a resumed answer by passing it in
+   `vars`, not by mutating the snapshot.
+
+**Shell-guard vars resolution (two layers).** A guard command may reference workflow vars either way:
+
+1. **Template resolution (engine).** `${vars.*}` templates in guard options (e.g.
+   `spur task check ${vars.wbs}`) are resolved against `workflow.vars` *before* the guard runs
+   (`resolveTemplates`), the same interpolation the driver's `firstPassingTransition` uses.
+2. **Subprocess env export (spur).** Spur's `EnvShellGuardRunner` replaces the engine's default shell
+   guard and spawns `/bin/sh -c <command>` with `context.vars` merged over `process.env` as the child
+   env — so a guard can also reference vars by bare name (`$wbs`, `$spurBin`). Because the value is
+   passed as environment data, a variable-expansion result is **never re-parsed as shell code** (no
+   backtick/`$(...)` injection — task 0435/0432). The lifecycle adapter binds the run's guard var
+   (e.g. `wbs`) and `spurBin` into `workflow.vars` before requesting a transition, which is why
+   `task-lifecycle.yaml` guards can run `$spurBin task check $wbs`.
+
+Guard evaluation is fail-closed: a non-zero shell exit denies the transition atomically with zero
+partial writes (see `LifecycleAdapter.requestTransition` in §12.2).
 
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 

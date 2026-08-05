@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.14.0
+version: 1.15.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-04
+updated_at: 2026-08-05
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -46,6 +46,9 @@ When collaborating with the design team:
 | [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
 | [`inbox-board-module.md`](design/inbox-board-module.md) | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented |
 | [`workflow-run-log.md`](design/workflow-run-log.md) | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045) | built |
+| [`brainstorm-workflow-observability-steering.md`](design/brainstorm-workflow-observability-steering.md) | Brainstorm — tiered `spur workflow run` output, richer lifecycle/execution events, `--json` machine mode, steering axes (0114/0310 foundation) | brainstorm |
+| [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md) | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only) | proposed design only |
+| [`workspace-design.md`](design/workspace-design.md) | Workspace module — data model, config, board surface, agent-team + inbox composition layer (ADR-025, feature G3) | design |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -719,7 +722,7 @@ Source: delivery §1.1, design §10.
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
 | `spur task check [<wbs>]` | `--strict` `--strict-core` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default) + **parent↔child roll-up** (ADR-020 amendment 2026-06-25, task 0121: for a decomposition parent, warn when the parent is `done` with an open child, when all children are closed but the parent is still open, or when the parent `## Plan` lacks a sub-task roster table — all warnings, `--strict` elevates; inert for tasks with no children). Validates all tasks when `<wbs>` omitted; `--strict` elevates ALL warnings; `--strict-core` is the `testing→done` gate variant (fails only on hard-core errors — Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — without the blanket elevation). Matrix loaded from `config/tasks/section-matrix.yaml`. |
 | `spur task verdict <wbs>` | `--from-answer <path>` `--folder <path>` `--json` | 0/1 | Derive the PASS/PARTIAL/FAIL/UNKNOWN gate verdict from the verify-step answer file and write `.spur/run/<wbs>-verdict.json`. Parses requirement rows, AC rows, and checks rows; behavior-bearing CORE AC rows marked `MET` without `test`/`command` evidence are downgraded to `PARTIAL` and surfaced via `evidence-rule-failed`. The deterministic replacement for grep-over-prose in the pipeline verify step (0109). Consumed by the completion gate and by `spur task record`. |
-| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Preserves `acceptanceCriteria[]` evidence rows in Testing when present. Never transitions to `done` — the gate stays in the workflow (0108). |
+| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Preserves `acceptanceCriteria[]` evidence rows in Testing when present. A `--transition done` with a **PASS** verdict auto-walks `wip → testing → done` through the FSM and auto-creates the `pipeline` run-link the provenance gate requires (task 0436 R4); a non-PASS verdict to `done` surfaces a single `GuardDeniedError` instead of a bookkeeping retry loop. |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -944,8 +947,9 @@ architecture, task 0227); `verify` → `/sp:dev-verify` (→ `sp:code-verificati
 `verify → record` transition is a shell guard asserting `jq -r .verdict … = PASS`, with a sibling
 `verify → failed` on the negation — so a PARTIAL/FAIL/missing verdict blocks `done`. This is the
 spur-native replacement for rd3's default-on `--postflight-verify`.
-**Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start
-hook — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
+**`task_run_links` pipeline linkage (kind=pipeline, R4):** resolved by task 0436 — `spur task record`
+now auto-creates the `pipeline` run-link when recording a PASS verdict to `done`, so no link-writing
+CLI verb is needed from a shell step.
 **Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4):** each `agent.run`
 step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/test-fix and
 `${vars.implementTimeoutMs}` for the heavier implement hop, both defaulting to `"1800000"` (30 min).

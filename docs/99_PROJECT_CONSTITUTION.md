@@ -475,6 +475,12 @@ if it recurs, a new rule in §6.
   A UI change still carries non-UI surface facts (§4.1 routing) that `DESIGN.md` does not cover.
   When a UI module ships, check for system-boundary surface and record it in `04`/`03`/ADR in
   the same change (ADR-042 repaired this in a follow-up).
+- [2026-08-05] spur-new: A recorded 04 design premise (`task_run_links` "needs a WorkflowService
+  run-start hook") was silently reversed by a code change (`spur task record` auto-walking the
+  `done` transition and auto-creating the run-link, task 0436 R4) — a §5 T1/T2 obligation with no
+  same-change ADR. The premise only read as "resolved" in 04, not as a decision. Repair: new
+  ADR-048 in the wrapup. A design premise in 04 that a code change reverses needs an ADR in the
+  same change, not just an edited follow-up note.
 
 ### Lessons for `docs/05_FEATURES.md`
 
