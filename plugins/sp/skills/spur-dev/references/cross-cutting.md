@@ -92,6 +92,13 @@ This is **the same rule, not an exception**: `--agent` names who does the thinki
 the thinking happens in the stages. Selecting an executor for a loop that runs no prompts would be
 meaningless.
 
+**Workflow-driven commands never honor `inline` (ADR-046).** When a command's model-bearing work is
+a workflow pipeline's `agent.run` stages, those stages always dispatch a subprocess — `inline` is not
+an honorable value and is not accepted. `dev-plan` and `dev-runall` accept `--agent <auto|name>`
+only; `dev-run --mode full` (the default) never merges `inline` into `vars.agent`. `dev-run --mode
+implement` runs a single competency in-session and does honor `inline`. Omit `--agent` on a
+workflow-driven command to leave the stages on the configured `agent.default`.
+
 ### Explicit subprocess surfaces are unchanged
 
 Direct `spur agent run` invocations are always subprocess execution. Workflow `agent.run` actions

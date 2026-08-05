@@ -59,6 +59,11 @@ audit record, headless) that the chosen executor cannot satisfy, not preferences
 wrapper (`dev-run`, `dev-runall`) the loop does no model-bearing work itself, so `--agent` addresses
 its stages via `vars.agent`; that is the same rule applied, not an exception.
 
+**Workflow-driven exception (ADR-046):** commands whose model-bearing work is pipeline `agent.run`
+stages (`dev-plan`, `dev-runall`, `dev-run --mode full`) never honor `inline` — those stages always
+dispatch a subprocess, so the accepted value set is `<auto|name>` and `inline` is unrepresentable.
+`dev-run --mode implement` runs a single competency in-session and does honor `inline`.
+
 Operator-layer vocabulary (task 0405): `agent` names the concrete coding-agent tool; `executor`
 remains the domain-layer role and is not a command flag. `inline` and `auto` are reserved values —
 config validation rejects an executor claiming either. Full contract:

@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <auto|name>] [--json] [--wrap] [--next] [--continue]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -17,7 +17,7 @@ Wraps the **sp:spur-dev** skill.
 | `--mode` `<sequential\|parallel>` | Batch execution order. | sequential |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task. | inline |
+| `--agent` `<auto\|name>` | Who runs each task's pipeline stages. Each per-task workflow's `agent.run` stages always dispatch a subprocess; `inline` is not an acceptable value here (ADR-046). Omit to leave stages on the configured `agent.default`; `auto` tier-resolves an executor; a name pins that executor. | agent.default |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop per task. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -28,7 +28,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <auto|name>] [--json] [--wrap] [--next] [--continue]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -37,9 +37,9 @@ or `ready`), `--feature <id>` (sugar for `feature:<id>`), `--mode`
 see `execution-batch.md` § Parallel Execution), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
 halts on first failure), `--auto`
-(sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
-(names who does the model-bearing work — here the pipeline's stages, so it merges into each
-per-task `vars.agent`; the orchestrator loop continues in this session), `--json` (emit the
+(sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <auto|name>`
+(names who runs the pipeline's stages — merged into each per-task `vars.agent`; `inline` is not
+acceptable here because stages always dispatch, ADR-046; the orchestrator loop continues in this session), `--json` (emit the
 report as JSON), `--wrap` (trigger
 `wrapup-pipeline.yaml` after the batch completes), `--next`
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),

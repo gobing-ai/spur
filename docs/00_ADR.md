@@ -1234,3 +1234,52 @@ caps the marginal value of a dedicated monitor verb.
 
 **Detail:** `docs/design/workflow-run-log.md`; `docs/03_ARCHITECTURE.md §6`; feature `D2`
 (`docs/features/D2_all-in-one-per-run-workflow-run-log.md`).
+
+## ADR-046: `--agent inline` Is Inapplicable to Workflow-Driven Pipeline Stages
+
+**Status:** Accepted · **Date:** 2026-08-04 · **Feature:** H82 · **Amends:** ADR-041 / H82 R6
+
+**Decision (branch b, task 0434).** `inline` is not an honorably executable `--agent` value on a
+workflow-driven command — one whose model-bearing work is a workflow pipeline's `agent.run` stages.
+Those stages always dispatch a subprocess (`spur agent run`), which rejects the literal sentinel
+`inline` with exit 2. For such commands the `--agent` value set is `<auto|name>`, not
+`<inline|auto|name>`, and attempting `--agent inline` is rejected with a diagnostic naming
+`agent.default` as the supported redirect.
+
+**What is workflow-driven.** A command is workflow-driven when its execution path (under its default
+mode) is a workflow whose `agent.run` stages are the model-bearing units:
+
+- `dev-plan` — the planning pipeline (`idea-pipeline` / `sp:spur-dev`) always dispatches stages.
+- `dev-runall` — each per-task run is a full workflow whose stages dispatch.
+- `dev-run --mode full` (the default) — the task pipeline's `implement`/`test`/`review`/… stages
+  dispatch.
+
+`dev-run --mode implement` is **not** workflow-driven: it runs a single competency in the current
+session, so `inline` remains honored there. `dev-run` therefore keeps `inline` in its value set,
+scoped to implement mode, and its flag table documents the split (full mode never merges `inline`
+into `vars.agent`).
+
+**Why (b), not (a).** The four objective triggers in
+`cross-cutting.md#inline-default-execution-surface` already mark a pipeline stage as a durable,
+auditable, independently-timed unit (triggers 2 and 3) — subprocess is the correct surface, not an
+accident. The practical "broken executor / wrong default" pain is already closed by the
+2026-08-04 `agent.default` injection into `vars.agent`: an operator redirects stages by changing one
+config key, no control inversion needed. Branch (a) (true in-session execution via a control
+inversion over the HITL pause seam) is a large, higher-blast-radius change for a corner the redirect
+already covers, and it would depend on a resume-with-payload path beyond the current `--answer`.
+
+**What (b) gives up.** An operator cannot force a pipeline stage to consume the current session's
+chat context. That trade-off is accepted explicitly; if a future product need appears, open a new
+task for branch (a) rather than leaving the default unhonorable.
+
+**Surface + runtime agreement (R6).** The flag table and the runtime now agree for every declaring
+command: workflow-driven commands accept `<auto|name>`, `dev-run` documents the mode split, and
+`cross-cutting.md` states plainly that pipeline stages always dispatch and never honor `inline`.
+
+**Detail:** `docs/00_ADR.md` (this entry); `plugins/sp/commands/dev-plan.md`,
+`plugins/sp/commands/dev-runall.md` (`--agent <auto|name>`, drop `inline` default),
+`plugins/sp/commands/dev-run.md` (document full-mode inline inapplicability);
+`plugins/sp/skills/spur-dev/references/cross-cutting.md`,
+`plugins/sp/skills/spur-dev/references/flag-glossary.md`,
+`plugins/sp/skills/spur-dev/references/dev-operations.md`; `plugins/sp/tests/inline-execution-contract.test.ts`,
+`plugins/sp/tests/command-flag-parity.test.ts`; `plugins/sp/scripts/validate-flag-contracts.ts`.

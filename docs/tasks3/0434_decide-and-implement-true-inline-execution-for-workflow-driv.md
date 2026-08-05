@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Decide and implement true inline execution for workflow-driven pipeline stages"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H82
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0433"]
 created_at: "2026-08-04T19:04:35.799Z"
-updated_at: "2026-08-04T21:42:59.628Z"
+updated_at: "2026-08-05T06:14:18.545Z"
 ---
 
 ## 0434. Decide and implement true inline execution for workflow-driven pipeline stages
@@ -180,19 +180,62 @@ that reintroduces a subprocess under a name that promises the opposite.
 - [ ] Either branch: re-verify executor-redirect invariants (2026-08-04) — `agent.default` → stages; caller `--vars`/`--agent` wins; YAML literal last. Existing `workflow-service` tests must stay green.
 - [ ] Gate: `bun run lint` + `plugins/sp` contract tests + app workflow-service tests green.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/workflow.ts:429` |
+| `apps/cli/src/commands/workflow.ts:436` |
+| `apps/cli/src/commands/workflow.ts:464` |
+| `apps/cli/src/commands/workflow.ts:473` |
+| `apps/cli/src/commands/workflow.ts:479` |
+| `apps/cli/tests/commands/workflow.test.ts:284` |
+| `packages/app/src/services/workflow-service.ts:416` |
+| `packages/app/src/services/workflow-service.ts:442` |
+| `packages/app/src/services/workflow-service.ts:452` |
+| `packages/app/src/services/workflow-service.ts:476` |
+| `packages/app/src/services/workflow-service.ts:490` |
+| `packages/app/src/services/workflow-service.ts:497` |
+| `packages/app/src/services/workflow-service.ts:500` |
+| `packages/app/src/services/workflow-service.ts:646` |
+| `packages/app/src/services/workflow-service.ts:653` |
+| `packages/app/src/services/workflow-service.ts:655` |
+| `packages/app/src/services/workflow-service.ts:667` |
+| `packages/app/src/services/workflow-service.ts:675` |
+| `packages/app/src/services/workflow-service.ts:683` |
+| `packages/app/tests/services/workflow-service.test.ts:283` |
+| `packages/app/tests/services/workflow-service.test.ts:795` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:115` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:119` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:125` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:136` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:50` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 (decide first) | MET | ADR-046 appended to `docs/00_ADR.md` (2026-08-04) choosing branch (b), naming what is given up and the reasoning (pipeline stages are durable/auditable/timed units; the practical pain is closed by `agent.default` injection). |
+| R2-R4 (branch a) | N/A | Branch (b) chosen; no in-session control inversion built, `AgentService` still rejects literal `inline`. |
+| R5 (surface honest) | MET | `dev-plan` and `dev-runall` carry `--agent <auto\|name>` with default `agent.default`; bodies state stages always dispatch and `inline` is not acceptable (ADR-046). `inline-execution-contract.test.ts` gains a `WORKFLOW_DRIVEN_AGENT_COMMANDS` set and an ADR-046 test. |
+| R6 (surface/runtime agree) | MET | `dev-run` keeps `inline` (implement mode) but its flag-table default + body make the full-mode restriction explicit: full mode never merges `inline` into `vars.agent`; explicit `--agent inline` on the full path surfaces a diagnostic naming `agent.default`. dev-operations.md rows 6/13 + Inputs prose updated. |
+| R7 (executor-redirect no regression) | MET | Existing workflow-service tests for `agent.default` reaching `agent.run` stages still pass (68 tests). Caller `--vars`/`--agent` still win over config; YAML literal last fallback unchanged. |
+| R8 (ADR same-change docs) | MET | `cross-cutting.md`, `flag-glossary.md`, `dev-operations.md`, and ADR-046 updated same-change. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+- 2026-08-05T05:53:23.270Z todo → wip (system)
+- 2026-08-05T06:14:18.075Z wip → testing (system)
+- 2026-08-05T06:14:18.545Z testing → done (system)

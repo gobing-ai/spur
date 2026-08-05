@@ -14,7 +14,7 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | --- | --- | --- |
 | `<wbs>` | Task WBS to run. | required |
 | `--mode` `<full\|implement>` | Full pipeline or single implement step. | full |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. `--mode implement` honors `inline` (runs in this session). `--mode full` never runs stages inline — they always dispatch a subprocess (ADR-046); `inline` is not merged into `vars.agent` there, omit to use the configured `agent.default`. | inline (implement) · agent.default (full) |
 | `--auto` | Skip objective HITL confirmations. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--wrap` | Run the wrap hop after the main step. | off |
@@ -34,7 +34,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 **Flags:**
 
-- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. In `--mode implement` that is this session, so `inline` is honored literally. In `--mode full` the model-bearing work is the pipeline's `agent.run` stages, which **always dispatch a subprocess** (triggers 2 and 3) — `inline` is therefore not merged into `vars.agent`, because `spur agent run` rejects the literal and every stage would fail. A named executor or `auto` **is** merged into `vars.agent`; omitting `--agent` leaves the stages on the configured `agent.default`. Either way the orchestrator loop continues in this session. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. In `--mode implement` that is this session, so `inline` is honored literally. In `--mode full` the model-bearing work is the pipeline's `agent.run` stages, which **always dispatch a subprocess** (triggers 2 and 3) — `inline` is therefore not merged into `vars.agent`, because `spur agent run` rejects the literal and every stage would fail. An explicit `--agent inline` on the `--mode full` path is a surface error: surface a diagnostic naming `agent.default` (or `--agent <name>` / `--agent auto`) as the supported redirect, and do not merge `inline` into `vars.agent` (ADR-046). A named executor or `auto` **is** merged into `vars.agent`; omitting `--agent` leaves the stages on the configured `agent.default`. Either way the orchestrator loop continues in this session. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 **Mode split (load-bearing — bug-742)**
 
