@@ -2,11 +2,11 @@
 schema_version: 1
 id: H2
 name: Companion skills and write guard
-status: verifying
+status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-07-25T19:33:18.994Z"
+updated_at: "2026-08-05T22:48:32.382Z"
 ---
 
 # H2: Companion skills and write guard
@@ -75,3 +75,4 @@ the delivery doc with the decision.
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-07-25T19:33:18.756Z backlog → active (system)
 - 2026-07-25T19:33:18.994Z active → verifying (system)
+- 2026-08-05T22:48:32.382Z verifying → done (system)

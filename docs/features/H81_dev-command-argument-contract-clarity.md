@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H81"
 name: "Dev command argument contract clarity"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-02T03:30:35.439Z"
-updated_at: "2026-08-02T03:32:35.021Z"
+updated_at: "2026-08-05T22:38:19.875Z"
 ---
 
 # H81: Dev command argument contract clarity
@@ -111,3 +111,6 @@ Feature: Clear and coherent dev-command argument contracts
 ## Notes
 
 ## History
+- 2026-08-05T22:35:31.582Z backlog → active (system)
+- 2026-08-05T22:35:31.848Z active → verifying (system)
+- 2026-08-05T22:38:19.875Z verifying → done (system)

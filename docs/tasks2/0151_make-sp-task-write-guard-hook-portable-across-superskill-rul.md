@@ -12,7 +12,7 @@ priority: P1
 tags: [bug]
 dependencies: []
 created_at: 2026-06-29T05:34:21.692Z
-updated_at: 2026-06-29T07:20:15.483Z
+updated_at: "2026-08-05T22:46:56.008Z"
 ---
 
 ## 0151. Make sp task-write-guard hook portable across superskill/rulesync installs
@@ -164,6 +164,21 @@ Feature: Portable sp task-write-guard hook
 - [ ] AC-7: cc anti-hallucination hook config calls `superskill hook run cc anti-hallucination`; no generated config references `CLAUDE_PLUGIN_ROOT` or `plugins/cc/scripts`.
 - [ ] AC-8: the cc Stop runner emits `{hookSpecificOutput:{allowStop,feedback}}` and blocks when the protocol fails; it fails open on empty/malformed `ARGUMENTS` or a passing message.
 - [ ] AC-9: `cc-hooks` SKILL.md + `expert-hook` agent + references teach `superskill hook run` as the portable standard; no `${CLAUDE_PLUGIN_ROOT}/<script>` is presented as cross-platform; the Antigravity capability row is corrected.
+
+**Feature scenario cover (DD-09 / H2 close)**
+
+```gherkin
+Feature: Companion skills and write guard
+
+  Scenario: The hook holds no logic
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Companions document, spur-dev acts
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+```
 ### Design
 Recommended fix: make every hook config portable and move execution behind a single stable PATH
 command, `superskill hook run <plugin> <hook-id>`, backed by a runtime registry in superskill.

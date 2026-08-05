@@ -154,7 +154,15 @@ export class FeatureCheckService extends PlanningCheckService {
         options?: {
             strict?: boolean;
             featuresDir?: string;
+            /** Active task folder (legacy single-dir). Prefer {@link tasksDirs}. */
             tasksDir?: string;
+            /**
+             * All registered task phase folders (docs/tasks, tasks2, tasks3, …).
+             * When set, L4 `feature_id` edge resolution scans **every** folder —
+             * matching `FeatureService.collectTasksByFeature` so archive-folder
+             * edges (e.g. docs/tasks2) no longer look like orphan scenarios.
+             */
+            tasksDirs?: string[];
             dogfoodDir?: string;
             /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
             runDir?: string;
@@ -206,8 +214,15 @@ export class FeatureCheckService extends PlanningCheckService {
         // When tasksDir is `docs/tasks*` (this monorepo layout), dirname(tasksDir)
         // is `docs` — walking one extra level reaches the repo root. Callers that
         // know the root should pass `runDir` explicitly.
-        const runDir = options?.runDir ?? (options?.tasksDir ? defaultVerdictRunDir(options.tasksDir) : undefined);
-        await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, runDir, findings);
+        const primaryTasksDir = options?.tasksDir ?? options?.tasksDirs?.[0];
+        const runDir = options?.runDir ?? (primaryTasksDir ? defaultVerdictRunDir(primaryTasksDir) : undefined);
+        const taskScanDirs =
+            options?.tasksDirs && options.tasksDirs.length > 0
+                ? options.tasksDirs
+                : options?.tasksDir
+                  ? [options.tasksDir]
+                  : [];
+        await this.runL4(doc, featureId, status, taskScanDirs, dogfoodDir, runDir, findings);
 
         return { id: featureId, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
     }
@@ -376,15 +391,16 @@ export class FeatureCheckService extends PlanningCheckService {
         doc: MarkdownDocument,
         featureId: string,
         status: string,
-        tasksDir: string | undefined,
+        tasksDirs: string[],
         dogfoodDir: string | undefined,
         runDir: string | undefined,
         findings: CheckFeatureFindings[],
     ): Promise<void> {
-        if (tasksDir === undefined) return;
+        if (tasksDirs.length === 0) return;
 
         // Tasks reference features via `feature_id` (one direction, DD-07). A
-        // feature's "edges" are the tasks pointing at it. Verify those tasks
+        // feature's "edges" are the tasks pointing at it. Scan every registered
+        // phase folder (active + archive) so edges in docs/tasks2 still count.
         let linkedTasks = 0;
         const incompleteTasks: string[] = [];
         const linkedTaskAc: string[] = [];
@@ -394,41 +410,43 @@ export class FeatureCheckService extends PlanningCheckService {
         // links them; "verified" only when that task is done AND carries a PASS
         // verdict artifact whose matching requirement row is MET.
         const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string }> = [];
-        try {
-            const entries = await this.fs.readDir(tasksDir);
-            for (const entry of entries) {
-                if (!/^\d{4}_.+\.md$/.test(entry)) continue;
-                try {
-                    const raw = await this.fs.readFile(`${tasksDir}/${entry}`);
-                    const taskDoc = MarkdownDocument.parse(raw, 'task');
-                    const tfm = taskDoc.frontmatterData ?? {};
-                    const tfid = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
-                    if (tfid !== featureId) continue;
-                    linkedTasks += 1;
-                    const tStatus = (tfm.status as string | undefined) ?? 'backlog';
-                    const wbs = entry.match(/^(\d{4})_/)?.[1] ?? entry;
-                    if (tStatus !== 'done' && tStatus !== 'cancelled') {
-                        incompleteTasks.push(wbs);
+        for (const tasksDir of tasksDirs) {
+            try {
+                const entries = await this.fs.readDir(tasksDir);
+                for (const entry of entries) {
+                    if (!/^\d{4}_.+\.md$/.test(entry)) continue;
+                    try {
+                        const raw = await this.fs.readFile(`${tasksDir}/${entry}`);
+                        const taskDoc = MarkdownDocument.parse(raw, 'task');
+                        const tfm = taskDoc.frontmatterData ?? {};
+                        const tfid =
+                            (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
+                        if (tfid !== featureId) continue;
+                        linkedTasks += 1;
+                        const tStatus = (tfm.status as string | undefined) ?? 'backlog';
+                        const wbs = entry.match(/^(\d{4})_/)?.[1] ?? entry;
+                        if (tStatus !== 'done' && tStatus !== 'cancelled') {
+                            incompleteTasks.push(wbs);
+                        }
+                        const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
+                        if (tac.trim().length > 0) linkedTaskAc.push(tac);
+                        linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
+                        linkedTaskRecords.push({ wbs, status: tStatus, ac: tac });
+                    } catch {
+                        // A task that references this feature but fails to parse is a
+                        // dangling edge — surface it as a traceability warning.
+                        findings.push({
+                            layer: 'L4',
+                            code: FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
+                            severity: 'warning',
+                            section: '',
+                            message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
+                        });
                     }
-                    const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
-                    if (tac.trim().length > 0) linkedTaskAc.push(tac);
-                    linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
-                    linkedTaskRecords.push({ wbs, status: tStatus, ac: tac });
-                } catch {
-                    // A task that references this feature but fails to parse is a
-                    // dangling edge — surface it as a traceability warning.
-                    findings.push({
-                        layer: 'L4',
-                        code: FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
-                        severity: 'warning',
-                        section: '',
-                        message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
-                    });
                 }
+            } catch {
+                // One phase folder unreadable — continue scanning the others.
             }
-        } catch {
-            // Tasks directory unreadable — skip incoming-edge resolution.
-            return;
         }
 
         // Orphan-scenario warning: AC scenarios exist but no task references this

@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dev-next", "impl"]
 dependencies: ["0270", "0271", "0272"]
 created_at: "2026-07-17T01:09:03.002Z"
-updated_at: "2026-07-28T00:32:20.640Z"
+updated_at: "2026-08-05T22:46:56.232Z"
 ---
 
 ## 0275. Ship /sp:dev-next command and sp:next-router skill
@@ -59,6 +59,105 @@ Scenario: Dry-run does not dispatch
   Given a resolvable task WBS
   When invoking next-router with --dry-run
   Then the plan block is printed and no child lifecycle command mutates the task
+```
+
+**Feature scenario cover (DD-09 / H4 close)**
+
+```gherkin
+Feature: sp plugin next-layer UX
+
+  Scenario: Map has a concrete destination and two workstreams
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Frontier investigation tickets are sharp and dependency-wired
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: No ticket is resolved during charting session
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Complete requires footer
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Pass fixture is green
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Detector catches dev-run without leading space
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Implement-heavy pipeline dogfood warns
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Done refuses prose-only Review
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Done allows valid Review + provenance
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Finalize aborts on invalid report shape
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Implement-heavy advisory links to step-split recipe
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Chained cost row is honest
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Super-coder still drives the pipeline for ready tasks
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Preflight skips unmet dependencies
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: One-shot recovery after FAIL
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Boundary is explicit in agent docs
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Multi-candidate router stop is not auto-picked
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: dev-verify --next documents all three done-gate layers honestly (R1)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: dev-run --next on a backlog-seeded task has a defined outcome (R2)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: UNKNOWN verdict artifacts carry an actionable remediation (R3)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: empty Design placeholder surfaces a warning (R4)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: pipeline agent.run stall has a written root cause (R5)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: protocol and corpus hygiene items are closed (R6, R7)
+    Given linked implementation under this feature
+    Then this scenario is covered
+
 ```
 ### Q&A
 

@@ -327,6 +327,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             const resolved = await resolvePlanningFolders(context.fs);
             const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
             const tasksDir = context.fs.resolve(resolved.tasksDir);
+            // Scan every registered phase folder for feature_id edges (parity with feature sync).
+            const tasksDirs = Object.keys(resolved.foldersConfig.folders).map((p) => context.fs.resolve(p));
+            if (!tasksDirs.includes(tasksDir)) tasksDirs.unshift(tasksDir);
             const svc = new FeatureCheckService(context.fs);
             const json = options.json === true;
             const strict = options.strict === true;
@@ -350,6 +353,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         strict,
                         featuresDir,
                         tasksDir,
+                        tasksDirs,
                         // Verdict SSOT is always <cwd>/.spur/run (not docs/.spur/run).
                         runDir: context.fs.resolve('.spur/run'),
                         severityOverrides: resolved.severityOverrides,
@@ -489,6 +493,8 @@ async function assertFeatureCheckPass(
     const resolved = await resolvePlanningFolders(context.fs);
     const featuresDir = folderOverride ?? context.fs.resolve(resolved.featuresDir);
     const tasksDir = context.fs.resolve(resolved.tasksDir);
+    const tasksDirs = Object.keys(resolved.foldersConfig.folders).map((p) => context.fs.resolve(p));
+    if (!tasksDirs.includes(tasksDir)) tasksDirs.unshift(tasksDir);
     const entries = await context.fs.readDir(featuresDir);
     const fileName = entries.find((name) => name.match(new RegExp(`^${id}_.+\\.md$`)));
     if (fileName === undefined) {
@@ -498,6 +504,7 @@ async function assertFeatureCheckPass(
         strict,
         featuresDir,
         tasksDir,
+        tasksDirs,
         // 0418: the hop's target status so the one-active-goal rule sees the
         // post-transition state (same hint the FSM shell guard passes).
         asStatus,

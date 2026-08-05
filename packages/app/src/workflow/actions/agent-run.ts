@@ -183,11 +183,11 @@ export class AgentRunActionRunner implements ActionRunner {
         const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
 
-        // Always dispatch via runTraced: forces non-interactive buffered output
-        // (R3 / task 0295) and returns the resolved invocation for the run
-        // trace (R1). The legacy capture/non-capture branch collapses into a
-        // single dispatch path — `capture` now only controls whether the
-        // stdout is surfaced as `data.answer`.
+        // Always dispatch via runTraced: forces non-interactive pipe-no-TTY
+        // output (H83 R5 / task 0295+0448) so onOutput streams live without a
+        // child TTY, and returns the resolved invocation for the run trace
+        // (R1). Capture still only controls whether stdout is surfaced as
+        // `data.answer` (answerFile / expectFile path).
         // Child-agent lifecycle is fanned out to the observability bus as the
         // `workflow.agent` event; the consolidated run-log sink (feature D2) is a
         // subscriber on that bus, so the agent's stdout/stderr reach the log without

@@ -6,7 +6,7 @@ status: backlog
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-08-05T22:38:32.649Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -245,7 +245,6 @@ Feature: spur-dev umbrella skill
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-
 The umbrella skill is decomposed by **function**, not by lifecycle phase (ADR-028, task 0161): a thin
 spine dispatches deep competency skills and never inlines them. A phase split (planning vs. execution)
 was considered and rejected — a phase boundary is temporal and relocates coupling rather than reducing
@@ -254,6 +253,13 @@ skills + thin spine); evidence reviewed at design time only (see task 0161), nev
 dependency — `plugins/sp` is self-contained (ADR-028d). dev-* names continue for muscle memory; subset
 decided per candidate by the ADR-016 test (task 0065).
 
+
+
+**Do not close H1 yet.** Linked task `0142` (tasks2) remains **blocked** — deferred parallel worktree batching + mid-step interactive escalation. Sync correctly refuses `done` and proposes `blocked` while 0142 is non-terminal.
+
+- `task list --feature H1` only shows active-folder tasks by default (tasks3); archive folder tasks2 still count for feature edges.
+- H81/H82/H83 are separate features; closing them does not close the H1 umbrella.
+- When 0142 is cancelled (if superseded by H51/parallel work) or completed, re-run `spur feature sync H1`.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)

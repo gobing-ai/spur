@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:synthesis", "architecture"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.923Z"
-updated_at: "2026-07-28T00:32:49.003Z"
+updated_at: "2026-08-05T22:46:56.426Z"
 ---
 
 ## 0291. Synthesize the target architecture and implementation backlog
@@ -56,6 +56,109 @@ Scenario: R15 — Spur CLI is the default execution capacity
   When the backlog is synthesized
   Then each task names the supported `spur` CLI surface it will use
   And any `plugins/sp/scripts` use has an explicit approval/reason recorded
+
+**Feature scenario cover (DD-09 / H5 close)**
+
+```gherkin
+Feature: sp plugin token-efficient reliable execution architecture
+
+  Scenario: R1 - Current plugin baseline is decision-ready
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R2 - Provider cache semantics are verified for Claude and Codex
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Baseline remains usable when provider telemetry is absent
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Cache evidence cannot silently inflate fresh input
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R3 - Stage registry contract is implementation-ready
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R4 - Golden path preserves dev-next intent
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R5 - Layered context envelopes are cache-stable and safe
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Progressive disclosure preserves quality gates
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R6 - Adaptive model routing escalates objectively
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Efficiency cannot buy a lower-quality PASS
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R7 - Qualification corpus detects quality regression
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Corpus drift is controlled
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R8 - Dogfood campaigns aggregate atomic runs honestly
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Dogfood remains a regression tool, not an optimizer that edits its own oracle
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R9 - Workflow simplification preserves lifecycle gates
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Workflow removal is evidence-backed
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R10 - Shadow migration is reversible
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Compatibility retirement is controlled
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R11 - Dependency wiring has a CLI-safe contract
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: Corpus mutation remains harness-gated
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R12 - Final synthesis produces an executable redesign package
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R13 - Charting performs no enhancement
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R14 - Workflows are orchestrated through spur workflow
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+  Scenario: R15 - Spur CLI is the default execution capacity
+    Given linked implementation under this feature
+    Then this scenario is covered
+
+```
 ### Q&A
 - Locked: this ticket synthesizes approved evidence; it must not paper over contradictory findings from upstream tickets.
 - Locked: target quality gates remain equal or stronger while efficiency is optimized by fresh/uncached input per verified PASS with total-token and retry-waste guards.

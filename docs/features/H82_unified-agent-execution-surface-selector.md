@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H82"
 name: "Unified --agent execution-surface selector"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-02T05:50:05.816Z"
-updated_at: "2026-08-02T07:23:24.809Z"
+updated_at: "2026-08-05T22:38:20.340Z"
 ---
 
 # H82: Unified --agent execution-surface selector
@@ -138,3 +138,6 @@ Feature: Unified --agent execution-surface selector
 ## Notes
 
 ## History
+- 2026-08-05T22:35:32.361Z backlog → active (system)
+- 2026-08-05T22:35:32.581Z active → verifying (system)
+- 2026-08-05T22:38:20.340Z verifying → done (system)

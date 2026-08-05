@@ -404,9 +404,15 @@ export class FeatureService {
         // Helper to evaluate L4 AC gate before transitioning into verifying or done
         const checkL4Gate = async (): Promise<{ pass: boolean; findings: CheckFeatureFindings[] }> => {
             const checkSvc = new FeatureCheckService(this.ctx.fs);
+            // Multi-folder scan (parity with collectTasksByFeature / feature check CLI).
+            const tasksDirs = this.ctx.foldersConfig
+                ? Object.keys(this.ctx.foldersConfig.folders).map((p) => this.ctx.fs.resolve(p))
+                : [this.ctx.tasksDir];
+            if (!tasksDirs.includes(this.ctx.tasksDir)) tasksDirs.unshift(this.ctx.tasksDir);
             const res = await checkSvc.check(feature.filePath, featureId, {
                 featuresDir: this.ctx.featuresDir,
                 tasksDir: this.ctx.tasksDir,
+                tasksDirs,
                 runDir: defaultVerdictRunDir(this.ctx.tasksDir),
             });
             const l4Errors = res.findings.filter((f) => f.layer === 'L4' && f.severity === 'error');

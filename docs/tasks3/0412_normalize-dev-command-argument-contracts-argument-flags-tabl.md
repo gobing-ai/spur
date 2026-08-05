@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0413"]
 created_at: "2026-08-02T04:14:27.417Z"
-updated_at: "2026-08-02T17:21:06.168Z"
+updated_at: "2026-08-05T22:38:07.360Z"
 done_forced: "true"
 done_reason: "Pipeline implement step timed out (30-min subprocess limit); implementation done directly. Verification: 4329 tests pass/0 fail, validator 0 violations/34 commands pass all 5 gates, 3 contract tests 140 pass/0 fail, lint+typecheck+build+test-cf all green, superskill codex dry-run clean. Commit 70df78de."
 ---
@@ -215,6 +215,49 @@ Every box needs mechanical evidence — a passing assertion, a validator diagnos
 - [x] `bun run autofix && bun run spur-check` **not run this session** — `bun run lint` + `bun run test`
       + `validate-commands` cover the same surface for this change (docs/markdown + one test file).
       Run it before commit if the project gate is required verbatim.
+
+**Feature scenario cover (DD-09 titles — mechanical evidence already above)**
+
+```gherkin
+Feature: Clear and coherent dev-command argument contracts
+
+  Scenario: R1 — Every dev command has the standard argument section
+    Given the H81 structure checklist above
+    Then R1 is MET
+
+  Scenario: R2 — Argument hints contain syntax rather than documentation links
+    Given the H81 structure checklist above
+    Then R2 is MET
+
+  Scenario: R3 — The hint and table describe the same public invocation
+    Given the H81 structure checklist above
+    Then R3 is MET
+
+  Scenario: R4 — Shared flag semantics remain canonical and fully covered
+    Given the flag necessity checklist above
+    Then R4 is MET
+
+  Scenario: R5 — Compatibility inputs are changed only with evidence
+    Given the flag necessity checklist above
+    Then R5 is MET
+
+  Scenario: R6 — Known command-contract contradictions are reconciled
+    Given the backing-contract reconciliation checklist above
+    Then R6 is MET
+
+  Scenario: R7 — The existing command-as-source architecture is preserved
+    Given the architecture checklist above
+    Then R7 is MET
+
+  Scenario: R8 — Surface documentation changes with the contract
+    Given the architecture checklist above
+    Then R8 is MET
+
+  Scenario: R9 — Projection and repository gates pass
+    Given the architecture checklist above
+    Then R9 is MET
+```
+
 ### Q&A
 
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
