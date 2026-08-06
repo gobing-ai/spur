@@ -46,6 +46,12 @@ Use this sequence:
 4. **Run the narrow check.** Fix root causes, not symptoms.
 5. **Update the task Solution.** The `implement` step owns `## Solution`; write a change map through
    `spur task update <wbs> --section Solution --from-file <tmp>`.
+   Every file reference in the Solution MUST use backtick `` `path:line` `` form with paths from
+   repo root (e.g. `` `packages/app/src/foo.ts:123` `` or `` `packages/app/src/bar.ts:10-20` ``).
+   Prose `path:line` without backticks will fail `spur task check` (L3 stale-anchor detection).
+   `spur task record --solution-from-diff` is complementary — it backfills the change map from
+   git diff — but implement-time Solution is the authoritative source and must carry the
+   backtick format.
 
 ## Pattern Selection
 

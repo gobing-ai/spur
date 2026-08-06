@@ -91,6 +91,7 @@ reproduce → isolate → minimal fix → regression guard.
 
 - Writing code without having read the immediate callers of what you're changing.
 - A `## Solution` section that lists files but not what changed or why.
+- A `## Solution` section with file references that are not in backtick `` `path:line` `` form (L3 requirement: `` `packages/app/src/foo.ts:123` `` or `` `packages/app/src/bar.ts:10-20` ``; paths from repo root).
 - A new abstraction with exactly one caller and no second use in sight.
 - The diff touches files unrelated to the task's scope.
 - "Done" claimed with no test run pasted.

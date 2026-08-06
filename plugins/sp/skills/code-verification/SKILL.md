@@ -263,10 +263,16 @@ Verdict: PASS    (or PARTIAL / FAIL)
 ```
 
 The verify agent's output MUST also include a per-requirement traceability table
-(`| Req | Status | Evidence |`), an Acceptance Criteria table
+(`| Req | Status | Evidence |` — exactly this header, no `R#`/`R`/`Requirement` variant,
+and no extra columns between the Req and Status columns), an Acceptance Criteria table
 (`| AC | Status | Evidence Type | Evidence |`), and a `### SECUA Review` heading with ranked
 findings — this heading is an **answer-file contract only** (it must never appear in a
 `--section`-bound body file; see Step 10).
+
+**MUST NOT:** use `| R# | ... |` as the sole id header without `Status` in column 2.
+**MUST NOT:** place a `Severity` column between `Req` and `Status` in the authoring contract.
+The parser is tolerant of these variants (defense-in-depth), but the authoring contract is
+canonical.
 
 **Under the pipeline** (`task-pipeline.yaml`), `agent.run answerFile` captures this whole output to
 `.spur/run/<wbs>-verify-answer.txt`. A deterministic shell step then derives
@@ -442,6 +448,7 @@ Flags: `--agent <inline|auto|name>` (execution surface — inline default, with 
 
 - A PASS verdict with no per-AC evidence column, or evidence that is a description rather than a pasted command + exit status.
 - Clearing an objective AC (`file exists`, `command exits 0`, `test named X passes`) with `llm-judge` instead of the literal check.
+- A requirements table using `| R# | ... |` or placing `Severity` between `Req` and `Status` — the authoring contract is `| Req | Status | Evidence |`.
 - A verdict authored from the implementer's summary without independently re-running the gate.
 - Softening a FAIL to PARTIAL, or PARTIAL to PASS, to avoid surfacing to the operator.
 - Skipping `spur task check <wbs> --strict-core` because "it passed last run" — stale evidence is not evidence.
