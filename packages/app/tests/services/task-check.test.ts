@@ -2120,6 +2120,7 @@ describe('TaskCheckService', () => {
             // WHY: the rule was written for this case — a live task parented to a
             // terminal feature genuinely needs re-parenting. R1 narrows the
             // predicate; it must not silence the original signal.
+            // R4 (0453): message must include the reopen command for done features.
             const content = taskFm({ status: 'todo', feature_id: 'F1' });
             const { fs, path, cleanup } = seedEnv({
                 taskContent: content,
@@ -2133,11 +2134,14 @@ describe('TaskCheckService', () => {
             );
             expect(terminalErrors.length).toBe(1);
             expect(terminalErrors[0]?.message).toContain('done');
+            expect(terminalErrors[0]?.message).toContain('spur feature update');
+            expect(terminalErrors[0]?.message).not.toContain('cancelled');
         });
 
         test('R2: live (wip) task under cancelled feature still emits L4_FEATURE_TERMINAL', async () => {
             // WHY: covers the cancelled-feature half of R2 and a non-todo live
             // status, so the predicate isn't accidentally keyed to `todo` only.
+            // R4 (0453): cancelled features must NOT offer reopen.
             const content = taskFm({ status: 'wip', feature_id: 'F1' });
             const { fs, path, cleanup } = seedEnv({
                 taskContent: content,
@@ -2151,6 +2155,7 @@ describe('TaskCheckService', () => {
             );
             expect(terminalErrors.length).toBe(1);
             expect(terminalErrors[0]?.message).toContain('cancelled');
+            expect(terminalErrors[0]?.message).not.toContain('spur feature update');
         });
 
         test('R3: placeholder-only Requirements emits L3_REQUIREMENTS_EMPTY (fails gate)', async () => {

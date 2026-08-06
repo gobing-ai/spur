@@ -263,6 +263,73 @@ describe('WorkflowAppService', () => {
             expect(rejected.valid).toBe(false);
             await rm(dir, { recursive: true });
         });
+
+        // ── R3 (0453): shell syntax validation ──────────────────────────
+
+        const GOOD_SHELL_WORKFLOW = [
+            'name: shell-good',
+            'kind: state-machine',
+            'initialState: start',
+            'states:',
+            '  - id: start',
+            '    onEnter:',
+            '      - kind: shell',
+            '        options:',
+            '          command: mkdir -p .spur/run && echo PASS > .spur/run/status',
+            '  - id: done',
+            'transitions:',
+            '  - from: start',
+            '    to: done',
+            '    guard:',
+            '      kind: shell',
+            '      options:',
+            '        command: "test -f .spur/run/status"',
+            'terminalStates: [done]',
+        ].join('\n');
+
+        const BAD_SHELL_WORKFLOW = [
+            'name: shell-bad',
+            'kind: state-machine',
+            'initialState: start',
+            'states:',
+            '  - id: start',
+            '    onEnter:',
+            '      - kind: shell',
+            '        options:',
+            '          command: if true; then echo "unclosed"',
+            '  - id: done',
+            'transitions:',
+            '  - from: start',
+            '    to: done',
+            'terminalStates: [done]',
+        ].join('\n');
+
+        test('R3: workflow with valid shell commands passes validate', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-sh-good-'));
+            const path = join(dir, 'good.yaml');
+            await writeFile(path, GOOD_SHELL_WORKFLOW);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(true);
+            await rm(dir, { recursive: true });
+        });
+
+        test('R3: workflow with broken shell syntax (unclosed if) fails validate', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-sh-bad-'));
+            const path = join(dir, 'bad.yaml');
+            await writeFile(path, BAD_SHELL_WORKFLOW);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.errors.some((e) => e.includes('Shell syntax error'))).toBe(true);
+                // Error should name the state/action location
+                expect(result.errors[0]).toContain('start/action');
+            }
+            await rm(dir, { recursive: true });
+        });
     });
 
     describe('run', () => {

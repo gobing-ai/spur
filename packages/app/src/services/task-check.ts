@@ -585,12 +585,16 @@ export class TaskCheckService extends PlanningCheckService {
                 const featureTerminal = featureStatus === 'done' || featureStatus === 'cancelled';
                 const taskTerminal = status === 'done' || status === 'cancelled';
                 if (featureTerminal && !taskTerminal) {
+                    const reopenGuide =
+                        featureStatus === 'done'
+                            ? `Reopen: \`spur feature update ${featureId} active\` (or \`spur feature sync ${featureId} --force\` when non-terminal tasks are already linked). Alternatively re-parent: \`spur task update <wbs> --feature <otherId>\`.`
+                            : `Feature is cancelled — re-parent or unlink this live task (\`spur task update <wbs> --feature <otherId>\`).`;
                     findings.push({
                         layer: 'L4',
                         code: FINDING_CODES.L4_FEATURE_TERMINAL,
                         severity: 'error',
                         section: '',
-                        message: `Feature "${featureId}" is ${featureStatus} — remove or re-parent this task`,
+                        message: `Feature "${featureId}" is ${featureStatus} — live tasks cannot stay linked without action. ${reopenGuide}`,
                     });
                 }
                 // ── AC coverage (R1, DD-09): task AC ⊆ linked feature AC ──

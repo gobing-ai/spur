@@ -113,6 +113,21 @@ states:
           # hook at run start — see the 0062 follow-up note; there is no link-writing
           # CLI verb to call from a shell step, so it cannot live in pure YAML.
           message: "Pipeline start for task ${vars.wbs}."
+      # R1 (0453): auto-profile precheck reopens a done feature before task check.
+      # Under profile=auto, resolve feature_id, sync (preferred) or update to active.
+      # Under non-auto, leave R4 message to guide the operator.
+      - kind: shell
+        options:
+          command: >-
+            if [ "$profile" = auto ]; then
+              FID=$($spurBin task show $wbs --json 2>/dev/null |
+              jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);
+              if [ -n "$FID" ]; then
+                $spurBin feature sync "$FID" --force --json 2>/dev/null ||
+                $spurBin feature update "$FID" active 2>/dev/null || true;
+              fi;
+            fi;
+            exit 0
 
   - id: implement
     description: >

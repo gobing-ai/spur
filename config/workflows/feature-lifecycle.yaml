@@ -74,6 +74,16 @@ transitions:
     guard:
       kind: always
 
+  # Reopen: done → active (design §7.5 — done is re-enterable; cancelled is not)
+  - from: done
+    to: active
+    description: >
+      Reopen completed feature for follow-up work (mandatory History entry).
+      Mirrors task-lifecycle done→wip. Prefer spur feature sync --force when
+      non-terminal tasks are already linked.
+    guard:
+      kind: always
+
   # Blocked ↔ active — bidirectional
   - from: active
     to: blocked

@@ -17,17 +17,26 @@ import {
 } from '@gobing-ai/spur-domain';
 
 import {
+    type ActionDef,
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     type WorkflowRunResult as EngineWorkflowRunResult,
     WorkflowService as EngineWorkflowService,
+    type GuardDef,
     type HitlResponder,
     loadWorkflowDef,
+    type StateMachineWorkflowDef,
+    type TransitionFlowWorkflowDef,
     type WorkflowDef,
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import { createNodeFileSystem, type ProcessExecutor, parseYamlObject } from '@gobing-ai/ts-runtime';
+import {
+    createNodeFileSystem,
+    NodeProcessExecutor,
+    type ProcessExecutor,
+    parseYamlObject,
+} from '@gobing-ai/ts-runtime';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
@@ -402,6 +411,34 @@ export class WorkflowAppService {
                 validateSchema: opts.validateSchema !== false,
                 ...(embedded !== undefined ? embedded : {}),
             });
+
+            // Post-schema shell syntax validation (R3, task 0453): walk the def for
+            // shell-kind actions and guards, run `sh -n` on each command.
+            const shellErrors: string[] = [];
+            const commands = collectShellCommands(workflow);
+            const executor = new NodeProcessExecutor();
+            for (const { stateId, kind, index, command } of commands) {
+                if (!command || command.trim().length === 0) continue;
+                try {
+                    const result = await executor.run({
+                        command: 'sh',
+                        args: ['-n', '-c', command],
+                        rejectOnError: false,
+                    });
+                    if (result.exitCode !== 0) {
+                        const stderr = (result.stderr ?? '').trim();
+                        const location = stateId ? `${stateId}/${kind}[${index}]` : `${kind}[${index}]`;
+                        shellErrors.push(`Shell syntax error at ${location}: ${stderr || 'non-zero exit'}`);
+                    }
+                } catch {
+                    shellErrors.push(`Shell syntax check failed at ${stateId}/${kind}[${index}]: process error`);
+                }
+            }
+
+            if (shellErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: shellErrors };
+            }
+
             return { ok: true, valid: true, workflow };
         } catch (error) {
             return {
@@ -937,6 +974,74 @@ export class WorkflowAppService {
 // ---------------------------------------------------------------------------
 // Module-level helpers (not exported)
 // ---------------------------------------------------------------------------
+
+interface ShellCommandEntry {
+    /** State or node id where the command was found. */
+    stateId: string;
+    /** Whether it's an action or guard. */
+    kind: 'action' | 'guard';
+    /** Index within the action array or guard location. */
+    index: number;
+    /** The shell command string. */
+    command: string;
+}
+
+/**
+ * Walk a workflow def and collect all shell-kind commands for syntax validation.
+ * Supports both state-machine and transition-flow workflow kinds.
+ */
+function collectShellCommands(def: WorkflowDef): ShellCommandEntry[] {
+    const entries: ShellCommandEntry[] = [];
+
+    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
+        if (action.kind === 'shell') {
+            const cmd = action.options?.command;
+            if (typeof cmd === 'string' && cmd.length > 0) {
+                entries.push({ stateId, kind: 'action', index: idx, command: cmd });
+            }
+        }
+    };
+
+    const visitGuard = (stateId: string, guard: GuardDef): void => {
+        if (guard.kind === 'shell') {
+            const cmd = guard.options?.command;
+            if (typeof cmd === 'string' && cmd.length > 0) {
+                entries.push({ stateId, kind: 'guard', index: 0, command: cmd });
+            }
+        }
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        // Transition-flow: walk nodes for actions, edges for guards.
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            if (node.action) visitAction(node.id, node.action, 0);
+        }
+        for (const edge of flowDef.edges ?? []) {
+            if (edge.condition) visitGuard(edge.from, edge.condition);
+        }
+    } else {
+        // State-machine: walk states for onEnter/onExit, transitions for guards.
+        const smDef = def as StateMachineWorkflowDef;
+        for (const state of smDef.states ?? []) {
+            if (state.onEnter) {
+                state.onEnter.forEach((action, i) => {
+                    visitAction(state.id, action, i);
+                });
+            }
+            if (state.onExit) {
+                state.onExit.forEach((action, i) => {
+                    visitAction(state.id, action, i);
+                });
+            }
+        }
+        for (const trans of smDef.transitions ?? []) {
+            if (trans.guard) visitGuard(`${trans.from}→${trans.to}`, trans.guard);
+        }
+    }
+
+    return entries;
+}
 
 async function fileExists(path: string): Promise<boolean> {
     const fs = createNodeFileSystem();
