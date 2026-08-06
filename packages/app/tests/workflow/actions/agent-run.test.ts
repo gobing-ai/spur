@@ -1335,7 +1335,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         );
     });
 
-    test('setting sessionAffinity false disables cross-hop sessionDir; affinity-off latch sets continue (R3)', async () => {
+    test('setting sessionAffinity false: run-scoped sessionDir without cross-hop affinity; latch sets continue (R3)', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1345,8 +1345,10 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         const result = await runner.execute({ input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
-        expect(capturedFlags.sessionDir).toBeTruthy();
+        // Isolation under .spur/run still applied; cross-hop affinity vars not persisted.
         expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/');
+        expect(capturedFlags.sessionId).toBeUndefined();
+        expect(result.setVars?.__agentSessionDir).toBeUndefined();
         // R3 (0451): affinity off + latch open → continue:true (restored Q8)
         expect(capturedFlags.continue).toBe(true);
     });
@@ -1379,7 +1381,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
 // ---------------------------------------------------------------------------
 
 describe('R1 — config injection (task 0451)', () => {
-    test('injected agentConfig.sessionAffinity false disables sessionDir', async () => {
+    test('injected agentConfig.sessionAffinity false keeps run-scoped sessionDir but no cross-hop affinity vars', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1392,8 +1394,13 @@ describe('R1 — config injection (task 0451)', () => {
         const result = await runner.execute({ input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
-        expect(capturedFlags.sessionDir).toBeUndefined();
+        // Affinity-off still isolates session files under .spur/run/<runId>/agent-sessions/
+        // (not project cwd), but does not resume by sessionId or persist affinity vars.
+        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/claude');
+        expect(capturedFlags.sessionId).toBeUndefined();
         expect(result.setVars?.__agentSessionDir).toBeUndefined();
+        expect(result.setVars?.__agentSessionAgent).toBeUndefined();
+        expect(result.setVars?.__agentSessionId).toBeUndefined();
     });
 
     test('injected agentConfig.default appears in sessionDir when agent is inline', async () => {
@@ -1535,7 +1542,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
         expect(capturedFlags.sessionDir).toContain('.spur/run/run-555/agent-sessions');
     });
 
-    test('affinity-off + latch open → continue:true set (restored Q8)', async () => {
+    test('affinity-off + latch open → continue:true set (restored Q8); sessionDir run-scoped only', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1543,13 +1550,16 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
         const runner = new AgentRunActionRunner(svc);
         const ctx = makeCtx({
             runId: 'run-666',
-            vars: { __agentSession: 'open', sessionAffinity: 'false' },
+            vars: { __agentSession: 'open', sessionAffinity: 'false', __agentSessionId: 'must-not-forward' },
         });
         const result = await runner.execute({ input: 'resume' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(true);
-        expect(capturedFlags.sessionDir).toBeUndefined();
+        // Run-scoped isolation path is still set; affinity resume (sessionId) is not.
+        expect(capturedFlags.sessionDir).toContain('.spur/run/run-666/agent-sessions/');
+        expect(capturedFlags.sessionId).toBeUndefined();
+        expect(result.setVars?.__agentSessionDir).toBeUndefined();
     });
 
     test('explicit continue always wins over latch and affinity', async () => {
