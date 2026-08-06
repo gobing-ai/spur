@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-08-05T23:03:08.987Z"
-updated_at: "2026-08-06T00:39:42.341Z"
+updated_at: "2026-08-06T01:08:47.242Z"
 ---
 
 ## 0451. H83 follow-up: agent.run config injection, affinity session keying, dual-latch collapse, and workflow close-path hardening
@@ -53,7 +53,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 ### Requirements
 **P1 — must fix (correctness)**
 
-- [ ] **R1. Inject real Spur agent config into `agent.run` (or stop reading a fake `context.config`).**
+- [x] **R1. Inject real Spur agent config into `agent.run` (or stop reading a fake `context.config`).**
 
   **Issue (current code).** `AgentRunActionRunner.execute` reads config via a fake cast:
 
@@ -94,7 +94,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 ---
 
-- [ ] **R2. Key affinity `sessionDir` / `__agentSessionAgent` off the *resolved* executor name, not pre-resolve heuristics.**
+- [x] **R2. Key affinity `sessionDir` / `__agentSessionAgent` off the *resolved* executor name, not pre-resolve heuristics.**
 
   **Issue (current code).** ~119–127:
 
@@ -132,7 +132,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 ---
 
-- [ ] **R3. Collapse dual session systems when affinity is on — and fix inverted latch branch.**
+- [x] **R3. Collapse dual session systems when affinity is on — and fix inverted latch branch.**
 
   **Issue — dual systems.** Two resume mechanisms coexist:
   - Legacy latch: `vars.__agentSession` (`open` / `no-resume`) → may set `continue: true` (~130–175).
@@ -177,7 +177,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 **P2 — should fix (correctness / process)**
 
-- [ ] **R4. `requireDiff` / empty-implement guard must exclude *all* configured task folders, not only `docs/tasks3`.**
+- [x] **R4. `requireDiff` / empty-implement guard must exclude *all* configured task folders, not only `docs/tasks3`.**
 
   **Issue.** `gitHasNonCorpusChanges` ~541–555:
 
@@ -201,7 +201,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 ---
 
-- [ ] **R5. Harden `discoverSessionId` (cwd + tests).**
+- [x] **R5. Harden `discoverSessionId` (cwd + tests).**
 
   **Issue.** ~376–396:
 
@@ -226,7 +226,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 ---
 
-- [ ] **R6. Regression test: multi-folder `feature check` L4 edges.**
+- [x] **R6. Regression test: multi-folder `feature check` L4 edges.**
 
   **Issue.** `FeatureCheckService` already accepts `tasksDirs[]` (parity with `collectTasksByFeature`) — implementation landed during H2/H4/H5 close. **Missing unit test** allowed false orphans historically when tasks lived outside active_folder.
 
@@ -238,7 +238,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 ---
 
-- [ ] **R7. Document or implement a close-path verdict policy for multi-coverer / archive done tasks.**
+- [x] **R7. Document or implement a close-path verdict policy for multi-coverer / archive done tasks.**
 
   **Issue.** Strict `feature check` emits `L4.malformed-verdict-artifact` when a done covering task has missing/invalid `.spur/run/<wbs>-verdict.json` (`readVerdictArtifact` ~690+, diagnostics.artifactError for missing file). `isScenarioVerified` (~661–678) already uses ANY covering done task with PASS + MET row — good. Pain point: **every** done coverer with a missing artifact still emits malformed warning, which noise-blocks operator close when archives lack artifacts.
 
@@ -254,7 +254,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
 **P3 — docs / debt (clear for task done)**
 
-- [ ] **R8. Refresh stale JSDoc / comments that claim nonInteractive is buffered.**
+- [x] **R8. Refresh stale JSDoc / comments that claim nonInteractive is buffered.**
 
   **Stale sites (as of task authoring):**
   - `agent-run.ts` file header ~18–25: still says `{ mode: 'buffered' }` for runTraced.
@@ -266,7 +266,7 @@ Post-H83 code review (packages/app + apps/cli workflow / `agent.run` path) found
 
   **Acceptance:** No comment claims buffered-only for nonInteractive/`agent.run`; remaining "buffered" only refer to silent/json capture paths. Grep gate in self-check (see Design).
 
-- [ ] **R9. Remove duplicate comment lines in `agent-run.ts` execute()** (~191–197): `workflow.agent` / D2 paragraph is duplicated verbatim twice.
+- [x] **R9. Remove duplicate comment lines in `agent-run.ts` execute()** (~191–197): `workflow.agent` / D2 paragraph is duplicated verbatim twice.
 
 **Explicitly out of scope (do not implement here)**
 
@@ -573,17 +573,17 @@ bun run autofix && bun run spur-check
 
 **Catalog pin:** `@gobing-ai/ts-runtime` / related ^0.4.19. Pipe mode is real — do not reintroduce casts or `link:` overrides.
 ### Plan
-- [ ] R1: Inject agent config into AgentRunActionRunner; remove fake context.config cast; tests for sessionAffinity false + default agent naming.
-- [ ] R2: Resolve agent before/at sessionDir finalization; set __agentSessionAgent from resolved name (invocation.agent); tests with non-omp resolution.
-- [ ] R3: Fix inverted latch branch — affinityOn does not set continue from latch; affinityOff restores Q8 continue; preserve 0406 fallback; tests both modes.
-- [ ] R4: requireDiff excludes all foldersConfig task paths + features; unit test tasks2-only change fails requireDiff.
-- [ ] R5: discoverSessionId prefers *.json, absolute sessionDir test, document heuristic.
-- [ ] R6: feature-check multi-folder unit test (archive edge not orphan).
-- [ ] R7: Implement chosen verdict policy A or B + test or runbook cite.
-- [ ] R8–R9: JSDoc/comment cleanup; remove duplicates; grep for stale buffered claims.
-- [ ] Gate: targeted tests green, then `bun run autofix && bun run spur-check`.
-- [ ] Solution section: change-map file:line + which R# each change closes.
-- [ ] Testing section: commands run + outcomes for handoff verify.
+- [x] R1: Inject agent config into AgentRunActionRunner; remove fake context.config cast; tests for sessionAffinity false + default agent naming.
+- [x] R2: Resolve agent before/at sessionDir finalization; set __agentSessionAgent from resolved name (invocation.agent); tests with non-omp resolution.
+- [x] R3: Fix inverted latch branch — affinityOn does not set continue from latch; affinityOff restores Q8 continue; preserve 0406 fallback; tests both modes.
+- [x] R4: requireDiff excludes all foldersConfig task paths + features; unit test tasks2-only change fails requireDiff.
+- [x] R5: discoverSessionId prefers *.json, absolute sessionDir test, document heuristic.
+- [x] R6: feature-check multi-folder unit test (archive edge not orphan).
+- [x] R7: Implement chosen verdict policy A or B + test or runbook cite.
+- [x] R8–R9: JSDoc/comment cleanup; remove duplicates; grep for stale buffered claims.
+- [x] Gate: targeted tests green, then `bun run autofix && bun run spur-check`.
+- [x] Solution section: change-map file:line + which R# each change closes.
+- [x] Testing section: commands run + outcomes for handoff verify.
 ### Solution
 **R1 — Config injection (0451):**
 - `packages/app/src/workflow/actions/agent-run.ts:15` — `AgentRunAgentConfig` (`default`, `sessionAffinity`, `excludeGlobs`). Constructor 4th param at `:98` (default `{}`). Fake `context.config` cast removed; `dispatchAgent` uses `this.agentConfig.default` (`:115`); affinity gate uses `this.agentConfig.sessionAffinity` (`:121–126`).

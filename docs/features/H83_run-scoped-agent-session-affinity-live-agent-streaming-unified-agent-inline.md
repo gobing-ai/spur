@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-08-05T18:59:07.219Z"
-updated_at: "2026-08-05T20:55:14.409Z"
+updated_at: "2026-08-06T01:09:02.313Z"
 ---
 
 # H83: Run-scoped agent session affinity, live agent streaming, unified --agent inline
@@ -97,6 +97,66 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
     When implementation is planned
     Then no task implements host-stage control inversion
     And a deferred meta task records Phase D for a future ADR only
+
+  # Follow-up (task 0451) — config injection, affinity keying, latch, close-path
+  @core
+  Scenario: R1 — config sessionAffinity and agent.default apply to agent.run
+    Given .spur/config.yaml sets agent.sessionAffinity false and agent.default to a non-omp executor
+    And a two-hop workflow agent.run with agent omit or inline and no vars.sessionAffinity override
+    When both hops execute
+    Then affinity sessionDir is not set on either hop
+    And when sessionAffinity is true again, session directory basename matches the resolved default executor not a hardcoded omp fallback
+
+  @core
+  Scenario: R2 — affinity session key matches resolved invocation agent
+    Given affinity is on and hop 1 resolves agent A
+    When hop 1 succeeds and hop 2 runs with the same agent selector
+    Then __agentSessionDir is under agent-sessions/A
+    And __agentSessionAgent equals A
+    And hop 2 reuses that directory for resume isolation
+
+  @core
+  Scenario: R3 — affinity on does not set bare continue from legacy latch
+    Given affinity is on and __agentSession is open from a prior successful hop
+    When the next agent.run executes without an explicit continue option
+    Then flags do not include continue true solely because of the latch
+    And sessionDir and sessionId (when known) are still passed for resume isolation
+    And when affinity is off the documented latch/continue behavior remains tested including 0406 fallback
+
+  @core
+  Scenario: R4 — requireDiff excludes all configured task folders
+    Given requireDiff true on an implement-like agent.run
+    When the only working-tree changes are under docs/tasks2 (or another non-active configured folder)
+    Then the step fails as empty implement
+    When packages/ (or other non-corpus) files change
+    Then requireDiff passes
+
+  @core
+  Scenario: R5 — discoverSessionId is cwd-safe and tested
+    Given an absolute sessionDir under the project .spur/run tree with a session json file
+    When discoverSessionId runs after a successful hop
+    Then it returns a non-empty session id without throwing
+    And unit coverage asserts absolute-path discovery
+
+  @core
+  Scenario: R6 — multi-folder feature check regression test exists
+    Given a feature with only a linked done task in a non-active tasks folder
+    When spur feature check runs with the registered foldersConfig
+    Then L4.orphan-scenarios is not emitted solely because the task is outside active_folder
+
+  @core
+  Scenario: R7 — archive verdict policy is explicit
+    Given a feature scenario covered by multiple done tasks
+    When feature check --strict evaluates scenario satisfaction
+    Then behavior matches the chosen policy (A runbook or B code) and is covered by a test or documented runbook path cited in Solution
+
+  @core
+  Scenario: R8-R9 — docs match pipe-no-TTY implementation
+    Given agent-run.ts and agent-service runTraced documentation
+    When grepped for nonInteractive or agent.run output policy
+    Then no remaining claim states buffered-only for that path
+    And duplicate comment blocks are removed
+
 ```
 ## Tasks
 
