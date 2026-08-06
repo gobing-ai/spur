@@ -1,5 +1,8 @@
 {
     "name": "sp",
     "version": "0.3.33",
-    "description": "Spur — a local-first harness engineering toolkit that wraps mainstream coding agents with constraint checking, workflow orchestration, and history analytics."
+    "description": "Spur — a local-first harness engineering toolkit that wraps mainstream coding agents with constraint checking, workflow orchestration, and history analytics.",
+    "pi": {
+        "extensions": ["./hooks/pi/guard-extension.ts"]
+    }
 }
