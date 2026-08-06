@@ -37,11 +37,18 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             context.output.write(options.json ? toJson(summary) : formatSummary(summary));
         });
     noun.command('report')
-        .description('Reserved richer report surface; currently prints a TODO marker.')
+        .description(
+            'Reserved richer report surface; not yet implemented (see docs/04_DESIGN.md §spur history report).',
+        )
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (options) => {
-            const message = 'TODO: spur history report is reserved for the richer report surface.';
-            context.output.write(options.json ? toJson({ status: 'todo', message }) : message);
+            const message =
+                'spur history report is reserved but not yet implemented (P8).\n' +
+                'See docs/04_DESIGN.md for the planned surface.\n' +
+                'Workaround: use "spur history analyze" for aggregate summaries, or\n' +
+                '"spur history import" to load session data, then query the database directly.';
+            context.output.write(options.json ? toJson({ status: 'not-implemented', message }) : message);
+            context.setExitCode(0);
         });
 }
 

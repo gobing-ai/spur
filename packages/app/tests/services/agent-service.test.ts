@@ -1680,16 +1680,15 @@ describe('AgentService phase-aware auto resolution', () => {
             { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
             { name: 'claude', agent: 'claude' },
         ],
-        'default-by-phase': { 'dev-run': 'omp-zai', 'dev-review': 'claude' },
     };
 
-    test('R1: phase mapping selects the configured executor with its model override', async () => {
+    test('R1: slash-command auto resolves via stage/default without default-by-phase (0452)', async () => {
         const svc = makeConfiguredService(fullConfig);
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('/sp:dev-run 0126 --auto', { agent: 'auto', json: true }, deps);
         expect(code).toBe(0);
+        // No default-by-phase: stage model_policy or agent.default → omp (no zai model force)
         expect(resolvedAgent(runner)).toBe('omp');
-        expect(resolvedModel(runner)).toBe('zai//glm-5.2');
     });
 
     test('R2: no phase match falls back to the default executor', async () => {
@@ -1730,37 +1729,10 @@ describe('AgentService phase-aware auto resolution', () => {
         expect(resolvedModel(runner)).toBeUndefined();
     });
 
-    test('R4: phase mapping naming an unknown executor exits 2 before spawning', async () => {
-        const svc = makeConfiguredService({
-            executors: [{ name: 'omp', agent: 'omp' }],
-            'default-by-phase': { 'dev-review': 'nonexistent' },
-        });
-        const { deps, runner } = mockResolutionDeps();
-        const code = await svc.run('/sp:dev-review 0126', { agent: 'auto', json: true }, deps);
-        expect(code).toBe(2);
-        expect(runner.runPromptCommand).not.toHaveBeenCalled();
-    });
-
-    test('R7: phase mapping to a known-but-unusable executor exits 1 with no fallback', async () => {
-        const svc = makeConfiguredService({
-            default: 'omp',
-            executors: [
-                { name: 'omp', agent: 'omp' },
-                { name: 'claude', agent: 'claude' },
-            ],
-            'default-by-phase': { 'dev-plan': 'claude' },
-        });
-        // claude unusable; omp usable — but R7 must NOT fall back to the omp default.
-        const { deps, runner } = mockResolutionDeps({ claude: false, omp: true });
-        const code = await svc.run('/sp:dev-plan 0126', { agent: 'auto', json: true }, deps);
-        expect(code).toBe(1);
-        expect(runner.runPromptCommand).not.toHaveBeenCalled();
-    });
-
     test('R6: explicit --model overrides the executor model override', async () => {
         const svc = makeConfiguredService(fullConfig);
         const { deps, runner } = mockResolutionDeps();
-        const code = await svc.run('/sp:dev-run 0126', { agent: 'auto', model: 'my-model', json: true }, deps);
+        const code = await svc.run('plain prompt', { agent: 'omp-zai', model: 'my-model', json: true }, deps);
         expect(code).toBe(0);
         expect(resolvedAgent(runner)).toBe('omp');
         expect(resolvedModel(runner)).toBe('my-model');
@@ -1786,8 +1758,9 @@ describe('AgentService phase-aware auto resolution', () => {
             const { deps, runner } = mockResolutionDeps();
             const code = await svc.run(prompt, { agent: 'auto', json: true }, deps);
             expect(code, `prompt=${prompt}`).toBe(0);
-            // Every form normalizes to phase dev-run → executor omp-zai.
-            expect(resolvedModel(runner), `prompt=${prompt}`).toBe('zai//glm-5.2');
+            // Every form still resolves (phase extract works for stage routing); no
+            // default-by-phase model override after 0452.
+            expect(resolvedAgent(runner), `prompt=${prompt}`).toBe('omp');
         }
     });
 
@@ -1847,7 +1820,6 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
             { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
             { name: 'claude', agent: 'claude' },
         ],
-        'default-by-phase': { 'dev-run': 'omp-zai', 'dev-review': 'claude' },
     };
 
     test('R5: --agent <executor-name> resolves to that executor with model override', async () => {
@@ -2065,19 +2037,6 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         // Escalated to capable-exec (claude)
         expect(resolvedAgent(runner)).toBe('claude');
         expect(errors.some((e) => e.includes('Stage escalation: stage=implement signal=gate-fail'))).toBe(true);
-    });
-
-    test('R4: legacy default-by-phase config emits deprecation warning', async () => {
-        const { errors, output } = captureOutput();
-        const svc = makeService({}, output, {
-            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' }],
-            'default-by-phase': { 'dev-run': 'omp-zai' },
-        });
-        const { deps, runner } = mockResolutionDeps();
-        const code = await svc.run('/sp:dev-run 0319 --auto', { agent: 'auto' }, deps);
-        expect(code).toBe(0);
-        expect(resolvedAgent(runner)).toBe('omp');
-        expect(errors.some((e) => e.includes('default-by-phase is deprecated'))).toBe(true);
     });
 
     test('R5: stage mapping fails fast when executor maps to unknown agent', async () => {

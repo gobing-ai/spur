@@ -516,6 +516,9 @@ export function applyM8(doc: MarkdownDocument, domain: MarkdownDomain, body: str
 /**
  * Standalone corpus migrator. Discovers `.md` files in the configured corpus directory,
  * applies M1–M8 normalization, validates against the 0041 schema, and writes atomically.
+ * @internal — no public CLI surface. Corpus migration is not a shipped product
+ * capability (0452 R3). Tests exist for the module's internal logic, but no
+ * operator entry point is exposed. Use `mv` or a manual script instead.
  */
 export class CorpusMigrator {
     private readonly fs: FileSystem;

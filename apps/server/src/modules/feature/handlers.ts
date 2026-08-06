@@ -127,7 +127,10 @@ export function createFeatureHandlers(ctx: ServerContext) {
 
         sync: os.feature.sync.handler(async ({ input }) => {
             if (input.direction === 'push') {
-                throw new Error('Push sync (feature->tasks cascade) is not implemented');
+                throw new HTTPException(501, {
+                    message:
+                        'Push sync (feature->tasks cascade) is not implemented; use the pull direction or spur feature sync CLI',
+                });
             }
             const svc = ctx.featureService();
             const res = await svc.syncFeature(input.id);

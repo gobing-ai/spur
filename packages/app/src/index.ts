@@ -42,6 +42,7 @@ export type {
     MigrationFlag,
     MigrationReport,
 } from './services/corpus-migrator';
+// R3 (0452): CorpusMigrator is @internal — no public CLI surface.
 export { CorpusMigrator } from './services/corpus-migrator';
 export type {
     GuardInput,
