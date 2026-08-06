@@ -53,39 +53,39 @@ agent:
     - name: omp
       agent: omp
       tier: standard
-    - name: omp-zai
-      agent: omp
-      model: zai/glm-5.2
-      tier: standard
-    # - name: omp-zai-nvidia
+    # - name: omp-zai
     #   agent: omp
-    #   model: nvidia/z-ai/glm-5.2
+    #   model: zai/glm-5.2
     #   tier: standard
+    - name: omp-zai-nvidia
+      agent: omp
+      model: nvidia/z-ai/glm-5.2
+      tier: standard
     # - name: omp-zai-opencode
     #   agent: omp
     #   model: opencode/glm-5.2
     #   tier: standard
-    # - name: omp-zai-volc
+    - name: omp-zai-volc
+      agent: omp
+      model: volc/glm-5.2
+      tier: standard
+    # - name: omp-zai-ollama
     #   agent: omp
-    #   model: volc/glm-5.2
+    #   model: ollama/glm-5.2:cloud
     #   tier: standard
-    - name: omp-zai-ollama
-      agent: omp
-      model: ollama/glm-5.2:cloud
+    # - name: omp-dsv4-flash-ollama
+    #   agent: omp
+    #   model: deepseek-v4-flash:0731-cloud
+    #   tier: standard
+    - name: agy-gemini
+      agent: agy
+      model: gemini-3.6-flash-high
+      # model: gemini-3.1-pro
       tier: standard
-    - name: omp-dsv4-flash-ollama
-      agent: omp
-      model: deepseek-v4-flash:0731-cloud
+    - name: agy-opus
+      agent: agy
+      model: claude-4-6-opus
       tier: standard
-    # - name: agy-gemini
-    #   agent: agy
-    #   model: gemini-3.6-flash-high
-    #   # model: gemini-3.1-pro
-    #   tier: standard
-    # - name: agy-opus
-    #   agent: agy
-    #   model: claude-4-6-opus
-    #   tier: standard
     - name: codex-luna
       agent: codex
       model: gpt-5.6-luna
@@ -94,10 +94,10 @@ agent:
     # capable-1/2/3 — planning, verification, dogfooding (0343)
     # 1 = low output quality within the capable band, 3 = high. Declare
     # explicitly — inference never invents capable-2/3.
-    - name: pi-k3
-      agent: pi
-      model: "k3[1m]"
-      tier: capable-1
+    # - name: pi-k3
+    #   agent: pi
+    #   model: "k3[1m]"
+    #   tier: capable-1
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-flash

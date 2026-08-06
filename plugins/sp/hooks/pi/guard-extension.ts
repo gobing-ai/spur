@@ -19,8 +19,9 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 
 // ─── Constants ───────────────────────────────────────────────────────────
@@ -35,18 +36,68 @@ const SUMMARY_MAX_CHARS = 200;
 
 type TaskOwnership = 'owned' | 'unowned' | 'unknown';
 
+/**
+ * Extract the target path from a write/edit tool input. Pi uses `path`;
+ * Claude Code uses `file_path`. Returns an absolute path when present.
+ */
+function resolveInputPath(input: Record<string, unknown> | undefined): string {
+    let raw = '';
+    if (input) {
+        if (typeof input.path === 'string') raw = input.path;
+        else if (typeof input.file_path === 'string') raw = input.file_path;
+    }
+    if (!raw) return '';
+    return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
+}
+
+/**
+ * Candidate `spur` executable locations (symlinks). Pi launched from a GUI
+ * may not have `~/.bun/bin` or node/bun on PATH, so we try each in order
+ * and finally run spur.js via the current Bun executable directly.
+ */
+const SPUR_BIN_CANDIDATES: string[] = [
+    join(homedir(), '.bun', 'bin', 'spur'),
+    '/opt/homebrew/bin/spur',
+    '/usr/local/bin/spur',
+];
+
+/** Resolve a candidate spur symlink to its real spur.js path (for execPath fallback). */
+function resolveSpurJsPath(candidate: string): string | undefined {
+    try {
+        return realpathSync(candidate);
+    } catch {
+        return existsSync(candidate) ? candidate : undefined;
+    }
+}
+
 function resolveSpurTaskOwnership(filePath: string): TaskOwnership {
-    const spurBin = process.env.SPUR_BIN || 'spur';
-    const parts = spurBin.split(' ');
-    const cmd = parts[0] ?? 'spur';
-    const args = [...parts.slice(1), 'task', 'resolve', filePath, '--strict', '--json'];
-    const res = spawnSync(cmd, args, {
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-        timeout: 8000,
-    });
-    if (res.error || typeof res.status !== 'number') return 'unknown';
-    return res.status === 0 ? 'owned' : 'unowned';
+    const run = (cmd: string, args: string[]) =>
+        spawnSync(cmd, args, { cwd: process.cwd(), encoding: 'utf-8', timeout: 8000 });
+
+    // 1. SPUR_BIN env override (may include args) or `spur` on PATH
+    const envBin = process.env.SPUR_BIN || 'spur';
+    const envParts = envBin.split(' ');
+    let res = run(envParts[0] ?? 'spur', [...envParts.slice(1), 'task', 'resolve', filePath, '--strict', '--json']);
+    // Only 0 (owned) / 1 (unowned) are valid spur exit codes; 127 (interpreter
+    // missing) and other codes mean the environment is broken — keep trying.
+    if (!res.error && (res.status === 0 || res.status === 1)) return res.status === 0 ? 'owned' : 'unowned';
+
+    // 2. Absolute symlink paths (needs node/bun on PATH for the shebang)
+    for (const candidate of SPUR_BIN_CANDIDATES) {
+        if (!existsSync(candidate)) continue;
+        res = run(candidate, ['task', 'resolve', filePath, '--strict', '--json']);
+        if (!res.error && (res.status === 0 || res.status === 1)) return res.status === 0 ? 'owned' : 'unowned';
+    }
+
+    // 3. Run spur.js via the current Bun executable (no PATH dependency)
+    for (const candidate of SPUR_BIN_CANDIDATES) {
+        const spurJs = resolveSpurJsPath(candidate);
+        if (!spurJs) continue;
+        res = run(process.execPath, [spurJs, 'task', 'resolve', filePath, '--strict', '--json']);
+        if (!res.error && (res.status === 0 || res.status === 1)) return res.status === 0 ? 'owned' : 'unowned';
+    }
+
+    return 'unknown';
 }
 
 // Destructive command patterns (mirrors careful-guard.ts)
@@ -252,9 +303,10 @@ export default function (pi: ExtensionAPI): void {
     // ── task-write-guard + careful-guard ──────────────────────────────
     pi.on('tool_call', async (event, ctx) => {
         // task-write-guard: block Write/Edit to Spur task files
-        if (event.toolName === 'Write' || event.toolName === 'Edit') {
+        if (event.toolName === 'write' || event.toolName === 'edit') {
             const input = event.input as Record<string, unknown> | undefined;
-            const filePath = typeof input?.file_path === 'string' ? input.file_path : '';
+            // Pi's write/edit tools use `path` (not Claude Code's `file_path`)
+            const filePath = resolveInputPath(input);
             if (filePath && resolveSpurTaskOwnership(filePath) === 'owned') {
                 const msg = `Denied: ${filePath} is a Spur task file. Use 'spur task update' instead.`;
                 ctx.ui.notify(msg, 'error');
@@ -263,7 +315,7 @@ export default function (pi: ExtensionAPI): void {
         }
 
         // careful-guard: warn on destructive Bash commands
-        if (event.toolName === 'Bash') {
+        if (event.toolName === 'bash') {
             const input = event.input as Record<string, unknown> | undefined;
             const command = typeof input?.command === 'string' ? input.command : '';
             if (command && isDestructiveCommand(command) && !isSafeDestructivePath(command)) {

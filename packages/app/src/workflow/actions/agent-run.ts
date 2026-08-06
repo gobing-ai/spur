@@ -3,11 +3,15 @@ import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentExecutionObserver } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
+import { TaskLocator } from '../../services/task-locator';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 
 /** Bound the stdout/stderr tail captured into the partial-work artifact (R2b). */
 const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
+
+/** Progress heartbeat interval for agent.run steps (R3, task 0454). */
+export const AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000;
 
 const KIND = 'agent.run';
 
@@ -243,6 +247,7 @@ export class AgentRunActionRunner implements ActionRunner {
                             actionId,
                         },
                         ...(observer !== undefined ? { observer } : {}),
+                        heartbeatMs: AGENT_RUN_PROGRESS_INTERVAL_MS,
                         ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
                     });
                     if (this.steeringController === undefined) break;
@@ -474,10 +479,52 @@ function asOptionalNumber(value: unknown): number | undefined {
 /**
  * Write a machine-readable partial-work handoff artifact after a failed
  * `agent.run` (R2b / G2 — implement-step timeouts, bugs 742/744/746/748;
- * R1 / task 0295 — include the resolved invocation for post-mortem).
- * Destination: `.spur/run/<runId>-<stateOrNodeId>-partial.md`, relative to `cwd`.
- * Best-effort: any error here is swallowed so it never masks the real `ok:false`
- * action result the caller already returns.
+/**
+ * Extract completed requirements from a task markdown body for the partial-work
+ * artifact heuristic section (R4, task 0454).
+ *
+ * Heuristic: Plan `- [x]` items and Solution `R\d+` mentions.
+ * Labeled as heuristic — never claims MET.
+ */
+export function extractCompletedRequirementsHeuristic(taskMarkdown: string): string[] {
+    const found = new Set<string>();
+
+    // 1. Plan checklist items currently `- [x]`
+    const planMatch = taskMarkdown.match(/^#{2,3}\s+Plan\s*$/m);
+    if (planMatch) {
+        const rest = taskMarkdown.slice((planMatch.index ?? 0) + planMatch[0].length);
+        const nextSection = rest.match(/^#{2,3}\s+/m);
+        const planBody = nextSection ? rest.slice(0, nextSection.index ?? 0) : rest;
+        const xItems = planBody.match(/^\s*-\s*\[x\]\s*(.+)$/gim);
+        if (xItems) {
+            for (const item of xItems) {
+                const text = item.replace(/^\s*-\s*\[x\]\s*/i, '').trim();
+                if (text) found.add(`- [x] ${text}`);
+            }
+        }
+    }
+
+    // 2. Solution body R# mentions
+    const solutionMatch = taskMarkdown.match(/^##\s+Solution\s*$/m);
+    if (solutionMatch) {
+        const rest = taskMarkdown.slice((solutionMatch.index ?? 0) + solutionMatch[0].length);
+        const nextSection = rest.match(/^#{2,3}\s+/m);
+        const solutionBody = nextSection ? rest.slice(0, nextSection.index ?? 0) : rest;
+        const rMatches = solutionBody.match(/\bR\d+\b/g);
+        if (rMatches) {
+            for (const r of [...new Set(rMatches)].sort()) {
+                found.add(r);
+            }
+        }
+    }
+
+    return found.size > 0 ? [...found] : ['unknown — Solution empty and Plan checkboxes open'];
+}
+
+/**
+ * Write a machine-readable partial-work handoff artifact after a failed
+ * or timed-out implement hop (R2b / task 0375). Best-effort: never masks
+ * the action result the caller already returns.
  */
 async function writePartialWorkArtifact(
     context: ActionRunContext,
@@ -500,6 +547,34 @@ async function writePartialWorkArtifact(
         const headerLine = model !== undefined ? `${agentLabel} (model: ${model})` : agentLabel;
         const inv = traced.invocation;
         const argvLine = inv ? `${inv.command} ${inv.argv.join(' ')}` : '(invocation not captured)';
+
+        // R4 (0454): completed-requirements heuristic section
+        let completedSection = '';
+        const wbs = String(context.vars.wbs ?? '');
+        if (wbs) {
+            try {
+                const fs = createNodeFileSystem(cwd);
+                const locator = TaskLocator.forDirs(fs, [
+                    join(cwd, 'docs', 'tasks3'),
+                    join(cwd, 'docs', 'tasks2'),
+                    join(cwd, 'docs', 'tasks'),
+                ]);
+                const hit = await locator.findByWbs(wbs);
+                if (hit) {
+                    const taskMarkdown = await fs.readFile(hit.filePath);
+                    const completed = extractCompletedRequirementsHeuristic(taskMarkdown);
+                    completedSection = [
+                        '',
+                        '## completed requirements (heuristic)',
+                        '',
+                        ...completed.map((l) => `- ${l}`),
+                        '',
+                    ].join('\n');
+                }
+            } catch {
+                // Best-effort: task file lookup failure is not a partial-artifact failure.
+            }
+        }
         const body = [
             `# Partial-work handoff — ${headerLine}`,
             '',
@@ -535,7 +610,7 @@ async function writePartialWorkArtifact(
             '```',
             stderrTail || '(empty)',
             '```',
-            '',
+            completedSection,
         ].join('\n');
 
         const target = join(cwd, '.spur', 'run', `${context.runId}-${context.stateOrNodeId}-partial.md`);

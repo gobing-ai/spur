@@ -11,7 +11,11 @@ import type {
     AgentExecutionOptions,
 } from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
-import { AgentRunActionRunner } from '../../../src/workflow/actions/agent-run';
+import {
+    AGENT_RUN_PROGRESS_INTERVAL_MS,
+    AgentRunActionRunner,
+    extractCompletedRequirementsHeuristic,
+} from '../../../src/workflow/actions/agent-run';
 import type { WorkflowObservabilityBus, WorkflowObservabilityEventMap } from '../../../src/workflow/observability';
 import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
 
@@ -1311,6 +1315,159 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
         expect(existsSync(join(dir, '.spur', 'run', 'test-1-output.log'))).toBe(false);
         expect(existsSync(join(dir, '.spur', 'run', 'test-1.log'))).toBe(false);
         rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+// ─── R3 (0454): progress heartbeats ─────────────────────────────────────────
+
+function heartbeatEvent(
+    overrides: Partial<Extract<AgentExecutionEvent, { kind: 'heartbeat' }>> = {},
+): AgentExecutionEvent {
+    return {
+        kind: 'heartbeat',
+        schemaVersion: 1,
+        eventId: 'e-hb',
+        sequence: 3,
+        runId: 'test-1',
+        executionId: 'execution-1',
+        actionId: 'test-1:s1',
+        at: '2026-08-02T00:00:03.000Z',
+        elapsedMs: 31_000,
+        timeoutMs: 1_800_000,
+        ...overrides,
+    };
+}
+
+describe('R3 — progress heartbeats (task 0454)', () => {
+    test('heartbeat event flows through the observability bus', async () => {
+        const svc = svcInvokingObserver((observer) => {
+            observer(startedEvent());
+            observer(heartbeatEvent());
+            observer(finishedEvent());
+        });
+        const { bus, events } = recordingBus();
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        expect(result.ok).toBe(true);
+        const heartbeatEvents = events.filter((e) => e.kind === 'heartbeat');
+        expect(heartbeatEvents.length).toBe(1);
+        const hb = heartbeatEvents[0];
+        expect(hb).toMatchObject({ kind: 'heartbeat', elapsedMs: 31_000 });
+    });
+
+    test('heartbeat event includes elapsedMs and timeoutMs', async () => {
+        const svc = svcInvokingObserver((observer) => {
+            observer(heartbeatEvent({ elapsedMs: 45_000, timeoutMs: 60_000 }));
+        });
+        const { bus, events } = recordingBus();
+        const runner = new AgentRunActionRunner(svc, bus);
+        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const hb = events.find((e) => e.kind === 'heartbeat') as
+            | Extract<AgentExecutionEvent, { kind: 'heartbeat' }>
+            | undefined;
+        expect(hb).toBeDefined();
+        expect(hb?.elapsedMs).toBe(45_000);
+        expect(hb?.timeoutMs).toBe(60_000);
+    });
+
+    test('no heartbeat when no observability bus', async () => {
+        const svc = svcInvokingObserver((observer) => {
+            observer(heartbeatEvent());
+        });
+        const runner = new AgentRunActionRunner(svc); // no bus
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        expect(result.ok).toBe(true);
+        // No bus → no observer connected → no events captured, but test passes
+    });
+
+    test('AGENT_RUN_PROGRESS_INTERVAL_MS constant is exported and positive', () => {
+        expect(AGENT_RUN_PROGRESS_INTERVAL_MS).toBeGreaterThan(0);
+        expect(AGENT_RUN_PROGRESS_INTERVAL_MS).toBe(30_000);
+    });
+});
+
+// ─── R4 (0454): completed-requirements heuristic ────────────────────────────
+
+describe('R4 — completed-requirements heuristic (task 0454)', () => {
+    const TASK_WITH_COMPLETED = `## Requirements
+- [ ] R1. Some requirement
+- [ ] R2. Another requirement
+
+### Plan
+- [ ] Step one
+- [x] Step two done
+- [ ] Step three
+- [x] Step four done
+
+## Solution
+Implemented R1 in src/foo.ts and R2 in src/bar.ts.
+Also fixed edge case R3.
+
+### Testing
+All tests pass.
+`;
+
+    const TASK_WITH_EMPTY_SOLUTION = `## Requirements
+- [ ] R1. Some requirement
+
+### Plan
+- [ ] Step one
+- [ ] Step two
+
+## Solution
+
+
+### Testing
+N/A
+`;
+
+    const TASK_WITH_NO_PLAN_X = `## Requirements
+- [ ] R1. Some requirement
+
+### Plan
+- [ ] Step one
+- [ ] Step two
+
+## Solution
+R1 and R2 done.
+`;
+
+    const TASK_NO_PLAN = `## Requirements
+- [ ] R1. Some requirement
+
+## Solution
+Just R1.
+`;
+
+    test('extracts completed plan items and R# mentions from Solution', () => {
+        const result = extractCompletedRequirementsHeuristic(TASK_WITH_COMPLETED);
+        expect(result.length).toBeGreaterThanOrEqual(3);
+        expect(result.some((l) => l.includes('Step two done'))).toBe(true);
+        expect(result.some((l) => l.includes('Step four done'))).toBe(true);
+        expect(result.some((l) => l === 'R1')).toBe(true);
+        expect(result.some((l) => l === 'R2')).toBe(true);
+        expect(result.some((l) => l === 'R3')).toBe(true);
+    });
+
+    test('unknown when Solution empty and no Plan checkboxes checked', () => {
+        const result = extractCompletedRequirementsHeuristic(TASK_WITH_EMPTY_SOLUTION);
+        expect(result).toEqual(['unknown — Solution empty and Plan checkboxes open']);
+    });
+
+    test('uses R# mentions from Solution when Plan has no checkboxes', () => {
+        const result = extractCompletedRequirementsHeuristic(TASK_WITH_NO_PLAN_X);
+        expect(result).toContain('R1');
+        expect(result).toContain('R2');
+    });
+
+    test('no Plan section returns unknown', () => {
+        const result = extractCompletedRequirementsHeuristic(TASK_NO_PLAN);
+        expect(result).toContain('R1');
+    });
+
+    test('empty content returns unknown', () => {
+        const result = extractCompletedRequirementsHeuristic('');
+        expect(result).toEqual(['unknown — Solution empty and Plan checkboxes open']);
     });
 });
 

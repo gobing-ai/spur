@@ -57,6 +57,10 @@ vars:
   # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
   # selection) so a broken/misconfigured agent on the box can't silently capture the run.
   agent: "omp"
+  # Implement-only executor override (R1, task 0454). Defaults to same as agent.
+  # Override with `--vars '{"implementAgent":"omp-zai"}'` to pin implement to a
+  # specific executor while other hops keep the default agent.
+  implementAgent: "omp"
   # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
   # Soft quality-gate shells are unbounded by this var (host shell only).
   # Raised 600s → 1800s (task 0398 R4 / H6 dogfood). Override:
@@ -86,6 +90,12 @@ vars:
   # project can point it at its own formatter; invoked best-effort (a missing or
   # failing formatter must never abort a run — the quality gate is the real gate).
   formatCmd: "bun run format"
+  # Max R-items in ## Requirements before size precheck fails (R2, task 0454).
+  # Override with `--vars '{"maxImplementReqs":"12"}'`.
+  maxImplementReqs: "5"
+  # Max checklist items under ## Plan before size precheck fails (R2, task 0454).
+  # Override with `--vars '{"maxImplementPlanItems":"15"}'`.
+  maxImplementPlanItems: "8"
 
 states:
   - id: precheck
@@ -128,6 +138,17 @@ states:
               fi;
             fi;
             exit 0
+      # R2 (0454): task size precheck — evaluate R-item and Plan-item counts.
+      # Writes PASS/FAIL to .spur/run/<wbs>-precheck-size.status. Always exit 0
+      # (soft check, like doctor). The precheck→implement guard reads the file.
+      - kind: shell
+        options:
+          command: >-
+            SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
+            mkdir -p .spur/run &&
+            bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
+            --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems" &&
+            exit 0
 
   - id: implement
     description: >
@@ -145,7 +166,7 @@ states:
     onEnter:
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.implementAgent}
           # Pure slash command only (ADR-043). Anti-recursion / implement discipline
           # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
           input: /sp:dev-run --mode implement ${vars.wbs} --auto
@@ -352,7 +373,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-precheck-doctor.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
+        command: 'test "$(cat .spur/run/$wbs-precheck-doctor.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
   - from: precheck
     to: failed
     description: Doctor FAIL and/or task check failed — stop before implement.
