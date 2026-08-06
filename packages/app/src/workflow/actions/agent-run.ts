@@ -477,9 +477,6 @@ function asOptionalNumber(value: unknown): number | undefined {
 }
 
 /**
- * Write a machine-readable partial-work handoff artifact after a failed
- * `agent.run` (R2b / G2 — implement-step timeouts, bugs 742/744/746/748;
-/**
  * Extract completed requirements from a task markdown body for the partial-work
  * artifact heuristic section (R4, task 0454).
  *
@@ -504,8 +501,8 @@ export function extractCompletedRequirementsHeuristic(taskMarkdown: string): str
         }
     }
 
-    // 2. Solution body R# mentions
-    const solutionMatch = taskMarkdown.match(/^##\s+Solution\s*$/m);
+    // 2. Solution body R# mentions (## Solution or ### Solution — task corpus uses H3)
+    const solutionMatch = taskMarkdown.match(/^#{2,3}\s+Solution\s*$/m);
     if (solutionMatch) {
         const rest = taskMarkdown.slice((solutionMatch.index ?? 0) + solutionMatch[0].length);
         const nextSection = rest.match(/^#{2,3}\s+/m);
@@ -567,7 +564,8 @@ async function writePartialWorkArtifact(
                         '',
                         '## completed requirements (heuristic)',
                         '',
-                        ...completed.map((l) => `- ${l}`),
+                        // Plan rows already start with `- [x]`; R# tokens need a bullet.
+                        ...completed.map((l) => (l.startsWith('-') ? l : `- ${l}`)),
                         '',
                     ].join('\n');
                 }

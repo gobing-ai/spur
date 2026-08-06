@@ -160,8 +160,13 @@ export class WorkflowRunLogSink {
             case 'finished':
                 this.append(`\n=== run ${event.outcome} (exit ${event.exitCode}) after ${event.durationMs}ms ===\n`);
                 break;
+            case 'heartbeat': {
+                // R3 (0454): mid-hop liveness for `spur workflow trace --follow --output`
+                const timeout = event.timeoutMs !== undefined ? ` timeoutMs=${event.timeoutMs}` : '';
+                this.append(`[${event.at}] agent.run progress: elapsed=${event.elapsedMs}ms${timeout}\n`);
+                break;
+            }
             default:
-                // heartbeat events carry no output — ignored.
                 break;
         }
     }

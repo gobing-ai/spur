@@ -922,6 +922,50 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         expect(artifact).toContain('agent: omp');
         expect(artifact).toContain('model: (default)');
     });
+
+    // R4 (0454): partial artifact embeds completed-requirements heuristic from task file.
+    test('R4 (0454) — partial artifact lists completed requirements without double-dash bullets', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const tasksDir = join(dir, 'docs', 'tasks3');
+        mkdirSync(tasksDir, { recursive: true });
+        writeFileSync(
+            join(tasksDir, '0454_fixture.md'),
+            [
+                '### Plan',
+                '- [x] wired implementAgent',
+                '- [ ] still open',
+                '',
+                '### Solution',
+                'Closed R1 and R3 in this hop.',
+                '',
+                '### Testing',
+                '',
+            ].join('\n'),
+        );
+        const svc = svcWithRunTraced({
+            exitCode: 1,
+            stdout: 'partial implement',
+            durationMs: 900,
+            invocation: invocation({ agent: 'omp' }),
+        });
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true, agent: 'omp' },
+            makeCtx({
+                runId: 'run-r4',
+                stateOrNodeId: 'implement',
+                workdir: dir,
+                vars: { wbs: '0454' },
+            }),
+        );
+
+        const artifact = readFileSync(join(dir, '.spur', 'run', 'run-r4-implement-partial.md'), 'utf8');
+        expect(artifact).toContain('## completed requirements (heuristic)');
+        expect(artifact).toContain('- [x] wired implementAgent');
+        expect(artifact).not.toContain('- - [x]');
+        expect(artifact).toContain('- R1');
+        expect(artifact).toContain('- R3');
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -1458,6 +1502,19 @@ Just R1.
         const result = extractCompletedRequirementsHeuristic(TASK_WITH_NO_PLAN_X);
         expect(result).toContain('R1');
         expect(result).toContain('R2');
+    });
+
+    test('extracts R# from ### Solution (task corpus H3 heading)', () => {
+        const md = `### Plan
+- [ ] open
+
+### Solution
+R4 closed in partial hop.
+
+### Testing
+`;
+        const result = extractCompletedRequirementsHeuristic(md);
+        expect(result).toContain('R4');
     });
 
     test('no Plan section returns unknown', () => {

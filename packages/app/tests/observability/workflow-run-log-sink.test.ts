@@ -178,6 +178,30 @@ describe('WorkflowRunLogSink', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
+    test('R3 (0454) — heartbeat events project as agent.run progress lines', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-1' });
+        await bus.emit('workflow.agent', {
+            kind: 'heartbeat',
+            schemaVersion: 1,
+            eventId: 'e-hb',
+            sequence: 2,
+            runId: 'run-1',
+            executionId: 'execution-1',
+            actionId: 'run-1:s1',
+            at: '2026-08-02T00:00:30.000Z',
+            elapsedMs: 30_000,
+            timeoutMs: 1_800_000,
+        });
+        sink.close();
+
+        const text = readFileSync(sink.filePath, 'utf8');
+        expect(text).toContain('agent.run progress: elapsed=30000ms');
+        expect(text).toContain('timeoutMs=1800000');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test('R4 — captures steering commands with the note redacted and bounded', async () => {
         const dir = tempDir();
         const bus = makeBus();
