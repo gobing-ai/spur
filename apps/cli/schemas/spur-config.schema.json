@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://github.com/gobing-ai/spur/schemas/spur-config.schema.json",
     "title": "Spur Project Configuration",
-    "description": "Schema for .spur/config.yaml — the single project configuration surface consumed by spur and (future) spur-server.",
+    "description": "Schema for .spur/config.yaml \u2014 the single project configuration surface consumed by spur and (future) spur-server.",
     "type": "object",
     "required": ["version", "name"],
     "properties": {
@@ -107,7 +107,7 @@
                 },
                 "executors": {
                     "type": "array",
-                    "description": "Named executor profiles: each pairs a canonical agent with an optional model override. Referenced by name from `default` and `default-by-phase`.",
+                    "description": "Named executor profiles: each pairs a canonical agent with an optional model override. Referenced by name from `agent.default` and stage model_policy (default-by-phase removed 0452).",
                     "items": {
                         "type": "object",
                         "required": ["name", "agent"],
@@ -130,16 +130,9 @@
                             "tier": {
                                 "type": "string",
                                 "enum": ["cheap", "standard", "capable-1", "capable-2", "capable-3"],
-                                "description": "Capability tier for stage-registry adaptive model routing (ADR-033, 0343). Live values: cheap | standard | capable-1 | capable-2 | capable-3 (1=low output quality, 3=high within the capable band). A stage starts on the cheapest eligible executor meeting its model_policy min_tier. Bare legacy `capable` is accepted at runtime (zod preprocess → capable-1) during the deprecation window but is not part of this editor enum."
+                                "description": "Capability tier for stage-registry adaptive model routing (ADR-033, 0343). Live values: cheap | standard | capable-1 | capable-2 | capable-3 (1=low output quality, 3=high within the capable band). A stage starts on the cheapest eligible executor meeting its model_policy min_tier. Bare legacy `capable` is accepted at runtime (zod preprocess \u2192 capable-1) during the deprecation window but is not part of this editor enum."
                             }
                         }
-                    }
-                },
-                "default-by-phase": {
-                    "type": "object",
-                    "description": "DEPRECATED (ADR-033). Backward-compat map of dev phase (e.g. dev-run, dev-review) to executor selector. Prefer executor `tier` + stage-registry model_policy. When present, a matching phase mapping is still authoritative (fail-fast; no fall back to `default`) and shadows stage routing for that phase.",
-                    "additionalProperties": {
-                        "type": "string"
                     }
                 },
                 "team": {
@@ -169,7 +162,10 @@
                                 "description": "Roster of member references (>= 1). A bare string is shorthand for { executor: <string> }; the composed agent id is <teamId>-<id ?? executor>.",
                                 "items": {
                                     "oneOf": [
-                                        { "type": "string", "minLength": 1 },
+                                        {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
                                         {
                                             "type": "object",
                                             "required": ["executor"],
@@ -177,27 +173,41 @@
                                                 "executor": {
                                                     "type": "string",
                                                     "minLength": 1,
-                                                    "description": "Executor name — resolved against agent.executors first, else a raw canonical agent type."
+                                                    "description": "Executor name \u2014 resolved against agent.executors first, else a raw canonical agent type."
                                                 },
                                                 "id": {
                                                     "type": "string",
                                                     "minLength": 1,
                                                     "description": "Local member id; composed id is <teamId>-<id ?? executor> (must match ^[a-z][a-z0-9_-]{1,63}$)."
                                                 },
-                                                "purpose": { "type": "string" },
+                                                "purpose": {
+                                                    "type": "string"
+                                                },
                                                 "workspace": {
                                                     "type": "string",
                                                     "minLength": 1,
                                                     "description": "Per-member workspace override. A leading `~` is tilde-expanded at load."
                                                 },
-                                                "model": { "type": "string", "minLength": 1 },
-                                                "autonomy": { "type": "string" },
-                                                "systemPrompt": { "type": "string" },
+                                                "model": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "autonomy": {
+                                                    "type": "string"
+                                                },
+                                                "systemPrompt": {
+                                                    "type": "string"
+                                                },
                                                 "command": {
                                                     "type": "array",
-                                                    "items": { "type": "string", "minLength": 1 }
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
                                                 },
-                                                "autostart": { "type": "boolean" }
+                                                "autostart": {
+                                                    "type": "boolean"
+                                                }
                                             }
                                         }
                                     ]
@@ -213,7 +223,9 @@
             "properties": {
                 "paths": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "Glob paths to rule files."
                 }
             }
@@ -223,7 +235,9 @@
             "properties": {
                 "paths": {
                     "type": "array",
-                    "items": { "type": "string" },
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "Glob paths to workflow directories."
                 }
             }
@@ -239,11 +253,11 @@
         },
         "tasks": {
             "type": "object",
-            "description": "Task-folder registration (design §9). Absorbs the legacy docs/.tasks/config.json folders + baseCounter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
+            "description": "Task-folder registration (design \u00a79). Absorbs the legacy docs/.tasks/config.json folders + baseCounter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
             "properties": {
                 "folders": {
                     "type": "object",
-                    "description": "Map of task-folder path → folder config.",
+                    "description": "Map of task-folder path \u2192 folder config.",
                     "additionalProperties": {
                         "type": "object",
                         "properties": {
@@ -275,7 +289,7 @@
         },
         "features": {
             "type": "object",
-            "description": "Feature directory location (design §9). Mirrors @gobing-ai/spur-config featuresConfigSchema (Zod is SSOT).",
+            "description": "Feature directory location (design \u00a79). Mirrors @gobing-ai/spur-config featuresConfigSchema (Zod is SSOT).",
             "properties": {
                 "dir": {
                     "type": "string",

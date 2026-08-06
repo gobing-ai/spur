@@ -146,8 +146,9 @@ export const executorCapabilityTierSchema = z.preprocess((value) => {
  *
  * An executor pairs a canonical coding-agent (`agent`) with an optional opaque
  * `model` override. `name` is the selector key referenced from `agent.default`
- * and `agent.default-by-phase`. `agent`/`model` are validated as non-empty
- * strings here; canonicalization and usability checks happen at resolution time.
+ * and stage-registry model_policy (`default-by-phase` removed in task 0452).
+ * `agent`/`model` are validated as non-empty strings here; canonicalization and
+ * usability checks happen at resolution time.
  *
  * `tier` (0343): declare `cheap | standard | capable-1 | capable-2 | capable-3`.
  * Never invent capable-2/3 via inference — only declare those explicitly.
@@ -307,7 +308,6 @@ export const AgentOutputConfigSchema = z.object({
  *
  * - `default` — executor selector first, legacy direct agent name second.
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
- * - `default-by-phase` — a `Record<phase, executorSelector>` **map**.
  * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
  * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
  */
@@ -315,7 +315,7 @@ export const AgentConfigSchema = z
     .object({
         default: z.string().optional(),
         executors: z.array(AgentExecutorConfigSchema).optional(),
-        'default-by-phase': z.record(z.string(), z.string()).optional(),
+        // default-by-phase removed (0452 / ADR-033 retirement) — use stage model_policy
         team: z.record(z.string(), TeamConfigSchema).optional(),
         output: AgentOutputConfigSchema.optional(),
         sessionAffinity: z.boolean().optional(),

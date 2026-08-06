@@ -113,7 +113,7 @@ agent:
       model: gpt-5.6-sol
       tier: capable-3
 
-  # `default-by-phase` retired 2026-07-26 (ADR-033). Retained only as a
+  # `default-by-phase` removed from schema (0452). Was a
   # backward-compat shim that emits a one-time deprecation warning. When present
   # it is still authoritative for matching phases and shadows stage routing —
   # do not re-enable unless you intentionally need that fail-fast map.

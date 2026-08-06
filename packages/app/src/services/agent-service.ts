@@ -79,7 +79,6 @@ export interface AgentExecutorConfig {
 export interface AgentConfig {
     default?: string;
     executors?: AgentExecutorConfig[];
-    'default-by-phase'?: Record<string, string>;
     sessionAffinity?: boolean;
 }
 
@@ -831,15 +830,6 @@ export class AgentService {
     // Private: agent resolution
     // -------------------------------------------------------------------------
 
-    private hasWarnedDeprecation = false;
-
-    private warnDeprecationOnce(message: string): void {
-        if (!this.hasWarnedDeprecation) {
-            this.ctx.output.error(`Warning: ${message}`);
-            this.hasWarnedDeprecation = true;
-        }
-    }
-
     private async resolveAgent(
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
@@ -854,19 +844,18 @@ export class AgentService {
         // names still fail clearly below via resolveExecutorSelector.
         if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner);
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
-        // executor-first lookup as `agent.default`. phase stays undefined so no
-        // default-by-phase mapping is consulted (R8: --agent wins, no phase).
+        // executor-first lookup as `agent.default`. No phase map is consulted
+        // (R8: --agent wins; default-by-phase removed 0452).
         return this.resolveExecutorSelector(raw, doctorRunner, 'explicit');
     }
 
     /**
      * Resolve `--agent auto` using stage-registry model routing (R1/R2/R3):
-     *  1. Check legacy `default-by-phase` config mapping (R4 shim): if configured,
-     *     emit a deprecation warning and resolve via 0126 phase mapping.
-     *  2. Resolve canonical `stage_id` from explicit `--stage` flag or prompt phase/alias.
-     *  3. If stage found, consume `model_policy` and start on the cheapest eligible executor.
+     *  1. Resolve canonical `stage_id` from explicit `--stage` flag or prompt phase/alias.
+     *  2. If stage found, consume `model_policy` and start on the cheapest eligible executor.
      *     Objective escalation signals (`--signal`) trigger fallback entries.
-     *  4. No stage match falls through to `agent.default` selector, then Tier-1 priority.
+     *  3. No stage match falls through to `agent.default` selector, then Tier-1 priority.
+     * (`default-by-phase` removed in task 0452 — stage model_policy is the only adaptive path.)
      */
     private async resolveAgentAuto(
         prompt: string | undefined,
@@ -875,16 +864,6 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
         const phase = extractPhase(prompt);
-        const phaseMap = config?.['default-by-phase'];
-        const phaseSelector = phase !== undefined ? phaseMap?.[phase] : undefined;
-
-        // A configured legacy phase mapping is authoritative (R4/R5) — broken means fail, not fall back.
-        if (phaseSelector !== undefined && phase !== undefined) {
-            this.warnDeprecationOnce(
-                `default-by-phase is deprecated; use stage model_policy instead. Phase '${phase}' mapped to '${phaseSelector}'.`,
-            );
-            return this.resolveExecutorSelector(phaseSelector, doctorRunner, 'phase', phase);
-        }
 
         // Stage-registry adaptive model routing (R1/R2/R3)
         const stageFlag = stringFlag(flags, 'stage', '');
@@ -993,11 +972,9 @@ export class AgentService {
 
     /**
      * Resolve an executor selector to an execution profile. Sources:
-     *  - `phase` — from `default-by-phase`; an unknown executor exits 2 and an
-     *    unusable agent exits 1, no fallback.
+     *  - `phase` — legacy source tag (default-by-phase removed 0452).
      *  - `default` — from `agent.default`; falls through to legacy agent name.
-     *  - `explicit` — from `--agent <name>` (0346); executor-first then binary,
-     *    `phase` undefined so no `default-by-phase` mapping is consulted (R8).
+     *  - `explicit` — from `--agent <name>` (0346); executor-first then binary (R8).
      *
      * Collision precedence (R3): when an executor and an agent binary share a
      * name, the executor wins. To reach a bare binary whose name is shadowed

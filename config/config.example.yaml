@@ -74,7 +74,7 @@ agent:
     #   agent: pi
     #   tier: capable-1
 
-  # `default-by-phase` is a deprecated backward-compat shim (ADR-033). Prefer
+  # `default-by-phase` is a REMOVED (0452). Prefer
   # executor `tier` + stage-registry model_policy. When present, a matching
   # phase mapping is still authoritative (fail-fast; no fall back to default)
   # and shadows stage routing for that phase.
