@@ -162,13 +162,10 @@ Execute a prompt or slash command via a coding agent. `--agent` (default `auto`)
 `agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
 per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
 claude, `/sp-dev-run` opencode/gemini/hermes/grok (default dialect), `/skill:sp-dev-run` pi/omp,
-`$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`); a configured `agent.default-by-phase[phase]`
-selects a named `agent.executors` profile (`{ name, agent, model? }`) — its `model` becomes the run's
-model **unless** the user passed an explicit `--model` (explicit wins). A configured phase mapping is
-authoritative: an unknown executor exits 2, a known-but-unusable executor exits 1, and neither falls
-back. With no phase match, `agent.default` is resolved as an executor selector (then a legacy agent
-name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the legacy
-behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var.
+`$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`). Routing is stage-registry-first
+(ADR-033 / 0452): stage `model_policy` selects a named `agent.executors` profile. With no stage
+match, `agent.default` is resolved as an executor selector (then a legacy agent name); on miss,
+Tier-1 priority applies. `current` reads `SPUR_AGENT` env var. (`default-by-phase` removed 0452.)
 **Explicit `--agent` is executor-aware (0346).** An explicit `--agent <name>` reuses the same
 executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`, source `explicit`):
 if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
@@ -187,8 +184,8 @@ the deprecation window. **Stage floors (cost-aware):** `plan` starts at `capable
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
 `capable-2`) as the blank-Design fallback; `implement` stays `standard`; `verify`/`dogfood` floor at
 `capable-1`. Unified `--skip-design` skips feature satellite **and** per-task Design at create.
-`default-by-phase` is retained only as a backward-compatibility shim that emits a one-time
-deprecation warning and preserves the 0126 fail-fast semantics.
+`default-by-phase` was removed (task 0452 / ADR-033 retirement). Routing uses stage registry
+`model_policy` only; migrate legacy configs to `agent.default` + executors + stage tiers.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope
@@ -367,8 +364,7 @@ Reads `history_etl_*` tables; estimates cost from per-model pricing.
 
 #### `spur history report [--json]`
 
-Reserved CLI surface for richer history reports. Currently prints a TODO marker so migration can
-stabilize before the report implementation is designed.
+Reserved CLI surface for richer history reports. Currently prints a not-implemented message citing this section and suggesting `spur history analyze` (0452 MVP). Full report deferred (P8).
 
 #### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
 
@@ -378,7 +374,7 @@ Sync feature status with linked task states via conservative forward-only deriva
 - `--all` — evaluate and sync all features with linked tasks.
 - `--dry-run` — report proposed status sync transitions without applying writes.
 - `--force` — force applying reopen proposals (`done/cancelled -> active` when non-terminal tasks are linked) without confirmation.
-- `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns an explicit error ("Push sync not implemented").
+- `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns HTTP 501 structured error (not supported; use pull or CLI `spur feature sync`).
 - Pipeline integration (task 0328; bounded by 0411): `task-pipeline.yaml`'s post-record step syncs the feature when the task carries a `feature_id`, or appends an orphan proposal to the run report if unlinked; `wrapup-pipeline.yaml`'s feature-transition step syncs `${vars.feature}`. Both prefer the retry-suppressing wrapper `bun plugins/sp/scripts/feature-sync-bounded.ts <id> --spur-bin <bin> --json` and fall back to the plain `spur feature sync <id> --json` verb when that script is absent — `spur init` seeds `.spur/workflows/` but never `plugins/sp/`, so a scaffolded project must not depend on the monorepo-relative path. Both steps are **advisory** (`; exit 0`): feature-status sync is a follow-up, never a completion gate, and must not abort a run that already produced a PASS verdict. Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
 
 #### `spur task scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]`
@@ -477,7 +473,7 @@ agent:
     - name: claude
       agent: claude
       tier: capable-3
-  # default-by-phase:     # deprecated shim (ADR-033); prefer executor tier + stage registry
+  # default-by-phase:     # REMOVED 0452 — use executor tier + stage model_policy
   #   dev-run: omp
 rules:
   paths:

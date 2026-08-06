@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Residual review cleanup: server push sync, history report, corpus migrator, default-by-phase retirement, legacy task aliases, agent-run nits"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: ["0451"]
 created_at: "2026-08-05T23:18:28.343Z"
-updated_at: "2026-08-05T23:21:30.764Z"
+updated_at: "2026-08-06T14:57:04.252Z"
 ---
 
 ## 0452. Residual review cleanup: server push sync, history report, corpus migrator, default-by-phase retirement, legacy task aliases, agent-run nits
@@ -50,7 +50,7 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
 ### Requirements
 **P2 — product gaps (implement when product wants them; each has MVP option)**
 
-- [ ] **R1. Server feature→tasks push sync (review #8).**
+- [x] **R1. Server feature→tasks push sync (review #8).**
   - **Issue:** `apps/server/src/modules/feature/handlers.ts` ~128–130:
     ```ts
     if (input.direction === 'push') {
@@ -64,7 +64,7 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
   - **Primary files:** `apps/server/src/modules/feature/handlers.ts`; `packages/app/src/services/feature-service.ts` (`syncFeature`); contracts for sync direction if any.
   - **Out:** Do not invent a second sync SSOT outside FeatureService.
 
-- [ ] **R2. `spur history report` (review #9).**
+- [x] **R2. `spur history report` (review #9).**
   - **Issue:** `apps/cli/src/commands/history.ts` ~39–43 — reserved surface prints TODO marker only. README + `docs/04_DESIGN.md` (~368) document the reservation.
   - **Impact:** Operators expecting a real report get a stub; long-parked (plan P8).
   - **Acceptance (full):** Report command produces useful summary (session counts, cost/token aggregates from imported history, top agents) human + `--json`; design section matches behavior.
@@ -72,7 +72,7 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
   - **Primary files:** `apps/cli/src/commands/history.ts`; design `docs/04_DESIGN.md`; any history service in packages/app/domain.
   - **Prefer full only if product prioritizes history analytics this cycle.**
 
-- [ ] **R3. Feature corpus migrator productization or honest non-support (review #10).**
+- [x] **R3. Feature corpus migrator productization or honest non-support (review #10).**
   - **Issue:** `packages/app/src/services/corpus-migrator.ts` + export from `packages/app/src/index.ts` — migrator class exists; unclear operator entry / completeness for feature corpus moves.
   - **Acceptance (pick one):**
     - **A (ship):** CLI verb or documented `spur` path that runs migrator dry-run + apply with tests; DESIGN updated.
@@ -82,7 +82,7 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
 
 **P3 — cleanup / debt**
 
-- [ ] **R4. Dual-latch / Q8 design docs after companion 0451 latch fix (review #12).**
+- [x] **R4. Dual-latch / Q8 design docs after companion 0451 latch fix (review #12).**
   - **Issue:** File headers / skill notes still describe pure latch (`continue: true` inheritance) without H83 affinity matrix. Companion task 0451 R3 changes code behavior — docs must follow.
   - **Sequence:** Prefer after 0451 R3 lands (or document target-state matrix matching 0451 Design while 0451 is open).
   - **Acceptance:** `agent-run.ts` session latch comments + any spur-dev Q8/session notes describe:
@@ -90,7 +90,7 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
     | affinityOff | Q8 latch may set continue; 0406 fallback |
   - **Primary:** `agent-run.ts` comments; optional `plugins/sp/skills/spur-dev` session notes if they still claim latch-only.
 
-- [ ] **R5. Retire or quarantine `default-by-phase` (review #13).**
+- [x] **R5. Retire or quarantine `default-by-phase` (review #13).**
   - **Issue:** Deprecated shim still live: config schema `packages/config/src/index.ts` ~310–318; `agent-service.ts` resolve path ~858–884 emits deprecation warning; tests assert warning still works.
   - **ADR/DESIGN:** ADR-033 / DESIGN default-by-phase retained as shim; CHANGELOG already mentions retire intent.
   - **Acceptance (inventory first):**
@@ -100,13 +100,13 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
   - **Primary:** `agent-service.ts`, `packages/config`, tests `agent-service.test.ts` default-by-phase describe.
   - **Do not** remove without inventory evidence in Solution.
 
-- [ ] **R6. Legacy status aliases / template skeleton noise (review #14).**
+- [x] **R6. Legacy status aliases / template skeleton noise (review #14).**
   - **Issue:** `task-service.ts` still carries template-as-skeleton paths and any legacy status alias normalization that confuses agents (intentional compatibility, noisy).
   - **Acceptance:** Inventory aliases + skeleton fallbacks; either (A) document intentional list in DESIGN/AGENTS one-liner, or (B) remove dead aliases with tests proving no corpus uses them. Prefer **no behavior change** without corpus proof.
   - **Primary:** `task-service.ts` create/render paths (~195, ~641, ~1376); status normalize helpers if any.
   - **Out:** Full template system rewrite.
 
-- [ ] **R7. H1 umbrella hygiene note + held H1 parallel-worktree task (review #15) — process only, non-blocking.**
+- [x] **R7. H1 umbrella hygiene note + held H1 parallel-worktree task (review #15) — process only, non-blocking.**
   - **Issue:** H1 stays open while the held H1 parallel-worktree task remains blocked (parallel worktree / mid-step HITL). Many H1 AC scenarios unlinked.
   - **Operator policy (non-negotiable unless overridden):** Continue holding 0142; do **not** cancel or implement that held H1 task in this task; do **not** force H1 to `done`. Completing other R#s on this task does **not** require 0142 to leave blocked.
   - **Acceptance:** Solution cites current H1 notes + that held task's status; optional hygiene **only if operator asks**: trim clearly orphan H1 scenarios with feature update (CLI-gated). Default: document "no code change for R7" + leave backlog note.
@@ -114,12 +114,12 @@ Post-H83 packages/apps code review (2026-08-05) listed **18 findings**. Companio
 
 **P4 — nits**
 
-- [ ] **R8. Leftover capture/buffered comment nits (review #17).**
+- [x] **R8. Leftover capture/buffered comment nits (review #17).**
   - After companion 0451 R8, re-grep for "buffered" / capture wording that still implies nonInteractive is buffered-only (`AgentRunInvocation.outputMode` docs, option comments).
   - **Acceptance:** Same grep gate as 0451; no remaining false buffered claims for pipe path.
   - **Primary:** `agent-run.ts`, `agent-service.ts` types/JSDoc.
 
-- [ ] **R9. Sidecar / partial-work write silent catch (review #18).**
+- [x] **R9. Sidecar / partial-work write silent catch (review #18).**
   - **Issue:** `agent-run.ts` ~344, ~512+ — best-effort writes (`*-agent-session.json`, partial.md) swallow errors with empty `catch {}`.
   - **Acceptance:** On write failure, emit debug/trace via existing logger or observability bus (if available on runner) **or** at minimum a single best-effort comment + optional debug log; never mask the primary `ok:false` agent result. Unit test optional (mock FS throw → still returns agent failure).
   - **Primary:** `agent-run.ts` sidecar block ~328–346; `writePartialWorkArtifact` ~449–520.
@@ -283,28 +283,115 @@ bun run autofix && bun run spur-check
 | Touching held H1 task | Forbidden unless operator override |
 | Thrash with 0451 on agent-run | Sequence R4/R8 after 0451 |
 ### Plan
-- [ ] R7: Confirm held H1 parallel-worktree task + H1 notes; document no implement (read-only).
-- [ ] R9: Observable or explicitly documented best-effort catches on sidecar/partial writes.
-- [ ] R5: Inventory default-by-phase; remove or keep-shim with DESIGN update.
-- [ ] R6: Inventory legacy aliases/skeleton; document or remove with proof.
-- [ ] R1: Choose MVP vs full push sync; implement + tests or structured unsupported.
-- [ ] R2: Choose MVP vs full history report; implement accordingly.
-- [ ] R3: Ship migrator CLI or mark internal/non-supported.
-- [ ] R4: After 0451 R3, refresh latch/affinity docs comments.
-- [ ] R8: Final buffered/capture grep cleanup.
-- [ ] Solution + Testing filled; spur-check green for code-changing paths.
+- [x] R7: Confirm held H1 parallel-worktree task + H1 notes; document no implement (read-only).
+- [x] R9: Observable or explicitly documented best-effort catches on sidecar/partial writes.
+- [x] R5: Inventory default-by-phase; remove or keep-shim with DESIGN update.
+- [x] R6: Inventory legacy aliases/skeleton; document or remove with proof.
+- [x] R1: Choose MVP vs full push sync; implement + tests or structured unsupported.
+- [x] R2: Choose MVP vs full history report; implement accordingly.
+- [x] R3: Ship migrator CLI or mark internal/non-supported.
+- [x] R4: After 0451 R3, refresh latch/affinity docs comments.
+- [x] R8: Final buffered/capture grep cleanup.
+- [x] Solution + Testing filled; spur-check green for code-changing paths.
 ### Solution
+**R1 — Server push sync (MVP)**
+- `apps/server/src/modules/feature/handlers.ts:128-132` — `HTTPException(501)` with pull/CLI workaround (not raw Error).
+- `docs/04_DESIGN.md` feature sync — push documented as unsupported.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+**R2 — history report (MVP)**
+- `apps/cli/src/commands/history.ts:39-52` — reserved stub cites DESIGN + `history analyze`/`import`; human + `--json`; exit 0.
+- `docs/04_DESIGN.md` history report section updated.
 
+**R3 — Corpus migrator (option B)**
+- `packages/app/src/services/corpus-migrator.ts:519-522` — `@internal`, no public CLI.
+- `packages/app/src/index.ts:45-46` — export marked internal.
+
+**R4 — Latch/affinity docs**
+- `packages/app/src/workflow/actions/agent-run.ts:77-88` — header matrix affinityOn vs affinityOff.
+
+**R5 — default-by-phase removed**
+- **Inventory:** monorepo `.spur/config.yaml` / `config.example.yaml` only commented examples; no live product field values.
+- Removed: Zod field `packages/config/src/index.ts`, JSON schema `apps/cli/schemas/spur-config.schema.json`, resolve path + deprecation warn in `agent-service.ts`, deprecation/phase-map tests.
+- DESIGN routing § updated to stage model_policy only.
+
+**R6 — Legacy aliases (document)**
+- Keep intentional input normalization; DESIGN status alias policy documents them.
+
+**R7 — H1/0142 hold**
+- 0142 `blocked`, H1 `backlog` — not cancelled/implemented here.
+
+**R8 — buffered nits**
+- Grep clean for nonInteractive buffered-only claims (post-0451).
+
+**R9 — Sidecar/partial catches**
+- `packages/app/src/workflow/actions/agent-run.ts` sidecar + partial-work catches document R9 best-effort; never mask agent failure.
 ### Testing
+**Verify (0452 close-out)** — 2026-08-06
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+**Verdict: PASS**
 
+**Commands:**
+```
+bun test packages/app/tests/services/agent-service.test.ts packages/app/tests/workflow/actions/agent-run.test.ts
+# → 186 pass, 0 fail
+
+bun run apps/cli/src/index.ts history report
+# → not-implemented + DESIGN + analyze workaround
+
+bun run apps/cli/src/index.ts history report --json
+# → {"status":"not-implemented",...}
+
+rg -n "default-by-phase" packages/app/src/services/agent-service.ts packages/config/src/index.ts
+# → comments only (removed field/resolve)
+
+spur task show 0142 --json | jq -r .status
+# → blocked
+
+spur task check 0452 --strict-core
+# → PASS
+```
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `apps/server/src/modules/feature/handlers.ts:128-132` |
+| R2 | MET | `apps/cli/src/commands/history.ts:39-52` + smoke |
+| R3 | MET | `packages/app/src/services/corpus-migrator.ts:519-522` |
+| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts:77-88` |
+| R5 | MET | schema/runtime removed; inventory commented-only; tests green |
+| R6 | MET | DESIGN alias policy; intentional keep |
+| R7 | MET | 0142 blocked |
+| R8 | MET | grep clean |
+| R9 | MET | documented catches on sidecar/partial |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 — push sync is either implemented or honest | MET | static-ref | handlers 501 |
+| Scenario: R2 — history report is either real or honest | MET | command | history report smoke |
+| Scenario: R3 — corpus migrator product stance is explicit | MET | static-ref | @internal |
+| Scenario: R4 — latch docs match post-0451 affinity matrix | MET | static-ref | agent-run header |
+| Scenario: R5 — default-by-phase inventory then act | MET | test + static-ref | removal + 186 tests |
+| Scenario: R6 — legacy aliases documented or removed with proof | MET | static-ref | DESIGN |
+| Scenario: R7 — held H1 parallel-worktree task remains blocked | MET | command | 0142 blocked |
+| Scenario: R8-R9 — nits cleared | MET | static-ref | grep + catch comments |
+
+Coverage: N/A (targeted 186). Design-conformance: pass (MVP R1–R3; R5 remove).
 ### Review
+**Verdict: PASS**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Priority findings**
 
+| Priority | Dimension | Finding | Status |
+|----------|-----------|---------|--------|
+| P1 | — | None | PASS |
+| P2 | — | None open (R5 incomplete removal completed this close-out) | PASS |
+| P3 | Product depth | R1–R3 MVP not full features | ACCEPTED per task |
+| P4 | Observability | R9 comment-only (no bus event) | ACCEPTED |
+
+**SECUA:** structured 501 for push; default-by-phase fully removed from runtime; no secrets; 0142 hold preserved.
 ### References
 - Companion hot-path task: `docs/tasks3/0451_h83-follow-up-agent-run-config-injection-affinity-session-ke.md` (review #1–#7, #11, #16)
 - Review source: packages/apps code review 2026-08-05 findings #8–#10, #12–#15, #17–#18
@@ -318,3 +405,6 @@ bun run autofix && bun run spur-check
 - Plan park: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md` P8 history report
 ### History
 - 2026-08-05T23:20:53.303Z backlog → todo (system)
+- 2026-08-06T09:23:55.095Z todo → wip (system)
+- 2026-08-06T14:57:03.935Z wip → testing (system)
+- 2026-08-06T14:57:04.252Z testing → done (system)
