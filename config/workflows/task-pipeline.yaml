@@ -181,8 +181,6 @@ states:
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             echo 0 > "$ATTEMPT_FILE" &&
             set +e &&
-            # sh -c re-parses multi-command gates (&&, ;); do NOT use bare `$qualityGateCmd`
-            # word-split (breaks on &&). qualityGateCmd is pipeline-owned trusted config only.
             ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
@@ -223,7 +221,6 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
             set +e &&
-            # See test probe: sh -c for multi-command; qualityGateCmd is trusted config only.
             ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";

@@ -117,6 +117,7 @@ Feature: Run-scoped agent session affinity, live agent streaming, unified --agen
 | 0448 | Spur pipeline agent.run: host-safe affinity default-on + live run log streaming | done |
 | 0449 | Unify --agent inline surface + skill launch/observation hygiene | done |
 | 0450 | H83 dogfood: multi-agent affinity and streaming smoke | done |
+| 0451 | H83 follow-up: agent.run config injection, affinity session keying, dual-latch collapse, and workflow close-path hardening | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
