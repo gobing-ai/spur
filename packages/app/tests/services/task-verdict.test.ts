@@ -143,6 +143,52 @@ describe('deriveVerdict', () => {
         expect(result.requirements).toEqual([{ id: 'R1', status: 'MET', evidence: '`src/foo.ts:10`' }]);
         expect(result.acceptanceCriteria).toHaveLength(1);
     });
+
+    // ── R2 (0453): column-name mapping ─────────────────────────────────
+
+    const R2_SEVERITY_STATUS_ANSWER = [
+        '| R# | Severity | Evidence | Status |',
+        '|----|----------|----------|--------|',
+        '| R1 | P1 | `packages/app/src/foo.ts:10` | MET |',
+        '| R2 | P2 | `packages/app/src/bar.ts:20` | PARTIAL |',
+    ].join('\n');
+
+    const R2_R_STATUS_ANSWER = [
+        '| R# | Status | Evidence |',
+        '|----|--------|----------|',
+        '| R1 | MET | `src/foo.ts:10` |',
+        '| R2 | PARTIAL | `src/bar.ts:20` |',
+    ].join('\n');
+
+    test('R2: R#/Severity/Evidence/Status extracts status from column 4 (not Severity)', () => {
+        const result = deriveVerdict(R2_SEVERITY_STATUS_ANSWER, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.requirements).toHaveLength(2);
+        expect(result.requirements[0]).toEqual({
+            id: 'R1',
+            status: 'MET',
+            evidence: '`packages/app/src/foo.ts:10`',
+        });
+        // Status must be MET, not P1 (Severity column)
+        expect(result.requirements[0]?.status).toBe('MET');
+        expect(result.requirements[1]?.status).toBe('PARTIAL');
+    });
+
+    test('R2: R#/Status/Evidence works (status in column 2)', () => {
+        const result = deriveVerdict(R2_R_STATUS_ANSWER, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.requirements).toHaveLength(2);
+        expect(result.requirements[0]?.status).toBe('MET');
+        expect(result.requirements[1]?.status).toBe('PARTIAL');
+    });
+
+    test('R2: canonical Req/Status/Evidence still works unchanged', () => {
+        const result = deriveVerdict(MET_ANSWER, true);
+        expect(result.verdict).toBe('PASS');
+        expect(result.requirements).toHaveLength(2);
+        expect(result.requirements[0]?.status).toBe('MET');
+        expect(result.requirements[1]?.status).toBe('MET');
+    });
 });
 
 describe('classifyTaskOutcome', () => {

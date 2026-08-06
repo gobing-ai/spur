@@ -74,15 +74,31 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
 // ─── Parsers ────────────────────────────────────────────────────────────
 
 /**
+ * Column-index map for a requirement table: which cell holds id, status, and evidence.
+ * Indices are determined by scanning the header row.
+ */
+interface ColMap {
+    id: number;
+    status: number;
+    evidence?: number;
+}
+
+/**
  * Extract per-requirement rows from a verify answer body.
  *
- * Looks for a markdown table with `| Req | Status | Evidence |` or
- * `| Req | Status |` columns. Each data row becomes a VerdictRequirement.
+ * Scans the first plausible header row (first cell is id-like) for status and
+ * evidence column positions by name, then uses those indices for data rows.
+ * Falls back to col1=status / col2=evidence when no status column is found by name.
+ *
+ * Supports canonical `| Req | Status | Evidence |`, `| R# | Severity | Evidence | Status |`,
+ * and `| R# | Status | Evidence |` — the status column is located by its header name,
+ * not by its position.
  */
 function extractRequirements(text: string): VerdictRequirement[] {
     const reqs: VerdictRequirement[] = [];
     const lines = text.split('\n');
     let inTable = false;
+    let colMap: ColMap | null = null;
 
     for (const line of lines) {
         const trimmed = line.trim();
@@ -93,20 +109,32 @@ function extractRequirements(text: string): VerdictRequirement[] {
             .map((c) => c.trim())
             .filter(Boolean);
 
-        // Detect header row
+        // Detect header row: first cell must be id-like
         if (!inTable && cells.length >= 2) {
-            const h0 = (cells[0] ?? '').toLowerCase();
-            const h1 = (cells[1] ?? '').toLowerCase();
-            if ((h0.includes('req') || h0 === 'requirement') && (h1.includes('status') || h1 === 'verdict')) {
-                inTable = true;
-                continue;
+            const h0 = (cells[0] ?? '').toLowerCase().trim();
+            const h0IsId = h0.includes('req') || h0 === 'requirement' || h0 === 'r#' || h0 === 'r' || /^r\d+$/.test(h0);
+            if (h0IsId) {
+                const statusIdx = cells.findIndex((c) => {
+                    const x = c.toLowerCase().trim();
+                    return x.includes('status') || x === 'verdict';
+                });
+                if (statusIdx >= 0) {
+                    const evidenceIdx = cells.findIndex((c) => c.toLowerCase().includes('evidence'));
+                    colMap = {
+                        id: 0,
+                        status: statusIdx,
+                        evidence: evidenceIdx >= 0 ? evidenceIdx : undefined,
+                    };
+                    inTable = true;
+                    continue;
+                }
             }
         }
 
         // Skip separator rows
         if (/^[-:]+$/.test(cells[0] ?? '')) continue;
 
-        if (inTable && cells.length >= 2) {
+        if (inTable && colMap && cells.length >= 2) {
             const first = (cells[0] ?? '').toLowerCase();
             const second = (cells[1] ?? '').toLowerCase();
             if (
@@ -114,11 +142,12 @@ function extractRequirements(text: string): VerdictRequirement[] {
                 (second.includes('status') || second === 'verdict')
             ) {
                 inTable = false;
+                colMap = null;
                 continue;
             }
-            const id = cells[0] ?? '';
-            const statusRaw = (cells[1] ?? '').toUpperCase();
-            const evidence = cells.length >= 3 ? (cells[2] ?? '') : '';
+            const id = cells[colMap.id] ?? '';
+            const statusRaw = (cells[colMap.status] ?? '').toUpperCase();
+            const evidence = colMap.evidence !== undefined ? (cells[colMap.evidence] ?? '') : '';
             const status = normalizeStatus(statusRaw);
             if (status !== null && id.length > 0) {
                 reqs.push({ id, status, evidence });
