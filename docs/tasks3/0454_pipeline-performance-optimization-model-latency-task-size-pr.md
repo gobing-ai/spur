@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Pipeline performance optimization: model latency, task size precheck, progress visibility"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-08-06T10:54:14.344Z"
-updated_at: "2026-08-06T20:50:08.626Z"
+updated_at: "2026-08-06T21:24:10.276Z"
 ---
 
 ## 0454. Pipeline performance optimization: model latency, task size precheck, progress visibility
@@ -35,7 +35,7 @@ The 0452 residual-cleanup pipeline run took ~75 minutes — far above a healthy 
 ### Requirements
 **P1 — prevent timeout cascade**
 
-- [ ] **R1. Document + wire implement executor override (no fake TTFB SLA).**
+- [x] **R1. Document + wire implement executor override (no fake TTFB SLA).**
 
   **Issue.** Pipeline implement uses `${vars.agent}` (default `omp` → dogfood executor). There is no **implement-only** override, so operators cannot pin a faster executor for implement without retargeting every agent.run hop. Guaranteeing TTFB &lt;5s is **not** a code property (provider-side).
 
@@ -46,14 +46,14 @@ The 0452 residual-cleanup pipeline run took ~75 minutes — far above a healthy 
 
   **Primary files:** `config/workflows/task-pipeline.yaml` (+ `.spur/` and `apps/cli/config/` copies), optional `docs/04_DESIGN.md` / help one-liner.
 
-- [ ] **R2. Deterministic task-size precheck before implement.**
+- [x] **R2. Deterministic task-size precheck before implement.**
 
   **Issue.** Oversized tasks (R-count / plan breadth) burn a full `implementTimeoutMs` then force resume. Precheck today is doctor + `spur task check` only.
 
   **Acceptance**
   - New precheck shell (soft status file pattern like doctor) after doctor, before implement guard.
-  - Counts **R-items** in `## Requirements` via `spur task show $wbs --json` content (lines matching `- [ ] **R` / `- [x] **R` or `**R{n}.**` / `- [ ] R{n}.` — freeze one regex in Design).
-  - Pipeline vars: `maxImplementReqs` (default **`5`**), `maxImplementPlanItems` (default **`8`**, count `- [ ]` / `- [x]` under `## Plan`).
+  - Counts **R-items** in `## Requirements` via `spur task show $wbs --json` content (lines matching `- [x] **R` / `- [x] **R` or `**R{n}.**` / `- [x] R{n}.` — freeze one regex in Design).
+  - Pipeline vars: `maxImplementReqs` (default **`5`**), `maxImplementPlanItems` (default **`8`**, count `- [x]` / `- [x]` under `## Plan`).
   - When either threshold is exceeded: write `.spur/run/$wbs-precheck-size.status=FAIL` and a one-line message suggesting decomposition **or** raising vars; precheck→implement guard requires size PASS (same hard fail as doctor).
   - Under `profile=auto`: **still hard-fail** (no silent proceed). Override: `--vars '{"maxImplementReqs":"12"}'`.
   - Unit test with fixture task bodies (≤5 reqs pass; 6 reqs fail). Prefer pure function in `packages/app` tested under `bun test`, called from a thin `bun` script or inlined shell that shells to spur — Design freezes which.
@@ -62,7 +62,7 @@ The 0452 residual-cleanup pipeline run took ~75 minutes — far above a healthy 
 
 **P2 — operator visibility & resume**
 
-- [ ] **R3. Mid-hop progress on the existing observability path (not raw console).**
+- [x] **R3. Mid-hop progress on the existing observability path (not raw console).**
 
   **Issue.** Long implement hops look stuck; `no-console-output` forbids `console.*` in app code. `workflow.agent` + run-log sink already exist.
 
@@ -74,7 +74,7 @@ The 0452 residual-cleanup pipeline run took ~75 minutes — far above a healthy 
 
   **Primary files:** `packages/app/src/workflow/actions/agent-run.ts`; tests `packages/app/tests/workflow/actions/agent-run.test.ts`; sink only if a new event type is required (`workflow-run-log-sink.ts`).
 
-- [ ] **R4. Partial-work artifact: completed-requirements heuristic section.**
+- [x] **R4. Partial-work artifact: completed-requirements heuristic section.**
 
   **Issue.** `writePartialWorkArtifact` records invocation + git diff + stdout/stderr tails but not which R# finished, so resume re-scopes from scratch.
 
@@ -280,25 +280,102 @@ Extend `writePartialWorkArtifact`:
 | Heartbeat noise | 30s default; single line |
 | Heuristic wrong R# | Label heuristic; operator still reads git diff |
 ### Plan
-- [ ] R2a: Implement `evaluateTaskSize` + unit tests (pass ≤5 reqs; fail 6; plan item cap).
-- [ ] R2b: Add `plugins/sp/scripts/task-size-precheck.ts`; wire soft status file + guard into all task-pipeline copies; monorepo validate YAML.
-- [ ] R1: Add `implementAgent` var; point implement `agent.run` at it; sync workflow copies; doc one-liner for `--vars` override.
-- [ ] R3: Heartbeat interval in `AgentRunActionRunner` + bus emit; unit test with fake timers.
-- [ ] R4: `extractCompletedRequirementsHeuristic` + partial artifact section; unit test fixtures.
-- [ ] Gate: `bun test` on new/changed tests; `spur workflow validate` on task-pipeline; `bun run autofix && bun run spur-check` if code changed.
-- [ ] Solution/Testing filled by implement/verify (not this refine).
+- [x] R2a: Implement `evaluateTaskSize` + unit tests (pass ≤5 reqs; fail 6; plan item cap).
+- [x] R2b: Add `plugins/sp/scripts/task-size-precheck.ts`; wire soft status file + guard into all task-pipeline copies; monorepo validate YAML.
+- [x] R1: Add `implementAgent` var; point implement `agent.run` at it; sync workflow copies; doc one-liner for `--vars` override.
+- [x] R3: Heartbeat interval in `AgentRunActionRunner` + bus emit; unit test with fake timers.
+- [x] R4: `extractCompletedRequirementsHeuristic` + partial artifact section; unit test fixtures.
+- [x] Gate: `bun test` on new/changed tests; `spur workflow validate` on task-pipeline; `bun run autofix && bun run spur-check` if code changed.
+- [x] Solution/Testing filled by implement/verify (not this refine).
 ### Solution
+**R1 — implementAgent override**
+- `config/workflows/task-pipeline.yaml` — `vars.implementAgent` (default `omp`); implement `agent.run` uses `agent: ${vars.implementAgent}`; other hops keep `${vars.agent}`.
+- Copies synced: `.spur/workflows/task-pipeline.yaml`, `apps/cli/config/workflows/task-pipeline.yaml`.
+- `docs/04_DESIGN.md` task-pipeline vars — implement-only pin via `--vars '{"implementAgent":"…"}'`; size precheck vars documented.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+**R2 — task size precheck**
+- `packages/app/src/services/task-size-precheck.ts` — pure `evaluateTaskSize` / `countRItems` / `countPlanItems` (defaults 5 / 8).
+- `plugins/sp/scripts/task-size-precheck.ts` — soft status writer `.spur/run/<wbs>-precheck-size.status`.
+- `task-pipeline.yaml` precheck shell + guard requires size PASS with doctor + `task check`.
+- Tests: `packages/app/tests/services/task-size-precheck.test.ts`.
 
+**R3 — progress heartbeats**
+- `AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000` in `agent-run.ts`; passed as `heartbeatMs` into `runTraced` → `AgentExecutionLifecycle`.
+- `workflow-run-log-sink.ts` projects `kind: 'heartbeat'` as `agent.run progress: elapsed=…ms` (residual: was ignored).
+- Tests: agent-run R3 suite + run-log sink heartbeat test.
+
+**R4 — partial completed-requirements heuristic**
+- `extractCompletedRequirementsHeuristic` in `agent-run.ts` — Plan `[x]` + Solution `R\d+` (`##` or `###` heading).
+- Wired into `writePartialWorkArtifact` via `TaskLocator` multi-folder lookup when `vars.wbs` set.
+- Residual: no double-dash bullets for Plan rows; orphaned JSDoc removed; integration test covers artifact path.
 ### Testing
+**Verify** residual fix-pass before commit — 2026-08-06
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+**Verdict: PASS**
 
+**Commands (fresh residual pass):**
+```
+bun test packages/app/tests/services/task-size-precheck.test.ts \
+  packages/app/tests/workflow/actions/agent-run.test.ts \
+  packages/app/tests/observability/workflow-run-log-sink.test.ts
+# → 127 pass, 0 fail
+
+spur workflow validate config/workflows/task-pipeline.yaml --json
+# → ok:true valid:true
+
+bun plugins/sp/scripts/task-size-precheck.ts 0454
+# → PASS — 4 R-items, 7 Plan items
+
+rg -n 'implementAgent' config/workflows/task-pipeline.yaml
+# → vars + implement agent.run
+
+spur task check 0454 --strict-core
+# → PASS
+```
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml` implementAgent; DESIGN vars; copies synced |
+| R2 | MET | `task-size-precheck.ts` + script + pipeline guard; unit tests; smoke on 0454 → PASS |
+| R3 | MET | `agent-run.ts` heartbeatMs; `workflow-run-log-sink.ts` heartbeat→progress lines; tests |
+| R4 | MET | `extractCompletedRequirementsHeuristic` (##/### Solution); partial section no double-dash; integration + unit tests |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 — implement step honors implementAgent override | MET | static-ref | task-pipeline.yaml implement agent: ${vars.implementAgent}; other hops vars.agent |
+| Scenario: R2 — oversized task fails precheck size gate | MET | test | task-size-precheck.test.ts LARGE_TASK fail |
+| Scenario: R2b — in-budget task passes size precheck | MET | test + command | SMALL_TASK + script on 0454 PASS |
+| Scenario: R3 — agent.run emits progress heartbeats | MET | test | R3 heartbeat tests + sink progress line |
+| Scenario: R4 — partial artifact lists completed requirements heuristic | MET | test | heuristic suite + partial-artifact integration (no `- - [x]`) |
+
+**Residual fix-pass (pre-commit):**
+1. Run-log sink projects `kind: 'heartbeat'` as `agent.run progress:` (was ignored).
+2. Solution R# heuristic matches `### Solution` (task corpus H3).
+3. Partial section avoids double-dash bullets for Plan `[x]` rows.
+4. Orphaned incomplete JSDoc above `extractCompletedRequirementsHeuristic` removed.
+5. Integration test: failed implement with `vars.wbs` writes completed-requirements section.
+
+Coverage: N/A full suite (127 targeted green). Design-conformance: pass.
 ### Review
+**Verdict: PASS**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Priority findings**
 
+| Priority | Dimension | Finding | Status |
+|----------|-----------|---------|--------|
+| P1 | — | None | PASS |
+| P2 | Correctness | Heartbeats ignored by run-log sink (R3 AC visibility) | FIXED residual |
+| P2 | Correctness | Solution R# heuristic missed `### Solution` | FIXED residual |
+| P2 | Correctness | Plan rows became `- - [x]` in partial section | FIXED residual |
+| P3 | Maintainability | Orphaned incomplete JSDoc before extract helper | FIXED residual |
+| P3 | Maintainability | Script duplicates regex vs pure helper (sync comment present) | ACCEPTED |
+| P4 | Usability | meta task lacks feature_id | ACCEPTED (meta) |
+
+**SECUA:** no secrets; soft size precheck + hard guard; no console.* progress path.
 ### References
 - Incident: 0452 residual pipeline ~75m; implement timeout `implementTimeoutMs` 1800000
 - Pipeline: `config/workflows/task-pipeline.yaml` (precheck, implement agent.run)
@@ -310,3 +387,6 @@ Extend `writePartialWorkArtifact`:
 - Dogfood: operator session 2026-08-06 volc TTFB degradation
 ### History
 - 2026-08-06T20:50:04.872Z backlog → todo (system)
+- 2026-08-06T21:14:39.012Z todo → wip (system)
+- 2026-08-06T21:14:39.590Z wip → testing (system)
+- 2026-08-06T21:14:40.167Z testing → done (system)
