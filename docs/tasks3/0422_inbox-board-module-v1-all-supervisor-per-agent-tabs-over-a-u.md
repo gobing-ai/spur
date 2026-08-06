@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-08-03T23:02:05.562Z
-updated_at: "2026-08-04T04:44:04.560Z"
+updated_at: "2026-08-05T23:46:08.489Z"
 ---
 
 ## 0422. Inbox Board module v1: All / Supervisor / per-agent tabs over a unified message+process timeline
@@ -376,33 +376,35 @@ Each entry cites the first changed line per file (`file:line`).
 | `apps/web/tests/modules/teams/tabs.test.ts:28` |
 | `apps/web/tests/modules/teams/tabs.test.ts:30` |
 ### Testing
-**Verdict: PASS** (2026-08-04 `/sp-dev-verify 0422 --force --focus all --fix all`)
+**Verdict: PASS** (2026-08-05 `/sp-dev-verify 0422 --auto --next --force --focus all --fix all`)
 
-Prior FAIL was environment-blocked. This run re-executed gates.
+Re-audit of terminal task with `--force`. No code changes this run; evidence re-executed and line anchors re-read.
 
-**Commands**
-- `bun test apps/web` → **651 pass / 0 fail**
-- focused inbox/process-stream/teams/observability subset → **148 pass / 0 fail**
-- `spur task check 0422` after section writes
-- Coverage: `process-stream.ts` / `inbox/tabs.ts` / `inbox/timeline.ts` 100% in suite; component `.tsx` excluded from per-file gate
+**Commands (this run)**
+- `bun test apps/web/tests/modules/inbox apps/web/tests/lib/process-stream.test.ts apps/web/tests/modules/teams/tabs.test.ts apps/web/tests/modules/teams/MemberTerminal.test.tsx` → **54 pass / 0 fail**
+- `bun test apps/web` → **651 pass / 0 fail** (2148 expects)
+- `spur task check 0422` → PASS (findings empty after path-qualified evidence)
+- `spur feature check M4` → findings:[]
+- Static: observability `InboxTab.tsx` and teams `MessagesTab.tsx` absent; `TEAMS_TABS` has no messages tab; no Tailwind palette classes / hex in `modules/inbox/**/*.{ts,tsx}`
+- Coverage: `apps/web/src/lib/process-stream.ts` / `apps/web/src/modules/inbox/tabs.ts` / `apps/web/src/modules/inbox/timeline.ts` 100% funcs+lines in focused run; component `.tsx` excluded from per-file gate
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `apps/web/src/modules/inbox/index.tsx:12-21`; `apps/web/src/modules/inbox/tabs.ts:12-15`; `apps/web/src/modules/inbox/InboxShell.tsx:85-111`; test R1 in `apps/web/tests/modules/inbox/inbox.test.tsx` |
-| R2 | MET | `apps/web/src/modules/inbox/AllTab.tsx:52-78`, `94-149`, `223-243`; `apps/web/tests/modules/inbox/inbox.test.tsx` R2 |
-| R3 | MET | `apps/web/src/modules/inbox/SupervisorTab.tsx:10-15`, `24-45`; inbox.test.tsx R3 |
-| R4 | MET | `apps/web/src/modules/inbox/InboxShell.tsx:34-55`; inbox.test.tsx R4 |
-| R5 | MET | `apps/web/src/modules/inbox/timeline.ts:36-56`; `apps/web/src/modules/inbox/AgentTab.tsx:16-70`; timeline.test.ts + inbox.test.tsx R5 |
-| R6 | MET | `apps/web/src/modules/inbox/timeline.ts:51-55`; `apps/web/src/modules/inbox/AgentTab.tsx:17-26`, `166-169`; inbox.test.tsx R6 |
-| R7 | MET | `apps/web/src/modules/teams/tabs.ts:15-20`; MessagesTab + observability/InboxTab deleted; `apps/web/tests/modules/teams/tabs.test.ts` |
-| R9 | MET | `apps/web/src/lib/process-stream.ts:33-78`; `apps/web/src/modules/teams/MemberTerminal.tsx:3`; `apps/web/tests/lib/process-stream.test.ts` |
-| R10 | MET | `apps/web/src/styles/global.css:128-147` `.inbox` scope; `apps/web/src/modules/inbox/InboxShell.tsx:58`; rg clean under modules/inbox |
+| R1 | MET | `apps/web/src/modules/inbox/index.tsx:12-21`; `apps/web/src/modules/inbox/tabs.ts:12-15`; `apps/web/src/modules/inbox/InboxShell.tsx:85-119`; `apps/web/tests/modules/inbox/inbox.test.tsx` R1 |
+| R2 | MET | `apps/web/src/modules/inbox/AllTab.tsx:52-78`; `apps/web/src/modules/inbox/AllTab.tsx:94-133`; `apps/web/tests/modules/inbox/inbox.test.tsx` R2 |
+| R3 | MET | `apps/web/src/modules/inbox/SupervisorTab.tsx:10-15`; `apps/web/src/modules/inbox/SupervisorTab.tsx:24-45`; `apps/web/tests/modules/inbox/inbox.test.tsx` R3 |
+| R4 | MET | `apps/web/src/modules/inbox/InboxShell.tsx:33-55`; `apps/web/tests/modules/inbox/inbox.test.tsx` R4 |
+| R5 | MET | `apps/web/src/modules/inbox/timeline.ts:36-56`; `apps/web/src/modules/inbox/AgentTab.tsx:16-70`; `apps/web/tests/modules/inbox/timeline.test.ts`; `apps/web/tests/modules/inbox/inbox.test.tsx` R5 |
+| R6 | MET | `apps/web/src/modules/inbox/timeline.ts:51-55`; `apps/web/src/modules/inbox/AgentTab.tsx:17-26`; `apps/web/src/modules/inbox/AgentTab.tsx:166-169`; `apps/web/tests/modules/inbox/inbox.test.tsx` R6 |
+| R7 | MET | `apps/web/src/modules/teams/tabs.ts:14-20`; MessagesTab + observability/InboxTab deleted; `apps/web/tests/modules/teams/tabs.test.ts`; `bun test apps/web` 651 pass |
+| R9 | MET | `apps/web/src/lib/process-stream.ts:33-78`; `apps/web/src/modules/teams/MemberTerminal.tsx:3`; `apps/web/src/modules/inbox/AgentTab.tsx:2`; `apps/web/tests/lib/process-stream.test.ts` |
+| R10 | MET | `apps/web/src/styles/global.css:128-147`; `apps/web/src/modules/inbox/InboxShell.tsx:58`; rg clean under `apps/web/src/modules/inbox` |
 | R11 | MET | `apps/web/src/styles/global.css:143-146` daisyUI primary/accent pins |
-| R12 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:33`, `59`; `apps/web/src/modules/inbox/AllTab.tsx:175-208` |
-| R13 | MET | `@theme` unmodified in `git diff apps/web/src/styles/global.css`; `bun test apps/web` 651 pass |
-| R14 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:88-129`; `apps/web/src/modules/inbox/AllTab.tsx:112-146`; inbox.test.tsx R14 |
+| R12 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:33`; `apps/web/src/modules/inbox/AgentTab.tsx:59`; spur surface ladder + rounded-xl |
+| R13 | MET | Shared `@theme` consumers green via `bun test apps/web` 651 pass |
+| R14 | MET | `apps/web/src/modules/inbox/AgentTab.tsx:88-129`; `apps/web/tests/modules/inbox/inbox.test.tsx` R14 |
 
 **Acceptance Criteria Verification**
 
@@ -413,20 +415,26 @@ Prior FAIL was environment-blocked. This run re-executed gates.
 | R3 — The Supervisor tab filters the feed to supervisor traffic | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R3 |
 | R4 — Per-agent tabs are derived from the team roster | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R4 |
 | R5 — A per-agent tab renders a unified IN/OUT timeline | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R5; `apps/web/tests/modules/inbox/timeline.test.ts` |
-| R6 — The process-frame history boundary is visible | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R6; timeline.test.ts |
-| R7 — Message surfaces are consolidated, not duplicated | MET | test | `apps/web/tests/modules/teams/tabs.test.ts`; deleted paths; observability green |
-| R9 — Process-stream helpers are shared, not duplicated | MET | test | `apps/web/tests/lib/process-stream.test.ts` + MemberTerminal suite |
+| R6 — The process-frame history boundary is visible | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R6; `apps/web/tests/modules/inbox/timeline.test.ts` |
+| R7 — Message surfaces are consolidated, not duplicated | MET | test | `apps/web/tests/modules/teams/tabs.test.ts`; deleted paths; `bun test apps/web` 651 pass |
+| R9 — Process-stream helpers are shared, not duplicated | MET | test | `apps/web/tests/lib/process-stream.test.ts`; `apps/web/tests/modules/teams/MemberTerminal.test.tsx` |
 | R10 — Inbox surfaces resolve DESIGN.md tokens through a module scope | MET | command | rg clean module; `apps/web/src/styles/global.css:128-147`; `apps/web/src/modules/inbox/InboxShell.tsx:58` |
 | R11 — Inbox controls resolve a single chromatic accent | MET | static-ref | `apps/web/src/styles/global.css:143-146` |
-| R12 — Inbox cards and type follow the DESIGN.md ladder and scale | MET | static-ref | `apps/web/src/modules/inbox/AgentTab.tsx:33,59` |
-| R13 — Other board modules are unregressed by the Inbox palette | MET | test | `bun test apps/web` 651 pass |
-| R14 — Switching agent tabs tears down the previous stream | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R14 |
+| R12 — Inbox cards and type follow the DESIGN.md ladder and scale | MET | static-ref | `apps/web/src/modules/inbox/AgentTab.tsx:33`; `apps/web/src/modules/inbox/AgentTab.tsx:59` |
+| R13 — Other board modules are unregressed by the Inbox palette | MET | test | `bun test apps/web` 651 pass (Teams/Observability included) |
+| R14 — Switching agent tabs tears down the previous stream | MET | test | `apps/web/tests/modules/inbox/inbox.test.tsx` R14; `apps/web/src/modules/inbox/AgentTab.tsx:88-129` |
 
-**Design conformance:** DONE (process-stream extract, mergeTimeline, fixed tabs, SUPERVISOR_ENDPOINT_ID, `.inbox` scope, R8 excluded).
+**design-conformance:** pass — layout (process-stream extract, inbox module tree, pure mergeTimeline, FIXED_INBOX_TABS, SUPERVISOR_ENDPOINT_ID, .inbox scope) matches Design; M4 R8 hold intentionally out of scope.
 
-**SECUA:** no P1–P3. Minor: selected tab `bg-spur-accent` (TeamsShell parity); light `.inbox` omits daisyUI primary pins (task-kanban parity).
+**SECUA (focus all):** no blockers/majors. Minors accepted: selected tab `bg-spur-accent` fill (selection emphasis allowed); light `.inbox` omits daisy primary pins (mirrors task-kanban light). Untrusted feed narrowed via parseMessagesFeed/parseFrame.
 
-**Fix pass:** no code mutations; artifacts `.spur/run/0422-verdict.json`, `.spur/run/0422-verify-answer.txt`.
+**Fix pass:** none required (all MET). Artifacts: `.spur/run/0422-verdict.json` rewritten this run.
+
+**Coverage:** process-stream / inbox tabs+timeline 100% in suite; React `.tsx` excluded from per-file gate by project policy.
+
+**Shippable:** PASS — Feature M4; `spur feature check M4` findings:[]; linked task 0422 done only.
+
+**`--next`:** no-op — task already terminal (`done`)
 ### Review
 **SECUA + functional review** (verify mode + record; verdict PASS)
 

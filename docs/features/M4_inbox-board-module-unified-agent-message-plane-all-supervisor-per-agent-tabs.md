@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M4"
 name: "Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-03T23:00:42.623Z"
-updated_at: "2026-08-04T04:44:28.037Z"
+updated_at: "2026-08-05T23:46:20.898Z"
 ---
 
 # M4: Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)
@@ -209,3 +209,6 @@ Gherkin ship set is R1–R7 and R9–R14 only. When the flag lands, re-add the R
 open a covering implement task.
 
 ## History
+- 2026-08-05T23:46:20.572Z backlog → active (system)
+- 2026-08-05T23:46:20.742Z active → verifying (system)
+- 2026-08-05T23:46:20.898Z verifying → done (system)
