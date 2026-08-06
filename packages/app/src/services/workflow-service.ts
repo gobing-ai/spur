@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
+import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCost,
@@ -882,6 +882,35 @@ export class WorkflowAppService {
         const processExec = this.ctx.processExecutor?.();
         const host = createDefaultWorkflowEngineHost(processExec !== undefined ? { processExecutor: processExec } : {});
         const bus = this.ctx.observabilityBus?.();
+        // R1 (0451): load agent config slice at composition root so AgentRunActionRunner
+        // receives real config values instead of reading a fake context.config cast.
+        // R4 (0451): also inject requireDiff excludeGlobs from all registered task folders
+        // + features dir so multi-folder corpus edits never pass the empty-implement gate.
+        let agentSlice: {
+            default?: string;
+            sessionAffinity?: boolean;
+            excludeGlobs?: string[];
+        } = {};
+        try {
+            const agent = (await loadSpurConfig(this.ctx.cwd)).agent;
+            agentSlice = {
+                ...(agent?.default !== undefined ? { default: agent.default } : {}),
+                ...(agent?.sessionAffinity !== undefined ? { sessionAffinity: agent.sessionAffinity } : {}),
+            };
+        } catch {
+            // degrade empty — never block engine create
+        }
+        try {
+            const fs = createNodeFileSystem(this.ctx.cwd);
+            const { foldersConfig, featuresDir } = await resolvePlanningFolders(fs);
+            const folderGlobs = Object.keys(foldersConfig.folders).map((k) => `${k}/*`);
+            agentSlice = {
+                ...agentSlice,
+                excludeGlobs: [...folderGlobs, `${featuresDir}/*`],
+            };
+        } catch {
+            // keep agent-run defaults (docs/tasks3 + docs/features) when folder resolve fails
+        }
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
@@ -891,6 +920,7 @@ export class WorkflowAppService {
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
             ...(processExec !== undefined ? { processExecutor: processExec } : {}),
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
+            agentConfig: agentSlice,
         });
         const db = await this.ctx.getDb();
         let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);

@@ -608,9 +608,18 @@ export class FeatureCheckService extends PlanningCheckService {
         for (const wbs of doneWbs) {
             const artifact = await this.readVerdictArtifact(runDir, wbs);
             artifacts.set(wbs, artifact);
+            // R7 (0451, option B): missing artifact is treated as "unverified for this
+            // coverer" only — do NOT emit L4.malformed-verdict-artifact for pure missing.
+            // Still emit malformed for present but invalid JSON/fields.
             const diagnosticParts: string[] = [];
             if (artifact.diagnostics.artifactError !== undefined) {
-                diagnosticParts.push(artifact.diagnostics.artifactError);
+                // Only flag as malformed when the artifact file exists but is corrupt.
+                // A missing artifact is expected for archive tasks that predate the verdict
+                // convention — it just means "unverified for this coverer."
+                // The `readError` is `'artifact is missing'` when the file doesn't exist.
+                if (artifact.diagnostics.artifactError !== 'artifact is missing') {
+                    diagnosticParts.push(artifact.diagnostics.artifactError);
+                }
             }
             if (artifact.diagnostics.rejectedRowCount > 0) {
                 diagnosticParts.push(`${artifact.diagnostics.rejectedRowCount} rejected coverage row(s)`);

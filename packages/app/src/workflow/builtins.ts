@@ -7,7 +7,7 @@ import {
 } from '@gobing-ai/ts-runtime';
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
-import { AgentRunActionRunner } from './actions/agent-run';
+import { AgentRunActionRunner, type AgentRunAgentConfig } from './actions/agent-run';
 import { FileExistsActionRunner } from './actions/file-exists';
 import { FileReadActionRunner } from './actions/file-read';
 import { FileReadIntoVarActionRunner } from './actions/file-read-into-var';
@@ -34,13 +34,20 @@ export interface SpurWorkflowBuiltinsOptions {
     steeringController?: WorkflowSteeringController;
     /** Process executor for shell actions (task 0421 R9). Defaults to a fresh NodeProcessExecutor. */
     processExecutor?: ProcessExecutor;
+    /** Agent config slice injected at composition root (R1, task 0451). */
+    agentConfig?: AgentRunAgentConfig;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
 export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWorkflowBuiltinsOptions): void {
     const fileSystem = options.fileSystem ?? createNodeFileSystem();
     host.registerAction(
-        new AgentRunActionRunner(options.agentService, options.observabilityBus, options.steeringController),
+        new AgentRunActionRunner(
+            options.agentService,
+            options.observabilityBus,
+            options.steeringController,
+            options.agentConfig,
+        ),
         'builtin',
     );
     // Streaming shell runner — replaces the engine's buffered shell runner by kind.

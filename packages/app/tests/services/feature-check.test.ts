@@ -2589,17 +2589,16 @@ describe('FeatureCheckService', () => {
         cleanup();
     });
 
-    test('0410 R3: missing artifact emits a task-specific failure-mode warning distinct from malformed JSON', async () => {
+    test('R7 (0451): missing artifact does not emit malformed warning (treated as unverified coverer)', async () => {
         const { result, cleanup } = await setup0410({
             taskStatus: 'done',
             rawArtifact: undefined, // file not written
         });
+        // Scenario is still unverified (no verdict artifact → no PASS)
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        // R7: missing artifact is no longer flagged as malformed — silent degraded
         const malformed = result.findings.filter((f) => f.code === malformedCode);
-        expect(malformed).toHaveLength(1);
-        expect(malformed[0]?.message).toContain('Task 0001');
-        expect(malformed[0]?.message).toContain('artifact is missing');
-        expect(malformed[0]?.message).not.toContain('malformed JSON');
+        expect(malformed).toHaveLength(0);
         cleanup();
     });
 
@@ -2701,5 +2700,119 @@ describe('FeatureCheckService', () => {
         expect(malformed).toHaveLength(1);
         expect(malformed[0]?.message).toContain('4 rejected coverage row');
         cleanup();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// R6: multi-folder feature check (task 0451) — L4 edge resolution across
+// all configured task folders, not only the active one.
+// ---------------------------------------------------------------------------
+
+describe('R6 — multi-folder feature check (task 0451)', () => {
+    test('L4: no orphan-scenarios when done task is in non-active tasks folder', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-r6-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks'); // active
+        const tasksDir2 = join(dir, 'tasks2'); // archive
+        const runDir = join(dir, '.spur', 'run');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(tasksDir2, { recursive: true });
+        mkdirSync(runDir, { recursive: true });
+
+        // Feature with one scenario "alpha"
+        const featureContent = [
+            '---',
+            'schema_version: 1',
+            'id: "R6"',
+            'name: "R6 Multi-Folder"',
+            'status: done',
+            'priority: P2',
+            'created_at: 2026-08-05T00:00:00.000Z',
+            'updated_at: 2026-08-05T00:00:00.000Z',
+            '---',
+            '',
+            '# R6: Multi-Folder',
+            '',
+            '## Goal',
+            '',
+            'Test multi-folder L4 edge resolution.',
+            '',
+            '## Scope',
+            '',
+            'In scope: testing.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '```gherkin',
+            'Scenario: alpha',
+            '  Given a situation',
+            '  When something happens',
+            '  Then ensure result',
+            '```',
+            '',
+            '## Tasks',
+            '',
+            '- [x] 0001: secondary task',
+        ].join('\n');
+        writeFileSync(join(featuresDir, 'R6_multi.md'), featureContent);
+
+        // Task in non-active folder (tasks2) with feature_id R6 and AC covering "alpha"
+        const taskContent = [
+            '---',
+            'schema_version: 1',
+            'name: "R6 Secondary Task"',
+            'status: done',
+            'feature_id: R6',
+            'priority: P2',
+            'created_at: 2026-08-05T00:00:00.000Z',
+            'updated_at: 2026-08-05T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. R6 Secondary Task',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '```gherkin',
+            'Scenario: alpha',
+            '  Given a situation',
+            '  When something happens',
+            '  Then ensure result',
+            '```',
+            '',
+            '## Solution',
+            '',
+            'Implemented.',
+        ].join('\n');
+        writeFileSync(join(tasksDir2, '0001_secondary.md'), taskContent);
+
+        // Verdict artifact for the done task — PASS with MET for alpha
+        writeFileSync(
+            join(runDir, '0001-verdict.json'),
+            JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'Scenario: alpha', status: 'MET' }],
+                acceptanceCriteria: [],
+            }),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'R6_multi.md'), 'R6', {
+            featuresDir,
+            tasksDirs: [tasksDir, tasksDir2],
+            runDir,
+        });
+
+        // No orphan scenarios — the task in tasks2 is found via tasksDirs
+        const orphan = result.findings.filter((f) => f.code === 'L4.orphan-scenarios');
+        expect(orphan).toHaveLength(0);
+        // No unverified scenario — the verdict is PASS with MET
+        const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
+        expect(unverified).toHaveLength(0);
+        // No malformed verdict artifact
+        const malformed = result.findings.filter((f) => f.code === 'L4.malformed-verdict-artifact');
+        expect(malformed).toHaveLength(0);
+
+        rmSync(dir, { recursive: true, force: true });
     });
 });

@@ -124,9 +124,10 @@ describe('registerSpurBuiltins', () => {
         );
 
         expect(result.status).toBe('done');
-        // First agent.run opens the session (latch unset → continue not forced true);
-        // second inherits it (latch set by step 1's setVars → continue true).
-        expect(continueSeen).toEqual([undefined, true]);
+        // R3 (0451): affinity-on (default) → latch does not auto-set continue.
+        // The latch still propagates via setVars (__agentSession: 'open'), but
+        // resume is via sessionDir/sessionId, not bare continue.
+        expect(continueSeen).toEqual([undefined, undefined]);
     });
 
     test('resolved invocation is persisted in the workflow action trace without the raw prompt (0295 R1)', async () => {

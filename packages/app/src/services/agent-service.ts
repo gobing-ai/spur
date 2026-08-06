@@ -180,7 +180,7 @@ export interface AgentRunInvocation {
 
 /**
  * Result of {@link AgentService.runTraced} — a pipeline-oriented variant that
- * forces non-interactive buffered execution and returns the resolved invocation
+ * forces non-interactive (pipe-no-TTY) execution and returns the resolved invocation
  * alongside captured stdout/stderr and the diagnostic fields needed for the
  * partial-work handoff artifact (R2b / G2) and the workflow run trace (R1).
  *
@@ -193,7 +193,7 @@ export interface AgentRunTracedResult {
     exitCode: number;
     /** Resolved invocation; absent only when validation failed before resolution. */
     invocation?: AgentRunInvocation;
-    /** Captured agent stdout (always buffered under non-interactive mode). */
+    /** Captured agent stdout (accumulated for return; child uses pipe-no-TTY when nonInteractive). */
     stdout: string;
     /** Captured agent stderr, when available. */
     stderr?: string;
@@ -430,11 +430,11 @@ export class AgentService {
      * dispatched (R1).
      *
      * Contract:
-     *  - Output is ALWAYS buffered (`{ mode: 'buffered' }`) regardless of TTY —
-     *    the agent subprocess never inherits the parent's stdout, so it cannot
+     *  - Output is pipe-no-TTY (`{ mode: 'pipe' }`) when nonInteractive — the
+     *    agent subprocess never inherits the parent's stdout, so it cannot
      *    perceive an interactive terminal. Direct `spur agent run` keeps its
      *    interactive streaming behavior because it uses {@link run}, not this.
-     *  - Diagnostics are suppressed (silent).
+     *  - Silent/json paths still use buffered mode.
      *  - Exit-code mapping matches {@link runCapture}: 0 success, 3 agent
      *    failure / signal, 2 validation/dispatch error.
      *

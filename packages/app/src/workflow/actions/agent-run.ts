@@ -11,18 +11,28 @@ const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
 
 const KIND = 'agent.run';
 
+/** Config slice injected at composition root for agent.run steps (R1, task 0451). */
+export interface AgentRunAgentConfig {
+    default?: string;
+    sessionAffinity?: boolean;
+    /**
+     * Pathspec exclude globs for the requireDiff empty-implement gate (R4, task 0451).
+     * Defaults to `['docs/tasks3/*', 'docs/features/*']` when absent.
+     */
+    excludeGlobs?: string[];
+}
+
 /**
  * Workflow action that delegates to AgentService.runTraced — the pipeline's
  * non-interactive agent dispatch path (task 0295 / R3).
  *
  * **Non-interactive contract (R3 / task 0295):** every `agent.run` dispatched
  * by a workflow uses {@link AgentService.runTraced}, which forces
- * `{ mode: 'buffered' }` output regardless of TTY. The subprocess therefore
- * never inherits the parent's stdout, so a translated slash command (e.g.
- * `/sp:dev-run --mode implement … --auto`) cannot stall waiting on an
- * interactive confirmation prompt that never arrives. Direct `spur agent run`
- * from a terminal keeps its interactive streaming behavior because it uses
- * {@link AgentService.run}, not this action.
+ * `{ mode: 'pipe' }` output (nonInteractive) — the subprocess therefore
+ * inherits pipe-no-TTY stdout/stderr, so output streams live via onOutput
+ * without a child TTY. Direct `spur agent run` from a terminal keeps its
+ * interactive streaming behavior because it uses {@link AgentService.run},
+ * not this action.
  *
  * **Invocation capture (R1 / task 0295):** the resolved agent, argv (post
  * slash-command translation), cwd, output mode, timeout, continue state, and
@@ -39,10 +49,9 @@ const KIND = 'agent.run';
  * - `continue` (boolean): explicit continue flag. When unset, the session latch
  *   (`vars.__agentSession`) auto-determines continue-on/open-new.
  * - `capture` (boolean): when true, the agent's stdout is also returned in
- *   `data.answer` for downstream steps (e.g. `response.validate`). Output is
- *   always buffered under the non-interactive contract, so `capture` here only
- *   controls whether `answer` is surfaced in `data` — it does NOT switch the
- *   dispatch path. Kept for backward compatibility with existing workflow yaml.
+ *   `data.answer` for downstream steps (e.g. `response.validate`). Capture is
+ *   available because the non-interactive path captures stdout regardless —
+ *   `capture` here only controls whether `answer` is surfaced in `data`.
  * - `answerFile` (string): persist the captured stdout to a file (implies capture).
  *   Relative paths resolve against `cwd`; parent dirs are created.
  * - `expectFile` (string): post-exit verification — after a successful (exit-0)
@@ -78,7 +87,7 @@ const KIND = 'agent.run';
  * lifecycle events are emitted to the observability bus as `workflow.agent`;
  * the consolidated run-log sink (`.spur/run/<runId>.log`) subscribes there and
  * captures the child's stdout/stderr (bounded, best-effort) for `spur workflow
- * trace`. The child's output policy stays buffered and stdin stays `'ignore'`
+ * trace`. The child's output policy is pipe-no-TTY (nonInteractive) and stdin stays `'ignore'`
  * — the observer consumes the `onOutput` relay as-is.
  */
 export class AgentRunActionRunner implements ActionRunner {
@@ -90,6 +99,7 @@ export class AgentRunActionRunner implements ActionRunner {
         agentService: AgentService,
         private readonly observabilityBus?: WorkflowObservabilityBus,
         private readonly steeringController?: WorkflowSteeringController,
+        private readonly agentConfig: AgentRunAgentConfig = {},
     ) {
         this.agentService = agentService;
     }
@@ -97,12 +107,12 @@ export class AgentRunActionRunner implements ActionRunner {
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
-        const cfg = (context as unknown as { config?: { agent?: { default?: string; sessionAffinity?: boolean } } })
-            .config;
+        // R1 (0451): config is injected at composition root, not read from a fake cast.
+        // Affinity config via this.agentConfig below.
         // ADR-047 (0449 R2): `inline` on a headless dispatch surface ≡ omit → agent.default.
         // Normalize to the configured default executor name before dispatch so session
         // affinity / labels key off the real executor, never the literal `inline`.
-        const dispatchAgent = agent === 'inline' ? (cfg?.agent?.default ?? undefined) : agent;
+        const dispatchAgent = agent === 'inline' ? (this.agentConfig.default ?? undefined) : agent;
         const model = asOptionalString(options.model);
         const mode = asOptionalString(options.mode) ?? 'text';
         const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';
@@ -112,11 +122,11 @@ export class AgentRunActionRunner implements ActionRunner {
             sessionAffinityVar === 'false' ||
             (typeof sessionAffinityVar === 'boolean' && !sessionAffinityVar) ||
             options.sessionAffinity === false ||
-            cfg?.agent?.sessionAffinity === false;
+            this.agentConfig.sessionAffinity === false;
         const affinityOn = !affinityDisabled;
 
         const agentLabel = dispatchAgent ?? '<default>';
-        const targetAgentDir = dispatchAgent ?? cfg?.agent?.default ?? 'omp';
+        const targetAgentDir = dispatchAgent ?? this.agentConfig.default ?? 'omp';
         const prevAgent = asOptionalString(context.vars.__agentSessionAgent);
 
         let sessionDir = asOptionalString(context.vars.__agentSessionDir);
@@ -136,11 +146,12 @@ export class AgentRunActionRunner implements ActionRunner {
         // resume mode rejects a new prompt (task 0406 — codex incompatibility).
         const latchAutoContinued = continueFlag === undefined && latch === 'open';
         if (latchAutoContinued) {
-            if (affinityOn) {
+            // R3 (0451): affinity on → resume via sessionDir/sessionId only, not bare continue.
+            // Affinity off → restore Q8: latch open sets continue:true.
+            if (!affinityOn) {
                 continueFlag = true;
-            } else {
-                continueFlag = undefined;
             }
+            // affinityOn: leave continueFlag undefined — resume via sessionDir/sessionId only.
         }
 
         // Input required unless continue is effectively true on a resume-only agent.
@@ -189,9 +200,6 @@ export class AgentRunActionRunner implements ActionRunner {
         // (R1). Capture still only controls whether stdout is surfaced as
         // `data.answer` (answerFile / expectFile path).
         // Child-agent lifecycle is fanned out to the observability bus as the
-        // `workflow.agent` event; the consolidated run-log sink (feature D2) is a
-        // subscriber on that bus, so the agent's stdout/stderr reach the log without
-        // a per-step file sink here.
         // `workflow.agent` event; the consolidated run-log sink (feature D2) is a
         // subscriber on that bus, so the agent's stdout/stderr reach the log without
         // a per-step file sink here.
@@ -289,11 +297,11 @@ export class AgentRunActionRunner implements ActionRunner {
             // writes docs/tasks3|docs/features). Tree-level approximation: a
             // pre-existing dirty tree reads as non-empty — safe direction, a false
             // pass would silently certify an empty implement.
-            if (ok && requireDiff === true && !(await gitHasNonCorpusChanges(cwd))) {
+            if (ok && requireDiff === true && !(await gitHasNonCorpusChanges(cwd, this.agentConfig.excludeGlobs))) {
                 return {
                     ok: false,
                     data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
-                    error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside docs/tasks3|docs/features; fix the implement input and re-run the pipeline.`,
+                    error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
                 };
             }
 
@@ -318,12 +326,19 @@ export class AgentRunActionRunner implements ActionRunner {
                     ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
                     : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}; ${partialWorkHint}`;
 
-            let discoveredSessionId = storedSessionId;
-            if (ok && affinityOn && sessionDir && !discoveredSessionId) {
-                discoveredSessionId = await discoverSessionId(sessionDir);
+            // R2 (0451): key __agentSessionAgent off the resolved invocation.agent
+            const resolvedAgent = invocation?.agent ?? targetAgentDir;
+            let resolvedSessionDir = sessionDir;
+            if (ok && affinityOn && resolvedAgent !== targetAgentDir && !context.vars.__agentSessionDir) {
+                resolvedSessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', resolvedAgent);
             }
 
-            if (ok && affinityOn && sessionDir) {
+            let discoveredSessionId = storedSessionId;
+            if (ok && affinityOn && resolvedSessionDir && !discoveredSessionId) {
+                discoveredSessionId = await discoverSessionId(resolvedSessionDir);
+            }
+
+            if (ok && affinityOn && resolvedSessionDir) {
                 try {
                     const sidecarPath = join(cwd, '.spur', 'run', `${context.runId}-agent-session.json`);
                     const fs = createNodeFileSystem(cwd);
@@ -332,9 +347,9 @@ export class AgentRunActionRunner implements ActionRunner {
                         sidecarPath,
                         JSON.stringify(
                             {
-                                agent: agentLabel,
+                                agent: resolvedAgent,
                                 sessionId: discoveredSessionId ?? null,
-                                sessionDir,
+                                sessionDir: resolvedSessionDir,
                                 openedAt: new Date().toISOString(),
                             },
                             null,
@@ -357,11 +372,11 @@ export class AgentRunActionRunner implements ActionRunner {
                 setVars: ok
                     ? {
                           __agentSession: resumeRetried ? 'no-resume' : 'open',
-                          ...(affinityOn && sessionDir ? { __agentSessionDir: sessionDir } : {}),
+                          ...(affinityOn && resolvedSessionDir ? { __agentSessionDir: resolvedSessionDir } : {}),
                           ...(affinityOn && (discoveredSessionId || storedSessionId)
                               ? { __agentSessionId: discoveredSessionId || storedSessionId }
                               : {}),
-                          ...(affinityOn ? { __agentSessionAgent: targetAgentDir } : {}),
+                          ...(affinityOn ? { __agentSessionAgent: resolvedAgent } : {}),
                           ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                       }
                     : undefined,
@@ -379,9 +394,15 @@ async function discoverSessionId(sessionDir: string): Promise<string | undefined
         if (!(await fs.exists(sessionDir))) return undefined;
         const entries = await fs.readDir(sessionDir);
         if (entries.length === 0) return undefined;
+        // R5 (0451): prefer only *.json files when selecting newest — non-json files
+        // (log, tmp, etc.) should not win by mtime. Newest-json heuristic: when
+        // multiple session files exist, the newest by mtime wins. This is a best-effort
+        // heuristic; a future agent-native session discovery API would replace it.
+        const jsonEntries = entries.filter((e) => e.toLowerCase().endsWith('.json'));
+        if (jsonEntries.length === 0) return undefined;
         let newestFile: string | undefined;
         let newestMtime = 0;
-        for (const entry of entries) {
+        for (const entry of jsonEntries) {
             const fullPath = join(sessionDir, entry);
             const st = await fs.stat(fullPath);
             if (st?.isFile() && st.mtimeMs > newestMtime) {
@@ -537,12 +558,21 @@ async function gitDiffStat(cwd: string): Promise<string> {
  * corpus pathspecs excluded. Non-git or unreadable trees read as "no changes"
  * so the gate rejects (conservative: a false rejection is a diagnostic, a false
  * pass would certify an empty implement).
+ *
+ * R4 (0451): excludeGlobs parameter replaces the hardcoded pathspec list so
+ * all configured task folders (docs/tasks, docs/tasks2, ...) plus docs/features
+ * are excluded. When called from tests without excludeGlobs, defaults cover
+ * the active folder + docs/features for backward compatibility.
  */
-async function gitHasNonCorpusChanges(cwd: string): Promise<boolean> {
+async function gitHasNonCorpusChanges(
+    cwd: string,
+    excludeGlobs: string[] = ['docs/tasks3/*', 'docs/features/*'],
+): Promise<boolean> {
     try {
+        const excludes = excludeGlobs.map((g) => `:(exclude)${g}`);
         const result = await new NodeProcessExecutor().run({
             command: 'git',
-            args: ['status', '--porcelain', '--', '.', ':(exclude)docs/tasks3/*', ':(exclude)docs/features/*'],
+            args: ['status', '--porcelain', '--', '.', ...excludes],
             cwd,
             maxOutput: 1024 * 1024,
             forceBuffered: true,

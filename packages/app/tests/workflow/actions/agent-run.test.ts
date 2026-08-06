@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
@@ -118,13 +118,25 @@ describe('AgentRunActionRunner', () => {
         expect(capturedFlags.continue).toBeUndefined();
     });
 
-    test('session latch: latch=open, no explicit → continue:true', async () => {
+    test('session latch: affinity-on + latch=open, no explicit → continue not set (R3)', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute({ input: 'hi' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        // R3 (0451): affinity-on (default) → resume via sessionDir only, not bare continue
+        expect(capturedFlags.continue).toBeUndefined();
+    });
+
+    test('session latch: affinity-off + latch=open, no explicit → continue:true (restored Q8)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'hi' }, makeCtx({ vars: { __agentSession: 'open', sessionAffinity: 'false' } }));
+        // R3 (0451): affinity off → latch open sets continue:true (restored Q8)
         expect(capturedFlags.continue).toBe(true);
     });
 
@@ -169,14 +181,19 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
         } as unknown as AgentService;
     }
 
-    test('latch=open, exitCode 2 on first call → retries without continue, succeeds', async () => {
+    test('latch=open, exitCode 2 on first call → retries without continue, succeeds (affinity-off)', async () => {
         const calls: { flags: Record<string, string | boolean> }[] = [];
         const svc = svcFailingThenSucceeding(calls);
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        // R3 (0451): force affinity off so latch sets continue (restored Q8).
+        // The 0406 fallback retries when continue is set but the agent rejects it.
+        const result = await runner.execute(
+            { input: 'verify' },
+            makeCtx({ vars: { __agentSession: 'open', sessionAffinity: 'false' } }),
+        );
         expect(result.ok).toBe(true);
         expect(calls).toHaveLength(2);
-        // First call: latch auto-set continue:true
+        // First call: latch auto-set continue:true (affinity off)
         expect(calls[0]?.flags.continue).toBe(true);
         // Retry: continue dropped
         expect(calls[1]?.flags.continue).toBeUndefined();
@@ -598,6 +615,39 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('empty implement');
+    });
+
+    test('exit-0 + requireDiff with change only under docs/tasks2 → rejected (R4 multi-folder)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-tasks2-'));
+        gitInit(dir);
+        const taskFile = join(dir, 'docs/tasks2/0001_feature.md');
+        mkdirSync(dirname(taskFile), { recursive: true });
+        writeFileSync(taskFile, 'base');
+        gitCommitAll(dir, 'base');
+        writeFileSync(taskFile, 'changed');
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        // Pass excludeGlobs that include both docs/tasks2 and docs/features
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            excludeGlobs: ['docs/tasks2/*', 'docs/features/*', 'docs/tasks3/*'],
+        });
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('empty implement');
+    });
+
+    test('exit-0 + requireDiff with change only under docs/tasks2 passes when not excluded', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-tasks2-pass-'));
+        gitInit(dir);
+        const taskFile = join(dir, 'docs/tasks2/0001_feature.md');
+        mkdirSync(dirname(taskFile), { recursive: true });
+        writeFileSync(taskFile, 'base');
+        gitCommitAll(dir, 'base');
+        writeFileSync(taskFile, 'changed');
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        // No excludeGlobs → defaults only exclude docs/tasks3/*, docs/features/*
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        expect(result.ok).toBe(true);
     });
 
     test('exit-0 + requireDiff with a non-corpus change → ok:true', async () => {
@@ -1285,7 +1335,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         );
     });
 
-    test('setting sessionAffinity false disables cross-hop sessionDir without bare continue', async () => {
+    test('setting sessionAffinity false disables cross-hop sessionDir; affinity-off latch sets continue (R3)', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1296,7 +1346,8 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toBeUndefined();
-        expect(capturedFlags.continue).toBeUndefined();
+        // R3 (0451): affinity off + latch open → continue:true (restored Q8)
+        expect(capturedFlags.continue).toBe(true);
     });
 
     test('later hop inherits sessionDir and sessionId when set in vars', async () => {
@@ -1319,5 +1370,284 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toBe('/tmp/sdir');
         expect(capturedFlags.sessionId).toBe('sess-456');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: R1 — config injection (task 0451)
+// ---------------------------------------------------------------------------
+
+describe('R1 — config injection (task 0451)', () => {
+    test('injected agentConfig.sessionAffinity false disables sessionDir', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: false,
+            default: 'claude',
+        });
+        const ctx = makeCtx({ runId: 'run-123', workdir: '/tmp/w1' });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toBeUndefined();
+        expect(result.setVars?.__agentSessionDir).toBeUndefined();
+    });
+
+    test('injected agentConfig.default appears in sessionDir when agent is inline', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: true,
+            default: 'my-agent',
+        });
+        const ctx = makeCtx({ runId: 'run-456', workdir: '/tmp/w2' });
+        const result = await runner.execute({ input: 'hello', agent: 'inline' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.agent).toBe('my-agent');
+        expect(capturedFlags.sessionDir).toContain('agent-sessions/my-agent');
+        expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('my-agent');
+    });
+
+    test('injected agentConfig.default without explicit agent uses default', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: true,
+            default: 'claude',
+        });
+        const ctx = makeCtx({ runId: 'run-789', workdir: '/tmp/w3' });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toContain('agent-sessions/claude');
+        expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('claude');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: R2 — resolved-agent session keying (task 0451)
+// ---------------------------------------------------------------------------
+
+describe('R2 — resolved-agent session keying (task 0451)', () => {
+    test('setVars uses resolved invocation.agent not pre-resolve heuristics', async () => {
+        const svc = svcWithRunTraced({
+            exitCode: 0,
+            stdout: '',
+            invocation: { ...invocation(), agent: 'codex' as const },
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: true,
+            default: 'default-agent',
+        });
+        const ctx = makeCtx({ runId: 'run-321', workdir: '/tmp/w4' });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('codex');
+        const dir = (result.setVars as Record<string, unknown>).__agentSessionDir as string;
+        expect(dir).toContain('agent-sessions/codex');
+    });
+
+    test('second hop reuses resolved session dir when agent matches', async () => {
+        const ctx = makeCtx({
+            runId: 'run-321',
+            workdir: '/tmp/w4',
+            vars: {
+                __agentSession: 'open',
+                __agentSessionDir: '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
+                __agentSessionAgent: 'codex',
+                __agentSessionId: 'sess-abc',
+            },
+        });
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: true,
+        });
+        // Second hop explicitly selects the same agent so targetAgentDir matches prevAgent
+        const result = await runner.execute({ input: 'continue', agent: 'codex' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionDir).toBe('/tmp/w4/.spur/run/run-321/agent-sessions/codex');
+        expect(capturedFlags.sessionId).toBe('sess-abc');
+    });
+
+    test('different resolved agent on second hop gets different subfolder', async () => {
+        const svc = svcWithRunTraced({
+            exitCode: 0,
+            stdout: '',
+            invocation: { ...invocation(), agent: 'claude' as const },
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {
+            sessionAffinity: true,
+        });
+        // Second hop: prev agent is 'codex', but the new step explicitly selects 'claude'
+        // so targetAgentDir ('claude') doesn't match prevAgent ('codex') → new dir created
+        const ctx = makeCtx({
+            runId: 'run-321',
+            workdir: '/tmp/w4',
+            vars: {
+                __agentSession: 'open',
+                __agentSessionDir: '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
+                __agentSessionAgent: 'codex',
+                __agentSessionId: 'sess-abc',
+            },
+        });
+        const result = await runner.execute({ input: 'test', agent: 'claude' }, ctx);
+
+        expect(result.ok).toBe(true);
+        // The step explicitly selected 'claude', so the session is under claude, not codex
+        const dir = (result.setVars as Record<string, unknown>).__agentSessionDir as string;
+        expect(dir).toContain('agent-sessions/claude');
+        expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('claude');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: R3 — latch vs affinity matrix (task 0451)
+// ---------------------------------------------------------------------------
+
+describe('R3 — latch vs affinity matrix (task 0451)', () => {
+    test('affinity-on + latch open → continue not set, sessionDir passed', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-555',
+            vars: { __agentSession: 'open' },
+        });
+        const result = await runner.execute({ input: 'continue' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBeUndefined();
+        expect(capturedFlags.sessionDir).toContain('.spur/run/run-555/agent-sessions');
+    });
+
+    test('affinity-off + latch open → continue:true set (restored Q8)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-666',
+            vars: { __agentSession: 'open', sessionAffinity: 'false' },
+        });
+        const result = await runner.execute({ input: 'resume' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBe(true);
+        expect(capturedFlags.sessionDir).toBeUndefined();
+    });
+
+    test('explicit continue always wins over latch and affinity', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-777',
+            vars: { __agentSession: 'open', sessionAffinity: 'true' },
+        });
+        const result = await runner.execute({ input: 'fresh', continue: false }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBe(false);
+    });
+
+    test('affinity-on + latch open + explicit continue:true → continue:true honored', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-888',
+            vars: { __agentSession: 'open' },
+        });
+        const result = await runner.execute({ input: 'resume', continue: true }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: R5 — discoverSessionId prefers *.json (task 0451)
+// ---------------------------------------------------------------------------
+
+describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('discovers session id from newest json file in session dir', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-r5-'));
+        // The invocation returns agent: 'claude' (default), so the resolved session dir
+        // is under agent-sessions/claude, not agent-sessions/omp
+        const sessionDir = join(dir, '.spur', 'run', 'run-r5', 'agent-sessions', 'claude');
+        mkdirSync(sessionDir, { recursive: true });
+        // Write a non-json file first (set older mtime) then a json file (newer mtime)
+        const logPath = join(sessionDir, 'session.log');
+        writeFileSync(logPath, 'log content');
+        // Pin the .log file's mtime to 1s ago using utimesSync
+        const oldMtime = new Date(Date.now() - 1000);
+        utimesSync(logPath, oldMtime, oldMtime);
+        writeFileSync(join(sessionDir, 'session-abc.json'), '{}');
+
+        const svc = svcWithRunTraced({
+            exitCode: 0,
+            stdout: '',
+            invocation: invocation(),
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-r5',
+            workdir: dir,
+        });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        // session-abc.json → discovered id = 'session-abc'
+        expect((result.setVars as Record<string, unknown>).__agentSessionId).toBe('session-abc');
+    });
+
+    test('returns undefined when session dir has only non-json files', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-r5-json-'));
+        // The invocation returns agent: 'claude' (default), so the resolved session dir
+        // is under agent-sessions/claude, not agent-sessions/omp
+        const sessionDir = join(dir, '.spur', 'run', 'run-r5b', 'agent-sessions', 'claude');
+        mkdirSync(sessionDir, { recursive: true });
+        // Only non-json files
+        writeFileSync(join(sessionDir, 'session.log'), 'log content');
+
+        const svc = svcWithRunTraced({
+            exitCode: 0,
+            stdout: '',
+            invocation: invocation(),
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-r5b',
+            workdir: dir,
+        });
+        const result = await runner.execute({ input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        // No json files → no session id discovered
+        expect((result.setVars as Record<string, unknown>).__agentSessionId).toBeUndefined();
     });
 });
