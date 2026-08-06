@@ -1,0 +1,304 @@
+/**
+ * Pi extension for Spur (sp) plugin hooks.
+ *
+ * Replaces @vahor/pi-hooks with native Pi event handlers — no spinner,
+ * no pi.exec overhead, no "Operation aborted" on Esc.
+ *
+ * Implements:
+ *   - task-write-guard  (tool_call → block Write/Edit to Spur task files)
+ *   - careful-guard     (tool_call → warn on destructive Bash commands)
+ *   - context-post-tool (tool_result → append to token-ledger.jsonl)
+ *   - context-session-start (session_start → init .session.json)
+ *   - context-session-stop  (session_shutdown → rollup + cleanup)
+ *
+ * Installation:
+ *   Add to ~/.pi/agent/settings.json packages:
+ *     "npm:spur"  (when published), or
+ *   Copy to ~/.pi/agent/extensions/sp-guard/ and reference via:
+ *     "pi": { "extensions": ["path/to/guard-extension.ts"] }
+ */
+
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+
+// ─── Constants ───────────────────────────────────────────────────────────
+
+const SPUR_CONTEXT_DIR = join(process.cwd(), '.spur', 'context');
+const SESSION_FILE = join(SPUR_CONTEXT_DIR, '.session.json');
+const LEDGER_FILE = join(SPUR_CONTEXT_DIR, 'token-ledger.jsonl');
+const REDACTION_CAP = 4096;
+const SUMMARY_MAX_CHARS = 200;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+type TaskOwnership = 'owned' | 'unowned' | 'unknown';
+
+function resolveSpurTaskOwnership(filePath: string): TaskOwnership {
+    const spurBin = process.env.SPUR_BIN || 'spur';
+    const parts = spurBin.split(' ');
+    const cmd = parts[0] ?? 'spur';
+    const args = [...parts.slice(1), 'task', 'resolve', filePath, '--strict', '--json'];
+    const res = spawnSync(cmd, args, {
+        cwd: process.cwd(),
+        encoding: 'utf-8',
+        timeout: 8000,
+    });
+    if (res.error || typeof res.status !== 'number') return 'unknown';
+    return res.status === 0 ? 'owned' : 'unowned';
+}
+
+// Destructive command patterns (mirrors careful-guard.ts)
+const DESTRUCTIVE_PATTERNS: RegExp[] = [
+    /\brm\s+(?:-[rRf]*[rf]+\s*|\s*--recursive\s*)/,
+    /\bDROP\s+(?:TABLE|DATABASE)\b/i,
+    /\bTRUNCATE\b/i,
+    /\bgit\s+push\s+--force\b/,
+    /\bgit\s+reset\s+--hard\b/,
+    /\bgit\s+checkout\s+\.\b/,
+    /\bgit\s+restore\s+\.\b/,
+    /\bkubectl\s+delete\b/,
+    /\bdocker\s+system\s+prune\b/,
+];
+
+// Safe destructive paths (rm -rf of build caches is routine)
+const SAFE_CACHE_PATTERNS = [/node_modules/, /dist\b/, /\.next\b/, /coverage\b/, /build\b/, /\.turbo\b/, /\.cache\b/];
+
+function isDestructiveCommand(command: string): boolean {
+    return DESTRUCTIVE_PATTERNS.some((p) => p.test(command));
+}
+
+function isSafeDestructivePath(command: string): boolean {
+    // Check if rm -rf targets a known safe cache directory
+    const rmMatch = command.match(/\brm\s+(?:-[rRf]*[rf]+\s*|\s*--recursive\s*)(.+)/);
+    if (!rmMatch) return false;
+    const target = rmMatch[1] ?? '';
+    return SAFE_CACHE_PATTERNS.some((p) => p.test(target));
+}
+
+// ─── Token ledger helpers (mirrors context-post-tool.ts) ──────────────────
+
+interface ToolEvent {
+    session_id?: string;
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+}
+
+function estimateTokenCount(text: string): number {
+    if (!text) return 0;
+    // Rough estimate: ~4 chars per token for English text
+    return Math.ceil(text.length / 4);
+}
+
+function summarizeToolEvent(event: ToolEvent): string {
+    const input = event.tool_input ?? {};
+    const candidates = [input.file_path, input.command, input.pattern, input.glob_pattern, input.glob, input.path];
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) {
+            const s = c.trim();
+            return s.length > SUMMARY_MAX_CHARS ? `${s.slice(0, SUMMARY_MAX_CHARS - 3)}...` : s;
+        }
+    }
+    return `(${event.tool_name ?? 'unknown'})`;
+}
+
+function redactText(text: string): string {
+    // Strip obvious secret patterns
+    let result = text.slice(0, REDACTION_CAP);
+    result = result.replace(
+        /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+)?PRIVATE\s+KEY-----/g,
+        '[REDACTED: PRIVATE KEY]',
+    );
+    result = result.replace(/ghp_[A-Za-z0-9]{36}/g, '[REDACTED: GITHUB_TOKEN]');
+    result = result.replace(/gho_[A-Za-z0-9]{36}/g, '[REDACTED: GITHUB_TOKEN]');
+    result = result.replace(/sk-[A-Za-z0-9]{20,}/g, '[REDACTED: API_KEY]');
+    result = result.replace(/api[_-]key['"]?\s*[:=]\s*['"][A-Za-z0-9_-]{16,}['"]/gi, '[REDACTED: API_KEY]');
+    result = result.replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED: AWS_KEY]');
+    return result;
+}
+
+function appendToLedger(event: ToolEvent, command: string | undefined): void {
+    try {
+        if (!existsSync(SPUR_CONTEXT_DIR)) return;
+        const sessionId = readSessionId();
+        if (!sessionId) return;
+
+        const summary = summarizeToolEvent(event);
+        const tokens = command ? estimateTokenCount(redactText(command)) : 0;
+
+        const ledgerEntry = JSON.stringify({
+            session: sessionId,
+            type: event.tool_name === 'Read' ? 'read' : 'write',
+            tool: event.tool_name,
+            path: event.tool_input?.file_path ?? null,
+            summary,
+            tokens,
+            timestamp: new Date().toISOString(),
+        });
+
+        appendFileSync(LEDGER_FILE, `${ledgerEntry}\n`);
+    } catch {
+        // fail-open: skip ledger writes on error
+    }
+}
+
+function readSessionId(): string | undefined {
+    try {
+        if (!existsSync(SESSION_FILE)) return undefined;
+        const data = JSON.parse(readFileSync(SESSION_FILE, 'utf-8')) as { session_id?: string };
+        return data.session_id;
+    } catch {
+        return undefined;
+    }
+}
+
+// ─── Session helpers (mirrors context-session-start.ts, context-session-stop.ts) ─
+
+function generateSessionId(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).slice(2, 10);
+    return `${timestamp}-${random}`;
+}
+
+function resolveAgentHint(): string | undefined {
+    const candidates = [process.env.SPUR_AGENT, process.env.TERM_PROGRAM, process.env.SPUR_DEFAULT_AGENT];
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return 'pi';
+}
+
+function resolveModelHint(): string | undefined {
+    const candidates = [process.env.SPUR_MODEL, process.env.ANTHROPIC_MODEL, process.env.OPENAI_MODEL];
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return undefined;
+}
+
+function initSession(): void {
+    try {
+        mkdirSync(SPUR_CONTEXT_DIR, { recursive: true });
+        const sessionId = generateSessionId();
+        const session = {
+            session_id: sessionId,
+            agent: resolveAgentHint(),
+            model: resolveModelHint(),
+            started_at: new Date().toISOString(),
+        };
+        writeFileSync(SESSION_FILE, `${JSON.stringify(session, null, 2)}\n`);
+
+        // Append session_start event to ledger
+        const startEntry = JSON.stringify({
+            session: sessionId,
+            type: 'session_start',
+            agent: session.agent,
+            model: session.model,
+            timestamp: session.started_at,
+        });
+        appendFileSync(LEDGER_FILE, `${startEntry}\n`);
+    } catch {
+        // fail-open
+    }
+}
+
+function cleanupSession(): void {
+    try {
+        if (!existsSync(SESSION_FILE)) return;
+        const session = JSON.parse(readFileSync(SESSION_FILE, 'utf-8')) as { session_id?: string };
+        const sessionId = session.session_id;
+
+        // Compute rollup totals from ledger
+        let reads = 0;
+        let writes = 0;
+        let tokens = 0;
+        if (sessionId && existsSync(LEDGER_FILE)) {
+            for (const line of readFileSync(LEDGER_FILE, 'utf-8').split('\n')) {
+                if (!line.trim()) continue;
+                try {
+                    const evt = JSON.parse(line) as { session?: string; type?: string; tokens?: number };
+                    if (evt.session !== sessionId) continue;
+                    if (evt.type === 'read') reads++;
+                    else if (evt.type === 'write') writes++;
+                    if (evt.tokens) tokens += evt.tokens;
+                } catch {
+                    // skip unparseable lines
+                }
+            }
+        }
+
+        // Append session_end event
+        const endEntry = JSON.stringify({
+            session: sessionId,
+            type: 'session_end',
+            reads,
+            writes,
+            tokens,
+            timestamp: new Date().toISOString(),
+        });
+        appendFileSync(LEDGER_FILE, `${endEntry}\n`);
+
+        // Cleanup session file
+        rmSync(SESSION_FILE, { force: true });
+    } catch {
+        // fail-open
+    }
+}
+
+// ─── Extension entry point ───────────────────────────────────────────────
+
+export default function (pi: ExtensionAPI): void {
+    // ── task-write-guard + careful-guard ──────────────────────────────
+    pi.on('tool_call', async (event, ctx) => {
+        // task-write-guard: block Write/Edit to Spur task files
+        if (event.toolName === 'Write' || event.toolName === 'Edit') {
+            const input = event.input as Record<string, unknown> | undefined;
+            const filePath = typeof input?.file_path === 'string' ? input.file_path : '';
+            if (filePath && resolveSpurTaskOwnership(filePath) === 'owned') {
+                const msg = `Denied: ${filePath} is a Spur task file. Use 'spur task update' instead.`;
+                ctx.ui.notify(msg, 'error');
+                return { block: true, reason: msg };
+            }
+        }
+
+        // careful-guard: warn on destructive Bash commands
+        if (event.toolName === 'Bash') {
+            const input = event.input as Record<string, unknown> | undefined;
+            const command = typeof input?.command === 'string' ? input.command : '';
+            if (command && isDestructiveCommand(command) && !isSafeDestructivePath(command)) {
+                const msg = `Warning: destructive command: ${command.slice(0, 120)}`;
+                ctx.ui.notify(msg, 'warning');
+                // Ask for confirmation
+                const ok = await ctx.ui.confirm('Destructive command', msg);
+                if (!ok) return { block: true, reason: 'Cancelled by user' };
+            }
+        }
+
+        return {};
+    });
+
+    // ── context-post-tool: append to token-ledger.jsonl ───────────────
+    pi.on('tool_result', async (event) => {
+        const input = event.input as Record<string, unknown> | undefined;
+        const command = typeof input?.command === 'string' ? input.command : undefined;
+        appendToLedger(
+            {
+                session_id: readSessionId(),
+                tool_name: event.toolName,
+                tool_input: input as Record<string, unknown>,
+            },
+            command,
+        );
+    });
+
+    // ── context-session-start: init session tracking ─────────────────
+    pi.on('session_start', async () => {
+        initSession();
+    });
+
+    // ── context-session-stop: rollup + cleanup ───────────────────────
+    pi.on('session_shutdown', async () => {
+        cleanupSession();
+    });
+}
