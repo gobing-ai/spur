@@ -74,14 +74,18 @@ export interface AgentRunAgentConfig {
  * invocation, `git diff --stat`, and a bounded tail of captured stdout/stderr.
  * Best-effort — a write failure here never masks the underlying `ok:false` result.
  *
- * Session latch (Q8): the first executed agent.run opens a session (continue: false);
- * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
- * Relies on engine `ActionResult.setVars` (F1, available ≥ 0.3.9); on older engines the
- * field is ignored and the latch degrades to explicit per-step `continue`.
+ * Session latch (Q8) + affinity matrix (H83 / 0451 R3 / 0452 R4 docs):
  *
- * Resume-mode fallback (task 0406): when the latch auto-sets continue and the agent's
- * resume mode rejects a new prompt (codex), the action retries once as a fresh dispatch
- * and writes `__agentSession: "no-resume"` so subsequent steps skip the latch.
+ *   | affinityOn  | resume via sessionDir/sessionId; latch does NOT set bare continue |
+ *   | affinityOff | Q8 latch may set continue:true; 0406 exit-2 → no-resume fallback  |
+ *
+ * On success, sets `__agentSession: "open"`. Relies on engine `ActionResult.setVars`
+ * (F1, available ≥ 0.3.9); on older engines the field is ignored and the latch
+ * degrades to explicit per-step `continue`.
+ *
+ * Resume-mode fallback (task 0406): when affinityOff latch auto-sets continue and the
+ * agent's resume mode rejects a new prompt (codex), the action retries once as a fresh
+ * dispatch and writes `__agentSession: "no-resume"` so subsequent steps skip the latch.
  *
  * Live output capture (feature D2 / task 0426): the redacted incremental
  * lifecycle events are emitted to the observability bus as `workflow.agent`;
@@ -134,6 +138,13 @@ export class AgentRunActionRunner implements ActionRunner {
             if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
                 sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
             }
+        } else {
+            // Without affinity, still write session logs under .spur/run/<runId>/agent-sessions/
+            // instead of the agent's cwd (project root). One-hop dir only — not persisted to
+            // __agentSessionDir for subsequent hops, since affinity tracking is off.
+            if (!sessionDir) {
+                sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
+            }
         }
         const storedSessionId = asOptionalString(context.vars.__agentSessionId);
 
@@ -168,9 +179,9 @@ export class AgentRunActionRunner implements ActionRunner {
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;
 
-        if (affinityOn && sessionDir) {
+        if (sessionDir) {
             flags.sessionDir = sessionDir;
-            if (storedSessionId) {
+            if (affinityOn && storedSessionId) {
                 flags.sessionId = storedSessionId;
             }
         }
@@ -357,7 +368,8 @@ export class AgentRunActionRunner implements ActionRunner {
                         ),
                     );
                 } catch {
-                    // best-effort
+                    // R9 (0452): best-effort sidecar write — never overrides agent ok/error.
+                    // No workflow.debug bus event; failure is informational only.
                 }
             }
 
@@ -531,7 +543,8 @@ async function writePartialWorkArtifact(
         await fs.ensureDir(dirname(target));
         await fs.writeFile(target, body);
     } catch {
-        // Best-effort — never let artifact-writing mask the real failure.
+        // R9 (0452): best-effort partial-work artifact — never mask ok:false.
+        // Standalone helper has no logger/bus; caller already has the failure result.
     }
 }
 

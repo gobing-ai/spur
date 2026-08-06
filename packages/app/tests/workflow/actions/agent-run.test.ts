@@ -1345,7 +1345,8 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         const result = await runner.execute({ input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
-        expect(capturedFlags.sessionDir).toBeUndefined();
+        expect(capturedFlags.sessionDir).toBeTruthy();
+        expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/');
         // R3 (0451): affinity off + latch open → continue:true (restored Q8)
         expect(capturedFlags.continue).toBe(true);
     });

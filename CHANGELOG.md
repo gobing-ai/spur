@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.34] — 2026-08-06
+
+### Added
+
+- feat(core): done→active lifecycle edge, precheck reopen, sh -n validate, actionable L4 messages (b9191d45)
+
+### Fixed
+
+- fix(core): verdict parser maps Status by header name instead of hardcoded column (230e8509)
+- fix(app): agent.run config injection, affinity keying, latch collapse, and pipeline hardening (087ead56)
+- fix(feature-check): scan all phase folders for feature_id edges (tasks2 + tasks3) (bd553e39)
+
+### Changed
+
+- docs(core): 0451 companion — H83 follow-up AC, feature N active, task statuses (4330efe3)
+- docs(corpus): add task 0453 and feature N for 0451 post-mortem findings (b6526465)
+- docs(corpus): update task 0451 status, feature H83 reopen, pipeline YAML fix (3e850c39)
+- docs: update AGENTS.md best practices, index, and residual corpus changes (3e29be67)
+- docs: verify/implement skill contract hardening — canonical Req table and backtick citations (c542c5fc)
+- docs: 0453 pipeline post-mortem — Solution, Testing, Review sections (2af9d56c)
+
 ## [0.3.33] — 2026-08-05
 
 ### Added
