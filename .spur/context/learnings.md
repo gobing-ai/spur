@@ -798,3 +798,5 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 
 
 - **[2026-07-23] Command `allowed-tools` least privilege (0318).** Wrapper agents inherit `allowed-tools` for `Skill()` dispatches. Trim Write/Edit when mutation is CLI-gated (`spur task update` via Bash), workflow-engine (`spur workflow run`), or subagent-delegated — not when the same agent authors code/docs (dev-run/unit/simplify/reverse, dogfood, rule-add, workflow-add). Regression gate: `command-contract.test.ts` block `(j)`. Prefer KEEP on shaky traces (one-release-compat). Feature O’s “R10” is shadow-migration, not this least-privilege principle (0314 R10 / 0315 notes) — task AC may trip DD-09 L4 warnings without blocking `task check` pass.
+
+- **[2026-08-06] Workflow monorepo paths:** SSOT `config/workflows/`; runtime examples `.spur/workflows/*` (symlink); publish tree via `build:bundle` → `apps/cli/config/`. See `docs/04_DESIGN.md` monorepo path model and `docs/design/e2e-workflow-for-system-development.md` Path Model.

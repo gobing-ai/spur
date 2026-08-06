@@ -240,3 +240,5 @@ Each entry records a past mistake and its correction. Maintained by the
 
 - [2026-07-08] Do not pass multiline commit messages through a bash heredoc (`git commit -m "$(cat <<'EOF' … EOF\n)"`). The embedded shell parser mangles the body (`EOF` tag split, `$`/`\`/backtick expansion), producing a truncated message that lefthook `cog` rejects with "expected commit_type". Pattern that WORKS: `Write` the message to `/tmp/<slug>-commit-msg.txt`, then `git commit -F /tmp/<slug>-commit-msg.txt`. The `-F` path bypasses shell quoting entirely and is the reliable workflow for any multi-paragraph conventional commit. Beside it, also keep English prose free of CJK tokens ("一站式" leaked into chat output on 2026-07-08 — keep English in English; CJK only mirrors an explicit user language shift).
 
+
+- **[2026-08-06] Workflow path model — no triple-sync.** Edit `config/workflows/` only (SSOT). `.spur/workflows/` is a symlink to it in this monorepo. `apps/cli/config/` is gitignored `build:bundle` output — never hand-cp after pipeline edits. Wrong pattern from 0454/0455 thrash: keep three trees in sync. Right: one edit; rebuild package only when testing published CLI.

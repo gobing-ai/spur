@@ -132,6 +132,12 @@ docs/           # 00–05 + 99 + plans/features/design
 
 Apps are thin transports; logic lives in `packages/app` (ADR-021).
 
+**Workflow YAML (monorepo self-dev):** edit **`config/workflows/`** only (tracked SSOT).
+`.spur/workflows/` is a **symlink** to that tree — runtime path for `spur workflow run
+.spur/workflows/task-pipeline.yaml`. **Do not** hand-`cp` into `apps/cli/config/` (gitignored
+`build:bundle` artifact). Refresh the package tree with `build:bundle` / `bundle-config` only when
+testing the published layout. Details: `docs/04_DESIGN.md` §2.3 monorepo path model.
+
 Domain engines are external `@gobing-ai/ts-*` from `~/xprojects/ts-libs/`:
 
 | Package                              | Role                                                |

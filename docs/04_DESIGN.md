@@ -559,9 +559,17 @@ here. The bare `recommended` preset is removed; `recommended-pre-check` is the d
 it relies on the `~/.config/spur` seed. The published global install (`spur.js` + package-root
 `config/`) reads the bundled tree directly and is the primary path.
 
-No symlinks participate in install or init — config propagates by copy-and-resolve only. (The
-monorepo may symlink `.spur/{rules,workflows,…}` → repo-root `config/` to avoid duplication during
-Spur's own development; that is a monorepo convenience only.)
+No symlinks participate in install or init — config propagates by copy-and-resolve only.
+
+**Monorepo path model (Spur self-dev — avoid triple-sync thrash):**
+
+| Path | Role | Agent rule |
+| --- | --- | --- |
+| `config/workflows/` | **Tracked SSOT** for this checkout | **Edit here** when changing pipeline/lifecycle YAML |
+| `.spur/workflows/` | **Symlink → `config/workflows/`** in this monorepo | Runtime / command examples (`.spur/workflows/task-pipeline.yaml`). Do **not** copy between `config/` and `.spur/` — same inodes |
+| `apps/cli/config/` | **`build:bundle` / `bundle-config` artifact** (gitignored) | Do **not** hand-`cp` or hand-edit. Regenerated on CLI package build for npm ship |
+
+Wrong pattern (0454/0455 waste): “keep `config/`, `.spur/`, and `apps/cli/config/` in sync” after every YAML edit. Right pattern: edit SSOT once; refresh the package tree only via `bun run --filter @gobing-ai/spur build:bundle` (or `spur-dev bundle-config`) when testing the **published** layout.
 
 ### 2.4 Config loader — single facade in `@gobing-ai/spur-config` (ADR-027)
 
@@ -923,13 +931,21 @@ directly — status moves use the normal `spur task update <wbs> <status>` verb 
 through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
 identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 
-**Vars.** `wbs`, `profile`, `spurBin`, `agent`, `stepTimeoutMs`, `implementTimeoutMs`,
-`qualityGateCmd`, `qualityGateMaxFixAttempts`, `formatCmd`, `__hitlAnswer`. The three command-shaped
-vars are the per-project override surface: `qualityGateCmd` (default `bun run autofix && bun run
-spur-check`) is single-sourced across the soft probe, the `/sp:dev-fixall` input and the recheck;
-`formatCmd` (default `bun run format`) is the post-implement auto-format. `formatCmd` is invoked
-best-effort (`${vars.formatCmd} ; exit 0`) — a missing or failing formatter must not abort a run,
-because `qualityGateCmd` at `test` is the gate that actually decides.
+**Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
+`maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`,
+`formatCmd`, `__hitlAnswer`. The three command-shaped vars are the per-project override surface:
+`qualityGateCmd` (default `bun run autofix && bun run spur-check`) is single-sourced across the soft
+probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
+post-implement auto-format. `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
+missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
+that actually decides. **Implement-only pin (task 0454):** `implementAgent` defaults to the same seed
+as `agent` and is used only by the implement `agent.run` hop — override with
+`--vars '{"implementAgent":"omp-zai"}'` without retargeting review/verify. **Size precheck (0454):**
+`maxImplementReqs` (default `5`) and `maxImplementPlanItems` (default `8`) feed
+`plugins/sp/scripts/task-size-precheck.ts`; precheck→implement requires
+`.spur/run/<wbs>-precheck-size.status=PASS`. **Edit surface:** change this YAML under
+`config/workflows/task-pipeline.yaml` only (see §2.3 monorepo path model) — no hand-sync to
+`.spur/workflows` or `apps/cli/config`.
 
 **Step→command mapping (ADR-026, amended by ADR-043):** `implement` → `/sp:dev-run --mode implement`
 (NOT `--mode full` — that drives this pipeline, so calling it here recurses); `test` → **the project

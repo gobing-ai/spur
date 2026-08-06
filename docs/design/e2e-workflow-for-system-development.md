@@ -246,16 +246,18 @@ eight workflows is 56 states; the 26 above are the operator-walked operational s
 
 ## Path Model
 
-Workflow paths have two valid forms in this repository:
+Workflow paths in this repository:
 
 | Path | Role | Rule |
 | --- | --- | --- |
 | `.spur/workflows/<name>.yaml` | Project-facing workflow root used by operators, plugin commands, and seeded local config | Prefer this path in command examples and wrapper command docs. |
-| `config/workflows/<name>.yaml` | Physical repo source for this checkout; `.spur/workflows` is a symlink to it | Edit either path only when you understand they are the same inode in this repo. Do not copy between them. |
+| `config/workflows/<name>.yaml` | Physical repo source for this checkout; `.spur/workflows` is a symlink to it | **Monorepo edit SSOT.** Do not copy between `config/` and `.spur/` — same inodes. |
+| `apps/cli/config/workflows/` | Gitignored `build:bundle` / `bundle-config` output for npm package ship | Do **not** hand-edit or hand-`cp` after pipeline edits. Rebuild the CLI package when you need the published tree. |
 
-Implementation and validation may use either path. Plugin command examples should use
-`.spur/workflows/*` because it is the stable project-local surface after `spur init`. Repository
+Implementation and validation may use either of the first two paths. Plugin command examples should
+use `.spur/workflows/*` because it is the stable project-local surface after `spur init`. Repository
 tests may validate `config/workflows/*` directly because that is the committed physical source.
+**Never** treat `apps/cli/config/` as a third source of truth that must stay manually in sync.
 
 ## System Principles
 
