@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
@@ -37,6 +37,29 @@ describe('HistoryService', () => {
         test('treats empty string since as no filter', async () => {
             const svc = new HistoryService(makeCtx());
             await expect(svc.analyze('')).resolves.toBeDefined();
+        });
+
+        test('prices and aggregates a seeded ETL record through analyze', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await db.run(
+                `INSERT INTO history_etl_claude (record_hash, source_file, source_line, split_index, payload_json, imported_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                'hash-1',
+                'test.jsonl',
+                1,
+                0,
+                JSON.stringify({
+                    source_record_id: 'r1',
+                    created_at: '2025-01-01T00:00:00Z',
+                    content: 'hello world',
+                    model: 'claude-sonnet-4-20250514',
+                }),
+                '2025-01-01T00:00:00Z',
+            );
+            const svc = new HistoryService(ctx);
+            const summary = await svc.analyze();
+            expect(summary.totals.records).toBe(1);
         });
     });
 
@@ -78,6 +101,31 @@ describe('HistoryService', () => {
             // A file path selects force-file mode; the 0.3.0 importer surfaces a missing
             // file as a rejection rather than swallowing it (R8: encode real behavior).
             await expect(svc.import('claude', { file: '/tmp/spur-nonexistent.jsonl' })).rejects.toThrow();
+        });
+        test('passes dryRun true through to the importer without error', async () => {
+            const svc = new HistoryService(makeCtx());
+            const result = await svc.import('claude', { mode: 'incremental', root: emptyRoot(), dryRun: true });
+            expect(result.source).toBe('claude');
+            expect(result.mode).toBe('incremental');
+            expect(result.scannedFiles).toBe(0);
+        });
+
+        test('treats empty string file as absent, defaulting to force-file mode without a files list', async () => {
+            const svc = new HistoryService(makeCtx());
+            const result = await svc.import('claude', { file: '', root: emptyRoot() });
+            expect(result.mode).toBe('force-file');
+            expect(result.scannedFiles).toBe(0);
+        });
+
+        test('treats empty string root as absent, scanning the provided file instead', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-file-'));
+            const file = join(dir, 'empty.jsonl');
+            writeFileSync(file, '');
+            const svc = new HistoryService(makeCtx());
+            const result = await svc.import('claude', { root: '', file });
+            expect(result.mode).toBe('force-file');
+            expect(result.scannedFiles).toBe(1);
+            expect(result.processedLines).toBe(0);
         });
     });
 });
