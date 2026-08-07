@@ -9,7 +9,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
     const noun = program.command('history').summary('import and analyze coding-agent history');
     noun.command('import')
         .description('Import agent conversation JSONL.')
-        .option('--source <source>', 'pi|claude|codex|gemini|opencode|antigravity|openclaw', 'pi')
+        .option('--source <source>', 'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy', 'pi')
         .option('--file <path>', 'Import one JSONL file')
         .option('--root <path>', 'Scan a history root')
         .option('--mode <mode>', 'full|incremental|force-file')
@@ -60,6 +60,7 @@ function formatImportResult(r: HistoryImportResult): string {
         `lines: ${r.processedLines}`,
         `imported: ${r.importedRecords}`,
         `duplicates: ${r.skippedDuplicates}`,
+        `unknown: ${r.unknownRecords}`,
         `parse_errors: ${r.parseErrors.length}`,
         `validation_errors: ${r.validationErrors.length}`,
     ].join('\n');

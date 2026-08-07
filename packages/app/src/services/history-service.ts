@@ -26,7 +26,18 @@ export interface HistoryServiceContext {
 // Private constants
 // ---------------------------------------------------------------------------
 
-const SOURCES: readonly LlmJsonlSource[] = ['pi', 'claude', 'codex', 'gemini', 'opencode', 'antigravity', 'openclaw'];
+const SOURCES: readonly LlmJsonlSource[] = [
+    'pi',
+    'claude',
+    'codex',
+    'gemini',
+    'opencode',
+    'antigravity',
+    'openclaw',
+    'omp',
+    'grok',
+    'agy',
+];
 const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 
 // ---------------------------------------------------------------------------
