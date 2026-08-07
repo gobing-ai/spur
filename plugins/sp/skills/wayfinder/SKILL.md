@@ -67,11 +67,20 @@ Activate sp:wayfinder when:
 
 ## Core Principles
 
-### 1. The Map Is a Spur Feature
+### 1. The Map Is a Spur Feature — but decisions are not tasks
 
-The map is a `spur feature` — its description IS the map body. Every investigation ticket is a `spur task` child of that feature. No new data model needed; sp already has the nouns (feature, task, dependency graph, WBS, status lifecycle).
+The map is a `spur feature` — its description IS the map body. sp already has the nouns (feature, task, dependency graph, WBS, status lifecycle), so no new data model is needed.
 
-**Shippable destinations:** If the map destination is a **shippable implementation** (code lands, not design-doc-only), research/grilling tickets alone are not “feature done.” After investigation tickets close, graduate implement work into tasks; close the map only when `/sp:dev-verifyall --feature <id> --fix all` reports **`Shippable: PASS`** (or use `--skip-shippable` only for deliberate non-ship audits). Per-task research PASS is not enough — see `sp:code-verification` Step 13.
+**Only executable investigations become `spur task` children.** A task file is work to be done, not a question to be answered — see [`../spur-dev/references/cross-cutting.md`](../spur-dev/references/cross-cutting.md) § What belongs in a task file. Apply its test to every candidate:
+
+| Candidate | Where it lives |
+|---|---|
+| Research, prototype, inventory, measurement — an implementer can execute it and produce an artifact | **`spur task`** child of the map |
+| A decision needing the operator's judgment — "decide X", "choose A or B", "what should the contract be" | **`## Open questions`** on the map body, never a task |
+
+A decision filed as a task sits in the feature's Tasks table looking like queued work, gets handed to an implementing agent, and is either stalled on or invented. Resolve open questions in conversation with the operator; record the answer in **`## Decisions so far`**; then create tasks for whatever work the answer implies.
+
+**Shippable destinations:** If the map destination is a **shippable implementation** (code lands, not design-doc-only), research and prototype tickets alone are not “feature done.” After investigation tickets close, graduate implement work into tasks; close the map only when `/sp:dev-verifyall --feature <id> --fix all` reports **`Shippable: PASS`** (or use `--skip-shippable` only for deliberate non-ship audits). Per-task research PASS is not enough — see `sp:code-verification` Step 13.
 
 ### 2. The Destination Fixes the Scope
 
@@ -106,10 +115,11 @@ Invoked when the operator has a loose idea and the destination itself is foggy. 
 3. **Create the map as a spur feature.** `spur feature create "<destination>"`. The feature description carries:
    - **## Destination** — the one-line destination statement
    - **## Notes** — domain context, skills every session should consult, standing preferences
-   - **## Decisions so far** — empty on creation; populated as tickets resolve (one line per closed ticket: WBS + title + one-line gist of the answer)
+   - **## Open questions** — sharp decisions that need the operator's judgment. These are **never tasks**. Each carries the question, why only the operator can settle it, and what it blocks. Resolved in conversation, then moved to Decisions so far.
+   - **## Decisions so far** — empty on creation; populated as questions and tickets resolve (one line each: the decision, or WBS + title + one-line gist)
    - **## Not yet specified** — the fog of war: in-scope questions you can sense but can't yet phrase sharply enough to ticket
    - **## Out of scope** — work consciously ruled beyond this destination
-4. **Create child tasks for what's specifiable now.** `spur task create "<question>" --feature <feature-id>` for each sharp question. Ticket types (see below) determine which skill resolves them.
+4. **Create child tasks only for executable investigations.** `spur task create "<title>" --feature <feature-id>` for each sharp question **an implementer can answer without the operator** — research, prototype, inventory, measurement. Anything needing the operator's judgment goes to **## Open questions** instead. Ticket types (see below) determine which skill resolves the tasks.
 5. **Wire blocking edges.** After all tickets exist (they need IDs before they can reference each other), set dependencies via `spur task update`. Wiring sorts tickets into the frontier (open, unblocked, unclaimed) and the blocked.
 6. **Populate the fog.** Everything you can't yet specify stays in **## Not yet specified** — sketch it as loosely or as fully as the view allows. Don't pre-slice fog into ticket-sized pieces; one patch may graduate into several tickets, or none.
 7. **Stop.** Charting is one session's work.
@@ -127,8 +137,11 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    |---|---|---|
    | **Research** | Fact-finding, doc reading, API exploration. Delegate to `sp:brainstorm` or deep-research via `spur agent run`. | Linked summary as a task artifact |
    | **Prototype** | Cheap, rough, concrete artifact to react to — an outline, stub, or rough implementation via `sp:code-implementation`. | Linked prototype as a task artifact |
-   | **Grilling** | One question at a time via `sp:dev-refine`. The default ticket type when the question is a decision. | Decision recorded in task body |
-   | **Task** | Literal manual work — nothing to decide, prototype, or research. Moving data, provisioning access. | Checklist in task body; resolved when done |
+   | **Task** | Literal manual work — nothing to prototype or research. Moving data, provisioning access. | Checklist in task body; resolved when done |
+
+   An open question from the map is **not** resolved this way. It is settled with the operator in
+   conversation (`AskUserQuestion` where available) and recorded straight into **## Decisions so far**
+   — no task is claimed, and it does not consume the session's one ticket.
 
 5. **Record the resolution.** Post the answer in the task body, then `spur task update <wbs> done`. Append one line to the map's **## Decisions so far**: `- [<WBS> <title>](path) — <one-line gist of the answer>`.
 6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **## Not yet specified** so it lives only as its new ticket.
@@ -137,13 +150,12 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
 
 ### Ticket Types
 
-Each ticket carries its type in the task body or a tag, signaling which skill resolves it:
+Each ticket carries its type in the task body or a tag, signaling which skill resolves it. **Every type here is executable by an implementer** — that is what makes it a task at all. Decisions are not on this list; they live in the map's `## Open questions`.
 
 | Type | Label | Resolved by | When to use |
 |------|-------|-------------|-------------|
 | Research | `wayfinder:research` | `sp:brainstorm` / `spur agent run` | Knowledge outside the current working directory is required |
 | Prototype | `wayfinder:prototype` | `sp:code-implementation` (rough take) | "How should it look/behave?" is the key question |
-| Grilling | `wayfinder:grilling` | `sp:dev-refine` | A decision needs structured Q&A — the default type |
 | Task | `wayfinder:task` | Manual checklist | Literal work with nothing to decide, prototype, or research |
 
 ### Fog of War
@@ -156,13 +168,15 @@ The map's **## Not yet specified** section is where that dim view is written dow
 
 1. **Ask now when** the question is sharp **and the operator already holds the answer** — a preference, a scope call, a ruling only they can make. These are decision briefs, not investigations. Put them to the operator in the charting session (`AskUserQuestion` where available), record the answer directly in **## Decisions so far**, and never create a ticket. A ticket here buys nothing and costs a session.
 2. **Merge when** the question is sharp and needs real work, **but a sibling ticket's session would answer it anyway** — same files, same sources, same body of evidence, or one is unreadable without the other. Cohesion beats sharpness: two sharp questions answered by one investigation are **one ticket**. See [`../spur-dev/references/cross-cutting.md`](../spur-dev/references/cross-cutting.md) § Task sizing.
-3. **Ticket when** the question is sharp, answering it needs real work, **and no sibling covers it** — research, a prototype, a codebase inventory, or structured back-and-forth that will not fit in one exchange. Blocked-but-sharp still tickets.
+3. **Ticket when** the question is sharp, answering it needs real work, no sibling covers it, **and an implementer can execute it without the operator** — research, a prototype, a codebase inventory, a measurement. Blocked-but-sharp still tickets.
+3b. **Open question when** it is sharp and needs deciding but the operator holds the judgment and is not available right now. It goes to the map's **## Open questions**, never to a task. This is test 1's deferred form: the answer still comes from the operator, just in a later session.
 4. **Not yet specified when** you can't yet phrase the question sharply. Don't pre-slice the fog into ticket-sized pieces: it's coarser than a ticket, and one patch may graduate into several tickets, or none, once the frontier reaches it.
 
-Two failure modes this prevents:
+Three failure modes this prevents:
 
 - Charting a map, then watching the operator answer half the tickets in their next message. Those were briefs mis-filed as tickets (test 1) — consolidate them and record the answers.
 - Charting a map the operator sends back as over-sliced. Those were cohesive investigations split across tickets (test 2). Splitting one body of evidence across several sessions is worse than merging: each session re-derives the same context, and no session sees the whole picture.
+- Filing a decision as a task (test 3 vs 3b). It then sits in `spur task list` looking like queued work; an implementing agent picks it up and either stalls or invents the decision and calls it done. Task files are work to be done, not questions to be answered.
 
 **Sanity check before creating the tickets:** count them. A first cut above ~5 is a signal, not a plan — re-run test 2 across every pair before writing anything. Prefer the coarser map; a ticket that turns out to hold two questions can be split when the frontier reaches it, but a session spent on a fragment is spent.
 
@@ -200,6 +214,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 | "I'll auto-escalate to wayfinding when the topic looks big." | Scope judgment needs human confirmation. A 30-minute quick-answer need might touch a big domain without requiring a multi-session map. Always ask. |
 | "The map feature description is just boilerplate — the tasks are what matter." | The map is the orienting artifact every session loads first. Without a clear destination and running Decisions-so-far log, each session re-derives context from scratch. |
 | "I'll pre-slice the fog into ticket stubs so the map looks more complete." | Pre-sliced fog is noise — it creates tickets for questions you can't yet phrase, which wastes time and may point the wrong direction once earlier tickets resolve. |
+| "Making it a task gives the decision a WBS, a status, and a place in the queue." | Those are exactly the reasons not to. A decision with a WBS looks like queued work to every agent and dashboard that reads the corpus, and an implementer handed it will invent the answer rather than stall. The map's **## Open questions** gives it a home without pretending it is executable. |
 | "More tickets make the map look thorough." | A ticket costs a session. If the operator answers it in their next message, it was a decision brief mis-filed as a ticket — ask those during charting and record them in Decisions so far. |
 | "These are two distinct questions, so they're two tickets." | Distinctness is not the test — cohesion is. If one investigation's evidence answers both, they're one ticket. A map is judged by how few sessions reach the destination, not by how many questions it enumerates. |
 | "I'll ticket the secondary sources now and handle the primary ones downstream." | Backwards. The sources or files the operator cares most about belong in the *first* discovery ticket. Deciding a contract on evidence from the peripheral cases is how a map ends up re-derived later. |
@@ -213,6 +228,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 - Skipping the claim step (`spur task update <wbs> wip`) before work — concurrent sessions may collide.
 - Pre-slicing fog into ticket stubs before the questions are sharp.
 - Ticketing a question the operator could answer on the spot — a preference or scope ruling is a decision brief, not an investigation ticket.
+- A ticket whose deliverable is a decision ("decide X", "choose A or B", "what should the contract be"). Task files are work to be done; that belongs in **## Open questions**.
 - Two tickets that would read the same files or the same sources to answer — that is one investigation split in two.
 - A discovery ticket that omits the operator's primary subjects while a downstream ticket covers them.
 - A first cut above ~5 tickets that was written without re-checking every pair for cohesion.
@@ -225,7 +241,8 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 
 - [ ] Destination is a single, concrete sentence (not a paragraph, not a vague noun phrase).
 - [ ] Map feature exists (`spur feature show <id>` returns clean).
-- [ ] Feature description has all five sections: Destination, Notes, Decisions so far (empty), Not yet specified, Out of scope.
+- [ ] Feature description has all six sections: Destination, Notes, Open questions, Decisions so far (empty), Not yet specified, Out of scope.
+- [ ] No task's deliverable is a decision — every ticket is executable by an implementer without the operator. Decisions sit in **## Open questions**.
 - [ ] Every specifiable question has a child task with a sharp, answerable question in its body.
 - [ ] Blocking edges are wired (tasks that depend on others list them in their dependency graph).
 - [ ] No ticket pre-slices fog — every ticket's question is precise enough to answer in one session.
@@ -253,7 +270,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 
 - Use `Skill(skill="sp:brainstorm", args="dev-brainstorm --context ...")` for research tickets
 - Use `Skill(skill="sp:code-implementation", ...)` for prototype tickets
-- Use `Skill(skill="sp:dev-refine", ...)` for grilling tickets
+- Use `AskUserQuestion` to settle the map's open questions — they are conversations, not tickets
 - Use `Bash` with `spur` CLI for all task/feature operations
 - Use `AskUserQuestion` for the scope-check confirmation
 

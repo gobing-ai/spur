@@ -10,10 +10,10 @@ feature_id: E1
 parent_wbs: null
 priority: P2
 tags: []
-dependencies: ["0468"]
+dependencies: ["0474"]
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:01.061Z"
-updated_at: "2026-08-07T05:05:36.531Z"
+updated_at: "2026-08-07T06:45:17.611Z"
 ---
 
 ## 0469. Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner

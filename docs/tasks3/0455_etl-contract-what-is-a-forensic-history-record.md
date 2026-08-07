@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0463"]
 created_at: "2026-08-06T23:09:53.642Z"
-updated_at: "2026-08-07T00:43:02.155Z"
+updated_at: "2026-08-07T05:07:58.158Z"
 done_forced: "true"
 done_reason: "Wayfinder investigation ticket resolved by decision, not code. R1-R7 are all 'the task body states X' and are satisfied in Design + Q&A; there is no implementation in this task to verify. The contract itself is verified when the graduated implementation task lands."
 ---
@@ -303,13 +303,52 @@ token columns. 0464 owns the artifact schema and the scheduled loop.
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
+**Investigation ticket (`wayfinder:grilling`) — no code changed.** The deliverable is the contract
+recorded in `### Design`; this section is the anchor map behind it. **Backfilled 2026-08-07** — the
+ticket was closed with `--force-done` before its required sections were filled, which left it failing
+its own `done` status gate.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Monorepo anchors:**
 
+| File | What it established |
+| --- | --- |
+| `packages/domain/src/migrations.ts:4` | `HISTORY_IMPORT_SCHEMA_SQL` is the consumption point for the two new tables — migration is additive, no backfill needed to land the schema |
+| `packages/domain/src/analytics/run-cost.ts:131` | the existing heuristic match that stays in place for the four sources without `--session-dir`, under `provenance='ambient'` |
+| `packages/app/src/workflow/actions/agent-run.ts:143` | Spur-launched `sessionDir` routing — the basis for `provenance='spur-run'` + `run_id` exact attribution |
+
+**External anchors** (ts-libs, outside repo root — cite package + symbol per convention):
+llm-jsonl-importer `types.ts` — `splitConfig.mode: 'custom'` accepting an arbitrary
+`(raw: JsonObject) => readonly JsonObject[]`, whose one real gap is that `targetTable` is
+per-`splitConfig` rather than per-emitted-entry; llm-jsonl-importer `importer.ts` — where that split
+is applied; llm-jsonl-importer `schema-sql.ts` — the `HISTORY_IMPORT_SCHEMA_SQL` the two tables extend.
+
+**Inputs consumed:** the per-source field maps and record-type censuses from task 0463 (six agents,
+tool-call join keys, timing and usage availability per source) and the checkpoint/ledger verification
+from task 0457 (append-only resume PASS, plus the two defects graduated to task 0465).
+
+**Verification that the contract landed as designed** (checked 2026-08-07 while resolving the
+consumption-surface ticket): llm-jsonl-importer `schema-sql.ts` now carries the `history_message` and
+`history_tool_call` DDL and all five specified indices, matching this ticket's `### Design` column for
+column. The contract is implemented, not merely proposed.
 ### Testing
+**N/A** — decision ticket, no code changed, so no test suite applies. **Backfilled 2026-08-07**
+alongside `### Solution`; the ticket was closed before these sections were filled.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Evidence for this contract is the two investigation tickets it consumed rather than fresh probes of
+its own: task 0463 supplied the per-source field maps, record-type censuses, and tool-call join keys
+for all six agents; task 0457 supplied the empirical checkpoint and ledger verification. The
+granularity, unknown-record, and normalization rulings were operator decisions recorded in `### Q&A`.
 
+**Confidence ratings:**
+
+| Claim | Rating | Basis |
+| --- | --- | --- |
+| The two-table shape is implementable as specified | **HIGH** | Verified 2026-08-07: the DDL and all five indices are present in the importer package exactly as designed |
+| The `custom` split seam can express the mapping | **HIGH** | Read from the importer's own types and application site; the single gap (per-config rather than per-entry `targetTable`) is named precisely |
+| Per-source constraints (agy has no model/usage; grok is per-turn only and the sole source with true per-step tool timing) | **HIGH** | Measured in task 0463 against real files |
+| Unknown-record capture is the right drift alarm | **MEDIUM** | Sound design; its value depends on the counter actually being watched, which the consumption ticket later made a report field |
+| `duration_ms` derivation from adjacent `ts` is accurate enough to be useful | **MEDIUM** | Unproven until rows exist; the never-interpolate-across-gaps rule bounds the error but does not measure it |
+| Cost attribution via `provenance='spur-run'` will cover the intended runs | **MEDIUM** | Exact for the two sources honoring `--session-dir`; the other four fall back to the existing heuristic |
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

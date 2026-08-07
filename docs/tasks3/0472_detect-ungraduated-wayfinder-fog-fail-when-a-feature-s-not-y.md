@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T05:48:12.113Z"
-updated_at: "2026-08-07T05:49:28.660Z"
+updated_at: "2026-08-07T06:25:57.692Z"
 ---
 
 ## 0472. Detect ungraduated wayfinder fog: fail when a feature's Not-yet-specified shrinks without new tickets
@@ -196,6 +196,17 @@ constraint set the design must satisfy, plus the open questions to resolve first
   half. If a future need makes it genuinely useful, it is additive and independent of this check.
 - Do **not** make this a third standalone gate. One corpus gate, one baseline.
 - Do **not** fail on fog *growth* or rewording. The check exists for one destructive act.
+
+#### Sequencing against the map-marker ticket
+
+A sibling ticket under this feature teaches `spur feature check` a first-class wayfinder-map marker
+(it currently hard-errors on a map's deliberate no-AC contract). **Prefer landing that one first**:
+this check needs to know which features are maps, and consuming an explicit marker is strictly better
+than independently sniffing for a `## Not yet specified` heading — the sniffing approach this ticket
+would otherwise need is the same prose-coupling its own Design rejects for shrinkage detection.
+
+Not a hard blocker: if this ticket lands first, detect maps by section presence and switch to the
+marker when it exists.
 ### Plan
 
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->

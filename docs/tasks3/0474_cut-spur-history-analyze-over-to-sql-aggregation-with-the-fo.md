@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0466"]
 ac_numbering: task-local
 created_at: "2026-08-07T06:45:01.675Z"
-updated_at: "2026-08-07T06:45:10.051Z"
+updated_at: "2026-08-07T06:52:02.691Z"
 ---
 
 ## 0474. Cut spur history analyze over to SQL aggregation with the forensic query set and versioned JSON artifact
@@ -56,7 +56,7 @@ per-line error arrays into the artifact.
 - R8 — Preserve the existing human stdout summary so `spur history analyze` without artifact flags stays usable, and keep `--json` emitting the artifact shape.
 ### Acceptance Criteria
 ```gherkin
-Feature: 0468 analyze answers forensic questions from SQL
+Feature: 0474 analyze answers forensic questions from SQL
 
   Scenario: R1 — per-step attribution is answerable
     Given a populated history_message and history_tool_call for one session

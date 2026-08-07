@@ -10,10 +10,10 @@ feature_id: E1
 parent_wbs: null
 priority: P2
 tags: []
-dependencies: ["0465", "0468"]
+dependencies: ["0465", "0474"]
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:01.341Z"
-updated_at: "2026-08-07T05:05:36.793Z"
+updated_at: "2026-08-07T06:45:18.079Z"
 ---
 
 ## 0470. Add spur history --source all fan-out with per-source failure isolation and a spur history daily command

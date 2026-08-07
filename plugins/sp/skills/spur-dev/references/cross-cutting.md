@@ -141,10 +141,15 @@ run: `wip → testing` invokes `spur task check`, `testing → done` invokes
 task at its current status, surface the blocking finding, do not advance. This is the gate that
 keeps a malformed task out of `testing`/`done`.
 
-`--no-lifecycle` is **pipeline-only**: `task-pipeline.yaml` suppresses lifecycle-run creation
-because it runs the equivalent checks as its own workflow transitions (and to avoid orphaned
-lifecycle runs). Never add `--no-lifecycle` to an interactive chain transition — doing so bypasses
-the very guard the chain relies on for its review-pending stop.
+`--no-lifecycle` is **bookkeeping, not a guard bypass**: `task-pipeline.yaml` suppresses
+lifecycle-*run* creation because it is already a run and a nested one would orphan. The structural
+gate still runs — `→ testing` and `→ done` invoke `spur task check` regardless of the flag.
+
+> **Behavior corrected 2026-08-07.** `--no-lifecycle` previously suppressed enforcement as a side
+> effect of suppressing the run record, because the FSM guards live inside the lifecycle workflow.
+> Combined with `--force-done` (which waives the verify **verdict** only) it left nothing: a task
+> walked `wip → done` carrying L3 errors. Neither flag leaks alone. The CLI now runs the gate
+> inline whenever the FSM guard will not. **was: `--no-lifecycle` skipped the check entirely.**
 
 ### Bounding context compaction in `--next` chains
 
@@ -210,6 +215,35 @@ frontmatter schema, section-status matrix, section format rules, feature traceab
 
 After writing a section, run `spur task check <wbs>` again to confirm the write introduced no
 structural issues (phantom sections, matrix violations) before moving on.
+
+## What belongs in a task file
+
+**A task file is work to be done, not a question to be answered.** Every surface that creates tasks
+is bound by this — decomposition, wayfinder, issue-finding, brainstorm exits, review findings,
+dogfood follow-ups.
+
+The test is one question: **can an implementer execute this to completion without the operator in the
+loop?**
+
+- **Yes → it is a task.** It has a definite outcome, and `### Requirements` states observable results
+  that `spur task check` and verify can be judged against. Writing code, extending tests, running a
+  measurement, producing a documented inventory, migrating data — all tasks, whether or not they ship
+  production code.
+- **No, it needs the operator's judgment → it is not a task.** "Decide X", "choose between A and B",
+  "what should the contract be" are decision briefs. They are resolved in conversation with the
+  operator, and the *answer* is recorded where the decision belongs — the feature body, an ADR
+  (`docs/00_ADR.md`), or the design doc. A task may then be created for the work the answer implies.
+
+**Why this is a rule and not a preference.** A decision filed as a task sits in `spur task list` and
+in a feature's Tasks table looking like queued work. It gets handed to an implementing agent, which
+either stalls or invents the decision and calls it done. It also inflates task counts, which is how
+an over-decomposed batch hides. The corpus is a work queue; a question in it is a queue defect.
+
+**Open questions do not live in task files either.** `### Q&A` records decisions that are *closed* —
+"we chose X because Y", "deferred with reason Z". If a task's `### Q&A` or `### Design` still contains
+an unanswered question at the point of handoff, the task is not ready: close the question with the
+operator first, or state the assumption explicitly and proceed. An implementer must never have to
+guess which of two designs was intended.
 
 ## Task sizing: cohesion before hours
 

@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-06T23:08:18.775Z"
-updated_at: "2026-08-07T01:02:14.888Z"
+updated_at: "2026-08-07T06:45:29.660Z"
 ---
 
 # E1: History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop
@@ -99,9 +99,15 @@ Feature: History data plane trustworthy end-to-end
 | 0461 | Choose the scheduling surface for the morning import-analyze-report loop | cancelled |
 | 0462 | Decide the ingestion path model: Spur-launched run sessions vs ambient agent history | cancelled |
 | 0463 | Source discovery and field map for all six agents: claude, codex, pi, omp, agy, grok | done |
-| 0464 | Consumption surface: analyze artifact, report rendering, and the scheduled loop | todo |
+| 0464 | Consumption surface: analyze artifact, report rendering, and the scheduled loop | done |
 | 0465 | Normalize history import source_file via realpath and harden line-number checkpoints | todo |
-| 0466 | Implement the forensic ETL contract in ts-llm-jsonl-importer: per-entry targetTable, history_message + history_tool_call schema, six source mappers | todo |
+| 0466 | Implement the forensic ETL contract in ts-llm-jsonl-importer: per-entry targetTable, history_message + history_tool_call schema, six source mappers | done |
+| 0467 | Fix analytics SOURCE_TABLES allowlist to include omp, grok, and agy history ETL tables | todo |
+| 0468 | Fix issues found in 0466 forensic ETL implementation session: Bun link, TS strict, test coverage, analyze command | todo |
+| 0469 | Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner | todo |
+| 0470 | Add spur history --source all fan-out with per-source failure isolation and a spur history daily command | todo |
+| 0471 | Declare history.* system events and install the launchd agent for the nightly history loop | todo |
+| 0474 | Cut spur history analyze over to SQL aggregation with the forensic query set and versioned JSON artifact | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -116,8 +122,9 @@ Skills every session should consult: `sp:spur-cli` (corpus verbs), `sp:source-dr
 (the JSONL shapes are undocumented — verify against real files, never from memory),
 `sp:sys-architecture` (upstream-vs-Spur placement calls).
 
-**Route.** Investigation tickets **0463**, **0457**, and the keystone **0455** are `done`. The map is
-past its foggy phase — what remains is one decision ticket and two implementation tasks:
+**Route.** All four investigation tickets — **0463**, **0457**, the keystone **0455**, and the
+consumption surface **0464** — are `done`. **The map's investigation phase is complete; nothing on it
+is foggy any more.** What remains is implementation only:
 
 - **0466 Implement the forensic ETL contract** — graduated from 0455. Extend `custom` split with a
   per-entry `targetTable`, add `history_message` + `history_tool_call` to `HISTORY_IMPORT_SCHEMA_SQL`,
@@ -126,8 +133,32 @@ past its foggy phase — what remains is one decision ticket and two implementat
   schema first, mappers second), never one task per source.
 - **0465 Normalize source_file via realpath + harden checkpoints** — graduated from 0457 P1/P2;
   independent, does not block 0466.
-- **0464 Consumption surface** — now unblocked by 0455. analyze artifact, report rendering, scheduled
-  loop. Prefer resolving it after 0466 lands so the queries are written against real rows.
+- **0464 Consumption surface** — `done` 2026-08-07. Graduated **0467–0471** (created and wired below).
+
+**Implementation order.** Two roots can start immediately; the rest is one chain plus one join.
+
+```
+0467  (independent — start now, ~1 session)
+0465 ──────────────┐
+0466 ── 0474 ── 0469
+          └── 0470 ── 0471
+                 ↑
+              (0465)
+```
+
+- **0467 Fix `SOURCE_TABLES` allowlist** — no dependencies. `analyze` and workflow run-cost are blind
+  to omp/grok/agy today and `agent.default` is `omp`, so this is a live wrong-answer bug. Smallest
+  ticket on the map; do it first regardless of what else is in flight.
+- **0465 Realpath + checkpoint hardening** — no dependencies. Gates 0470, because under `--source all`
+  the path-identity defect hits every source on every run.
+- **0466 Implement the forensic ETL contract** — no dependencies. The keystone; everything downstream
+  reads the tables it populates. **ADR owed before it lands** (0455 R7).
+- **0474 analyze → SQL** — needs 0466's rows.
+- **0469 report renderer** — needs 0474's artifact. Sequence right after it so the artifact is never
+  write-only.
+- **0470 `--source all` + `spur history daily`** — needs 0465 and 0474.
+- **0471 `history.*` events + launchd** — needs 0470. Closes the loop; the events are the only
+  in-harness evidence a run happened, since the scheduler is external.
 
 An ADR is owed before 0466 lands (0455 R7): the `custom` split extension plus the two-table forensic
 shape change a published package's extension model. Map closes only on
@@ -299,19 +330,55 @@ This explains pi's 1.3M parse errors outright: its `defaultRoots` are `['.pi/his
   Full contract in 0455 `### Design`; decision rationale in `### Q&A`. Closed with `--force-done`
   (decision ticket; no implementation in it to verify). Graduated **0466** (implementation).
 
+- **2026-08-07 — 0464 resolved (last investigation ticket).** Consumption surface settled on measured
+  evidence, not estimates. **analyze → SQL**, decided by benchmark: the current load-all-and-fold path
+  allocates **+865 MB heap at 600k rows** (≈ today's real claude+codex corpus) versus a constant-memory
+  `GROUP BY` at 286 ms; at the measured growth rate it crosses ~1.3 GB within a month. Ten concrete
+  queries fixed, of which the two that justify this map are **loop detection** (`GROUP BY tool_name,
+  args_digest HAVING COUNT(*) >= 3` — the "which tool loop burned this session" answer) and the
+  **unknown-record drift alarm**. **Artifact:** versioned JSON at
+  `.spur/reports/history/<date>/analyze-<selectorDigest>.json`, integer `schemaVersion` (additive
+  changes do not bump; `report` refuses an unknown version), 90-day prune — and `report` **never opens
+  the DB**, which is what makes the morning report reproducible. **Scheduling: launchd, not Spur's
+  embedded scheduler** — the latter was disqualified three times over: ts-infra's `parseInterval`
+  cannot express a daily cron (`0 7 * * *` silently degrades to a 60-second interval), it needs a
+  long-lived process the run-once CLI is not, and **zero cron entries are registered anywhere in the
+  monorepo**. A `spur workflow` was rejected as the driver too — the action registry has no
+  `foreach`/`parallel`, so fan-out would be six hand-written `shell` steps. **Fan-out lives in
+  `spur history --source all`**, not in the scheduler, so per-source isolation holds regardless of what
+  invokes it; exit becomes 0/1/**2 = partial**. **The nightly window is not a date range** — 0457
+  verified checkpoint resume, so the import takes no date argument and a missed night self-heals.
+  Full decision in 0464 `### Design`; graduated five implementation tickets.
+- **2026-08-07 — two live defects found while resolving 0464** (neither is an investigation; fold into
+  implementation). (1) `SOURCE_TABLES` (`packages/domain/src/analytics/query.ts:8-16`) omits
+  `history_etl_omp`, `history_etl_grok`, and `history_etl_agy` — analyze is structurally blind to three
+  of six in-scope sources, and since `agent.default` is `omp`, workflow run-cost attribution silently
+  under-reports **today**. Fixable now, independent of everything else. (2) An absent source imports as
+  `files=0` with **exit 0**, bit-identical to a healthy no-op — under nightly fan-out an agent whose
+  history path changed would report success forever while importing nothing.
+- **2026-08-07 — ledger belief corrected.** `system_events` was previously characterized as ~90% prune
+  heartbeat with no workflow rows. That is **stale**: the live 15,794-row ledger carries current
+  `workflow.*` rows (489 `workflow.action.start`, last 2026-08-06). The real gap is narrower and was
+  verified rather than assumed — **`history.*` events are 0 rows and 0 of the 66 declared events**, so
+  the history plane has no ledger trail at all. Since the scheduler is external to Spur, those events
+  are the only in-harness signal the loop ran; they ship with the daily command, not as a follow-up.
+- **2026-08-07 — 0464's graduated tickets created and wired.** **0467** `SOURCE_TABLES` allowlist fix
+  (independent), **0474** analyze→SQL (needs 0466), **0469** report renderer (needs 0474), **0470**
+  `--source all` + `spur history daily` (needs 0465 and 0474), **0471** `history.*` events + launchd
+  (needs 0470). All five carry Background, Requirements, and Acceptance Criteria derived from 0464
+  `### Design`, pass `spur task check` with 0 errors, and have their blocking edges in frontmatter.
+  **The map's investigation phase is closed — every remaining ticket is implementation.**
+
 ### Not yet specified
 
-- **Retention and volume.** 90k–1.5M lines per source per scan, and `history_tool_call` will be the
-  largest table (omp: 247 tool calls in one 489-line session). Pruning policy, table growth, index
-  tuning. Now specifiable in principle — the shape is fixed — but it needs measured growth from real
-  imports. Graduate after 0466.
-- **Report content.** Which diagnoses actually earn a place in the rendered report (the lost 0451
-  report is the reference point, recoverable from transcripts). Owned by 0464.
+- **Retention and volume — narrowed, not closed.** 0464 measured the *source* side: ~590k lines /
+  749 MB across claude+codex today, growing ~10.4 MB/day (~+280k lines/month), and set a 90-day prune
+  on the report artifacts. Still unspecified is the *table* side: `history_tool_call` row growth
+  (omp alone: 247 tool calls in one 489-line session), a pruning policy for the forensic tables, and
+  index tuning under real load. Needs rows on disk — graduate after the ETL implementation lands.
 - **Redaction posture.** `DEFAULT_REDACTION_RULES` exists upstream; whether it holds against real
   transcripts carrying secrets, paths, and tool output is unmeasured. The contract narrows the
   surface (`args_digest`, never raw tool args) but does not settle the rules themselves.
-- **Delivery.** How a scheduled report reaches the operator — file on disk, `spur message`, or
-  something else. Owned by 0464.
 - **agy model and usage.** Live in `conversations/<uuid>.db` protobuf/blob columns; NULL for agy in
   v1 by decision. Revisit only if agy cost attribution turns out to matter.
 ## History
