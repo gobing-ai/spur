@@ -186,6 +186,30 @@ each linked task's AC block, so one task carrying R2 and R3 in its `### Acceptan
 both — there is no orphan warning and no reason to split 1:1 to satisfy the gate. Splitting to keep
 the coverage check quiet is the single most common cause of an over-decomposed batch.
 
+### Two R-namespaces — do not mix them in one scenario list
+
+A task's `### Requirements` are numbered **task-locally** (R1, R2, … within that task). A feature's AC
+scenarios are numbered in the **feature's** namespace. Both appear in a task's
+`### Acceptance Criteria`, and conflating them is how AC silently drifts from Requirements.
+
+The rule:
+
+- **Scenarios covering the task's own requirements carry the task-local R-prefix** —
+  `Scenario: R3 — <observable outcome>`. Tasks declaring `ac_numbering: task-local` in frontmatter
+  get these cross-checked by `spur task check` (`L3.ac-requirement-coverage`): a requirement with no
+  scenario, or a scenario citing a requirement that does not exist, is reported.
+- **Scenarios carried verbatim from the feature (for DD-09 traceability) carry NO R-prefix** — copy
+  the title text only. `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:58`) strips `R\d+`
+  before matching, so the prefix is invisible to feature coverage anyway; dropping it keeps the
+  feature's number from being read as a task requirement id. Verified empirically: removing the
+  prefix from a carried scenario left the feature's orphan count unchanged.
+
+**Legacy tasks are exempt.** Most existing tasks predate this and copied feature AC wholesale,
+carrying the feature's numbers. The coverage check is opt-in precisely so they emit nothing —
+absent `ac_numbering`, only DD-09 applies. Opting an old task in is a pure prefix renumber; it cannot
+break traceability. New tasks get `ac_numbering: task-local` from the templates automatically;
+`spur task update <wbs> --ac-numbering task-local` opts in an existing one.
+
 Edge-case scenarios may map to tasks, merge into a sibling, or be deferred. Record deferrals
 explicitly: `Deferred: R7 — Edge case not in this iteration`.
 

@@ -371,9 +371,12 @@ export class TaskCheckService extends PlanningCheckService {
             let numbered = 0;
             for (const block of blocks) {
                 const firstLine = block.trimStart().split('\n')[0] ?? '';
-                // Accept an optional list-bullet prefix and an optional task-list
-                // checkbox: "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …".
-                if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R\d+\.?\s/.test(firstLine)) {
+                // Accept an optional list-bullet prefix, an optional task-list checkbox,
+                // and optional bold/italic emphasis around the R-number:
+                // "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …" / "- [ ] **R1.** …".
+                // Emphasis is a natural way to write R-items and was previously rejected,
+                // so a correctly-structured Requirements section warned for a cosmetic reason.
+                if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R\d+\.?[*_]{0,2}\s/.test(firstLine)) {
                     numbered++;
                 }
             }
@@ -385,6 +388,82 @@ export class TaskCheckService extends PlanningCheckService {
                     section: 'Requirements',
                     message: 'Requirements should use R-numbered items (R1., R2., …) — got ~50% or fewer',
                 });
+            }
+        }
+
+        // Requirements ↔ Acceptance Criteria coverage, opt-in via `ac_numbering: task-local`.
+        //
+        // WHY GATED: DD-09 (L4) compares a task's AC to its FEATURE's AC; nothing compared
+        // a task's AC to its OWN Requirements, so a requirement could carry zero scenarios
+        // and every gate stayed green — how task 0465 shipped refined R1–R5 beside stale AC
+        // covering only R1–R2, leaving its highest-risk requirement untested and one
+        // scenario demanding behavior its requirement had explicitly deferred.
+        //
+        // It cannot run unconditionally. An audit of 117 task files found three coexisting
+        // conventions: 43 tasks copy AC verbatim from the feature and carry the FEATURE's
+        // R-numbers (Requirements R1–R5 beside `Scenario: R6` is correct there), 29 number
+        // locally, and 38 use no R-ids at all. Ungated, this fires on nearly every task and
+        // trains everyone to ignore L3. So it runs only where the task declares the
+        // namespace. Opting a legacy task in is a pure prefix renumber — `normalizeTitle`
+        // strips `R\d+` before matching, so feature traceability cannot see it.
+        const acBodyForCoverage = doc.getSection('Acceptance Criteria');
+        if (
+            doc.frontmatterData?.ac_numbering === 'task-local' &&
+            reqBody !== null &&
+            !isPlaceholderBody(reqBody) &&
+            acBodyForCoverage !== null &&
+            !isPlaceholderBody(stripAcFence(acBodyForCoverage))
+        ) {
+            const reqIds = new Set<string>();
+            for (const line of reqBody.split('\n')) {
+                const m = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R(\d+)\.?\s/.exec(line);
+                if (m?.[1] !== undefined) reqIds.add(m[1]);
+            }
+            const acIds = new Set<string>();
+            let scenarioCount = 0;
+            for (const line of stripAcFence(acBodyForCoverage).split('\n')) {
+                const s = /^\s*Scenario(?:\s+Outline)?:\s*(.*)$/.exec(line);
+                if (s === null) continue;
+                scenarioCount++;
+                const id = /^R(\d+)\b/.exec((s[1] ?? '').trim());
+                if (id?.[1] !== undefined) acIds.add(id[1]);
+            }
+            const byNumber = (a: string, b: string): number => Number(a) - Number(b);
+            if (reqIds.size > 0 && scenarioCount > 0 && acIds.size === 0) {
+                // Declared task-local but nothing binds to it — the third legacy convention.
+                findings.push({
+                    layer: 'L3',
+                    code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
+                    severity: 'warning',
+                    section: 'Acceptance Criteria',
+                    message:
+                        'ac_numbering is task-local but no scenario is R-numbered — prefix each scenario with the requirement it covers (Scenario: R1 — …)',
+                });
+            } else if (reqIds.size > 0 && acIds.size > 0) {
+                const uncovered = [...reqIds].filter((id) => !acIds.has(id)).sort(byNumber);
+                const stale = [...acIds].filter((id) => !reqIds.has(id)).sort(byNumber);
+                if (uncovered.length > 0) {
+                    findings.push({
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
+                        severity: 'warning',
+                        section: 'Acceptance Criteria',
+                        message: `Requirements with no Acceptance Criteria scenario: ${uncovered
+                            .map((id) => `R${id}`)
+                            .join(', ')} — add a scenario or drop the requirement`,
+                    });
+                }
+                if (stale.length > 0) {
+                    findings.push({
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
+                        severity: 'warning',
+                        section: 'Acceptance Criteria',
+                        message: `Acceptance Criteria scenarios cite requirements that do not exist: ${stale
+                            .map((id) => `R${id}`)
+                            .join(', ')} — the AC is stale relative to Requirements`,
+                    });
+                }
             }
         }
 

@@ -1859,10 +1859,45 @@ Only this section exists.
     // --no-lifecycle to isolate the verdict-guard behavior. R8 (verdict gate applies
     // under --no-lifecycle) is therefore exercised by every test in this block, and
     // called out explicitly in its own case.
+    /**
+     * Fill every section `spur task check` requires before a task may legally
+     * reach `testing`/`done`.
+     *
+     * WHY this exists: a real task at `testing` has ALWAYS passed the structural
+     * gate. Seeding a placeholder-only task and walking it to `testing` worked
+     * only while `--no-lifecycle` suppressed enforcement as well as the lifecycle
+     * run record — the bypass this fixture now stops relying on. Holding
+     * structural validity constant is what actually isolates the verdict guard;
+     * the old fixture isolated it by keeping every task structurally invalid,
+     * which is a state the verdict guard never sees in production.
+     */
+    async function fillDoneRequiredSections(path: string): Promise<void> {
+        const bodies: Record<string, string> = {
+            Requirements: '- R1 — Seeded requirement for the done-guard fixture.',
+            'Acceptance Criteria':
+                '```gherkin\nFeature: done-guard fixture\n\n  Scenario: R1 — seeded scenario\n    Given a seeded task\n    When the done guard runs\n    Then the structural gate is already satisfied\n```',
+            Solution: 'Seeded change map: `apps/cli/src/commands/task.ts:1` — fixture only, no code.',
+            Testing: 'N/A — fixture task, no code. Coverage N/A.',
+            Review: [
+                '| Severity | File | Finding | Recommendation |',
+                '| --- | --- | --- | --- |',
+                '| P4 | `apps/cli/src/commands/task.ts:1` | Fixture only. | None. |',
+                '',
+                'Residual risk: none (fixture).',
+            ].join('\n'),
+        };
+        let text = await readFile(path, 'utf-8');
+        for (const [name, body] of Object.entries(bodies)) {
+            text = text.replace(new RegExp(`(### ${name}\\n)[\\s\\S]*?(?=\\n### |$)`), `$1\n${body}\n`);
+        }
+        await writeFile(path, text, 'utf-8');
+    }
+
     async function seedTaskAtTesting(label: string): Promise<string> {
         const cOut = createCapturedOutput();
         await main(['task', 'create', label], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
+        await fillDoneRequiredSections(createdPath(cOut));
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
         await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
         await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: nullOutput() });
@@ -2003,6 +2038,43 @@ Only this section exists.
         const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    // ── Structural gate survives --no-lifecycle (bypass regression) ──
+    // A structurally invalid task reached `done` because `--no-lifecycle` and
+    // `--force-done` each removed a different layer: the first skipped the FSM
+    // guard (`spur task check`), the second waived the verdict artifact. Neither
+    // flag leaks alone; together they left nothing. `--no-lifecycle` is
+    // bookkeeping ("the pipeline is already a run"), never a guard bypass.
+    test('--no-lifecycle does not bypass the structural gate on wip→testing', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'bypass regression testing hop'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        // Deliberately NOT filled — placeholder Requirements/AC are L3 errors.
+        await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
+        await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain('Lifecycle transition blocked');
+        expect(await readStatus(wbs)).toBe('wip');
+    });
+
+    test('--no-lifecycle --force-done together cannot land a structurally invalid task at done', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'bypass regression done hop'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
+        await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'update', wbs, 'done', '--no-lifecycle', '--force-done', '--reason', 'probe'],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(1);
+        // --force-done waives the VERDICT, never the structural matrix.
+        expect(output.errors.join('\n')).toContain('Lifecycle transition blocked');
+        expect(await readStatus(wbs)).not.toBe('done');
     });
 
     test('done guard: same-status no-op is honest and exits 0 (R9)', async () => {

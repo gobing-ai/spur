@@ -939,6 +939,18 @@ describe('TaskService', () => {
             expect(doc.frontmatterData?.priority).toBe('P1');
         });
 
+        test('sets ac_numbering on an existing task', async () => {
+            // WHY: the task templates only ship `ac_numbering` on NEW tasks. Without a
+            // post-create path, a task authored before the standard could never opt into
+            // the L3 Requirements↔AC coverage check.
+            const created = await svc.create({ title: 'ac numbering opt-in test' });
+            await svc.updateField(created.ref.id, 'ac_numbering', 'task-local');
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            expect(doc.frontmatterData?.ac_numbering).toBe('task-local');
+        });
+
         test('rejects a non-allow-listed field (e.g. status)', async () => {
             const created = await svc.create({ title: 'bad field test' });
             await expect(svc.updateField(created.ref.id, 'status', 'done')).rejects.toThrow(/not settable/);

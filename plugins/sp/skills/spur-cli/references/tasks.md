@@ -104,8 +104,9 @@ enforces legal transitions). Two transitions are **guarded by `check`**: `wip→
 `spur task check <wbs>`, and `testing→done` runs `spur task check <wbs> --strict-core` — a failing
 gate blocks the transition (§7.5).
 
-**`--no-lifecycle`** suppresses lifecycle workflow run creation (use during pipeline-driven
-transitions so nested lifecycle runs are not orphaned).
+**`--no-lifecycle`** suppresses lifecycle workflow *run record* creation (use during pipeline-driven
+transitions so nested lifecycle runs are not orphaned). **It is not a guard bypass** — the
+`wip→testing` / `testing→done` `check` gates still run, evaluated inline when the FSM guard does not.
 **Forced-done override** (`--force-done`, paired with `--reason`):
 
 ```bash

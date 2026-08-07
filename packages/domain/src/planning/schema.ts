@@ -261,6 +261,24 @@ export const taskFrontmatterSchema = z.object({
     tags: z.array(z.string()).optional(),
     dependencies: z.array(z.string()).optional(),
     /**
+     * Which R-numbering namespace this task's `### Acceptance Criteria` scenarios use.
+     *
+     * `task-local` — scenario R-ids refer to this task's own `### Requirements`, so the
+     * two can be cross-checked (L3.ac-requirement-coverage). Shipped by the task
+     * templates, so every new task opts in.
+     *
+     * **Absent** — legacy. Historically most task AC was copied verbatim from the linked
+     * feature and carried the FEATURE's R-numbers (a task with Requirements R1–R5 could
+     * legitimately hold `Scenario: R6`), while other tasks numbered locally and others
+     * used no R-ids at all. Those three conventions are indistinguishable after the fact,
+     * so the coverage check stays off unless a task declares `task-local`. Existing tasks
+     * therefore emit no new warnings and need no migration.
+     *
+     * Opting an old task in is a pure prefix renumber: `normalizeTitle` strips `R\d+`
+     * before matching, so feature traceability (DD-09) cannot see the change.
+     */
+    ac_numbering: z.literal('task-local').optional(),
+    /**
      * Operator override of the verdict gate (R3, task 0292). `done_forced=true`
      * records that a non-PASS verdict was advanced to `done` deliberately;
      * `done_reason` carries the operator rationale. Accepts the YAML boolean

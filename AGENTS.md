@@ -269,7 +269,21 @@ Before “done”:
 3. `bun run test` green (workspaces + `plugins/sp`; no skipped tests to pass)
 4. `bun run test-cf` green
 5. `bun run build` green
-6. `git status` intentional only
+6. `bun run corpus-check` green (runs inside `spur-check`; see below)
+7. `git status` intentional only
+
+**`corpus-check` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
+structural error outside `config/corpus-baseline.json`. It exists because per-task gates run **once**,
+at a transition, and nothing re-validates afterwards — so both a bypassed gate and a tightened rule
+go unnoticed indefinitely. The baseline is two-sided: an unlisted error fails, **and** a listed entry
+that no longer reproduces fails, so it cannot rot into a silent suppression list. Adding or
+tightening a finding code obliges you to reconcile the fallout in the same commit (constitution
+**T10**).
+
+**`--no-lifecycle` is bookkeeping, never a guard bypass.** It suppresses lifecycle *run record*
+creation (the pipeline is already a run; a nested one would orphan). The structural gate
+(`spur task check`) runs on `→ testing` and `→ done` regardless. `--force-done` waives the verify
+**verdict** only — never the section matrix.
 
 **Targeted-test-first while iterating:** when a test fails, run the narrow target
 `bun test <file> --test-name-pattern <test>` to green before any full-suite gate, and run the full

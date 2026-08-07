@@ -260,6 +260,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--feature <id>', 'Set the feature_id frontmatter field (traceability edge)')
         .option('--priority <p>', 'Set the priority frontmatter field (P0–P3)')
         .option(
+            '--ac-numbering <mode>',
+            'Set the ac_numbering frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check',
+        )
+        .option(
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
@@ -292,9 +296,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                         context.output.write(`Updated section '${options.section}' in task ${result.ref.id}`);
                     }
-                } else if (options.feature !== undefined || options.priority !== undefined) {
-                    const key = options.feature !== undefined ? 'feature_id' : 'priority';
-                    const value = options.feature ?? options.priority ?? '';
+                } else if (
+                    options.feature !== undefined ||
+                    options.priority !== undefined ||
+                    options.acNumbering !== undefined
+                ) {
+                    const key =
+                        options.feature !== undefined
+                            ? 'feature_id'
+                            : options.priority !== undefined
+                              ? 'priority'
+                              : 'ac_numbering';
+                    const value = options.feature ?? options.priority ?? options.acNumbering ?? '';
                     const result = await svc.updateField(wbs, key, value);
                     if (options.json) {
                         context.output.write(toJson(result));
@@ -309,19 +322,34 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     // backstop).
                     status = canonicalStatusOrRaw(status);
                     // P3 backstop (task 0130 retrospective): the lifecycle YAML runs
-                    // `spur task check` as the wip→testing and testing→done guard. When the
-                    // lifecycle adapter is unavailable (--no-lifecycle, or the bundled
-                    // task-lifecycle workflow can't be resolved), the fallback
-                    // (SchemaLifecyclePort) silently permits the transition — so a task can
-                    // slide to `done` with L3 errors via raw CLI. Re-run the gate inline for
-                    // the two guarded terminal entries when the adapter is absent.
-                    if (options.lifecycle !== false && (status === 'done' || status === 'testing')) {
-                        const adapter = makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
+                    // `spur task check` as the wip→testing and testing→done guard. Whenever
+                    // that FSM guard will NOT run, re-run the gate inline so the structural
+                    // check is not silently lost.
+                    //
+                    // Two ways the FSM guard goes missing, and BOTH must be covered:
+                    //   1. the bundled task-lifecycle workflow can't be resolved (adapter
+                    //      undefined) — the SchemaLifecyclePort fallback permits silently;
+                    //   2. `--no-lifecycle` was passed — no adapter is built at all.
+                    //
+                    // Case 2 used to disable this backstop via `options.lifecycle !== false`,
+                    // which made the flag that suppresses the lifecycle RUN RECORD also
+                    // suppress ENFORCEMENT. That coupling let `--no-lifecycle --force-done`
+                    // walk a task from wip to done carrying L3 errors. `--no-lifecycle` is
+                    // bookkeeping ("the pipeline is already a run; a nested lifecycle run
+                    // would orphan"), never a guard bypass — so the gate now runs regardless.
+                    // In-process (TaskCheckService), so this costs no subprocess.
+                    if (status === 'done' || status === 'testing') {
+                        const adapter =
+                            options.lifecycle === false
+                                ? undefined
+                                : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
                         if (adapter === undefined) {
-                            context.output.error(
-                                `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
-                                    'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
-                            );
+                            if (options.lifecycle !== false) {
+                                context.output.error(
+                                    `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
+                                        'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
+                                );
+                            }
                             const ok = await runDoneGateCheck(context, wbs, options.folder);
                             if (!ok) {
                                 context.output.error(

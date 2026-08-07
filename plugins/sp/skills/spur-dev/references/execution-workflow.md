@@ -201,8 +201,11 @@ status control, omit `--next` and promote explicitly with `spur task update <wbs
 later chained run.
 
 Honoring the guard is the point: the FSM is what stops a malformed task from sliding into `testing`
-and then `done`. Bypassing it with `--no-lifecycle` (as the pipeline does for its own internal
-transitions) would defeat the review-pending stop the chain exists to provide.
+and then `done`. Keep chain transitions on the plain verb so the *lifecycle run* is recorded as
+well — `--no-lifecycle` (which the pipeline uses for its own internal transitions, being a run
+already) suppresses that record. Since 2026-08-07 it no longer suppresses the structural gate: the
+CLI evaluates `spur task check` inline whenever the FSM guard will not, so the review-pending stop
+survives the flag.
 
 ## Mode resolution (deterministic — run before dispatch)
 

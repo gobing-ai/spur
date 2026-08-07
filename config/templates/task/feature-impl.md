@@ -10,6 +10,7 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
+ac_numbering: task-local
 created_at: "{{ CREATED_AT }}"
 updated_at: "{{ CREATED_AT }}"
 ---
@@ -30,7 +31,9 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Q&A
 
-<!-- Clarifications and decisions made during refinement. Keep empty if none. -->
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
 
 ### Design
 

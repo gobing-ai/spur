@@ -193,6 +193,23 @@ names the docs that must be touched **in the same commit / same change**:
 | T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
 | T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
 | T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
+| T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | run `bun run corpus-check` and reconcile the fallout **in the same change**: fix the newly-failing tasks/features, or add each to `config/corpus-baseline.json` with a reason and a date |
+
+**T10 — why it exists.** Corpus checks run *once*, at a transition, against the rules that existed
+that day. Nothing re-validates afterwards, so tightening a rule silently converts previously-legal
+closed work into non-compliant work — with no event anywhere. Task 0368 closed 2026-07-28; the rule
+that now flags it landed 2026-08-01 (`f373e90b`). Four days apart, invisible for ten.
+
+`bun run corpus-check` (wired into `spur-check`) makes that fallout loud, so the only remaining
+question is *where* it gets reconciled. The answer is the tightening commit itself: its author knows
+why the rule changed, and the blast radius is smallest before anyone rebases onto it. Deferring the
+reconciliation means the next unrelated contributor inherits a red gate they did not cause and
+cannot judge.
+
+The baseline is deliberately two-sided — an unlisted error fails the gate, **and** a listed entry
+that no longer reproduces fails it too. Without that second half the file rots into a silent
+suppression list, which is the same invisible debt in a new place. Delete an entry the moment its
+finding is fixed.
 
 ## 6. Edit principles per file
 

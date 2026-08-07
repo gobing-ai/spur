@@ -52,8 +52,10 @@ frontmatter scalar.
 - **Status** (positional): legal transition over `backlog → todo → wip → testing → blocked → done →
   cancelled`. Two transitions run a `check` guard (§7.5): `wip→testing` → `spur task check <wbs>`;
   `testing→done` → `spur task check <wbs> --strict-core`. A failing gate blocks the transition.
-- **`--no-lifecycle`**: suppress lifecycle workflow run creation (use inside pipeline runs to avoid
-  orphaned nested lifecycle runs).
+- **`--no-lifecycle`**: suppress lifecycle workflow *run record* creation (use inside pipeline runs
+  to avoid orphaned nested lifecycle runs). **It is not a guard bypass** — the `wip→testing` and
+  `testing→done` `check` gates above still run; the CLI evaluates them inline when the FSM guard
+  does not. `--force-done` waives the verify **verdict** only, never the section matrix.
 - **Section** (`--section` **requires** `--from-file`): replaces the entire named section body from
   the file. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an

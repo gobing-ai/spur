@@ -10,6 +10,7 @@ parent_wbs: null
 priority: P2
 tags: ["bug"]
 dependencies: []
+ac_numbering: task-local
 created_at: "{{ CREATED_AT }}"
 updated_at: "{{ CREATED_AT }}"
 ---

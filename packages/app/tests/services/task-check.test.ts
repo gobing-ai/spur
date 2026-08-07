@@ -756,6 +756,37 @@ describe('TaskCheckService', () => {
         expect(reqWarnings).toHaveLength(0);
     });
 
+    test('L3: bold-emphasised R-numbered Requirements produce no warning', async () => {
+        // WHY: "- [ ] **R1.** …" is a natural way to write R-items and was previously
+        // rejected on a cosmetic technicality — the regex allowed a bullet and a checkbox
+        // but not emphasis, so a correctly-structured section warned.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Bold reqs"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Bold reqs',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            '- [ ] **R1.** The system shall do X.',
+            '- [x] **R2.** The system shall do Y.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        expect(reqWarnings).toHaveLength(0);
+    });
+
     test('L3: multi-line R-numbered Requirements produce no warning', async () => {
         // WHY: R-items with multi-line bodies (continuation lines, detail paragraphs)
         // must not false-positive. The heuristic counts requirement blocks, not lines,
@@ -2284,6 +2315,118 @@ describe('TaskCheckService', () => {
             const emptyAc = result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_EMPTY);
             expect(emptyReq).toEqual([]);
             expect(emptyAc).toEqual([]);
+        });
+    });
+
+    describe('L3: Requirements ↔ Acceptance Criteria coverage (ac_numbering: task-local)', () => {
+        // WHY: DD-09 (L4) compares a task's AC to its FEATURE's AC. Nothing compared a
+        // task's AC to its OWN Requirements, so a requirement could carry zero scenarios
+        // and every gate stayed green — how task 0465 shipped R1–R5 with AC covering only
+        // R1–R2, leaving its highest-risk requirement untested.
+        //
+        // The check is opt-in because an audit of 117 task files found three coexisting
+        // conventions (43 feature-scoped R-ids, 29 task-local, 38 unnumbered). Ungated it
+        // fires on nearly every legacy task, so the gate is load-bearing, not cosmetic.
+        const taskWith = (requirements: readonly string[], scenarios: readonly string[], optIn = true): string =>
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Coverage"',
+                'status: backlog',
+                ...(optIn ? ['ac_numbering: task-local'] : []),
+                'created_at: 2026-06-13T00:00:00.000Z',
+                'updated_at: 2026-06-13T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. Coverage',
+                '',
+                '### Background',
+                '',
+                'text',
+                '',
+                '### Requirements',
+                '',
+                ...requirements,
+                '',
+                '### Acceptance Criteria',
+                '',
+                '```gherkin',
+                'Feature: Coverage',
+                '',
+                ...scenarios,
+                '```',
+            ].join('\n');
+
+        const coverageFindings = async (content: string) => {
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+            return result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE);
+        };
+
+        const scenario = (title: string): string[] => [
+            `  Scenario: ${title}`,
+            '    Given a thing',
+            '    When acted on',
+            '    Then it holds',
+            '',
+        ];
+
+        test('warns naming each requirement that has no scenario', async () => {
+            const findings = await coverageFindings(
+                taskWith(['- [ ] R1. Does X.', '- [ ] R2. Does Y.', '- [ ] R3. Does Z.'], scenario('R1 — X happens')),
+            );
+            expect(findings).toHaveLength(1);
+            expect(findings[0]?.message).toContain('R2, R3');
+        });
+
+        test('warns when a scenario cites a requirement that does not exist', async () => {
+            const findings = await coverageFindings(
+                taskWith(['- [ ] R1. Does X.'], [...scenario('R1 — X happens'), ...scenario('R7 — superseded')]),
+            );
+            expect(findings).toHaveLength(1);
+            expect(findings[0]?.message).toContain('R7');
+            expect(findings[0]?.message).toContain('stale');
+        });
+
+        test('is silent when every requirement has a scenario', async () => {
+            const findings = await coverageFindings(
+                taskWith(
+                    ['- [ ] R1. Does X.', '- [ ] R2. Does Y.'],
+                    [...scenario('R1 — X happens'), ...scenario('R2 — Y happens')],
+                ),
+            );
+            expect(findings).toEqual([]);
+        });
+
+        test('one requirement may carry several scenarios without warning', async () => {
+            // WHY: merging is legitimate — a scenario set smaller than the requirement
+            // count must not be forced 1:1, the over-decomposition failure this repo
+            // has already corrected twice.
+            const findings = await coverageFindings(
+                taskWith(['- [ ] R1. Does X.'], [...scenario('R1 — X happens'), ...scenario('R1 — X degrades safely')]),
+            );
+            expect(findings).toEqual([]);
+        });
+
+        test('warns when opted in but no scenario is R-numbered', async () => {
+            const findings = await coverageFindings(taskWith(['- [ ] R1. Does X.'], scenario('X happens')));
+            expect(findings).toHaveLength(1);
+            expect(findings[0]?.message).toContain('no scenario is R-numbered');
+        });
+
+        test('stays silent on a legacy task that does not declare ac_numbering', async () => {
+            // WHY: the 43 feature-scoped tasks legitimately carry the FEATURE's R-numbers
+            // (Requirements R1–R5 beside `Scenario: R6`). Without the gate this fires on
+            // all of them and the warning class becomes noise.
+            const findings = await coverageFindings(
+                taskWith(
+                    ['- [ ] R1. Does X.', '- [ ] R2. Does Y.', '- [ ] R3. Does Z.'],
+                    scenario('R6 — feature-numbered scenario'),
+                    false,
+                ),
+            );
+            expect(findings).toEqual([]);
         });
     });
 });

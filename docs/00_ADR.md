@@ -1356,3 +1356,109 @@ friction (10 `GuardDeniedError` retries across a 3-task chain, task 0436).
 **Supersedes the 04 follow-up premise:** `task_run_links` linkage was previously recorded as needing a
 `WorkflowService` run-start hook (no link-writing CLI verb); the record-owned walk makes that hook
 unnecessary. The 04 note is now marked resolved.
+
+---
+
+## ADR-049: Per-Entry `targetTable` on the Custom Split Seam + Two-Table Forensic Shape
+
+**Status:** Accepted · **Date:** 2026-08-07
+
+**Decision.** The `custom` split seam (`SplitConfig.mode === 'custom'`) now accepts `SplitEntry`
+objects that carry a per-entry `targetTable`, so one JSONL line can fan out into both
+`history_message` and `history_tool_call` rows. A `SplitEntry` is `{ targetTable?: string; record: JsonObject }`;
+bare `JsonObject` returns continue to work unchanged (R1).
+
+Two typed contract tables — `history_message` and `history_tool_call` — replace the generic
+`payload_json` blob for the forensic import path. Their columns are exactly the 0455 contract
+(R3). A data-driven `TYPED_TABLE_COLUMNS` map routes typed inserts through column-specific INSERT
+statements while the generic `ETL_TABLE_DDL` path remains untouched for `history_etl_*` tables.
+
+**Why.** The generic `custom` split returned only `JsonObject[]` and could not split one line into
+multiple tables. The `history_etl_*` generic schema stores everything as `payload_json`, which
+cannot be indexed or grouped by `tool_name` — the whole point of the forensic shape. Rather than
+renaming the contract tables to `history_etl_message` (which would make cross-source normalized
+tables masquerade as per-source ETL tables), `VALID_TABLE_NAME` was widened to `/^history_[a-z_]+$/`
+to admit `history_message` and `history_tool_call` while preserving the same SQL-injection safety
+(R2).
+
+**Alternatives rejected.**
+- **One generic insert path with JSON extraction for queries.** Rejected because `GROUP BY tool_name`
+  and `SUM(duration_ms)` over JSON extraction is unindexable and slow.
+- **One function per typed table.** Rejected because two tables don't justify two code paths; a third
+  table later should cost a config entry.
+- **Rename tables to `history_etl_message`.** Rejected because they are cross-source normalized
+  tables, not per-source ETL tables.
+
+**Detail:** `03` (importer architecture); `src/jsonl-importer-dao.ts` → `TYPED_TABLE_COLUMNS`,
+`insertRecord` typed branch; `src/importer.ts` → `SplitEntry` normalization in `splitRawRecord`;
+`src/schema-sql.ts` → `history_message` + `history_tool_call` DDL + indices.
+
+**Part of:** feature E1 (forensic ETL data plane).
+
+---
+
+## ADR-050: Corpus Gates Are Continuous and Unbypassable — `--no-lifecycle` Is Bookkeeping, and a Two-Sided Baseline Re-Validates the Whole Corpus
+
+**Status:** Accepted · **Date:** 2026-08-07
+
+**Decision.** Two changes, one thesis: a corpus gate must be impossible to switch off by accident,
+and must keep applying after the transition that first ran it.
+
+(a) **`--no-lifecycle` no longer suppresses enforcement.** It suppresses lifecycle *run record*
+creation only — its documented purpose ("the pipeline is already a run; a nested lifecycle run would
+orphan"). The structural gate (`spur task check`) now runs on `→ testing` and `→ done` regardless:
+the CLI's P3 backstop (`apps/cli/src/commands/task.ts`) evaluates it inline whenever the FSM guard
+will not, whether because the flag was passed or because the lifecycle adapter is unresolvable.
+`--force-done` continues to waive the verify **verdict** only — never the section matrix.
+
+(b) **`bun run corpus-check` sweeps every task and feature on each `spur-check`,** failing on any
+error absent from `config/corpus-baseline.json`. The baseline is **two-sided**: an unlisted error
+fails the gate, *and* a listed entry that no longer reproduces fails it too. Constitution **T10**
+binds the reconciliation to the commit that adds or tightens a finding code.
+
+**Why.** Neither flag leaked alone — verified by probe. `--no-lifecycle` removed layer 1 (the FSM
+guard, which is where `spur task check` lives) and `--force-done` removed layer 2 (the verdict
+artifact); **together they left nothing**, and a structurally invalid task walked `wip → done`
+carrying L3 errors. The coupling was accidental: the guards happen to live inside the lifecycle
+workflow, so suppressing the run record suppressed enforcement as a side effect.
+
+That contradicted ADR-040's own premise — "severity is error because `testing → done` is gated by
+`spur task check --strict-core`" — which held only when nobody passed the flag. This ADR makes that
+sentence unconditionally true rather than amending it.
+
+The second half exists because per-task gates run **once**, at a transition, against the rules of
+that day. Nothing re-validated afterwards, so two defect classes accumulated invisibly: bypassed
+gates, and **ratchet drift** — task 0368 closed 2026-07-28 and the rule that flags it landed
+2026-08-01 (ADR-040), four days apart and unnoticed for ten. A corpus sweep at 122 tasks / 64
+features costs seconds and is the only mechanism that sees either class.
+
+**Alternatives rejected.**
+- **Split `--no-lifecycle` into two flags (`--no-lifecycle-run` + an explicit `--skip-guards`).**
+  Rejected: it preserves a deliberate bypass nobody had a use case for, and every in-tree caller
+  (`task-pipeline.yaml`, `docs-pipeline.yaml`) already passes its own `spur task check` at the
+  `record → done` transition, so none of them needed one.
+- **Make the CLI verdict guard (`done-transition-guard.ts`) carry the structural check too.**
+  Rejected: that module is a leaf with a deliberately narrow verdict contract; the structural gate
+  already had a home in the P3 backstop, which only needed its disabling condition removed.
+- **Fail `spur-check` on the raw corpus error count with no baseline.** Rejected: it would have been
+  red on 8 pre-existing errors from day one, and a gate that is red on arrival gets disabled.
+- **A one-sided ignore list.** Rejected as the same invisible debt in a new place — without the
+  stale-entry half it rots into a permanent suppression file.
+
+**Consequences.**
+- A task driven fully inline (the common case under a restricted sandbox, per ADR-040) can no longer
+  reach `testing`/`done` while structurally invalid, by any flag combination.
+- Test fixtures may no longer seed a placeholder-only task at `testing` via `--no-lifecycle`; that
+  state is now unreachable in production and the fixture must fill the required sections
+  (`apps/cli/tests/commands/task.test.ts` → `fillDoneRequiredSections`).
+- Tightening any check rule now has a same-commit cost (T10). This is intended: it moves the cost to
+  the author who knows why, instead of the next contributor who inherits a red gate.
+- A missing baseline degrades to zero exemptions with a warning, never a crash.
+
+**Detail:** `apps/cli/src/commands/task.ts` (P3 backstop condition);
+`scripts/commands/corpus-check.ts`; `config/corpus-baseline.json`;
+`docs/99_PROJECT_CONSTITUTION.md` §5 T10; `AGENTS.md` § Verification gate.
+
+**Part of:** feature N (process and infrastructure hardening). Follow-on gate-correctness tickets:
+0472 (ungraduated wayfinder fog — a gate that fails to fire), 0473 (wayfinder-map AC false positive —
+a gate that fires when it must not).

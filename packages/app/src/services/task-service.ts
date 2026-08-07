@@ -722,12 +722,18 @@ export class TaskService {
         // `done_forced` / `done_reason` are set by the CLI verdict-guard override
         // path (R3, task 0292) — they record an operator's explicit decision to
         // advance a non-PASS task to `done`. Status itself stays on `updateStatus`.
+        // `ac_numbering` opts a task into the L3 Requirements↔AC coverage check. It is
+        // settable post-create because the templates only ship it on NEW tasks — without
+        // this, a task authored before the standard could never adopt it. Opting in is
+        // safe for traceability: `normalizeTitle` strips the `R\d+` prefix before DD-09
+        // matching, so renumbering AC scenarios cannot break feature coverage.
         const allowed: Record<string, true> = {
             feature_id: true,
             parent_wbs: true,
             priority: true,
             done_forced: true,
             done_reason: true,
+            ac_numbering: true,
         };
         if (!(key in allowed)) {
             throw new Error(`Field "${key}" is not settable via update; allowed: ${Object.keys(allowed).join(', ')}.`);
