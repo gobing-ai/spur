@@ -13,6 +13,7 @@
     ├── [done] **D2**: All-in-one per-run workflow run log ([D2_all-in-one-per-run-workflow-run-log.md](./D2_all-in-one-per-run-workflow-run-log.md))
     └── [backlog] **D3**: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL ([D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md](./D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md))
 [active] **E**: History ([E_history.md](./E_history.md))
+    └── [active] **E1**: History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop ([E1_history-data-plane-trustworthy-end-to-end-forensic-etl-verified-incremental-import-analyze-report-one-scheduled-loop.md](./E1_history-data-plane-trustworthy-end-to-end-forensic-etl-verified-incremental-import-analyze-report-one-scheduled-loop.md))
 [active] **F**: Planning ([F_planning.md](./F_planning.md))
     ├── [active] **F1**: Planning foundation ([F1_planning-foundation.md](./F1_planning-foundation.md))
     ├── [done] **F2**: Task management CLI ([F2_task-management-cli.md](./F2_task-management-cli.md))
@@ -63,5 +64,5 @@
     ├── [done] **M2**: Teams residual polish for release (post-M1) ([M2_teams-residual-polish-for-release-post-m1.md](./M2_teams-residual-polish-for-release-post-m1.md))
     ├── [verifying] **M3**: Teams board continuous UX fine-tune (Terminal-centric controls) ([M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md](./M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md))
     └── [done] **M4**: Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs) ([M4_inbox-board-module-unified-agent-message-plane-all-supervisor-per-agent-tabs.md](./M4_inbox-board-module-unified-agent-message-plane-all-supervisor-per-agent-tabs.md))
-[backlog] **N**: 0451 pipeline post-mortem: process and infrastructure hardening ([N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md](./N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md))
+[active] **N**: 0451 pipeline post-mortem: process and infrastructure hardening ([N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md](./N_0451-pipeline-post-mortem-process-and-infrastructure-hardening.md))
 <!-- END AUTO-GENERATED -->
