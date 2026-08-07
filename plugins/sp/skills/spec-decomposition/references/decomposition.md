@@ -62,6 +62,28 @@ touching one shared config file may be genuinely independent, and two tasks touc
 files may share a review context entirely. Cohesion is a judgment about coupling, and it is stated
 as prose for that reason.
 
+### Second occurrence: E1's first charting (2026-08-06)
+
+The same failure recurred through `sp:wayfinder`, which authors tickets without going through this
+skill. A wayfinder map for feature E1 was charted with 8 investigation tickets where 4 were right —
+four of the six merged pairs would have read the *same transcript files* to answer. Worse, the
+discovery ticket covered only the four secondary agents while claude and codex, the operator's
+primaries, were split into a separate ticket blocked downstream — so the ETL contract would have
+been decided on evidence from the peripheral sources.
+
+Two lessons, both now fixed rather than restated:
+
+1. **Cohesion applies to investigation tickets, not just implementation tasks.** Two questions
+   answered by one body of evidence are one ticket, exactly as two changes to one file surface are
+   one task.
+2. **The rule was unreachable from the surface that failed.** It lived only here, cited only by this
+   skill and the spur-dev planning path — while wayfinder, issue-finding, brainstorm, and
+   dogfood-testing all author tasks through other routes. The shared statement now lives in
+   [`../../spur-dev/references/cross-cutting.md`](../../spur-dev/references/cross-cutting.md)
+   § Task sizing, which every command and skill already cites; this file keeps the full treatment
+   and the knobs. **Do not delete the cross-cutting section as duplication** — that reachability is
+   the fix.
+
 ## The batch schema
 
 `apps/cli/schemas/task-batch.schema.json` (runtime SSOT: the Zod `taskBatchSchema` in
@@ -142,16 +164,30 @@ Selection on the CLI: `spur task create "<title>" --template <variant>`; in a ba
 
 ## Scenario-to-task mapping
 
-For each core scenario in the feature's AC:
+**Run "Default to NOT decomposing" (below) first.** If the parent scores 0–2, there is no mapping to
+do — write the steps in the parent's `## Plan` and stop. This section only applies once decomposition
+has already been justified.
 
-1. **Design one task** that implements the scenario end-to-end. This is the common case.
-2. **Split into multiple tasks** when the scenario spans subsystems (e.g., auth service +
-   UI). Each task names the subsystem it owns.
-3. **Record the mapping** in each task's `## Background`: `Implements: R3 — Registered user
-   can log in with email and password`.
+Scenario count is **not** task count. A feature with 7 scenarios does not imply 7 tasks; scenarios
+describe observable behavior, tasks describe units of work, and one unit of work routinely delivers
+several behaviors. Walk the scenarios and sort them into groups, then emit one task per group:
 
-Edge-case scenarios may map to tasks or be deferred. Record deferrals explicitly:
-`Deferred: R7 — Edge case not in this iteration`.
+1. **Merge** scenarios that one task delivers — same file surface, same subsystem, or unreadable
+   apart in review. This is the **most common outcome** and the one agents skip. Two scenarios
+   describing two behaviors of one change are one task.
+2. **One task** when a scenario is a unit of work on its own.
+3. **Split into multiple tasks** only when a single scenario spans subsystems (e.g. auth service +
+   UI) and each part clears the rubric independently. Each task names the subsystem it owns.
+4. **Record the mapping** in each task's `## Background`, listing every scenario it covers:
+   `Implements: R2 — …; R3 — Registered user can log in with email and password`.
+
+**Merging never costs AC coverage.** `checkAcCoverage` matches by normalized scenario title across
+each linked task's AC block, so one task carrying R2 and R3 in its `### Acceptance Criteria` covers
+both — there is no orphan warning and no reason to split 1:1 to satisfy the gate. Splitting to keep
+the coverage check quiet is the single most common cause of an over-decomposed batch.
+
+Edge-case scenarios may map to tasks, merge into a sibling, or be deferred. Record deferrals
+explicitly: `Deferred: R7 — Edge case not in this iteration`.
 
 ## Default to NOT decomposing
 

@@ -211,6 +211,28 @@ frontmatter schema, section-status matrix, section format rules, feature traceab
 After writing a section, run `spur task check <wbs>` again to confirm the write introduced no
 structural issues (phantom sections, matrix violations) before moving on.
 
+## Task sizing: cohesion before hours
+
+Applies to **every** surface that authors more than one task in a sitting — decomposition,
+wayfinder charting, issue-finding, brainstorm exits, dogfood follow-ups, review findings. Ceremony
+cost is **per task** (precheck, implement, test, review, approve, verify, record, done, plus a
+verdict artifact), so an over-split batch pays that cost repeatedly for a diff the reviewer reads
+once.
+
+Before creating a set of tasks, apply the two dimensions in order:
+
+1. **Cohesion — is the split legitimate at all?** Candidates that would edit the same file surface,
+   or that must be read together to be judged, are **one task** — even when each would be a
+   respectable size alone. Merge them.
+2. **Hours — is the resulting cohesive task too large?** Only once cohesion permits the split do the
+   hour knobs bound it. Above `force_decompose_above_hours`, size overrides cohesion.
+
+Sharpness is not sufficient justification for a separate task. A question can be sharp, need real
+work, and still belong to a sibling's session.
+
+Full treatment, the worked example, and the tunable knobs:
+[`../../spec-decomposition/references/decomposition.md`](../../spec-decomposition/references/decomposition.md).
+
 ## Iron Laws
 
 Seven non-negotiable invariants for the spur-dev lifecycle. These are laws, not guidelines — a
