@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0466"]
 ac_numbering: task-local
 created_at: "2026-08-07T06:45:01.675Z"
-updated_at: "2026-08-07T06:52:02.691Z"
+updated_at: "2026-08-07T18:20:29.680Z"
 ---
 
 ## 0474. Cut spur history analyze over to SQL aggregation with the forensic query set and versioned JSON artifact
@@ -45,6 +45,15 @@ Two anti-patterns it calls out explicitly: do not carry `etlToCostRecord`'s 4-ch
 (`packages/domain/src/analytics/query.ts:125-131`) into the artifact — an unflagged estimate reaching
 a cost total is the fabrication the forensic contract exists to end; and do not write unbounded
 per-line error arrays into the artifact.
+
+**Live regression this task owns (handed off from task 0468 R4, 2026-08-07).** `analyze` is currently
+blind to every source task 0466 converted to a custom mapper — `claude`, `codex`, `pi`, `omp`, `grok`,
+and `agy` all now write `history_message`/`history_tool_call`, but `queryAllEtlRecords`/`SOURCE_TABLES`
+(`packages/domain/src/analytics/query.ts:8-19`) read only `history_etl_*`, so those six sources return
+zero records. To keep the suite honest without touching analytics production code (which this task
+retires anyway, R7), task 0468 pinned the migrate-stubs `runs history analyze` test to `--source gemini`
+(a still-generic sourceDefinition writing `history_etl_gemini`). This task's SQL cut-over restores
+coverage for all six converted sources and removes that pin.
 ### Requirements
 - R1 — Implement the ten forensic queries specified in task 0464 Design § R1 as SQL against history_message and history_tool_call, including per-step time cost, per-step token cost, per-step tool-call counts, repeated-call loop detection, and the unknown-record drift alarm.
 - R2 — Aggregate in SQL, not in memory: no code path may load the full record set into a JavaScript array before folding. Peak heap for an analyze run must not scale with corpus size.

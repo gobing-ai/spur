@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Fix issues found in 0466 forensic ETL implementation session: Bun link, TS strict, test coverage, analyze command"
 description: "Remediate the four bottlenecks identified during the 0466 implementation session to reduce future implementation friction"
-status: todo
+status: wip
 type: task
 profile: standard
 feature_id: E1
@@ -12,7 +12,7 @@ priority: P1
 tags: ["infrastructure", "dev-exp", "tech-debt"]
 dependencies: ["0466"]
 created_at: "2026-08-07T05:00:00.000Z"
-updated_at: "2026-08-07T18:10:15.706Z"
+updated_at: "2026-08-07T18:25:33.428Z"
 ---
 
 ## Fix issues found in 0466 forensic ETL implementation session
@@ -30,24 +30,31 @@ What actually remains as work: a ts-libs build/version-identity trap (P1), seven
 errors hidden behind a package-wide `@ts-nocheck` (P2), one lesson to record (P3), and one
 genuinely failing test whose product-side fix belongs to task 0474, not here (P4).
 ### Requirements
-- [x] R1. `ts-libs/packages/llm-jsonl-importer` regenerates `dist/` on install/link rather than
-      trusting it, so a ts-libs source edit can never present as "my edit did nothing". The
-      identity-collision half of this problem — both copies declaring the same `version` — was
-      **resolved by the 0.4.20 release** (2026-08-07): the package now declares 0.4.20 (distinct
-      from the cached 0.4.19), the Spur `workspaces.catalog` entry is bumped to `^0.4.20`, and the
-      registry resolves to the new version. No further version work remains here.
+- [ ] R1. `ts-libs/packages/llm-jsonl-importer` regenerates `dist/` on install/link rather than
+      trusting it, so a ts-libs source edit can never present as "my edit did nothing". **Status
+      split:** the identity-collision half is resolved (0.4.20 released 2026-08-07 — the package
+      now declares 0.4.20, distinct from the cached 0.4.19; Spur `workspaces.catalog` is `^0.4.20`);
+      but the **dist-regeneration half is NOT done** — the released 0.4.20 `package.json` has only
+      `build`, no `prepare` hook, so `dist/` is still trusted and can lag `src/`. Pending a ts-libs
+      edit (`"prepare": "bun run build"`) + a 0.4.21 release. Cross-repo + remote push — needs
+      explicit go-ahead.
 - [ ] R2. `src/mappers.ts` compiles clean under `tsc -p tsconfig.build.json` with **no
       `@ts-nocheck`** and with `noUncheckedIndexedAccess` left enabled. All seven `TS2339` sites
       are fixed at the expression, not by relaxing a compiler flag. ts-libs' own suite stays green.
-- [ ] R3. The source-conversion lesson from P3 is recorded where the next conversion will hit it:
+      **Not done** — the released 0.4.20 still carries `// @ts-nocheck` on `src/mappers.ts:1`.
+      Pending a ts-libs edit + 0.4.21 release. Cross-repo + remote push — needs explicit go-ahead.
+- [x] R3. The source-conversion lesson from P3 is recorded where the next conversion will hit it:
       converting a built-in source to a custom mapper moves its rows from `history_etl_<source>`
       to `history_message`/`history_tool_call`, and any test asserting generic ETL behavior must
-      pin a still-generic source.
-- [ ] R4. `bun test apps/cli/tests/commands/migrate-stubs.test.ts` is green, with **no change to
+      pin a still-generic source. **Done** — recorded in `.spur/context/pitfalls.md` (2026-08-07),
+      alongside the linked-package-serves-`dist` stale-build trap.
+- [x] R4. `bun test apps/cli/tests/commands/migrate-stubs.test.ts` is green, with **no change to
       `queryAllEtlRecords`, `SOURCE_TABLES`, or any analytics production code** — those belong to
       0474 and 0467. Task 0474's Background records that `analyze` is currently blind to every
-      converted source.
-- [ ] R5. `bun run lint` and `bun run test` remain green in Spur at task end.
+      converted source. **Done** — test pinned to `--source gemini` (commit 6052ef51); 0474
+      Background carries the blind-sources hand-off. Full suite 4604 pass / 0 fail.
+- [x] R5. `bun run lint` and `bun run test` remain green in Spur at task end. **Done** — lint +
+      typecheck clean, 4604 pass / 0 fail, corpus-check OK.
 ### Design
 Re-verification of the `/skill:sp-dev-findissue` post-mortem
 (`.spur/run/sp-dev-findissue-20260806.md`) against the tree, 2026-08-07.
@@ -209,18 +216,18 @@ re-verification, then reverted — you are reapplying known-good changes, not ex
       and no `src/*.ts` is newer than its `dist/*.js`. The identity-collision half of R1 is
       already closed by the 0.4.20 release (version bumped, catalog bumped) — see `### Design`
       § P1; this step no longer needs to touch version or release.
-- [ ] **3. Fix the red test without touching analytics (R4).** In
+- [x] **3. Fix the red test without touching analytics (R4).** In
       `apps/cli/tests/commands/migrate-stubs.test.ts:192`, change `'--source', 'claude'` to
       `'--source', 'gemini'` and add a one-line comment naming the reason and pointing at 0474.
       No production file changes in this step. Verified to pass.
-- [ ] **4. Hand the analyze regression to 0474 (R4).** Append to task 0474's Background that
+- [x] **4. Hand the analyze regression to 0474 (R4).** Append to task 0474's Background that
       `analyze` currently returns zero records for `claude`, `codex`, `pi`, `omp`, `grok`, and
       `agy`, and that the migrate-stubs test was pinned to `gemini` to keep the suite honest in
       the meantime. Use `spur task update 0474 --section Background --from-file …`.
-- [ ] **5. Record the lesson (R3).** Append to `.spur/context/pitfalls.md` via
+- [x] **5. Record the lesson (R3).** Append to `.spur/context/pitfalls.md` via
       `sp:indexed-context`, covering both P3 (converting a source moves its rows to different
       tables) and P1 (a linked package serves `dist/`, so unbuilt `src/` edits are invisible).
-- [ ] **6. Gate (R5).** `bun run lint` and `bun run test` in Spur. Three pre-existing full-suite
+- [x] **6. Gate (R5).** `bun run lint` and `bun run test` in Spur. Three pre-existing full-suite
       failures are sandbox port-binding denials, not regressions.
 ### Acceptance Criteria
 ```gherkin
@@ -273,3 +280,7 @@ Feature: 0468 — remediate the verified 0466 bottlenecks
     (its R7). The analyze regression P4 describes is 0474's to fix.
   - **0467** owns the `SOURCE_TABLES` allowlist (`packages/domain/src/analytics/query.ts:8-16`).
 - Upstream repo for R1/R2: `~/xprojects/ts-libs/packages/llm-jsonl-importer`
+### History
+
+- 2026-08-07T18:22:04.841Z todo → wip (system)
+
