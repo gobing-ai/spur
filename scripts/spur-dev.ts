@@ -15,6 +15,8 @@
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
+ *   corpus-check                                sweep task/feature corpus against the baseline
+ *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  */
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
@@ -22,12 +24,13 @@ import { bundleConfig } from './commands/bundle-config';
 import { bundleWeb } from './commands/bundle-web';
 import { corpusCheck } from './commands/corpus-check';
 import { devAll } from './commands/dev-all';
+import { linkCheck } from './commands/link-check';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all, corpus-check',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all, corpus-check, link-check',
     );
     process.exit(message ? 1 : 0);
 }
@@ -72,6 +75,9 @@ try {
             break;
         case 'corpus-check':
             process.exit(await corpusCheck());
+            break;
+        case 'link-check':
+            process.exit(await linkCheck());
             break;
         default:
             usage(command ? `unknown command "${command}"` : undefined);

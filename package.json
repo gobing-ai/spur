@@ -75,14 +75,15 @@
         "verify-gha-ci": "act -W .github/workflows/ci.yml -j verify",
         "test": "bun test --reporter=dots ./apps/cli ./apps/server ./apps/web ./packages ./plugins",
         "check": "bun run lint && bun run test",
-        "spur-check": "bun run lint && bun run test-pre-check && bun run test && bun run test-post-check && bun run corpus-check",
+        "spur-check": "bun run link-check && bun run lint && bun run test-pre-check && bun run test && bun run test-post-check && bun run corpus-check",
         "test:full": "bun test ./apps/cli ./apps/server ./apps/web ./packages ./plugins",
         "test-pre-check:full": "bun run apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --verbose",
         "test-post-check:full": "bun run apps/cli/src/index.ts rule run --preset recommended-post-check --fail-on warning --verbose",
         "check:full": "bun run lint && bun run test:full",
-        "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full && bun run corpus-check",
+        "spur-check:full": "bun run link-check && bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full && bun run corpus-check",
         "eval": "bun run plugins/sp/evals/run-eval.ts",
-        "corpus-check": "bun scripts/spur-dev.ts corpus-check"
+        "corpus-check": "bun scripts/spur-dev.ts corpus-check",
+        "link-check": "bun scripts/spur-dev.ts link-check"
     },
     "dependencies": {
         "@gobing-ai/ts-utils": "catalog:"
