@@ -189,7 +189,11 @@ describe('CLI migrate and extracted domains', () => {
             historyFile,
             `${JSON.stringify({ id: 'a1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello world', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 50 } })}\n`,
         );
-        await main(['history', 'import', '--source', 'claude', '--file', historyFile], { cwd, output, dbUrl });
+        // Source pinned to `gemini` (a generic sourceDefinition that still writes
+        // history_etl_gemini). `claude` became a custom mapper in task 0466 and now writes
+        // history_message, which `analyze` (queryAllEtlRecords/SOURCE_TABLES) cannot read —
+        // the SQL cut-over to history_message is task 0474's scope. See task 0468 R4.
+        await main(['history', 'import', '--source', 'gemini', '--file', historyFile], { cwd, output, dbUrl });
 
         // JSON output
         expect(await main(['history', 'analyze', '--json'], { cwd, output, dbUrl })).toBe(0);
