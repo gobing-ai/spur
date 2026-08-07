@@ -12,7 +12,8 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-07T00:27:39.582Z"
-updated_at: "2026-08-07T01:01:53.429Z"
+updated_at: "2026-08-07T02:52:45.114Z"
+ac_numbering: task-local
 ---
 
 ## 0465. Normalize history import source_file via realpath and harden line-number checkpoints
@@ -27,6 +28,12 @@ updated_at: "2026-08-07T01:01:53.429Z"
 **Evidence:** task 0457 Testing (scratch re-runs under `/tmp/spur-0457-reverify/`). Do **not** re-open 0457 for the fix — implement here / upstream in `@gobing-ai/ts-llm-jsonl-importer`.
 
 **Placement:** Operator ruling — ts-libs packages are in scope via `bun link`. Prefer fixing the importer facade over a Spur-only workaround.
+
+**Read `### Design` before writing code.** The fix is one line of normalization; the risk is not.
+`record_hash` is `sha256({source, sourceFile, sourceLine, splitIndex, record})`
+(`src/importer.ts:93-99`) — `source_file` is *inside the hash*, so normalizing it changes every hash,
+`ledgerExists()` stops matching, and the whole corpus silently re-imports under new hashes while the
+old rows remain. R4's migration exists for that, and a test on a fresh database cannot reproduce it.
 ### Requirements
 - [ ] R1. Normalize every `source_file` through filesystem `realpath` at file-discovery time, so symlink and real paths collapse to one checkpoint, ledger, and `record_hash` identity. Fall back to the original path when `FileSystem.realPath` is unavailable or the path does not resolve.
 - [ ] R2. Prove with a scratch-DB test that importing via a symlinked path and then the real path of the same file yields exactly one checkpoint row and re-imports no already-seen content.
@@ -35,19 +42,61 @@ updated_at: "2026-08-07T01:01:53.429Z"
 - [ ] R5. Preserve the 0457 behaviors that already passed: `--dry-run` does not advance checkpoints, and `--mode full` resets only the imported source's scope.
 ### Acceptance Criteria
 ```gherkin
-Feature: Checkpoint path identity and rewrite safety
+Feature: 0465 checkpoint path identity and ledger migration
 
-  Scenario: R1 — symlink and real path share one checkpoint
-    Given a JSONL file reachable via a symlink and its real path
+  Scenario: R1 — symlink and real path resolve to one identity
+    Given a JSONL file reachable via a symlinked path and via its real path
     When spur history import --mode incremental runs against each path in turn
-    Then history_import_checkpoint has exactly one row for that physical file
-    And the second import does not re-import already-ledgered lines as new content
+    Then history_import_checkpoint holds exactly one row for that physical file
+    And the second run imports no already-ledgered content as new
 
-  Scenario: R2 — rewrite shorter does not silently lose new content
-    Given a file imported to line N then rewritten shorter with different content
-    When spur history import --mode incremental runs again
-    Then the new content is imported or the run fails loudly with a documented recovery path
-    And dry-run still does not advance checkpoints
+  Scenario: R1 — normalization degrades safely when realPath is unavailable
+    Given a FileSystem implementation that does not provide realPath
+    When the importer discovers files
+    Then discovery succeeds using the original path
+    And no error is raised and node:fs is not called directly
+    And a path that does not resolve on disk also falls back rather than failing discovery
+
+  Scenario: R2 — path identity is proven against a scratch database
+    Given a scratch database seeded by importing a fixture via one path
+    When the same physical file is imported via its other path
+    Then exactly one checkpoint row exists for it
+    And the observed command output is recorded as evidence
+
+  Scenario: R3 — the rewrite guard is deferred in writing, not implemented
+    Given 0457 established that all six in-scope agents are append-only
+    When this task is complete
+    Then no size, mtime, or content-hash guard has been added to incremental mode
+    And the deferral is recorded with the condition that would reopen it
+
+  Scenario: R4 — the migration collapses existing unnormalized rows
+    Given a database seeded with pre-migration rows carrying unnormalized source_file
+    And two checkpoint rows for one physical file with different last_imported_line
+    When the migration runs
+    Then one checkpoint row remains per source and physical file
+    And it carries the highest last_imported_line of the collapsed rows
+    And history_import_ledger source_file values are normalized
+    And any contract table present is normalized by the same pass
+
+  Scenario: R4 — the migration is idempotent
+    Given the migration has already run once
+    When it runs a second time
+    Then nothing changes
+
+  Scenario: R5 — 0457's passing behaviors still pass
+    Given the normalization and migration are in place
+    When spur history import --dry-run runs
+    Then no checkpoint row is written or advanced
+    And when --mode full runs it resets only the imported source's scope
+
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: incremental import is exactly-once over append-only files
+    Given a source file already imported to line N
+    When lines are appended and spur history import --mode incremental runs again
+    Then only the appended lines are imported
+    And history_import_checkpoint records the new last_imported_line
+    And no duplicate record_hash is written to history_import_ledger
 ```
 ### Q&A
 **Closed during specification (2026-08-07):**
@@ -192,9 +241,20 @@ is second rebases rather than re-deciding. The migration must therefore cover th
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-
-E1
-
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
-
+- **Feature:** E1 — History data plane trustworthy end-to-end (`docs/features/E1_*.md`). This task
+  delivers part of the map's destination scenario R2 (incremental import is exactly-once).
+- **Evidence this task acts on:** task 0457 `### Testing` — the empirical run that found the
+  path-identity defect (R4) and established that all six in-scope agents are append-only, which is
+  what justifies deferring the rewrite guard.
+- **Interacting task:** 0466 (forensic ETL contract). No ordering constraint in either direction;
+  both write `source_file`, so whichever lands second rebases. The migration is written to normalize
+  whatever tables it finds, so it covers `history_message` / `history_tool_call` if 0466 landed first.
+- **Upstream package:** `@gobing-ai/ts-llm-jsonl-importer` at
+  `~/xprojects/ts-libs/packages/llm-jsonl-importer` — `src/importer.ts` (hash at `:93-99`, root
+  resolution at `:221-245`), `src/jsonl-importer-dao.ts` (checkpoint CRUD at `:63-90`).
+- **Runtime seam:** `@gobing-ai/ts-runtime` — `FileSystem.realPath?` declared optional at
+  `src/file-system.ts:75`, Node implementation at `src/file-system-node.ts:116`.
+- **ADR:** none owed by this task. The ADR for the `custom` split extension and the two-table forensic
+  shape belongs to 0466 (from 0455 R7); realpath normalization is a defect fix, not a structural
+  decision.
 ### History

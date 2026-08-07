@@ -12,7 +12,8 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-07T00:43:06.432Z"
-updated_at: "2026-08-07T00:55:26.364Z"
+updated_at: "2026-08-07T02:57:05.162Z"
+ac_numbering: task-local
 ---
 
 ## 0466. Implement the forensic ETL contract in ts-llm-jsonl-importer: per-entry targetTable, history_message + history_tool_call schema, six source mappers
@@ -162,7 +163,9 @@ Feature: 0466 forensic ETL contract implementation
     And Spur runs bun run lint and bun run test against the linked package
     Then all gates pass with no skipped tests
 
-  Scenario: R1 — forensic records survive import for every in-scope source
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: forensic records survive import for every in-scope source
     Given real history files for claude, codex, pi, omp, agy, and grok
     When spur history import runs against each source
     Then imported records carry tool calls, model, usage, and session/turn linkage
@@ -421,7 +424,13 @@ Steps 1–3 are the seam and must land before any mapper.
 - [ ] **4. Registry (R5).** Add `omp`, `grok`, `agy` to `LlmJsonlSource` in `src/types.ts` and to
       `SOURCE_DEFINITIONS`; correct `defaultRoots`/`filePatterns` for all six per the `### Design`
       table. Mirror the source list in Spur: `packages/app/src/services/history-service.ts:29` and the
-      `--source` help text in `apps/cli/src/commands/history.ts:12`. Test: every in-scope source
+      `--source` help text in `apps/cli/src/commands/history.ts:12`. **Note:** parts of the Spur side are
+      already sitting uncommitted in the working tree and do **not** typecheck until the upstream
+      changes land here — four errors in total: `SOURCES` at `history-service.ts:29` already lists
+      omp/grok/agy (fixed by widening `LlmJsonlSource`, this step), and
+      `apps/cli/src/commands/history.ts:63` already prints `r.unknownRecords` (fixed by adding that
+      field to `ImportResult`, step 7). Do not treat those four pre-existing `tsc` failures as your
+      regression, and do not revert them — completing this task is what makes them compile. Test: every in-scope source
       resolves its real root; pi's pattern no longer matches non-transcript `*.json`.
 - [ ] **5. Reference mappers — claude and pi (R4).** Do these two first: claude is the richest shape
       and pi is the simplest with 100% usage coverage, so together they exercise every column. Build
@@ -451,11 +460,49 @@ Steps 1–3 are the seam and must land before any mapper.
       per-source constraint discovered that 0463's sample did not show.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map (importer package: `~/xprojects/ts-libs/packages/llm-jsonl-importer`):**
+
+| File | Change |
+| --- | --- |
+| `src/types.ts` | `SplitEntry` interface; `LlmJsonlSource` gains `omp\|grok\|agy`; `ImportResult.unknownRecords` |
+| `src/sources.ts` | `VALID_TABLE_NAME` → `/^history_[a-z_]+$/` (R2); six custom source definitions replacing generic `sourceDefinition()`; `customSourceDefinition()` helper |
+| `src/mappers.ts` | Six source mappers (claude, pi, omp, codex, agy, grok) with `SplitEntry[]` return; `stableFieldShape()`; `argsDigest()`; identity field maps |
+| `src/schema-sql.ts` | `history_message` + `history_tool_call` DDL + 5 indices (R3) |
+| `src/jsonl-importer-dao.ts` | `TYPED_TABLE_COLUMNS` + typed insert path; `ensureTargetTables` skips typed tables; `_ensuredTables` cache for on-demand ETL table creation |
+| `src/importer.ts` | Two-pass split processing (resolve `message_hash` via `_messageSplitIndex`); `unknownRecords` counting |
+| `src/index.ts` | Export `SplitEntry` type |
+
+**Spur side (`~/xprojects/spur-new`):**
+
+| File | Change |
+| --- | --- |
+| `packages/app/src/services/history-service.ts` | `SOURCES` array gains omp/grok/agy |
+| `apps/cli/src/commands/history.ts` | `--source` help string; `formatImportResult` includes `unknown` count |
+
+**ADR:** `docs/00_ADR.md` entry ADR-049.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Package gates:** `bun run check` in importer package — 56 pass, 0 fail, 257 expect() calls.
+
+**Yield measurements (2026-08-07, `bun run apps/cli/src/index.ts history import --source <s> --mode incremental --dry-run`):**
+
+| Source | Baseline (imported/total) | New Yield (imported/total) | Improvement |
+| --- | --- | --- | --- |
+| claude | 749/99,401 (0.75%) | 82,323/82,323 (100%) | 110× |
+| codex | 2,141/224,055 (0.96%) | 222,295/222,295 (100%) | 104× |
+| pi | 1,023/1,487,701 (0.07%) | 164,617/164,617 (100%) | 161× |
+| omp | N/A (no source) | 212,558/212,558 (100%) | N/A |
+| agy | N/A (no source) | 57,774/39,755 (145%) * | N/A |
+| grok | N/A (no source) | 507,084/499,038 (101%) * | N/A |
+
+* Some lines produce multiple records (tool calls are separate entries).
+
+**R8 verification:**
+- agy: 39,772 rows, all with NULL model, input_tokens, output_tokens, duration_ms, cost_usd ✓
+- All tool call `args_digest` values are sha256 hex strings (no raw arguments) ✓
+
+**Spur lint:** `bun run lint` — biome + typecheck pass (7 workspaces, 0 errors).
 
 ### Review
 
