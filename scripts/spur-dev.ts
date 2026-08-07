@@ -20,13 +20,14 @@ import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { bundleConfig } from './commands/bundle-config';
 import { bundleWeb } from './commands/bundle-web';
+import { corpusCheck } from './commands/corpus-check';
 import { devAll } from './commands/dev-all';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all, corpus-check',
     );
     process.exit(message ? 1 : 0);
 }
@@ -68,6 +69,9 @@ try {
             break;
         case 'dev-all':
             devAll();
+            break;
+        case 'corpus-check':
+            process.exit(await corpusCheck());
             break;
         default:
             usage(command ? `unknown command "${command}"` : undefined);
