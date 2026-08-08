@@ -54,6 +54,8 @@ it keeps the pipeline's configured default (`omp`). Direct invocations of the sa
 remain inline by default. See the
 [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
 
+> **Single-run & parse discipline (suite run cost control).** Run full quality/test suites (`bun run check` / `spur-check`) at most ONCE per task iteration (task 0436 R2). Parse failure details from the single retained command output rather than re-running full suites repeatedly to inspect errors. Re-run targeted/narrow test files (e.g. `bun test <file> --test-name-pattern <pattern>`) while iterating on fixes, and re-run the full suite only when all targeted fixes pass.
+
 ## Section ownership — `## Solution`
 
 The implement step **owns** `## Solution` (the change-map). After writing code, before

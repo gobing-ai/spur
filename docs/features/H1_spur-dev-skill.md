@@ -359,6 +359,51 @@ Feature: spur-dev umbrella skill
     And it does not depend on the EnterWorktree or ExitWorktree tools
     And it reuses branch-workflow/references/worktree-patterns.md for git mechanics
 
+  # ── 0479: verification-loop gate holes ──
+
+  Scenario: R1 A verdict artifact with no requirement rows blocks done
+    Given a task at "testing" whose verdict artifact has an empty requirements array
+    When the testing-to-done transition is attempted
+    Then the transition is refused
+    And the failure names the malformed verdict artifact
+    And a verdict recorded as UNKNOWN is refused on the same path
+
+
+  Scenario: R2 Evidence anchors authored from the skill pass the checker
+    Given an agent authoring a Testing section directly from sp:code-verification
+    When it records file:line evidence following the skill text
+    Then the paths are repo-relative from the project root
+    And spur task check --strict-core reports 0 L4.stale-line-anchor findings
+    And the issue-finding skill's citation example is repo-relative
+
+
+  Scenario: R3 Non-subset task AC warns at write time
+    Given a task with a feature_id whose parent feature AC lacks the task's scenarios
+    When the task Acceptance Criteria section is written via spur task update
+    Then the command warns that the scenarios are not a feature-AC subset
+    And the operator learns this without running task check --strict-core
+
+
+  Scenario: R4 The sp suite is cwd-independent
+    Given the sp plugin test suite
+    When it runs from the repository root and again from plugins/sp
+    Then both runs report the same pass and fail counts
+    And neither reports a path containing plugins/sp/plugins/sp
+
+
+  Scenario: R5 A task needs at most two full-suite executions
+    Given a task whose verification requires the full test suite
+    When the suite is run and reports failures
+    Then the failure list is parsed from that run's retained output
+    And the suite is not re-executed solely to enumerate failures
+
+
+  Scenario: R6 The sandbox baseline is documented and actionable
+    Given spur-check exits non-zero in the restricted sandbox
+    When an agent consults the gate checklist
+    Then it finds the known environmental failure count and its cause class
+    And it finds the file-triage step that distinguishes environmental from real failures
+
   # ── 0478: pipeline bottlenecks ──
 
   Scenario: R1.1 Orchestrator warns before launch when plan items exceed cap

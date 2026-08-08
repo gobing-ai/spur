@@ -116,7 +116,7 @@ assign a per-requirement status:
 | **PARTIAL** | Evidence for part of the requirement only |
 | **UNMET** | No implementation evidence found |
 
-Record the evidence string (`file:line`, command, or test name) per requirement — this is what lands
+Record the evidence string (repo-relative path `file:line`, e.g. `packages/app/src/services/task-check.ts:42`, command, or test name) per requirement — this is what lands
 in `## Testing`.
 
 **Line-anchor verification (anti-stale-citation rule).** Every `file:line` evidence citation

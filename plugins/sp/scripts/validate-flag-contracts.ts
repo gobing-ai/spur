@@ -591,7 +591,11 @@ export function checkAgentValueTables(crossCuttingRaw: string, glossaryRaw: stri
 
 // ─── Full-tree gate ─────────────────────────────────────────────────────────
 
-export function validate(root: string = process.cwd()): FlagValidationResult {
+// ── R4: module-relative default so validate() is CWD-independent ──
+const SCRIPT_DIR: string = typeof import.meta.dir === 'string' ? import.meta.dir : join(__dirname);
+const MODULE_ROOT: string = join(SCRIPT_DIR, '..', '..', '..');
+
+export function validate(root: string = MODULE_ROOT): FlagValidationResult {
     const commandsDir = join(root, 'plugins', 'sp', 'commands');
     const refsDir = join(root, 'plugins', 'sp', 'skills', 'spur-dev', 'references');
 

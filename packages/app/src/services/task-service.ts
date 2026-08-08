@@ -5,17 +5,20 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { isAbsolute, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { TaskFolderEntry, TaskFoldersConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
     buildTaskSkeleton,
+    checkAcCoverage,
     type DbAdapter,
     DEFAULT_TASK_VARIANT,
     escapeYamlValue,
     MarkdownDocument,
+    parseChecklist,
     renderTaskTemplate,
     SECTION_GUIDANCE,
+    stripAcFence,
     TASK_CANONICAL_SECTIONS,
     type TaskBatchItem,
     type TaskSection,
@@ -1088,7 +1091,69 @@ export class TaskService {
         const raw = await this.ctx.fs.readFile(sourceFile);
         const body = stripLeadingSectionHeader(raw, sectionName);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        return this.writeService.updateSection(ref, sectionName, body);
+        const result = await this.writeService.updateSection(ref, sectionName, body);
+
+        if (sectionName === 'Acceptance Criteria') {
+            const warnings = await this.checkAcSubsetWarning(filePath, body);
+            if (warnings.length > 0) {
+                return {
+                    ...result,
+                    warnings: [...(result.warnings ?? []), ...warnings],
+                };
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * R3 (0479): DD-09 subset warning on section write.
+     * When writing Acceptance Criteria, warn if task scenarios are not a subset of feature AC.
+     */
+    private async checkAcSubsetWarning(taskFilePath: string, acBody: string): Promise<string[]> {
+        try {
+            const raw = await this.ctx.fs.readFile(taskFilePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            const fm = doc.frontmatterData ?? {};
+            const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+            if (!featureId || featureId.length === 0) return [];
+
+            const tasksDir = dirname(taskFilePath);
+            const featuresDir = join(tasksDir, '..', 'features');
+            // Feature files are named `<id>_<slug>.md` (e.g. `H1_spur-dev-skill.md`), so resolve by
+            // prefix scan — matching `task-check.ts` findFeatureFile. Probing `<id>_feature.md` /
+            // `<id>.md` never matches a real file and silently disabled this warning (0479 R3).
+            const featurePath = await (async (): Promise<string | null> => {
+                try {
+                    for (const name of await this.ctx.fs.readDir(featuresDir)) {
+                        if (name.startsWith(`${featureId}_`) && name.endsWith('.md')) {
+                            return `${featuresDir}/${name}`;
+                        }
+                    }
+                } catch {
+                    // Directory missing or unreadable — no warning to emit.
+                }
+                return null;
+            })();
+            if (featurePath === null) return [];
+
+            const featureRaw = await this.ctx.fs.readFile(featurePath);
+            const featureDoc = MarkdownDocument.parse(featureRaw, 'feature');
+            const featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
+            if (!featureAc.trim()) return [];
+
+            const taskAc = stripAcFence(acBody);
+            const taskChecklist = parseChecklist(taskAc);
+            const coverage = checkAcCoverage(featureAc, taskAc, taskChecklist);
+
+            const warnings: string[] = [];
+            for (const scenario of coverage.uncovered) {
+                warnings.push(`Task scenario "${scenario}" is not in feature "${featureId}"'s AC (DD-09 subset rule)`);
+            }
+            return warnings;
+        } catch {
+            return [];
+        }
     }
 
     // ── record (pipeline result write-back) ──

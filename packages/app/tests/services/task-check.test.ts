@@ -2611,4 +2611,39 @@ describe('TaskCheckService', () => {
             expect(findings).toEqual([]);
         });
     });
+
+    describe('R1 (0479): L4_MALFORMED_VERDICT_ARTIFACT check', () => {
+        test('emits L4_MALFORMED_VERDICT_ARTIFACT when status is testing and verdict artifact has empty requirements and AC', async () => {
+            const { fs, path, cleanup } = seedEnv({
+                wbs: '0479',
+                taskContent:
+                    taskFm({ status: 'testing', template: 'standard' }) +
+                    '\n\n## Solution\n`file:1`\n\n## Testing\n`file:1`\n',
+            });
+            try {
+                // Write empty verdict artifact in .spur/run/0479-verdict.json
+                const { dirname: pathDirname } = require('node:path');
+                const runDir = join(pathDirname(pathDirname(path)), '.spur', 'run');
+                const { mkdirSync, writeFileSync } = require('node:fs');
+                mkdirSync(runDir, { recursive: true });
+                writeFileSync(
+                    join(runDir, '0479-verdict.json'),
+                    JSON.stringify({ wbs: '0479', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [] }),
+                );
+
+                const tasksDir = pathDirname(path);
+                const svc = new TaskCheckService(
+                    fs,
+                    matrix,
+                    new TaskLocator({ fs, tasksDir, foldersConfig: { active_folder: tasksDir, folders: {} } as never }),
+                );
+                const res = await svc.check(path, '0479');
+                const malformed = res.findings.filter((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT);
+                expect(malformed.length).toBeGreaterThan(0);
+                expect(malformed[0]?.message).toContain('verdict is UNKNOWN');
+            } finally {
+                cleanup();
+            }
+        });
+    });
 });

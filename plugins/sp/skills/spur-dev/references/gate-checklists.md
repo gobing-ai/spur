@@ -138,3 +138,21 @@ transition to `done`.
 > is documented in [sp:spur-cli `tasks/verbs.md` §Answer-file shape](../../spur-cli/references/tasks/verbs.md#answer-file-shape-what---from-answer-parses).
 > The verify skill writes this shape automatically — operators only need it when hand-authoring
 > an answer file or debugging an UNKNOWN verdict.
+
+> **Corpus baseline discipline (`corpus-check`).** `corpus-check` sweeps every task/feature and fails on any structural finding outside `config/corpus-baseline.json`. The baseline is two-sided: an unlisted finding fails, **and** a listed entry that no longer reproduces fails. When introducing or tightening finding rules, reconcile the fallout in the same commit (constitution **T10**).
+
+> **Sandbox test baseline (`bun run test` / `spur-check`).** In the restricted Bash sandbox
+> `bun run spur-check` exits **1 regardless of code health**: ~24 tests bind real ports and the
+> sandbox denies `listen`, so they fail environmentally. They cluster in seven suites — `spur
+> projects CLI`, `startServer`, `createServerContext`, `healthModule`, `rpc client`,
+> `project-start`, `ProjectRegistry` — and every one names a port/listen/`ps` error on the line
+> above `(fail)`. Reproduce the class in one line:
+> `bun -e 'Bun.serve({port:0, fetch:()=>new Response("x")})'`. `bun run test-cf` cannot run at all
+> in-sandbox for the same reason.
+>
+> **Triage without a baseline run:** list the failing test *files*, then grep them for the surface
+> you changed. If your change touches `task.ts` and no failing file references task/lifecycle, the
+> failure is not yours. This costs seconds and mutates nothing — do **not** `git stash` to get a
+> clean baseline on a shared working tree. Treat any failure that does *not* name a port/listen/`ps`
+> cause as yours until proven otherwise; the count is a moving baseline, not a constant.
+

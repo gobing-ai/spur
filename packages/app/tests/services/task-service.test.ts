@@ -1730,4 +1730,52 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             rmSync(root, { recursive: true, force: true });
         }
     });
+
+    // Regression: 0479 R3 shipped non-functional because the feature file was probed as
+    // `<id>_feature.md` / `<id>.md`, while real features are named `<id>_<slug>.md`. The lookup
+    // always missed, so the warning silently never fired. These tests fail if that returns.
+    describe('updateSection — DD-09 AC subset warning (0479 R3)', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function seedFeature(id: string, slug: string, scenarios: string[]): Promise<void> {
+            const fs = createNodeFileSystem(root());
+            const featuresDir = join(root(), 'features');
+            await fs.ensureDir(featuresDir);
+            const body = scenarios.map((s) => `  Scenario: ${s}\n    Given x\n    Then y`).join('\n\n');
+            await fs.writeFile(
+                join(featuresDir, `${id}_${slug}.md`),
+                `---\nid: ${id}\nname: "${slug}"\n---\n\n# ${id}\n\n## Acceptance Criteria\n\n\`\`\`gherkin\n${body}\n\`\`\`\n`,
+            );
+        }
+
+        async function writeAc(name: string, scenarios: string[]): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const body = scenarios.map((s) => `  Scenario: ${s}\n    Given x\n    Then y`).join('\n\n');
+            const path = join(tasksDir, `${name}.ac.tmp.md`);
+            await fs.writeFile(path, `\`\`\`gherkin\n${body}\n\`\`\`\n`);
+            return path;
+        }
+
+        test('warns for task scenarios absent from the feature AC (feature named <id>_<slug>.md)', async () => {
+            await seedFeature('Y1', 'subset-warning', ['Covered scenario']);
+            const created = await svc.create({ title: 'DD-09 non-subset', featureId: 'Y1' });
+            const src = await writeAc('y1-bad', ['Covered scenario', 'Uncovered scenario']);
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+
+            expect(result.warnings ?? []).toHaveLength(1);
+            expect((result.warnings ?? [])[0]).toContain('Uncovered scenario');
+            expect((result.warnings ?? [])[0]).toContain('DD-09 subset rule');
+        });
+
+        test('stays silent when every task scenario is in the feature AC', async () => {
+            await seedFeature('Y2', 'subset-clean', ['Alpha', 'Beta']);
+            const created = await svc.create({ title: 'DD-09 subset', featureId: 'Y2' });
+            const src = await writeAc('y2-ok', ['Alpha']);
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+
+            expect(result.warnings ?? []).toHaveLength(0);
+        });
+    });
 });

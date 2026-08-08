@@ -285,7 +285,7 @@ spur task update <wbs> --section Background --from-file /tmp/issue-bg.md --json
 
 **Section format rules** (from task 0379):
 
-1. **Solution `file:line` citations**: `filename:line` (e.g. `SupervisorTab.tsx:17-20`), never bare `:line`.
+1. **Solution `file:line` citations**: repo-relative `file:line` (e.g. `apps/web/src/components/SupervisorTab.tsx:17-20`), never bare `:line` or bare filename without path.
 2. **Review P1–P4 table**: if a Review section exists, include a markdown table with a cell matching
    `/^\s*P[1-4]\s*$/` and a non-placeholder content cell.
 3. **Meta template**: no `Root Cause` section — put analyses in `Notes`.

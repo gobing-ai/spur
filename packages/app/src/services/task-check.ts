@@ -17,6 +17,7 @@ import {
     taskFrontmatterSchema,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -308,7 +309,7 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(doc, fm, status, findings, featuresDir, tasksDir);
+        await this.runL4(doc, fm, status, findings, featuresDir, tasksDir, wbs);
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
@@ -611,7 +612,13 @@ export class TaskCheckService extends PlanningCheckService {
         findings: CheckFindings[],
         featuresDir: string,
         tasksDir: string,
+        wbs: string,
     ): Promise<void> {
+        // ── R1: Done-gate verdict artifact check (testing/done status) ──
+        if (status === 'testing' || status === 'done') {
+            await this.checkVerdictArtifact(wbs, tasksDir, findings);
+        }
+
         // ── R4 (task 0294): Design placeholder warning ──
         // Standard tasks retain Design as historical intent after it stops being
         // status-required at `testing`/`done`. Key this content warning to the
@@ -1146,5 +1153,46 @@ export class TaskCheckService extends PlanningCheckService {
     /** Find a task file by WBS number across every registered task folder. */
     private async findTaskFile(tasksDir: string, wbs: string): Promise<string | null> {
         return await this.locatorFor(tasksDir).findPathByWbs(wbs);
+    }
+
+    /**
+     * R1 (0479): Done-gate verdict artifact check.
+     * Emits L4.malformed-verdict-artifact when status is testing/done and the
+     * verdict artifact is UNKNOWN, malformed, or has empty requirements[] and AC[].
+     */
+    private async checkVerdictArtifact(wbs: string, tasksDir: string, findings: CheckFindings[]): Promise<void> {
+        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
+        const runDir = join(projectRoot, '.spur', 'run');
+        const loaded = await readGuardVerdictArtifact(this.fs, runDir, wbs);
+
+        if (loaded.artifact === undefined) {
+            if (loaded.readError && loaded.readError !== 'artifact is missing') {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                    severity: 'error',
+                    section: 'Testing',
+                    message: `Verdict artifact at ${loaded.path} is malformed: ${loaded.readError}`,
+                });
+            }
+            return;
+        }
+
+        const artifact = loaded.artifact;
+        const reqs = artifact.requirements ?? [];
+        const acs = artifact.acceptanceCriteria ?? [];
+        const isUnknown = artifact.verdict === 'UNKNOWN';
+        const isEmpty = reqs.length === 0 && acs.length === 0;
+
+        if (isUnknown || isEmpty) {
+            const reason = isUnknown ? 'verdict is UNKNOWN' : 'requirements and AC are empty';
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                severity: 'error',
+                section: 'Testing',
+                message: `Verdict artifact at ${loaded.path} is malformed: ${reason}`,
+            });
+        }
     }
 }
