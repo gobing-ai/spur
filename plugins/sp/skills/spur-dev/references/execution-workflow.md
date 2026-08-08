@@ -84,6 +84,10 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 
 ## Step 2: Pipeline run
 
+> **Pre-launch size-gate pre-check (R1 / 0478).** Before launching `spur workflow run task-pipeline.yaml`, probe the task's `## Plan` checklist item count (`spur task show <wbs> --json`). The default cap is 8 items (`maxImplementPlanItems: 8`). If the plan item count exceeds 8:
+> - Without `--auto`: warn the operator before calling `spur workflow run` and prompt for confirmation or a plan-item override via `--vars '{"maxImplementPlanItems":"<count>"}'`.
+> - With `--auto`: automatically append `"maxImplementPlanItems": "<count>"` to `--vars` and log a single-line notice (e.g. `Notice: task <wbs> has N plan items (>8 default cap); injecting maxImplementPlanItems override`).
+
 **Launch async, observe with a single `--follow` call.** A pipeline with `agent.run` stages runs
 for many minutes (each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous
 invocation blocks the caller for the entire duration and risks an orphaned run if the caller is

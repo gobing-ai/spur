@@ -262,12 +262,28 @@ deterministically:
 Verdict: PASS    (or PARTIAL / FAIL)
 ```
 
-The verify agent's output MUST also include a per-requirement traceability table
-(`| Req | Status | Evidence |` — exactly this header, no `R#`/`R`/`Requirement` variant,
-and no extra columns between the Req and Status columns), an Acceptance Criteria table
-(`| AC | Status | Evidence Type | Evidence |`), and a `### SECUA Review` heading with ranked
-findings — this heading is an **answer-file contract only** (it must never appear in a
-`--section`-bound body file; see Step 10).
+**Answer-File Schema Contract (R2 / 0478).** The verify answer file (`.spur/run/<wbs>-verify-answer.txt`) MUST follow this exact structure so `spur task verdict --from-answer` can parse it:
+
+```markdown
+Verdict: PASS
+
+### Per-Requirement Traceability
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/foo.ts:42` |
+
+### Acceptance Criteria Verification
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
+
+### SECUA Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+```
+
+The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant, and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
 
 **MUST NOT:** use `| R# | ... |` as the sole id header without `Status` in column 2.
 **MUST NOT:** place a `Severity` column between `Req` and `Status` in the authoring contract.

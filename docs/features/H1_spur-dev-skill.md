@@ -6,7 +6,7 @@ status: backlog
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-05T22:38:32.649Z"
+updated_at: "2026-08-08T05:07:15.544Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -223,8 +223,189 @@ Feature: spur-dev umbrella skill
     When the plugin tree is scanned
     Then no skill, agent, command, reference, config, or doc inside plugins/sp references vendors/ or the rd3 plugin path
     And the self-containment assertion passes in the test gate
-```
 
+  # ── R1: flag surface ──
+
+  Scenario: R1.1 The three batch commands accept --worktree
+    Given the sp plugin command documents
+    When I inspect dev-runall, dev-refineall, and dev-verifyall
+    Then each declares --worktree in its frontmatter argument-hint
+    And each lists --worktree in its Argument Flags table with default off
+    And each shows --worktree in its Usage block
+
+  Scenario: R1.2 dev-next does not accept --worktree
+    Given the dev-next command document
+    When I inspect its argument-hint and flag table
+    Then --worktree is absent
+    And the exclusion rationale is recorded in the sp:spur-dev batch reference
+
+  # ── R2: creation ──
+
+  Scenario: R2.1 A clean run creates one worktree before any task work
+    Given a clean main working tree on base ref "feat/example"
+    When I run a batch command with --worktree
+    Then exactly one git worktree is created on a new branch cut from "feat/example"
+    And the worktree directory follows the sibling-directory convention
+    And the batch loop executes with the worktree as its process cwd
+
+  Scenario: R2.2 The base ref is the current ref, not literally main
+    Given the main tree is checked out on "feat/example"
+    When I run a batch command with --worktree
+    Then the worktree branch is cut from "feat/example"
+    And the recorded base ref is "feat/example"
+
+  # ── R3: dirty-tree precheck ──
+
+  Scenario: R3.1 A dirty main tree aborts before any worktree is created
+    Given the main working tree has uncommitted modifications
+    When I run a batch command with --worktree
+    Then the command aborts before creating a worktree
+    And the output names the uncommitted files
+    And the output instructs the operator to commit or stash
+    And no task work has run
+
+  Scenario: R3.2 --force proceeds past a dirty tree with a warning
+    Given the main working tree has uncommitted modifications
+    When I run a batch command with --worktree --force
+    Then a divergence warning is emitted naming the uncommitted files
+    And the worktree is created and the batch proceeds
+
+  # ── R4: success path ──
+
+  Scenario: R4.1 A fully successful batch fast-forward-merges and cleans up
+    Given a batch run with --worktree in which every task succeeded
+    And the base ref has not moved since the worktree was created
+    When the batch completes
+    Then the worktree branch is fast-forward-merged onto the base ref
+    And the worktree directory is removed
+    And the worktree branch is deleted
+    And the state marker records the terminal status "merged"
+
+  Scenario: R4.2 A moved base ref falls through to retention, never a conflict resolve
+    Given a batch run with --worktree in which every task succeeded
+    And the base ref has advanced so fast-forward is impossible
+    When the batch completes
+    Then no rebase, merge commit, or conflict resolution is attempted
+    And the worktree and branch are retained
+    And the report names the divergence and the three operator commands
+
+  # ── R5: failure path ──
+
+  Scenario: R5.1 A halted batch retains the worktree intact
+    Given a batch run with --worktree that halts at the third of seven tasks
+    When the run ends
+    Then the worktree directory and branch still exist
+    And the work committed by the first two tasks is present in the worktree
+    And nothing was merged onto the base ref
+
+  Scenario: R5.2 The retention report names path, branch, cause, and three commands
+    Given a batch run with --worktree that failed or halted
+    When the report is emitted
+    Then it names the worktree path, the branch, and the base ref
+    And it names the halt cause in the flag-glossary halt-report shape
+    And it prints a resume command, a merge command, and a discard command
+
+  Scenario: R5.3 No flag combination auto-deletes a failed run's worktree
+    Given a batch run with --worktree that failed or halted
+    When the run ends under any combination of --auto, --force, and --keep-going
+    Then the worktree directory and branch are retained
+
+  # ── R6: crash-safe marker ──
+
+  Scenario: R6.1 A marker is written under .spur/run at creation
+    When a --worktree batch creates its worktree
+    Then a marker file is written under .spur/run
+    And it records marker id, worktree path, branch, base ref, base SHA,
+        originating command, task selector, created-at, and status
+
+  Scenario: R6.2 A killed session leaves a recoverable marker
+    Given a --worktree batch whose session is killed mid-run
+    When the operator inspects .spur/run afterwards
+    Then the marker identifies the worktree path, branch, and base ref
+    And the retained worktree can be resumed, merged, or discarded from it
+
+  # ── R7: --continue ──
+
+  Scenario: R7.1 --continue re-enters the existing worktree
+    Given an interrupted batch started with --worktree
+    When I re-run the command with --continue --worktree
+    Then the existing worktree is re-entered via its marker
+    And no second worktree is created
+
+  Scenario: R7.2 --continue without a resolvable marker fails loudly
+    Given no resolvable worktree marker for the batch
+    When I run the command with --continue --worktree
+    Then the command fails with a message naming the missing marker
+    And it does not silently run in the main working tree
+
+  # ── R8: scope exclusions ──
+
+  Scenario: R8.1 --worktree with --mode parallel is rejected
+    Given a batch command invoked with --worktree --mode parallel
+    When the flags are validated
+    Then the combination is rejected
+    And the message points to task 0142 for per-task parallel isolation
+
+  # ── R9/R10: docs and portability ──
+
+  Scenario: R9.1 The flag glossary documents --worktree
+    When I read spur-dev/references/flag-glossary.md
+    Then it carries a --worktree section in the established per-flag format
+    And execution-batch.md describes the worktree lifecycle for the sequential loop
+
+  Scenario: R10.1 The mechanism is portable git, not a Claude-Code-only tool
+    When I inspect the implementation guidance
+    Then it uses portable git worktree commands
+    And it does not depend on the EnterWorktree or ExitWorktree tools
+    And it reuses branch-workflow/references/worktree-patterns.md for git mechanics
+
+  # ── 0478: pipeline bottlenecks ──
+
+  Scenario: R1.1 Orchestrator warns before launch when plan items exceed cap
+    Given a task with 11 Plan items and the pipeline default cap of 8
+    When the operator invokes /sp:dev-run <wbs> --mode full
+    Then the skill surfaces a warning before any spur workflow run call
+    And suggests the --vars override or plan reduction
+    And prompts the operator to confirm (unless --auto is set)
+
+  Scenario: R1.2 --auto bypasses the prompt but logs the override
+    Given the same task with 11 Plan items and --auto set
+    When the operator invokes /sp:dev-run <wbs> --mode full --auto
+    Then the skill adds maxImplementPlanItems to vars automatically
+    And launches the pipeline without an interactive pause
+    And emits a single-line notice about the override
+
+  Scenario: R2.1 A pipeline verify run produces a parseable verdict
+    Given a verify stage running as a subprocess executor
+    When it writes the answer file to .spur/run/<wbs>-verify-answer.txt
+    Then the file carries an explicit Verdict line
+    And a per-requirement table with at least one requirement row
+    And spur task verdict --from-answer exits 0 with PASS or FAIL, never UNKNOWN
+
+  Scenario: R2.2 An unparseable answer file still fails the pipeline
+    Given a verify agent that wrote prose instead of the contracted tables
+    And the task status is already done
+    When verify/shell runs spur task verdict --from-answer
+    Then the verdict is UNKNOWN and the step exits non-zero
+    And the pipeline routes to failed
+    And the run is not treated as a pass on account of the task's status
+
+  Scenario: R3.1 Typecheck runs exactly once per test stage
+    Given a clean working tree
+    When the test stage executes qualityGateCmd
+    Then typecheck is invoked exactly once, inside spur-check
+    And the test stage wall time decreases versus the two-typecheck baseline
+
+  Scenario: R3.2 Lint and format coverage is unchanged
+    Given the updated qualityGateCmd default
+    When a file with a lint violation is in the working tree
+    Then the test stage still catches the violation and fails
+
+  Scenario: R3.3 The shared autofix script is untouched
+    Given the change is scoped to the pipeline's qualityGateCmd default
+    When package.json is inspected
+    Then the autofix script still runs format followed by typecheck for its other callers
+```
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->

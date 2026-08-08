@@ -82,7 +82,7 @@ vars:
   # and the fixall slash input all use this same var so the command stays single-sourced.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
   # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
-  qualityGateCmd: "bun run autofix && bun run spur-check"
+  qualityGateCmd: "bun run format && bun run spur-check"
   # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
   # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
   qualityGateMaxFixAttempts: "2"
@@ -290,8 +290,10 @@ states:
   - id: verify
     description: >
       Functional verification (BDD + traceability) via /sp:dev-verify. The agent's
-      captured answer is written to `.spur/run/<wbs>-verify-answer.txt`; a deterministic
-      shell step then derives the verdict and writes the gate artifact
+      captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
+      the answer-file schema contract (explicit `Verdict: PASS|PARTIAL|FAIL` line plus
+      `| Req | Status | Evidence |` and `| AC | Status | Evidence Type | Evidence |` tables);
+      a deterministic shell step then derives the verdict and writes the gate artifact
       `.spur/run/<wbs>-verdict.json` (so the completion gate reads a real verdict, not
       agent discretion — R9). The verdict is PASS only if the agent both reported PASS
       AND `spur task check` passes; otherwise FAIL.
