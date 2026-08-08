@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Refine-loop friction: narrow prose-prerequisite heuristic, fix DD-09 for map-parented tasks, add premise-verification to the implement-ready checklist"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: N
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T22:25:21.471Z"
-updated_at: "2026-08-07T22:46:00.464Z"
+updated_at: "2026-08-08T04:20:05.548Z"
 ---
 
 ## 0475. Refine-loop friction: narrow prose-prerequisite heuristic, fix DD-09 for map-parented tasks, add premise-verification to the implement-ready checklist
@@ -359,17 +359,42 @@ follow, and none is optional:
 - [ ] **12. Record.** `### Solution` gets the `path:line` change map; `### Testing` gets the commands,
       the step-7 target table, and the step-0/step-9 count comparison.
 ### Solution
+**Solution (commit 92df9764, branch `fix/0475-prose-prereq-heuristic`)**
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+Three surgical edits, no new dependencies, no schema/migration change:
 
+1. `packages/app/src/services/task-check.ts:861` — `extractProsePrerequisites`: replaced broad keyword + any-WBS matching with the frozen ordered-adjacency rule. A strong-verb keyword (`depends on|depends upon|gated on|blocked by|waiting for`) must *precede* the WBS within a 40-char same-sentence window, with list continuation for the `tasks X and Y` form. Excludes fenced code blocks, table rows, inline code spans.
+2. `packages/app/src/services/task-check.ts:881` — `checkDependencyReadiness` gains a `proseSeeded` param; a cycle is reported only when `!proseSeeded`, so a prose-inferred seed edge never closes an `L4.prerequisite-cycle`.
+3. `packages/app/tests/services/task-check.test.ts:1469` — 8 regression tests (incidental, list, fenced, table, inline, prose-cycle ×2, frontmatter-cycle).
+4. `plugins/sp/skills/spur-dev/references/dev-operations.md:179` — item 7 (premise verification) added to the implement-ready checklist.
 ### Testing
+**Testing (2026-08-07)**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
-
+- `bun test packages/app/tests/services/task-check.test.ts` — **102 pass / 0 fail** (94 pre-existing + 8 new R1–R3 regressions).
+- `bun run --filter '@gobing-ai/spur-app' typecheck` — exit 0.
+- `bunx biome check` on the 3 changed files — clean (1 auto-fixed line-wrap on re-check).
+- Corpus measurement (local worktree CLI `bun apps/cli/src/index.ts task check`, nine AC tasks 0465–0475):
+  - **Before** (parent commit code): prose-prerequisite matches = **18** (all on 0475); `L4.prerequisite-cycle` = **1** (fictional 0474→0469→0474).
+  - **After** (this fix): prose-prerequisite = **5** (all genuine: 0475's real refs to 0465/0473/0474); cycle = **0**. Target ≤7 met; 0472/0473/0476 unchanged at 0.
+- AC traceability: all 10 scenarios **MET** (verdict `.spur/run/0475-verdict.json` = PASS).
 ### Review
+**Review (2026-08-07) — inline implement→verify (async pipeline unavailable; omp auth: no). Commit 92df9764 on `fix/0475-prose-prereq-heuristic`.**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Scope:** 3 files — `packages/app/src/services/task-check.ts` (+57/−13), `packages/app/tests/services/task-check.test.ts` (+182), `plugins/sp/skills/spur-dev/references/dev-operations.md` (+6). No schema, migration, or shared-infra change.
 
+**SECU findings**
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P1 | correctness | — | none |
+| P2 | correctness | — | none |
+| P3 | correctness | — | none |
+| P4 | test gate | task-check.test.ts | 8 new regression tests; 102/102 pass |
+| P4 | type/lint | task-check.ts | typecheck exit 0; biome clean |
+
+**Residual risk:** low. The frozen rule is narrower than the old broad-keyword match by design; recall loss is limited to prose that uses a keyword NOT in the five-verb set (`after`, `requires`, `merged`, `approved`). Such tokens assert weakly and were the dominant false-positive source (measured). Genuine declarations (`depends on`/`blocked by`/`gated on`/`waiting for` + `depends upon`) are preserved. No public API or persistence change.
+
+**Disposition:** PASS — all 10 AC scenarios MET; corpus target exceeded (18→5 ≤ 7 target); fictional cycle eliminated (1→0); no regressions on 0472/0473/0476.
 ### References
 N
 
@@ -402,3 +427,6 @@ N
 - `sp:issue-finding` — 5-phase protocol used for this analysis (DISCOVER → ANALYZE → IDENTIFY →
   PROPOSE → GENERATE).
 ### History
+- 2026-08-08T04:17:22.843Z todo → wip (system)
+- 2026-08-08T04:18:52.215Z wip → testing (system)
+- 2026-08-08T04:18:58.397Z testing → done (system)

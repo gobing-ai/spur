@@ -839,9 +839,13 @@ export class TaskCheckService extends PlanningCheckService {
             }
         }
 
+        const declaredSet = new Set(declaredDeps);
         const directDeps = [...new Set([...declaredDeps, ...proseDeps.map((d) => d.wbs)])].filter((dep) => dep !== wbs);
         for (const depWbs of directDeps) {
-            await this.checkDependencyReadiness(depWbs, wbs, findings, tasksDir, new Set([wbs]), false);
+            // R3: a prose-inferred seed edge never closes a prerequisite-cycle — only a
+            // frontmatter dependencies[] edge can. proseSeeded marks the path's origin.
+            const proseSeeded = !declaredSet.has(depWbs);
+            await this.checkDependencyReadiness(depWbs, wbs, findings, tasksDir, new Set([wbs]), false, proseSeeded);
         }
 
         this.checkGateLanguage(doc, findings);
@@ -858,20 +862,45 @@ export class TaskCheckService extends PlanningCheckService {
         return deps;
     }
 
+    /**
+     * Infer prerequisite WBS values from prose. Frozen rule (task 0475): a strong-verb
+     * keyword must *precede* the WBS within a bounded same-sentence window, list
+     * continuation captures the "tasks X and Y" form, and non-assertive text (fenced
+     * code blocks, table rows, inline code spans) is excluded — quoted or illustrative
+     * dependency language does not assert an edge.
+     */
     private extractProsePrerequisites(doc: MarkdownDocument): { wbs: string; section: string }[] {
         const refs: { wbs: string; section: string }[] = [];
+        // Ordered, sentence-bounded adjacency: keyword precedes the WBS within 40 chars,
+        // with no sentence boundary (. or ;) between them.
+        const headRe = /(?:depends on|depends upon|gated on|blocked by|waiting for)\b[^.;\n]{0,40}?\b(\d{4})\b/gi;
+        // List continuation after a head match: ", 0003" / "and 0003" / "and tasks 0003".
+        const listRe = /\s*(?:,|and)\s*(?:tasks?\s+)?(\d{4})\b/gi;
         for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
             const body = doc.getSection(section);
             if (body === null) continue;
+            let inFence = false;
             for (const line of body.split('\n')) {
-                const isPrereq =
-                    /\b(depends on|gated on|blocked by|after|requires|waiting for|merged|approved|approval|HITL)\b/i.test(
-                        line,
-                    ) || /\b(pre-gate|post-gate|content-gate|capstone)\b/i.test(line);
-                if (!isPrereq) continue;
-                for (const match of line.matchAll(/\b(\d{4})\b/g)) {
-                    const wbs = match[1];
+                // R2: fenced code blocks toggle on ``` and are skipped entirely.
+                if (/^\s*```/.test(line)) {
+                    inFence = !inFence;
+                    continue;
+                }
+                if (inFence) continue;
+                // R2: markdown table rows quote/illustrate rather than assert.
+                if (/^\s*\|/.test(line)) continue;
+                // R2: blank inline code spans before matching (backtick examples, finding output).
+                const cleaned = line.replace(/`[^`]*`/g, ' ');
+                headRe.lastIndex = 0;
+                for (let head = headRe.exec(cleaned); head !== null; head = headRe.exec(cleaned)) {
+                    const wbs = head[1];
                     if (wbs !== undefined) refs.push({ wbs, section });
+                    // Consume any continuation list immediately after the head match.
+                    listRe.lastIndex = headRe.lastIndex;
+                    for (let cont = listRe.exec(cleaned); cont !== null; cont = listRe.exec(cleaned)) {
+                        const cw = cont[1];
+                        if (cw !== undefined) refs.push({ wbs: cw, section });
+                    }
                 }
             }
         }
@@ -885,15 +914,21 @@ export class TaskCheckService extends PlanningCheckService {
         tasksDir: string,
         seen: Set<string>,
         transitive: boolean,
+        proseSeeded = false,
     ): Promise<void> {
         if (seen.has(depWbs)) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_PREREQUISITE_CYCLE,
-                severity: 'warning',
-                section: '',
-                message: `Prerequisite cycle detected while checking ${rootWbs}: ${[...seen, depWbs].join(' -> ')}`,
-            });
+            // R3: report a cycle only when it rests on at least one frontmatter
+            // dependencies[] edge. A loop reached solely through a prose-inferred seed
+            // edge is a parser artifact, not a corpus defect.
+            if (!proseSeeded) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.L4_PREREQUISITE_CYCLE,
+                    severity: 'warning',
+                    section: '',
+                    message: `Prerequisite cycle detected while checking ${rootWbs}: ${[...seen, depWbs].join(' -> ')}`,
+                });
+            }
             return;
         }
 
@@ -913,7 +948,7 @@ export class TaskCheckService extends PlanningCheckService {
         const nextSeen = new Set(seen);
         nextSeen.add(depWbs);
         for (const childDep of dep.dependencies) {
-            await this.checkDependencyReadiness(childDep, rootWbs, findings, tasksDir, nextSeen, true);
+            await this.checkDependencyReadiness(childDep, rootWbs, findings, tasksDir, nextSeen, true, proseSeeded);
         }
     }
 

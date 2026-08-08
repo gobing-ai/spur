@@ -1466,6 +1466,188 @@ describe('TaskCheckService', () => {
         expect(prose[0]?.section).toBe('Requirements');
     });
 
+    // ── Frozen prose-prerequisite rule (task 0475): precision without recall loss ──
+
+    test('readiness: incidental keyword across a sentence boundary infers no edge (R1)', async () => {
+        // The exact task-0474 shape: a downstream WBS precedes an incidental 'after'
+        // across a period. It asserts nothing about task order and must not be an edge.
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            '0469 renders and must never open the DB. Any shape change after this lands is a schemaVersion.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const prose = result.findings.filter(
+            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
+        );
+        expect(prose).toHaveLength(0);
+    });
+
+    test('readiness: the "tasks X and Y" list form infers every named prerequisite (R1)', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Requirements',
+            '',
+            'This task Depends on tasks 0465 and 0474 for the data plane.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const msgs = result.findings
+            .filter((f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED)
+            .map((f) => f.message);
+        expect(msgs.some((m) => m.includes('0465'))).toBe(true);
+        expect(msgs.some((m) => m.includes('0474'))).toBe(true);
+    });
+
+    test('readiness: a WBS inside a fenced code block infers no edge (R2)', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            'Example finding output:',
+            '',
+            '```',
+            'Prose prerequisite 0466 is not mirrored in frontmatter dependencies[]',
+            'This depends on 0470 inside the block.',
+            '```',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const prose = result.findings.filter(
+            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
+        );
+        expect(prose).toHaveLength(0);
+    });
+
+    test('readiness: a WBS in a markdown table row infers no edge (R2)', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            '| dep | note |',
+            '| --- | --- |',
+            '| 0474 | wrong claim: depends on 0466 |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const prose = result.findings.filter(
+            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
+        );
+        expect(prose).toHaveLength(0);
+    });
+
+    test('readiness: a WBS in an inline code span infers no edge (R2)', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            'The test covers `depends on 0466` as a backtick example.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const prose = result.findings.filter(
+            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
+        );
+        expect(prose).toHaveLength(0);
+    });
+
+    test('readiness: a cycle reached through a prose-inferred edge is not reported (R3)', async () => {
+        // 0001 prose-refs 0002; 0002 declares [0001]. The closing edge is frontmatter,
+        // but the opening edge is prose-inferred — the loop is a parser artifact.
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Requirements',
+            '',
+            'This task depends on 0002 before implementation.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: {
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep', status: 'done', dependencies: ['0001'] }),
+            },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const cycle = result.findings.filter((f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PREREQUISITE_CYCLE);
+        expect(cycle).toHaveLength(0);
+    });
+
+    test('readiness: a cycle whose only mutual references are prose is not reported (R3)', async () => {
+        // Neither task declares the other; the only references are prose. Such a loop
+        // is never claimed from prose alone.
+        const content = [taskFm({ feature_id: 'F1' }), '', '### Requirements', '', 'This task depends on 0002.'].join(
+            '\n',
+        );
+        const dep2 = [
+            taskFm({ feature_id: 'F1', name: 'Dep', status: 'done' }),
+            '',
+            '### Requirements',
+            '',
+            'This task depends on 0001.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': dep2 },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const cycle = result.findings.filter((f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PREREQUISITE_CYCLE);
+        expect(cycle).toHaveLength(0);
+    });
+
+    test('readiness: a cycle resting on frontmatter dependency edges is still reported (R3)', async () => {
+        const content = taskFm({ feature_id: 'F1', dependencies: ['0002'] });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: {
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep', status: 'done', dependencies: ['0001'] }),
+            },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const cycle = result.findings.filter((f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PREREQUISITE_CYCLE);
+        expect(cycle).toHaveLength(1);
+    });
+
     test('readiness: gate language is surfaced as a prerequisite advisory', async () => {
         const content = [
             taskFm({ feature_id: 'F1' }),
