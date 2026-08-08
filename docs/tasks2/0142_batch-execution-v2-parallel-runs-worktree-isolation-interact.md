@@ -12,7 +12,7 @@ priority: P3
 tags: []
 dependencies: []
 created_at: 2026-06-28T05:37:28.269Z
-updated_at: 2026-06-28T16:53:38.429Z
+updated_at: "2026-08-08T00:06:31.166Z"
 ---
 
 ## 0142. Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation
@@ -52,6 +52,14 @@ distinct blast radius (Slice A touches git/worktree mechanics + corpus merge), a
 prioritized independently. Folding them back into 0141 would either block its closure or ship a
 half-feature advertised as whole — the exact failure mode 0141's `⚠️ PARTIAL` discipline exists to
 prevent.
+
+**Cross-link — task 0477 (sequential worktree lifecycle, `done`).** Task 0477 landed the
+batch-level `--worktree` flag on `dev-runall` / `dev-refineall` / `dev-verifyall`: one worktree per
+batch run, sequential only, fast-forward-merge on success, retain-on-failure. That ships the
+worktree create/merge/retain lifecycle, the `.spur/run/` state marker, and the retention-report
+shape that this task's Slice A builds its per-task parallel isolation on top of. Slice A remains
+open here for the parallel case: per-task worktrees, the bounded scheduler, the join barrier, and
+the `--mode parallel` combination. See 0477 §"Relationship to task 0142" for the scope split.
 ### Acceptance Criteria
 ```gherkin
 Feature: Batch execution v2 — parallel runs + interactive within-step escalation
