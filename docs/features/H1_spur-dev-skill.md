@@ -6,7 +6,7 @@ status: backlog
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-08T05:07:15.544Z"
+updated_at: "2026-08-08T12:37:47.503Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -450,6 +450,41 @@ Feature: spur-dev umbrella skill
     Given the change is scoped to the pipeline's qualityGateCmd default
     When package.json is inspected
     Then the autofix script still runs format followed by typecheck for its other callers
+
+  # ── E1 batch forensics (task 0482 — reachable escalation, precheck wiring, fix-hop scope) ──
+  Scenario: R1 — a pinned executor still escalates on resource exhaustion
+    Given the implement step pins a concrete executor (not the literal `auto`)
+    And the prompt resolves to the `implement` stage whose model_policy declares a
+      resource-exhaustion fallback
+    When the dispatch exits non-zero with a 429 quota body
+    Then the run escalates to the next eligible tier and re-dispatches
+    And the escalation is reported naming the failed executor, the signal, and the target tier
+    And the run does not terminate at `failed` with only a partial-work artifact
+
+  Scenario: R2 — the size precheck resolves spur regardless of shell PATH
+    Given a workflow shell whose environment has no user PATH (bare `spur` unresolvable)
+    When the size precheck runs
+    Then the pipeline passes `--spur-bin "$spurBin"` to the script
+    And the precheck reports PASS rather than `could not fetch task <wbs> via spur`
+
+  Scenario: R3 — a single gate finding costs one fix dispatch
+    Given the quality gate fails with exactly one finding carrying a file:line anchor
+    When the test-fix hop dispatches its fix agent
+    Then the agent input names that finding's file:line
+    And the gate goes green within one dispatch rather than consuming the step timeout
+
+  Scenario: R4 — a dead agent's handoff points at its transcript
+    Given an agent.run step fails and writes a partial-work artifact
+    When an operator opens that artifact to resume
+    Then it contains a resume-context block naming the agent session directory
+    And that path resolves to the dead agent's transcript
+
+  Scenario: R5 — executor-exhaustion guidance exists once and is true
+    Given the `--agent` execution-surface SSOT anchor
+    When an operator selects a default executor for a batch run
+    Then the anchor states that any executor can exhaust and that the pipeline escalates
+    And no document claims an executor has no hard quota
+    And no document instructs reading quota state from `spur agent doctor`
 ```
 ## Tasks
 
@@ -468,6 +503,12 @@ Feature: spur-dev umbrella skill
 | 0230 | bind structured-input tools and centralize up-front questionnaires across dev commands | done |
 | 0231 | migrate reverse-engineering skill and dev-reverse command from rd3 to sp | done |
 | 0408 | Extract the flag glossary out of dev-operations.md into its own reference | done |
+| 0477 | Batch worktree isolation --worktree for dev-runall dev-refineall dev-verifyall | done |
+| 0478 | Fix pipeline bottlenecks from task 0477 run: size-gate surprise, verify-answer format mismatch, duplicate typecheck in test stage | done |
+| 0479 | Fix verification-loop gate holes and discovery costs found in the 0477 re-verify session | done |
+| 0480 | Comprehensive cleanup of the --agent execution-surface contract: collapse duplicated definitions to one SSOT and purge ADR-041/046-era stale | todo |
+| 0481 | 0475-verify retrospective: worktree deps install, worktree-local spur CLI, merge commit-type contract, lifecycle transition chain, merge side-effect hygiene | done |
+| 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
