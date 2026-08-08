@@ -110,24 +110,26 @@ Two modes. Either way, **never resolve more than one ticket per session.**
 
 Invoked when the operator has a loose idea and the destination itself is foggy. Charting IS one session's work — do not also resolve tickets.
 
+0. **Branch first.** `git checkout -b wayfind/<destination-slug>` before touching the map. A session is what spans the fog edit and the tickets it graduates into — routinely separate commits — so the branch point is the only boundary that contains both. The `corpus.ungraduated-fog` gate measures `merge-base(origin/main, HEAD)..(working tree)`, which means it **cannot fire at all** on work done directly on the default branch. That is exactly how the 2026-08-07 incident shipped.
 1. **Name the destination.** Run a discovery interview (one question at a time, always with a recommendation) to pin down what this map is finding its way to — the spec, decision, or change. The destination fixes the scope, so it's settled first.
 2. **Map the frontier breadth-first.** Fan out across the whole space rather than deep on any one thread, surfacing open decisions and the first steps takeable now. Use the decision-brief format for each HITL choice (see `../spur-dev/references/decision-brief.md`).
 3. **Create the map as a spur feature.** `spur feature create "<destination>"`. The feature description carries:
    - **## Destination** — the one-line destination statement
-   - **## Notes** — domain context, skills every session should consult, standing preferences
+   - **## Notes** — domain context, skills every session should consult, standing preferences. Fog and scope cuts live **under** Notes as `###` subsections, not as standalone `##` sections — the `corpus.ungraduated-fog` gate matches `### Not yet specified` and `### Out of scope` (nested under Notes), so a top-level `##` heading the gate cannot see is a defect, not a style preference.
    - **## Open questions** — sharp decisions that need the operator's judgment. These are **never tasks**. Each carries the question, why only the operator can settle it, and what it blocks. Resolved in conversation, then moved to Decisions so far.
    - **## Decisions so far** — empty on creation; populated as questions and tickets resolve (one line each: the decision, or WBS + title + one-line gist)
-   - **## Not yet specified** — the fog of war: in-scope questions you can sense but can't yet phrase sharply enough to ticket
-   - **## Out of scope** — work consciously ruled beyond this destination
+   - **### Not yet specified** — the fog of war: in-scope questions you can sense but can't yet phrase sharply enough to ticket. Nest under `## Notes`.
+   - **### Out of scope** — work consciously ruled beyond this destination. Nest under `## Notes`.
 4. **Create child tasks only for executable investigations.** `spur task create "<title>" --feature <feature-id>` for each sharp question **an implementer can answer without the operator** — research, prototype, inventory, measurement. Anything needing the operator's judgment goes to **## Open questions** instead. Ticket types (see below) determine which skill resolves the tasks.
 5. **Wire blocking edges.** After all tickets exist (they need IDs before they can reference each other), set dependencies via `spur task update`. Wiring sorts tickets into the frontier (open, unblocked, unclaimed) and the blocked.
-6. **Populate the fog.** Everything you can't yet specify stays in **## Not yet specified** — sketch it as loosely or as fully as the view allows. Don't pre-slice fog into ticket-sized pieces; one patch may graduate into several tickets, or none.
+6. **Populate the fog.** Everything you can't yet specify stays in **### Not yet specified** — sketch it as loosely or as fully as the view allows. Don't pre-slice fog into ticket-sized pieces; one patch may graduate into several tickets, or none.
 7. **Stop.** Charting is one session's work.
 
 ### Work Through the Map
 
 Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference.
 
+0. **Branch first.** `git checkout -b wayfind/<wbs>-<slug>`, for the same reason as charting: steps 6 and 7 below remove fog from the map, and the gate that checks the removal was paid for measures the branch, not the commit. On the default branch the check silently passes no matter what you delete.
 1. **Load the map** — the feature description (the low-res view), not every task body. Read the destination and Decisions-so-far to orient.
 2. **Pick the first frontier ticket.** Query: `spur task list --feature <id> --status todo` — the first open, unblocked, unclaimed task. If the operator named one, use it instead.
 3. **Claim it.** `spur task update <wbs> wip` — before any work.
@@ -144,8 +146,8 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    — no task is claimed, and it does not consume the session's one ticket.
 
 5. **Record the resolution.** Post the answer in the task body, then `spur task update <wbs> done`. Append one line to the map's **## Decisions so far**: `- [<WBS> <title>](path) — <one-line gist of the answer>`.
-6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **## Not yet specified** so it lives only as its new ticket.
-7. **Rule out mis-scoped tickets.** If the answer reveals a ticket sits beyond the destination, close it and add one line to **## Out of scope** (the gist + why it's out of scope, linking the closed ticket). A scope boundary is not a step on the route — it stays out of **## Decisions so far**.
+6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **### Not yet specified** so it lives only as its new ticket. Doing half of this — deleting the fog without creating the ticket — destroys the only record the work was ever identified, so `corpus-check` fails the branch (`corpus.ungraduated-fog`) unless the removal is matched by a new/re-parented ticket or a line in **### Out of scope**.
+7. **Rule out mis-scoped tickets.** If the answer reveals a ticket sits beyond the destination, close it and add one line to **### Out of scope** (the gist + why it's out of scope, linking the closed ticket). A scope boundary is not a step on the route — it stays out of **## Decisions so far**.
 8. **Stop after ONE ticket.** Never resolve more than one per session.
 
 ### Ticket Types
@@ -162,7 +164,7 @@ Each ticket carries its type in the task body or a tag, signaling which skill re
 
 The map is **deliberately incomplete**: don't chart what you can't yet see. Beyond the live tickets lies the fog of war — the dim view of decisions and investigations you can tell are coming but can't yet pin down, because they hang on questions still open. Resolving a ticket clears the fog ahead of it, graduating whatever's now specifiable into fresh tickets.
 
-The map's **## Not yet specified** section is where that dim view is written down: the suspected question, the area to revisit later. It's the undiscovered frontier toward the destination — everything here is in scope, just not sharp enough to ticket.
+The map's **### Not yet specified** section (nested under `## Notes`) is where that dim view is written down: the suspected question, the area to revisit later. It's the undiscovered frontier toward the destination — everything here is in scope, just not sharp enough to ticket.
 
 **Ask, merge, ticket, or fog?** Sharpness alone does not earn a ticket — a ticket costs a whole session, so it must also need one *and* be worth one on its own. Apply the tests in this order:
 
@@ -184,11 +186,11 @@ Three failure modes this prevents:
 
 ### Out of Scope
 
-Fog only ever gathers toward the destination. The destination fixes the scope, so work beyond it is out of scope — it isn't fog, and it doesn't belong in **## Not yet specified**. It gets its own **## Out of scope** section on the map: work consciously ruled out of this effort.
+Fog only ever gathers toward the destination. The destination fixes the scope, so work beyond it is out of scope — it isn't fog, and it doesn't belong in **### Not yet specified**. It gets its own **### Out of scope** section on the map (nested under `## Notes`): work consciously ruled out of this effort.
 
 Out-of-scope work never graduates — the frontier stops at the destination — so it returns only if the destination is redrawn, and then as a fresh effort, not a resumption.
 
-Ruling something out of scope is a scoping act, not a step on the route. When a ticket that already exists turns out to sit past the destination, close it and leave one line in **## Out of scope**: the gist plus why it's out of scope, linking the closed ticket.
+Ruling something out of scope is a scoping act, not a step on the route. When a ticket that already exists turns out to sit past the destination, close it and leave one line in **### Out of scope**: the gist plus why it's out of scope, linking the closed ticket.
 
 ## Invocation
 
@@ -222,9 +224,10 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 ## Red Flags
 
 - Resolving more than one ticket in a single session.
+- Charting or resolving directly on the default branch — the `corpus.ungraduated-fog` gate is branch-scoped, so on `main` fog can be deleted with no ticket and nothing complains.
 - Creating a map without a destination statement — the destination fixes scope; without it, every ticket is unbounded.
 - Auto-escalating to wayfinding without operator confirmation (except under `--wayfind`).
-- An empty or missing **## Not yet specified** section when the destination was described as foggy — fog that isn't written down is fog the next session can't see.
+- An empty or missing **### Not yet specified** section when the destination was described as foggy — fog that isn't written down is fog the next session can't see.
 - Skipping the claim step (`spur task update <wbs> wip`) before work — concurrent sessions may collide.
 - Pre-slicing fog into ticket stubs before the questions are sharp.
 - Ticketing a question the operator could answer on the spot — a preference or scope ruling is a decision brief, not an investigation ticket.
@@ -239,6 +242,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 
 ### Charting verification
 
+- [ ] The session ran on its own branch, not the default branch (`git branch --show-current`).
 - [ ] Destination is a single, concrete sentence (not a paragraph, not a vague noun phrase).
 - [ ] Map feature exists (`spur feature show <id>` returns clean).
 - [ ] Feature description has all six sections: Destination, Notes, Open questions, Decisions so far (empty), Not yet specified, Out of scope.
@@ -251,12 +255,13 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 
 ### Resolution verification
 
+- [ ] The session ran on its own branch, not the default branch (`git branch --show-current`).
 - [ ] Exactly one ticket was resolved this session.
 - [ ] The ticket was claimed (`wip`) before work began.
 - [ ] The resolution is recorded in the task body (not just a status transition — the answer is written down).
 - [ ] The map's **## Decisions so far** has one new line: WBS + title + one-line gist.
-- [ ] Any graduated fog was removed from **## Not yet specified** and created as new child tasks.
-- [ ] Any mis-scoped tickets were closed and recorded in **## Out of scope**.
+- [ ] Any graduated fog was removed from **### Not yet specified** and created as new child tasks.
+- [ ] Any mis-scoped tickets were closed and recorded in **### Out of scope**.
 
 ## Reference Files
 
