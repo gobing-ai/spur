@@ -1866,6 +1866,119 @@ describe('TaskCheckService', () => {
         expect(cov.every((f) => f.severity === 'warning')).toBe(true);
     });
 
+    /** A feature with Gherkin AC AND a wayfinder-map tag (task 0476). */
+    function featureWithAcAndTag(id: string, scenarios: string[], tag: string): string {
+        const ac = [
+            '```gherkin',
+            `Feature: ${id}`,
+            '',
+            ...scenarios.flatMap((s) => [`  Scenario: ${s}`, '    Given x']),
+            '```',
+        ];
+        return [
+            '---',
+            'schema_version: 1',
+            `id: ${id}`,
+            `name: "Feature ${id}"`,
+            'status: active',
+            'priority: P1',
+            `tags: ["${tag}"]`,
+            'created_at: 2026-06-13T00:00:00Z',
+            'updated_at: 2026-06-13T00:00:00Z',
+            '---',
+            '',
+            `# ${id}: Feature ${id}`,
+            '',
+            '## Acceptance Criteria',
+            '',
+            ...ac,
+        ].join('\n');
+    }
+
+    test('R2: wayfinder-map parent feature skips DD-09 subset rule entirely', async () => {
+        // Same setup as the baseline DD-09 test, but the parent feature is tagged
+        // as a wayfinder map. The rogue scenario should NOT produce a coverage
+        // warning because the subset rule is category-wrong for maps.
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['rogue scenario']),
+            features: { F1: featureWithAcAndTag('F1', ['the real scenario'], 'wayfinder-map') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    test('R2: non-map tag does NOT skip DD-09 — only wayfinder-map is exempt', async () => {
+        // A different tag should not suppress the subset check.
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['rogue scenario']),
+            features: { F1: featureWithAcAndTag('F1', ['the real scenario'], 'some-other-tag') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1);
+    });
+
+    test('R2: untagged feature with scenarios still applies DD-09 (no regression)', async () => {
+        // Baseline behavior unchanged for non-map features.
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['rogue scenario']),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1);
+    });
+    test('R1: only DD-09 is skipped — map-parented task still reports unrelated defects', async () => {
+        // A map-parented task that also has a Requirements section with non-R-numbered
+        // items should still get the L3 format finding. Only the DD-09 comparison is
+        // suppressed for map parents; every other layer stays live.
+        const taskWithDefect = [
+            '---',
+            'schema_version: 1',
+            'name: "Defective task"',
+            'status: backlog',
+            'feature_id: F1',
+            'created_at: 2026-06-13T00:00:00Z',
+            'updated_at: 2026-06-13T00:00:00Z',
+            '---',
+            '',
+            '## 0001. Defective task',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            'some unnumbered requirement without the R-prefix',
+            'another line that also lacks the pattern',
+            '',
+            '### Acceptance Criteria',
+            '',
+            '```gherkin',
+            'Feature: T',
+            '  Scenario: rogue scenario',
+            '    Given x',
+            '```',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithDefect,
+            features: { F1: featureWithAcAndTag('F1', ['the real scenario'], 'wayfinder-map') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        // DD-09 is suppressed (map parent) ...
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+        // ... but the L3 format defect is still reported.
+        const formatFindings = result.findings.filter(
+            (f) => f.code.includes('requirements-format') || f.code.includes('REQUIREMENTS_FORMAT'),
+        );
+        expect(formatFindings.length).toBeGreaterThanOrEqual(1);
+    });
+
     // ── L4 roll-up (0121): parent↔child status drift + roster presence ──
 
     /** A parent task body with a Plan; `withRoster` controls whether the Plan table names a child WBS. */

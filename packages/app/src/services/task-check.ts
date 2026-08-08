@@ -15,6 +15,7 @@ import {
     parseChecklist,
     stripAcFence,
     taskFrontmatterSchema,
+    WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
@@ -1117,9 +1118,18 @@ export class TaskCheckService extends PlanningCheckService {
         if (taskAc.trim().length === 0) return; // no task AC → nothing to cover
 
         let featureAc: string;
+        let featureTags: string[] = [];
         try {
             const raw = await this.fs.readFile(featurePath);
-            featureAc = stripAcFence(MarkdownDocument.parse(raw, 'feature').getSection('Acceptance Criteria') ?? '');
+            const featureDoc = MarkdownDocument.parse(raw, 'feature');
+            // DD-09 subset rule is category-wrong for wayfinder maps: a map's AC is
+            // destination-level or absent, so comparing task scenarios against it
+            // produces noise, not signal (task 0476).
+            featureTags = Array.isArray(featureDoc.frontmatterData?.tags)
+                ? (featureDoc.frontmatterData.tags as unknown[]).filter((t): t is string => typeof t === 'string')
+                : [];
+            if (featureTags.includes(WAYFINDER_MAP_TAG)) return;
+            featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
         } catch {
             return; // feature unreadable — the edge warning above already covered it
         }

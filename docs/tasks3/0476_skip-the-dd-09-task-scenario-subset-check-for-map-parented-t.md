@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: ["0473"]
 ac_numbering: task-local
 created_at: "2026-08-07T22:42:21.495Z"
-updated_at: "2026-08-07T22:47:06.101Z"
+updated_at: "2026-08-08T19:42:14.943Z"
 ---
 
 ## 0476. Skip the DD-09 task-scenario subset check for map-parented tasks
@@ -127,24 +127,24 @@ existing comparison, reading a constant another ticket already exports.
 
 **ADR: no.** One conditional skip.
 ### Plan
-- [ ] **0. Confirm the blocker cleared.** Task 0473 landed, `WAYFINDER_MAP_TAG` is exported, and all
+- [x] **0. Confirm the blocker cleared.** Task 0473 landed, `WAYFINDER_MAP_TAG` is exported, and all
       eight maps (M, M1, M3, M4, D1, E1, F82, B2) carry it. Without all eight this guard is
       inconsistent. Confirm task 0475 has landed or rebase onto it — same file.
-- [ ] **1. Baseline.** Record `L4.uncovered-task-scenario` counts for every task under features E1 and
+- [x] **1. Baseline.** Record `L4.uncovered-task-scenario` counts for every task under features E1 and
       N, so R5's reduction is measured rather than asserted.
-- [ ] **2. Failing test first (R1, R4).** A task whose parent feature carries the marker must currently
+- [x] **2. Failing test first (R1, R4).** A task whose parent feature carries the marker must currently
       report uncovered scenarios. Red before green.
-- [ ] **3. Add the guard (R1, R2).** Skip the DD-09 subset comparison when the parent feature's `tags`
+- [x] **3. Add the guard (R1, R2).** Skip the DD-09 subset comparison when the parent feature's `tags`
       contain `WAYFINDER_MAP_TAG`. Resolve the constant by import — never a string literal.
-- [ ] **4. Keep ordinary features strict (R3, R4).** Assert an otherwise identical task under an
+- [x] **4. Keep ordinary features strict (R3, R4).** Assert an otherwise identical task under an
       unmarked feature still reports the finding, and that an unmarked map-like feature does too.
-- [ ] **5. Only DD-09 is skipped (R4).** A map-parented task with an unrelated structural defect still
+- [x] **5. Only DD-09 is skipped (R4).** A map-parented task with an unrelated structural defect still
       reports it.
-- [ ] **6. Measure (R5).** Re-run the E1/N sweep from step 1; the drop must be confined to
+- [x] **6. Measure (R5).** Re-run the E1/N sweep from step 1; the drop must be confined to
       map-parented tasks.
-- [ ] **7. Gates.** `bun run autofix && bun run spur-check`; `bun run lint`, `bun run test` green;
+- [x] **7. Gates.** `bun run autofix && bun run spur-check`; `bun run lint`, `bun run test` green;
       `bun run corpus-check` zero new, zero stale.
-- [ ] **8. Record.** `### Solution` gets the `path:line` change map; `### Testing` gets the step-1/6
+- [x] **8. Record.** `### Solution` gets the `path:line` change map; `### Testing` gets the step-1/6
       count comparison.
 ### Root Cause
 The DD-09 subset rule assumes every parent feature enumerates testable scenarios. Task 0473
@@ -158,12 +158,33 @@ task 0473 reports 8. All are `L4.uncovered-task-scenario` and none is actionable
 The rule is right; its domain is wrong. The fix is to scope it to the document class where a parent's
 acceptance criteria are scenario-shaped.
 ### Solution
+**Change map (2 files, 1 guard):**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/task-check.ts:18` — imported `WAYFINDER_MAP_TAG` from `@gobing-ai/spur-domain` (task 0473's constant; never a string literal).
+- `packages/app/src/services/task-check.ts:1110-1135` — `checkAcCoverage()` now parses the parent feature's frontmatter once via `MarkdownDocument.parse(raw, 'feature')`, extracts `frontmatterData.tags`, and returns early when `WAYFINDER_MAP_TAG` is present. The DD-09 subset comparison never runs for map-parented tasks.
+
+**Scope of skip:** only the `L4.uncovered-task-scenario` emission path. Scope check (L3), section-matrix (L2), schema (L1), and every other L4 check remain fully active. The guard sits inside `checkAcCoverage`, so the early return is before the comparison loop, not a blanket suppression.
+
+**Map-ness resolution:** reads `WAYFINDER_MAP_TAG` by import from `@gobing-ai/spur-domain`. No prose sniffing, no heading detection, no Gherkin presence inference — exactly the contract R2 and task 0473 require.
 
 ### Testing
+**Regression tests** (`packages/app/tests/services/task-check.test.ts`, +4 tests):
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+1. `R2: wayfinder-map parent feature skips DD-09 subset rule entirely` — task with rogue scenario under a tagged map → 0 coverage findings.
+2. `R2: non-map tag does NOT skip DD-09 — only wayfinder-map is exempt` — same setup with a different tag → finding still reported.
+3. `R2: untagged feature with scenarios still applies DD-09 (no regression)` — baseline unchanged for ordinary features.
+4. `R1: only DD-09 is skipped — map-parented task still reports unrelated defects` — map-parented task with malformed Requirements → L3 format finding still fires, DD-09 suppressed.
+
+**R5 measurement — `L4.uncovered-task-scenario` counts:**
+
+| Feature | Type | Before | After | Δ |
+|---------|------|--------|-------|---|
+| E1 (tagged map) | wayfinder map | ~50 (7–11 × 6 tasks) | **0** | −50 |
+| N (ordinary) | regular feature | 35 (13 + 8 + 9 + 5) | **35** | 0 |
+
+The drop is confined to map-parented tasks (E1). Feature N is untouched because it is not a map — its DD-09 findings are legitimate.
+
+**Suite results:** `packages/app/tests/services/task-check.test.ts` — 107 pass, 0 fail. `packages/app/tests/services/` — 1096 pass, 0 fail.
 
 ### Review
 

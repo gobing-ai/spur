@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Teach feature check about wayfinder maps so a map's deliberate no-AC contract stops failing the BDD gate"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: N
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T06:24:37.133Z"
-updated_at: "2026-08-08T19:37:00.983Z"
+updated_at: "2026-08-08T19:37:26.609Z"
 ---
 
 ## 0473. Teach feature check about wayfinder maps so a map's deliberate no-AC contract stops failing the BDD gate
@@ -385,3 +385,6 @@ N
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-08T19:37:26.108Z todo → wip (system)
+- 2026-08-08T19:37:26.420Z wip → testing (system)
+- 2026-08-08T19:37:26.609Z testing → done (system)
