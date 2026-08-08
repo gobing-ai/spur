@@ -29,7 +29,7 @@ bootstrap:
 
 # ── Spur app section (validated by spurConfigSchema in @gobing-ai/spur-config) ──
 agent:
-  default: omp
+  default: omp-zai-volc
 
   # ── Executors (ADR-033 adaptive model routing) ──
   # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a
@@ -53,10 +53,10 @@ agent:
     - name: omp
       agent: omp
       tier: standard
-    # - name: omp-zai
-    #   agent: omp
-    #   model: zai/glm-5.2
-    #   tier: standard
+    - name: omp-zai
+      agent: omp
+      model: zai/glm-5.2
+      tier: standard
     - name: omp-zai-nvidia
       agent: omp
       model: nvidia/z-ai/glm-5.2
@@ -65,9 +65,17 @@ agent:
     #   agent: omp
     #   model: opencode/glm-5.2
     #   tier: standard
-    - name: omp-zai-volc
+    - name: omp-dsv4-flash-opencode
       agent: omp
-      model: volc/glm-5.2
+      model: opencode/deepseek-v4-flash
+      tier: standard
+    # - name: omp-zai-volc
+    #   agent: omp
+    #   model: volc/glm-5.2
+    #   tier: standard
+    - name: omp-dsv4-flash-volc
+      agent: omp
+      model: volc/deepseek-v4-flash-ga-260731
       tier: standard
     # - name: omp-zai-ollama
     #   agent: omp

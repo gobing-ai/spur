@@ -13,6 +13,7 @@
       "WebFetch(domain:mael.dev)",
       "WebFetch(domain:developers.cloudflare.com)",
       "WebFetch(domain:ab.chatgpt.com)",
+      "WebFetch(domain:github.com)",
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -52,8 +53,7 @@
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Edit(//tmp/**)",
-      "Edit(//private/tmp/**)",
-      "WebFetch(domain:github.com)"
+      "Edit(//private/tmp/**)"
     ]
   },
   "skillOverrides": {
