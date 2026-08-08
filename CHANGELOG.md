@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.36] — 2026-08-08
+
+### Added
+
+- feat(dev-pipeline): batch worktree lifecycle (task 0477) + dev-ops flag glossary (7e444f1c)
+- feat(history): E1 history data plane — forensic ETL, import-all fan-out, analyze/report, daily pipeline (b9963557)
+- feat(0477): `--worktree` flag for dev-runall/refineall/verifyall (27ec074c)
+
+### Fixed
+
+- fix(0479): reject empty verdict artifacts, fix cwd-dependent gate, anchor rules (2359b2a1)
+- fix(0478): pipeline size-gate pre-check, answer-file contract, single typecheck (3da71595)
+- fix(0475): narrow prose-prerequisite heuristic, fix prose-seeded cycles, add premise-verification (92df9764)
+
+### Changed
+
+- docs(0481): 0475-verify retrospective — worktree deps install, worktree-local spur CLI (e3e124fc)
+- docs(tasks): land E1/N task corpus for refine-loop friction analysis (ab9a23f2)
+- chore(config): update executor roster and local IDE permissions (0504154e)
+- chore(pipeline-meta): post-mortem children 0475/0476, batch hardening tasks 0480/0482 (7d8cdfcb)
+- chore(deps): bump @gobing-ai/ts-* to 0.4.23 (02851926)
+- chore(tools): bump lefthook to 2.1.10, drop LEFTHOOK_SANDBOX skip guard (5ab3558b)
+- chore(hooks): skip pre-commit format in spawn-restricted sandboxes via LEFTHOOK_SANDBOX=1 (a67d09a0)
+- chore(0475): merge prose-prerequisite heuristic fix into main (14cc3afe)
+- chore(0475): record done — status, solution/testing/review sections (310c4d81)
+- style(plugin): format pi extensions array on single line (biome) (c9cf6ded)
+
 ## [0.3.34] — 2026-08-06
 
 ### Added
