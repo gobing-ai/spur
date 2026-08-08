@@ -10,11 +10,6 @@ pre-commit:
       glob: "*.{js,ts,tsx,jsx,json}"
       run: bunx biome check --staged --write --no-errors-on-unmatched
       stage_fixed: true
-      # Skip ONLY this command in a spawn-restricted sandbox (e.g. Claude Code),
-      # where lefthook cannot exec child processes. Other hooks (cog) still run.
-      # Run the gate manually before bypassing:
-      #   bunx biome check --staged --write --no-errors-on-unmatched
-      skip: [{ run: test "$LEFTHOOK_SANDBOX" = "1" }]
 
 pre-push:
   commands:
