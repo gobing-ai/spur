@@ -183,6 +183,12 @@ must not be changed without updating the backing skill.
      feature / upstream tasks present when the design depends on them.
   6. **Cross-task** — if `dependencies[]` exist, Design states what this task assumes from deps and
      what it must leave for dependents (no silent re-ownership of upstream contracts).
+  7. **Premise verification** — every factual claim in Background and Requirements that the Design
+     depends on (a status, a file/table/location, an already-landed fix, a count) is checked against
+     the **current tree** — read the file, run the query, grep the corpus. Contradictions are
+     corrected in **this** refine (rewrite the claim, or re-point the design at ground truth), never
+     deferred to the implementer. `--depth ready` exists so a downstream agent does not re-derive the
+     analysis; a frozen design built on a false premise is the worst available outcome.
 
   Ready depth is for multi-package work, multi-agent implement handoffs, and costly pipeline
   failures — not for every small task. Default remains `standard`.
