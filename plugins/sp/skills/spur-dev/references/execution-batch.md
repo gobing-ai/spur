@@ -389,10 +389,36 @@ git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "
 ```
 
 Branch and directory names are derived (command + selector slug + short id); no operator-supplied
-name in this slice (R8.3). After creation, immediately write the state marker (WT-3), then run the
+name in this slice (R8.3).
+
+A fresh worktree has no `node_modules` (gitignored), so the first `bun test` or
+typecheck fails on the first workspace import. Install before any task work:
+
+    cd "../<worktree-dir>" && bun install --frozen-lockfile
+
+`--frozen-lockfile` pins the worktree to `bun.lock` rather than re-resolving,
+so the worktree's dependency tree matches the base ref's.
+
+After creation, immediately write the state marker (WT-3), then run the
 existing batch loop (Steps 1–5) with the worktree as process cwd. `spur workflow run` resolves cwd
 from the process (`apps/cli/src/commands/workflow.ts:124`), so no CLI change is needed — `cd` into
 the worktree directory before launching the loop.
+
+### `spur` on PATH is not this checkout
+
+`spur` (`~/.bun/bin/spur`) resolves to a *published* bundle in `~/node_modules/`,
+not to the repo you are standing in and not to the worktree. `resolveSpurBin()`
+propagates whichever binary you entered through into `vars.spurBin`, which the
+`task-lifecycle.yaml` guards run as `$spurBin task check` — so one wrong entry
+point silently gate-checks against the published bundle.
+
+Inside a worktree, and in the monorepo whenever CLI behavior is under test, invoke
+the tree's own source:
+
+    cd "<worktree>" && bun apps/cli/src/index.ts task check <wbs> --json
+
+Confirm isolation by making a distinctive change in the worktree and checking that
+the command reflects it.
 
 ### WT-3 — Crash-safe state marker (R6)
 

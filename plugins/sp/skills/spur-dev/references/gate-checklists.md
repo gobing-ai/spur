@@ -21,6 +21,19 @@ Run each checklist as an actual command sequence, not a mental confirmation:
 3. If any checkbox fails: stop, fix, re-run. Do not enter the gate.
 4. Only when every checkbox passes: enter the gate (run the CLI verb or trigger the workflow state).
 
+## Task lifecycle transitions
+
+SSOT: `.spur/workflows/task-lifecycle.yaml`.
+
+    backlog → todo → wip → testing → done
+
+- `wip → done` is **not** an edge. Go through `testing`.
+- `done → wip` reopens (warning + mandatory History entry); `cancelled` is terminal.
+- `blocked` is bidirectional with `todo`, `wip`, and `testing`.
+- The two hard guards sit on `wip → testing` and `testing → done`; what the
+  `testing → done` guard requires is in the [done gate](#done-gate-testing--done)
+  section below.
+
 ## feature-check gate
 
 Entered before `spur feature check <id> --strict` (idea-pipeline `feature-check` state;

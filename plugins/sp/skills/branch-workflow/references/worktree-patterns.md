@@ -27,10 +27,12 @@ A git worktree gives you an isolated working directory linked to the same reposi
 
 ```bash
 git worktree add ../project-hotfix hotfix/critical-fix
-cd ../project-hotfix
+cd ../project-hotfix && bun install --frozen-lockfile
 ```
 
 The worktree directory is created alongside the main project. Name it `<project>-<branch>` for clarity.
+
+A fresh worktree has no `node_modules` (gitignored), so the first `bun test` or typecheck fails on the first workspace import. Run `bun install --frozen-lockfile` immediately after creation so the worktree matches `bun.lock`.
 
 ### List
 
@@ -84,3 +86,15 @@ git worktree remove ../old-worktree
 git worktree prune
 git gc --aggressive
 ```
+
+## `spur` on PATH is not this checkout
+
+`spur` (`~/.bun/bin/spur`) resolves to a *published* bundle in `~/node_modules/`, not to the repo you are standing in and not to the worktree. `resolveSpurBin()` propagates whichever binary you entered through into `vars.spurBin`, which the `task-lifecycle.yaml` guards run as `$spurBin task check` — so one wrong entry point silently gate-checks against the published bundle.
+
+Inside a worktree, and in the monorepo whenever CLI behavior is under test, invoke the tree's own source:
+
+```bash
+cd "<worktree>" && bun apps/cli/src/index.ts task check <wbs> --json
+```
+
+Confirm isolation by making a distinctive change in the worktree and checking that the command reflects it.

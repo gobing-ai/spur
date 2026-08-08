@@ -8,7 +8,8 @@ pre-commit:
   commands:
     format:
       glob: "*.{js,ts,tsx,jsx,json}"
-      run: bun run format
+      run: bunx biome check --staged --write --no-errors-on-unmatched
+      stage_fixed: true
 
 pre-push:
   commands:

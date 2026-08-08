@@ -70,9 +70,11 @@ Run `sp:code-review`'s pre-commit self-review checklist before pushing. Fix find
 ```bash
 git checkout main
 git pull --rebase
-git merge --no-ff feature/<slug>   # --no-ff preserves the feature branch history
+git merge --no-ff feature/<slug> -m "chore(<scope>): merge feature/<slug> into main"
 git push
 ```
+
+**Merge commit message.** The `commit-msg` hook runs `cog verify`, which rejects git's default `Merge branch 'x'` message *and* a `merge:` type — cocogitto's default type set has no `merge`. Always pass an explicit conventional `-m`. A rejected message leaves the merge staged but uncommitted; complete it with `git commit -m "chore(<scope>): …"`. Do not reach for `--no-verify` — the merge is valid, only the message token is not.
 
 ### 6. Cleanup
 
