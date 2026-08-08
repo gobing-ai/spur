@@ -336,6 +336,22 @@ Planning commands (`dev-idea`, `dev-plan`): with `--auto`, skip all remaining ta
 run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`. One CLI
 flag sets both.
 
+### `--worktree` — run the batch in an isolated git worktree
+
+**Anchor:** `#flag-worktree`.
+
+Batch commands only (`dev-refineall`, `dev-runall`, `dev-verifyall`): run the entire driver loop
+inside an isolated git worktree instead of the operator's working directory. On a fully successful
+batch the worktree branch is fast-forward-merged onto its base ref and removed; on any failure,
+halt, or non-fast-forward base, the worktree is **retained intact** — never auto-deleted, never
+auto-merged. `/sp:dev-next` does not get the flag (single step; not worth the worktree cost), and
+`--worktree --mode parallel` is rejected (per-task parallel isolation stays task 0142). The full
+lifecycle — dirty-tree precheck, creation, crash-safe marker, merge-or-retain, and `--continue`
+re-entry — is specified in
+[execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree). Portable
+`git worktree` commands only; the git mechanics are reused from
+[worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md).
+
 ---
 
 ## `--next` chain contract

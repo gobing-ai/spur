@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -22,13 +22,14 @@ Wraps the **sp:spur-dev** skill.
 | `--wrap` | Run the wrap hop per task. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
+| `--worktree` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -43,7 +44,17 @@ there as a synonym for omit, resolving to `agent.default`, ADR-047; the orchestr
 report as JSON), `--wrap` (trigger
 `wrapup-pipeline.yaml` after the batch completes), `--next`
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
-`--continue` (resume from checkpoint).
+`--continue` (resume from checkpoint), `--worktree` (run the batch in an isolated git worktree —
+FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; see
+`execution-batch.md` § Worktree isolation).
+
+**`--worktree` is sequential-only.** `--worktree --mode parallel` is **rejected**. This flag gives
+the batch *one* worktree for the whole run; per-task worktrees and parallel isolation remain task
+0142 Slice A. Run parallel batches without `--worktree`, or run them sequentially with it.
+
+**`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
+statuses, kanban) land in the worktree copy; your main tree still shows pre-run statuses until the
+FF-merge on success. This is expected, not a bug.
 
 **`--next` (batch-once wrap).** `--next`
 is chain-to-completion with propagation. On `dev-runall`, each task in the batch runs its

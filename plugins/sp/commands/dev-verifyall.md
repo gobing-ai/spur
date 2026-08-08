@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
+argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -23,13 +23,14 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 | `--next` | Hand off to the next-router on success. | off |
 | `--json` | Emit structured JSON. | off |
 | `--skip-shippable` | Compatibility alias for --skip-shipable; skip the shippable gate. | off |
+| `--worktree` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
+/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]
 ```
 
 Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sugar for
@@ -37,7 +38,12 @@ Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sug
 `--focus`, `--bdd`,
 `--auto`, `--force`),
 `--next` (per-task lifecycle chaining — see below),
-`--json`, `--skip-shippable`.
+`--json`, `--skip-shippable`, `--worktree` (run the batch in an isolated git worktree — FF-merge
+onto the base ref on full success, retain intact on any failure/halt/non-FF; see
+`execution-batch.md` § Worktree isolation).
+**`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
+statuses, verdicts) land in the worktree copy; your main tree still shows pre-run statuses until
+the FF-merge on success. Expected, not a bug.
 
 **`--next` (per-task lifecycle chaining):** `--next`
 is chain-to-completion with propagation. For each task whose verdict is **PASS**, the chain's first

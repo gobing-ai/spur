@@ -340,6 +340,167 @@ The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `no
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
+## Worktree isolation (`--worktree`)
+
+When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
+[`--worktree`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an isolated git
+worktree instead of the operator's working directory. This section owns the worktree lifecycle for
+the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out of scope
+(task 0142 Slice A); `--worktree --mode parallel` is rejected.
+
+The lifecycle wraps Steps 1–5 unchanged: a precheck creates the worktree before selector resolution
+runs, the loop executes with the worktree as process cwd, and a terminal action merges or retains
+after the batch report is emitted. Steps 1–5 themselves are not modified — only their cwd differs.
+
+**Portability (R10).** Use portable `git worktree` commands only. Do **not** depend on the Claude
+Code `EnterWorktree`/`ExitWorktree` tools — the `sp` plugin ships to Codex, Gemini CLI, pi, omp, and
+OpenCode. The underlying git mechanics (create / list / remove / prune, sibling-directory naming,
+disk-space awareness) are reused from [worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md);
+this section does not re-author them.
+
+### WT-1 — Dirty-tree precheck (R3)
+
+`git worktree add` branches from a ref, so uncommitted changes in the main tree do **not** carry
+into the worktree — a batch would silently run against different tree state than the operator sees.
+Before creating the worktree, check the main tree:
+
+```bash
+git status --porcelain
+```
+
+- **Clean tree** → proceed to WT-2.
+- **Dirty tree** → **abort** before any worktree is created. Name the offending files (from
+  `git status --porcelain`) and instruct the operator to commit or stash. No task work has run.
+- **`--force`** → proceed past a dirty tree with a divergence warning that names the uncommitted
+  files. The worktree is created and the batch proceeds against the committed base ref, not the
+  operator's working-directory state.
+
+### WT-2 — Worktree creation (R2)
+
+Create one worktree on a new branch cut from the current HEAD's ref (the **base ref** — often a
+`feat/…` branch, not literally `main`). Location follows the sibling-directory convention in
+[worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md):
+
+```bash
+BASE_REF=$(git rev-parse --abbrev-ref HEAD)
+BASE_SHA=$(git rev-parse HEAD)
+BRANCH="sp/<command>-<selector-slug>-<short-id>"     # e.g. sp/runall-h1-a3f2
+git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF"
+```
+
+Branch and directory names are derived (command + selector slug + short id); no operator-supplied
+name in this slice (R8.3). After creation, immediately write the state marker (WT-3), then run the
+existing batch loop (Steps 1–5) with the worktree as process cwd. `spur workflow run` resolves cwd
+from the process (`apps/cli/src/commands/workflow.ts:124`), so no CLI change is needed — `cd` into
+the worktree directory before launching the loop.
+
+### WT-3 — Crash-safe state marker (R6)
+
+Worktree identity lives on disk under `.spur/run/`, not only in the orchestrator's memory, so a
+session that dies mid-batch is recoverable. Write the marker at creation and update it at the
+terminal transition (merged / retained). Schema:
+
+```json
+{
+  "id": "<marker-id>",
+  "path": "../<repo>-<command>-<selector-slug>-<short-id>",
+  "branch": "sp/<command>-<selector-slug>-<short-id>",
+  "baseRef": "feat/example",
+  "baseSha": "<sha-at-creation>",
+  "command": "dev-runall",
+  "selector": "feature:H1",
+  "createdAt": "<iso-8601>",
+  "status": "active"
+}
+```
+
+`status` transitions: `active` → `merged` (WT-4 success) | `retained` (WT-5 failure/halt/non-FF).
+The marker file is named `.spur/run/worktree-<marker-id>.json`. It is the authority for WT-5 resume
+and for operator recovery after a crash: a killed session leaves the marker at `status: active`,
+which the operator reads to find the worktree path, branch, and base ref.
+
+### WT-4 — Success path (R4)
+
+When the batch completes with **no failed task**, fast-forward-merge the worktree branch onto the
+base ref, then remove the worktree and delete the branch:
+
+```bash
+# Run these from the main tree (not inside the worktree) - you merge the worktree branch
+# back onto the base ref there:
+git checkout "$BASE_REF"
+git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
+# if FF succeeded:
+git worktree remove "../<worktree-dir>"
+git branch -d "$BRANCH"
+# update marker: status = "merged"
+```
+
+**Fast-forward only.** If the base ref has moved since the worktree was created and FF is
+impossible, do **not** rebase, merge-commit, or resolve conflicts — fall through to the retention
+path (WT-5) and report the divergence. The corpus files (`docs/tasks*/`, kanban/index) are
+auto-generated and conflict-prone; automated conflict resolution over generated files is exactly the
+wrong thing to attempt unattended. FF-only means the merge either is trivially correct or does not
+happen.
+
+### WT-5 — Failure path: retain and report (R5)
+
+On any per-task failure, batch halt, HITL pause that ends the run, or non-FF merge from WT-4, the
+worktree directory and branch are left **intact**. No destructive automation on this path under any
+flag combination (`--auto`, `--force`, `--keep-going` — all leave the worktree in place). Update the
+marker: `status = "retained"`. Emit a retention report in the existing halt-report shape:
+
+```
+## Worktree retained — <command> <selector>
+
+**Halt cause:** <one-line cause — batch halted at task <wbs> / non-FF base ref / HITL pause>
+**Worktree path:** ../<worktree-dir>
+**Branch:** sp/<command>-<selector-slug>-<short-id>
+**Base ref:** <base-ref> (<base-sha>)
+
+The worktree and its branch are intact. Nothing was merged onto the base ref.
+Resume, merge, or discard:
+
+  resume:  cd <worktree-path> && <command> --continue --worktree <selector>
+  merge:   git checkout <base-ref> && git merge <branch>     # resolve conflicts manually
+  discard: git worktree remove <worktree-path> && git branch -D <branch>
+```
+
+The report reuses the [`--next` chain contract](flag-glossary.md#-next-chain-contract) halt-report
+shape (halt cause + where + why), not new vocabulary. Retention is the right default: these batches
+are long and already resumable via `--continue`; auto-deleting is data loss, auto-merging is a
+partial result presented as a whole. The answer to "what happens if it fails" is "nothing happens,
+and we tell you where the work is."
+
+### WT-6 — `--continue` re-entry (R7)
+
+A `--continue` resume of a batch started with `--worktree` must re-enter the existing worktree via
+its WT-3 marker rather than creating a second one. Marker lookup:
+
+1. Scan `.spur/run/worktree-*.json` for a marker whose `command` + `selector` match the current
+   invocation and whose `status` is `active` or `retained`.
+2. **Found** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and resume the loop
+   from the checkpoint (Steps 1–5 with `--continue` semantics).
+3. **Not found** → fail loudly: "no resolvable worktree marker for `<command> <selector>` under
+   `.spur/run/`; cannot resume a `--worktree` batch without one. Re-run without `--worktree` to
+   start a new batch in the main tree, or inspect `.spur/run/` for prior markers." Do **not**
+   silently run in the main tree.
+
+### WT-7 — Exclusions (R8)
+
+- **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
+  worth the worktree cost.
+- **`--mode parallel`** is rejected when combined with `--worktree` — per-task worktrees and
+  parallel isolation remain task 0142 Slice A.
+- **No** operator-supplied worktree name, no `--worktree-keep` variant, no auto-cleanup of stale
+  worktrees from prior runs.
+
+### Corpus visibility note
+
+While the batch runs, corpus writes (`spur task update`, `spur feature update`) land in the
+**worktree copy**; the operator's main tree still shows pre-run task statuses. This is expected —
+the merge (WT-4) or manual integration (WT-5) propagates the writes back. Worth one line in each
+command doc so it does not read as a bug.
+
 ## Still out of scope
 
 - **Interactive within-step Q&A** — a headless subprocess `agent.run` agent asking the operator a
