@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -322,6 +322,20 @@ describe('generateMarkdown', () => {
     test('falls back to "unknown" when no platforms detected', () => {
         const md = generateMarkdown({ ...baseSummary, platforms: [] });
         expect(md).toContain('- **Platforms:** unknown');
+    });
+
+    test('includes history report path when present (R7)', () => {
+        const md = generateMarkdown({
+            ...baseSummary,
+            historyReportPath: '/proj/.spur/reports/history/2026-08-07.json',
+        });
+        expect(md).toContain('## History Report');
+        expect(md).toContain('/proj/.spur/reports/history/2026-08-07.json');
+    });
+
+    test('omits history report section when no report exists (R7)', () => {
+        const md = generateMarkdown(baseSummary);
+        expect(md).not.toContain('## History Report');
     });
 });
 
@@ -760,6 +774,31 @@ describe('git-backed integration', () => {
         } finally {
             spawnSpy.mockRestore();
         }
+    });
+    test('buildDailySummary surfaces history report path via latest.json symlink (R7)', async () => {
+        const reportsDir = join(tmpRepo, '.spur', 'reports', 'history');
+        mkdirSync(reportsDir, { recursive: true });
+        const artifactPath = join(reportsDir, '2026-08-07.json');
+        writeFileSync(artifactPath, '{}');
+        symlinkSync(artifactPath, join(reportsDir, 'latest.json'));
+
+        const summary = await buildDailySummary({
+            date: todayLocal(),
+            dryRun: true,
+            skipGit: true,
+            skipCcusage: true,
+        });
+        expect(summary.historyReportPath).toBe(artifactPath);
+    });
+
+    test('buildDailySummary omits historyReportPath when no pointer exists (R7)', async () => {
+        const summary = await buildDailySummary({
+            date: todayLocal(),
+            dryRun: true,
+            skipGit: true,
+            skipCcusage: true,
+        });
+        expect(summary.historyReportPath).toBeUndefined();
     });
 });
 

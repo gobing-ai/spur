@@ -284,4 +284,23 @@ describe('loadAllEtlPayloads', () => {
         const payloads = await loadAllEtlPayloads(db);
         expect(payloads.length).toBe(0);
     });
+
+    // R4 (0467) — loadAllEtlPayloads inherits SOURCE_TABLES, so the added omp/grok/agy
+    // tables are now read when present. NOTE: post-0466, omp payloads are written to
+    // history_message, not history_etl_omp — so this recovers legacy rows only; the live
+    // run-cost attribution gap is deferred to its own E1 ticket (see 0467 Q&A).
+    test('reads payloads from the added omp/grok/agy tables when present', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const stmt =
+            'CREATE TABLE IF NOT EXISTS ETL_TABLE (id INTEGER PRIMARY KEY AUTOINCREMENT, payload_json TEXT NOT NULL, imported_at TEXT NOT NULL)';
+        for (const table of ['history_etl_omp', 'history_etl_grok', 'history_etl_agy']) {
+            await db.exec(stmt.replace('ETL_TABLE', table));
+        }
+        await insertPayload(db, 'history_etl_omp', makePayload({ source_record_id: 'omp-1' }));
+        await insertPayload(db, 'history_etl_grok', makePayload({ source_record_id: 'grok-1' }));
+        await insertPayload(db, 'history_etl_agy', makePayload({ source_record_id: 'agy-1' }));
+
+        const payloads = await loadAllEtlPayloads(db);
+        expect(payloads.map((p) => p.source_record_id).sort()).toEqual(['agy-1', 'grok-1', 'omp-1']);
+    });
 });

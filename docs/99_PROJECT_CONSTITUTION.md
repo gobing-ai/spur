@@ -509,6 +509,7 @@ if it recurs, a new rule in §6.
   elsewhere (run-level identity flags → agent specs) — the row stayed green while its acceptance
   text went false. A ✅ row's *acceptance text* rots independently of its status; spot-check both
   (§7 audit).
+- [2026-08-08] spur-new: The entire §6 History section was stale after feature E1 shipped — 7 sources (now 10), no forensic ETL, no `--source all` fan-out, no `daily`/`analyze`/`report` pipeline, no scheduling, no versioned artifact. A ✅ status row stayed green while its acceptance text was 4 features behind. When a feature ships a capability group, audit every `05` row in that section in the same wrapup (§7 audit).
 
 ### Lessons for `AGENTS.md`
 

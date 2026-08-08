@@ -1,6 +1,6 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { aggregateCosts, cacheHitRatio, computeRecordCost } from './costs';
-import { etlToCostRecord, SOURCE_TABLES } from './query';
+import { cacheHitRatio, computeRecordCost } from './costs';
+import { extractClaudeTokens, SOURCE_TABLES } from './query';
 import type { CostRecord, EtlPayload, TokenTotals } from './types';
 
 // ---------------------------------------------------------------------------
@@ -33,10 +33,14 @@ const UNAVAILABLE: ActionCost = Object.freeze({
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
-        cacheCreationTokens: 0,
+        cacheWriteTokens: 0,
         costUsd: 0,
         records: 0,
         recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
     },
     cacheHit: null,
     estimated: false,
@@ -183,17 +187,71 @@ export function actionCost(matchedRecords: readonly EtlPayload[], source: string
 
     const costRecords: CostRecord[] = [];
     for (const payload of matchedRecords) {
-        const record = etlToCostRecord(payload, source);
-        costRecords.push(computeRecordCost(record));
+        costRecords.push(computeRecordCost(payloadToCostRecord(payload, source)));
     }
 
-    const summary = aggregateCosts(costRecords);
-    const cacheHit = cacheHitRatio(summary.totals);
+    const totals = foldTotals(costRecords);
+    const cacheHit = cacheHitRatio(totals);
 
     return {
-        totals: summary.totals,
+        totals,
         cacheHit,
         estimated: false,
+    };
+}
+
+/**
+ * Fold priced cost records into a {@link TokenTotals} bucket. The in-memory
+ * `aggregateCosts` that used to do this was retired with the analyze SQL cut-over
+ * (task 0474, R7); run-cost still needs a small local fold over the bounded set of
+ * matched records. The forensic dimensions (`messages`, `toolCalls`, `durationMs`,
+ * `durationUnmeasured`) are not derivable from ETL payloads and stay 0 here.
+ */
+function foldTotals(records: readonly CostRecord[]): TokenTotals {
+    const totals: TokenTotals = {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
+    };
+    for (const record of records) {
+        totals.inputTokens += record.inputTokens;
+        totals.outputTokens += record.outputTokens;
+        totals.cacheReadTokens += record.cacheReadTokens;
+        totals.cacheWriteTokens += record.cacheCreationTokens;
+        totals.costUsd += record.costUsd;
+        totals.records += 1;
+        if (record.usageReported) totals.recordsWithUsage += 1;
+    }
+    return totals;
+}
+
+/**
+ * Build a {@link CostRecord} from an ETL payload using the provider `usage` object.
+ * Mirrors the retired `etlToCostRecord` without its 4-chars-per-token length estimate
+ * (task 0474 R7): an estimate silently entering a cost total is the fabrication the
+ * forensic contract exists to end. Absent usage yields zero tokens with
+ * `usageReported: false` — the never-fabricate invariant, not a guessed number.
+ */
+function payloadToCostRecord(payload: EtlPayload, source: string): CostRecord {
+    const tokens = extractClaudeTokens(payload);
+    return {
+        source,
+        date: payload.created_at?.slice(0, 10) ?? 'unknown',
+        model: payload.model ?? 'unknown',
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens,
+        cacheReadTokens: tokens.cacheReadTokens,
+        cacheCreationTokens: tokens.cacheCreationTokens,
+        usageReported: tokens.usageReported,
+        costUsd: 0, // Filled by cost computation
     };
 }
 

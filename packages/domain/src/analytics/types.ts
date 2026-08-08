@@ -36,19 +36,27 @@ export interface CostRecord {
     costUsd: number;
 }
 
-/** Token, cache, and cost aggregates shared by every analytics breakdown bucket. */
+/** Token, cache, cost, and forensic aggregates shared by every analytics breakdown bucket. */
 export interface TokenTotals {
     /** Total billed input tokens, cache reads and writes included. */
     inputTokens: number;
     outputTokens: number;
     /** Input tokens served from the provider's prompt cache. */
     cacheReadTokens: number;
-    /** Input tokens written into the provider's prompt cache. */
-    cacheCreationTokens: number;
+    /** Input tokens written into the provider's prompt cache (`history_message.cache_write_tokens`). */
+    cacheWriteTokens: number;
     costUsd: number;
     records: number;
     /** Records in this bucket that carried provider usage data — the ratio's denominator basis. */
     recordsWithUsage: number;
+    /** Number of `history_message` rows in this bucket. */
+    messages: number;
+    /** Number of `history_tool_call` rows in this bucket. */
+    toolCalls: number;
+    /** Sum of per-step `duration_ms` across tool calls. 0 when every duration is NULL. */
+    durationMs: number;
+    /** Tool calls in this bucket whose `duration_ms` was NULL — the duration "unavailable" count. */
+    durationUnmeasured: number;
 }
 
 /** Aggregated analytics summary across one or more platforms. */

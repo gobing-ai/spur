@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-06T23:30:12.554Z"
-updated_at: "2026-08-07T00:34:54.064Z"
+updated_at: "2026-08-08T12:32:05.476Z"
 done_forced: "true"
 done_reason: "Wayfinder investigation ticket resolved. Per-source field map complete with proposed roots, expected yields, and ingestion-path inventory. Full analysis in Solution section. Unblocks 0455 and 0457."
 ---
@@ -344,8 +344,8 @@ not an oversight — record it explicitly.
 
 **Tool-call join:**
 - `message` records with `message.role === "assistant"`: `message.content[]` where `block.type === "toolCall"` with `id`, `name`, `arguments`
-- `message` records with `message.role === "user"`: `message.content[]` where `block.type === "tool_result"` with `tool_use_id`
-- Join on `toolCall.id` ↔ `tool_result.tool_use_id`
+- Tool results are their own records: `message.role === "toolResult"` with `toolCallId`, `toolName`, `isError`, `content` — **not** `tool_result` blocks in user messages (corrected 2026-08-08 re-verify: zero `tool_result` records across all sampled pi files incl. the original 2026-05-10 sample)
+- Join on `toolCall.id` ↔ `toolResult.toolCallId`
 - Note: Pi uses `toolCall` (camelCase), NOT `tool_use` (unlike claude)
 
 **Timing:** No explicit duration field. `timestamp` on each record provides sequencing.
@@ -382,7 +382,7 @@ not an oversight — record it explicitly.
 | thinking_level_change | 1 | 0.2% | **meta** | Thinking level change |
 | custom_message | 1 | 0.2% | **drop** | Sidecar notification |
 
-**Tool-call join:** Identical to Pi — `toolCall` blocks in assistant message content, `tool_result` blocks in user message content. 247 tool calls in sampled file.
+**Tool-call join:** Identical to Pi — `toolCall` blocks in assistant message content; results are `message.role === "toolResult"` records carrying `toolCallId` (re-verified 2026-08-08: zero `tool_result` blocks in omp files). 247 tool calls in sampled file.
 
 **Timing:** No explicit duration field. `timestamp` on each record.
 
@@ -448,7 +448,7 @@ not an oversight — record it explicitly.
 
 **Session identity:** `params.sessionId` (UUID). `params._meta.eventId` has `eventId`. Path is `/<url-encoded-cwd>/<uuid>/updates.jsonl` (working directory URL-encoded in path).
 
-**What grok CANNOT supply:** Per-call token usage (only per-turn rollup). Cost field. Content is chunked across multiple records (streaming) — needs reconstruction.
+**What grok CANNOT supply:** Per-call token usage (only per-turn rollup). Content is chunked across multiple records (streaming) — needs reconstruction. (2026-08-08 re-verify: `turn_completed.usage.costUsdTicks` exists — a ticks field, not plain USD; 0455 must decide whether it is usable as cost.)
 
 ---
 
@@ -508,8 +508,8 @@ not an oversight — record it explicitly.
 | Top-level nesting | Flat | `{ts, type, payload}` | Flat | Flat | `{ts, method, params}` | Flat |
 | Record identity | `type` | `type` + `payload.type` | `type` | `type` | `method` + `sessionUpdate` | `type` |
 | Tool call field | `tool_use` | `function_call` | `toolCall` | `toolCall` | `tool_call` | `tool_calls[]` |
-| Tool result field | `tool_result` | `function_call_output` | `tool_result` | `tool_result` | `tool_call_update` | (implicit step) |
-| Call ID join | `id` ↔ `tool_use_id` | `call_id` ↔ `call_id` | `id` ↔ `tool_use_id` | `id` ↔ `tool_use_id` | `toolCallId` | step_index order |
+| Tool result field | `tool_result` | `function_call_output` | `role:"toolResult"` record | `role:"toolResult"` record | `tool_call_update` | (implicit step) |
+| Call ID join | `id` ↔ `tool_use_id` | `call_id` ↔ `call_id` | `toolCall.id` ↔ `toolResult.toolCallId` | `toolCall.id` ↔ `toolResult.toolCallId` | `toolCallId` | step_index order |
 | Timing | `turn_duration` (system) | None (timestamp only) | None (timestamp only) | None (timestamp only) | `apiDurationMs` | timestamp in content |
 | Model | `message.model` | `turn_context.payload.model` | `message.model` | `message.model` | `_meta.modelId` | SQLite only |
 | Token usage | `message.usage` (per assistant msg) | `token_count` (sparse) | `message.usage` (every msg) | `message.usage` (every msg) | `turn_completed.usage` | SQLite binary |
@@ -614,66 +614,68 @@ types; 0455 must classify them or explicitly defer each.
 Census script: `scratchpad/census.ts` (read-only; prints aggregates only, never raw transcript
 content).
 ### Testing
-**Verdict: PASS** (re-verify 2026-08-06, `--force --fix all --focus all`)
+**Verdict: PASS** (re-audit 2026-08-08 under `--auto --force --focus all --fix all --next`; second forced re-verify after 2026-08-06/07 runs)
 
 Coverage: N/A (documentation-only / wayfinder research; no runtime code path added).
 
-**Method this run:** Independent re-probe of ambient history with `find -L`, sample census of real JSONL per source, re-read code anchors, `spur task check 0463 --json`. Fix pass corrected R5 transcript-vs-full claim and Testing evidence paths. Artifacts: `.spur/run/0463-verdict.json` (this run).
+**Method this run:** Independent re-probe of all six ambient roots with `find -L` (symlink-safe), fresh grep/JSON inspection of current session files per source, re-read of code anchors at cited lines, agy SQLite re-opened, `spur task check 0463 --json`. One bounded `--fix all` repair applied to the Solution (pi/omp tool-join), then re-verified.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Solution field maps for all six sources with record-type census + keep/drop/fold: claude (`docs/tasks3/0463_…md` Field Map — claude), codex, pi, omp, grok, agy. Independent re-census 2026-08-06 confirmed type discriminators (`type` / `payload.type` / `params.update.sessionUpdate` / agy step `type`) on live files under `~/.claude/projects`, `~/.codex/sessions`, `~/.pi/agent/sessions`, `~/.omp/agent/sessions`, `~/.grok/sessions`, `~/.gemini/antigravity-cli/brain`. |
-| R2 | MET | Per-source tool join documented: claude `tool_use.id`↔`tool_result.tool_use_id`; codex `call_id`; pi/omp `toolCall.id`↔`tool_result.tool_use_id`; grok `toolCallId`; agy implicit `step_index` order. Re-confirmed on disk: pi big session has `toolCall` blocks; claude has `tool_use`/`tool_result`; agy `PLANNER_RESPONSE.tool_calls[]`. |
-| R3 | MET | Timing/model/usage table in Solution + cross-source comparison. Re-confirmed: claude `system.subtype=turn_duration` + `durationMs`; pi `message.usage` + `cost`; grok `turn_completed.usage.apiDurationMs` + `modelUsage`; agy model/usage absent from JSONL (SQLite binary). |
-| R4 | MET | Session/turn identity per source (path vs record). Layouts re-measured: claude filename UUID + `sessionId`; codex `sessions/YYYY/MM/DD/rollout-…`; pi `--<slug>--/<ts>_<uuid>.jsonl`; omp `<slug>/<ts>_<uuid>.jsonl`; grok URL-encoded cwd + session UUID; agy brain UUID dir. |
-| R5 | MET | Dual-store characterization: JSONL types + SQLite tables (`steps`, `gen_metadata`, `executor_metadata`, …) on `32e8a263-….db` (re-opened this run: 7 tables, steps=34). **Fix this run:** transcript vs full are same census but **not identical** (53/92 lines differ on `18376dc8-…`; prefer `transcript_full.jsonl`). JSONL authoritative over protobuf SQLite. |
-| R6 | MET | Proposed roots/patterns table. Re-confirmed: pi `.pi/history` missing; `find -L ~/.pi -name '*.json'` → 3843; `SOURCE_DEFINITIONS` at llm-jsonl-importer `sources.ts` (SOURCE_DEFINITIONS) has pi roots `['.pi/history','.pi']` patterns `*.jsonl,*.json`; missing omp/grok; antigravity → `.antigravity` (IDE config, not history). |
-| R7 | MET | Path A: `packages/app/src/workflow/actions/agent-run.ts` writes `.spur/run/<runId>/agent-sessions/<agent>/`; `discoverSessionId` at `:408`. Capability matrix ts-ai-runner `shims.ts` (AGENT_SESSION_CAPABILITY) — only pi+omp `supportsSessionDir: true`. On-disk agent-sessions contain omp/omp-zai only; no prune evidence. Path B: ambient counts re-measured (claude 307, codex 1328, pi 1236, omp 690, grok 344, agy 147 jsonl; agy .db 74). Facts only — no path decision. |
-| R8 | MET | Expected post-fix yield table per source with basis (claude ~40-50%, codex ~85%, pi/omp ~95%, grok ~30-40%, agy ~90%). |
+| R1 | MET | Solution per-source field maps (census tables keep/drop/fold) for all six. Re-probed live this run: claude `~/.claude/projects/-Users-robin-xprojects-spur-new/9e267a92-….jsonl` (257 ln; `tool_use`=109, `version 2.1.226` — drift beyond Solution's 2.1.220–221 noted there as expected), pi 2026-08-07 file (422 ln, 189 `toolCall`), agy `0943d750-…/transcript_full.jsonl` (194 ln; PLANNER_RESPONSE 95, RUN_COMMAND 35, CODE_ACTION 22, VIEW_FILE 21, GREP_SEARCH 10 — consistent with census + addendum). Root counts re-measured: claude 305, codex 1328, pi 1241, omp 710, grok 363, agy brain 153 (+77 conversations .db). |
+| R2 | MET (after fix this run) | claude join re-confirmed on disk (`tool_use`=109 / `tool_result`=65 in latest file; 1:1 claim was per-sample and is labeled as such). codex `call_id`, grok `toolCallId` (310 refs in latest `updates.jsonl`), agy step-index — unchanged. **Fix:** pi/omp join corrected — zero `tool_result`/`tool_use_id` across 8 recent + 5 May-2026 pi files and 4 omp files; actual join is `toolCall.id` ↔ `message.role:"toolResult"` records with `toolCallId`/`toolName`/`isError` (verified: toolCall keys `[arguments,id,name,type]`; toolResult keys `[content,details,isError,role,timestamp,toolCallId,toolName]`). Solution + cross-source table updated via CLI. |
+| R3 | MET | claude `turn_duration`/`durationMs` claim stands (absent in today's small file — version/turn dependent, Solution already scopes it to `system` subtype). grok re-confirmed fresh: `turn_completed.usage` keys `[apiDurationMs, cacheCreationTokens, cachedReadTokens, costUsdTicks, inputTokens, modelCalls, modelUsage, numTurns, outputTokens, reasoningTokens, totalTokens]` — matches Solution plus `costUsdTicks` (now annotated). pi `message.usage`+`cost` shape confirmed in May sample. agy model/usage absent from JSONL — re-confirmed (types carry no model field). |
+| R4 | MET | Path/record identity re-verified per source: claude filename UUID + `sessionId`; codex `sessions/YYYY/MM/DD/rollout-…`; pi `--<slug>--/<ts>_<uuid>.jsonl`; omp `<slug>/<ts>_<uuid>.jsonl` (incl. subdir layouts like `<ts>_<uuid>/session.jsonl` seen this run); grok URL-encoded cwd (`%2FUsers%2Frobin%2F…/019fdd90-…/updates.jsonl`); agy brain UUID dir. |
+| R5 | MET | Fresh agy diff this run on session `0943d750-…`: `transcript.jsonl` vs `transcript_full.jsonl` — same 194 lines, **DIFFER** (`cmp` exit 1) — confirms the 2026-08-06 correction (prefer `transcript_full`). SQLite re-opened `conversations/0943d750-….db`: 7 tables `[steps, gen_metadata, executor_metadata, trajectory_meta, trajectory_metadata_blob, battle_mode_infos, parent_references]` — matches Solution. JSONL authoritative stands (SQLite payloads are binary protobuf). |
+| R6 | MET | Proposed roots/patterns table in Solution. **Corroboration this run:** downstream commit `f58cfd6` ("typed contract tables + per-source mappers") in ts-libs adopted the proposals verbatim — `SOURCE_DEFINITIONS` (llm-jsonl-importer `src/sources.ts:152`) now has pi `['.pi/agent/sessions']` (`:153`), omp `['.omp/agent/sessions']` (`:173`), grok `['.grok/sessions']` (`:182`), agy `['.gemini/antigravity-cli/brain']` (`:193`), all `*.jsonl` — exactly the Solution's proposed roots. The Solution's "missing omp/grok" text correctly describes the investigation-time state (0.4.19); stale-reference nuance noted as advisory, not a defect of the historical record. |
+| R7 | MET | Anchor lines re-read: `packages/app/src/workflow/actions/agent-run.ts:143` = `sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir)` (affinity branch; non-affinity branch also routes to agent-sessions at `:151`); `discoverSessionId` at `:408`. Capability matrix re-read at ts-ai-runner `shims.ts` `AGENT_SESSION_CAPABILITY` (`:338`): only `omp` and `pi` have `supportsSessionDir: true`; claude/codex/agy/grok false — matches Solution. Prune evidence: none found (run dirs persist). |
+| R8 | MET | Expected post-fix yield table in Solution (claude ~40-50%, codex ~85%, pi/omp ~95%, grok ~30-40%, agy ~90%) with per-source basis; registry adoption (f58cfd6) is consistent with these fixes being implemented downstream. |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario: R1 — every in-scope source is characterized from real files — field map R1–R4 | MET | static-ref + command | Solution per-source maps; independent `find -L` + JSONL census this run (all six roots present) |
-| And agy characterized JSONL + SQLite | MET | command | SQLite tables listed via python/sqlite3 on `~/.gemini/antigravity-cli/conversations/*.db` (74 dbs); transcript vs full re-diffed |
-| And proposed roots/patterns per source | MET | static-ref | Solution “Proposed Roots and Patterns” table; matches importer gaps in llm-jsonl-importer sources.ts |
-| And both ingestion paths inventoried without deciding | MET | static-ref | Solution “Ingestion Paths”; packages/app/src/workflow/actions/agent-run.ts:143 + shims.ts re-read this run |
-| And expected post-fix yield per source | MET | static-ref | Solution “Expected Post-Fix Yield” table |
-| And every claim cites real files inspected | MET | static-ref | Solution “Files inspected” table + absolute code paths; live re-probe paths above |
+| Scenario: R1 — every in-scope source is characterized from real files — field map R1–R4 | MET | static-ref + command | Solution per-source maps; fresh `find -L` + per-file grep/python probes this run (all six roots, all six formats touched) |
+| And agy characterized JSONL + SQLite | MET | command | `cmp` DIFFER + 7-table sqlite listing on `0943d750-…` this run |
+| And proposed roots/patterns per source | MET | static-ref | Solution "Proposed Roots and Patterns"; corroborated by ts-libs `sources.ts:152-196` (adopted) |
+| And both ingestion paths inventoried without deciding | MET | static-ref | Solution "Ingestion Paths"; anchors `agent-run.ts:143`, `:408`, `shims.ts:338` re-read this run |
+| And expected post-fix yield per source | MET | static-ref | Solution "Expected Post-Fix Yield" table |
+| And every claim cites real files inspected | MET | static-ref | Solution "Files inspected" table + this run's fresh probes named above |
 
 **Design conformance**
 
 | Claim | Status | Notes |
 |-------|--------|-------|
-| Read-only census; no importer/code edits | DONE | No product code in this task’s deliverable |
-| Frozen output shape (per-source census, field map, joins, roots, yield) | DONE | All six maps + cross-source table present |
-| Sampling ≥3 files / ≥2 projects / ≥2 dates | PARTIAL (documented) | claude/codex meet; pi/omp/agy thinner — Review P4; shape confirmed by independent multi-file probe this run |
-| Anti-pattern: no contract proposal | DONE | Yields/constraints only; contract left to 0455 |
-| find -L not plain find | DONE | Background + this re-verify use `find -L` |
+| Read-only census; no importer/code edits | DONE | This run edited only the task's own Solution (doc repair under `--fix all`); no product code touched |
+| Frozen output shape (census, field map, joins, roots, yield per source) | DONE | All six maps + cross-source table present |
+| Sampling ≥3 files / ≥2 projects / ≥2 dates | CHANGED (documented) | Original thin for pi/omp/grok/agy; widened by the 80-file addendum and by this run's multi-file probes |
+| Anti-pattern: no contract proposal | DONE | Yields/constraints only; contract left to 0455 (since implemented in ts-libs f58cfd6) |
+| `find -L` not plain `find` | DONE | All probes this run use `find -L` |
 
 **Checks**
 
 | Check | Status | Evidence |
 |-------|--------|----------|
-| design-conformance | pass | 4/5 DONE; sampling PARTIAL documented (CHANGED-acceptable) |
-| scope-creep | pass | No product code; deliverable is Solution research only |
-| evidence-rule-pass | pass | Research/docs AC; evidenceType static-ref + command re-probes (no runtime suite expected) |
-| task-check | pass | `spur task check 0463` pass=true (warnings only: DD-09 scenario subset, pre-fix stale anchors — addressed this run) |
+| design-conformance | pass | 4/5 DONE; sampling CHANGED-documented (Solution note + addendum) |
+| scope-creep | pass | No product code; deliverable is Solution research; fix stayed inside this task's own section |
+| evidence-rule-pass | pass | Docs/research AC; `command` + `static-ref` evidence throughout; no runtime suite expected |
+| task-check | pass | `spur task check 0463 --json` → pass=true; one pre-existing L4 warning (DD-09: wayfinder scenario not in E1 feature AC subset) |
 
-**SECUA (research artifact)**
+**SECUA Review (research artifact)**
 
-- S: No secrets written into corpus; only structural field names and counts.
-- E: N/A for code; sampling used bounded line caps.
-- C: R5 identity claim corrected this run (major accuracy fix). Residual: ambient file counts drift vs Background table (normal).
-- U: Cross-source comparison table is 0455-readable.
-- A: Correctly stays out of importer edits; constraints explicit for 0455.
+- **S:** No secrets or transcript content written into corpus — only structural field names, counts, paths.
+- **E:** N/A (no code). Probes bounded (`head`, `grep -c`, single-file python).
+- **C:** One major accuracy defect found and fixed this run (pi/omp tool-join). Residual advisories: grok `costUsdTicks` semantics unresolved (annotated for 0455); `scratchpad/census.ts` referenced by the addendum no longer exists on disk (data retained in Solution); claude version drifted to 2.1.226 (Solution already warns of version drift).
+- **U:** Cross-source comparison table remains 0455-readable; corrected rows preserve the side-by-side layout.
+- **A:** Correctly stays out of importer edits; constraints for 0455 explicit; downstream adoption confirms handoff worked.
 
-Findings: no blocker/major remaining after fix. Minor/advisory: sparse primary sampling for pi/omp (mitigated by format=omp identity + independent multi-file check); codex format B lightly covered; grok also has `chat_history.jsonl` (third shape) not fully mapped — advisory for 0455.
+Findings: no blocker/major remaining after this run's fix. Advisory (non-blocking): (1) grok `costUsdTicks` — ticks, not USD; classify in 0455/report layer. (2) `scratchpad/census.ts` gone; census results are preserved in the Solution addendum. (3) agy latest sample shows brain UUID == conversations `.db` UUID (`0943d750-…`), softening the "different UUID system" remark — kept as-is since it held for the original `32e8a263-…` sample; 0455 implementers should key on brain UUID.
 
-**Close-out residual (2026-08-07):** Registry/root findings are inputs to **0455** and listed on the E1 map `Known defects` (not a separate 0463 implement ticket). Checkpoint path bugs belong to **0457 → 0465**.
+**Fix ledger:** `.spur/run/0463-fix-created.json` — in-place Solution repair (no follow-up task needed); pi/omp tool-join + cross-source rows + grok cost annotation.
+
+**--next: no-op - task already terminal (done)**
 ### Review
 
 **Read-only investigation task — no code changes. Review is evidence-based, not SECUA.**

@@ -350,21 +350,150 @@ Backed by `ts-rule-engine`. Help dispatch per §1.0.
   `packages/domain/src/analytics/run-cost.ts`.
 Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
-#### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]`
+#### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--source-timeout <ms>] [--json]`
 
 Import agent conversation JSONL. `--source` ∈ {pi, claude, codex, gemini, opencode, antigravity,
-openclaw}. `--mode` ∈ {full, incremental, force-file} (defaults: `incremental` for root scans,
-`force-file` when `--file` is given). Reports scanned files, processed lines, imported/duplicate
-records, parse/validation errors; exit 1 if any errors. Backed by `ts-llm-jsonl-importer`.
+openclaw, omp, grok, agy, **all**} (default `all`). `--mode` ∈ {full, incremental, force-file}
+(defaults: `incremental` for root scans, `force-file` when `--file` is given). Reports scanned files,
+processed lines, imported/duplicate records, parse/validation errors. Backed by
+`ts-llm-jsonl-importer`.
 
-#### `spur history analyze [--since <iso-date>] [--json]`
+**Fan-out (task 0470):** `--source all` iterates every known source in `SOURCES` order, each in its
+own `try` with its own transaction — a throwing or timing-out source is caught, recorded
+`status: 'failed'` with its error, and the loop continues; one source can never abort another. A
+source that discovers zero files is `status: 'empty'`, never `ok`; a source with checkpoint rows but
+zero files now emits a `source-was-nonempty` warning. `--source-timeout <ms>` bounds each source
+(default **600000** = 10 min); a source exceeding it is abandoned at its deadline and recorded
+`failed`. A single `--source <x>` is the n=1 case of the same contract — there is never a second
+import path.
 
-Aggregate imported ETL records into token/cost analytics (totals + per-source + per-model + daily).
-Reads `history_etl_*` tables; estimates cost from per-model pricing.
+**Exit-code contract (R3) — replaced the old "exit 1 if any errors":** `0` every source ok/empty,
+`2` at least one failed **and** at least one not, `1` every source failed. A source is `failed` only
+if it threw or hit its timeout — parse and validation errors become counts on its `CoverageEntry`,
+not a failed status (deliberate loss of "parse errors ⇒ exit 1", which under fan-out cannot
+distinguish one noisy source from six dead ones; the compensating signals are the artifact's error
+counts and the `history.*` events).
 
-#### `spur history report [--json]`
+#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--json]`
 
-Reserved CLI surface for richer history reports. Currently prints a not-implemented message citing this section and suggesting `spur history analyze` (0452 MVP). Full report deferred (P8).
+Run-once daily pipeline (task 0470 R6): **import-all → analyze → write artifact → prune** reports
+older than 90 days (`REPORT_RETENTION_DAYS`), in a single process that exits when done — never stays
+resident (a resident schedule belongs to 0471's launchd agent, not Spur's embedded scheduler). The
+**import** step takes no date window and runs `--mode incremental` on every source, relying on
+checkpoint resume (R7): a missed night self-heals on the next run with no gap and no double-count.
+Only the **analyze** step scopes the report via `--since`/`--until`. `--root <path>` overrides the
+per-source history roots (test seam; default is each source's platform dir). `--json` emits the
+structured `DailyResult` (`{ fanOut, artifact, pruned }`). Exit code follows the fan-out import
+outcome (0/1/2), so `history.daily.failed` and the exit agree.
+
+#### `spur history analyze [--since <iso>] [--until <iso>] [--source <s|all>] [--session <id>] [--run <runId>] [--task <wbs>] [--top <n>] [--out <path>] [--json]`
+
+Aggregate imported history into forensic analytics and write a **versioned JSON artifact** (task 0474).
+Aggregation is done in **SQL** over `history_message` / `history_tool_call` (the Q1–Q10 forensic query
+set — per-step time/token cost, tool-call counts, repeated-call loop detection, unknown-disposition
+drift) — never by loading the corpus into memory. Reads the contract tables populated by the six
+converted sources (claude, codex, pi, omp, grok, agy) plus the generic ETL sources.
+
+Six composable `AND` selectors, each resolving against an indexed column: `--since`/`--until`
+(`history_message.ts`), `--source <s>` / `all` (`source`; `all` = no source predicate), `--session`,
+`--run`, `--task` (`run_id`/`task_wbs` via the `0009_spur_cli_history_message_run_idx`
+`(provenance, run_id)` index), and `--top <n>` (default 20; bounds `bySession`/`byTool` only — never
+`totals`/`bySource`/`byModel`/`daily`).
+
+Artifact: `.spur/reports/history/<YYYY-MM-DD>/analyze-<selectorDigest>.json` where `selectorDigest` is
+the first 8 hex of sha256 over the canonicalized selector (stable for the daily loop). `--out <path>`
+overrides; `latest.json` symlinks the newest artifact. `schemaVersion: 1`; additive fields do not bump
+it. `coverage[].parseErrors`/`validationErrors` are **counts** plus at most 20 samples per source, with
+full detail streamed to `analyze-<digest>.errors.jsonl` (R6). `recordsWithUsage` /
+`durationUnmeasured` carry the never-fabricate invariant — a consumer renders `n/a`, never a
+fabricated `0`. No artifact flags ⇒ human stdout summary (rendered from the artifact); `--json` ⇒ the
+artifact shape.
+
+#### `spur history report [path] [--json]`
+
+Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the
+artifact JSON, asserts `schemaVersion === HISTORY_ARTIFACT_SCHEMA_VERSION`, then renders a stdout
+spend rollup (reusing `formatSummary` via `artifactToSummary`) plus forensic sections the spend
+summary cannot express: per-tool time/calls/result-bytes, detected loops, session leaderboard, and
+per-source coverage. Writes a `.md` sidecar next to the artifact (same basename) so the morning read
+needs no CLI invocation.
+
+- `[path]` — explicit artifact JSON path. When omitted, resolves `.spur/reports/history/latest.json`
+  (a symlink to the newest artifact, written by `analyze`). An explicit path wins (R6).
+- `--json` — emit the parsed artifact shape instead of the human report.
+- **Staleness banner (R7):** when the artifact is resolved via the `latest.json` pointer and is older
+  than 36 hours, a `⚠ STALE ARTIFACT` banner prints before the report body — the daily loop may have
+  stopped. Suppressed for explicit paths (the operator already knows the file's age).
+- **Version gate (R4):** an artifact whose `schemaVersion` is not the one this renderer understands is
+  refused with a clear message naming the path, the actual version, and the expected version; nothing
+  else is emitted. Re-run `spur history analyze` to regenerate.
+- **Never-fabricate (R5):** when a tool bucket has calls but every `duration_ms` was NULL
+  (`durationUnmeasured === calls`), timing renders `n/a`, never `0` — the same convention
+  `formatRatio` uses for unavailable cache-hit ratios.
+- Rendering is pure (`packages/domain/src/analytics/render-report.ts`); the FS seam lives in
+  `packages/app/src/services/history-service.ts` (`runHistoryReport`).
+
+#### History nightly loop — scheduling surface and observability (task 0471)
+
+The daily pipeline runs on an **external macOS launchd agent**, not Spur's embedded scheduler. The
+embedded scheduler (`ts-infra` `NodeSchedulerAdapter.parseInterval`) cannot express `0 2 * * *` — it
+silently degrades to a 60-second `setInterval`, needs a daemon the run-once CLI is not, and drives
+nothing today (`bootstrap.scheduler.enabled = false`). An external supervisor is the only correct fit.
+
+**Template:** `config/launchd/ai.gobing.spur.history.daily.plist` — `StartCalendarInterval` (daily
+wall-clock), `WorkingDirectory` = project root, `StandardOutPath`/`StandardErrorPath` →
+`.spur/logs/history-daily.out`/`.err`. Ship-as-template (not an installer verb): one plist + two
+documented commands beat a Spur verb that must track macOS launchctl changes.
+
+```bash
+# Install (from the project root, after substituting SPUR_BIN and PROJECT_DIR in the template)
+cp config/launchd/ai.gobing.spur.history.daily.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.gobing.spur.history.daily.plist
+
+# Uninstall
+launchctl bootout gui/$(id -u)/ai.gobing.spur.history.daily
+```
+
+**Rejected alternatives** (ADR recorded under task 0464 § R6): Spur's embedded scheduler (cannot
+express daily cron, silent 60-s fallback); a `spur history install-schedule` verb (tracks launchctl
+changes forever); a fifth detection layer or health-check verb (four already earn their place).
+
+**System events (R1, R2).** Choosing an external scheduler makes the event ledger the only in-harness
+evidence the loop ran. Three `history.*` events declared in `packages/app/src/services/event-names.ts`
+emit from `apps/cli/src/commands/history.ts` (daily verb) via the existing
+`attachSystemEventLedger(bus, context)` bridge:
+
+| Event | Renderer | When |
+| --- | --- | --- |
+| `history.import.completed` | `history-import` | fan-out import finished (regardless of per-source failures) |
+| `history.analyze.completed` | `history-analyze` | analyze + artifact write finished |
+| `history.daily.failed` | `history-daily` | the daily command exited non-zero or threw |
+
+All three are `metadata-only`, `default` tier — history payloads may carry `cwd`, file paths, and error
+text quoting source content; `raw-safe` would persist that. The normalizer
+(`normalizeSystemEventPayload`) strips `body`/`content`/`message`/`prompt`/`query`/`response`/`value`
+and redacts configured secrets. `await ledger.flush()` runs in a `finally` on **both** the success and
+failure paths — without it, a run-once process exits before the async inserts land, reproducing the
+exact "0 rows" symptom this task exists to end.
+
+**Four-layer missed-run detection (R5, R6).** No single layer is the sole signal:
+
+| Layer | Signal | Detects |
+| --- | --- | --- |
+| 1 — artifact freshness | `latest.json` older than 36 h ⇒ staleness banner | the whole loop stopped |
+| 2 — ledger events | `history.*` rows present / absent | started-and-failed vs never-started (R6) |
+| 3 — per-source coverage | `coverage[].status` per source | one source stopped while others kept working |
+| 4 — launchd error log | `.spur/logs/history-daily.err` | failures before Spur's own logging initializes |
+
+R6 is what layer 2 buys and layer 1 cannot: "no artifact" is ambiguous (launchd never fired vs the run
+started and failed). A `history.daily.failed` row ⇒ it ran and failed; **no** `history.*` row in the
+window ⇒ it never started. Both are checkable without reading the artifact, which by definition does
+not exist in either case.
+
+**Report reachability (R7).** The daily-summary surface (`plugins/sp/scripts/daily-summary/`) resolves
+the `.spur/reports/history/latest.json` pointer and emits a `## History Report` section carrying the
+newest artifact path — so a completed nightly run reaches the operator through the summary they already
+open, with no new notification channel.
 
 #### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
 
@@ -617,8 +746,14 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 ### 3.3 Analytics records
 
-`CostRecord` (source, date, model, input/output tokens, costUsd) aggregated into `AnalyticsSummary`
-(totals + bySource + byModel + daily). Pricing is per-model USD per 1M tokens.
+`CostRecord` (source, date, model, input/output tokens, cache split, costUsd) is the single-ETL-row cost
+shape consumed by `run-cost.ts` attribution. The analyze path no longer folds it in memory: it
+aggregates in SQL over `history_message` / `history_tool_call` into a versioned `HistoryArtifact`
+(`packages/domain/src/analytics/artifact.ts`), whose core bucket is `TokenTotals` extended with the
+forensic dimensions (`messages`, `toolCalls`, `durationMs`, `durationUnmeasured`) and
+`cacheWriteTokens` (matching the `history_message.cache_write_tokens` column). Artifact contract:
+`schemaVersion`, `generatedAt`, `spurVersion`, `selector`, `coverage`, `totals`, `bySource`,
+`byModel`, `daily`, `byTool`, `bySession`, `loops`, `warnings` (0464 R2).
 
 ## 4. Output Conventions
 

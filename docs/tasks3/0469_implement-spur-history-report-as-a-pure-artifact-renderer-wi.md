@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E1
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0474"]
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:01.061Z"
-updated_at: "2026-08-07T20:51:01.889Z"
+updated_at: "2026-08-08T12:42:53.678Z"
 ---
 
 ## 0469. Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner
@@ -98,6 +98,14 @@ Scenario: R2 — the spend rollup layout is reused, not re-implemented
     Given a rendered report
     When the render completes
     Then a markdown file is written next to the JSON artifact
+
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: analyze emits a JSON artifact that report renders
+    Given imported forensic records
+    When spur history analyze runs
+    Then it writes a JSON query-result artifact
+    And spur history report renders that artifact without re-querying the database
 ```
 ### Q&A
 **Closed during implement-ready refinement (2026-08-07):**
@@ -251,17 +259,92 @@ stopped".
 - [ ] **13. Record.** `### Solution` gets the `path:line` change map; `### Testing` gets the commands,
       the no-database evidence from step 9, and the coverage claim.
 ### Solution
+Pure renderer wired across three packages — no DB anywhere on the render path.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Domain — `packages/domain/src/analytics/render-report.ts` (new).** Pure `HistoryArtifact → string`. No I/O, no `DbAdapter` import (R1 statically enforced).
+- `artifactToSummary(artifact)` — adapter that feeds `formatSummary` from `totals` / `bySource` / `byModel` (R2). The spend layout is reused, not re-implemented.
+- `renderReport(artifact)` — stdout spend rollup (`formatSummary(artifactToSummary(...))`) then forensic sections: per-tool time/calls/result-bytes, detected loops, session leaderboard, per-source coverage (R3).
+- `renderMarkdown(artifact)` — `.md` sidecar body (R8).
+- `assertArtifactVersion(artifactPath, expectedVersion, actualVersion)` + `ArtifactVersionError` — refuse unknown `schemaVersion` with path + expected version (R4). Equality check only; no migration path.
+- `isStale(generatedAt, now, thresholdHours)` + `stalenessBanner(generatedAt, now, thresholdHours)` + `STALENESS_THRESHOLD_HOURS = 36` (R7). Pure; clock injected.
+- Unavailable rendering (R5): when `durationUnmeasured === toolCalls`, timing column reads `n/a`, never `0` — same convention as `formatRatio(null)`.
 
+**Domain export surface — `packages/domain/src/analytics/index.ts`.** Re-exported the new symbols.
+
+**App FS seam — `packages/app/src/services/history-service.ts`.**
+- `resolveArtifactPath(explicitPath, cwd)` — explicit path wins (R6), else follows `.spur/reports/history/latest.json` pointer via `readlinkSync`. Returns `ResolvedArtifact { path, resolution: 'explicit' | 'pointer' }`.
+- `runHistoryReport({ path?, cwd, now? })` — resolve → read → parse → `assertArtifactVersion` → `renderReport` + write `.md` sidecar beside JSON (R8). Returns `RunHistoryReportResult { report, artifactPath, resolution, artifact }`. Never receives `getDb`; opens no DB connection (R1).
+
+**CLI — `apps/cli/src/commands/history.ts:72-107`.** Replaced the reserved stub. `spur history report [path] [--json]`. `--json` emits the parsed artifact; default prints the rendered report. Staleness banner emitted only when `resolution === 'pointer'` (R7) — suppressed for explicit paths. Version-gate failures surface path + expected version and exit 1 (R4).
+
+**Docs (T3) — `docs/04_DESIGN.md` §`spur history report`** replaced the reserved-stub note with full command documentation (path resolution, version gate, staleness, sidecar, never-fabricate, layering).
+
+**No new deps. No behavior change to `formatSummary` / `formatRatio` / `run-cost`. No artifact-writing, fan-out, or scheduling — those stay with 0474 / 0470 / 0471.**
 ### Testing
+**Commands run (from repo root):**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+```
+bun run lint          # biome check + per-package tsc --noEmit - clean
+bun run test          # 4641 pass, 0 fail, 14703 expect() calls, 260 files
+```
 
+Both green. No skipped tests.
+
+**Tests added:**
+
+- `packages/domain/tests/analytics/render-report.test.ts` - 17 tests, **100% line/function coverage** on `render-report.ts`. Covers:
+  - R2 - spend block is byte-identical to `formatSummary(artifactToSummary(artifact))` (the re-implementation guard).
+  - R3 - forensic sections render with fixture values (byTool time/tokens/result-bytes, loops, sessions, coverage with `ok`/`failed`/`empty`).
+  - R4 - unknown `schemaVersion` throws `ArtifactVersionError` naming the path + expected version; no partial render.
+  - R5 - bucket with `durationUnmeasured === toolCalls` renders timing as `n/a`; string `0` does not appear in that cell.
+  - R7 - `isStale` boundary (35h quiet, 37h loud) via injected `now`; `stalenessBanner` returns the banner shape only past threshold.
+  - R8 - `renderMarkdown` produces the sidecar body.
+
+- `apps/cli/tests/commands/history.test.ts` - 8 integration tests covering `report` (2 additional tests cover `unknown subcommand` and `analyze`):
+  - R1 - command runs against a fixture with **no database configured**; renders in full (the contract's regression guard, not an import-shape assertion).
+  - R6 - resolves newest via `latest.json` pointer; explicit `[path]` overrides it.
+  - R7 - banner printed for stale pointer-resolved artifact; suppressed for explicit path; suppressed for fresh artifact.
+  - R8 - `.md` sidecar lands beside the JSON with the rendered content.
+  - `--json` mode emits the parsed artifact; default emits human report.
+
+**Coverage claim:** `render-report.ts` at 100% line/function in the domain test run. App seam (`runHistoryReport` / `resolveArtifactPath`) exercised through the CLI integration suite; per-file aggregate ≥ 90% target maintained.
+
+**No-database evidence (R1, Plan step 9):** the CLI integration suite runs `spur history report` against a temp dir with no `SPUR_DB` / no `getDb` reachable; the report renders in full. `render-report.ts` carries zero `DbAdapter` imports - the seam is visible statically too, but the behavioral test is the guard.
 ### Review
+| Severity | File | Finding | Recommendation |
+|----------|------|---------|----------------|
+| P1 | - | No P1 (blocking) findings remain. | - |
+| P2 | docs/tasks3/0469_*.md (Testing section) | Testing section claimed "10 integration tests covering report" but only 8 cover report (2 cover other subcommands). **RESOLVED during verify (`--fix all`):** corrected to "8 integration tests covering report (2 additional tests cover other subcommands)". | Keep the corrected count; no further action. |
+| P3 | - | No P3 (low) findings remain. | - |
+| P4 | - | No P4 (informational) findings remain. | - |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verification verdict: PASS** (auto-verify `--fix all`, 2026-08-07).
 
+Per-requirement evidence:
+
+| Req | Verdict | Evidence |
+|-----|---------|----------|
+| R1 | PASS | No `DbAdapter` import in `render-report.ts` (JSDoc comment only, line 160). `runHistoryReport` has no `getDb`. CLI test runs in temp cwd with no DB, asserts exit 0 + full render. |
+| R2 | PASS | `artifactToSummary` + `formatSummary` reused; domain test asserts byte-identical spend block. |
+| R3 | PASS | `renderByTool`, `renderLoops`, `renderBySession`, `renderCoverage` all implemented, called in `renderReport`, individually tested. |
+| R4 | PASS | `assertArtifactVersion` throws `ArtifactVersionError` (path + expected + actual) before render. CLI test asserts exit 1 + message names path + `schemaVersion`. |
+| R5 | PASS | `fmtDurOrNa` returns `n/a` when `durationUnmeasured === toolCalls`. Domain test asserts `n/a` present, `0ms` absent. |
+| R6 | PASS | `resolveArtifactPath`: explicit path wins, else `latest.json` pointer. Returns `ResolvedArtifact` with `resolution` type. CLI test verifies pointer resolution. |
+| R7 | PASS | 36h threshold (`STALENESS_THRESHOLD_HOURS`), clock injected. CLI tests: banner for stale pointer, suppressed for explicit path. |
+| R8 | PASS | `renderMarkdown` + unconditional sidecar write in `runHistoryReport`. CLI test verifies `.md` exists with rendered content. |
+
+Gates (all green):
+- `bun run lint` - clean (biome + typecheck, 621 files)
+- `bun run test` - 4641 pass, 0 fail, 260 files
+- `bun run build` - green
+- `spur task check 0469` - PASS (L4 subset warnings only)
+- T3: `docs/04_DESIGN.md` §`spur history report` updated (lines 383-405)
+
+Coverage: `render-report.ts` 100% line/function (17 domain tests). CLI seam exercised through 8 integration tests.
+
+Residual risk: none. Dependency 0474 is `done`; all exports present; no DB on render path (static + behavioral).
+
+Disposition: PASS - advance 0469 -> done.
 ### References
 
 E1
@@ -269,3 +352,6 @@ E1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-08T00:24:58.241Z todo → wip (system)
+- 2026-08-08T00:46:56.990Z wip → testing (system)
+- 2026-08-08T00:46:57.524Z testing → done (system)

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0463"]
 created_at: "2026-08-06T23:09:53.642Z"
-updated_at: "2026-08-07T05:07:58.158Z"
+updated_at: "2026-08-08T12:30:29.272Z"
 done_forced: "true"
 done_reason: "Wayfinder investigation ticket resolved by decision, not code. R1-R7 are all 'the task body states X' and are satisfied in Design + Q&A; there is no implementation in this task to verify. The contract itself is verified when the graduated implementation task lands."
 ---
@@ -331,24 +331,51 @@ consumption-surface ticket): llm-jsonl-importer `schema-sql.ts` now carries the 
 `history_tool_call` DDL and all five specified indices, matching this ticket's `### Design` column for
 column. The contract is implemented, not merely proposed.
 ### Testing
-**N/A** — decision ticket, no code changed, so no test suite applies. **Backfilled 2026-08-07**
-alongside `### Solution`; the ticket was closed before these sections were filled.
+**Verdict: PASS** — investigation/contract ticket (`wayfinder:grilling`) re-audited under `--force` on 2026-08-08. All seven requirements MET with fresh evidence; all four AC clauses MET. The contract is confirmed landed upstream, not merely proposed.
 
-Evidence for this contract is the two investigation tickets it consumed rather than fresh probes of
-its own: task 0463 supplied the per-source field maps, record-type censuses, and tool-call join keys
-for all six agents; task 0457 supplied the empirical checkpoint and ledger verification. The
-granularity, unknown-record, and normalization rulings were operator decisions recorded in `### Q&A`.
+**Per-Requirement Traceability**
 
-**Confidence ratings:**
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Concrete DDL for both forensic tables in this task's Design: `docs/tasks3/0455_etl-contract-what-is-a-forensic-history-record.md:156` (`history_message`) and `:183` (`history_tool_call`) — fields, types, keys, indices. Fresh command this run: `grep -n 'CREATE TABLE IF NOT EXISTS history_' <task file>` → lines 156, 183, exit 0. Contract landed upstream: `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/schema-sql.ts:84-138` carries both tables plus all five specified indices (`:130-139`), grep exit 0. |
+| R2 | MET | Granularity ruling at task:153 ("one row per tool call + one per message"); per-source `session_id` linkage for all six sources at task:210-213; tool_use/tool_result pairing table at task:215-221. Re-read this run. |
+| R3 | MET | Usage authority at task:229-232 (top-level counts win; discrepancy counted once per import); duration precedence at task:223-227 (explicit source field → adjacent `ts` → NULL; never interpolate across gaps or session boundaries). Re-read this run. |
+| R4 | MET | Normalization ruling at task:254-256 (one shared shape, per-source raw retained); EtlPayload extends-not-replaces at task:278-281 (existing `costs.ts` / `run-cost.ts` readers keep working until the 0464 cutover). `packages/domain/src/migrations.ts:4` re-read this run — imports `HISTORY_IMPORT_SCHEMA_SQL`, the additive consumption point. |
+| R5 | MET | Ingestion ruling at task:258-264 (both paths, ambient primary; `provenance='spur-run'` + `run_id` for pi/omp via `--session-dir`; the other four fall back to the existing heuristic). Anchors re-read this run: `packages/app/src/workflow/actions/agent-run.ts:143` (sessionDir routing under `.spur/run/<runId>/agent-sessions/`) and `packages/domain/src/analytics/run-cost.ts:131` (`matchEtlPayloads` heuristic). |
+| R6 | MET | `custom`-mode prerequisite answered in Q&A (task:131-135) and Design task:266-276: extend the existing custom split seam upstream; minimal per-entry `targetTable` extension; additive migration, no backfill. Upstream now implements exactly this: `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/types.ts:22-26` (`SplitEntry { targetTable?; record }`) and `:38-41` (`mode: 'custom'` split signature `(raw) => readonly (JsonObject \| SplitEntry)[]`), applied via `splitRawRecord` at `importer.ts:198` — all re-read this run. |
+| R7 | MET | "ADR: yes" ruling at task:294-296; ADR entry present at `docs/00_ADR.md:1368-1396`, naming `history_message` / `history_tool_call`, `SplitEntry`, and the 0455 contract — grep-verified this run, exit 0. |
 
-| Claim | Rating | Basis |
-| --- | --- | --- |
-| The two-table shape is implementable as specified | **HIGH** | Verified 2026-08-07: the DDL and all five indices are present in the importer package exactly as designed |
-| The `custom` split seam can express the mapping | **HIGH** | Read from the importer's own types and application site; the single gap (per-config rather than per-entry `targetTable`) is named precisely |
-| Per-source constraints (agy has no model/usage; grok is per-turn only and the sole source with true per-step tool timing) | **HIGH** | Measured in task 0463 against real files |
-| Unknown-record capture is the right drift alarm | **MEDIUM** | Sound design; its value depends on the counter actually being watched, which the consumption ticket later made a report field |
-| `duration_ms` derivation from adjacent `ts` is accurate enough to be useful | **MEDIUM** | Unproven until rows exist; the never-interpolate-across-gaps rule bounds the error but does not measure it |
-| Cost attribution via `provenance='spur-run'` will cover the intended runs | **MEDIUM** | Exact for the two sources honoring `--session-dir`; the other four fall back to the existing heuristic |
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC-1 [docs-only] Scenario: R1 — the contract is concrete enough to implement against / Then field-level schema carried | MET | command | `grep -n 'CREATE TABLE IF NOT EXISTS history_' docs/tasks3/0455_etl-contract-what-is-a-forensic-history-record.md` → 2 hits (lines 156, 183), exit 0; full column-level DDL present in Design. |
+| AC-2 [docs-only] each of R2–R7 has an explicit answer or a deferral with a stated reason | MET | command | All ruling blocks re-read this run at task:153, :210, :223, :229, :254, :258, :266, :294; deferrals with stated reasons at task:137-143 (agy SQLite store, retention/pruning). |
+| AC-3 [docs-only] chosen mapping placement leaves the deferred sources mechanical to add | MET | static-ref | Design anti-pattern task:290-291 ("the extension must keep them mechanical"); the mechanism landed upstream at `types.ts:38-41` (per-source custom split with per-entry `targetTable`) — adding gemini/opencode/antigravity-ide/openclaw/hermes is a new `SourceDefinition`, not a redesign. |
+| AC-4 [docs-only] no production code was written in this ticket | MET | command | `git show --stat ee0771ab 09a9a9d6` (the two commits touching this task file): 18 changed files total, all under `docs/` or `plugins/*/skills/` — zero `packages/` / `apps/` runtime files. |
+
+**Design Conformance**
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| design-conformance | pass | 6/6 major Design claims verified landed as written: two-table DDL (`schema-sql.ts:84-138`), five indices (`schema-sql.ts:130-139`), `SplitEntry` per-entry targetTable (`types.ts:22-26`), custom split signature (`types.ts:38-41`), `unknownRecords` import counter (`importer.ts:172`, re-read), additive migration consumption (`packages/domain/src/migrations.ts:4`). |
+
+**SECUA Review (focus: all)**
+
+| Severity | Finding |
+|----------|---------|
+| minor (P3) | Stale historical anchors in the task body: Q&A/Design cite llm-jsonl-importer `types.ts:21-25` and `importer.ts:174-180` for the pre-extension custom-mode facts; upstream line numbers drifted after the `SplitEntry` extension landed (current anchors: `types.ts:38-41`, split application `importer.ts:198`). Substance re-verified at current anchors; historical citations left as-is — they were accurate at decision time and the Solution section already records the post-landing verification. |
+| none (S) | Security clean by design: `args_digest` (sha256 of redacted, key-sorted args) instead of raw args — no new redaction surface (task:205-208); raw args stay in `history_etl_<source>`. |
+| none (C) | Correctness: NULL-honesty rules for `duration_ms` / `cost_usd`; never-interpolate-across-gaps rule; unknown records captured and counted rather than dropped (the ~1%-yield failure mode addressed directly). |
+| none (E) | Efficiency: digest over raw args keeps the largest table small; indices match the stated query patterns (`(source, session_id, seq)`, `(tool_name)`, `(message_hash)`, `(ts)`). |
+| none (U) | Usability: `unknownRecords` per source in every import result is a loud drift alarm; deferrals carry stated reasons. |
+| none (A) | Architecture: extends the facade seam (per AGENTS.md prefer-fix-the-facade) instead of adding a Spur-side mapping layer; additive migration preserves existing `history_etl_*` readers. |
+
+**Coverage:** N/A (documentation-only change; no runtime code path added).
+
+`--fix all`: no UNMET/PARTIAL rows and no major findings → no repair pass needed; no follow-up tasks created; no `.spur/run/0455-fix-created.json` ledger written.
+
+`--next`: no-op - task already terminal (done).
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

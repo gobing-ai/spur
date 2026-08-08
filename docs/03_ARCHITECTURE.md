@@ -5,7 +5,7 @@ authority: derived
 version: 1.7.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-05
+updated_at: 2026-08-08
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -254,10 +254,27 @@ discover files → resume from (source, source_file) checkpoint → read line-by
   → load to per-source ETL table → update checkpoint
 ```
 
-Sources: pi, claude, codex, gemini, opencode, antigravity, openclaw. Adding a source = one
-`SourceDefinition` variant; the pipeline never changes. **Analytics**
-(`packages/domain/src/analytics`) reads the ETL tables, estimates tokens/cost per model, and
-aggregates by source/model/day — a domain consumer, not part of the generic importer.
+Sources: pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy. Adding a source
+is one `SourceDefinition` variant; the pipeline never changes. `--source all` fans out with
+per-source failure isolation (E1/0470); ad-hoc `--file <path>` imports a single session (E1/0470).
+
+**Forensic ETL contract** (E1/0466, 0468): the importer normalizes records into a machine-readable
+output with `MAX_ERROR_SAMPLES` cap, `importOneIsolated` per-source isolation, `schemaVersion`
+tagging, and `assertArtifactVersion` gating — the artifact is a versioned contract, not ad-hoc JSON.
+
+**Analyze → Report** (E1/0474, 0469): `spur history analyze` aggregates the ETL tables in SQL
+(`packages/domain/src/analytics/forensic-query.ts`) and writes a versioned JSON artifact
+(`schemaVersion` field). `spur history report` is a pure renderer — it reads the artifact, asserts
+the schema version, and renders to stdout + markdown sidecar without opening the database.
+Unavailable values render as `n/a`, never `0` (never-fabricate).
+
+**Daily pipeline** (E1/0470, 0471): `spur history daily` is a single run-once invocation:
+import-all → analyze → write artifact → prune reports older than 90 days. Scheduling is via an
+external launchd plist (`com.gobing-ai.spur.history.daily.plist`), not an embedded scheduler. The
+history system emits `history.*` events to the event ledger for observability.
+
+**Analytics** (`packages/domain/src/analytics`) reads the ETL tables, estimates tokens/cost per
+model, and aggregates by source/model/day — a domain consumer, not part of the generic importer.
 
 ## 8. Data & Storage (ADR-007/008)
 

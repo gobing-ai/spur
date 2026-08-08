@@ -172,6 +172,21 @@ CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kin
 `;
 
 /**
+ * Add the `(provenance, run_id)` index to the forensic `history_message` table so
+ * the `--run` / `--task` analyze selectors resolve against an index rather than a
+ * scan (task 0474, R3).
+ *
+ * `history_message` is created by `HISTORY_IMPORT_SCHEMA_SQL`
+ * (`@gobing-ai/ts-llm-jsonl-importer`), which Spur cannot edit, so the index lands
+ * Spur-side as an incremental migration — the same reasoning that produced
+ * `0005_spur_cli_run_pid`. `CREATE INDEX IF NOT EXISTS` makes it idempotent if the
+ * importer later ships the index itself.
+ */
+export const HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message (provenance, run_id);
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -185,6 +200,8 @@ CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kin
  * `runs.external_key` for databases whose `runs` table predates that column;
  * `0008` backfills the indexed `system_events` correlation columns
  * (`run_id`, `entity_kind`, `entity_id`, `sequence`) for pre-0369 ledgers.
+ * `0009` adds the `(provenance, run_id)` index to `history_message` for the
+ * analyze `--run`/`--task` selectors (task 0474).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -213,6 +230,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
         addColumnIfMissing: { table: 'system_events', column: 'sequence' },
     },
+    { id: '0009_spur_cli_history_message_run_idx', sql: HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

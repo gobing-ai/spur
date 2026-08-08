@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { aggregateCosts, computeRecordCost, formatSummary, resolvePricing } from '../../src/analytics';
+import { computeRecordCost, formatSummary, resolvePricing } from '../../src/analytics';
 import { byCostDesc, byDateAsc } from '../../src/analytics/costs';
-import { etlToCostRecord, extractClaudeTokens, queryAllEtlRecords, queryEtlRecords } from '../../src/analytics/query';
+import { extractClaudeTokens, queryEtlRecords } from '../../src/analytics/query';
 import type { CostRecord, TokenTotals } from '../../src/analytics/types';
 
 /** CostRecord with cache/usage fields defaulted — a test states only what it exercises. */
@@ -27,10 +27,14 @@ function totals(partial: Partial<TokenTotals> = {}): TokenTotals {
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
-        cacheCreationTokens: 0,
+        cacheWriteTokens: 0,
         costUsd: 0,
         records: 0,
         recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
         ...partial,
     };
 }
@@ -50,50 +54,6 @@ describe('analytics', () => {
         const raw = rec({ inputTokens: 1_000_000, outputTokens: 500_000 });
         const priced = computeRecordCost(raw);
         expect(priced.costUsd).toBeCloseTo(10.5, 1); // 1M * $3/1M + 0.5M * $15/1M = 3 + 7.5 = 10.5
-    });
-
-    test('aggregates records into summary', () => {
-        const records = [
-            rec({ inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 10.5 }),
-            rec({
-                source: 'gemini',
-                model: 'gemini-2.5-flash',
-                inputTokens: 2_000_000,
-                outputTokens: 1_000_000,
-                costUsd: 0.9,
-            }),
-            rec({ date: '2026-05-31', inputTokens: 500_000, outputTokens: 200_000, costUsd: 4.5 }),
-        ];
-
-        const summary = aggregateCosts(records);
-
-        expect(summary.totals).toMatchObject({
-            inputTokens: 3_500_000,
-            outputTokens: 1_700_000,
-            costUsd: 15.9,
-            records: 3,
-        });
-        expect(summary.bySource.claude).toMatchObject({
-            inputTokens: 1_500_000,
-            outputTokens: 700_000,
-            costUsd: 15,
-            records: 2,
-        });
-        expect(summary.bySource.gemini).toMatchObject({
-            inputTokens: 2_000_000,
-            outputTokens: 1_000_000,
-            costUsd: 0.9,
-            records: 1,
-        });
-        expect(summary.byModel['claude-sonnet-4-20250514']).toMatchObject({
-            inputTokens: 1_500_000,
-            outputTokens: 700_000,
-            costUsd: 15,
-            records: 2,
-        });
-        expect(summary.daily).toHaveLength(2);
-        expect(summary.daily[0]?.date).toBe('2026-05-30');
-        expect(summary.daily[1]?.date).toBe('2026-05-31');
     });
 
     test('formats summary as readable text', () => {
@@ -162,34 +122,6 @@ describe('analytics', () => {
         });
     });
 
-    test('converts ETL payload to cost record with fallback estimation', () => {
-        const withTokens = etlToCostRecord(
-            {
-                source_record_id: 'msg-1',
-                created_at: '2026-05-30T12:00:00Z',
-                content: 'test',
-                model: 'claude-sonnet-4-20250514',
-                usage: { input_tokens: 1_000_000, output_tokens: 100_000 },
-            },
-            'claude',
-        );
-        expect(withTokens).toMatchObject({ source: 'claude', date: '2026-05-30', model: 'claude-sonnet-4-20250514' });
-        expect(withTokens.inputTokens).toBe(1_000_000);
-        expect(withTokens.outputTokens).toBe(100_000);
-
-        const noTokens = etlToCostRecord(
-            {
-                source_record_id: 'msg-2',
-                created_at: '2026-05-30T12:00:00Z',
-                content: 'hello world test',
-            },
-            'gemini',
-        );
-        expect(noTokens.source).toBe('gemini');
-        expect(noTokens.inputTokens).toBe(0);
-        expect(noTokens.outputTokens).toBeGreaterThan(0); // Content-length fallback
-    });
-
     test('queries ETL records from a single source table without since filter', async () => {
         const db = createMockDb([
             {
@@ -226,31 +158,6 @@ describe('analytics', () => {
         const records = await queryEtlRecords(db, 'history_etl_pi', '2026-05-01');
         expect(records).toHaveLength(1);
         expect(records[0]?.source_record_id).toBe('recent');
-    });
-
-    test('queries ETL records from all source tables and converts to cost records', async () => {
-        const db = createMockDb([
-            {
-                payload_json: JSON.stringify({
-                    source_record_id: 'c1',
-                    created_at: '2026-05-30T00:00:00Z',
-                    content: 'hello',
-                    model: 'claude-sonnet-4-20250514',
-                }),
-            },
-        ]);
-        const records = await queryAllEtlRecords(db);
-        expect(records.length).toBeGreaterThanOrEqual(1);
-        const claudeRecord = records.find((r) => r.source === 'claude');
-        expect(claudeRecord).toBeDefined();
-        expect(claudeRecord?.model).toBe('claude-sonnet-4-20250514');
-        expect(claudeRecord?.date).toBe('2026-05-30');
-    });
-
-    test('queryAllEtlRecords passes since filter through', async () => {
-        const db = createMockDb([]);
-        const records = await queryAllEtlRecords(db, '2026-01-01');
-        expect(records).toEqual([]);
     });
 
     test('byDateAsc sorts by date ascending', () => {

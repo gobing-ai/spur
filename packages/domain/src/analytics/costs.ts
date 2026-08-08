@@ -10,65 +10,6 @@ export function computeRecordCost(record: CostRecord): CostRecord {
     return { ...record, costUsd };
 }
 
-/** A zeroed {@link TokenTotals} accumulator. */
-function emptyTotals(): TokenTotals {
-    return {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0,
-        costUsd: 0,
-        records: 0,
-        recordsWithUsage: 0,
-    };
-}
-
-/** Fold one record into a {@link TokenTotals} bucket in place. Single point of truth so a
- *  new token dimension is added once, not once per breakdown — the omission that dropped the
- *  cache split in the first place. */
-function accumulate(bucket: TokenTotals, record: CostRecord): void {
-    bucket.inputTokens += record.inputTokens;
-    bucket.outputTokens += record.outputTokens;
-    bucket.cacheReadTokens += record.cacheReadTokens;
-    bucket.cacheCreationTokens += record.cacheCreationTokens;
-    bucket.costUsd += record.costUsd;
-    bucket.records += 1;
-    if (record.usageReported) bucket.recordsWithUsage += 1;
-}
-
-/** Aggregate cost records into a summary with per-source and per-model breakdowns. */
-export function aggregateCosts(records: readonly CostRecord[]): AnalyticsSummary {
-    const summary: AnalyticsSummary = {
-        totals: emptyTotals(),
-        bySource: {},
-        byModel: {},
-        daily: [],
-    };
-
-    const dailyMap = new Map<string, { date: string } & TokenTotals>();
-
-    for (const record of records) {
-        accumulate(summary.totals, record);
-
-        summary.bySource[record.source] ??= emptyTotals();
-        accumulate(summary.bySource[record.source] as TokenTotals, record);
-
-        summary.byModel[record.model] ??= emptyTotals();
-        accumulate(summary.byModel[record.model] as TokenTotals, record);
-
-        let dailyEntry = dailyMap.get(record.date);
-        if (dailyEntry === undefined) {
-            dailyEntry = { date: record.date, ...emptyTotals() };
-            dailyMap.set(record.date, dailyEntry);
-        }
-        accumulate(dailyEntry, record);
-    }
-
-    summary.daily = [...dailyMap.values()].sort(byDateAsc);
-
-    return summary;
-}
-
 /**
  * Prompt-cache hit ratio for a totals bucket: cache-read input tokens over total billed
  * input tokens, in `[0, 1]`.
@@ -126,7 +67,7 @@ export function formatSummary(summary: AnalyticsSummary): string {
 
 /** Render a cache-hit ratio for humans: `42.0%`, or `n/a` when the ratio is unavailable
  *  (`null`) — never a fabricated `0.0%`. */
-function formatRatio(ratio: number | null): string {
+export function formatRatio(ratio: number | null): string {
     return ratio === null ? 'n/a' : `${(ratio * 100).toFixed(1)}%`;
 }
 

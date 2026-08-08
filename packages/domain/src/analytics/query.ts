@@ -1,5 +1,5 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import type { CostRecord, EtlPayload } from './types';
+import type { EtlPayload } from './types';
 
 // SECURITY INVARIANT: these table names are interpolated directly into SQL
 // (SQLite cannot parameterize identifiers). They MUST remain a hardcoded
@@ -13,6 +13,9 @@ export const SOURCE_TABLES = [
     'history_etl_opencode',
     'history_etl_antigravity',
     'history_etl_openclaw',
+    'history_etl_omp',
+    'history_etl_grok',
+    'history_etl_agy',
 ] as const;
 
 /** A known history ETL table name — the only values safe to interpolate into SQL. */
@@ -49,26 +52,6 @@ export async function queryEtlRecords(
               )
             : await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${sourceTable}`);
     return rows.map((row) => parsePayload(row.payload_json, sourceTable));
-}
-
-/** Query ETL records from all source tables. */
-export async function queryAllEtlRecords(db: DbAdapter, since?: string): Promise<readonly CostRecord[]> {
-    const results: CostRecord[] = [];
-    for (const table of SOURCE_TABLES) {
-        const source = table.replace('history_etl_', '');
-        const rows =
-            since !== undefined
-                ? await db.queryAll<{ payload_json: string }>(
-                      `SELECT payload_json FROM ${table} WHERE imported_at >= ?`,
-                      since,
-                  )
-                : await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${table}`);
-        for (const row of rows) {
-            const payload = parsePayload(row.payload_json, table);
-            results.push(etlToCostRecord(payload, source));
-        }
-    }
-    return results;
 }
 
 /** Token counts extracted from a provider `usage` object, with the cache split preserved. */
@@ -112,33 +95,5 @@ export function extractClaudeTokens(payload: EtlPayload): ExtractedTokens {
         cacheReadTokens: cacheRead,
         cacheCreationTokens: cacheCreate,
         usageReported: true,
-    };
-}
-
-/** Convert an ETL payload to an analytics cost record with token estimates. */
-export function etlToCostRecord(payload: EtlPayload, source: string): CostRecord {
-    const tokens = extractClaudeTokens(payload);
-
-    // Fallback: estimate tokens from content length when usage data is absent. The estimate
-    // deliberately leaves `usageReported` false — cache dimensions are then UNKNOWN, not zero,
-    // and must render as unavailable rather than 0% (0281/0284 never-fabricate invariant).
-    if (tokens.inputTokens === 0 && tokens.outputTokens === 0) {
-        const contentLength = payload.content?.length ?? 0;
-        // Rough estimate: 4 chars per token. Split for input/output.
-        if (contentLength > 0) {
-            tokens.outputTokens = Math.ceil(contentLength / 4);
-        }
-    }
-
-    return {
-        source,
-        date: payload.created_at?.slice(0, 10) ?? 'unknown',
-        model: payload.model ?? 'unknown',
-        inputTokens: tokens.inputTokens,
-        outputTokens: tokens.outputTokens,
-        cacheReadTokens: tokens.cacheReadTokens,
-        cacheCreationTokens: tokens.cacheCreationTokens,
-        usageReported: tokens.usageReported,
-        costUsd: 0, // Filled by cost computation
     };
 }

@@ -2,12 +2,102 @@
  * Thin-wrapper integration tests for apps/cli/src/commands/history.ts.
  * Behavioral tests for HistoryService live in packages/app/tests/services/history-service.test.ts.
  */
-import { describe, expect, test } from 'bun:test';
+
+import { describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HistoryService } from '@gobing-ai/spur-app';
+import {
+    type CoverageEntry,
+    HISTORY_ARTIFACT_SCHEMA_VERSION,
+    type HistoryArtifact,
+    SystemEventDao,
+    type SystemEventRow,
+} from '@gobing-ai/spur-domain';
 import { main } from '../../src';
+import { createMigratedDbAdapter } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
+}
+
+function capturingOutput(): { output: CommandOutput; lines: string[] } {
+    const lines: string[] = [];
+    return {
+        lines,
+        output: { write: (s: string) => lines.push(s), error: (s: string) => lines.push(s) },
+    };
+}
+
+function emptyTokens() {
+    return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
+    };
+}
+
+function makeCoverageEntry(overrides: Partial<CoverageEntry> = {}): CoverageEntry {
+    return {
+        source: 'claude',
+        status: 'ok',
+        files: 1,
+        messages: 5,
+        toolCalls: 0,
+        parseErrors: 0,
+        validationErrors: 0,
+        unknownRecords: 0,
+        lastImportedAt: '2026-08-07T00:00:00Z',
+        parseErrorSamples: [],
+        validationErrorSamples: [],
+        ...overrides,
+    };
+}
+
+function makeArtifact(overrides: Partial<HistoryArtifact> = {}): HistoryArtifact {
+    return {
+        schemaVersion: HISTORY_ARTIFACT_SCHEMA_VERSION,
+        generatedAt: '2026-08-07T00:00:00Z',
+        spurVersion: '1.0.0',
+        selector: {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        },
+        coverage: [],
+        totals: { ...emptyTokens(), inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 1.25, records: 10 },
+        bySource: { claude: { ...emptyTokens(), costUsd: 1.25, records: 10 } },
+        byModel: { 'claude-3': { ...emptyTokens(), costUsd: 1.25, records: 10 } },
+        daily: [],
+        byTool: [],
+        bySession: [],
+        loops: [],
+        warnings: [],
+        ...overrides,
+    };
+}
+
+function makeTmpCwd(): string {
+    return mkdtempSync(join(tmpdir(), 'spur-hist-'));
+}
+
+function writeArtifactFile(dir: string, name: string, artifact: HistoryArtifact): string {
+    const path = join(dir, name);
+    writeFileSync(path, JSON.stringify(artifact, null, 2));
+    return path;
 }
 
 describe('history command', () => {
@@ -24,11 +114,443 @@ describe('history command', () => {
         expect(typeof exitCode).toBe('number');
     });
 
-    test('report subcommand prints TODO marker', async () => {
-        const exitCode = await main(['history', 'report', '--json'], {
-            output: nullOutput(),
+    test('report with explicit path renders the spend rollup and exits 0', async () => {
+        const cwd = makeTmpCwd();
+        const artifactPath = writeArtifactFile(cwd, 'a.json', makeArtifact());
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('Total:');
+        expect(joined).toContain('$1.25');
+    });
+
+    test('report --json emits the parsed artifact as JSON', async () => {
+        const cwd = makeTmpCwd();
+        const artifactPath = writeArtifactFile(cwd, 'a.json', makeArtifact());
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--json'], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.join('')) as HistoryArtifact;
+        expect(parsed.schemaVersion).toBe(HISTORY_ARTIFACT_SCHEMA_VERSION);
+        expect(parsed.totals.costUsd).toBe(1.25);
+    });
+
+    test('report writes a .md sidecar next to the artifact (R8)', async () => {
+        const cwd = makeTmpCwd();
+        const artifactPath = writeArtifactFile(cwd, 'a.json', makeArtifact());
+        const { output } = capturingOutput();
+
+        await main(['history', 'report', artifactPath], { output, cwd });
+
+        // Sidecar has same basename, .md extension — use readFileSync to verify it exists.
+        const sidecar = artifactPath.replace(/\.json$/, '.md');
+        expect(existsSync(sidecar)).toBe(true);
+        const md = readFileSync(sidecar, 'utf8');
+        expect(md).toContain('```');
+        expect(md).toContain('Total:');
+    });
+
+    test('report resolves via latest.json pointer when no path given (R6)', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact();
+        // Place artifact in the dated reports dir and point latest.json at it.
+        const reportsDir = join(cwd, '.spur', 'reports', 'history');
+        mkdirSync(reportsDir, { recursive: true });
+        const artifactPath = join(reportsDir, 'analyze-deadbeef.json');
+        writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+        symlinkSync(artifactPath, join(reportsDir, 'latest.json'));
+
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'report'], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        expect(lines.join('')).toContain('Total:');
+    });
+
+    test('report prints staleness banner when pointer artifact is older than 36h (R7)', async () => {
+        const cwd = makeTmpCwd();
+        // Generated 5 days ago — well past the 36h threshold.
+        const stale = makeArtifact({ generatedAt: '2026-08-02T00:00:00Z' });
+        const reportsDir = join(cwd, '.spur', 'reports', 'history');
+        mkdirSync(reportsDir, { recursive: true });
+        const artifactPath = join(reportsDir, 'analyze-stale.json');
+        writeFileSync(artifactPath, JSON.stringify(stale, null, 2));
+        symlinkSync(artifactPath, join(reportsDir, 'latest.json'));
+
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'report'], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('STALE ARTIFACT');
+    });
+
+    test('report does NOT print staleness banner for explicit path even when old (R7)', async () => {
+        const cwd = makeTmpCwd();
+        const stale = makeArtifact({ generatedAt: '2026-08-02T00:00:00Z' });
+        const artifactPath = writeArtifactFile(cwd, 'stale.json', stale);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        expect(lines.join('')).not.toContain('STALE ARTIFACT');
+    });
+
+    test('report exits 1 with clear message when artifact has wrong schemaVersion (R4)', async () => {
+        const cwd = makeTmpCwd();
+        const bad = makeArtifact({ schemaVersion: 99 });
+        const artifactPath = writeArtifactFile(cwd, 'bad.json', bad);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath], { output, cwd });
+
+        expect(exitCode).toBe(1);
+        const joined = lines.join('');
+        expect(joined).toContain('schemaVersion');
+        expect(joined).toContain(artifactPath);
+    });
+
+    test('report exits 1 when no path and no latest pointer exists', async () => {
+        const cwd = makeTmpCwd();
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report'], { output, cwd });
+
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('failed');
+    });
+    test('import --file with --source all is rejected up front', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'h.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'all', '--file', file], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('--file requires a single --source');
+    });
+
+    test('import --mode bad is a CLI usage error on stderr (not a soft source warning)', async () => {
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'codex', '--mode', 'bad'], {
+            output,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('Invalid history import mode');
+    });
+
+    test('import --mode bad --json emits structured error on stdout', async () => {
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'codex', '--mode', 'bad', '--json'], {
+            output,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { status: string; message: string };
+        expect(parsed.status).toBe('error');
+        expect(parsed.message).toContain('Invalid history import mode');
+    });
+
+    test('import --source missing is rejected with the source allowlist', async () => {
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'missing'], {
+            output,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('Invalid history source');
+    });
+
+    test('import single source --json emits fan-out entries array (0470 fan-out contract)', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'h.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'codex', '--file', file, '--json'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.join('')) as {
+            entries: Array<{ source: string; status: string; messages: number }>;
+            exitCode: number;
+        };
+        expect(Array.isArray(parsed.entries)).toBe(true);
+        expect(parsed.entries[0]?.source).toBe('codex');
+        expect(parsed.entries[0]?.messages).toBe(1);
+    });
+
+    test('import single source plain text emits fan-out formatter', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'h.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'import', '--source', 'codex', '--file', file], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('history import (fan-out)');
+        expect(joined).toContain('codex: ok');
+        expect(joined).toContain('exit_code: 0');
+    });
+
+    test('daily --root <empty> runs the full pipeline and emits the daily formatter', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'daily', '--root', emptyRoot, '--source-timeout', '500'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        // All sources empty under the empty root → exit 0.
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('history daily');
+        expect(joined).toContain('import:');
+        expect(joined).toContain('exit_code: 0');
+    });
+
+    test('daily --root <empty> --json emits the structured DailyResult', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'daily', '--root', emptyRoot, '--source-timeout', '500', '--json'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.join('')) as {
+            fanOut: { entries: Array<{ source: string; status: string }>; exitCode: number };
+            artifact: { totals: { messages: number } };
+            pruned: unknown[];
+        };
+        expect(parsed.fanOut.entries.length).toBeGreaterThan(0);
+        expect(parsed.fanOut.exitCode).toBe(0);
+        expect(parsed.artifact.totals.messages).toBe(0);
+    });
+
+    test('analyze subcommand formatted text output (non-json)', async () => {
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'analyze'], {
+            output,
             dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('Total:');
+        expect(joined).toContain('$0.00');
+    });
+
+    test('import subcommand formats warnings in text output', async () => {
+        const spy = spyOn(HistoryService.prototype, 'importAll').mockResolvedValueOnce({
+            entries: [makeCoverageEntry({ source: 'claude' })],
+            warnings: [{ code: 'WARN_TEST', source: 'claude', detail: 'test warning detail' }],
+            exitCode: 0,
+        });
+
+        try {
+            const { output, lines } = capturingOutput();
+            const exitCode = await main(['history', 'import', '--source', 'claude'], {
+                output,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(0);
+            const joined = lines.join('');
+            expect(joined).toContain('warnings:');
+            expect(joined).toContain('[WARN_TEST] claude: test warning detail');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('daily subcommand handles exception failure in text and json mode', async () => {
+        const spy = spyOn(HistoryService.prototype, 'daily').mockRejectedValue(new Error('forced daily exception'));
+
+        try {
+            const cwd = mkdtempSync(join(tmpdir(), 'spur-hist-fail-'));
+            try {
+                // Text mode
+                const { output: outputText, lines: linesText } = capturingOutput();
+                const exitCodeText = await main(['history', 'daily'], { output: outputText, cwd });
+                expect(exitCodeText).toBe(1);
+                expect(linesText.join('')).toContain('history daily failed: forced daily exception');
+
+                // JSON mode
+                const { output: outputJson, lines: linesJson } = capturingOutput();
+                const exitCodeJson = await main(['history', 'daily', '--json'], {
+                    output: outputJson,
+                    cwd,
+                });
+                expect(exitCodeJson).toBe(1);
+                const parsed = JSON.parse(linesJson.join('')) as { error: string };
+                expect(parsed.error).toBe('forced daily exception');
+
+                // Verify ledger captured history.daily.failed
+                const rows = await readSystemEvents(cwd);
+                const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
+                expect(failedRow).toBeDefined();
+                const payload = JSON.parse(failedRow?.payload_json ?? '{}');
+                expect(payload.detail).toBe('forced daily exception');
+            } finally {
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('daily subcommand formats failing fan-out entries and warnings', async () => {
+        const spy = spyOn(HistoryService.prototype, 'daily').mockResolvedValueOnce({
+            fanOut: {
+                entries: [
+                    makeCoverageEntry({ source: 'claude' }),
+                    makeCoverageEntry({
+                        source: 'codex',
+                        status: 'failed',
+                        files: 0,
+                        messages: 0,
+                        parseErrors: 2,
+                        validationErrors: 1,
+                    }),
+                ],
+                warnings: [{ code: 'IMP_ERR', source: 'codex', detail: 'failed to parse file' }],
+                exitCode: 1,
+            },
+            artifact: makeArtifact(),
+            pruned: [],
+        });
+
+        try {
+            const cwd = mkdtempSync(join(tmpdir(), 'spur-hist-fanfail-'));
+            try {
+                const { output, lines } = capturingOutput();
+                const exitCode = await main(['history', 'daily'], { output, cwd });
+                expect(exitCode).toBe(1);
+                const joined = lines.join('');
+                expect(joined).toContain('warnings:');
+                expect(joined).toContain('[IMP_ERR] codex: failed to parse file');
+                expect(joined).toContain('exit_code: 1');
+
+                // Verify ledger captured history.daily.failed with source detail
+                const rows = await readSystemEvents(cwd);
+                const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
+                expect(failedRow).toBeDefined();
+                const payload = JSON.parse(failedRow?.payload_json ?? '{}');
+                expect(payload.detail).toContain('codex: 3 errors');
+            } finally {
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('daily subcommand handles non-zero exit with no failing source in entries', async () => {
+        const spy = spyOn(HistoryService.prototype, 'daily').mockResolvedValueOnce({
+            fanOut: {
+                entries: [makeCoverageEntry({ source: 'claude' })],
+                warnings: [],
+                exitCode: 1,
+            },
+            artifact: makeArtifact(),
+            pruned: [],
+        });
+
+        try {
+            const cwd = mkdtempSync(join(tmpdir(), 'spur-hist-nofail-'));
+            try {
+                const { output } = capturingOutput();
+                const exitCode = await main(['history', 'daily', '--json'], { output, cwd });
+                expect(exitCode).toBe(1);
+
+                const rows = await readSystemEvents(cwd);
+                const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
+                expect(failedRow).toBeDefined();
+                const payload = JSON.parse(failedRow?.payload_json ?? '{}');
+                expect(payload.detail).toBe('daily fan-out reported non-zero exit with no failing source');
+            } finally {
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        } finally {
+            spy.mockRestore();
+        }
+    });
+});
+
+/** Read every system_events row newest-first from the workspace ledger. */
+async function readSystemEvents(cwd: string): Promise<SystemEventRow[]> {
+    const db = await createMigratedDbAdapter(cwd);
+    try {
+        return await new SystemEventDao(db).query({ limit: 500 });
+    } finally {
+        await db.close();
+    }
+}
+
+describe('CLI history events -> system_events ledger (0471 R2)', () => {
+    test('daily success persists history.import.completed and history.analyze.completed (R2)', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-hist-evt-'));
+        try {
+            const emptyRoot = join(cwd, 'empty-history');
+            mkdirSync(emptyRoot, { recursive: true });
+            const { output } = capturingOutput();
+
+            const exitCode = await main(
+                ['history', 'daily', '--root', emptyRoot, '--source-timeout', '500', '--json'],
+                { output, cwd },
+            );
+            expect(exitCode).toBe(0);
+
+            const rows = await readSystemEvents(cwd);
+            const names = rows.map((r) => r.event_name);
+            expect(names).toContain('history.import.completed');
+            expect(names).toContain('history.analyze.completed');
+            // No failure event on success.
+            expect(names).not.toContain('history.daily.failed');
+
+            // Metadata-only: counts survive, no high-risk text fields leak.
+            const importRow = rows.find((r) => r.event_name === 'history.import.completed');
+            expect(importRow).toBeDefined();
+            const payload = JSON.parse(importRow?.payload_json ?? '{}');
+            expect(payload.sources).toBeGreaterThan(0);
+            expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+            // No high-risk text fields survive normalization (metadata-only policy).
+            expect(payload.message ?? payload.content ?? payload.body).toBeUndefined();
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 });

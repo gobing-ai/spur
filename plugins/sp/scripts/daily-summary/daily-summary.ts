@@ -8,8 +8,8 @@
  * - User annotations (learnings, issues, pending)
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { logger } from './logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -76,6 +76,9 @@ export interface DailySummary {
     };
     commits: GitCommit[];
     annotations: UserAnnotations;
+    /** Path to the newest history report artifact (R7), resolved from the
+     * `.spur/reports/history/latest.json` pointer. Omitted when no report exists. */
+    historyReportPath?: string;
     generatedAt: string;
 }
 
@@ -436,6 +439,14 @@ export function generateMarkdown(summary: DailySummary): string {
         lines.push('');
     }
 
+    // History report path (R7 — surfaces the newest nightly-run artifact).
+    if (summary.historyReportPath) {
+        lines.push('## History Report');
+        lines.push('');
+        lines.push(`- **Newest artifact:** ${summary.historyReportPath}`);
+        lines.push('');
+    }
+
     // Footer
     lines.push('---');
     lines.push('');
@@ -464,6 +475,27 @@ export function writeSummary(markdown: string, options: CliOptions): string {
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the newest history report artifact path by following the
+ * `.spur/reports/history/latest.json` symlink (task 0471 R7). Returns
+ * `undefined` when no report exists — the daily summary simply omits the
+ * section rather than failing.
+ */
+function resolveHistoryReportPath(): string | undefined {
+    const pointer = resolve(process.cwd(), '.spur', 'reports', 'history', 'latest.json');
+    if (!existsSync(pointer)) {
+        return undefined;
+    }
+    try {
+        const target = readlinkSync(pointer);
+        const resolved = isAbsolute(target) ? target : resolve(dirname(pointer), target);
+        return existsSync(resolved) ? resolved : undefined;
+    } catch {
+        // Not a symlink or unreadable — treat as absent.
+        return undefined;
+    }
+}
 
 export async function buildDailySummary(options: CliOptions): Promise<DailySummary> {
     const platforms: string[] = [];
@@ -506,6 +538,9 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
         }
     }
 
+    // R7 — surface the newest history report artifact path (if present).
+    const historyReportPath = resolveHistoryReportPath();
+
     // Get user annotations
     const annotations = await promptUser();
 
@@ -514,6 +549,7 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
         platforms,
         commits,
         annotations,
+        historyReportPath,
         generatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
     };
 

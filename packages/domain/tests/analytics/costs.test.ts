@@ -1,13 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    aggregateCosts,
-    byCostDesc,
-    byDateAsc,
-    cacheHitRatio,
-    computeRecordCost,
-    formatSummary,
-} from '../../src/analytics/costs';
-import type { CostRecord } from '../../src/analytics/types';
+import { byCostDesc, byDateAsc, cacheHitRatio, computeRecordCost, formatSummary } from '../../src/analytics/costs';
+import type { AnalyticsSummary, CostRecord, TokenTotals } from '../../src/analytics/types';
 
 /** Build a CostRecord from a partial, defaulting the cache/usage fields so a test only
  *  states the dimensions it exercises. Keeps fixtures immune to future field additions. */
@@ -23,6 +16,35 @@ function mkRecord(partial: Partial<CostRecord> = {}): CostRecord {
         usageReported: true,
         costUsd: 0,
         ...partial,
+    };
+}
+
+/** A {@link TokenTotals} bucket with the forensic fields defaulted. */
+function totals(partial: Partial<TokenTotals> = {}): TokenTotals {
+    return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
+        ...partial,
+    };
+}
+
+/** Build an {@link AnalyticsSummary} from a shared bucket (the artifact-driven rendering path). */
+function makeSummary(bucket: TokenTotals, overrides: Partial<AnalyticsSummary> = {}): AnalyticsSummary {
+    return {
+        totals: bucket,
+        bySource: { claude: bucket },
+        byModel: { 'claude-sonnet-4-20250514': bucket },
+        daily: [{ date: '2026-05-30', ...bucket }],
+        ...overrides,
     };
 }
 
@@ -100,105 +122,20 @@ describe('analytics costs', () => {
         });
     });
 
-    describe('aggregateCosts', () => {
-        test('returns zeroed summary for empty array', () => {
-            const summary = aggregateCosts([]);
-            expect(summary.totals).toEqual({
-                inputTokens: 0,
-                outputTokens: 0,
-                cacheReadTokens: 0,
-                cacheCreationTokens: 0,
-                costUsd: 0,
-                records: 0,
-                recordsWithUsage: 0,
-            });
-            expect(summary.bySource).toEqual({});
-            expect(summary.byModel).toEqual({});
-            expect(summary.daily).toEqual([]);
-        });
-
-        test('aggregates single record correctly', () => {
-            const records = [mkRecord({ inputTokens: 1000, outputTokens: 500, costUsd: 0.05 })];
-            const summary = aggregateCosts(records);
-            expect(summary.totals.records).toBe(1);
-            expect(summary.totals.inputTokens).toBe(1000);
-            expect(summary.totals.outputTokens).toBe(500);
-            expect(summary.totals.costUsd).toBeCloseTo(0.05);
-            expect(summary.bySource.claude?.records).toBe(1);
-            expect(summary.byModel['claude-sonnet-4-20250514']?.records).toBe(1);
-            expect(summary.daily).toHaveLength(1);
-            expect(summary.daily[0]?.date).toBe('2026-05-30');
-        });
-
-        test('aggregates multiple records from different sources', () => {
-            const records = [
-                mkRecord({ inputTokens: 1000, outputTokens: 500, costUsd: 0.05 }),
-                mkRecord({
-                    source: 'pi',
-                    model: 'gemini-2.5-flash',
-                    inputTokens: 2000,
-                    outputTokens: 1000,
-                    costUsd: 0.02,
-                }),
-                mkRecord({ date: '2026-05-29', inputTokens: 500, outputTokens: 200, costUsd: 0.03 }),
-            ];
-            const summary = aggregateCosts(records);
-
-            // Totals
-            expect(summary.totals.records).toBe(3);
-            expect(summary.totals.inputTokens).toBe(3500);
-            expect(summary.totals.outputTokens).toBe(1700);
-            expect(summary.totals.costUsd).toBeCloseTo(0.1);
-
-            // By source
-            expect(Object.keys(summary.bySource)).toHaveLength(2);
-            expect(summary.bySource.claude?.records).toBe(2);
-            expect(summary.bySource.pi?.records).toBe(1);
-
-            // By model
-            expect(Object.keys(summary.byModel)).toHaveLength(2);
-
-            // Daily — sorted ascending
-            expect(summary.daily).toHaveLength(2);
-            expect(summary.daily[0]?.date).toBe('2026-05-29');
-            expect(summary.daily[1]?.date).toBe('2026-05-30');
-        });
-
-        test('sorts daily entries by date ascending', () => {
-            const records = [
-                mkRecord({ source: 'pi', date: '2026-05-31', model: 'm', inputTokens: 1 }),
-                mkRecord({ source: 'pi', date: '2026-05-29', model: 'm', inputTokens: 1 }),
-                mkRecord({ source: 'pi', date: '2026-05-30', model: 'm', inputTokens: 1 }),
-            ];
-            const summary = aggregateCosts(records);
-            const dates = summary.daily.map((d) => d.date);
-            expect(dates).toEqual(['2026-05-29', '2026-05-30', '2026-05-31']);
-        });
-    });
-
     describe('formatSummary', () => {
         test('formats populated summary', () => {
-            const summary = aggregateCosts([
-                mkRecord({ inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 10.5 }),
-                mkRecord({
-                    source: 'pi',
-                    model: 'gemini-2.5-flash',
-                    inputTokens: 500_000,
-                    outputTokens: 200_000,
-                    costUsd: 2.1,
-                }),
-            ]);
+            const bucket = totals({ inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 10.5, records: 2 });
+            const summary = makeSummary(bucket);
             const text = formatSummary(summary);
-            expect(text).toContain('$12.60');
+            expect(text).toContain('$10.50');
             expect(text).toContain('2 records');
             expect(text).toContain('By source:');
             expect(text).toContain('By model:');
             expect(text).toContain('claude');
-            expect(text).toContain('pi');
         });
 
         test('formats empty summary', () => {
-            const summary = aggregateCosts([]);
+            const summary = makeSummary(totals());
             const text = formatSummary(summary);
             expect(text).toContain('$0.00');
             expect(text).toContain('0 records');
@@ -206,26 +143,13 @@ describe('analytics costs', () => {
 
         test('renders the cache-hit line as n/a when no record carried usage', () => {
             // Length-estimated records (usageReported=false) must not read as 0% cache — unknown, not zero.
-            const summary = aggregateCosts([mkRecord({ inputTokens: 100, usageReported: false })]);
+            const summary = makeSummary(totals({ inputTokens: 100 }));
             expect(formatSummary(summary)).toContain('Cache hit: n/a');
         });
 
         test('renders the cache-hit percentage when usage is present', () => {
-            const summary = aggregateCosts([mkRecord({ inputTokens: 1000, cacheReadTokens: 250 })]);
+            const summary = makeSummary(totals({ inputTokens: 1000, cacheReadTokens: 250, recordsWithUsage: 1 }));
             expect(formatSummary(summary)).toContain('Cache hit: 25.0%');
-        });
-    });
-
-    describe('aggregateCosts — cache split', () => {
-        test('sums cache read/create dimensions and counts records with usage', () => {
-            const summary = aggregateCosts([
-                mkRecord({ inputTokens: 1000, cacheReadTokens: 400, cacheCreationTokens: 100 }),
-                mkRecord({ inputTokens: 500, cacheReadTokens: 100, usageReported: false }),
-            ]);
-            expect(summary.totals.cacheReadTokens).toBe(500);
-            expect(summary.totals.cacheCreationTokens).toBe(100);
-            expect(summary.totals.records).toBe(2);
-            expect(summary.totals.recordsWithUsage).toBe(1);
         });
     });
 

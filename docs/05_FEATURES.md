@@ -5,7 +5,7 @@ authority: derived
 version: 1.3.1
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-06-30
+updated_at: 2026-08-08
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]
@@ -100,13 +100,17 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 
 | Feature | Status | Acceptance |
 | --------- | -------- | ----------- |
-| `spur history import` (full/incremental/force-file) | ✅ | validated-before-persist; checkpointed; idempotent |
-| 7 source definitions (pi, claude, codex, gemini, opencode, antigravity, openclaw) | ✅ | one `SourceDefinition` each |
+| `spur history import --source <s\|all>` (full/incremental/force-file, per-source fan-out) | ✅ | validated-before-persist; checkpointed; idempotent; `--source all` fans out with per-source failure isolation; ad-hoc `--file` targets one session (E1/0470) |
+| 10 source definitions (pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy) | ✅ | one `SourceDefinition` each; omp/grok/agy added in E1 (0467) |
+| Forensic ETL contract (`ts-llm-jsonl-importer`) | ✅ | normalized output with `MAX_ERROR_SAMPLES`, `importOneIsolated`, `schemaVersion`, `assertArtifactVersion` (E1/0466/0468) |
+| `spur history analyze` — SQL aggregation, versioned JSON artifact | ✅ | forensic queries (Q1–Q10), `schemaVersion` gate, `assertArtifactVersion`; artifact is a contract (E1/0474) |
+| `spur history report` — pure artifact renderer | ✅ | database-free; reads + asserts `schemaVersion`; never-fabricate (unavailable ≠ 0); markdown sidecar (E1/0469) |
+| `spur history daily` — single run-once invocation | ✅ | import-all → analyze → write artifact → prune (90-day retention); launchd plist (E1/0470/0471) |
+| History system events + launchd scheduling | ✅ | `history.*` event catalog; `com.gobing-ai.spur.history.daily.plist`; pre-logging failure capture (E1/0471) |
 | Configurable splitting (one-to-one/one-to-many/custom) | ✅ | declarative `splitConfig` |
 | Field firewall (fieldMap + transforms) | ✅ | raw→canonical decoupling |
 | Redaction (secrets/PII before dedup) | ✅ | runs before SHA-256 hashing |
-| `spur history analyze` (cost/token analytics) | ✅ | totals + per-source/model/day |
-| DB-dependent query test coverage | ✅ | `query.ts` integration-tested against in-memory SQLite (single/all-source, since-filter, empty, malformed-payload guard); 100% line/func |
+| DB-dependent query test coverage | ✅ | `query.ts` + `forensic-query.ts` integration-tested against in-memory SQLite (single/all-source, since-filter, empty, malformed-payload guard) |
 | Windowing/forecasting toolkit | 💤 | extract only with ≥2 consumers; else stay inline |
 
 ## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`)

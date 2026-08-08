@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.gobing.spur.history.daily</string>
+
+    <!-- ── Program: run the nightly history pipeline (task 0470+) ──────────── -->
+    <!-- Replace SPUR_BIN with the absolute path to your `spur` binary          -->
+    <!-- (e.g. /opt/homebrew/bin/spur or the bun-linked monorepo CLI).           -->
+    <!-- Replace PROJECT_DIR with the absolute path to your Spur project root.   -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>SPUR_BIN</string>
+        <string>history</string>
+        <string>daily</string>
+        <string>--json</string>
+    </array>
+
+    <!-- Working directory: the Spur project root. The daily command resolves    -->
+    <!-- .spur/reports, .spur/logs, and the SQLite ledger relative to this.       -->
+    <key>WorkingDirectory</key>
+    <string>PROJECT_DIR</string>
+
+    <!-- ── Schedule: daily wall-clock trigger (R3) ─────────────────────────── -->
+    <!-- 02:00 local time — picks a low-activity hour. Adjust Hour to taste.      -->
+    <!-- launchd survives reboot and runs missed CalendarInterval jobs at the     -->
+    <!-- next login, so a laptop closed overnight self-heals.                     -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- ── Log capture (R4): failures before Spur's own logging initializes ── -->
+    <!-- are still written here. launchd owns these file handles from the first   -->
+    <!-- byte — there is no window where output is lost.                          -->
+    <key>StandardOutPath</key>
+    <string>PROJECT_DIR/.spur/logs/history-daily.out</string>
+    <key>StandardErrorPath</key>
+    <string>PROJECT_DIR/.spur/logs/history-daily.err</string>
+
+    <!-- RunAtLoad=false: do NOT fire every time the agent loads (boot/login).   -->
+    <!-- StartCalendarInterval already re-fires a missed slot when the machine   -->
+    <!-- wakes, so RunAtLoad would only cause duplicate runs.                    -->
+
+    <!-- If the process exits non-zero, do NOT auto-restart — the daily command  -->
+    <!-- has its own retry semantics (checkpoint resume), and a tight retry loop  -->
+    <!-- would mask a configuration error. The operator checks the four detection -->
+    <!-- layers (R5) instead.                                                     -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

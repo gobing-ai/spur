@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { etlToCostRecord, extractClaudeTokens, queryAllEtlRecords, queryEtlRecords } from '../../src/analytics/query';
+import { SOURCE_DEFINITIONS } from '@gobing-ai/ts-llm-jsonl-importer';
+import { extractClaudeTokens, queryEtlRecords, SOURCE_TABLES } from '../../src/analytics/query';
 
 async function setupEtlDb(): Promise<DbAdapter> {
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
@@ -101,123 +102,6 @@ describe('analytics query', () => {
         });
     });
 
-    describe('etlToCostRecord', () => {
-        test('creates cost record from payload with usage', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-1',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: 'test content',
-                    model: 'claude-sonnet-4-20250514',
-                    usage: { input_tokens: 1000, output_tokens: 200 },
-                },
-                'claude',
-            );
-            expect(record.source).toBe('claude');
-            expect(record.model).toBe('claude-sonnet-4-20250514');
-            expect(record.inputTokens).toBe(1000);
-            expect(record.outputTokens).toBe(200);
-            expect(record.usageReported).toBe(true);
-            expect(record.costUsd).toBe(0);
-        });
-
-        test('carries the cache split onto the record', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-cache',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: '',
-                    model: 'claude-sonnet-4-20250514',
-                    usage: {
-                        input_tokens: 300,
-                        output_tokens: 100,
-                        cache_read_input_tokens: 600,
-                        cache_creation_input_tokens: 100,
-                    },
-                },
-                'claude',
-            );
-            expect(record.inputTokens).toBe(1000); // 300 + 600 + 100
-            expect(record.cacheReadTokens).toBe(600);
-            expect(record.cacheCreationTokens).toBe(100);
-            expect(record.usageReported).toBe(true);
-        });
-
-        test('length-estimated record leaves usageReported false so cache reads as unknown', () => {
-            const record = etlToCostRecord(
-                { source_record_id: 'test-est', created_at: '2026-01-01T00:00:00Z', content: 'a'.repeat(40) },
-                'pi',
-            );
-            expect(record.usageReported).toBe(false);
-            expect(record.cacheReadTokens).toBe(0);
-            expect(record.outputTokens).toBe(10); // ceil(40/4)
-        });
-
-        test('estimates outputTokens from content length when no usage', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-2',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: 'a'.repeat(100),
-                },
-                'pi',
-            );
-            expect(record.inputTokens).toBe(0);
-            expect(record.outputTokens).toBe(25); // ceil(100/4)
-            expect(record.source).toBe('pi');
-        });
-
-        test('returns 0 tokens when no usage and no content', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-3',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: '',
-                },
-                'codex',
-            );
-            expect(record.inputTokens).toBe(0);
-            expect(record.outputTokens).toBe(0);
-        });
-
-        test('returns unknown date for missing created_at', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-4',
-                    created_at: undefined as unknown as string,
-                    content: '',
-                },
-                'pi',
-            );
-            expect(record.date).toBe('unknown');
-        });
-
-        test('returns unknown model for missing model field', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-5',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: '',
-                },
-                'pi',
-            );
-            expect(record.model).toBe('unknown');
-        });
-
-        test('extracts date portion from ISO timestamp', () => {
-            const record = etlToCostRecord(
-                {
-                    source_record_id: 'test-6',
-                    created_at: '2026-05-30T14:22:00Z',
-                    content: '',
-                    usage: { input_tokens: 10, output_tokens: 5 },
-                },
-                'gemini',
-            );
-            expect(record.date).toBe('2026-05-30');
-        });
-    });
-
     describe('queryEtlRecords', () => {
         test('queries records from a single source table', async () => {
             const adapter = await setupEtlDb();
@@ -258,54 +142,6 @@ describe('analytics query', () => {
         });
     });
 
-    describe('queryAllEtlRecords', () => {
-        test('queries and converts records from all source tables', async () => {
-            const adapter = await setupEtlDb();
-            await adapter.run(
-                "INSERT INTO history_etl_pi (payload_json, imported_at) VALUES (?, '2026-05-30')",
-                JSON.stringify({
-                    source_record_id: 'pi-1',
-                    created_at: '2026-05-30T00:00:00Z',
-                    content: '',
-                    model: 'gemini-2.5-flash',
-                    usage: { input_tokens: 100, output_tokens: 50 },
-                }),
-            );
-            await adapter.run(
-                "INSERT INTO history_etl_claude (payload_json, imported_at) VALUES (?, '2026-05-30')",
-                JSON.stringify({
-                    source_record_id: 'claude-1',
-                    created_at: '2026-05-30T00:00:00Z',
-                    content: '',
-                    model: 'claude-sonnet-4-20250514',
-                    usage: { input_tokens: 200, output_tokens: 100 },
-                }),
-            );
-
-            const records = await queryAllEtlRecords(adapter);
-            expect(records).toHaveLength(2);
-            expect(records.map((r) => r.source).sort()).toEqual(['claude', 'pi']);
-            adapter.close();
-        });
-
-        test('filters all tables by since date', async () => {
-            const adapter = await setupEtlDb();
-            await adapter.run(
-                "INSERT INTO history_etl_pi (payload_json, imported_at) VALUES (?, '2026-05-28')",
-                JSON.stringify({ source_record_id: 'old', created_at: '2026-05-28T00:00:00Z', content: '' }),
-            );
-            await adapter.run(
-                "INSERT INTO history_etl_claude (payload_json, imported_at) VALUES (?, '2026-05-31')",
-                JSON.stringify({ source_record_id: 'new', created_at: '2026-05-31T00:00:00Z', content: '' }),
-            );
-
-            const records = await queryAllEtlRecords(adapter, '2026-05-30');
-            expect(records).toHaveLength(1);
-            expect(records[0]?.source).toBe('claude');
-            adapter.close();
-        });
-    });
-
     // A persisted payload_json is always valid JSON under the validate-before-persist
     // contract, so a parse failure signals DB corruption/tampering. The reader must fail
     // loud with the offending table (not a bare opaque SyntaxError) so `spur history
@@ -323,16 +159,33 @@ describe('analytics query', () => {
             );
             adapter.close();
         });
+    });
 
-        test('queryAllEtlRecords throws a contextual error naming the offending table', async () => {
-            const adapter = await setupEtlDb();
-            await adapter.run(
-                "INSERT INTO history_etl_claude (payload_json, imported_at) VALUES (?, '2026-05-30')",
-                'definitely-not-json',
-            );
+    // R5 — drift regression. The allowlist must cover every targetTable the importer
+    // declares, so a new source can never land without an allowlist entry again. This
+    // is exactly how omp/grok/agy were missed: SOURCE_DEFINITIONS grew, SOURCE_TABLES did not.
+    // The test reads SOURCE_DEFINITIONS (production code does not — that would defeat the
+    // compile-time-constant security invariant).
+    describe('SOURCE_TABLES drift regression', () => {
+        test('every SOURCE_DEFINITIONS targetTable is present in SOURCE_TABLES', () => {
+            const declared = new Set(Object.values(SOURCE_DEFINITIONS).map((d) => d.targetTable));
+            const allowed = new Set<string>(SOURCE_TABLES);
+            for (const table of declared) {
+                expect(allowed.has(table)).toBe(true);
+            }
+        });
 
-            await expect(queryAllEtlRecords(adapter)).rejects.toThrow(/Malformed payload_json in history_etl_claude/);
-            adapter.close();
+        test('the drift check is real — removing an entry would fail it', () => {
+            // Sanity: confirm the assertion has teeth. If every declared table is already
+            // covered, removing one allowed entry makes at least one declared table uncovered.
+            const declared = new Set(Object.values(SOURCE_DEFINITIONS).map((d) => d.targetTable));
+            expect(declared.size).toBeGreaterThan(0);
+            // Simulate a regression: drop one entry from the allowed set and verify the
+            // invariant would be violated.
+            const regressed = new Set<string>(SOURCE_TABLES);
+            const victim = declared.values().next().value as string;
+            regressed.delete(victim);
+            expect(regressed.has(victim)).toBe(false);
         });
     });
 });

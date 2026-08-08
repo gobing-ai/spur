@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:00.489Z"
-updated_at: "2026-08-07T21:45:58.317Z"
+updated_at: "2026-08-08T12:32:38.385Z"
 ---
 
 ## 0467. Fix analytics SOURCE_TABLES allowlist to include omp, grok, and agy history ETL tables
@@ -250,26 +250,42 @@ Confirmed in source — not memory: `history_etl_omp`, `history_etl_grok`, `hist
 - Does not touch `etlToCostRecord` token estimates — that is 0474 R7.
 - Does not add the three tables to the static importer schema — they are dead tables post-0466; the missing-table guard is the correct fix (Design anti-pattern).
 ### Testing
-**Pipeline verify results**
+**Re-verify (2026-08-08, `--auto --force --focus all --fix all --next`).** Verdict: **PASS**. All evidence re-run fresh this session. Tree-state note: the working tree includes task 0474's retirement of `queryAllEtlRecords` — a handoff this task's own `### Design` pre-sanctions ("Leaves for 0474: … 0474 R7 retires `queryAllEtlRecords` outright, so keep this change small"). R2/R3 are therefore certified against the surviving protective behaviors plus the documented handoff; R1/R4/R5 are certified directly against the live tree.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `query.ts:16-18` — omp/grok/agy appended; `as const` (`:19`) + `SourceTable` (`:22`) preserved; security comment `:4-7` re-read, names remain compile-time constants |
-| R2 | MET | `query.ts:63-77` — `try/catch continue` guard; `parsePayload` (`:79`) outside try (fail-loud). Schema finding verified: omp/grok/agy = 0 matches in `HISTORY_IMPORT_SCHEMA_SQL`. Test: `query.test.ts:350-369` |
-| R3 | MET | `query.test.ts:374-401` — derived `source` sorts to `['agy','grok','omp']`; derivation at `query.ts:61` |
-| R4 | MET | `run-cost.test.ts:292-305` — `loadAllEtlPayloads` reads added tables; Solution honestly records run-cost coverage **not restored** post-0466, deferred to unfiled E1 ticket |
-| R5 | MET | `query.test.ts:409-428` — drift regression + teeth-check; 10/10 `SOURCE_DEFINITIONS` targetTables covered |
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/query.ts:16-18` re-read this run — `history_etl_omp`, `history_etl_grok`, `history_etl_agy` present in `SOURCE_TABLES`; `as const` (`:19`) and `SourceTable` narrowing (`:22`) preserved; SECURITY INVARIANT comment (`:4-7`) intact — names remain compile-time constants, never derived from user input |
+| R2 | MET (superseded-by-0474) | Named function retired by 0474 R7 (pre-sanctioned handoff). Goal behaviors re-verified fresh: missing-table skip survives in the remaining `SOURCE_TABLES` consumer `loadAllEtlPayloads` (`run-cost.ts:111-114`, `try/catch continue` — "Table doesn't exist yet — skip") — test `run-cost.test.ts:282-286` "returns empty when tables are absent" PASS (exit 0). Malformed payloads still fail loud: `parsePayload` (`query.ts:31-39`) sits outside any try and throws `Malformed payload_json in <table>` — test `query.test.ts:152-163` PASS (exit 0). Schema finding re-confirmed from source: 0 matches for omp/grok/agy in `ts-libs/packages/llm-jsonl-importer/src/schema-sql.ts` (static schema creates only the 7 original ETL tables; the three are on-demand only) |
+| R3 | MET (superseded-by-0474) | The `table.replace('history_etl_', '')` derivation retired with `queryAllEtlRecords` per the sanctioned handoff; original per-table verification recorded in `### Solution`. The underlying concern — rows seeded in the added tables are actually returned — re-proven fresh: `run-cost.test.ts:292-305` seeds one row in each of `history_etl_omp`/`_grok`/`_agy` and asserts `['agy-1','grok-1','omp-1']` returned — PASS (exit 0) |
+| R4 | MET | `run-cost.test.ts:292-305` fresh PASS; `loadAllEtlPayloads` iterates all of `SOURCE_TABLES` (`run-cost.ts:109`). Measured outcome honestly recorded in `### Solution` (Run-cost finding): post-0466 omp payloads live in `history_message`, so run-cost attribution for `agent.default: omp` is **not** restored by this ticket — deferred to its own E1 ticket, not absorbed here |
+| R5 | MET | `query.test.ts:169-190` — drift regression asserts every `SOURCE_DEFINITIONS` `targetTable` ⊆ `SOURCE_TABLES`, plus teeth-check proving removal fails. Fresh targeted run `bun test packages/domain/tests/analytics/query.test.ts --test-name-pattern "drift"`: 2 pass / 0 fail (exit 0). Production code does not import `SOURCE_DEFINITIONS` (test-only import at `query.test.ts:3`) — invariant preserved |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 — analyze sees omp/grok/agy records | MET | test | `query.test.ts:374-401` + `query.ts:16-18` |
-| Scenario: R2 — missing allowlisted table does not crash | MET | test | `query.test.ts:350-369`; `query.ts:63-77` |
-| Scenario: R3 — derived source identifier correct | MET | test | `query.test.ts:374-401`; `query.ts:61` |
-| Scenario: R4 — run-cost coverage measured, not assumed | MET | test | `run-cost.test.ts:292-305` + Solution `:244` |
-| Scenario: R5 — allowlist cannot drift from schema | MET | test | `query.test.ts:409-428` |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 — analyze sees omp, grok, and agy records | MET | test | Records in the three added tables are returned by the surviving reader: `run-cost.test.ts:292-305` fresh PASS (exit 0). Compile-time-constant clause: `query.ts:4-19` re-read — hardcoded `as const` literal, invariant comment untouched. Note: the scenario's named reader `queryAllEtlRecords` was retired by 0474 under this task's sanctioned handoff; `loadAllEtlPayloads` is the remaining `SOURCE_TABLES` consumer |
+| Scenario: R2 — an allowlisted table that was never created does not crash analyze | MET | test | Missing table skipped, not thrown: `run-cost.test.ts:282-286` fresh PASS over guard `run-cost.ts:111-114`. Malformed payload in an existing table still raises: `query.test.ts:152-163` fresh PASS over `query.ts:31-39` |
+| Scenario: R3 — the derived source identifier is correct per table | MET | test | Derivation mechanism retired with `queryAllEtlRecords` (sanctioned 0474 handoff); scenario's underlying concern re-proven deterministically: one row per added table is returned — `run-cost.test.ts:292-305` fresh PASS (exit 0) |
+| Scenario: R4 — run-cost coverage is measured, not assumed | MET | test | `run-cost.test.ts:292-305` fresh PASS — added tables are among those read; measured negative outcome (post-0466 payloads in `history_message`, coverage **not** restored) recorded in `### Solution` rather than assumed |
+| Scenario: R5 — the allowlist cannot drift from the schema again | MET | test | `query.test.ts:169-190` — targeted `--test-name-pattern "drift"` run this session: 2 pass / 0 fail (exit 0); teeth-check proves the assertion fails when an entry is removed |
+
+**Fresh command evidence (this run)**
+
+- `bun test packages/domain/tests/analytics/query.test.ts` → 12 pass / 0 fail, exit 0 (`query.ts` 100% line coverage).
+- `bun test packages/domain/tests/analytics/run-cost.test.ts` → 20 pass / 0 fail, exit 0 (`run-cost.ts` 100% line coverage).
+- `bun test … --test-name-pattern "drift"` → 2 pass / 0 fail, exit 0. `--test-name-pattern "added omp/grok/agy|tables are absent"` → 2 pass / 0 fail, exit 0.
+- `grep -c "history_etl_omp|history_etl_grok|history_etl_agy" ts-libs/packages/llm-jsonl-importer/src/schema-sql.ts` → 0 (schema finding holds).
+
+**Design conformance: PASS.** 2/3 claims DONE exactly as written (allowlist extension at `query.ts:16-18` with frozen names/no API change; drift test reading `SOURCE_DEFINITIONS` at `query.test.ts:169-190`). 1 claim CHANGED with documented sanction: the `queryAllEtlRecords` guard landed as designed, then the function was retired by 0474 R7 — a deviation this task's `### Design` explicitly pre-authorizes ("Leaves for 0474"); the guard behavior survives in `loadAllEtlPayloads` (`run-cost.ts:111-114`). No scope creep attributable to 0467.
+
+**SECUA review (`--focus all`).** Security: clean — allowlist remains a hardcoded compile-time `as const` literal (`query.ts:8-19`); no runtime derivation anywhere in production code. Efficiency: clean — one pass per allowlisted table, no new scans. Correctness: clean — missing-table guard and fail-loud parse both freshly tested. Usability: clean — frozen names, no signature changes. Architecture: clean for this task's scope — the prior P3 (duplicated guard idiom) is moot post-retirement; the retirement itself is 0474's sanctioned scope, not this task's diff. Findings: no blocker, no major, no minor.
+
+**`--fix all`:** no UNMET/PARTIAL requirements and no major findings — no repair needed, no follow-up tasks created.
+
+**`--next`:** no-op — task already terminal (done).
 ### Review
 **Dev review (2026-08-07, `--auto`).** Three-dimensional: functional traceability + SECUA + architecture. Diff scope: `packages/domain/src/analytics/query.ts`, `packages/domain/tests/analytics/query.test.ts`, `packages/domain/tests/analytics/run-cost.test.ts` (3 files).
 

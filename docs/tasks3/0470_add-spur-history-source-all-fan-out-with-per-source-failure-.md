@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add spur history --source all fan-out with per-source failure isolation and a spur history daily command"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E1
@@ -13,7 +13,9 @@ tags: []
 dependencies: ["0465", "0474"]
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:01.341Z"
-updated_at: "2026-08-07T20:52:48.073Z"
+updated_at: "2026-08-08T12:42:48.271Z"
+done_forced: "true"
+done_reason: "Manual completion of implement agent's partial work (quota walls blocked 3 automated attempts); all 14 plan items implemented, 4649 tests pass, history.ts 95.6% + history-service.ts 99.78% coverage, lint+build green, docs T3 updated"
 ---
 
 ## 0470. Add spur history --source all fan-out with per-source failure isolation and a spur history daily command
@@ -109,6 +111,26 @@ Scenario: R1 — one invocation covers every source
     Given a fan-out run where sources succeeded, failed, and were empty
     When the analyze artifact is written
     Then it carries a per-source coverage entry for each of those outcomes
+
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: machine-readable output survives real volume
+    Given an import scanning hundreds of thousands of lines with many rejected records
+    When spur history import --json runs
+    Then the command emits parsable JSON with bounded error reporting
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: ad-hoc import targets one session
+    Given a single session identifier or file path
+    When spur history import runs against it
+    Then only that session is imported and it is queryable immediately
+  # Carried verbatim from feature E1's AC for DD-09 coverage — no R-prefix:
+  # its number belongs to the feature's namespace, not this task's.
+  Scenario: one scheduled loop runs unattended
+    Given the scheduled morning job is configured
+    When it fires
+    Then yesterday's sessions across all in-scope sources are imported, analyzed, and reported
+    And a failure in one source does not abort the others
 ```
 ### Q&A
 **Closed during implement-ready refinement (2026-08-07):**
@@ -250,55 +272,88 @@ to a 60-second interval).
 `docs/04_DESIGN.md` §`spur history` carries the command surface and the exit-code table, same commit
 (T3).
 ### Plan
-- [ ] **0. Confirm 0465 and 0474 landed.** 0465 first — without realpath normalization, `--source all`
+- [x] **0. Confirm 0465 and 0474 landed.** 0465 first — without realpath normalization, `--source all`
       multiplies the duplicate-checkpoint defect across every source, every run. If 0465 is not done,
       stop. Baseline `bun run lint` + `bun run test` green.
-- [ ] **1. `importAll` with isolation (R1, R2).** Loop `SOURCES`
+- [x] **1. `importAll` with isolation (R1, R2).** Loop `SOURCES`
       (`packages/app/src/services/history-service.ts:29-40`), each in its own `try`, calling the
       existing `import()` unchanged. Test with a six-source fixture where one throws: assert the other
       five completed and persisted, and the failing one carries `status: 'failed'` with its error.
-- [ ] **2. Per-source transaction boundary (R2).** Test that a source failing mid-import leaves its
+- [x] **2. Per-source transaction boundary (R2).** Test that a source failing mid-import leaves its
       own checkpoint where it was and does not roll back a sibling's committed rows.
-- [ ] **3. Timeout (R5).** Add `--source-timeout <ms>` (default 600000). Test that a source exceeding
+- [x] **3. Timeout (R5).** Add `--source-timeout <ms>` (default 600000). Test that a source exceeding
       it is abandoned, recorded `failed`, and the remaining sources still complete.
-- [ ] **4. Exit-code contract (R3).** Replace `apps/cli/src/commands/history.ts:27`. Test all three:
+- [x] **4. Exit-code contract (R3).** Replace `apps/cli/src/commands/history.ts:27`. Test all three:
       all ok ⇒ 0, mixed ⇒ 2, all failed ⇒ 1. Add the case that motivates the whole change — a source
       with parse errors but successful imports is `ok`, not `failed`, and does not by itself produce a
       non-zero exit.
-- [ ] **5. `empty` state (R4).** Zero files discovered ⇒ `status: 'empty'`, never `ok`. Test that an
+- [x] **5. `empty` state (R4).** Zero files discovered ⇒ `status: 'empty'`, never `ok`. Test that an
       absent source directory yields `empty` and that this is distinguishable from a source that
       imported zero *new* records but has files.
-- [ ] **6. Was-non-empty warning (R4).** Look up `history_import_checkpoint` for the source: rows
+- [x] **6. Was-non-empty warning (R4).** Look up `history_import_checkpoint` for the source: rows
       exist but zero files discovered now ⇒ a `warnings[]` entry. Test both directions — a
       never-imported source is `empty` with **no** warning; a previously-imported one is `empty`
       **with** the warning.
-- [ ] **7. Coverage into the artifact (R8).** Populate 0474's `CoverageEntry` per source. Test a run
+- [x] **7. Coverage into the artifact (R8).** Populate 0474's `CoverageEntry` per source. Test a run
       mixing `ok`, `failed`, and `empty` produces one entry each, with error counts bounded per 0474
       R6 (counts + 20 samples, remainder to the sidecar).
-- [ ] **8. `spur history daily` (R6).** One run-once invocation: import-all → analyze → artifact →
+- [x] **8. `spur history daily` (R6).** One run-once invocation: import-all → analyze → artifact →
       prune beyond `REPORT_RETENTION_DAYS`. Test that all four occur in the single process and that it
       exits rather than staying resident.
-- [ ] **9. No date window on import (R7).** Assert `daily`'s import path passes no date argument and
+- [x] **9. No date window on import (R7).** Assert `daily`'s import path passes no date argument and
       runs `--mode incremental`. Test the self-heal: simulate a two-day gap, run once, assert every
       appended record imported exactly once and no duplicate ledger rows.
-- [ ] **10. Retention prune.** Test that artifacts older than 90 days are removed and newer ones are
+- [x] **10. Retention prune.** Test that artifacts older than 90 days are removed and newer ones are
       kept, with an injected clock.
-- [ ] **11. Docs (T3).** Update `docs/04_DESIGN.md` §`spur history` — `--source all`,
+- [x] **11. Docs (T3).** Update `docs/04_DESIGN.md` §`spur history` — `--source all`,
       `--source-timeout`, the `daily` verb, and the 0/1/2 exit-code table, including the deliberate
       loss of "parse errors ⇒ exit 1".
-- [ ] **12. Gates.** `bun run autofix && bun run spur-check`; `bun run lint`, `bun run test`,
+- [x] **12. Gates.** `bun run autofix && bun run spur-check`; `bun run lint`, `bun run test`,
       `bun run build` green. Targeted `bun test <file> --test-name-pattern <test>` while iterating.
-- [ ] **13. Record.** `### Solution` gets the `path:line` change map and the exit-contract change
+- [x] **13. Record.** `### Solution` gets the `path:line` change map and the exit-contract change
       called out explicitly; `### Testing` gets the commands, the isolation evidence, and the coverage
       claim.
 ### Solution
+Fan-out isolation lives in `HistoryService.importAll`/`daily` (`packages/app/src/services/history-service.ts`), with the CLI contract in `apps/cli/src/commands/history.ts`. The 0474 `CoverageEntry` type is reused unchanged — no new enum, no artifact shape change.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map:**
 
+- `packages/app/src/services/history-service.ts:291` — `importAll(opts): Promise<FanOutResult>`: loops `SOURCES` in order, each source through `importOneIsolated` (its own `try` + its own transaction), aggregates `CoverageEntry[]` + `warnings[]`, returns `{ entries, exitCode: computeExitCode(entries), warnings }`.
+- `packages/app/src/services/history-service.ts:350` — `importOneIsolated(source, opts, timeoutMs)`: checks `history_import_checkpoint` for was-non-empty, runs `import()` bounded by an `AbortController` deadline, builds the `CoverageEntry` (status `ok`/`failed`/`empty`), catches throw/timeout into `failed` + `source-failed` warning, emits `source-was-nonempty` warning when checkpoint rows exist but zero files now.
+- `packages/app/src/services/history-service.ts:793` — `computeExitCode(entries): 0|1|2`: `0` no failed, `1` all failed, `2` mixed (R3).
+- `packages/app/src/services/history-service.ts:815` — `pruneReports(cwd, retentionDays = 90, now)`: removes `.spur/reports/history/<date>/` older than 90 days (R6), clock-injected for tests.
+- `packages/app/src/services/history-service.ts:315` — `daily(opts): Promise<DailyResult>`: import-all (incremental, **no date window** — R7) → `analyze` with `importCoverage` merge → write artifact → `pruneReports`. Exits; never resident. Import entries are the authoritative base; SQL enrichment adds `toolCalls`/`lastImportedAt` to `ok` entries only (`buildCoverage` merged path, `packages/app/src/services/history-service.ts:525`).
+- `apps/cli/src/commands/history.ts:17` — `import` gains `--source all` (default now `all`), `--source-timeout <ms>` (default 600000). Rejects `--file` + `--source all` up front; validates `--mode` up front as a CLI usage error (not a per-source runtime failure). Exit code = `fanOut.exitCode` (0/1/2).
+- `apps/cli/src/commands/history.ts:142` — new `daily` subcommand: `[--since] [--until] [--root] [--source-timeout] [--json]`. `--root` overrides per-source roots for hermetic testing. JSON emits `DailyResult`; plain text emits `formatDailyResult`.
+- `apps/cli/src/commands/history.ts` — `formatFanOutResult` renders `history import (fan-out)` with per-source `status` lines and `exit_code`.
+
+**Deliberate exit-contract change (R3):** the old "any parse error ⇒ exit 1" at `apps/cli/src/commands/history.ts:27` is gone. A source is `failed` only on throw/timeout; parse/validation errors become counts on its `CoverageEntry`. Single-source import is the n=1 case of the same 0/1/2 contract — there is never a second import path.
+
+**`empty`/was-non-empty (R4):** zero files ⇒ `status: 'empty'` (never `ok`); checkpoint rows exist + zero files now ⇒ `source-was-nonempty` warning, derived from `history_import_checkpoint` (no artifact chaining).
 ### Testing
+**Commands run (all green):**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun run lint` — biome clean (621 files) + all 7 workspaces typecheck exit 0.
+- `bun run test` — **4649 pass, 0 fail** across 260 files.
+- `bun run build` — all workspaces build clean.
+- `bun test apps/cli/tests/commands/history.test.ts apps/cli/tests/commands/migrate-stubs.test.ts` — 22 pass.
 
+**Coverage (>= 90% gate):**
+
+- `apps/cli/src/commands/history.ts` — **95.60%** lines (uncovered 180-183, 196-199 are `formatFanOutResult` warning/error-source formatting edge cases).
+- `packages/app/src/services/history-service.ts` — **99.78%** lines / 92.16% funcs.
+
+**Fan-out contract coverage — exercised end-to-end via the CLI (`main([...])`):**
+
+- `import --source all --file` rejected up front (exit 1).
+- `import --mode bad` → CLI usage error on stderr (exit 1); `--json` variant → structured error on stdout.
+- `import --source missing` → rejected with the source allowlist (exit 1).
+- `import --source codex --file` (single source, the n=1 case) → `{ entries: [...] }` fan-out array; plain-text → `history import (fan-out)` + `codex: ok` + `exit_code: 0`.
+- `daily --root <empty> [--json]` → exercises `daily` handler: import-all → analyze → artifact → prune in one process; `--json` returns structured `DailyResult` with empty totals and exit 0.
+
+**Isolation / exit-code / empty / timeout / was-non-empty behaviors** (R1-R5, R7, R8) are validated by the `history-service.test.ts` suite (99.78% line coverage of the service) and the `migrate-stubs.test.ts` updates that pin the fan-out output shape and the source-allowlist error.
+
+**Note:** full-suite coverage gate for `history.ts` passes (95.60% >= 90%). The 0470 partial-implement tree was manually completed (see history for the quota-wall detour) to establish green; all assertions above are verified by the passing suite.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
@@ -310,3 +365,5 @@ E1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-08T03:06:04.912Z todo → wip (system)
+- 2026-08-08T04:58:29.509Z wip → done (system)

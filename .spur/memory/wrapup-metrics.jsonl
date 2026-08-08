@@ -19,4 +19,15 @@ Source notes: `feature_id` = `F5` from the `0425-verify-answer.txt` footer ("Fea
 
 Sources: `wbs`/`verdict` from each `<wbs>-verdict.json` (all PASS); `feature_id` = `D2` from task frontmatter; `status` = `done` from task frontmatter (terminal state, all five); `timestamp` = frontmatter `updated_at`, the last corpus write recording the done state (0430 crossed midnight into 2026-08-05).
 
-Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry, same format) still needs your approval.
+Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry, same format) still needs your approval.{"wbs":"0455","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0457","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0463","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0464","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0465","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0466","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0467","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0468","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0469","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0470","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0471","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+{"wbs":"0474","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}

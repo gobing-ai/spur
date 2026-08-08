@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { HISTORY_ARTIFACT_SCHEMA_VERSION, selectorDigest } from '../../src/analytics/artifact';
 import type { ArtifactSelector } from '../../src/analytics/artifact';
+import { HISTORY_ARTIFACT_SCHEMA_VERSION, selectorDigest } from '../../src/analytics/artifact';
 
 function selector(overrides: Partial<ArtifactSelector> = {}): ArtifactSelector {
     return {

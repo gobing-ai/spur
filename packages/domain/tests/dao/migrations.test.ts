@@ -58,8 +58,8 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, runs-external-key, and system-events-correlation migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(9);
+        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, runs-external-key, system-events-correlation, and history-message-run-idx migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(10);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -69,6 +69,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[6]?.id).toBe('0006_spur_cli_system_events');
             expect(CLI_MIGRATIONS[7]?.id).toBe('0007_spur_cli_runs_external_key');
             expect(CLI_MIGRATIONS[8]?.id).toBe('0008_spur_cli_system_events_correlation');
+            expect(CLI_MIGRATIONS[9]?.id).toBe('0009_spur_cli_history_message_run_idx');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -127,15 +128,16 @@ describe('db migrations', () => {
             await applyCliMigrations(adapter, [
                 {
                     id: '0000_spur_cli_foundation',
-                    sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY);',
+                    sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS history_message (record_hash TEXT PRIMARY KEY, source TEXT NOT NULL, session_id TEXT NOT NULL, provenance TEXT NOT NULL, run_id TEXT);',
                 },
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
             // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid
             // + 0006 system-events + 0007 runs-external-key
-            // + 0008 system-events-correlation applied on top.
+            // + 0008 system-events-correlation + 0009 history-message-run-idx
+            // applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(7);
+            expect(applied).toBe(8);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -169,8 +171,8 @@ describe('db migrations', () => {
 
             const applied = await applyCliMigrations(adapter);
             // renamed inbox + rule + planning + queue-jobs + run-pid + system-events
-            // + runs-external-key + system-events-correlation
-            expect(applied).toBe(8);
+            // + runs-external-key + system-events-correlation + history-message-run-idx
+            expect(applied).toBe(9);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -305,6 +307,25 @@ describe('db migrations', () => {
             // index cannot serve the "this task's stream" lookup.
             const entityCols = await adapter.queryAll<{ name: string }>('PRAGMA index_info(idx_system_events_entity)');
             expect(entityCols.map((c) => c.name)).toEqual(['entity_kind', 'entity_id']);
+            adapter.close();
+        });
+
+        test('0009 adds the (provenance, run_id) index to history_message', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+
+            const indexes = await adapter.queryAll<{ name: string }>('PRAGMA index_list(history_message)');
+            expect(indexes.map((i) => i.name)).toContain('idx_history_message_provenance_run');
+
+            // The index covers the (provenance, run_id) pair — the --run/--task selectors.
+            const cols = await adapter.queryAll<{ name: string }>(
+                'PRAGMA index_info(idx_history_message_provenance_run)',
+            );
+            expect(cols.map((c) => c.name)).toEqual(['provenance', 'run_id']);
+
+            // Idempotent: re-applying journals nothing and does not duplicate the index.
+            const secondApplied = await applyCliMigrations(adapter);
+            expect(secondApplied).toBe(0);
             adapter.close();
         });
     });

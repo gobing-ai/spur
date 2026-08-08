@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-07T00:27:39.582Z"
-updated_at: "2026-08-07T21:32:55.100Z"
+updated_at: "2026-08-08T12:30:25.078Z"
 ac_numbering: task-local
 ---
 
@@ -260,18 +260,56 @@ is second rebases rather than re-deciding. The migration must therefore cover th
 **macOS note:** `tmpdir()` returns `/var/folders/...` but `realpath` resolves to `/private/var/folders/...`. `fixtureFile` now returns the realpath so test assertions match the normalized `source_file`.
 
 ### Testing
-**Pipeline verify results**
+**Re-verification (--force re-audit): 2026-08-08**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS
+- Fresh evidence this run (all in `~/xprojects/ts-libs/packages/llm-jsonl-importer`):
+  - `bun test tests/importer.test.ts --test-name-pattern "R1|R5|0465|realpath"` → 5 pass / 0 fail, exit 0
+  - `bun test tests/jsonl-importer-dao.test.ts` → 18 pass / 0 fail, exit 0
+  - `bun test tests/importer.test.ts` (full file) → 35 pass / 0 fail, exit 0
+  - `bun test tests/importer.test.ts --test-name-pattern "composite file checkpoints"` → 1 pass / 0 fail, exit 0
+  - `bun run check` (package gate: lint + tsc + tests) → 174 pass / 0 fail / 810 expectations, exit 0
+  - `grep -nE 'mtime' src/*.ts` → no matches; no size/mtime/content-hash guard added (R3 honored)
+- All `file:line` anchors below were re-read at those lines this run and name the requirement's subject.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 — normalize source_file via realpath | MET | `normalizeSourceFilePath` at `importer.ts:298-305`, applied at all 3 discovery sites (`:256,:277,:281`); record_hash `:103-109` now feeds on canonical path by construction |
-| R2 — symlink & real path collapse | MET | `importer.test.ts:477` — single checkpoint row, 0 second-import records |
-| R3 — rewrite guard deferred | MET | Solution §"Rewrite guard"; no guard code in diff; reopen condition named |
-| R4 — migration collapses existing rows | MET | `jsonl-importer-dao.ts:264-369`; DAO tests `:165,:186,:209,:243,:259` |
-| R5 — 0457 regression coverage | MET | `importer.test.ts:584` (dry-run), `:605` (full reset) |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 — normalize source_file via realpath at discovery, with fallback | MET | `normalizeSourceFilePath` at `src/importer.ts:298-305` (returns `fileSystem.realPath(path)`, falls back on absence/throw); applied at all 3 discovery sites (`:256` explicit-files map, `:277` root-is-file, `:281` dir-walk); `record_hash` at `:103-109` feeds on the canonical `file` |
+| R2 — symlink + real path collapse to one checkpoint, no re-import | MET | `tests/importer.test.ts:477` `R1/R2 — symlinked and real paths of one file collapse to one checkpoint row` — asserts exactly one checkpoint row keyed by realpath, `second.importedRecords === 0`, one ledger row; fresh run exit 0 |
+| R3 — rewrite guard deferred in writing, not implemented | MET | Solution §R3 names the reopen condition (a source observed to rewrite/truncate a session file in place); `grep -nE 'mtime'` over `src/*.ts` returns nothing — no size/mtime/hash guard code exists |
+| R4 — idempotent migration across checkpoint/ledger/contract tables | MET | `normalizeSourceFilePaths` at `src/jsonl-importer-dao.ts:264`; collapse keeping highest `last_imported_line` at `:321`; contract tables via `TYPED_TABLE_COLUMNS_SOURCE_FILE` `:281` + `tableExists` `:283`; ETL tables via `listEtlTables` `:291`; ledger rewrite `normalizeColumnPaths` `:344`; DAO tests `:165` (collapse), `:186` (ledger), `:209` (contract), `:243` (record_hash untouched), `:259` (idempotent) — all pass, exit 0 |
+| R5 — 0457 behaviors preserved (dry-run, scoped full reset) | MET | `tests/importer.test.ts:584` `R5 — dry-run does not advance the checkpoint`; `:605` `R5 — full mode resets only the imported source scope` — both pass, exit 0 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 — symlink and real path resolve to one identity | MET | test | `tests/importer.test.ts:477` — one checkpoint row, second import 0 records, 1 ledger row; exit 0 |
+| Scenario: R1 — normalization degrades safely when realPath is unavailable | MET | test | `tests/importer.test.ts:528` (FileSystem without `realPath` imports via original path) and `:553` (throwing `realPath`, e.g. ENOENT, falls back); both pass, exit 0 |
+| Scenario: R2 — path identity is proven against a scratch database | MET | test | `tests/importer.test.ts:477` runs against a fresh scratch DB seeded via the symlinked path then re-imported via the real path; observed output recorded this run (5 pass / 0 fail under pattern `R1|R5|0465|realpath`) |
+| Scenario: R3 — the rewrite guard is deferred in writing, not implemented | MET | command | `grep -nE 'mtime' src/*.ts` → no matches; Solution §R3 records the deferral and reopen condition; no guard code in the diff |
+| Scenario: R4 — the migration collapses existing unnormalized rows | MET | test | `tests/jsonl-importer-dao.test.ts:165` (highest `last_imported_line` kept), `:186` (ledger normalized), `:209` (`history_message`/`history_tool_call` normalized) — all pass, exit 0 |
+| Scenario: R4 — the migration is idempotent | MET | test | `tests/jsonl-importer-dao.test.ts:259` — second run produces identical state; exit 0 |
+| Scenario: R5 — 0457's passing behaviors still pass | MET | test | `tests/importer.test.ts:584` (dry-run writes/advances no checkpoint) and `:605` (full mode resets only the imported source) — both pass, exit 0 |
+| Scenario: incremental import is exactly-once over append-only files (E1 DD-09) | MET | test | `tests/importer.test.ts:41` `uses composite file checkpoints for incremental imports` — appends, re-runs incremental, asserts only appended line imported, checkpoint advances, no duplicate ledger hash; exit 0 |
+
+**Design Conformance**
+
+All `### Design` claims classified against the diff: 8/8 DONE — single choke point at discovery (`importer.ts:256,277,281`); `record_hash` inputs unchanged (`:103-109`); checkpoint/ledger keys canonical by construction; in-place idempotent migration chosen over full re-import (`jsonl-importer-dao.ts:264`); fallback never bypasses the injected `FileSystem` (`:298-305`); migration discovers contract/ETL tables dynamically (`:281-295`); `record_hash` grandfathered (test `:243`); rewrite-guard deferral in writing with reopen condition. No scope creep — diff is confined to the Solution change-map files.
+
+**SECUA Review**
+
+- S: Clean — realpath reduces path-spoofing ambiguity; SQL table names come from constants or `sqlite_master` (local DDL trust boundary), never user input; no `node:fs` bypass of the injected seam.
+- E: Good — one normalization per discovered file; ledger/contract rewrites touch only changed rows; checkpoint rebuild is O(rows) on a tiny table.
+- C: Strong — collapse keeps `MAX(last_imported_line)` (`jsonl-importer-dao.ts:321`); `resolveWithFallback` (`:360`) covers null/undefined/throw. Minor (P4, advisory): the checkpoint rebuild (`DELETE FROM` + re-INSERT, `:331-340`) is not wrapped in an explicit transaction — a crash mid-rebuild could drop checkpoint rows; blast radius is limited because the ledger UNIQUE on `record_hash` still prevents duplicate ETL inserts on re-scan. Accepted, no fix required.
+- U: Good — additive optional export (`index.ts:4`), documented WHY on the migration.
+- A: Good — resolver injected (no FS coupling in the DAO); dynamic table discovery avoids hardcoding the 0466-volatile table list.
+
+Coverage: N/A (package gate `bun run check` runs the full package suite: 174 pass / 0 fail / 810 expectations; no separate coverage measurement applies to this verification).
+
+--next: no-op - task already terminal (done)
 ### Review
 **Reviewer:** sp-dev-review (--auto) · **Date:** 2026-08-07 · **Verdict: PASS**
 

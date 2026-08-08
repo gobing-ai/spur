@@ -113,10 +113,15 @@ export function buildMessageWhere(sel: ArtifactSelector): { where: string; param
         params.push(sel.sessionId);
     }
     if (sel.runId != null) {
+        // `run_id`/`task_wbs` only exist on `provenance='spur-run'` rows, and the 0009 index
+        // is `(provenance, run_id)` — the provenance equality is what makes the --run/--task
+        // selectors resolve against an index rather than a scan (R3).
+        clauses.push("m.provenance = 'spur-run'");
         clauses.push('m.run_id = ?');
         params.push(sel.runId);
     }
     if (sel.taskWbs != null) {
+        clauses.push("m.provenance = 'spur-run'");
         clauses.push('m.task_wbs = ?');
         params.push(sel.taskWbs);
     }
@@ -184,15 +189,19 @@ export async function byTool(db: DbAdapter, sel: ArtifactSelector, top: number):
 /** Per-session leaderboard (Q5), bounded by `top`. */
 export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<SessionRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    return db.queryAll<SessionRow>(
+
+    // Message-side stats per session, selector-scoped (Q5).
+    const msgRows = await db.queryAll<{
+        sessionId: string;
+        source: string;
+        startedAt: string | null;
+        messages: number;
+        tokens: number | null;
+        costUsd: number | null;
+    }>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 MIN(m.ts) AS startedAt,
                 COUNT(*) AS messages,
-                (SELECT COUNT(*) FROM history_tool_call tc
-                  WHERE tc.session_id = m.session_id AND tc.source = m.source) AS toolCalls,
-                (SELECT tc2.tool_name FROM history_tool_call tc2
-                  WHERE tc2.session_id = m.session_id AND tc2.source = m.source
-                  GROUP BY tc2.tool_name ORDER BY COUNT(*) DESC, tc2.tool_name LIMIT 1) AS topTool,
                 SUM(m.input_tokens + m.output_tokens) AS tokens,
                 SUM(m.cost_usd) AS costUsd
          FROM history_message m
@@ -203,6 +212,64 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
         ...params,
         top,
     );
+
+    if (msgRows.length === 0) return [];
+
+    // Tool-call stats per (session, tool), selector-scoped via JOIN to history_message.
+    // Both queries honor the same selector window: the old correlated subqueries only
+    // filtered by session_id+source, ignoring since/until/runId/taskWbs and over-counting
+    // tool calls outside the window (F1).
+    const toolRows = await db.queryAll<{ sessionId: string; source: string; toolName: string; cnt: number }>(
+        `SELECT m.session_id AS sessionId, m.source AS source,
+                tc.tool_name AS toolName,
+                COUNT(*) AS cnt
+         FROM history_tool_call tc
+         JOIN history_message m ON m.record_hash = tc.message_hash
+         ${where}
+         GROUP BY m.session_id, m.source, tc.tool_name`,
+        ...params,
+    );
+
+    // Build per-session tool counts from the flat (session, tool) rows.
+    const toolMap = new Map<string, Map<string, number>>();
+    for (const row of toolRows) {
+        const key = `${row.sessionId}\0${row.source}`;
+        let tools = toolMap.get(key);
+        if (!tools) {
+            tools = new Map();
+            toolMap.set(key, tools);
+        }
+        tools.set(row.toolName, (tools.get(row.toolName) ?? 0) + row.cnt);
+    }
+
+    // Merge message stats with tool stats; pick the most frequent tool per session
+    // (ties broken by tool_name ASC, matching the old SQL `ORDER BY COUNT(*) DESC, tc2.tool_name`).
+    return msgRows.map((msg) => {
+        const key = `${msg.sessionId}\0${msg.source}`;
+        const tools = toolMap.get(key);
+        let toolCalls = 0;
+        let topTool: string | null = null;
+        let maxCount = -1;
+        if (tools) {
+            for (const [name, count] of tools) {
+                toolCalls += count;
+                if (topTool === null || count > maxCount || (count === maxCount && name < topTool)) {
+                    maxCount = count;
+                    topTool = name;
+                }
+            }
+        }
+        return {
+            sessionId: msg.sessionId,
+            source: msg.source,
+            startedAt: msg.startedAt,
+            messages: msg.messages,
+            toolCalls,
+            topTool,
+            tokens: msg.tokens,
+            costUsd: msg.costUsd,
+        };
+    });
 }
 
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */
@@ -252,4 +319,16 @@ export async function sourceSummary(db: DbAdapter, sel: ArtifactSelector): Promi
          GROUP BY m.source`,
         ...params,
     );
+}
+
+/**
+ * Count `history_import_checkpoint` rows for a source (task 0470 R4 was-non-empty
+ * detection). Owned here so raw SQL stays in the domain layer (ADR-011).
+ */
+export async function countCheckpointsBySource(db: DbAdapter, source: string): Promise<number> {
+    const row = await db.queryFirst<{ cnt: number }>(
+        'SELECT COUNT(*) AS cnt FROM history_import_checkpoint WHERE source = ?',
+        source,
+    );
+    return row?.cnt ?? 0;
 }

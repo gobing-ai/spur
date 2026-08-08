@@ -15,6 +15,7 @@ export type SystemEventSource =
     | 'rule'
     | 'agent'
     | 'team'
+    | 'history'
     | 'bus'
     | 'api';
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
@@ -120,6 +121,15 @@ export const SYSTEM_EVENT_CATALOG = [
     event('team.member.assigned', 'team', 'team'),
     event('team.member.started', 'team', 'team'),
     event('team.member.stopped', 'team', 'team'),
+
+    // ── history.* (task 0471 R1) ─────────────────────────────────────────
+    // The nightly history loop runs under an external scheduler (launchd),
+    // so the event ledger is the only in-harness evidence it ran. `metadata-only`
+    // keeps counts/durations/outcome; error text lives in `detail` (bounded,
+    // secret-redacted) — never `raw-safe` (history payloads quote source paths).
+    event('history.import.completed', 'history', 'history-import'),
+    event('history.analyze.completed', 'history', 'history-analyze'),
+    event('history.daily.failed', 'history', 'history-daily'),
 
     // ── rule.* (task 0221 R2/R3) ──────────────────────────────────────────
     event('rule.run.start', 'rule', 'rule'),

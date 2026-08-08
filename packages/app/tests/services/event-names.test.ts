@@ -199,6 +199,26 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             expect(SYSTEM_EVENT_PREFIXES).toContain('team');
         }
     });
+
+    test('registers history.* catalog entries (task 0471 R1)', () => {
+        const cases = [
+            { name: 'history.import.completed', renderer: 'history-import' },
+            { name: 'history.analyze.completed', renderer: 'history-analyze' },
+            { name: 'history.daily.failed', renderer: 'history-daily' },
+        ] as const;
+        for (const { name, renderer } of cases) {
+            const entry = requireEntry(name);
+            expect(entry.source).toBe('history');
+            expect(entry.renderer).toBe(renderer);
+            // R1 + Design: metadata-only, never raw-safe (history payloads quote source paths).
+            expect(entry.payloadPolicy).toBe('metadata-only');
+            expect(entry.tier).toBe('default');
+            expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain(name);
+            expect(SYSTEM_EVENT_PERSISTED_NAMES).toContain(name);
+            expect(SYSTEM_EVENT_STREAMED_NAMES).toContain(name);
+            expect(SYSTEM_EVENT_PREFIXES).toContain('history');
+        }
+    });
 });
 
 describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
@@ -343,5 +363,48 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         const entry = requireEntry('workflow.agent');
         const result = normalizeSystemEventPayload(entry, 42);
         expect(result).toEqual({ value: 42 });
+    });
+});
+
+describe('normalizeSystemEventPayload — history.* (task 0471 R1/R2)', () => {
+    test('metadata-only strips text fields and redacts secrets from history payloads', () => {
+        const entry = requireEntry('history.import.completed');
+        const configuredSecret = 'sk-ant-supersecret-9876543210';
+        const payload = {
+            sources: 10,
+            files: 42,
+            messages: 1337,
+            durationMs: 52_400,
+            // High-risk text fields must be stripped to [redacted].
+            message: 'imported from /Users/robin/.claude/projects',
+            content: `raw body quoting secret ${configuredSecret}`,
+            // Safe metadata survives.
+            cwd: '/Users/robin/xprojects/spur-new',
+            artifactPath: '/tmp/x/analyze.json',
+        };
+        const result = normalizeSystemEventPayload(entry, payload, [configuredSecret]);
+        expect(result).not.toBeNull();
+        expect(result?.sources).toBe(10);
+        expect(result?.files).toBe(42);
+        expect(result?.messages).toBe(1337);
+        expect(result?.durationMs).toBe(52_400);
+        expect(result?.message).toBe('[redacted]');
+        expect(result?.content).toBe('[redacted]');
+        expect(JSON.stringify(result)).not.toContain(configuredSecret);
+        expect(result?.cwd).toBe('/Users/robin/xprojects/spur-new');
+    });
+
+    test('history.daily.failed keeps detail (bounded) and outcome, strips message', () => {
+        const entry = requireEntry('history.daily.failed');
+        const payload = {
+            exitCode: 2,
+            detail: 'codex import timed out after 600000ms',
+            message: 'Error: ECONNREFUSED redis://localhost:6379',
+        };
+        const result = normalizeSystemEventPayload(entry, payload);
+        expect(result).not.toBeNull();
+        expect(result?.exitCode).toBe(2);
+        expect(result?.detail).toBe('codex import timed out after 600000ms');
+        expect(result?.message).toBe('[redacted]');
     });
 });

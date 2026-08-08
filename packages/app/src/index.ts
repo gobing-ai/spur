@@ -109,11 +109,26 @@ export {
     isFindingCode,
 } from './services/finding-codes';
 export type {
+    AnalyzeOptions,
+    ArtifactResolution,
+    DailyOptions,
+    DailyResult,
+    FanOutResult,
     HistoryAnalyzeResult,
     HistoryImportResult,
     HistoryServiceContext,
+    ImportAllOptions,
+    ResolvedArtifact,
+    RunHistoryReportResult,
 } from './services/history-service';
-export { HistoryService } from './services/history-service';
+export {
+    computeExitCode,
+    formatIssue,
+    HistoryService,
+    pruneReports,
+    resolveArtifactPath,
+    runHistoryReport,
+} from './services/history-service';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {

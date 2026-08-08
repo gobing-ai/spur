@@ -46,6 +46,7 @@ The daily-summary skill:
 3. Prompts user for learnings, issues fixed, and pending tasks
 4. Generates a timestamped markdown summary
 5. Outputs to `docs/daily/summary_yyyymmdd.md`
+6. Surfaces the newest history report path when a nightly `spur history daily` artifact exists (R7)
 
 ## Quick Start
 
@@ -125,6 +126,7 @@ Assemble sections into `docs/daily/summary_yyyymmdd.md`
 | Issues Fixed | If provided | User input |
 | Learnings | If provided | User input |
 | Pending | If provided | User input |
+| History Report | If a nightly history artifact exists | `.spur/reports/history/latest.json` pointer (R7) |
 
 ## Data Sources
 

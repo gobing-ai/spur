@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E1"
 name: "History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-06T23:08:18.775Z"
-updated_at: "2026-08-07T06:45:29.660Z"
+updated_at: "2026-08-08T12:43:55.812Z"
 ---
 
 # E1: History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop
@@ -100,14 +100,14 @@ Feature: History data plane trustworthy end-to-end
 | 0462 | Decide the ingestion path model: Spur-launched run sessions vs ambient agent history | cancelled |
 | 0463 | Source discovery and field map for all six agents: claude, codex, pi, omp, agy, grok | done |
 | 0464 | Consumption surface: analyze artifact, report rendering, and the scheduled loop | done |
-| 0465 | Normalize history import source_file via realpath and harden line-number checkpoints | todo |
+| 0465 | Normalize history import source_file via realpath and harden line-number checkpoints | done |
 | 0466 | Implement the forensic ETL contract in ts-llm-jsonl-importer: per-entry targetTable, history_message + history_tool_call schema, six source mappers | done |
-| 0467 | Fix analytics SOURCE_TABLES allowlist to include omp, grok, and agy history ETL tables | todo |
-| 0468 | Fix issues found in 0466 forensic ETL implementation session: Bun link, TS strict, test coverage, analyze command | todo |
-| 0469 | Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner | todo |
-| 0470 | Add spur history --source all fan-out with per-source failure isolation and a spur history daily command | todo |
-| 0471 | Declare history.* system events and install the launchd agent for the nightly history loop | todo |
-| 0474 | Cut spur history analyze over to SQL aggregation with the forensic query set and versioned JSON artifact | todo |
+| 0467 | Fix analytics SOURCE_TABLES allowlist to include omp, grok, and agy history ETL tables | done |
+| 0468 | Fix issues found in 0466 forensic ETL implementation session: Bun link, TS strict, test coverage, analyze command | done |
+| 0469 | Implement spur history report as a pure artifact renderer with markdown sidecar and staleness banner | done |
+| 0470 | Add spur history --source all fan-out with per-source failure isolation and a spur history daily command | done |
+| 0471 | Declare history.* system events and install the launchd agent for the nightly history loop | done |
+| 0474 | Cut spur history analyze over to SQL aggregation with the forensic query set and versioned JSON artifact | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -383,3 +383,5 @@ This explains pi's 1.3M parse errors outright: its `defaultRoots` are `['.pi/his
   v1 by decision. Revisit only if agy cost attribution turns out to matter.
 ## History
 - 2026-08-06T23:18:19.322Z backlog → active (system)
+- 2026-08-08T08:05:56.640Z active → verifying (system)
+- 2026-08-08T12:43:55.812Z verifying → done (system)

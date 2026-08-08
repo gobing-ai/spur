@@ -12,7 +12,7 @@ priority: P1
 tags: ["infrastructure", "dev-exp", "tech-debt"]
 dependencies: ["0466"]
 created_at: "2026-08-07T05:00:00.000Z"
-updated_at: "2026-08-07T19:20:51.768Z"
+updated_at: "2026-08-08T12:32:19.142Z"
 ---
 
 ## Fix issues found in 0466 forensic ETL implementation session
@@ -404,87 +404,53 @@ to 0474 (which retires `queryAllEtlRecords` outright, its R7) and 0467 (which ow
 allowlist). Building the union here would have meant writing code 0474 deletes. No commit, tag, push, or
 publish in either repo.
 ### Testing
-**Verdict: PASS** — verified 2026-08-07 via `/sp:dev-verify 0468 --auto --next --force --focus all --fix all`.
-All evidence below was re-run this session; every `file:line` anchor was re-read at the cited lines.
+**Verdict: PARTIAL** — re-audit 2026-08-08 via the E1 verifyall batch (`--auto --force --focus all --fix all --next`). All evidence below was re-run fresh this run; every `file:line` anchor was re-read at the cited lines. R1–R4 MET on fresh targeted evidence; R5 PARTIAL — the full-repo gate it names (`bun run lint`, `bun run test`) is prohibited by the batch run-scope constraint, so freshness rests on scoped proxies (all green). The completion-time full-gate result (2026-08-07: lint exit 0; 4580 pass / 24 fail of 4604, all 24 sandbox `Bun.serve` port-binding denials) stands recorded but is not re-certified.
 
-**Verdict history in this run — two revisions, both recorded.** R1 was first marked MET on the
-assumption that Bun fires `prepare` on install *and on link*, taken from `### Design` § P1 without
-checking. Reading Bun 1.3.14 source **falsified** it, so the verdict was revised PASS → PARTIAL and the
-task returned `done` → `wip`. R1's link path was then closed with a consumer-side guard
-(`bun run link-check`) and the AC amended (operator-approved) from mechanism wording to outcome, taking
-the verdict PARTIAL → PASS. The `prepare` hook was kept — it closes the ts-libs-side `bun install` case
-the guard does not see.
+**Tree-state note (successor drift, not a defect).** Since 0468 closed, sibling E1 tasks have landed in this worktree: 0474's in-flight SQL cut-over removed the `--source gemini` pin from `apps/cli/tests/commands/migrate-stubs.test.ts` (the test now imports `--source claude`, current `:198`) — exactly the successor action 0468's design prescribed ("This task's SQL cut-over restores coverage for all six converted sources and removes that pin", `docs/tasks3/0474_*.md:51-58`). The test stays green (4 pass / 0 fail, fresh). 0468's own commits (`6052ef51`, `5f692e96`, `84842e8f`) remain the scope baseline: zero analytics production change.
 
-**Fix pass — cross-repo writes (disclosure).** This run's `--fix all` pass edited the upstream repo
-`~/xprojects/ts-libs` (outside the Spur tree, so invisible to Spur's `git status`), under explicit
-operator authorization. Those edits were then committed and **released by the operator as 0.4.22**,
-with the `prepare` hook dropped; Spur's catalog is `^0.4.22`. What the pass wrote:
-
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/mappers.ts:1` — deleted the `@ts-nocheck` directive.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/mappers.ts:1038-1041` — added the `o()` narrowing helper.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/mappers.ts:213,218,301,314,318,390,414` — rewrote the
-  seven `unknown?.` sites per the `### Design` § P2 table (documented line numbers 212/217/299/312/316/387/411
-  shifted by the line-1 deletion; expressions match 1:1).
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/package.json` — added `"prepare": "bun run build"` (since removed; see below).
-
-The `prepare` line was subsequently removed by the operator (`8e71310`) once verification showed it
-cannot cover the `bun link` path; 0.4.22 ships without it, deliberately. `~/xprojects/ts-libs` is clean
-at `401d5a4`.
+**Fix pass (`--fix all`).** No UNMET requirement/AC and no unresolved major finding — nothing repaired. R5's PARTIAL is not fixable inside the batch run-scope constraint (the only certifying commands are the prohibited full-repo runs); residual reported, no retry per the bounded-loop rule. Ledger: `.spur/run/0468-fix-created.json` (zero entries this run). `--next`: no-op — task already terminal (done).
 
 **Per-Requirement Traceability**
 
-| Req | Status | Confidence | Evidence |
-| --- | --- | --- | --- |
-| R1 | MET | HIGH | **Closed by the two mechanisms that actually guard Spur; the originally specified `prepare` hook was falsified and then dropped.** Bun enqueues `prepare` only for `ResolutionTag::Git \| Github \| Root` and `Workspace` (`src/install/lockfile/Package/Scripts.rs:167-194`); `bun link` yields `Symlink` (`src/install/resolution.rs:84-91`). Registry path: `prepublishOnly: bun run build` — verified in the consumed tarball, whose `dist/mappers.js` contains the `o()` helper added to `src/` (`grep -c 'function o('` → 1). Link path: `scripts/commands/link-check.ts` wired into `spur-check`, verified live in both directions (stale → exit 1 naming `src/mappers.ts` + rebuild command; rebuilt → exit 0), 7 unit tests green. Identity: `Bun.resolveSync` from `packages/app`, `packages/domain`, and `apps/cli` all return `…@gobing-ai+ts-llm-jsonl-importer@0.4.22/…`, so the resolved path names the copy. |
-| R2 | MET | HIGH | `bunx tsc -p tsconfig.build.json` → exit 0, `TS2339` count 0, `noUncheckedIndexedAccess` still `true` (`tooling/typescript/base.json:16`); importer suite 164 pass / 0 fail; `tooling/typescript/base.json` untouched. **Now verified in the copy Spur loads**, not just a working tree: the 0.4.22 store copy's `src/mappers.ts` has `@ts-nocheck` count 0 and the `o()` helper present, and its compiled `dist/mappers.js` carries the helper too. |
-| R3 | MET | HIGH | `.spur/context/pitfalls.md:245` records the source-conversion lesson (converted sources move to `history_message`/`history_tool_call`; pin generic-ETL assertions to a still-generic source). `:247` records the companion `bun link` serves-`dist` stale-build trap. Both re-read this run. |
-| R4 | MET | HIGH | `apps/cli/tests/commands/migrate-stubs.test.ts:196` imports `--source gemini`; `:192-195` carries the reason comment naming 0474. `bun test apps/cli/tests/commands/migrate-stubs.test.ts` → 4 pass / 0 fail / 50 expect(). Zero analytics production diff: `git diff HEAD -- packages/domain/src/analytics/query.ts` → empty. Handoff landed at `docs/tasks3/0474_*.md:48-56`. |
-| R5 | MET | HIGH | `bun run lint` → exit 0 (biome 613 files clean; all 7 workspaces typecheck exit 0). `bun run test` → 4580 pass / 24 fail / 4604 across 257 files. All 24 failures are sandbox `Bun.serve` port-binding denials (`error: Failed to listen at 127.0.0.1` / `::1`), reproduced bare: `bun -e 'Bun.serve({port:0, fetch:()=>new Response("x")})'` → `Failed to start server`. None touch importer, analytics, or history modules. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Registry path: consumed store copy declares `prepublishOnly: "bun run build"` (`node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.4.22+d5c29f764bf0e6e0/node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json:46`, re-read) and its `dist/mappers.js` carries `function o(` (grep count 1) matching its `src/mappers.ts` — the shipped dist is built from the shipped src. Link path: `bun run link-check` → exit 0 fresh ("no linked @gobing-ai package is serving a stale dist/"), chained first in `spur-check` / `spur-check:full` (`package.json:78,83,86`, re-read); `bun test scripts/commands/link-check.test.ts` → 7 pass / 0 fail fresh, pinning both directions (`flags a linked package whose dist is older than its src`, `flags a linked package that was never built at all`, `ignores a Bun store copy, whose realpath stays inside node_modules`). Identity: catalog `^0.4.22` (`package.json:36`, re-read); `Bun.resolveSync` from `packages/app`, `packages/domain`, and `apps/cli` each → `node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.4.22+d5c29f764bf0e6e0/…/dist/index.js` (fresh this run). |
+| R2 | MET | `bunx tsc -p tsconfig.build.json` in `~/xprojects/ts-libs/packages/llm-jsonl-importer` → exit 0 fresh (0 `TS2339`); `noUncheckedIndexedAccess: true` retained (`tooling/typescript/base.json:16`, re-read); store-copy `src/mappers.ts` `@ts-nocheck` count 0 with the `o()` helper present, and `dist/mappers.js` carries `function o(` (count 1) — the fix is in the bytes Spur loads; importer suite fresh: 174 pass / 0 fail across 10 files (grew from 164 via later upstream work). |
+| R3 | MET | `.spur/context/pitfalls.md:245` re-read — "Converting a built-in history source to a custom mapper moves its rows to different tables — any test or query asserting the generic ETL path must pin a still-generic source"; `:247` re-read — "A `bun link`-ed package serves its `dist/`, never `src/` — an unbuilt ts-libs edit looks applied and isn't". Both anchors exact and name the R3 subjects. |
+| R4 | MET | `bun test apps/cli/tests/commands/migrate-stubs.test.ts` → 4 pass / 0 fail / 50 expect() fresh. 0468 made zero analytics production change: `git show 6052ef51 --stat` → only `.spur/context/pitfalls.md` + the test file (2 files). Handoff intact at `docs/tasks3/0474_*.md:51-58` (re-read: names all six blind sources `claude`, `codex`, `pi`, `omp`, `grok`, `agy` and the gemini pin as the interim measure 0474's cut-over removes). The pin's subsequent removal by 0474 is the designed successor action — see tree-state note. |
+| R5 | PARTIAL | Full-gate re-run prohibited by batch run-scope constraint (no `bun run lint` / `bun run test` this run). Scoped proxies fresh: `bunx biome check` on all five Spur files 0468 touched (`scripts/commands/link-check.ts`, `scripts/commands/link-check.test.ts`, `scripts/spur-dev.ts`, `apps/cli/tests/commands/migrate-stubs.test.ts`, `package.json`) → clean, exit 0; `apps/cli` `tsc --noEmit` → exit 0; targeted suites green (migrate-stubs 4/0, link-check 7/7, importer 174/0). Not re-certified: project-wide lint + full suite. |
 
 **Acceptance Criteria Verification**
 
-| AC | Status | Confidence | Evidence Type | Evidence |
-| --- | --- | --- | --- | --- |
-| R1 — published dist matches its src (registry path) | MET | HIGH | command | `prepublishOnly: bun run build` declared; consumed 0.4.22 tarball's `dist/mappers.js` contains `function o(` (count 1), the helper added to `src/` — so the shipped build is from the shipped source. |
-| R1 — stale dist cannot masquerade (link path) | MET | HIGH | command + source | Mechanism necessity established at Bun source (`Scripts.rs:167-194`, `resolution.rs:84-91` — `Symlink` never fires `prepare`). Guard verified live: `touch ts-libs/.../src/mappers.ts` → `bun run link-check` exit 1, output names `@gobing-ai/ts-llm-jsonl-importer`, `src/mappers.ts`, and the rebuild command; after `bun run build` → exit 0. |
-| R1 — the guard does not false-alarm on registry copies | MET | HIGH | command | Clean-install run → `link-check OK`, exit 0, with all `@gobing-ai/*` store copies present. Regression-pinned by `scripts/commands/link-check.test.ts` "ignores a Bun store copy" (store copies publish `src/` too, so an early draft false-alarmed on every one of them). |
-| R1 — the identity trap is resolved by a real release | MET | HIGH | command | Spur `package.json:36` catalog `^0.4.22`; `Bun.resolveSync` from all three consuming workspaces returns `node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.4.22+…/dist/index.js`. The version is in the resolved path. |
-| R2 — the fix reaches the copy Spur actually loads | MET | HIGH | command | Store copy `…@0.4.22/…/src/mappers.ts`: `@ts-nocheck` count 0, `function o(value: unknown)` count 1; `dist/mappers.js`: `function o(` count 1. |
-| R2 — mappers.ts type-checks without suppression | MET | HIGH | command | No `@ts-nocheck` in `src/`; `bunx tsc -p tsconfig.build.json` → exit 0; `TS2339` count → 0; `noUncheckedIndexedAccess: true` retained (`tooling/typescript/base.json:16`); importer suite 164 pass / 0 fail. |
-| R4 — the analyze test is green without touching analytics | MET | HIGH | command | `bun test apps/cli/tests/commands/migrate-stubs.test.ts` → 4 pass / 0 fail. `git diff HEAD -- packages/domain/src/analytics/query.ts` → empty, so `SOURCE_TABLES` (`packages/domain/src/analytics/query.ts:8-16`) and `queryAllEtlRecords` are byte-identical to HEAD. |
-| R4 — the analyze regression is handed off, not dropped | MET | HIGH | static | `docs/tasks3/0474_*.md:48-56` names all six blind sources (`claude`, `codex`, `pi`, `omp`, `grok`, `agy`) and records the `--source gemini` pin as the interim measure 0474's cut-over removes. |
-| R5 — the gate holds | MET | HIGH | command | `bun run lint` exit 0; `bun run test` 4580/24/4604 with all 24 in the sandbox port-binding class, reproduced bare. No new failure outside that class. |
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — the published copy's dist always matches its src (registry path) | MET | command | Store-copy `package.json:46` declares `prepublishOnly: "bun run build"` (re-read); its `dist/mappers.js` contains `function o(` (grep count 1), the helper added to its `src/mappers.ts` — shipped build is from shipped source. |
+| R1 — a stale dist cannot masquerade as an applied edit (link path) | MET | test + command | No live `bun link` exists this run (resolution is store copies), so the stale-direction proof rests on fixtures: `bun test scripts/commands/link-check.test.ts` → 7/7 fresh, including `flags a linked package whose dist is older than its src` and `flags a linked package that was never built at all`; live run `bun run link-check` → exit 0; guard is chained into `spur-check` (`package.json:78`). Failure output names package, offending file, and rebuild command (pinned by the same tests). |
+| R1 — the guard does not false-alarm on registry copies | MET | command | `bun run link-check` → "link-check OK", exit 0, fresh, with all `@gobing-ai/*` store copies present; regression-pinned by `ignores a Bun store copy, whose realpath stays inside node_modules` (`scripts/commands/link-check.test.ts:90`, re-read). |
+| R1 — the identity trap is resolved by a real release | MET | command | `package.json:36` catalog `^0.4.22`; `Bun.resolveSync` from all three consuming workspaces → `…@gobing-ai+ts-llm-jsonl-importer@0.4.22+d5c29f764bf0e6e0/…/dist/index.js` (fresh) — the version is in the resolved path; no version work deferred. |
+| R2 — mappers.ts type-checks without suppression | MET | command | No `@ts-nocheck` in `src/mappers.ts` (count 0); `bunx tsc -p tsconfig.build.json` → exit 0, 0 `TS2339`; `noUncheckedIndexedAccess: true` at `tooling/typescript/base.json:16` (re-read); importer suite 174 pass / 0 fail fresh. |
+| R2 — the fix reaches the copy Spur actually loads | MET | command | Store copy `…@0.4.22+…/src/mappers.ts`: `@ts-nocheck` count 0, `function o(value: unknown)` present (count 1); `dist/mappers.js`: `function o(` count 1. All three workspaces resolve to this copy (fresh `Bun.resolveSync`). |
+| R4 — the analyze test is green without touching analytics | MET | command | `bun test apps/cli/tests/commands/migrate-stubs.test.ts` → 4 pass / 0 fail fresh. 0468's diff touched zero analytics production code (`git show 6052ef51 --stat`: 2 files, neither under `packages/domain/`). The "byte-identical to HEAD" clause was time-bound to 0468's completion; 0474's owned in-flight cut-over has since modified `packages/domain/src/analytics/` as designed (0474 R7 retires `queryAllEtlRecords`). |
+| R4 — the analyze regression is handed off, not dropped | MET | static-ref | `docs/tasks3/0474_*.md:51-58` re-read — "Live regression this task owns (handed off from task 0468 R4)…" names all six blind sources (`claude`, `codex`, `pi`, `omp`, `grok`, `agy`) and records the `--source gemini` pin as the interim measure. (Prior anchor `:48-56` shifted to `:51-58` after 0474 edits; refreshed here.) |
+| R5 — the gate holds | PARTIAL | command | Scoped proxies only, per batch run-scope constraint: biome clean on 0468-touched files (exit 0), `apps/cli` typecheck exit 0, targeted suites 4/0 + 7/7 + 174/0. Full `bun run lint` / `bun run test` not re-run this run; completion-time result (lint exit 0; 4580/24/4604, all 24 sandbox port-binding) recorded 2026-08-07. |
 
-**Aggregation:** all five requirements MET, all nine AC MET, no blocker or unresolved major finding
-⇒ **PASS**. Clears the completion gate.
+**Aggregation:** R1–R4 MET with fresh evidence, 8/9 AC MET, R5 + its AC PARTIAL (batch run-scope constraint, not an observed regression), no blocker and no unresolved major finding ⇒ **PARTIAL** (core PARTIAL, no FAIL).
 
 **Design conformance**
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| design-conformance | pass | 8/10 claims DONE, 1 CHANGED, 1 **FALSIFIED** (surfaced, acted on, and superseded — the falsified mechanism was removed from the package rather than left in place). FALSIFIED: `### Design` § P1 asserts "`prepare` fires on install and on `bun link`, so `dist/` is regenerated rather than trusted" — the `bun link` half is untrue at Bun source (see R1). This is a defect in the task's own design premise, surfaced by verification rather than by a `### Solution` deviation note. CHANGED: § P1's claim that `packages/app` resolves through the root link is stale — all three workspaces now resolve to the `0.4.20` registry copy; only the repo root still resolves via the global link. Goal-equivalent, no downgrade for that one. |
-| scope-creep | none | 0468's Spur-side diff is a test-source pin + comment, a catalog bump, and task-doc updates. The uncommitted working-tree changes (`.gitignore` +1, `packages/app/tests/services/history-service.test.ts` +50) predate this run and belong to other work. |
+| design-conformance | pass | Re-classified this run against 0468's commits: 8/10 claims DONE; 2 CHANGED, both documented in `### Solution` — the `prepare`-on-link premise (falsified at Bun source, hook dropped by operator ts-libs `8e71310`, link path covered by `link-check` instead) and the `packages/app` root-link resolution claim (post-release all three workspaces resolve the 0.4.22 store copy — goal-equivalent). No undocumented deviation found. |
+| scope-creep | pass | 0468's commits touch exactly the planned files (test pin + comment, pitfalls lessons, catalog bump, task docs, link-check guard + wiring). The dirty working tree (`apps/cli/src/commands/history.ts`, analytics package, sibling task files, …) belongs to concurrent E1 sibling tasks (0469/0470/0471/0474/0477/0480/0482), not 0468. |
 
-**SECUA Review** (`--focus all`) — 3 minors, no blockers, no unresolved majors.
+**SECUA Review** (`--focus all`) — no blockers, no unresolved majors; minors carried from the prior review, re-confirmed this run.
 
-- **major / Correctness — RESOLVED.** The `prepare` hook does not cover the failure it was chosen to
-  prevent (`Symlink` resolutions never fire it). Closed by the consumer-side `link-check` guard, and the
-  hook itself was then removed from the package by the operator — so no misleading mechanism is left
-  behind claiming a guarantee it cannot make. Registry path stays covered by `prepublishOnly`.
-- **minor / Efficiency** — `~/xprojects/ts-libs/.../src/mappers.ts:1039`: `o()` allocates a fresh `{}` on
-  every non-object call, in a per-record mapping path. Negligible against `JSON.parse` cost on the same record.
-- **minor / Environment** — `bun install` cannot run under this sandbox (`unable to write files to
-  tempdir: PermissionDenied`). No longer material to any requirement: the operator ran a real
-  `bun install` at the repo root, and the resulting resolution was verified here directly.
-- **minor / Usability (docs)** — `docs/tasks3/0474_*.md:52` cites `packages/domain/src/analytics/query.ts:8-19`
-  for `SOURCE_TABLES`, which spans `8-16`. Stale anchor in a sibling task.
-- **Security / Architecture** — clean. `o()` is behaviour-preserving against the `?.` it replaces (null /
-  undefined / primitive / array inputs all still yield `undefined` downstream), adds no trust boundary, and
-  feeds `s()`, which type-guards to `string`/`number`. Removing a package-wide `@ts-nocheck` from the 41 KB
-  forensic-mapping file is a net restoration of type coverage over the correctness-critical surface.
+- **minor / Efficiency** — `o()` allocates a fresh `{}` per non-object call in a per-record mapping path (store-copy `src/mappers.ts`, helper beside `s()`). Negligible against `JSON.parse` on the same record. Accepted.
+- **minor / Usability (docs)** — `docs/tasks3/0474_*.md` handoff paragraph still cites `packages/domain/src/analytics/query.ts:8-19` for `SOURCE_TABLES` (span was `8-16`; file now under 0474's in-flight edit). Sibling task's file; fix when 0474 is next edited.
+- **minor / Environment** — full-repo gate not re-runnable under the batch constraint (see R5). No defect; policy-bound evidence gap only.
+- **Security / Correctness / Architecture** — clean on re-look. `o()` is behaviour-preserving against the `?.` it replaces; `link-check` fails in the safe direction (false alarm carries its own fix command, never a missed staleness); no new trust boundary, secret, or injection surface in 0468's diff.
 
-Coverage: N/A for the Spur-side diff (test-source pin + catalog bump; no runtime code path added).
-Upstream importer coverage is measured by its own `bun run check` (164 pass / 0 fail).
+Coverage: N/A for the Spur-side diff (test-source pin + catalog bump + guard script; the guard carries its own 7-test suite, 7/7 fresh). Upstream importer coverage is measured by its own suite: 174 pass / 0 fail fresh this run.
 ### Review
 **Review (0468) — review mode (`sp:code-verification` Steps 3+7+10), three-dimensional, 2026-08-07.**
 Diff scope: Spur commits `6052ef51` (test-source pin + comment), `5f692e96` (catalog `^0.4.20`),
