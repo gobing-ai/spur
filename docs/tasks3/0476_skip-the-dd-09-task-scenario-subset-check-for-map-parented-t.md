@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Skip the DD-09 task-scenario subset check for map-parented tasks"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: N
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: ["0473"]
 ac_numbering: task-local
 created_at: "2026-08-07T22:42:21.495Z"
-updated_at: "2026-08-08T19:42:14.943Z"
+updated_at: "2026-08-08T19:43:59.831Z"
 ---
 
 ## 0476. Skip the DD-09 task-scenario subset check for map-parented tasks
@@ -187,9 +187,16 @@ The drop is confined to map-parented tasks (E1). Feature N is untouched because 
 **Suite results:** `packages/app/tests/services/task-check.test.ts` — 107 pass, 0 fail. `packages/app/tests/services/` — 1096 pass, 0 fail.
 
 ### Review
+| Priority | File | Finding | Disposition |
+|----------|------|---------|-------------|
+| P1 | — | None | — |
+| P2 | — | None | — |
+| P3 | — | None | — |
+| P4 | — | None — guard is minimal, well-scoped, and tested | Acceptable |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Residual risk:** Negligible. The guard reads a single tag from frontmatter; if the tag is absent, behavior is unchanged. The only way to get a false skip is a feature incorrectly tagged as `wayfinder-map`, which is a corpus error, not a code defect.
 
+**Final disposition:** PASS — ship as-is.
 ### References
 N
 
@@ -199,3 +206,6 @@ N
 - `packages/app/src/services/task-check.ts` — DD-09 subset comparison emitting `L4.uncovered-task-scenario`.
 - `packages/config/src/finding-codes.ts` — finding-code catalog.
 ### History
+- 2026-08-08T19:43:07.666Z todo → wip (system)
+- 2026-08-08T19:43:11.094Z wip → testing (system)
+- 2026-08-08T19:43:59.831Z testing → done (system)
