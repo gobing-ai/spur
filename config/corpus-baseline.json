@@ -17,34 +17,6 @@
         },
         {
             "kind": "feature",
-            "id": "M",
-            "code": "L3.ac-bdd-error",
-            "reason": "CHECKER GAP, not corpus debt. M is a wayfinder MAP; its Acceptance Criteria section carries an explicit prose disclaimer ('This feature is a wayfinder MAP... It has no acceptance criteria — its target is the ## Goal'). The BDD validator requires a `Feature:` declaration and has no notion of the map feature type. Correct fix is to teach `feature check` about wayfinder maps, not to bolt fake Gherkin onto a map.",
-            "since": "2026-08-07"
-        },
-        {
-            "kind": "feature",
-            "id": "M",
-            "code": "L3.ac-bdd-invalid",
-            "reason": "Downstream of the M ac-bdd-error entry — same missing-Feature-declaration cause, reported twice by the validator.",
-            "since": "2026-08-07"
-        },
-        {
-            "kind": "feature",
-            "id": "F82",
-            "code": "L3.ac-bdd-error",
-            "reason": "CHECKER GAP, same class as M: wayfinder map with a deliberate no-AC prose disclaimer (plus a noted exception for two implementation-ready child tickets). Not a syntax error to fix.",
-            "since": "2026-08-07"
-        },
-        {
-            "kind": "feature",
-            "id": "F82",
-            "code": "L3.ac-bdd-invalid",
-            "reason": "Downstream of the F82 ac-bdd-error entry — same cause, reported twice.",
-            "since": "2026-08-07"
-        },
-        {
-            "kind": "feature",
             "id": "F821",
             "code": "L3.ac-bdd-error",
             "reason": "LEGACY AC FORMAT, not a map. F821's Acceptance Criteria are written as plain `R1 @core — …` prose rows rather than Gherkin, an older convention predating the BDD validator. Converting them is a real (small) job with traceability risk: AC titles are identity keys, so renaming breaks child-task scenario references.",

@@ -4,7 +4,7 @@ id: "F82"
 name: "Feature status feedback loop: derivation sync, refresh command, Board status UX"
 status: active
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-24T23:39:28.101Z"
 updated_at: "2026-07-28T00:31:39.627Z"
 ---

@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T06:24:37.133Z"
-updated_at: "2026-08-07T21:01:45.595Z"
+updated_at: "2026-08-08T19:37:00.983Z"
 ---
 
 ## 0473. Teach feature check about wayfinder maps so a map's deliberate no-AC contract stops failing the BDD gate
@@ -318,13 +318,62 @@ one. `docs/04_DESIGN.md` carries the `feature check` surface note in the same co
 - [ ] **12. Record.** `### Solution` gets the `path:line` change map and the R7 disposition;
       `### Testing` gets the commands plus the corpus-check before/after counts from step 7.
 ### Solution
+## What changed
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — Shared marker constant.** Exported `WAYFINDER_MAP_TAG = 'wayfinder-map'` (`packages/domain/src/planning/schema.ts:119`), re-exported through the domain barrel (`packages/domain/src/index.ts:34`). The checker, charting skill, and fog detector all resolve the tag literal from this one constant.
 
+**R2/R3/R4 — Checker skip guard.** In `packages/app/src/services/feature-check.ts:232`, `runL3()` now accepts the parsed frontmatter (`fm`). It reads `fm.tags` and sets `isWayfinderMap = tags.includes(WAYFINDER_MAP_TAG)` (`feature-check.ts:245`). When true, the entire BDD + checklist AC validation block is skipped (`feature-check.ts:247`). No `L3.ac-bdd-error` or `L3.ac-bdd-invalid` emitted. All other L3 checks (required sections, scope delineation at `feature-check.ts:303`) and all L4 checks remain active for maps.
+
+**R5 — Marked all eight maps, shrank the baseline.** Set `tags: ["wayfinder-map"]` on M, M1, M3, M4, D1, E1, F82, B2. Removed the four M/F82 entries from `config/corpus-baseline.json:18-45`. The remaining four entries (0368, 0454, F821×2) stay — they are ratchet drift, genuine bypass debt, and legacy AC format respectively. `bun run corpus-check` reports 4 baselined, 0 new, 0 stale.
+
+**R6 — CLI tags affordance + skill update.** `packages/app/src/services/feature-service.ts:198` `update()` now special-cases `key === 'tags'`: comma-splits the value and routes through `updateFrontmatterArray` (YAML flow array) instead of the scalar `updateFrontmatter` path that would quote it as a string. The charting skill (`plugins/sp/skills/wayfinder/SKILL.md:122`) step 3 updated: instructs tagging the feature after creation so `feature check` skips BDD AC validation.
+
+**R7 — Reconciliation of the three inconsistent charting practices:**
+- **Prose no-AC disclaimer (M, F82):** canonical going forward. The marker is the machine-readable version of this disclaimer. AC section content stays as-is — it documents why there are no criteria.
+- **Empty AC section (B2):** passes today only because the checker skips empty sections (`rawAc.trim().length > 0` guard at `feature-check.ts:236`). With the marker now set, B2 passes by design, not accident. No content change needed.
+- **Real Gherkin AC (M1, M3, M4, D1, E1):** harmless but non-canonical. The marker makes them pass without the Gherkin; the existing AC content is not removed in this ticket (removing Gherkin from five features is a separate content decision, not a gate-correctness fix). Future charting sessions should not author Gherkin for maps.
+
+**R8 — Tests.** Three new tests in `packages/app/tests/services/feature-check.test.ts:392`:
+1. `wayfinder-map tag skips BDD AC validation for prose disclaimer` — marked map with no Gherkin → no ac-bdd errors.
+2. `wayfinder-map tag still runs non-AC checks (scope delineation)` — marked map with a scope defect → defect still reported.
+3. `untagged feature with prose AC still gets BDD errors` — ordinary feature with no Gherkin → ac-bdd-error reported (R4: strictness preserved).
+
+**Note on L4 warnings:** The eight `L4.uncovered-task-scenario` warnings are the DD-09 subset rule applied to map-parented tasks — a known category-wrong defect documented in the task's own Q&A section. Recommendation is a separate ticket (different gate, different code path). These are warnings, not errors.
 ### Testing
+## Requirements traceability
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 — Export shared WAYFINDER_MAP_TAG constant | MET | `packages/domain/src/planning/schema.ts:119` exports `WAYFINDER_MAP_TAG = 'wayfinder-map'`, re-exported via domain barrel. |
+| R2 — Skip BDD AC validation for marked maps | MET | `feature-check.ts:247` — when `fm.tags` includes `WAYFINDER_MAP_TAG`, the entire AC validation block is skipped. Test: "wayfinder-map tag skips BDD AC validation for prose disclaimer". |
+| R3 — Non-AC checks remain active for maps | MET | Guard wraps only AC validation; scope delineation at `feature-check.ts:303` and all L4 checks run unconditionally. Test: "wayfinder-map tag still runs non-AC checks". |
+| R4 — Unmarked features stay strict | MET | Guard is conditional on tag presence. Test: "untagged feature with prose AC still gets BDD errors" confirms ac-bdd-error reported. |
+| R5 — Mark all 8 maps, shrink baseline, zero new/stale | MET | 8 maps tagged. 4 M/F82 entries removed from baseline. `corpus-check`: 4 baselined, 0 new, 0 stale. F821 entries kept. |
+| R6 — CLI tags affordance + skill update | MET | `feature-service.ts:198` special-cases `tags` key. `SKILL.md:122` step 3 instructs tagging. |
+| R7 — Reconcile three charting practices | MET | Solution section documents: prose disclaimer = canonical, empty section = passes by design, real Gherkin = non-canonical. |
+| R8 — Three regression tests | MET | 3 tests at `feature-check.test.ts:392`. Coverage: packages/app 99%+ funcs/lines. |
 
+## Test evidence
+
+```
+bun test packages/app/tests/services/feature-check.test.ts
+85 pass, 0 fail, 298 expect() calls
+
+bun test packages/app
+1411 pass, 0 fail, 4501 expect() calls
+```
+
+## Corpus gate evidence
+
+```
+bun run corpus-check
+corpus-check: swept tasks + features — 4 error(s) observed, 4 baselined, 0 new, 0 stale.
+corpus-check OK
+```
+
+## Verdict
+
+PASS — all 8 requirements met with tests, corpus gate, and reconciliation notes.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

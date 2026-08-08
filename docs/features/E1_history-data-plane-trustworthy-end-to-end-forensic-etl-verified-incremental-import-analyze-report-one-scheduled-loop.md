@@ -4,7 +4,7 @@ id: "E1"
 name: "History data plane trustworthy end-to-end: forensic ETL, verified incremental import, analyze/report, one scheduled loop"
 status: done
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-08-06T23:08:18.775Z"
 updated_at: "2026-08-08T12:43:55.812Z"
 ---

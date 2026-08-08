@@ -118,6 +118,14 @@ export const DEFAULT_TASK_VARIANT: TaskVariant = 'standard';
 export const FEATURE_ID_PATTERN = /^[A-Z][1-9]*$/;
 
 /**
+ * Frontmatter tag marking a feature as a wayfinder investigation map (task 0473).
+ * A map's target is its `## Goal` (destination), not testable acceptance criteria;
+ * the charting skill, feature checker, and corpus fog detector all resolve this
+ * single literal so a typo cannot silently mean "not a map".
+ */
+export const WAYFINDER_MAP_TAG = 'wayfinder-map';
+
+/**
  * Legacy alias map preserved as input-only normalization. Lowercase canonical
  * outputs are always the resolved values; aliases never persist.
  */

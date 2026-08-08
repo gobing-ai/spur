@@ -4,7 +4,7 @@ id: "M1"
 name: "Fine-tune Teams module (Roster drop, Terminal UX, Processes watchlist, input)"
 status: done
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-15T05:34:41.928Z"
 updated_at: "2026-07-15T22:21:50.211Z"
 ---

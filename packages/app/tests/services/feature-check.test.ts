@@ -390,6 +390,139 @@ describe('FeatureCheckService', () => {
         expect(l3Errors.length).toBeGreaterThan(0);
     });
 
+    // ── L3: Wayfinder-map AC skip (task 0473) ──────────────────────────
+
+    test('L3: wayfinder-map tag skips BDD AC validation for prose disclaimer', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "M"',
+            'name: "Wayfinder Map"',
+            'status: active',
+            'priority: P1',
+            'tags: ["wayfinder-map"]',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# M: Wayfinder Map',
+            '',
+            '## Goal',
+            '',
+            'Discover the path to a specable feature.',
+            '',
+            '## Scope',
+            '',
+            'In scope: investigation.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '### Not yet specified',
+            '',
+            'This is a wayfinder map — acceptance criteria emerge when the destination is reached.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'M');
+        cleanup();
+
+        // Map tagged → BDD AC validation suppressed despite prose disclaimer
+        const acErrors = result.findings.filter(
+            (f) =>
+                f.layer === 'L3' &&
+                f.severity === 'error' &&
+                f.section === 'Acceptance Criteria' &&
+                (f.code === 'L3.ac-bdd-error' || f.code === 'L3.ac-bdd-invalid'),
+        );
+        expect(acErrors).toHaveLength(0);
+    });
+
+    test('L3: wayfinder-map tag still runs non-AC checks (scope delineation)', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "M"',
+            'name: "Wayfinder Map No Scope"',
+            'status: active',
+            'priority: P1',
+            'tags: ["wayfinder-map"]',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# M: Wayfinder Map No Scope',
+            '',
+            '## Goal',
+            '',
+            'Discover something.',
+            '',
+            '## Scope',
+            '',
+            'Free-form text with no in-scope markers.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '### Not yet specified',
+            '',
+            'Map destination.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'M');
+        cleanup();
+
+        // Scope check stays live for maps — no in/out delineation → warning
+        const scopeWarnings = result.findings.filter((f) => f.layer === 'L3' && f.code === 'L3.scope-delineation');
+        expect(scopeWarnings.length).toBe(1);
+    });
+
+    test('L3: untagged feature with prose AC still gets BDD errors', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "X"',
+            'name: "Not A Map"',
+            'status: active',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# X: Not A Map',
+            '',
+            '## Goal',
+            '',
+            'Build something testable.',
+            '',
+            '## Scope',
+            '',
+            'In scope: feature work.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '### Not yet specified',
+            '',
+            'This is NOT a wayfinder map — should fail BDD validation.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'X');
+        cleanup();
+
+        // No tag → BDD AC validation is live → prose disclaimer triggers errors
+        const acErrors = result.findings.filter(
+            (f) =>
+                f.layer === 'L3' &&
+                f.severity === 'error' &&
+                f.section === 'Acceptance Criteria' &&
+                (f.code === 'L3.ac-bdd-error' || f.code === 'L3.ac-bdd-invalid'),
+        );
+        expect(acErrors.length).toBeGreaterThan(0);
+    });
+
     test('L3: warns when Scope lacks in/out delineation', async () => {
         const content = [
             '---',

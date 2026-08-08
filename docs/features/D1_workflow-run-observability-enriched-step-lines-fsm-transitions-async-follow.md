@@ -4,7 +4,7 @@ id: "D1"
 name: "workflow run observability — enriched step lines, FSM transitions, async follow"
 status: done
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-21T20:46:29.481Z"
 updated_at: "2026-07-30T21:10:15.480Z"
 ---

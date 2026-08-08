@@ -4,7 +4,7 @@ id: "B2"
 name: "Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept"
 status: backlog
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-27T01:24:47.771Z"
 updated_at: "2026-07-27T06:53:19.295Z"
 ---

@@ -4,7 +4,7 @@ id: "M"
 name: "Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones"
 status: active
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-14T04:28:15.630Z"
 updated_at: "2026-07-25T19:33:19.292Z"
 ---

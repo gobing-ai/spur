@@ -4,7 +4,7 @@ id: "M4"
 name: "Inbox Board module: unified agent message plane (All / Supervisor / per-agent tabs)"
 status: done
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-08-03T23:00:42.623Z"
 updated_at: "2026-08-05T23:46:20.898Z"
 ---

@@ -196,6 +196,13 @@ export class FeatureService {
             );
         }
         const ref = await this.refFor(id);
+        if (key === 'tags') {
+            const tags = value
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean);
+            return this.ctx.writeService.updateFrontmatterArray(ref, key, tags);
+        }
         return this.ctx.writeService.updateFrontmatter(ref, key, value);
     }
 

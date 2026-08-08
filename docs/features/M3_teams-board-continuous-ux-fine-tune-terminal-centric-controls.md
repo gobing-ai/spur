@@ -4,7 +4,7 @@ id: "M3"
 name: "Teams board continuous UX fine-tune (Terminal-centric controls)"
 status: verifying
 priority: P2
-tags: []
+tags: ["wayfinder-map"]
 created_at: "2026-07-16T18:17:26.784Z"
 updated_at: "2026-07-25T19:33:19.814Z"
 ---

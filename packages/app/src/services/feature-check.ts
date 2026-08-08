@@ -17,6 +17,7 @@ import {
     parseFeature,
     stripAcFence,
     validateAcceptanceCriteria,
+    WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
@@ -199,7 +200,7 @@ export class FeatureCheckService extends PlanningCheckService {
         this.runL2(doc, entry, findings);
 
         // ── L3: Format rules — BDD AC validation + structural rules ──
-        this.runL3(doc, findings);
+        this.runL3(doc, findings, fm);
 
         // ── L3: One-active-goal + children-limit (corpus-derived) ──
         if (options?.featuresDir) {
@@ -228,65 +229,75 @@ export class FeatureCheckService extends PlanningCheckService {
     }
 
     // ── L3: Format rules ──
-    private runL3(doc: MarkdownDocument, findings: CheckFeatureFindings[]): void {
+    private runL3(doc: MarkdownDocument, findings: CheckFeatureFindings[], fm: Record<string, unknown>): void {
         // Acceptance Criteria: two-tier AC (B08) — Gherkin OR checklist, via the
         // shared BDD module (never a private parser). Strip the markdown code
         // fence the template/corpus wrap Gherkin in before validating.
         const rawAc = doc.getSection('Acceptance Criteria');
         if (rawAc !== null && rawAc.trim().length > 0) {
-            const acBody = stripAcFence(rawAc);
+            // Wayfinder maps (task 0473): a map's target is its `## Goal` (destination),
+            // not testable acceptance criteria — its AC section carries a deliberate
+            // `### Not yet specified` disclaimer. Skip BDD/checklist AC validation for
+            // tagged maps so the BDD gate stops blocking the charting workflow. Only
+            // AC validation is suppressed; scope, one-active-goal, and L4 traceability
+            // all remain live for maps.
+            const tags = Array.isArray(fm.tags) ? (fm.tags as unknown[]) : [];
+            const isWayfinderMap = tags.includes(WAYFINDER_MAP_TAG);
+            if (!isWayfinderMap) {
+                const acBody = stripAcFence(rawAc);
 
-            // Checklist tier: `- [ ]`/`- [x]` items and no Gherkin keyword.
-            const checklist = parseChecklist(acBody);
-            const looksGherkin = /^\s*(Feature:|Scenario:|Scenario Outline:)/m.test(acBody);
+                // Checklist tier: `- [ ]`/`- [x]` items and no Gherkin keyword.
+                const checklist = parseChecklist(acBody);
+                const looksGherkin = /^\s*(Feature:|Scenario:|Scenario Outline:)/m.test(acBody);
 
-            if (checklist.length > 0 && !looksGherkin) {
-                // Tier-2 checklist AC: require at least one non-empty item.
-                const emptyItems = checklist.filter((c) => c.text.length === 0);
-                for (const item of emptyItems) {
+                if (checklist.length > 0 && !looksGherkin) {
+                    // Tier-2 checklist AC: require at least one non-empty item.
+                    const emptyItems = checklist.filter((c) => c.text.length === 0);
+                    for (const item of emptyItems) {
+                        findings.push({
+                            layer: 'L3',
+                            code: FINDING_CODES.L3_AC_CHECKLIST_TEXT,
+                            severity: 'warning',
+                            section: 'Acceptance Criteria',
+                            line: item.line,
+                            message: 'Checklist item has no text',
+                        });
+                    }
+                    return;
+                }
+
+                const bddResult = validateAcceptanceCriteria(acBody);
+
+                for (const err of bddResult.errors) {
                     findings.push({
                         layer: 'L3',
-                        code: FINDING_CODES.L3_AC_CHECKLIST_TEXT,
-                        severity: 'warning',
+                        code: FINDING_CODES.L3_AC_BDD_ERROR,
+                        severity: 'error',
                         section: 'Acceptance Criteria',
-                        line: item.line,
-                        message: 'Checklist item has no text',
+                        line: err.line,
+                        message: `BDD: ${err.message}`,
                     });
                 }
-                return;
-            }
+                for (const warn of bddResult.warnings) {
+                    findings.push({
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_AC_BDD_WARNING,
+                        severity: 'warning',
+                        section: 'Acceptance Criteria',
+                        line: warn.line,
+                        message: `BDD: ${warn.message}`,
+                    });
+                }
 
-            const bddResult = validateAcceptanceCriteria(acBody);
-
-            for (const err of bddResult.errors) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_AC_BDD_ERROR,
-                    severity: 'error',
-                    section: 'Acceptance Criteria',
-                    line: err.line,
-                    message: `BDD: ${err.message}`,
-                });
-            }
-            for (const warn of bddResult.warnings) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_AC_BDD_WARNING,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    line: warn.line,
-                    message: `BDD: ${warn.message}`,
-                });
-            }
-
-            if (!bddResult.valid) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_AC_BDD_INVALID,
-                    severity: 'error',
-                    section: 'Acceptance Criteria',
-                    message: 'Acceptance Criteria validation failed; fix BDD syntax errors',
-                });
+                if (!bddResult.valid) {
+                    findings.push({
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_AC_BDD_INVALID,
+                        severity: 'error',
+                        section: 'Acceptance Criteria',
+                        message: 'Acceptance Criteria validation failed; fix BDD syntax errors',
+                    });
+                }
             }
         }
 
