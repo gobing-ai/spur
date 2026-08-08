@@ -29,7 +29,7 @@ bootstrap:
 
 # ── Spur app section (validated by spurConfigSchema in @gobing-ai/spur-config) ──
 agent:
-  default: omp-zai-volc
+  default: omp-dsv4-flash-volc
 
   # ── Executors (ADR-033 adaptive model routing) ──
   # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a
