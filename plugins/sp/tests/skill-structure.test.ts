@@ -652,7 +652,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 7200; // scales with skill count (26 skills incl. issue-finding); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 7600; // scales with skill count (27 skills incl. conflict-finding); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -1197,5 +1197,42 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(planner.toLowerCase()).toContain('product');
         expect(planner.toLowerCase()).toContain('project management');
         expect(planner.toLowerCase()).toContain('orchestration');
+    });
+});
+
+// ─── (R57) task 0486 — conflict-finding authority-aware audit capability ─────
+
+describe('task 0486 — conflict-finding authority-aware audit capability', () => {
+    test('R57 — skill, four reference rulebooks, and thin dev-find-conflict wrapper exist and delegate correctly', () => {
+        const skillDir = join(SKILLS_DIR, 'conflict-finding');
+        const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-find-conflict.md'), 'utf8');
+
+        // Skill SSOT + the four reference rulebooks (authority, comparison, finding contract, remediation).
+        for (const ref of [
+            'authority-resolution.md',
+            'comparison-protocol.md',
+            'finding-contract.md',
+            'remediation-routing.md',
+        ]) {
+            statSync(join(skillDir, 'references', ref));
+        }
+
+        // Thin wrapper delegates semantic logic to the skill SSOT (ADR-023/032); carries the frozen surface.
+        expect(command).toContain('Skill(skill="sp:conflict-finding", args="$ARGUMENTS")');
+        expect(command).toContain('--pillar');
+        expect(command).toContain('--mode');
+        expect(command).toContain('--resolve');
+        expect(command).toContain('--json');
+
+        // The four-pillar scope + the audit-only invariant live in the skill.
+        expect(skill).toContain('four pillars');
+        expect(skill).toContain('source');
+        expect(skill).toContain('task files');
+        expect(skill).toContain('feature files');
+        expect(skill).toContain('authority');
+        // Audit-only guard: without --resolve, no mutation; --resolve opens a confirmation workflow.
+        expect(skill).toContain('--resolve');
+        expect(skill.toLowerCase()).toContain('read-only');
     });
 });
