@@ -2,11 +2,11 @@
 schema_version: 1
 id: "N"
 name: "0451 pipeline post-mortem: process and infrastructure hardening"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-06T00:33:02.145Z"
-updated_at: "2026-08-09T21:45:05.492Z"
+updated_at: "2026-08-09T22:09:49.880Z"
 ---
 
 # N: 0451 pipeline post-mortem: process and infrastructure hardening
@@ -105,3 +105,5 @@ Feature: 0451 pipeline post-mortem process and infrastructure hardening
 
 ## History
 - 2026-08-06T01:37:18.879Z backlog → active (system)
+- 2026-08-09T22:09:02.910Z active → verifying (system)
+- 2026-08-09T22:09:49.880Z verifying → done (system)
