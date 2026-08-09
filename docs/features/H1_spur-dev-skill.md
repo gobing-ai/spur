@@ -506,9 +506,11 @@ Feature: spur-dev umbrella skill
 | 0477 | Batch worktree isolation --worktree for dev-runall dev-refineall dev-verifyall | done |
 | 0478 | Fix pipeline bottlenecks from task 0477 run: size-gate surprise, verify-answer format mismatch, duplicate typecheck in test stage | done |
 | 0479 | Fix verification-loop gate holes and discovery costs found in the 0477 re-verify session | done |
-| 0480 | Comprehensive cleanup of the --agent execution-surface contract: collapse duplicated definitions to one SSOT and purge ADR-041/046-era stale | todo |
+| 0480 | Comprehensive cleanup of the --agent execution-surface contract: collapse duplicated definitions to one SSOT and purge ADR-041/046-era stale | done |
 | 0481 | 0475-verify retrospective: worktree deps install, worktree-local spur CLI, merge commit-type contract, lifecycle transition chain, merge side-effect hygiene | done |
-| 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | todo |
+| 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | done |
+| 0483 | Fix H1 pipeline contract defects: implement scope, agent pin, review table, fixall repeats | done |
+| 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

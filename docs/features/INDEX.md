@@ -37,6 +37,7 @@
     └── [backlog] **G3**: Workspace module ([G3_workspace-module.md](./G3_workspace-module.md))
 [active] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [active] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
+        └── [backlog] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
     ├── [done] **H2**: Companion skills and write guard ([H2_companions-and-guard.md](./H2_companions-and-guard.md))
     ├── [done] **H3**: Prompt-skill moves ([H3_prompt-skill-moves.md](./H3_prompt-skill-moves.md))
     ├── [done] **H4**: sp plugin next-layer UX — dev-next router and dogfood hardening ([H4_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md](./H4_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md))
