@@ -1504,18 +1504,19 @@ terminalStates:
         }
 
         test('configured agent.default overrides the YAML literal', async () => {
-            const dir = await seedWorkflow('spur-wf-agent-cfg-', 'configured-executor');
+            // `pi` is a canonical agent binary, so R2 validation accepts it.
+            const dir = await seedWorkflow('spur-wf-agent-cfg-', 'pi');
             const svc = new WorkflowAppService(makeCtx(dir));
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'agent-cfg-1' });
 
             expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
-            expect(await capturedAgent(dir)).toBe('configured-executor');
+            expect(await capturedAgent(dir)).toBe('pi');
             await rm(dir, { recursive: true, force: true });
         });
 
         test('an explicit caller agent wins over agent.default', async () => {
-            const dir = await seedWorkflow('spur-wf-agent-explicit-', 'configured-executor');
+            const dir = await seedWorkflow('spur-wf-agent-explicit-', 'pi');
             const svc = new WorkflowAppService(makeCtx(dir));
 
             const result = await svc.run(join(dir, 'test.yaml'), {
@@ -1545,6 +1546,88 @@ terminalStates:
                 if (previous === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
                 else process.env.SPUR_SKIP_GLOBAL_CONFIG = previous;
             }
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('run — implementAgent injection + agent.default validation (0485 R2)', () => {
+        const BOTH_AGENT_YAML = `name: agent-both
+kind: state-machine
+initialState: start
+vars:
+  agent: "omp"
+  implementAgent: ""
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'echo "\${vars.agent} \${vars.implementAgent}" > captured-agents.txt'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+        async function seedBoth(prefix: string, configYaml: string): Promise<string> {
+            const dir = await mkdtemp(join(tmpdir(), prefix));
+            await writeFile(join(dir, 'test.yaml'), BOTH_AGENT_YAML);
+            await mkdir(join(dir, '.spur'), { recursive: true });
+            await writeFile(join(dir, '.spur', 'config.yaml'), configYaml);
+            return dir;
+        }
+
+        async function capturedAgents(dir: string): Promise<string> {
+            return (await readFile(join(dir, 'captured-agents.txt'), 'utf8')).trim();
+        }
+
+        test('AC2: agent.default injects both agent and implementAgent', async () => {
+            const dir = await seedBoth(
+                'spur-wf-r2-both-',
+                'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-both-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgents(dir)).toBe('my-exec my-exec');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('AC2: caller-set agent but no implementAgent — only implementAgent is injected', async () => {
+            const dir = await seedBoth(
+                'spur-wf-r2-impl-',
+                'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), {
+                runId: 'r2-impl-1',
+                vars: { agent: 'operator-pick' },
+            });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            // agent comes from the caller; implementAgent is injected from agent.default.
+            expect(await capturedAgents(dir)).toBe('operator-pick my-exec');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('AC3: stale agent.default warns once and the YAML literal stands', async () => {
+            const dir = await seedBoth('spur-wf-r2-stale-', 'agent:\n  default: commented-out-exec\n');
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-stale-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            // Neither var is injected → agent stays on the YAML literal.
+            expect(await capturedAgents(dir)).toBe('omp');
+            // Exactly one warning naming the dropped value; no dispatch failure.
+            const warnings = (result as Record<string, unknown>).warnings as string[] | undefined;
+            expect(Array.isArray(warnings)).toBe(true);
+            expect(warnings?.filter((w) => w.includes('commented-out-exec'))).toHaveLength(1);
             await rm(dir, { recursive: true, force: true });
         });
     });

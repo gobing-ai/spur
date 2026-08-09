@@ -2168,6 +2168,9 @@ describe('AgentService automatic tier escalation (0407)', () => {
         } as unknown as AgentRunDeps['detector'];
         const doctorRunner = {
             runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            // 0485 R3: when the stage ladder is exhausted (all executors attempted),
+            // resolveAgentAuto falls through to the priority path, which needs runAll.
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ usable: true })])),
         } as unknown as AgentRunDeps['doctorRunner'];
         const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
 
@@ -2210,5 +2213,122 @@ describe('AgentService automatic tier escalation (0407)', () => {
 
         expect(result.exitCode).toBe(3);
         expect(result.invocation?.agent).toBe('pi');
+    });
+
+    // ── 0485 R1: classifier vocabulary must cover realistic exhaustion signatures ──
+    const EXHAUSTION_SIGNATURES = [
+        'Claude usage limit reached',
+        '5-hour limit reached; resets at 14:00',
+        'error: rate_limit_exceeded',
+        '{"error":{"type":"rate_limit_error"...}}',
+        'out of tokens',
+        'Insufficient credits',
+        'API Error: 529 Overloaded',
+        'usage limit exceeded',
+        'rate limit exceeded (429)',
+        'exceeded your current quota',
+        'HTTP 429 Too Many Requests',
+        'request exceeds the maximum context length',
+    ];
+    const NON_EXHAUSTION_SIGNATURES = [
+        'rate of failure is high',
+        'token bucket refilled',
+        'no issues found',
+        'Limited concurrency set to 4',
+    ];
+
+    describe.each(EXHAUSTION_SIGNATURES)('0485 R1 classifier signature: %s', (signature) => {
+        test('classifies as resource-exhaustion and escalates', async () => {
+            const { errors, output } = captureOutput();
+            const svc = makeService({}, output, escalationConfig);
+            const results: AgentRunResult[] = [
+                makeRunResult({ exitCode: 1, stderr: signature }),
+                makeRunResult({ exitCode: 0 }),
+            ];
+            let callIndex = 0;
+            const runPromptCommand = mock((_agent: string) => {
+                const idx = Math.min(callIndex++, results.length - 1);
+                return Promise.resolve(results[idx] ?? results[results.length - 1]);
+            });
+            const detector = {
+                detectOne: mock(() =>
+                    Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+                ),
+            } as unknown as AgentRunDeps['detector'];
+            const doctorRunner = {
+                runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            } as unknown as AgentRunDeps['doctorRunner'];
+            const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+            const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+            expect(code).toBe(0);
+            expect(runPromptCommand).toHaveBeenCalledTimes(2);
+            expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
+        });
+    });
+
+    describe.each(NON_EXHAUSTION_SIGNATURES)('0485 R1 classifier noise: %s', (signature) => {
+        test('does not escalate — the result stands', async () => {
+            const { output } = captureOutput();
+            const svc = makeService({}, output, escalationConfig);
+            const runPromptCommand = mock(() => Promise.resolve(makeRunResult({ exitCode: 1, stderr: signature })));
+            const detector = {
+                detectOne: mock(() =>
+                    Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+                ),
+            } as unknown as AgentRunDeps['detector'];
+            const doctorRunner = {
+                runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            } as unknown as AgentRunDeps['doctorRunner'];
+            const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+            const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+            expect(code).not.toBe(0);
+            expect(runPromptCommand).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    test('0485 R3+R4: exhaustion fails over sideways to a same-tier different-binary executor before escalating up-tier', async () => {
+        const sidewaysConfig: AgentConfig = {
+            executors: [
+                { name: 'std-a', agent: 'pi', tier: 'standard' },
+                { name: 'std-b', agent: 'claude', tier: 'standard' },
+                { name: 'cap-exec', agent: 'codex', tier: 'capable-1' },
+            ],
+        };
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, sidewaysConfig);
+        // pi (std-a) exhausted → sideways to claude (std-b) → also exhausted →
+        // no same-tier different-binary left → fallback tier capable-1 → codex (cap-exec).
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: 'rate limit exceeded' }),
+            makeRunResult({ exitCode: 1, stderr: 'usage limit reached' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).toBe(0);
+        const dispatchedAgents = runPromptCommand.mock.calls.map((c) => c[0] as string);
+        // Same-tier different-binary failover first (claude), then up-tier (codex);
+        // attempted executors (std-a, std-b) are never re-dispatched.
+        expect(dispatchedAgents).toEqual(['pi', 'claude', 'codex']);
+        expect(errors.some((e) => e.includes('Failover:'))).toBe(true);
     });
 });

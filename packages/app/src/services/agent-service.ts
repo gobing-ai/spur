@@ -757,9 +757,12 @@ export class AgentService {
                 }
 
                 // Re-resolve with escalation flags to pick the next executor.
+                // R3: exclude executors already attempted this run so the ladder
+                // walks to the next eligible candidate instead of re-selecting the
+                // same dead executor and breaking on attemptedExecutors.has(...).
                 runFlags.signal = escalationSignal;
                 runFlags['from-executor'] = currentStage.executorName;
-                const nextResolved = await this.resolveAgent(prompt, runFlags, doctorRunner);
+                const nextResolved = await this.resolveAgent(prompt, runFlags, doctorRunner, attemptedExecutors);
                 if (
                     !nextResolved.ok ||
                     nextResolved.stage === undefined ||
@@ -834,21 +837,22 @@ export class AgentService {
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
+        exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
-        if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner);
+        if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner, exclude);
         // ADR-047: omit and `inline` are identical. On a headless dispatch surface
         // (`spur agent run` / workflow agent.run) both resolve to `agent.default` —
         // a subprocess of the configured default executor — never a host-session
         // stage. The ADR-046-era sentinel reject is withdrawn; unknown executor
         // names still fail clearly below via resolveExecutorSelector.
-        if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner);
+        if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner, exclude);
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`. No phase map is consulted
         // for the *starting* pick (R8: --agent wins; default-by-phase removed
         // 0452). The pin chooses where a run starts; it must not disable the
         // escalation ladder (0482 R1) — see resolvePinned.
-        return this.resolvePinned(raw, prompt, flags, doctorRunner);
+        return this.resolvePinned(raw, prompt, flags, doctorRunner, exclude);
     }
 
     /**
@@ -869,11 +873,12 @@ export class AgentService {
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
+        exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         if (stringFlag(flags, 'signal', '') !== '') {
             const stageRecord = this.resolveCanonicalStage(prompt, flags);
             if (stageRecord !== undefined) {
-                const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
+                const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
                 if (stageRes !== undefined) return stageRes;
             }
         }
@@ -924,13 +929,14 @@ export class AgentService {
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
+        exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
 
         // Stage-registry adaptive model routing (R1/R2/R3)
         const stageRecord = this.resolveCanonicalStage(prompt, flags);
         if (stageRecord !== undefined) {
-            const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
+            const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
             if (stageRes !== undefined) {
                 return stageRes;
             }
@@ -952,6 +958,7 @@ export class AgentService {
         stageRecord: StageRecord,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
+        exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult | undefined> {
         const executors = this.ctx.agentConfig?.executors;
         if (!executors || executors.length === 0) {
@@ -962,6 +969,57 @@ export class AgentService {
         const signalRaw = stringFlag(flags, 'signal', '');
         const signal = signalRaw.length > 0 ? (signalRaw as ObjectiveEscalationSignal) : undefined;
         const fromExecutor = stringFlag(flags, 'from-executor', '') || undefined;
+
+        // R4 — sideways availability failover. A `resource-exhaustion` signal means
+        // *this account/binary is dead right now* (a 5-hour usage limit), so the
+        // answer is an availability failover onto a same-tier executor on a DIFFERENT
+        // agent binary, not a quality escalation up-tier (which would land on another
+        // executor sharing the same dead binary — 9 of 13 executors share `omp`).
+        // Try same-tier, different-binary, not-yet-attempted executors in array order
+        // first; only when none is usable fall through to the fallback-tier path.
+        if (signal === 'resource-exhaustion' && fromExecutor !== undefined) {
+            const failed = executors.find((e) => e.name === fromExecutor);
+            if (failed !== undefined) {
+                const failedTier = getExecutorTier(failed);
+                const failedCanonical = resolveAgentName(failed.agent);
+                const sideways = executors.filter(
+                    (e) =>
+                        e.name !== fromExecutor &&
+                        getExecutorTier(e) === failedTier &&
+                        resolveAgentName(e.agent) !== failedCanonical &&
+                        !(exclude?.has(e.name) ?? false),
+                );
+                for (const executor of sideways) {
+                    const canonical = resolveAgentName(executor.agent);
+                    if (canonical === undefined) {
+                        return {
+                            ok: false,
+                            exitCode: 2,
+                            message: `Executor '${executor.name}' for stage '${stageRecord.id}' maps to unknown agent '${executor.agent}'`,
+                        };
+                    }
+                    const usable = await this.checkUsable(canonical, doctorRunner);
+                    if (usable.ok) {
+                        this.ctx.output.error(
+                            `Failover: ${fromExecutor} (tier ${failedTier}) exhausted; using same-tier ${executor.name} on a different binary`,
+                        );
+                        return {
+                            ok: true,
+                            agent: canonical,
+                            model: executor.model,
+                            source: 'stage',
+                            stage: {
+                                stageId: stageRecord.id,
+                                policy,
+                                executorName: executor.name,
+                                executorTier: getExecutorTier(executor),
+                            },
+                        };
+                    }
+                }
+                // Sideways list empty or none usable — fall through to fallback tier.
+            }
+        }
 
         let targetTier: CapabilityTier = policy.min_tier;
 
@@ -979,8 +1037,13 @@ export class AgentService {
             }
         }
 
-        // Filter candidate executors whose capability meets targetTier
-        const eligible = executors.filter((e) => isTierEligible(getExecutorTier(e), targetTier));
+        // Filter candidate executors whose capability meets targetTier (R3: never
+        // re-select an executor already attempted this run — exclusion empties the
+        // list, resolveStageModelPolicy returns undefined, and the caller reports
+        // "chain exhausted" instead of re-dispatching the same dead executor).
+        const eligible = executors.filter(
+            (e) => isTierEligible(getExecutorTier(e), targetTier) && !(exclude?.has(e.name) ?? false),
+        );
         if (eligible.length === 0) {
             return undefined;
         }
@@ -1400,7 +1463,7 @@ function classifyObjectiveFailure(result: AgentRunResult): ObjectiveEscalationSi
     if (result.exitCode === 0) return undefined;
     const text = `${result.stderr} ${result.stdout}`.toLowerCase();
     if (
-        /\b(rate[\s-]?limit|429|too many requests|quota|token limit|token budget|context length|maximum context|context window)\b/.test(
+        /\b(rate[\s_-]?limit(?:_exceeded|_error)?|429|529|too many requests|quota|usage[\s_-]?limit|limit[\s_-]?(reached|will[\s_-]?reset|resets?)|out of tokens?|insufficient[\s_-]?(credits?|balance|quota|funds)|token[\s_-]?(limit|budget)|context[\s_-]?(length|window)|maximum context|overloaded)\b/.test(
             text,
         )
     ) {

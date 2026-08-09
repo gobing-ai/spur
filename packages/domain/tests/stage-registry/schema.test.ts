@@ -605,6 +605,22 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         expect(getCanonicalStage('nonexistent')).toBeUndefined();
     });
 
+    test('0485 R5: verify/dogfood carry a resource-exhaustion fallback and dev-fixall resolves to test', () => {
+        const verify = getCanonicalStage('verify');
+        expect(verify).toBeDefined();
+        expect(verify?.model_policy.fallback.length).toBeGreaterThan(0);
+        expect(verify?.model_policy.fallback.some((f) => f.trigger === 'resource-exhaustion')).toBe(true);
+
+        const dogfood = getCanonicalStage('dogfood');
+        expect(dogfood).toBeDefined();
+        expect(dogfood?.model_policy.fallback.length).toBeGreaterThan(0);
+        expect(dogfood?.model_policy.fallback.some((f) => f.trigger === 'resource-exhaustion')).toBe(true);
+
+        // test-fix hops dispatch /sp:dev-fixall; the registry alias must resolve to the test stage.
+        const fixall = getCanonicalStage('dev-fixall');
+        expect(fixall?.id).toBe('test');
+    });
+
     test('plan is capable-first; refine is cheap fallback for blank Design', () => {
         const plan = getCanonicalStage('plan');
         const refine = getCanonicalStage('refine');

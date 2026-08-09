@@ -380,7 +380,16 @@ export class AgentRunActionRunner implements ActionRunner {
 
             return {
                 ok,
-                data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                data: buildResultData(
+                    exitCode,
+                    agentLabel,
+                    capture,
+                    answer,
+                    invocation,
+                    // 0485 R6: carry stream tails on failure records only.
+                    ok ? undefined : traced.stdout,
+                    ok ? undefined : (traced.stderr ?? undefined),
+                ),
                 error,
                 // Latch: mark the session open after the first successful agent.run so later
                 // steps auto-continue (Q8). When we fell back to a fresh dispatch because
@@ -446,10 +455,17 @@ function buildResultData(
     capture: boolean,
     answer: string,
     invocation: AgentRunInvocation | undefined,
+    stdout?: string,
+    stderr?: string,
 ): Record<string, unknown> {
     const data: Record<string, unknown> = { exitCode, agent: agentLabel };
     if (capture) data.answer = answer;
     if (invocation !== undefined) data.invocation = invocation;
+    // 0485 R6: persist the last ≤4 KB of each stream on FAILURE records so an
+    // exhaustion post-mortem can confirm what the provider actually emitted.
+    // Omitted on success and when a stream is empty (lean records).
+    if (stdout !== undefined && stdout.length > 0) data.stdoutTail = tail(stdout, 4096);
+    if (stderr !== undefined && stderr.length > 0) data.stderrTail = tail(stderr, 4096);
     return data;
 }
 

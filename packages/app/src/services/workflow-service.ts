@@ -15,6 +15,7 @@ import {
     TaskRunLinkDao,
     TransitionRunDao,
 } from '@gobing-ai/spur-domain';
+import { resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
     type ActionDef,
@@ -481,8 +482,11 @@ export class WorkflowAppService {
         // pipelines: an operator whose default executor was failing had no supported way to
         // redirect them. Caller-supplied vars still win, so an explicit `--agent`/`--vars`
         // choice overrides config, and config in turn overrides the YAML literal.
+        // (0485 R2) `implementAgent` is injected on the same seam so `agent.default` also
+        // governs the implement hop; a stale default warns instead of failing dispatch.
+        const warnings: string[] = [];
         const runVars = {
-            ...(await resolveDefaultAgentVar(this.ctx.cwd, opts.vars)),
+            ...(await resolveDefaultAgentVar(this.ctx.cwd, opts.vars, (m) => warnings.push(m))),
             ...(opts.vars ?? {}),
             __runId: runId,
         };
@@ -516,7 +520,13 @@ export class WorkflowAppService {
         // task-pipeline run carries vars.wbs - links execution results back to
         // the task. Idempotent: a re-run with the same runId does not duplicate.
         await this.maybeLinkPipelineRun(file, runId, opts);
-        return result as WorkflowRunResult;
+        const runResult = result as WorkflowRunResult;
+        if (warnings.length > 0) {
+            // 0485 R2: surface a stale `agent.default` validation warning on the
+            // result so the CLI and tests can see it (no new public API field).
+            (runResult as Record<string, unknown>).warnings = warnings;
+        }
+        return runResult;
     }
 
     /**
@@ -1049,25 +1059,51 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
- * Resolve the `agent` run var from `.spur/config.yaml` `agent.default`, so the configured
- * default executor reaches a workflow's `agent.run` steps instead of the literal `agent: "omp"`
- * each pipeline YAML hardcodes.
+ * Resolve the `agent` / `implementAgent` run vars from `.spur/config.yaml`
+ * `agent.default`, so the configured default executor reaches a workflow's
+ * `agent.run` steps — including the implement hop, which previously read only the
+ * pipeline's literal `implementAgent: "omp"` (task 0485 R2).
  *
- * Returns an empty object — leaving the YAML default in force — when the caller already chose an
- * agent, when no `agent.default` is configured, or when config cannot be read. Best-effort by
- * design: executor selection must never be the reason a workflow fails to start.
+ * Returns an empty object — leaving the YAML default in force — when the caller
+ * already chose both agents, when no `agent.default` is configured, or when config
+ * cannot be read. Each key is injected independently: a caller-set `agent` does not
+ * suppress `implementAgent`. When the configured default names neither a configured
+ * executor nor a canonical agent binary, one warning is emitted and nothing is
+ * injected, so a stale `agent.default` (e.g. a commented-out executor) never fails
+ * dispatch (AC3) — the pipeline YAML literal governs instead.
  */
 async function resolveDefaultAgentVar(
     cwd: string,
     callerVars: Record<string, string> | undefined,
+    warn: (message: string) => void,
 ): Promise<Record<string, string>> {
-    if (callerVars?.agent !== undefined) return {};
+    let config: Awaited<ReturnType<typeof loadSpurConfig>>;
     try {
-        const configured = (await loadSpurConfig(cwd)).agent?.default;
-        return typeof configured === 'string' && configured.length > 0 ? { agent: configured } : {};
+        config = await loadSpurConfig(cwd);
     } catch {
         return {};
     }
+    const configured = config.agent?.default;
+    if (typeof configured !== 'string' || configured.length === 0) {
+        return {};
+    }
+    // Validate before injecting (AC3): accept iff the default names a configured
+    // executor or a canonical agent binary. On mismatch, warn once and inject
+    // nothing so the pipeline YAML literal governs instead of a dispatch-time
+    // "Unknown agent" failure.
+    const valid =
+        config.agent?.executors?.some((e) => e.name === configured) === true ||
+        resolveAgentName(configured) !== undefined;
+    if (!valid) {
+        warn(
+            `agent.default "${configured}" does not name a configured executor or agent binary; leaving the pipeline's literal agent in force`,
+        );
+        return {};
+    }
+    const result: Record<string, string> = {};
+    if (callerVars?.agent === undefined) result.agent = configured;
+    if (callerVars?.implementAgent === undefined) result.implementAgent = configured;
+    return result;
 }
 
 /**

@@ -786,7 +786,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
     {
         schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
         id: 'test',
-        aliases: ['dev-unit'],
+        aliases: ['dev-unit', 'dev-fixall'],
         description: 'dev-unit: generate/extend tests to coverage target',
         artifacts: [{ kind: 'test-file', direction: 'output', required: true }],
         reasoning_skill: 'sp:code-testing',
@@ -818,7 +818,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 2, terminal_stop: 'escalate' },
         model_policy: {
             min_tier: 'capable-1',
-            fallback: [],
+            fallback: [
+                { tier: 'capable-2', trigger: 'resource-exhaustion' },
+                { tier: 'capable-2', trigger: 'gate-fail' },
+            ],
         },
         context_layers: [],
         observability: [],
@@ -881,7 +884,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'capable-1',
-            fallback: [],
+            fallback: [
+                { tier: 'capable-2', trigger: 'resource-exhaustion' },
+                { tier: 'capable-2', trigger: 'gate-fail' },
+            ],
         },
         context_layers: [],
         observability: [],
