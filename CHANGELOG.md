@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.39] — 2026-08-09
+
+### Fixed
+
+- fix(pipeline): harden task-pipeline per 0487 post-mortem (R1-R7) (f26ccdae)
+
+### Changed
+
+- docs(features): N → done (0487 post-mortem hardening complete) (a77f0951)
+- docs(00_ADR.md): fine tune on docs/00_ADR.md (d91af80f)
+
 ## [0.3.36] — 2026-08-08
 
 ### Added
