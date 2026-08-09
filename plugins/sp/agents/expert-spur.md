@@ -1,6 +1,14 @@
 ---
 name: expert-spur
-description: Use PROACTIVELY for multi-step Spur CLI corpus work warranting its own context, across any `spur` noun — task, feature, rule, or workflow: batch task/feature creation, status sweeps, section-editing campaigns, traceability audits, rule catalog hardening, workflow authoring/refactoring. Triggers: "create tasks for this feature", "update all task statuses", "audit task traceability", "harden the rule catalog", "author a batch of workflows", "expert-spur". For a single operation, use the `spur` CLI directly; for the planning/execution lifecycle, use `sp:spur-dev`.
+description: |
+  Use PROACTIVELY for "create tasks for this feature", "update all task statuses", "audit task traceability", "create a feature with acceptance criteria", "harden the rule catalog", "author a batch of workflows", or "expert-spur". Multi-step Spur CLI corpus work across any `spur` noun — task, feature, rule, workflow: batch creation, status sweeps, section-editing campaigns, traceability audits, rule catalog hardening, workflow authoring/refactoring. Use when corpus work spans many files or nouns and warrants its own context; for a single operation, run the `spur` CLI directly.
+
+  <example>
+  Context: Batch task status update across a feature's tasks.
+  user: "Move all A1 tasks from backlog to wip."
+  assistant: "Delegating to sp:expert-spur — reads the spur-cli task reference, then runs spur task update for each."
+  <commentary>Multi-task batch work warrants context isolation.</commentary>
+  </example>
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green

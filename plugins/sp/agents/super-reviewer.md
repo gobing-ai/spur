@@ -1,7 +1,7 @@
 ---
 name: super-reviewer
 description: |
-  Code review specialist for multi-dimensional review: functional traceability, SECUA quality, and architectural depth. Use PROACTIVELY for code review, review-only execution, PR quality checks, architectural deepening, and pipeline Phase 7 review work. Triggers: "review this", "check the code", "audit this", "SECUA review", "find refactoring opportunities", "improve architecture", "functional review".
+  Use PROACTIVELY for "review this", "check the code", "audit this", "SECUA review", "find refactoring opportunities", "improve architecture", "functional review", plus PR quality checks, review-only execution, and pipeline Phase 7 review work. Code review specialist across three dimensions: functional traceability, SECUA quality, and architectural depth. Reviews and reports only — never edits the code it reviews.
 
   <example>
   Context: Standalone code review of a source path

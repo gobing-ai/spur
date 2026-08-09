@@ -1,6 +1,14 @@
 ---
 name: super-planner
-description: Planning and execution orchestration — owns the product/project management framing (intake, scope, sequencing, prioritization) and drives the task batch driver loop in sp:spur-dev/references/execution-batch.md (single task, sequential batch, or parallel batch: resolve+freeze -> topo-sort -> per-task pipeline run -> verdict inspect -> continue/halt -> batch report). Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", or "/sp:dev-runall --feature M1" / "/sp:dev-parallel --feature M1". For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next (sp:next-router) — NOT this agent's job.
+description: |
+  Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", "/sp:dev-runall", or "/sp:dev-parallel". Planning and execution orchestration: owns the product/project management framing (intake, scope, sequencing) and drives the batch driver loop in sp:spur-dev/references/execution-batch.md — resolve+freeze -> topo-sort -> per-task run -> verdict inspect -> continue/halt -> batch report, with optional parallel fan-out. For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next — NOT this agent's job.
+
+  <example>
+  Context: Batch execution of a feature's tasks
+  user: "Run all todo tasks in feature A1."
+  assistant: "Delegating to sp:super-planner — resolves feature:A1, topo-sorts by dependencies, runs each through task-pipeline.yaml, emits a report."
+  <commentary>A batch needs between-runs judgment: set resolution, dependency ordering, failure policy.</commentary>
+  </example>
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green
