@@ -18,6 +18,13 @@ not redefine it.
 
 ## Inline-default execution surface
 
+> **This section is the single source of truth for `--agent` value semantics, the executor
+> precedence chain, and the `implementAgent` override.** Every other reference (flag-glossary,
+> execution-workflow, execution-batch, dev-operations, cmd_agent, cmd_workflow) links here and
+> does not restate the contract. The value table below is authoritative; parity with it is
+> enforced by `validate-flag-contracts.ts` (C3a/C3b).
+
+
 ### The one rule
 
 > **`--agent <value>` names *who* does the model-bearing work. The execution surface is derived from
@@ -100,6 +107,59 @@ subprocess of the configured `agent.default`, never in the host session. `dev-pl
 and `dev-run --mode full` merge `--agent` (including an explicit `inline`) into per-task `vars.agent`;
 on dispatch that value resolves like omit to `agent.default`. `dev-run --mode implement` runs a single
 competency in-session and does honor `inline` as the host session.
+
+### Executor precedence chain (R7)
+
+For workflow-pipeline `agent.run` steps (the subprocess surface), the executor is resolved in this
+order; first match wins:
+
+1. **`--agent` / explicit `--vars '{"agent":"<value>"}'`** — the operator's selector, merged into
+   `vars.agent` by the command wrapper. This is the highest-precedence input.
+2. **`agent.default`** from `.spur/config.yaml` (project layer, then `~/.config/spur/config.yaml`) —
+   `spur workflow run` injects it as the `agent` var when `vars.agent` was not set by the caller.
+3. **YAML literal `agent:` in the pipeline file** — the last-resort fallback declared in the
+   workflow YAML (e.g. `agent: "omp"` in `task-pipeline.yaml`). This fires only when no
+   `agent.default` is configured anywhere.
+
+`--agent auto` tier-resolves an executor (stage `model_policy` → `agent.default` → tier priority)
+**before** merging, so it enters the chain at step 1 already resolved to a concrete name.
+`--agent inline` merges like omit and resolves to `agent.default`. Omitting the flag forwards
+nothing, so the spawned step resolves to `agent.default` (step 2) or the YAML literal (step 3).
+
+### Implement-only executor override (R6)
+
+`task-pipeline.yaml` declares a separate `implementAgent` var. The `implement` state's `agent.run`
+step reads `${vars.implementAgent}` instead of `${vars.agent}`, so an operator can pin the
+implement hop to one executor while review/verify/test-fix hops keep the default agent:
+
+```bash
+# Pin implement to a specific executor; other hops keep agent.default / YAML literal
+--vars '{"implementAgent":"omp-zai"}'
+```
+
+All other `agent.run` steps (test-fix, review, verify) read `${vars.agent}`. `implementAgent`
+applies **only** to the implement hop. **The `--agent` flag forwards into BOTH `agent` and
+`implementAgent`** at the execution-batch boundary (§3.2), so a pinned `--agent X` reaches every
+hop including implement. To pin ONLY implement to a different executor while other hops keep the
+default, pass `--vars '{"implementAgent":"..."}'` separately (task 0483 R2).
+
+### Executor exhaustion is survivable, not a pin-away problem (task 0482 R1/R5)
+
+Every executor can exhaust its provider quota — **including `omp`/Claude**, which enforces its own
+5-hour rolling limits. No executor is exempt from hard limits, so "pick a safe executor to pin" is
+not durable guidance: pinning one converts a recoverable failure into a rarer, unhandled one. The
+pipeline survives exhaustion automatically — a dispatch that fails with a 429/quota body is
+classified as `resource-exhaustion` and escalates to the stage's next eligible tier, **even when the
+run started from a pinned executor**. The pin chooses where a run *starts*; it does not disable
+recovery (0482 R1). To confirm recovery is wired, watch the run log for
+`Escalating: <executor> (tier <t>) failed with resource-exhaustion; retrying on <executor>` — that
+line, not quota state, is the signal that the fallback ladder fired.
+
+Do not read provider quota from `spur agent doctor`. The doctor resolves provider keys from
+`${PROVIDER}_API_KEY` env vars and cannot see an agent-owned credential store (e.g. omp's models
+config), so its row degrades to `status: usable · auth: no · model: unknown` for GLM-style executors
+and is useless as a preflight gate. Exhaustion is detected mid-run by the escalation classifier, not
+by any preflight probe.
 
 ### Explicit subprocess surfaces are unchanged
 
@@ -365,6 +425,17 @@ principles determine which gates route around HITL and which still pause.
 6. **Irreversible action → surface to human.** Branch deletion, force-push, schema migration,
    `spur feature update <id> cancelled`, and any `--merge` / `--force` action pauses regardless of
    `--auto`. Irreversible is irreversible.
+
+   **Exception — the worktree batch success path (`execution-batch.md` § WT-4).** The
+   `--worktree --auto` full-batch success sequence — `git merge --ff-only "$BRANCH"`, `git worktree
+   remove`, `git branch -d "$BRANCH"` — does **not** pause, even though it performs a merge and a
+   branch deletion. This is the single carve-out from Principle #6, and it is safe by construction:
+   `git merge --ff-only` refuses rather than rewriting history when the base ref has moved, and
+   `git branch -d` (lowercase) refuses to delete a branch that is not fully merged. Both fail closed,
+   so no work can be lost — the property #6 exists to protect. When FF is impossible, WT-4 falls
+   through to the WT-5 retention path, which leaves the worktree and branch intact. Every other
+   branch-deletion, `--merge` / `--force`, force-push, and schema-migration action continues to
+   pause regardless of `--auto`.
 7. **Error → stop.** Any unexpected error (CLI crash, schema parse failure, missing file) stops the
    run. `--auto` is not a license to power through errors; it is a license to skip *objective* HITL
    pauses, not to ignore failures.

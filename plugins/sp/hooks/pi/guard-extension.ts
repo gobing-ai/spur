@@ -23,6 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSy
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -204,28 +205,12 @@ function readSessionId(): string | undefined {
     }
 }
 
-// ─── Session helpers (mirrors context-session-start.ts, context-session-stop.ts) ─
+// ─── Session helpers (agent/model hints from agent-hint.ts; mirrors context-session-stop.ts) ─
 
 function generateSessionId(): string {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).slice(2, 10);
     return `${timestamp}-${random}`;
-}
-
-function resolveAgentHint(): string | undefined {
-    const candidates = [process.env.SPUR_AGENT, process.env.TERM_PROGRAM, process.env.SPUR_DEFAULT_AGENT];
-    for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) return c.trim();
-    }
-    return 'pi';
-}
-
-function resolveModelHint(): string | undefined {
-    const candidates = [process.env.SPUR_MODEL, process.env.ANTHROPIC_MODEL, process.env.OPENAI_MODEL];
-    for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) return c.trim();
-    }
-    return undefined;
 }
 
 function initSession(): void {
@@ -234,8 +219,8 @@ function initSession(): void {
         const sessionId = generateSessionId();
         const session = {
             session_id: sessionId,
-            agent: resolveAgentHint(),
-            model: resolveModelHint(),
+            agent: resolveAgentHintShared(process.env, 'pi'),
+            model: resolveModelHintShared(process.env),
             started_at: new Date().toISOString(),
         };
         writeFileSync(SESSION_FILE, `${JSON.stringify(session, null, 2)}\n`);

@@ -111,7 +111,7 @@ For each `R{n}` in `## Requirements`, find implementation evidence in the change
 assign a per-requirement status:
 
 | Per-requirement status | Condition |
-|------------------------|-----------|
+| ------------------------ | ----------- |
 | **MET** | Concrete evidence (code + test) for the requirement exists in scope |
 | **PARTIAL** | Evidence for part of the requirement only |
 | **UNMET** | No implementation evidence found |
@@ -133,7 +133,7 @@ If the task has a non-empty Acceptance Criteria section, evaluate every checklis
 Gherkin scenario independently. This gate runs whether or not `--bdd` is set.
 
 | Per-AC status | Condition |
-|---------------|-----------|
+| --------------- | ----------- |
 | **MET** | The AC is satisfied by concrete evidence |
 | **PARTIAL** | Some evidence exists, but a material condition is missing or only inferred |
 | **UNMET** | No implementation evidence satisfies the AC, or a required scenario fails |
@@ -178,7 +178,7 @@ blessed in DESIGN.md are not flagged).
 **Classification.** For each non-trivial design claim, classify against the diff:
 
 | Status | Condition |
-|--------|-----------|
+| -------- | ----------- |
 | **DONE** | The diff implements the claim exactly as written |
 | **PARTIAL** | Some but not all sub-aspects of the claim are implemented |
 | **NOT DONE** | The claim has no implementation in the diff |
@@ -242,7 +242,7 @@ spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
 > **Do not write `## Review` directly in verify mode.** The `## Review` section is owned by the
 > `review` step (`/sp:dev-review`), which dispatches `functional-review` + `code-verification`
 > review mode + `code-improvement`. The `record` step backfills `## Review` from the verdict
-> artifact only if the section is bare (`sectionIsBare` guard, `task-service.ts:563`). Writing
+> artifact only if the section is bare (`sectionIsBare` guard, `task-service.ts:485`). Writing
 > `## Review` here bypasses that guard and destroys the review step's three-dimensional findings.
 
 Section bodies passed to `spur task update --section` must be **body-only**. Do not put a same-level
@@ -296,7 +296,7 @@ canonical.
 reporting PASS in prose is necessary but not sufficient — the artifact is never left to the agent's
 discretion). The **record** step transcribes only `## Testing` from the verdict — verdict + per-
 requirement/AC tables + evidence. `## Review` is owned by the review step (`/sp:dev-review`) and
-the record step's `sectionIsBare` guard (`task-service.ts:563`) preserves any non-bare Review
+the record step's `sectionIsBare` guard (`task-service.ts:485`) preserves any non-bare Review
 content. Verify mode never writes `## Review`.
 
 **Standalone** (`/sp:dev-verify` outside the pipeline — no answer-file capture exists), write the
@@ -354,7 +354,7 @@ framework).
 **When active**
 
 | Condition | Gate |
-|-----------|------|
+| ----------- | ------ |
 | `--fix all` **and** feature context **and** **not** `--skip-shippable` / `--skip-shipable` | **ON** |
 | `--fix` is `none` or `blockers-first` | **OFF** (optional note: shippable not evaluated) |
 | No feature context | **N/A** |
@@ -450,7 +450,7 @@ Flags: `--agent <inline|auto|name>` (execution surface — inline default, with 
 ## Common Rationalizations
 
 | Rationalization | Reality |
-|---|---|
+| --- | --- |
 | "The AC is obviously met — I can see it in the diff." | Seeing code is not evidence. An AC is met only when a command or test tied to it exited 0 **this run**; paste it, or the AC is UNVERIFIED. |
 | "All tests pass, so the verdict is PASS." | Green tests prove the suite's assertions, not that every AC has coverage. Map each AC to its evidence; an AC with no test is not covered by a passing suite. |
 | "The implementer reported it works — I'll trust the summary." | A subagent success report is a claim, not a verdict. Verification **re-runs** the check; trusting the report is skipping the gate you were asked to be. |

@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.15.0
+version: 1.16.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-05
+updated_at: 2026-08-08
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -36,7 +36,7 @@ When collaborating with the design team:
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
 | [`workflow-observability.md`](design/workflow-observability.md) | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365) | partial |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124) | implemented |
-| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | Dev execution surface — `--agent` threading (0125), inline default + `--inline\|--subprocess` + named escalation triggers (0406), and `sp:dogfood-testing` extraction | implemented |
+| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | Dev execution surface — unified `--agent <inline\|auto\|name>` selector (0125, ADR-041/047), named escalation triggers (0406), and `sp:dogfood-testing` extraction | implemented |
 | [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md) | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment) | implemented |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
@@ -146,14 +146,15 @@ clobbering a configured project. `--json` emits
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--stage <id>] [--signal <sig>] [--drain] [--json]`
 
 **The subprocess LLM execution surface.** Every out-of-process model invocation in Spur routes
-through this verb: workflow `agent.run` actions, explicit `/sp:dev-* --subprocess` dispatches, and
-team-mode runs. This keeps subprocess agent resolution, auth, slash-command translation, and team
+through this verb: workflow `agent.run` actions, explicit `/sp:dev-* --agent auto|--agent <name>`
+subprocess dispatches, and team-mode runs. This keeps subprocess agent resolution, auth, slash-command translation, and team
 identity in one place, and is the seam where a future remote/SSE execution channel attaches without
 touching callers.
 
 Model-bearing `/sp:dev-*` commands invoked from a live coding-agent session use the host-native
-skill/subagent surface inline by default; `--inline` makes that choice explicit and `--subprocess`
-forces this verb. The four dispatch-surface triggers override inline: a different model/coding agent,
+skill/subagent surface inline by default; omitting `--agent` is `--agent inline`. `--agent auto` /
+`--agent <name>` force this verb. The four dispatch-surface triggers override inline: a different
+model/coding agent,
 headless or unattended execution, a durable auditable run record, or workspace/credential isolation.
 The applied trigger is named. Inline has no isolated workspace, separate run record, independent
 timeout/abort boundary, or tier-selected executor. Direct `spur agent run` and workflow `agent.run`
@@ -165,7 +166,10 @@ claude, `/sp-dev-run` opencode/gemini/hermes/grok (default dialect), `/skill:sp-
 `$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`). Routing is stage-registry-first
 (ADR-033 / 0452): stage `model_policy` selects a named `agent.executors` profile. With no stage
 match, `agent.default` is resolved as an executor selector (then a legacy agent name); on miss,
-Tier-1 priority applies. `current` reads `SPUR_AGENT` env var. (`default-by-phase` removed 0452.)
+Tier-1 priority applies. The legacy `current`/`inherit` tokens were removed (ADR-047): they resolve
+as unknown executor names (exit 2) — `inline` is the surviving value for "the agent running this
+session". Host-agent detection reads `SPUR_AGENT`/`CLAUDE_CODE_ENTRYPOINT`/`TERM_PROGRAM` via
+`resolveAgentHint`, not `--agent current`. (`default-by-phase` removed 0452.)
 **Explicit `--agent` is executor-aware (0346).** An explicit `--agent <name>` reuses the same
 executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`, source `explicit`):
 if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
@@ -1074,8 +1078,9 @@ identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profil
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
 post-implement auto-format. `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
-that actually decides. **Implement-only pin (task 0454):** `implementAgent` defaults to the same seed
-as `agent` and is used only by the implement `agent.run` hop — override with
+that actually decides. **Implement-only pin (task 0454):** `implementAgent` resolves to its own
+YAML literal default (`'omp'` in `task-pipeline.yaml`) — independent of `agent` and not affected
+by `agent.default` — and is used only by the implement `agent.run` hop. Override with
 `--vars '{"implementAgent":"omp-zai"}'` without retargeting review/verify. **Size precheck (0454):**
 `maxImplementReqs` (default `5`) and `maxImplementPlanItems` (default `8`) feed
 `plugins/sp/scripts/task-size-precheck.ts`; precheck→implement requires
@@ -1087,7 +1092,10 @@ as `agent` and is used only by the implement `agent.run` hop — override with
 (NOT `--mode full` — that drives this pipeline, so calling it here recurses); `test` → **the project
 quality gate**, a soft shell probe of `${vars.qualityGateCmd}` plus a bounded pure-slash
 `/sp:dev-fixall` loop — *not* `/sp:dev-unit`, which is the coverage gap-fill competency (router
-C3/C5); `review` → `/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` +
+C3/C5). The gate run is tee'd to `.spur/run/${wbs}-test-gate.log`, and the `test-fix` hop passes
+`--gate-log .spur/run/${wbs}-test-gate.log` to `/sp:dev-fixall` so the fix agent starts at the
+captured finding's `file:line` anchor rather than re-deriving the failure (task 0482 R3);
+`review` → `/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` +
 `sp:functional-review` + `sp:code-improvement`; three dimensions — SECUA / functional /
 architecture, task 0227); `verify` → `/sp:dev-verify` (→ `sp:code-verification` verify mode).
 
@@ -1103,7 +1111,10 @@ step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/
 `${vars.implementTimeoutMs}` for the heavier implement hop, both defaulting to `"1800000"` (30 min).
 On elapse the ts-libs `ProcessExecutor` kills the subprocess (never abandons it); the agent step
 exits non-zero → `ok:false` → pipeline routes to `failed`, and a partial-work handoff artifact is
-written to `.spur/run/<runId>-<state>-partial.md`. Overridable per run via
+written to `.spur/run/<runId>-<state>-partial.md`. The artifact carries a `## resume context` block
+naming the agent session dir (`.spur/run/<runId>/agent-sessions/<executor>/`) and the latched
+session sidecar (`.spur/run/<runId>-agent-session.json`), so an operator resumes from the dead
+agent's transcript instead of re-deriving it (task 0482 R4). Overridable per run via
 `--vars '{"stepTimeoutMs":"120000"}'`. The `agent.run` action surface accepts `timeoutMs`
 (number parsed from the workflow option or CLI string flag `--timeout`), forwarded through
 `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`.
@@ -1182,11 +1193,11 @@ authoritative reference for all 13 operations — purpose, inputs, backing, beha
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
 `sp:super-planner` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
-Model-bearing operations share the execution-surface flags `--inline|--subprocess` and the operator
-selector `--agent <name|auto>`. Inline is the default for a direct command. `--subprocess`, an
-explicit different agent/model, or another named dispatch-surface trigger selects `spur agent run`;
-full workflow-backed operations retain their `agent.run` subprocess actions because their headless
-and durable-record contracts are explicit triggers. The SSOT is
+Model-bearing operations share the single execution-surface selector `--agent <inline|auto|name>`
+(`inline` is the default when omitted; the former `--inline`/`--subprocess` flags are collapsed into
+it, ADR-041/047). `--agent auto` / `--agent <name>`, or another named dispatch-surface trigger,
+selects `spur agent run`; full workflow-backed operations retain their `agent.run` subprocess
+actions because their headless and durable-record contracts are explicit triggers. The SSOT is
 [`cross-cutting.md`](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.
 The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.

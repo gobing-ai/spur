@@ -118,22 +118,16 @@ background and let its exit report the terminal verdict. Use `spur workflow trac
 Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
 (< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.
 
-When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
-`--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
-for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
-to its canonical agent name before merging; `--agent inline` forwards like omit and resolves to
-`agent.default`; omitting the flag forwards nothing, so the spawned step also resolves to
-`agent.default` from `.spur/config.yaml` (project layer, then `~/.config/spur/config.yaml`),
-which `spur workflow run` injects as the `agent` var. The literal `agent: "omp"` each pipeline YAML
-declares is only the last-resort fallback when no `agent.default` is configured anywhere. Precedence:
-`--agent` / explicit `--vars` → `agent.default` → YAML literal.
-
-**`--agent inline` merges like omit and resolves to `agent.default` (ADR-047).** `agent.run` always
-dispatches a subprocess; `spur agent run` now accepts the literal `inline` and resolves it like
-omitting the flag to `agent.default`. On a full-mode wrapper, `--agent inline` is merged into
-`vars.agent` and every stage runs under a subprocess of `agent.default` — it never becomes a
-host-session stage. `inline` as a host-session stage applies only to single-competency commands
-(`--mode implement`).
+When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars as
+**both** `agent` and `implementAgent` (task 0483 R2):
+`--vars '{"wbs":"<wbs>","agent":"<value>","implementAgent":"<value>"}'`. The pipeline YAML reads
+`${vars.agent}` for review/verify/test-fix and `${vars.implementAgent}` for implement — setting
+both keys ensures the pinned executor reaches every hop. The full value-semantics contract (one
+rule, value table, objective triggers, `inline`→`agent.default` on headless surfaces per ADR-047)
+lives in [cross-cutting.md](cross-cutting.md#inline-default-execution-surface) — the SSOT.
+This file documents only the **workflow-pipeline mechanics**: how the selector reaches `agent.run`
+steps. Precedence chain: `--agent` / explicit `--vars` → `agent.default` → YAML literal (see SSOT
+§ "Executor precedence chain").
 
 **Mode is explicit before dispatch.** The full pipeline is selected by default or by `--mode full`;
 the implement step is selected only by `--mode implement`. `--next` controls lifecycle chaining and

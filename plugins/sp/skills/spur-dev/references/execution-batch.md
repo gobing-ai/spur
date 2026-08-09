@@ -220,7 +220,7 @@ Only two flags cross the orchestrator→pipeline boundary; both are merged into 
 | Flag | Effect on per-task `--vars` |
 |---|---|
 | `--auto` | sets `"profile":"auto"` (skips the HITL approve gate). Omitting it forwards nothing, so the pipeline uses its default profile (standard — HITL pause surfaces to the operator). (R4.2) |
-| `--agent <value>` | sets `"agent":"<value>"` so `agent.run` steps spawn that agent. `--agent auto` resolves the current runtime to its canonical name before merging. Omitting it forwards nothing, so spawned steps resolve to the configured default executor (`omp`). (R4.3) |
+| `--agent <value>` | sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every `agent.run` step — including the implement hop — spawns that agent. Omitting it forwards nothing, so spawned steps fall through the executor precedence chain — see [cross-cutting.md § Inline-default execution surface](cross-cutting.md#inline-default-execution-surface), the SSOT for `--agent` values and precedence. To pin ONLY implement to a different executor, pass `--vars '{"implementAgent":"..."}'` separately. (R4.3, task 0483 R2) |
 
 `sp:super-planner` remains the batch orchestrator regardless of `--agent` — the flag pins the
 per-task step executor, not the orchestrator.
@@ -420,6 +420,14 @@ the tree's own source:
 Confirm isolation by making a distinctive change in the worktree and checking that
 the command reflects it.
 
+**General rule — every path-resolving tool, not just `spur`.** The same failure class is not
+limited to the CLI on PATH. A host-agent file-edit or hash/`hashline` tool may resolve main-repo
+paths while the shell `cwd` is the worktree, silently acting on the wrong tree. Before relying on any
+path-resolving tool inside a `--worktree` batch, verify it is acting on the worktree — for example
+by making a distinctive change and confirming the path the tool reports matches the worktree. When a
+tool cannot be pointed at the worktree, fall back to `perl -i` in-place edits (or the agent's `write`
+verb) whose path argument you control.
+
 ### WT-3 — Crash-safe state marker (R6)
 
 Worktree identity lives on disk under `.spur/run/`, not only in the orchestrator's memory, so a
@@ -467,6 +475,13 @@ path (WT-5) and report the divergence. The corpus files (`docs/tasks*/`, kanban/
 auto-generated and conflict-prone; automated conflict resolution over generated files is exactly the
 wrong thing to attempt unattended. FF-only means the merge either is trivially correct or does not
 happen.
+
+**Auto-decision carve-out.** This success path runs unattended on a fully-passing `--worktree
+--auto` batch — it does **not** pause even though it performs a merge and a branch deletion. That is
+the explicit single exception to Auto-Decision Principle #6 (`cross-cutting.md`), which otherwise
+pauses any `--merge` / branch-deletion action regardless of `--auto`. The exception is safe because
+`git merge --ff-only` and `git branch -d` both fail closed (they refuse rather than risk losing
+work); WT-5 retains the worktree and branch whenever FF is impossible or any task fails.
 
 ### WT-5 — Failure path: retain and report (R5)
 

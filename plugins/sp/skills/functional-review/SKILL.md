@@ -52,7 +52,7 @@ Do **not** use this skill for:
 ## Key Distinctions
 
 | Skill | Question it answers |
-|-------|---------------------|
+| ------- | --------------------- |
 | **`sp:functional-review`** | Are all task requirements implemented? (requirements completeness) |
 | **`sp:code-verification`** | Is the code correct, secure, efficient, usable? (SECUA quality) |
 | **`sp:code-improvement`** | Is the architecture deep / testable? (structural depth) |
@@ -80,7 +80,7 @@ requirement to one or more Gherkin scenarios by requirement text, identifier, or
 traceability markers:
 
 | Scenario status | Requirement status |
-|-----------------|--------------------|
+| ----------------- | -------------------- |
 | All covering scenarios `passed` | `MET` |
 | Any covering scenario `failed` or `skipped` | `PARTIAL` |
 | No covering scenarios found | fall through to Track B |
@@ -127,7 +127,7 @@ verdict[req.id] = { status: assessment.status, evidence: assessment.evidence };
 ## Per-Requirement Status
 
 | Status | Condition |
-|--------|-----------|
+| -------- | ----------- |
 | **MET** | Concrete evidence (code + test, or code + static ref) for the requirement exists in scope |
 | **PARTIAL** | Evidence for part of the requirement only — a material sub-condition is missing or only inferred |
 | **UNMET** | No implementation evidence found in scope |
@@ -145,7 +145,7 @@ All evidence MUST be specific. Vague evidence is rejected and the requirement is
 ### SPECIFIC Evidence (required)
 
 | Type | Example |
-|------|---------|
+| ------ | --------- |
 | File path + line | `src/api/users.ts:42` |
 | Function / method name | `createUser()` |
 | Class / type name | `UserController` |
@@ -156,7 +156,7 @@ All evidence MUST be specific. Vague evidence is rejected and the requirement is
 ### VAGUE Evidence (rejected)
 
 | Type | Why rejected |
-|------|--------------|
+| ------ | -------------- |
 | "implemented correctly" | No specific location |
 | "meets requirements" | No evidence cited |
 | "the code does X" | No file:line reference |
@@ -165,6 +165,7 @@ All evidence MUST be specific. Vague evidence is rejected and the requirement is
 ### Evidence Templates
 
 **MET:**
+
 ```
 - `src/api/users.ts:42` — `createUser()` implements user creation
 - `src/api/users.ts:45-48` — input validation for email field
@@ -172,12 +173,14 @@ All evidence MUST be specific. Vague evidence is rejected and the requirement is
 ```
 
 **PARTIAL:**
+
 ```
 - `src/api/users.ts:42` — `createUser()` implements basic creation
 - MISSING: `src/api/users.ts` — no error handling for duplicate emails (R3 sub-condition "duplicate email rejected")
 ```
 
 **UNMET:**
+
 ```
 - NO IMPLEMENTATION FOUND for requirement R5: "Send email notification on user creation"
 - Searched: src/api/, src/services/, src/notifications/
@@ -240,16 +243,33 @@ off* delivery is.
 
 ### Step 7 — Write findings to the task
 
-Write the per-requirement traceability table to the task's `## Review` section via CLI verbs:
+Write the review body to the task's `## Review` section via CLI verbs. The body MUST lead with a
+`| Priority | Dimension | Location | Finding |` table (the L3 `hasPopulatedPriorityTable` gate at
+`task-check.ts:96-106` requires at least one `P[1-4]` row with non-placeholder siblings — any other
+shape, e.g. `| Req | Status | Evidence |` alone, is structurally rejected and denies the
+`wip→testing` transition). Use the same canonical shape as `sp:code-verification`:
 
 ```bash
-printf '...' > /tmp/<wbs>-functional.md
+cat > /tmp/<wbs>-functional.md <<'BODY'
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; functional verdict PASS |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1  | MET     | `src/api/users.ts:42` — `createUser()` |
+| R2  | PARTIAL | `src/api/users.ts:42` — basic only; MISSING duplicate-email handling |
+| R3  | UNMET   | no implementation found; searched src/api/, src/services/ |
+BODY
 spur task update <wbs> --section Review --from-file /tmp/<wbs>-functional.md
 rm /tmp/<wbs>-functional.md
 ```
 
-Section bodies passed to `spur task update --section` must be **body-only** — no same-level
-headings inside the body. Use bold labels or tables instead of `###` headings.
+For a PARTIAL/FAIL verdict, replace the P4 row with the actual P1–P3 findings ranked by severity.
+The priority table leads; the traceability table follows for per-requirement detail.
+
+Section bodies passed to `spur task update --section` must be **body-only** — no same-level (`##`)
+headings inside the body. Tables and bold labels are fine.
 
 ### Step 8 — Report
 
@@ -259,7 +279,7 @@ End the output with an explicit, parseable verdict line:
 Functional Verdict: PASS    (or PARTIAL / FAIL)
 ```
 
-Include the per-requirement traceability table:
+Include the per-requirement traceability table in the report:
 
 ```markdown
 | Req | Status | Evidence |
@@ -269,8 +289,12 @@ Include the per-requirement traceability table:
 | R3  | UNMET  | no implementation found; searched src/api/, src/services/ |
 ```
 
-**Under the pipeline**, the `record` step transcribes this output into the task's `## Review`
-section — keep the table structure stable.
+**Under the pipeline**, `sp:functional-review` is the review step dispatched by `/sp:dev-review`,
+so it owns `## Review` — its `--section Review` write is the authoritative source. The pipeline's
+`record` step transcribes only `## Testing` from the verify verdict (`code-verification/SKILL.md`,
+`task-record.ts:226-247`); it does not overwrite a non-bare `## Review` thanks to the
+`sectionIsBare` guard (`task-service.ts:485`). Keep the priority-table lead stable so the L3 gate
+stays satisfied through `record` → `done`.
 
 ---
 
@@ -295,7 +319,7 @@ verdict (standalone or pipeline), shape it as `FunctionalVerdict` — not `Verif
 ## Common Rationalizations
 
 | Rationalization | Reality |
-|---|---|
+| --- | --- |
 | "The requirement is obviously met — I can see it in the diff." | Seeing code is not evidence. A requirement is MET only when `file:line` evidence is cited. |
 | "All tests pass, so all requirements are covered." | Green tests prove the suite's assertions, not that every requirement has coverage. Map each requirement to its evidence. |
 | "The implementer reported it works — I'll trust the summary." | A subagent success report is a claim, not a verdict. Functional review **re-checks** the evidence; trusting the report skips the gate. |

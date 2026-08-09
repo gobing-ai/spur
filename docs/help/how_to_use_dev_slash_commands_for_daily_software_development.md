@@ -377,16 +377,15 @@ captured the learnings and synced the docs.
 
 ## Two cross-cutting flags
 
-**`--agent <name|auto>`** — pick which agent does the model work. Available on the
+**`--agent <inline|auto|name>`** — pick which agent does the model work. Available on the
 model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the
 AC/decomposition/ideation synthesis), and `dev-run`, `dev-verify`, `dev-unit`,
-`dev-review` (the pipeline/verification steps). Omit the flag and the default depends on
-the surface: **inline** commands (`dev-refine`/`dev-plan`/`dev-brainstorm`/`dev-unit`) run
-the model step in the current session (no subprocess); **pipeline** commands
-(`dev-run`/`dev-verify`/`dev-review`/`dev-runall`) forward nothing and the spawned step
-resolves to the configured default executor (`omp`) — "current agent" is not
-expressible there. `auto` resolves the current runtime to its canonical name; `<name>`
-(e.g. `codex`) is an explicit spawn.
+`dev-review` (the pipeline/verification steps). `inline` runs in-session, `auto`
+tier-resolves a subprocess executor, `<name>` pins that executor. See
+[cross-cutting.md](../../../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
+for the full value-semantics contract (one rule, value table, executor precedence chain,
+`implementAgent` override). Inline commands run the model step in the current session;
+pipeline commands' spawned steps resolve to the configured default executor (`omp`).
 
 > **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives*
 > other commands, its `--agent` sets the agent the **testee** runs under (forwarded into

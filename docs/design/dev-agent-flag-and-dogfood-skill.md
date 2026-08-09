@@ -6,14 +6,16 @@ Surface index: [`04_DESIGN.md §0`](../04_DESIGN.md), operations SSOT
 
 ## Task 0406 amendment — inline-default execution
 
-Model-bearing `/sp:dev-*` commands expose `--inline|--subprocess`; inline is the default when the
-operator invokes a command from a live coding-agent session. `--subprocess` forces
-`spur agent run`. A dispatch-surface trigger (different model/agent, headless/unattended, durable
-run record, or workspace/credential isolation) also forces subprocess and must be named; it
-overrides `--inline`. Direct `spur agent run` and workflow `agent.run` remain subprocess surfaces.
+Model-bearing `/sp:dev-*` commands expose the unified execution-surface selector
+`--agent <inline|auto|name>` (ADR-041/047); `inline` is the default when the operator invokes a
+command from a live coding-agent session. `--agent auto` / `--agent <name>` force `spur agent run`.
+A dispatch-surface trigger (different model/agent, headless/unattended, durable run record, or
+workspace/credential isolation) also forces subprocess and must be named; it overrides `inline`.
+Direct `spur agent run` and workflow `agent.run` remain subprocess surfaces.
 
-The operator selector remains `--agent <name|auto>` per task 0405's vocabulary boundary; an
-explicit different agent is trigger 1. Inline provides no isolated workspace, separate run record,
+The operator selector is `--agent <inline|auto|name>`; the former `--inline`/`--subprocess` flags
+and the legacy `current`/`inherit` tokens are collapsed/removed (ADR-041/047). An explicit different
+agent is trigger 1. Inline provides no isolated workspace, separate run record,
 independent timeout/abort boundary, or tier-selected executor. The current contract is
 `plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface`.
 
@@ -43,6 +45,8 @@ Two coupled gaps in the `/sp:dev-*` surface:
   `spur-dev/references/cross-cutting.md` (shared by both halves) + a "Honor `--agent`" note in
   `brainstorm/SKILL.md`. The rule: forward `--agent <value>` into every `spur agent run` call;
   `inherit` omits the flag (CLI default `auto`); no flag forwarded → bare call (prior behavior).
+  *(Task-0125-era vocabulary: `inherit` and `current` were later collapsed into `--agent inline`
+  by ADR-041 and removed as usable values by ADR-047 — see § Task 0406 amendment above.)*
 
 **Stream 2 — extract `sp:dogfood-testing`, enhance on the way out.**
 - New fat backbone skill `plugins/sp/skills/dogfood-testing/` (`SKILL.md` + `references/`), owning the

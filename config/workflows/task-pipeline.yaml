@@ -57,9 +57,11 @@ vars:
   # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
   # selection) so a broken/misconfigured agent on the box can't silently capture the run.
   agent: "omp"
-  # Implement-only executor override (R1, task 0454). Defaults to same as agent.
-  # Override with `--vars '{"implementAgent":"omp-zai"}'` to pin implement to a
-  # specific executor while other hops keep the default agent.
+  # Implement-only executor override (R1, task 0454). Resolves to this YAML literal
+  # unless overridden. The `--agent` flag (execution-batch.md §3.2) forwards into BOTH
+  # `agent` and `implementAgent`, so a pinned `--agent X` reaches implement too. To
+  # pin ONLY implement while other hops keep the default, pass
+  # `--vars '{"implementAgent":"omp-zai"}'`.
   implementAgent: "omp"
   # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
   # Soft quality-gate shells are unbounded by this var (host shell only).
@@ -90,6 +92,12 @@ vars:
   # project can point it at its own formatter; invoked best-effort (a missing or
   # failing formatter must never abort a run — the quality gate is the real gate).
   formatCmd: "bun run format"
+  # Bounded `file:line` anchors extracted from the failing quality-gate log by the
+  # `test` / `test-recheck` hops (deduped, max 20, space-separated on one line).
+  # `test-fix` reads `.spur/run/<wbs>-test-gate.findings` into this var and names the
+  # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
+  # file:line instead of re-deriving it from a fresh gate run (0482 R3).
+  gateFindings: ""
   # Max R-items in ## Requirements before size precheck fails (R2, task 0454).
   # Override with `--vars '{"maxImplementReqs":"12"}'`.
   maxImplementReqs: "5"
@@ -147,7 +155,7 @@ states:
             SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
             mkdir -p .spur/run &&
             bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
-            --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems" &&
+            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems" &&
             exit 0
 
   - id: implement
@@ -214,10 +222,14 @@ states:
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
+            LOG_FILE=".spur/run/$wbs-test-gate.log" &&
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             echo 0 > "$ATTEMPT_FILE" &&
             set +e &&
-            ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
+            ( sh -c "$qualityGateCmd" ) > "$LOG_FILE" 2>&1; gate_rc=$?; set -e &&
+            cat "$LOG_FILE" &&
+            FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
+            set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
@@ -238,10 +250,19 @@ states:
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
             printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
+      # R3 (0482): project the extracted gate anchors into a var so the dispatch input
+      # can NAME the failing file:line, not merely point at a log. A vars template cannot
+      # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-test-gate.findings
+          var: gateFindings
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-fixall "${vars.qualityGateCmd}"
+          # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
+          # the full-context escape hatch when the digest is not enough.
+          input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: test-recheck
@@ -256,8 +277,12 @@ states:
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
+            LOG_FILE=".spur/run/$wbs-test-gate.log" &&
             set +e &&
-            ( sh -c "$qualityGateCmd" ); gate_rc=$?; set -e &&
+            ( sh -c "$qualityGateCmd" ) > "$LOG_FILE" 2>&1; gate_rc=$?; set -e &&
+            cat "$LOG_FILE" &&
+            FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
+            set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else

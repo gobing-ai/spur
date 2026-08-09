@@ -16,6 +16,7 @@ import {
     formatActionCost,
     formatTraceTimeline,
     submitSteeringLine,
+    waitForRunRegistration,
 } from '../../src/commands/workflow';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -53,6 +54,25 @@ terminalStates:
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
+}
+
+/**
+ * Create an in-memory DB pre-seeded with a `runs` row so an `--async` launcher's
+ * registration confirmation (`waitForRunRegistration`) resolves. The detached worker
+ * spawned from the in-process test runner cannot register into this DB — its
+ * `resolveSpurBin()` points at the test entry, not the CLI — so seeding the row
+ * isolates flag-forwarding / started-message assertions from the child's real
+ * registration (task 0484 R2). The failure branch is covered directly by the
+ * `waitForRunRegistration` describe block.
+ */
+async function seededAsyncDb(runId: string) {
+    const db = await createMigratedDb({ url: ':memory:' });
+    const now = Date.now();
+    await db.run(
+        'INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [runId, 'cli-test-flow', 'async', 'running', now, '{}', now, now],
+    );
+    return db;
 }
 
 describe('workflow command (main)', () => {
@@ -1238,11 +1258,12 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-seeded-1');
 
-        const exitCode = await main(['workflow', 'run', '--async', workflowFile], {
+        const exitCode = await main(['workflow', 'run', '--async', '--run-id', 'async-seeded-1', workflowFile], {
             output,
             cwd: dir,
-            dbUrl: ':memory:',
+            db,
         });
 
         expect(exitCode).toBe(0);
@@ -1256,12 +1277,12 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-seeded-2');
 
-        const exitCode = await main(['workflow', 'run', '--async', '--json', workflowFile], {
-            output,
-            cwd: dir,
-            dbUrl: ':memory:',
-        });
+        const exitCode = await main(
+            ['workflow', 'run', '--async', '--json', '--run-id', 'async-seeded-2', workflowFile],
+            { output, cwd: dir, db },
+        );
 
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(output.messages[0] ?? '{}');
@@ -1276,15 +1297,15 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-seeded-3');
 
-        // --vars are forwarded to Bun.spawn cmd; we verify the parent exits
-        // cleanly (the child process is detached and may fail, but the parent
-        // doesn't wait for it).
-        const exitCode = await main(['workflow', 'run', '--async', '--vars', '{"wbs":"0116"}', workflowFile], {
-            output,
-            cwd: dir,
-            dbUrl: ':memory:',
-        });
+        // --vars are forwarded to the spawned command argv; the parent verifies the
+        // run registered (seeded) and exits cleanly (the child is detached and may
+        // fail, but the parent doesn't wait for it).
+        const exitCode = await main(
+            ['workflow', 'run', '--async', '--vars', '{"wbs":"0116"}', '--run-id', 'async-seeded-3', workflowFile],
+            { output, cwd: dir, db },
+        );
 
         expect(exitCode).toBe(0);
         expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
@@ -1296,12 +1317,12 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-seeded-4');
 
-        const exitCode = await main(['workflow', 'run', '--async', '--dry-run', workflowFile], {
-            output,
-            cwd: dir,
-            dbUrl: ':memory:',
-        });
+        const exitCode = await main(
+            ['workflow', 'run', '--async', '--dry-run', '--run-id', 'async-seeded-4', workflowFile],
+            { output, cwd: dir, db },
+        );
 
         expect(exitCode).toBe(0);
         expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
@@ -1313,11 +1334,12 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-custom-id');
 
         const exitCode = await main(['workflow', 'run', '--async', '--run-id', 'async-custom-id', workflowFile], {
             output,
             cwd: dir,
-            dbUrl: ':memory:',
+            db,
         });
 
         expect(exitCode).toBe(0);
@@ -1330,13 +1352,13 @@ failureStates:
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
+        const db = await seededAsyncDb('async-seeded-6');
         const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockResolvedValue({ exitCode: 0 } as never);
         try {
-            const exitCode = await main(['workflow', 'run', '--async', '--no-log', workflowFile], {
-                output,
-                cwd: dir,
-                dbUrl: ':memory:',
-            });
+            const exitCode = await main(
+                ['workflow', 'run', '--async', '--no-log', '--run-id', 'async-seeded-6', workflowFile],
+                { output, cwd: dir, db },
+            );
             expect(exitCode).toBe(0);
             expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
             expect(runSpy).toHaveBeenCalledTimes(1);
@@ -1709,6 +1731,108 @@ describe('formatTraceTimeline output artifact (task 0414)', () => {
     test('omits the artifact line when no capture exists', () => {
         const out = formatTraceTimeline(makeTimeline());
         expect(out).not.toContain('Agent output');
+    });
+});
+
+describe('waitForRunRegistration', () => {
+    test('returns true once the run row is traceable (0484 R2)', async () => {
+        const trace = async () => undefined;
+        await expect(waitForRunRegistration({ trace } as never, 'r', 1000, 50)).resolves.toBe(true);
+    });
+
+    test('returns false when the run never registers (phantom async spawn)', async () => {
+        const trace = async () => {
+            throw new Error('Run not found: r');
+        };
+        await expect(waitForRunRegistration({ trace } as never, 'r', 120, 30)).resolves.toBe(false);
+    });
+
+    test('SPUR_ASYNC_REGISTER_TIMEOUT_MS overrides the default budget; junk falls back', async () => {
+        // The default is only reachable via the CLI branch, so assert the parser directly
+        // through the exported helper: a tiny override must return false fast rather than
+        // waiting the built-in 5s, and an unparseable value must not disable the check.
+        const trace = async () => {
+            throw new Error('Run not found: r');
+        };
+        const prev = process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
+        try {
+            process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = '60';
+            const started = Date.now();
+            await expect(waitForRunRegistration({ trace } as never, 'r', undefined, 20)).resolves.toBe(false);
+            expect(Date.now() - started).toBeLessThan(2000);
+        } finally {
+            if (prev === undefined) delete process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
+            else process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = prev;
+        }
+    });
+});
+
+describe('async launcher failure branch (0484 R2)', () => {
+    // The helper is unit-tested above, but nothing covered what the COMMAND does when
+    // registration fails — which is where the contract actually lives: exit non-zero,
+    // name the sync fallback, and above all emit no run id. A phantom id in the JSON
+    // payload would let a machine caller poll a run that never existed, which is the
+    // whole failure R2 removes; it shipped unnoticed precisely because this gap existed.
+    const withFastTimeout = async (fn: () => Promise<void>) => {
+        const prev = process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
+        process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = '80';
+        try {
+            await fn();
+        } finally {
+            if (prev === undefined) delete process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
+            else process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = prev;
+        }
+    };
+
+    test('an unregistered async run exits non-zero with a sync-fallback hint and no run id', async () => {
+        await withFastTimeout(async () => {
+            const dir = await createTempProject();
+            const workflowFile = join(dir, 'workflow.yaml');
+            await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+            const output = createCapturedOutput();
+            // No seeded run row → the detached worker never registers → failure branch.
+            const db = await createMigratedDb({ url: ':memory:' });
+            const runId = 'phantom-run-text';
+
+            const exitCode = await main(['workflow', 'run', '--async', '--run-id', runId, workflowFile], {
+                output,
+                cwd: dir,
+                db,
+            });
+
+            expect(exitCode).toBe(1);
+            const text = output.messages.join('\n');
+            expect(text).toContain('async spawn failed');
+            expect(text).toContain('omit --async');
+            expect(text, 'must not hand back a run id trace cannot resolve').not.toContain(runId);
+            expect(text).not.toMatch(/^Started async run:/m);
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    test('--json failure payload carries status + hint and omits the phantom run id', async () => {
+        await withFastTimeout(async () => {
+            const dir = await createTempProject();
+            const workflowFile = join(dir, 'workflow.yaml');
+            await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+            const output = createCapturedOutput();
+            const db = await createMigratedDb({ url: ':memory:' });
+            const runId = 'phantom-run-json';
+
+            const exitCode = await main(['workflow', 'run', '--async', '--json', '--run-id', runId, workflowFile], {
+                output,
+                cwd: dir,
+                db,
+            });
+
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(output.messages[0] ?? '{}');
+            expect(parsed.status).toBe('failed');
+            expect(parsed.reason).toContain('failed to start or register');
+            expect(parsed.hint).toContain('omit --async');
+            expect(parsed, 'a machine caller reading .runId would poll a phantom run').not.toHaveProperty('runId');
+            await rm(dir, { recursive: true, force: true });
+        });
     });
 });
 

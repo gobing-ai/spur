@@ -818,6 +818,31 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         expect(artifact).toContain('git diff --stat');
     });
 
+    test('R4 (0482) — partial artifact names the dead agent session dir + latched session file', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = svcWithRunTraced({
+            exitCode: 1,
+            stdout: 'crashed mid-flight',
+            durationMs: 500,
+            invocation: invocation({ agent: 'pi' }),
+        });
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true, agent: 'pi' },
+            makeCtx({ runId: 'run-resume', stateOrNodeId: 'implement', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-resume-implement-partial.md');
+        const artifact = readFileSync(artifactPath, 'utf8');
+        // Resume-context block names the session dir (dead agent's transcript) and
+        // the latched session sidecar, so an operator can resume without re-deriving
+        // the output contract (RC3 — 0470/0471 manual-resume cost).
+        expect(artifact).toContain('## resume context');
+        expect(artifact).toContain('session dir:');
+        expect(artifact).toContain(join('.spur', 'run', 'run-resume', 'agent-sessions'));
+        expect(artifact).toContain(join('.spur', 'run', 'run-resume-agent-session.json'));
+    });
+
     test('captured non-timeout failure (plain non-zero exit) also writes the artifact', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({

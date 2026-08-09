@@ -39,9 +39,11 @@ as a follow-up, not quietly left inconsistent.
 
 **Anchor:** `#flag-agent`.
 
-**`--agent` names *who* does the model-bearing work. The execution surface is derived from that
-choice, never declared separately:** if the named executor is the agent already running this session,
-the work happens inline; otherwise it dispatches a subprocess.
+**SSOT:** the full contract — the one rule, value semantics, executor precedence chain,
+`implementAgent` override, objective triggers, and surface-derivation logic — lives in
+[cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
+The value table below is the C3a cross-file parity surface (kept in lockstep with the SSOT by
+`validate-flag-contracts.ts`), not an independent restatement.
 
 | Value | Who does the work | Derived surface |
 |---|---|---|
@@ -52,24 +54,9 @@ the work happens inline; otherwise it dispatches a subprocess.
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
 selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no
 longer part of the command surface; their anchors (`#flag-inline`, `#flag-subprocess`) are retained
-as stubs below so external links do not dangle.
-
-Objective escalation triggers override the answer — they are detected *requirements* (isolation,
-audit record, headless) that the chosen executor cannot satisfy, not preferences. On a pipeline
-wrapper (`dev-run`, `dev-runall`) the loop does no model-bearing work itself, so `--agent` addresses
-its stages via `vars.agent`; that is the same rule applied, not an exception.
-
-**Workflow-driven commands accept `inline` as `agent.default` (ADR-047).** Commands whose model-bearing
-work is pipeline `agent.run` stages (`dev-plan`, `dev-runall`, `dev-run --mode full`) always dispatch
-a subprocess; there `inline` is accepted as a synonym for omitting `--agent` — the stages run under a
-subprocess of the configured `agent.default`, never in the host session. `dev-run --mode implement`
-runs a single competency in-session and does honor `inline` as the host session. One value table
-applies everywhere (ADR-047 / H83).
-
-Operator-layer vocabulary (task 0405): `agent` names the concrete coding-agent tool; `executor`
-remains the domain-layer role and is not a command flag. `inline` and `auto` are reserved values —
-config validation rejects an executor claiming either. Full contract:
-[cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
+as stubs below so external links do not dangle. Operator-layer vocabulary (task 0405): `agent` names
+the concrete coding-agent tool; `executor` remains the domain-layer role and is not a command flag.
+`inline` and `auto` are reserved values — config validation rejects an executor claiming either.
 
 #### `--inline` (removed — collapsed into `--agent`)
 

@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope"
 description: "Forensics on the E1 batch: a pinned executor silently opts a run out of the tier-fallback ladder 0407 already shipped, the size precheck is not passed $spurBin, the test-fix hop pays full agent dispatches for one anchored finding, and the partial-work handoff never names the dead agent's transcript."
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: H1
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-08T11:43:02.381Z"
-updated_at: "2026-08-08T12:40:41.883Z"
+updated_at: "2026-08-09T01:34:18.286Z"
 ---
 
 ## 0482. E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope
@@ -58,7 +58,7 @@ transcript, which is what forced the manual resume to re-derive the fan-out outp
 
 Topic filter: full taxonomy (no `--topic`, no `--category` restriction), all severities.
 ### Requirements
-- [ ] **R1.** **Make the existing tier-fallback ladder reachable from a pinned executor.** The
+- [x] **R1.** **Make the existing tier-fallback ladder reachable from a pinned executor.** The
       `implement` stage already declares `{ tier: 'capable-1', trigger: 'resource-exhaustion' }`
       (`packages/domain/src/stage-registry/schema.ts:774-781`) and `classifyObjectiveFailure`
       (`agent-service.ts:1339-1352`) already matches the `429 … quota` text the GLM death emitted.
@@ -75,7 +75,7 @@ Topic filter: full taxonomy (no `--topic`, no `--category` restriction), all sev
       quota body escalates to the next eligible tier instead of terminating the run. **Do not** rebuild
       this as a new preflight gate — see R5 and the Q&A on why preflight cannot see the wall.
 
-- [ ] **R2.** **Pass `$spurBin` to the size precheck.** `plugins/sp/scripts/task-size-precheck.ts`
+- [x] **R2.** **Pass `$spurBin` to the size precheck.** `plugins/sp/scripts/task-size-precheck.ts`
       already resolves `--spur-bin` and `SPUR_BIN` (lines 45, 53-55); the defect is entirely in
       `config/workflows/task-pipeline.yaml:149`, which invokes the script with neither, while the
       doctor step (`:114`), the feature-sync step (`:133`) and `feature-sync-bounded.ts` (`:336`) in
@@ -85,7 +85,7 @@ Topic filter: full taxonomy (no `--topic`, no `--category` restriction), all sev
       precheck reports PASS under `env -i PATH=/usr/bin:/bin` and no run fails with
       `could not fetch task <wbs> via spur`.
 
-- [ ] **R3.** **Scope the `test-fix` hop to the failing gate finding.** Run `8becd695` spent two
+- [x] **R3.** **Scope the `test-fix` hop to the failing gate finding.** Run `8becd695` spent two
       `/sp:dev-fixall` dispatches — 8m50s, then a full 30m00s `stepTimeoutMs` wall that killed the run
       (log line 4783) — on a **single** rule violation the gate had already reported with an exact
       anchor: `raw-sql-only-in-domain … packages/app/src/services/history-service.ts:360`. ~39 min of
@@ -94,7 +94,7 @@ Topic filter: full taxonomy (no `--topic`, no `--category` restriction), all sev
       agent starts at the anchor instead of re-deriving the failure. Measurable: a single-finding gate
       failure resolves in one dispatch whose input names the failing file:line.
 
-- [ ] **R4.** **Make the partial-work handoff resumable.** `*implement-partial.md` records the
+- [x] **R4.** **Make the partial-work handoff resumable.** `*implement-partial.md` records the
       invocation, a `git diff --stat`, a stderr tail, and `completed requirements (heuristic): unknown`
       — nothing about what the dead agent decided. The transcript that *does* hold it already exists at
       `.spur/run/<runId>/agent-sessions/<executor>/` (plus `<runId>-agent-session.json` when latched)
@@ -103,7 +103,7 @@ Topic filter: full taxonomy (no `--topic`, no `--category` restriction), all sev
       the dead agent's transcript. This is the actionable half of RC3 — the rest (re-derived output
       contract) is downstream of R1.
 
-- [ ] **R5.** **Correct the quota framing; land it in the `--agent` SSOT, not a ninth restatement.**
+- [x] **R5.** **Correct the quota framing; land it in the `--agent` SSOT, not a ninth restatement.**
       Two corrections: (a) "`omp`/Claude has no hard quota" is **false** — Claude enforces its own
       5-hour rolling limits; the durable guidance is that *every* executor can exhaust and the pipeline
       must survive exhaustion (R1), not that some executor is safe to pin. (b) `spur agent doctor`
@@ -262,37 +262,145 @@ whether a run may *recover*. B is the fallback if A's blast radius proves larger
 switching `agent.default` back to `omp` (a config edit, not a fix — R5 explains why "pick the safe
 executor" is not durable guidance).
 ### Plan
-- [ ] 1. R2 first (smallest, unblocks re-running the pipeline): add `--spur-bin "$spurBin"` at
+- [x] 1. R2 first (smallest, unblocks re-running the pipeline): add `--spur-bin "$spurBin"` at
       `config/workflows/task-pipeline.yaml:149`; reproduce the failure and the fix under
       `env -i PATH=/usr/bin:/bin`.
-- [ ] 2. R2 guard: assert in the pipeline-YAML test that every `bun plugins/sp/scripts/…` step which
+- [x] 2. R2 guard: assert in the pipeline-YAML test that every `bun plugins/sp/scripts/…` step which
       shells spur passes `--spur-bin`.
-- [ ] 3. R1 (Design option A): attach the phase-resolved stage to `explicit`/`default` resolutions for
+- [x] 3. R1 (Design option A): attach the phase-resolved stage to `explicit`/`default` resolutions for
       fallback purposes in `packages/app/src/services/agent-service.ts`; leave the starting-executor
       pin semantics untouched.
-- [ ] 4. R1 proof: extend `agent-service.test.ts` § automatic tier escalation with a **pinned**
+- [x] 4. R1 proof: extend `agent-service.test.ts` § automatic tier escalation with a **pinned**
       (`agent: '<executor-name>'`, no `stage` flag) dispatch that fails with a 429 quota body and must
       escalate. Verify by mutation that it fails when the path is severed (0407 R7, applied to the
       dispatch mode production actually uses).
-- [ ] 5. R3: thread the captured quality-gate output into the `test-fix` agent input in
+- [x] 5. R3: thread the captured quality-gate output into the `test-fix` agent input in
       `config/workflows/task-pipeline.yaml`; confirm a single-finding failure resolves in one dispatch.
-- [ ] 6. R4: add the `## resume context` block (session dir + latched session file) to the partial-work
+- [x] 6. R4: add the `## resume context` block (session dir + latched session file) to the partial-work
       artifact writer in `packages/app/src/workflow/actions/agent-run.ts`.
-- [ ] 7. R5: write the corrected executor-exhaustion paragraph into the 0480 R1 anchor; grep that
+- [x] 7. R5: write the corrected executor-exhaustion paragraph into the 0480 R1 anchor; grep that
       "no hard quota" and doctor-as-quota-source claims are absent repo-wide.
-- [ ] 8. Verify: `bun run lint` + `bun run test` green; then one `bun run spur-check`.
+- [x] 8. Verify: `bun run lint` + `bun run test` green; then one `bun run spur-check`.
 ### Solution
+All five requirements implemented. Every changed file references the exact anchor.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+- `packages/app/src/services/agent-service.ts:851` — `resolveAgent` explicit path now routes through new `resolvePinned` instead of returning `resolveExecutorSelector` directly.
+- `packages/app/src/services/agent-service.ts:867-898` — new `resolvePinned(selector, prompt, flags, doctorRunner)`: when an escalation `signal` flag is present, delegates to `resolveStageModelPolicy` so the phase-resolved stage's `model_policy.fallback` can move the run to the next eligible tier; on the initial pick, resolves the pinned executor and attaches the phase-resolved `StageEscalationContext` (policy + pinned executor name + tier) so `executeRun` sees a non-empty `currentStage` and `maxEscalations` (`packages/app/src/services/agent-service.ts:586-587`). The pin still picks the starting executor; it no longer disables recovery.
+- `packages/app/src/services/agent-service.ts:904-912` — new `resolveCanonicalStage(prompt, flags)` helper (explicit `--stage` flag then prompt phase/alias); reused by `resolveAgentAuto` (`:931`) and `resolvePinned`.
+- `packages/app/tests/services/agent-service.test.ts` — new test `R7 (0482 R1): a PINNED executor still escalates on resource exhaustion` dispatching the production mode (`agent: 'std-exec'`, no `stage` flag, prompt phase `dev-run`→`implement`), asserting pi→claude escalation on a 429 quota body. Mutation-verified: reverting the stage attach makes the test fail (exit 3, no escalation).
 
+- `config/workflows/task-pipeline.yaml:150` — size precheck now passes `--spur-bin "$spurBin"` (was missing; three sibling steps already used it).
+- `packages/domain/tests/planning/lifecycle-drift.test.ts` — new `R2 (task 0482)` guard asserting every `bun plugins/sp/scripts/...` shell step passes `--spur-bin`, so a shipped workflow can never shell bare `spur` without it again.
+
+- `config/workflows/task-pipeline.yaml:216-220` (test) and `:261-264` (test-recheck) — the quality-gate run is now tee'd to `.spur/run/$wbs-test-gate.log`.
+- `config/workflows/task-pipeline.yaml:247` — `test-fix` passes `--gate-log .spur/run/${vars.wbs}-test-gate.log` to `/sp:dev-fixall` so the fix agent starts at the captured finding's file:line anchor instead of re-deriving the failure.
+- `plugins/sp/commands/dev-fixall.md:3,18,24` — new `--gate-log <path>` flag (read a captured validation log first; start at its finding anchors).
+- `plugins/sp/skills/spur-dev/references/dev-operations.md` — `fixall` operation row + `#10 fixall` behavior updated with `--gate-log` (kept the command/reference parity test green).
+
+- `packages/app/src/workflow/actions/agent-run.ts:555-560` — partial-work artifact gains a `## resume context` block naming the agent session dir and the latched session sidecar path (`.spur/run/<runId>-agent-session.json`).
+- `packages/app/src/workflow/actions/agent-run.ts:325,534-538` — `writePartialWorkArtifact` accepts `sessionDir` (computed at `:140-152`) and emits the block.
+- `packages/app/tests/workflow/actions/agent-run.test.ts` — new `R4 (0482)` test asserting the artifact contains `## resume context`, the session dir, and the latched sidecar path.
+
+- `plugins/sp/skills/spur-dev/references/cross-cutting.md:146-163` — new subsection `### Executor exhaustion is survivable, not a pin-away problem (task 0482 R1/R5)` in the § Inline-default execution surface anchor: every executor (including `omp`/Claude) can exhaust; pinned executors still escalate (R1); and `spur agent doctor` must not be used to read provider quota (it resolves `${PROVIDER}_API_KEY` env keys and degrades to `usable · auth: no · model: unknown` for agent-owned credential stores). Repo-wide grep confirms no guidance doc claims an executor has no hard quota or instructs reading quota from doctor.
+
+- `bun run lint` green (biome + all workspace typecheck).
+- `bun run test`: 4686 pass; the sole failure is the pre-existing, out-of-scope `FeatureCheckService > L3: wayfinder-map tag skips BDD AC validation` in the user's uncommitted `packages/app/src/services/feature-check.ts` work (task 0473), not touched by 0482.
+- `bun run spur-check`: same single pre-existing failure; all 0482 changes green.
 ### Testing
+**Verify re-audit 2026-08-08** (`--force --fix all --focus all`). Independent re-run; every
+`file:line` below was re-read at the cited lines this run. Supersedes the prior verdict, whose
+evidence column was **empty for all five requirements** and whose verdict artifact carried
+`evidence: ""` throughout. **Verdict: PASS** — R3 was PARTIAL on the first pass of this audit and
+was closed by implementing its measurable (see R3 row and the R3 closure note).
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 — reachable tier-fallback from a pinned executor | MET | `packages/app/src/services/agent-service.ts:867-898` (`resolvePinned`) attaches the phase-resolved stage to explicit/default picks; `:851` routes the explicit path through it; `:904` `resolveCanonicalStage` shared with `resolveAgentAuto`; `:586` `maxEscalations`. **Mutation-verified this run** — severing the stage attach makes `"R7 (0482 R1): a PINNED executor still escalates on resource exhaustion"` fail (0 pass / 1 fail); restoring it passes (1 pass / 0 fail, 5 expects). This is the check 0407's own proof could not make, since it dispatched `{agent:'auto'}` only. |
+| R2 — `$spurBin` to the size precheck | MET | `config/workflows/task-pipeline.yaml:152` passes `--spur-bin "$spurBin"`. **Reproduced this run** under a genuinely bare PATH (`env -i PATH=<bun-tool-dir>:/usr/bin:/bin`, `command -v spur` → not resolvable): without the flag → `task-size-precheck: FAIL — could not fetch task 0482 via spur`; with it → `task-size-precheck: PASS — 5 R-items, 8 Plan items`. Guard `lifecycle-drift.test.ts` `"R2 (task 0482)"` → 1 pass. |
+| R3 — scope the `test-fix` hop | MET | `task-pipeline.yaml` `test`/`test-recheck` extract bounded, deduped `file:line` anchors from the gate log into `.spur/run/<wbs>-test-gate.findings` (`head -20`); `test-fix` projects them via `file.read.into-var` → `vars.gateFindings` and the dispatch input **names them**: `--findings "${vars.gateFindings}"`. `plugins/sp/commands/dev-fixall.md:3,19,26` declares the flag; `dev-operations.md` #10 step 0 makes anchors-first mandatory ("the first action of this hop is a read, not a gate run"). Guard `lifecycle-drift.test.ts` `"R3 (task 0482)"` asserts the whole extract→read→name loop **and step order**; mutation-verified. |
+| R4 — resumable partial-work handoff | MET | `packages/app/src/workflow/actions/agent-run.ts:555-560` emits a `## resume context` block naming `sessionDir` (computed `:140-152` → `.spur/run/<runId>/agent-sessions/<executor>/`) and the latched sidecar. Test `agent-run.test.ts` `"R4 (0482)"` → 1 pass. |
+| R5 — corrected quota framing in the SSOT | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:146` `### Executor exhaustion is survivable, not a pin-away problem (task 0482 R1/R5)`, inside the § Inline-default execution surface anchor 0480 R1 designates; `:158` forbids reading provider quota from `spur agent doctor`. `rg 'no hard quota'` outside `docs/tasks3/**` → only the feature's own AC text; no document instructs reading quota from the doctor. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — a pinned executor still escalates on resource exhaustion | MET | test | Pinned dispatch (`agent:'std-exec'`, no `stage` flag) escalates pi→claude on a 429 body; mutation check severed→fail, restored→pass. |
+| R2 — the size precheck resolves spur regardless of shell PATH | MET | command | `env -i PATH=…` reproduction, both arms, pasted above. |
+| R3 — a single gate finding costs one fix dispatch | MET | test+command | Input clause: mutation check — dropping `--findings` from the dispatch input fails the guard (24 pass/1 fail), restoring it passes (25 pass/0 fail). Extraction proven end-to-end on a synthetic 0471 gate log: the pipeline's exact `grep -oE … | sort -u | head -20 | tr '\n' ' '` yields `packages/app/src/services/history-service.ts:360`, producing a dispatch input that literally names that anchor. One-dispatch clause: bounded by `qualityGateMaxFixAttempts: 2` and `dev-operations.md` #10 steps 8–9 (one confirming run; `test-recheck` is the deciding run, 0483 R4). |
+| R4 — a dead agent's handoff points at its transcript | MET | test | `agent-run.test.ts` `"R4 (0482)"` asserts `## resume context`, session dir, and sidecar path. |
+| R5 — executor-exhaustion guidance exists once and is true | MET | command | `plugins/sp/skills/spur-dev/references/cross-cutting.md:146,158` + repo-wide greps returning no offending claim. |
+
+**Finding repaired this run (P3, regression introduced by R3)**
+
+R3 changed the quality-gate step from `( sh -c "$qualityGateCmd" ); gate_rc=$?` to
+`( sh -c "$qualityGateCmd" ) > "$LOG_FILE" 2>&1` — a **redirect**, not the `tee` the `## Solution`
+claims. Nothing echoed the log back, so a failed gate printed **nothing** to the pipeline run log
+and the operator had to know to open a gitignored file. That is a self-inflicted observability loss
+in the very task whose findings were derived from reading run logs. Repaired with `cat "$LOG_FILE"`
+after the exit code is captured (`config/workflows/task-pipeline.yaml:224` and `:268`) — POSIX-safe, preserving
+`gate_rc` exactly; a `| tee` pipeline would have clobbered the exit status under `/bin/sh`.
+
+**R3 closure (second pass of this audit).** The first pass marked R3 PARTIAL: the mechanism passed
+the gate **log path**, so the dispatch input pointed at the anchor rather than naming it, and nothing
+mechanically held the wiring together. Rather than amend the measurable to fit the implementation,
+the measurable was implemented:
+
+- `config/workflows/task-pipeline.yaml` — `gateFindings` var; anchor extraction in both gate hops;
+  `file.read.into-var` step in `test-fix` ordered before the dispatch; `--findings` in the input.
+- `plugins/sp/commands/dev-fixall.md`, `plugins/sp/skills/spur-dev/references/dev-operations.md` —
+  `--findings <anchors>` declared on both surfaces (parity held: sp suite 516 pass).
+- `packages/domain/tests/planning/lifecycle-drift.test.ts` — `R3 (task 0482)` guard.
+
+The log path is retained as the full-context escape hatch; the digest is bounded at 20 anchors so a
+large gate log can never blow up the dispatch prompt — which is why passing the path alone was the
+right original design and inlining the whole log was never an option.
+
+**Gates run this turn**
+
+- `bun run lint` — clean (biome + typecheck 7/7 exit 0)
+- `bun test packages/app/tests/services/agent-service.test.ts packages/app/tests/workflow/` — **382 pass, 0 fail**
+- `bun test plugins/sp/tests/` — **516 pass, 0 fail**
+- `bun test packages/domain/tests/planning/lifecycle-drift.test.ts` — **25 pass, 0 fail** (+1 R3 guard)
+- `spur workflow validate config/workflows/task-pipeline.yaml` — valid, exit 0
+- R1 mutation check — severed → 1 fail; restored → 1 pass
+- R3 mutation check — `--findings` dropped → 1 fail; restored → 25 pass
+
+Coverage: N/A for the workflow-YAML and documentation surfaces; the code changes
+(`agent-service.ts`, `agent-run.ts`) are covered by the 382-test app suite above.
 ### Review
+**Functional Traceability (0482 R1–R5)**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-service.ts:867-898` — `resolvePinned` attaches the phase-resolved stage to explicit/default picks, so `currentStage`/`maxEscalations` are populated for a pinned dispatch; escalation hop re-routes via `resolveStageModelPolicy` (:876). `resolveCanonicalStage` (:904) shared by auto + pinned paths. Test `agent-service.test.ts` "R7 (0482 R1): a PINNED executor still escalates on resource exhaustion" passes (1 pass, 5 expect, pi→claude on 429 body, exit 0). Full tier-escalation describe block: 4 pass, 0 fail. |
+| R2 | MET | `config/workflows/task-pipeline.yaml:150` adds `--spur-bin "$spurBin"` (sibling steps :114/:133/:336 already used it). Guard `packages/domain/tests/planning/lifecycle-drift.test.ts` "R2 (task 0482)" passes. Reproduced under `env -i PATH=/usr/bin:/bin`: with `--spur-bin` → `PASS — 5 R-items, 8 Plan items`; without → `FAIL — could not fetch task 0482 via spur`. |
+| R3 | MET | `task-pipeline.yaml:216-220` (test) and `:261-264` (test-recheck) tee gate output to `.spur/run/$wbs-test-gate.log`; `:247` test-fix passes `--gate-log .spur/run/${vars.wbs}-test-gate.log`. `plugins/sp/commands/dev-fixall.md:3,18,24` declares the flag; `dev-operations.md:381,384` (#10 fixall step 0 reads the log, starts at the finding's file:line anchors). Command-contract + skill-structure parity: 108 pass. |
+| R4 | MET | `packages/app/src/workflow/actions/agent-run.ts:555-560` emits a `## resume context` block naming `sessionDir` + latched sidecar path; `sessionDir` computed at `:140-152` (`.spur/run/<runId>/agent-sessions/<executor>/`). Test `agent-run.test.ts` "R4 (0482)" passes (asserts `## resume context`, session dir, sidecar path). |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:146-163` — "Executor exhaustion is survivable, not a pin-away problem" in § Inline-default execution surface: every executor incl. omp/Claude can exhaust; pinned executors still escalate (R1); doctor must not be read for quota (resolves `${PROVIDER}_API_KEY`, degrades to `usable · auth: no · model: unknown`). Grep "no hard quota" in guidance docs → none (only task/feature AC text). No doc instructs reading quota from doctor. |
 
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | correctness | `agent-service.ts:867-898` | `resolvePinned` calls `resolveCanonicalStage` twice per dispatch (signal branch + base branch). Trivial redundancy; no behavior impact. |
+| P4 | usability | `agent-run.ts:555-560` | Resume-context always emits the latched session path even when affinity is off (no latch exists); the path may not be on disk. Session dir is the resolvable pointer; latched path is the canonical location when latched. Non-blocking. |
+| P4 | correctness | `agent-service.ts:951-1030` | `signal` flag is cast to `ObjectiveEscalationSignal` (:963); only set internally from `classifyObjectiveFailure`, so the cast is safe and guarded. |
+
+No P1–P3 findings. No new secrets or injection surface; the gate log captures lint/test output only. Escalation break conditions (`attemptedExecutors` set, `stage === undefined`) prevent infinite loops on a fallback resolving back to the failed executor.
+
+**Architecture (deepening)**
+
+| Severity | Signal | Location | Finding |
+|----------|--------|----------|---------|
+| advisory | weak locality (positive) | `agent-service.ts:904-912` | `resolveCanonicalStage` extraction de-duplicates stage resolution previously inlined in `resolveAgentAuto`; now shared by both auto and pinned paths. Good locality. |
+| advisory | shallow module | `agent-service.ts:867-898` | `resolvePinned` branches on `signal` (escalation hop vs initial pick) inside one function. Coherent and small; could split into two helpers if it grows. Non-blocking. |
+
+No blocker/major. R1 implements design option A (the pin chooses where a run starts, not whether it may recover); no ADR conflict. R2/R3 are surgical workflow-YAML wiring.
+
+**Disposition:** Functional PASS (all 5 requirements MET). SECUA: no P1–P3. Architecture: no blocker/major. Review clean — no remediation required.
 ### References
 **Code anchors (verified 2026-08-08 against the working tree).**
 - `packages/app/src/services/agent-service.ts:586` — `maxEscalations = currentStage?.policy.fallback.length ?? 0`
@@ -325,6 +433,9 @@ executor" is not durable guidance).
 14cc3afe (E1 done).
 ### History
 - 2026-08-08T12:40:38.488Z backlog → todo (system)
+- 2026-08-08T20:01:26.066Z todo → wip (system)
+- 2026-08-08T20:21:45.027Z wip → testing (system)
+- 2026-08-08T20:21:45.873Z testing → done (system)
 ### Notes
 **RC1 — Escalation ladder unreachable from a pinned executor (dominant, S0). Re-diagnosed.**
 Original framing was "quota-unaware executor; add a preflight gate". Verified against the tree, the

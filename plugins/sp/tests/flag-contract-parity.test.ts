@@ -17,10 +17,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
     bootMain,
+    checkAgentSsotIntegrity,
     checkAgentValueTables,
     checkDefaultsParity,
     checkGlossaryMembership,
+    checkSsotAnchorsResolve,
     extractTriggerTable,
+    headingAnchors,
+    headingSlug,
     parseCliArgs,
     renderHelp,
     runCli,
@@ -424,6 +428,166 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
 
         test('extractTriggerTable returns null when the table is absent', () => {
             expect(extractTriggerTable('## Inline-default execution surface\n\nno table here')).toBeNull();
+        });
+    });
+    // ─── C4: --agent SSOT integrity (task 0480 / R8) ────────────────────────
+
+    describe('C4: --agent SSOT integrity gate (task 0480 / R8)', () => {
+        const SSOT_TABLE = [
+            '| Value | Who does the work | Derived surface |',
+            '|---|---|---|',
+            '| `inline` | current coding-agent session | `--subprocess` omitted |',
+            '| `auto` | tier-resolved executor | `--subprocess <name>` |',
+            '| `<name>` | named executor | `--subprocess <name>` |',
+            '',
+        ].join('\n');
+
+        const PARAPHRASED_TABLE = [
+            '| Option | Description |',
+            '|---|---|',
+            '| `inline` | Run in current session |',
+            '| `auto` | Resolve executor automatically |',
+            '| `<name>` | Use named executor |',
+            '',
+        ].join('\n');
+
+        test('clean: SSOT file (cross-cutting.md) is exempt', () => {
+            const files = new Map<string, string>([['cross-cutting.md', SSOT_TABLE]]);
+            expect(checkAgentSsotIntegrity(files)).toEqual([]);
+        });
+
+        test('clean: parity surface (flag-glossary.md) is exempt', () => {
+            const files = new Map<string, string>([['flag-glossary.md', SSOT_TABLE]]);
+            expect(checkAgentSsotIntegrity(files)).toEqual([]);
+        });
+
+        test('clean: non-exempt file without the value table produces no violation', () => {
+            const files = new Map<string, string>([
+                ['execution-workflow.md', '## Some section\n\nNo table here, just prose about --agent.'],
+            ]);
+            expect(checkAgentSsotIntegrity(files)).toEqual([]);
+        });
+
+        test('clean: dev-operations.md operation map (1 token, different context) is not flagged', () => {
+            // This is the known false-positive vector: dev-operations.md has a single `inline`
+            // in its operation map table, which is about command types, not --agent values.
+            const files = new Map<string, string>([
+                ['dev-operations.md', '| Command | Type | Default |\n|---|---|---|\n| `inline` | dev | session |'],
+            ]);
+            expect(checkAgentSsotIntegrity(files)).toEqual([]);
+        });
+
+        test('dirty: non-exempt file restating all three values is flagged', () => {
+            const files = new Map<string, string>([['execution-workflow.md', `## --agent\n\n${PARAPHRASED_TABLE}`]]);
+            const violations = checkAgentSsotIntegrity(files);
+            expect(violations).toHaveLength(1);
+            expect(violations[0].gate).toBe('C4');
+            expect(violations[0].flag).toBe('--agent');
+            expect(violations[0].surfaces[0].name).toBe('execution-workflow.md');
+        });
+
+        test('dirty: cmd_agent.md restating the value table is flagged', () => {
+            const files = new Map<string, string>([['cmd_agent.md', `# --agent\n\n${PARAPHRASED_TABLE}`]]);
+            const violations = checkAgentSsotIntegrity(files);
+            expect(violations).toHaveLength(1);
+            expect(violations[0].gate).toBe('C4');
+            expect(violations[0].surfaces[0].name).toBe('cmd_agent.md');
+        });
+
+        test('dirty: one violation per file even if multiple tables match', () => {
+            const files = new Map<string, string>([
+                ['execution-workflow.md', `${PARAPHRASED_TABLE}\nprose\n${PARAPHRASED_TABLE}`],
+            ]);
+            expect(checkAgentSsotIntegrity(files)).toHaveLength(1);
+        });
+
+        test('dirty: violation message references SSOT anchor', () => {
+            const files = new Map<string, string>([['execution-workflow.md', PARAPHRASED_TABLE]]);
+            const violations = checkAgentSsotIntegrity(files);
+            expect(violations[0].message).toContain('cross-cutting.md');
+            expect(violations[0].message).toContain('SSOT anchor');
+        });
+    });
+
+    // ─── C5: SSOT anchor resolution (task 0480 / R1 regression guard) ───────
+
+    describe('C5: SSOT anchor resolution gate (task 0480 / R1)', () => {
+        const SSOT_DOC = [
+            '# Cross-cutting Rules',
+            '',
+            '## Inline-default execution surface',
+            '',
+            '### Executor precedence chain (R7)',
+            '',
+            '## Verification Before Completion',
+            '',
+        ].join('\n');
+
+        test('headingSlug matches GitHub slugging for the SSOT headings', () => {
+            expect(headingSlug('Inline-default execution surface')).toBe('inline-default-execution-surface');
+            expect(headingSlug('Executor precedence chain (R7)')).toBe('executor-precedence-chain-r7');
+        });
+
+        test('headingAnchors collects every heading level', () => {
+            expect(headingAnchors(SSOT_DOC)).toEqual(
+                new Set([
+                    'cross-cutting-rules',
+                    'inline-default-execution-surface',
+                    'executor-precedence-chain-r7',
+                    'verification-before-completion',
+                ]),
+            );
+        });
+
+        test('clean: a link to a real heading produces no violation', () => {
+            const files = new Map<string, string>([
+                ['dev-operations.md', 'See [SSOT](cross-cutting.md#inline-default-execution-surface).'],
+            ]);
+            expect(checkSsotAnchorsResolve(SSOT_DOC, files)).toEqual([]);
+        });
+
+        test('clean: a file with no cross-cutting link produces no violation', () => {
+            const files = new Map<string, string>([['execution-batch.md', 'prose about --agent, no links']]);
+            expect(checkSsotAnchorsResolve(SSOT_DOC, files)).toEqual([]);
+        });
+
+        // The exact 0480 defect: the intended heading was `Inline-default execution surface
+        // (SSOT for --agent)`, links were written against its slug, the heading never changed.
+        test('dirty: the 0480 dangling anchor is flagged', () => {
+            const files = new Map<string, string>([
+                [
+                    'dev-operations.md',
+                    'See [SSOT](cross-cutting.md#inline-default-execution-surface-ssot-for---agent).',
+                ],
+            ]);
+            const violations = checkSsotAnchorsResolve(SSOT_DOC, files);
+            expect(violations).toHaveLength(1);
+            expect(violations[0].gate).toBe('C5');
+            expect(violations[0].surfaces[0].name).toBe('dev-operations.md');
+            expect(violations[0].message).toContain('inline-default-execution-surface-ssot-for---agent');
+        });
+
+        // Why C5 exists: substring assertions cannot catch this class, because the correct
+        // short anchor is a prefix of the wrong long one.
+        test('dirty: a dangling anchor that contains the valid anchor as a prefix is still flagged', () => {
+            const link = 'cross-cutting.md#inline-default-execution-surface-ssot-for---agent';
+            expect(link).toContain('cross-cutting.md#inline-default-execution-surface');
+            expect(checkSsotAnchorsResolve(SSOT_DOC, new Map([['f.md', link]]))).toHaveLength(1);
+        });
+
+        test('dirty: one violation per distinct anchor, not per occurrence', () => {
+            const files = new Map<string, string>([
+                [
+                    'dev-operations.md',
+                    ['cross-cutting.md#nope', 'cross-cutting.md#nope', 'cross-cutting.md#also-no'].join('\n'),
+                ],
+            ]);
+            expect(checkSsotAnchorsResolve(SSOT_DOC, files)).toHaveLength(2);
+        });
+
+        test('live tree: every cross-cutting.md#anchor link across the sp surfaces resolves', () => {
+            const { violations } = validate();
+            expect(violations.filter((v) => v.gate === 'C5')).toEqual([]);
         });
     });
 });

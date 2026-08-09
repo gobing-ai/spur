@@ -1,6 +1,6 @@
 ---
 description: Fix all lint, type, and test errors systematically across the working tree
-argument-hint: "[<validation-command>] [--max-retry <n>] [--scope <path>]"
+argument-hint: "[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
@@ -15,14 +15,19 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 | `[<validation-command>]` | Validation command to iterate against. | project gate |
 | `--max-retry` `<n>` | Max fix iterations. | 3 |
 | `--scope` `<path>` | Scope fixes to a path. | entire working tree |
+| `--gate-log` `<path>` | Read a captured validation-run log first; start fixes at the finding anchors it names (R3, task 0482) instead of re-deriving the failure. | none |
+| `--findings` `<anchors>` | Space-separated `file:line` anchors already extracted from the gate log (R3, task 0482). Fix these first, in order; they are the authoritative list of what broke. | none |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
-/sp:dev-fixall [<validation-command>] [--max-retry <n>] [--scope <path>]
+/sp:dev-fixall [<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]
 
 ## Implementation
 
-Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) (fixall).
+Under the pipeline, the `test-recheck` state runs the full gate immediately after this hop — that is
+the deciding run. Fixall bounds itself to **one confirming gate run** (R4, task 0483); use targeted
+probes (`bun test <file> --test-name-pattern <test>`) during fix loops, never re-run the full gate
+per fix. `qualityGateCmd` itself is unchanged so `test-recheck` still runs the full gate.
 

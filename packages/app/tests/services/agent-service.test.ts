@@ -2105,6 +2105,52 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
     });
 
+    test('R7 (0482 R1): a PINNED executor still escalates on resource exhaustion', async () => {
+        // The pipeline pins a concrete executor (`agent: ${vars.implementAgent}`),
+        // not the literal `auto`. Before 0482 the pin resolved with no stage, so
+        // `currentStage`/`maxEscalations` were 0 and the run died instead of
+        // recovering. This test dispatches the production mode: a pinned executor
+        // name, no `stage` flag — the stage is derived from the prompt phase.
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, escalationConfig);
+
+        // Sequential runner: first dispatch (pi) fails with a 429 quota body,
+        // second dispatch (claude) succeeds.
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: '429 Usage limit reached for 5 hour' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        // Pinned executor (no `stage` flag) — phase resolves implement from the prompt.
+        const code = await svc.run(
+            '/skill:sp-dev-run --mode implement 0482 --auto',
+            { agent: 'std-exec', json: false },
+            deps,
+        );
+
+        // Escalation succeeded → exit code 0; two dispatches pi → claude.
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        const dispatchedAgents = runPromptCommand.mock.calls.map((c) => c[0] as string);
+        expect(dispatchedAgents).toEqual(['pi', 'claude']);
+        expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
+        expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
+    });
+
     test('R4/R6: chain exhaustion is reported honestly and bounded', async () => {
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, escalationConfig);

@@ -186,6 +186,12 @@ export class FeatureService {
      * keys are rejected so `--field status` cannot bypass the lifecycle FSM,
      * the History append, and the `feature.transitioned` event (mirrors
      * `TaskService.updateField`'s guard).
+     *
+     * The `tags` field is an array (`z.array(z.string())`) and the scalar
+     * `setFrontmatterField` path would write a quoted string that fails the
+     * schema on re-parse. Route `tags` through the array write path instead —
+     * comma-split the value so `--field tags --value wayfinder-map` and
+     * `--field tags --value a,b` both round-trip as a YAML list (task 0473 R6).
      */
     async update(id: string, key: string, value: string): Promise<WriteResult> {
         const protectedKeys = new Set(['status', 'id', 'schema_version', 'created_at', 'updated_at']);

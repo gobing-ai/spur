@@ -75,8 +75,10 @@ hands the loaded def to the engine — so validate/run share one `$schema` resol
 and do not fall through to a stale published package path under ancestor `node_modules`.
 
 When no `agent` is set in `--vars`, `agent.default` from `.spur/config.yaml` is injected so
-pipeline `agent.run` stages pick up the project default (YAML literal is last fallback;
-explicit `--vars '{"agent":…}'` wins).
+pipeline `agent.run` stages pick up the project default. The `--agent` value-semantics contract
+(one rule, executor precedence chain, `implementAgent` override) lives in
+[cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface);
+precedence: explicit `--vars '{"agent":…}'` → pinned workflow var → `agent.default`.
 
 ### Examples
 

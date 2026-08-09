@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Comprehensive cleanup of the --agent execution-surface contract: collapse duplicated definitions to one SSOT and purge ADR-041/046-era stale"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: H1
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-08T04:29:03.555Z"
-updated_at: "2026-08-08T04:37:57.905Z"
+updated_at: "2026-08-09T01:34:47.996Z"
 ---
 
 ## 0480. Comprehensive cleanup of the --agent execution-surface contract: collapse duplicated definitions to one SSOT and purge ADR-041/046-era stale
@@ -52,7 +52,7 @@ behavioral question (should headless `inline` resolve to the calling agent rathe
 `agent.default`?) is deliberately deferred to a successor task so the cleanup can land without an
 ADR amendment blocking it.
 ### Requirements
-- [ ] **R1 — One SSOT for the `--agent` value table.** Designate
+- [x] **R1 — One SSOT for the `--agent` value table.** Designate
       `plugins/sp/skills/spur-dev/references/cross-cutting.md` § Inline-default execution surface as
       the single normative definition of `--agent` values and their derived surfaces. Every other
       prose restatement — `flag-glossary.md`, `execution-workflow.md`, `dev-operations.md`,
@@ -60,14 +60,14 @@ ADR amendment blocking it.
       pointer to that anchor instead of a paraphrase. Measurable: exactly one file states the value
       table; a grep for the table's distinguishing phrases returns one definition plus links.
 
-- [ ] **R2 — Delete the false `--agent auto` claim.** `execution-batch.md:223` states that
+- [x] **R2 — Delete the false `--agent auto` claim.** `execution-batch.md:223` states that
       `--agent auto` "resolves the current runtime to its canonical name before merging."
       `AgentService.resolveAgentAuto` (`packages/app/src/services/agent-service.ts:860-889`)
       resolves stage `model_policy` → `agent.default` → tier priority, and performs no runtime
       detection. Correct the sentence to match the code. Measurable: no shipped document claims
       `auto` detects the calling agent.
 
-- [ ] **R3 — Purge dead tokens from documentation.** `current` and `inherit` are legacy, superseded
+- [x] **R3 — Purge dead tokens from documentation.** `current` and `inherit` are legacy, superseded
       by `inline`, and now resolve as unknown executor names (exit 2 —
       `packages/app/tests/services/agent-service.test.ts:646-656`). Remove or explicitly mark them
       as removed in `docs/help/cmd_agent.md` and
@@ -75,20 +75,20 @@ ADR amendment blocking it.
       and do not introduce a new synonym (`self`, `same`) for the same meaning. Measurable: no
       document presents `current` or `inherit` as a usable value.
 
-- [ ] **R4 — Consolidate duplicated host-agent detection.** `resolveAgentHint()` exists twice
+- [x] **R4 — Consolidate duplicated host-agent detection.** `resolveAgentHint()` exists twice
       (`plugins/sp/hooks/context-session-start.ts:18-24` and the inlined candidate chain in
       `plugins/sp/hooks/pi/guard-extension.ts`). Extract one shared helper and have both call it.
       Record in the code that this helper is the only host-agent identification path, so a future
       change cannot again conclude the capability is absent. Measurable: one definition of the
       candidate chain; both hooks consume it.
 
-- [ ] **R5 — Reconcile the ADR chain.** ADR-041 and ADR-046 remain readable but must be
+- [x] **R5 — Reconcile the ADR chain.** ADR-041 and ADR-046 remain readable but must be
       unambiguously marked superseded at the point of every surviving cross-reference, and ADR-047
       must be the only entry a reader lands on for current semantics. Audit each ADR-041 / ADR-046
       citation outside `docs/00_ADR.md` and repoint or annotate it. Measurable: no non-ADR document
       cites a superseded ADR as current authority.
 
-- [ ] **R6 — Document `implementAgent` or remove it.** `config/workflows/task-pipeline.yaml:63`
+- [x] **R6 — Document `implementAgent` or remove it.** `config/workflows/task-pipeline.yaml:63`
       defines `implementAgent` (default `"omp"`), which the implement stage consumes via
       `${vars.implementAgent}` (`:169`). It appears in **no** skill or command document, so
       `--agent <name>` — which maps only to `vars.agent` — silently leaves the implement hop on the
@@ -96,14 +96,14 @@ ADR amendment blocking it.
       `--agent` set both vars. Measurable: an operator redirecting the pipeline with one documented
       mechanism moves the implement stage too.
 
-- [ ] **R7 — Correct the `agent.default` attribution.** Documents and prior analyses attribute the
+- [x] **R7 — Correct the `agent.default` attribution.** Documents and prior analyses attribute the
       pipeline's executor to `.spur/config.yaml` `agent.default`. The pipeline actually pins
       `agent: "omp"` at `config/workflows/task-pipeline.yaml:59`, which overrides the configured
       default (`omp-zai-volc`). State the real precedence — `--agent` / explicit `--vars` → pinned
       workflow var → `agent.default` → tier priority — once, in the SSOT. Measurable: the precedence
       chain appears in one place and names the pinned var.
 
-- [ ] **R8 — Parity gate for the `--agent` contract.** Extend the existing cross-surface flag parity
+- [x] **R8 — Parity gate for the `--agent` contract.** Extend the existing cross-surface flag parity
       gate (`plugins/sp/scripts/validate-flag-contracts.ts`, already enforcing glossary
       declaring-commands equality) to fail when a document restates the `--agent` value table
       instead of linking to the SSOT anchor. Without a mechanical check, R1 decays on the next ADR.
@@ -262,36 +262,172 @@ No `--agent` behavior change, no ADR amendment, no new flag values, no change to
 `model_policy` routing. The behavioral question (headless `inline` → calling agent) is a successor
 task; this cleanup is its precondition, not its vehicle.
 ### Plan
-- [ ] **P1 — Fix the two factual errors first.** Correct `execution-batch.md:223` (R2) and the dead
+- [x] **P1 — Fix the two factual errors first.** Correct `execution-batch.md:223` (R2) and the dead
       `current` / `inherit` documentation (R3). These are standalone and unblock nothing, so they
       land immediately and stop the misinformation.
-- [ ] **P2 — Establish the SSOT.** Confirm `cross-cutting.md` § Inline-default execution surface is
+- [x] **P2 — Establish the SSOT.** Confirm `cross-cutting.md` § Inline-default execution surface is
       complete and correct, adding the precedence chain (R7) and `implementAgent` (R6). (R1)
-- [ ] **P3 — Collapse the restatements.** Replace paraphrases in `flag-glossary.md`,
+- [x] **P3 — Collapse the restatements.** Replace paraphrases in `flag-glossary.md`,
       `execution-workflow.md`, `dev-operations.md`, `docs/help/cmd_agent.md`,
       `docs/help/cmd_workflow.md` with pointers to the SSOT anchor. (R1)
-- [ ] **P4 — Consolidate host-agent detection.** Extract one shared `resolveAgentHint` helper;
+- [x] **P4 — Consolidate host-agent detection.** Extract one shared `resolveAgentHint` helper;
       repoint both hooks; annotate it as the single detection path. (R4)
-- [ ] **P5 — Reconcile the ADR chain.** Audit ADR-041 / ADR-046 citations outside `docs/00_ADR.md`;
+- [x] **P5 — Reconcile the ADR chain.** Audit ADR-041 / ADR-046 citations outside `docs/00_ADR.md`;
       repoint or annotate. (R5)
-- [ ] **P6 — Extend the parity gate.** Fail the suite when a paraphrased `--agent` value table
+- [x] **P6 — Extend the parity gate.** Fail the suite when a paraphrased `--agent` value table
       reappears outside the SSOT. (R8)
-- [ ] **P7 — Prove behavior is unchanged.** Full suite before/after; confirm identical `--agent`
+- [x] **P7 — Prove behavior is unchanged.** Full suite before/after; confirm identical `--agent`
       resolution. (R9)
-- [ ] **P8 — Gate.** `bun run autofix && bun run lint`; `bun test plugins/sp/tests/`;
+- [x] **P8 — Gate.** `bun run autofix && bun run lint`; `bun test plugins/sp/tests/`;
       `spur task check 0480`.
 ### Solution
+**Documented deviations from `### Design`** (recorded by the 2026-08-08 `--force` verify re-audit;
+the implement step recorded none).
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+**D1 — R7 precedence chain: the Design had it backwards.** `### Design` § Executor precedence and
+the R7 requirement text both state `--agent` → **pinned workflow var** → `agent.default` → tier
+priority, and the Background asserts the `config/workflows/task-pipeline.yaml:59` pin "overrides the configured
+default". The code says the opposite. `WorkflowService.run` spreads the config-derived agent var
+*before* caller vars (`packages/app/src/services/workflow-service.ts:485`), and
+`resolveDefaultAgentVar` (`:1060-1071`) returns `{}` when the caller already set `agent`, otherwise
+injects `agent.default`, otherwise leaves the YAML literal standing. So the real chain is:
 
+1. `--agent` / explicit `--vars`
+2. `agent.default` from `.spur/config.yaml` (currently `omp-dsv4-flash-volc`)
+3. YAML literal `agent: "omp"` in the pipeline file — last resort, not an override
+
+The SSOT (`plugins/sp/skills/spur-dev/references/cross-cutting.md:111-127`) states the verified chain, not the Design's. R7's *measurable*
+("the precedence chain appears in one place and names the pinned var") is satisfied either way — the
+pin is named as step 3. The Design section is left as-authored for provenance; this note is the
+correction of record.
+
+**D2 — R1 is a gate-locked parity pair, not literally one file.** R1 asks that "exactly one file
+states the value table." Two do: `plugins/sp/skills/spur-dev/references/cross-cutting.md:38-42` (the SSOT) and `plugins/sp/skills/spur-dev/references/flag-glossary.md:48-52`.
+The second is retained deliberately as the C3a parity surface — `validate-flag-contracts.ts` fails
+the suite if the two tables disagree row-for-row, and `plugins/sp/skills/spur-dev/references/flag-glossary.md:44-46` disclaims normative
+authority in-file ("a parity surface … not an independent restatement"). The C4 gate encodes the
+exemption at `plugins/sp/scripts/validate-flag-contracts.ts:606`. Divergence is mechanically impossible, which is R1's
+actual purpose; the literal one-file reading was traded for keeping C3a's three-way check alive.
+
+**D3 — R6 took the "document it" branch; task 0483 R2 later landed the other one. RESOLVED.**
+R6 permits either documenting `implementAgent` in the SSOT or making `--agent` set both vars. 0480
+documented it (`plugins/sp/skills/spur-dev/references/cross-cutting.md:129-145`) and froze behavior per R9. During this task's verify
+re-audit the tree briefly stated *both* answers, because 0483 R2 had updated `execution-batch.md` and
+`task-pipeline.yaml` but not yet the SSOT. That is now closed: 0483 R2 landed the both-keys
+forwarding rule on every surface, so `--agent X` reaches the implement hop and the SSOT,
+`execution-batch.md` §3.2, `execution-workflow.md` and the pipeline YAML all state one answer.
+Verified: `rg 'except implement'` outside `docs/tasks3/**` → no hits;
+`bun run plugins/sp/scripts/validate-flag-contracts.ts` → *All 64 contract surfaces agree*.
+R6's measurable is satisfied literally as well as in spirit.
+
+**Coverage gap this exposes (R8).** While that contradiction was live, the full `plugins/sp` suite
+passed 516/516 on it. R8's C4 gate matches the *value table's* structural signature only, so a prose
+contract claim ("`--agent` does / does not reach implement") can diverge between the SSOT and a
+derived surface with no gate firing. R8 as scoped is satisfied; extending the gate to prose contract
+claims is follow-up work, not a defect of this task.
+
+**Repairs applied during the verify re-audit** (`--fix all`):
+
+- **14 dangling SSOT anchors.** Every pointer written by P3 used
+  `cross-cutting.md#inline-default-execution-surface-ssot-for---agent` — the slug of a heading that
+  was never created (the heading stayed `## Inline-default execution surface`). The links dropped the
+  reader at the top of the file, so R1's "every other mention is a link to that anchor" was false at
+  ship time. Repointed to the real anchor across `dev-operations.md` (9), `execution-workflow.md`,
+  `flag-glossary.md`, `docs/help/cmd_agent.md`, `docs/help/cmd_workflow.md`, and
+  `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md`.
+- **New C5 gate — SSOT anchor resolution** (`plugins/sp/scripts/validate-flag-contracts.ts:698`,
+  `headingAnchors`/`headingSlug` at `:684-694`). R8's C4 guards paraphrase but not link validity, and
+  every existing assertion used `.includes('cross-cutting.md#inline-default-execution-surface')`,
+  which a *wrong longer* anchor satisfies as a prefix — that is precisely why 14 broken pointers
+  passed a green suite. C5 resolves each `cross-cutting.md#<anchor>` against the SSOT's real headings
+  across references, `docs/help`, and command files. 8 tests, including a live-tree assertion.
+- **`plugins/sp/skills/spur-dev/references/execution-batch.md:223` second factual error.** The R2 fix corrected the `auto` clause but left
+  the same line claiming omission resolves to "the configured default executor (`omp`)" — `omp` is
+  the YAML literal, and `agent.default` (`omp-dsv4-flash-volc`) outranks it. Replaced the restatement
+  with a link to the SSOT; that link survives inside 0483's subsequent edit to the same row.
+
+A same-run edit correcting the `config/workflows/task-pipeline.yaml:60` comment was **superseded** by task 0483's
+concurrent rewrite of the same lines; the current comment is 0483's, and reconciling it with the SSOT
+is tracked as D3 above rather than re-applied here.
+
+**Change map** (implement step + surviving verify repairs), first changed line per file:
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/hooks/agent-hint.ts:28` |
+| `plugins/sp/hooks/context-session-start.ts:17` |
+| `plugins/sp/hooks/pi/guard-extension.ts:26` |
+| `plugins/sp/scripts/validate-flag-contracts.ts:16` |
+| `plugins/sp/scripts/validate-flag-contracts.ts:606` |
+| `plugins/sp/scripts/validate-flag-contracts.ts:698` |
+| `plugins/sp/tests/flag-contract-parity.test.ts:24` |
+| `plugins/sp/tests/flag-contract-parity.test.ts:508` |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:21` |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:223` |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:84` |
+| `plugins/sp/skills/spur-dev/references/execution-workflow.md:125` |
+| `plugins/sp/skills/spur-dev/references/flag-glossary.md:44` |
+| `docs/help/cmd_agent.md:50` |
+| `docs/help/cmd_workflow.md:80` |
+| `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:385` |
 ### Testing
+**Verify re-audit 2026-08-08** (`--force --fix all --focus all`). Independent re-run; every
+`file:line` below was re-read at the cited lines this run. Supersedes the prior pipeline verdict,
+whose R1 evidence row was inaccurate (see R1). **Verdict: PASS** — AC R6 was PARTIAL on the first
+pass of this audit and was resolved by task 0483 R2; re-verified below.
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 — One SSOT for the value table | MET | SSOT declared `plugins/sp/skills/spur-dev/references/cross-cutting.md:21`; table `:38-42`. **14 dangling anchors found and repaired this run** (see Solution) — links now resolve to `## Inline-default execution surface` (`plugins/sp/skills/spur-dev/references/cross-cutting.md:19`). Two files state the table (`plugins/sp/skills/spur-dev/references/flag-glossary.md:48-52` is the gate-locked C3a parity surface, exempt at `plugins/sp/scripts/validate-flag-contracts.ts:606`) — deviation D2. |
+| R2 — Delete the false `auto` claim | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:223` no longer claims runtime detection; `resolveAgentAuto` (`packages/app/src/services/agent-service.ts:923-946`) does stage `model_policy` → `config.default` → `resolveAgentPriority`, no runtime detection. A second error on the same line (`omp` named as "the configured default") was found and repaired this run. |
+| R3 — Purge dead tokens | MET | `rg -- '--agent (current\|inherit)'` over `docs/help/cmd_agent.md`, `cmd_workflow.md`, `how_to_use_spur_for_daily_software_development.md` → 0 hits. No `self`/`same` synonym introduced (sole repo hit is this task's Q&A rejecting it). |
+| R4 — Consolidate host-agent detection | MET | One definition: `plugins/sp/hooks/agent-hint.ts:28` (`resolveAgentHint`), header `:1-15` names it "the **only** host-agent detection path" and forbids duplication. Both hooks consume it: `plugins/sp/hooks/context-session-start.ts:17,140-141`; `pi/guard-extension.ts:26,222-223`. `ExtensionAPI` import intact at `plugins/sp/hooks/pi/guard-extension.ts:25`. |
+| R5 — Reconcile the ADR chain | MET | No non-ADR document cites ADR-041/046 as *current* authority; every surviving citation is supersession-annotated: `packages/app/src/services/agent-service.ts:843`, `packages/app/tests/services/agent-service.test.ts:1894`, `docs/design/dev-agent-flag-and-dogfood-skill.md:49`, `plugins/sp/scripts/validate-flag-contracts.ts:13` ("ADR-041 legacy"), `H83_*.md:15,21,41`. |
+| R6 — Document `implementAgent` | MET | Documented in the SSOT at `plugins/sp/skills/spur-dev/references/cross-cutting.md:129-145`. R6's *other* branch ("make `--agent` set both vars") was subsequently landed by **task 0483 R2**, so the measurable is now literally satisfied too: `--agent X` reaches the implement hop. Re-verified this run — `cross-cutting.md` (SSOT), `execution-batch.md` §3.2, `plugins/sp/skills/spur-dev/references/execution-workflow.md:121-127` and `task-pipeline.yaml` vars comment all state the both-keys rule; `validate-flag-contracts.ts` → **all 64 contract surfaces agree**. |
+| R7 — Precedence chain stated once | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:111-127` states `--agent`/`--vars` → `agent.default` → YAML literal, and names the pin. Verified against code: `packages/app/src/services/workflow-service.ts:485` spreads config vars before caller vars; `resolveDefaultAgentVar` `:1060-1071`. This **contradicts the task's own `### Design`**, which had the ordering backwards — deviation D1. |
+| R8 — Parity gate | MET | `checkAgentSsotIntegrity` `plugins/sp/scripts/validate-flag-contracts.ts:617`, exemptions `:606`, wired into `validate()`. Mutation-proven this run (see AC R8). Gate covers the value table only, not prose contract claims — boundary recorded in Solution. |
+| R9 — Behavior unchanged | MET | `bun test packages/app/tests/services/agent-service.test.ts packages/app/tests/workflow/ packages/app/tests/services/workflow-service.test.ts` → **452 pass, 0 fail**. No behavioral source change; `agent-hint.ts` is a hooks-layer extraction, `validate-flag-contracts.ts` is a gate script. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 One document defines the value table | MET | static | `plugins/sp/skills/spur-dev/references/cross-cutting.md:21` normative claim; all pointers resolve after this run's anchor repair. Second stater `plugins/sp/skills/spur-dev/references/flag-glossary.md:48-52` disclaims normative authority in-file (`:44-46`) and is gate-locked by C3a. |
+| R2 No document claims auto detects the calling agent | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:223` re-read; matches `packages/app/src/services/agent-service.ts:923-946`. |
+| R3 Dead tokens are not presented as usable | MET | command | `rg` over `docs/help/**` → 0 hits for `current`/`inherit` as `--agent` values; 0 hits for `--agent self\|same`. |
+| R4 Host-agent detection has one definition | MET | static | `plugins/sp/hooks/agent-hint.ts:28` sole definition; consumed at `plugins/sp/hooks/context-session-start.ts:17` and `plugins/sp/hooks/pi/guard-extension.ts:26`. |
+| R5 Superseded ADRs never cited as current authority | MET | command | `rg 'ADR-041\|ADR-046' --glob '!docs/00_ADR.md'` — every hit annotated as superseded/legacy. |
+| R6 One documented mechanism redirects every pipeline stage | MET | command | Contradiction resolved by 0483 R2. `rg 'except implement\|does NOT redirect'` outside `docs/tasks3/**` → **no hits**; `bun run plugins/sp/scripts/validate-flag-contracts.ts` → *All 64 contract surfaces agree across all claims*. One mechanism (`--agent`) now moves every hop including implement. |
+| R7 Precedence chain stated once and correctly | MET | static | `plugins/sp/skills/spur-dev/references/cross-cutting.md:111-127` vs `packages/app/src/services/workflow-service.ts:485,1060-1071` — chain matches the code exactly. |
+| R8 A reintroduced paraphrase fails the gate | MET | command | Mutation check run this turn: appended a paraphrased 3-value table to `execution-workflow.md` → `bun test plugins/sp/tests/` **1 fail**, message `"execution-workflow.md restates the --agent value table instead of linking to the SSOT anchor."`; removed it → **516 pass, 0 fail**. |
+| R9 Behavior is unchanged by this cleanup | MET | test | 452 pass / 0 fail across agent-service + workflow + workflow-service. No ADR amendment required. |
+
+**AC R6 closure.** The first pass of this audit found the SSOT and two derived surfaces stating
+opposite answers on whether `--agent` reaches the implement hop, and left it with 0483 R2 rather than
+editing the SSOT under a concurrent session. 0483 R2 has since landed the both-keys forwarding rule
+on every surface. Re-verified here rather than taken on report: all four surfaces agree, and the
+mechanical contract gate passes across all 64 surfaces. Deviation **D3** in `## Solution` is
+superseded by that outcome — `--agent` no longer skips implement.
+
+**Gates run this turn**
+
+- `bun run lint` — clean (biome 623 files; typecheck 7/7 workspaces exit 0)
+- `bun test plugins/sp/tests/` — **516 pass, 0 fail** (508 prior + 8 new C5 tests)
+- `bun test packages/app/tests/services/agent-service.test.ts packages/app/tests/workflow/ packages/app/tests/services/workflow-service.test.ts` — **452 pass, 0 fail**
+- `spur workflow validate config/workflows/task-pipeline.yaml` — `workflow valid: task-pipeline`, exit 0
+
+Coverage: N/A for the documentation surfaces; `validate-flag-contracts.ts` measured at 100.00% funcs / 99.82% lines in the sp suite run above.
 ### Review
+**Review mode:** sp:super-reviewer (WBS) — multi-dimensional: functional traceability + SECUA + architecture.
+**Verdict: PASS — 9/9 requirements MET after 2 review fixes applied.**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P3 | Functional (R4) | `plugins/sp/hooks/pi/guard-extension.ts:25` | Host-agent detection consolidation dropped the `ExtensionAPI` type import the exported default function depends on. **Fixed**: `import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'` restored, Biome import order corrected. |
+| P3 | Functional (R6) | `plugins/sp/skills/spur-dev/references/cross-cutting.md:142` · `docs/04_DESIGN.md:1077` | `implementAgent` fallback wording was inaccurate — it resolves to its own YAML-literal default (`'omp'`), independent of `agent`/`agent.default`. **Fixed**: corrected to state `--agent` does NOT redirect the implement hop. |
+| P4 | — | — | No remaining P1–P2 findings; verify verdict PASS (9/9 MET). SECUA clean (no new attack surface), architecture sound (SSOT + C3a/C4 gates self-enforcing). |
 ### References
 - `docs/00_ADR.md` — ADR-041 (single `--agent` selector, H82/0413), ADR-046 (superseded; `inline`
   rejected on workflow-driven commands, 0434), ADR-047 (current authority: omit ≡ `inline`,
@@ -315,6 +451,9 @@ task; this cleanup is its precondition, not its vehicle.
 - Related: task 0478 (pipeline bottlenecks — `implementAgent` gap surfaced there), task 0479
   (verification-loop gate holes). Neither overlaps this task's scope.
 ### History
+- 2026-08-08T17:10:49.544Z todo → wip (system)
+- 2026-08-08T19:37:11.697Z wip → testing (system)
+- 2026-08-08T19:37:18.136Z testing → done (system)
 ### Notes
 
 **Why this is filed as cleanup rather than folded into 0478**

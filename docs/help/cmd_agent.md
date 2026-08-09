@@ -44,7 +44,11 @@ spur agent run [options] <prompt>
 
 ### `--agent` resolution
 
-`--agent` (default `auto`) resolves via the `agent` config block:
+`--agent` (default `auto`) resolves via the `agent` config block. The value-semantics contract
+(`inline` / `auto` / `<name>` and the one rule, value table, executor precedence chain) is the
+SSOT in
+[cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+The resolution steps below are specific to `spur agent run` (the subprocess surface):
 
 1. The prompt's slash command yields a **phase** — recognized in every per-agent surface form
    (`/sp:dev-run` claude, `/sp-dev-run` opencode/gemini/hermes/grok, `/skill:sp-dev-run` pi/omp,
@@ -57,8 +61,7 @@ spur agent run [options] <prompt>
 4. With no phase match, `agent.default` is resolved as an executor selector (then a legacy
    agent name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1
    agent — the legacy behavior preserved when no `agent` config is present.
-5. `current` reads `SPUR_AGENT` env var; an explicit name resolves directly and never consults
-   phase config.
+5. An explicit name resolves directly and never consults phase config.
 
 ### `--drain` (team mode)
 

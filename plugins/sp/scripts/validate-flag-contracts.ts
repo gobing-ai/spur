@@ -7,15 +7,22 @@
  * declaring-command parentheticals) — never free prose. A surface that cannot be parsed
  * fails loudly (named file + location), never silently skipped.
  *
- * Claim families (task 0415 / feature H82):
+ * Claim families (task 0415 / H82, extended 0480 / H1):
  *   C1   declaring commands per flag        glossary parenthetical lists ↔ command argument-hints
  *   C2   default value per flag per command command Argument Flags table ↔ dev-operations Inputs
- *   C3a  --agent value→behavior mapping     cross-cutting.md ↔ flag-glossary.md ↔ ADR-041
+ *   C3a  --agent value→behavior mapping     cross-cutting.md ↔ flag-glossary.md ↔ ADR-047 (ADR-041 legacy)
  *   C3b  --agent <name> in-file unanimity   within cross-cutting.md
+ *   C4   --agent SSOT integrity             no reference restates the value table outside the SSOT
+ *   C5   SSOT anchor resolution            every cross-cutting.md#anchor link names a real heading
  *
  * Authority ordering (R6): command files own declaring commands (C1) and local defaults
  * (C2); cross-cutting.md owns the execution-surface mapping (C3) — glossary and ADR are
- * derived and must agree with it.
+ * derived and must agree with it. C4 (R8/task 0480) guards R1: only cross-cutting.md and
+ * flag-glossary.md (the C3a parity surface) may state the value table; every other surface
+ * links to the SSOT anchor instead. C5 guards the other half of R1: a pointer to a
+ * non-existent anchor is not a link to the SSOT — it silently drops the reader at the top
+ * of the file. Substring assertions cannot catch this (a wrong longer anchor contains the
+ * right shorter one as a prefix), which is how 14 dangling pointers shipped in 0480.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,8 +37,8 @@ export interface SurfaceClaim {
 export interface FlagViolation {
     /** Flag under dispute, e.g. `--agent`. */
     readonly flag: string;
-    /** Claim family tag (C1 | C2 | C3a | C3b). */
-    readonly gate: 'C1' | 'C2' | 'C3a' | 'C3b';
+    /** Claim family tag (C1 | C2 | C3a | C3b | C4 | C5). */
+    readonly gate: 'C1' | 'C2' | 'C3a' | 'C3b' | 'C4' | 'C5';
     /** Every surface that stated a claim and what it stated. */
     readonly surfaces: readonly SurfaceClaim[];
     /** Designated authority surface for this claim. */
@@ -589,6 +596,126 @@ export function checkAgentValueTables(crossCuttingRaw: string, glossaryRaw: stri
     return violations;
 }
 
+// ─── C4: --agent SSOT integrity (R8 / task 0480) ────────────────────────────
+
+/**
+ * Files permitted to state the `--agent` value table. cross-cutting.md is the SSOT (R1);
+ * flag-glossary.md is the C3a parity surface that is kept in lockstep. No other reference,
+ * help file, or command document may restate the table — it must link to the SSOT anchor.
+ */
+const SSOT_FILES: Record<string, true> = { 'cross-cutting.md': true, 'flag-glossary.md': true };
+
+/**
+ * Detect a paraphrased `--agent` value table: a markdown table whose first column contains
+ * all three value tokens (`inline`, `auto`, `<name>`) within a single table block. This is
+ * the structural signature of the value table, not a prose match — it fires on any table
+ * that restates the full three-value contract regardless of wording in other columns.
+ *
+ * Exempt: the SSOT (cross-cutting.md) and the C3a parity surface (flag-glossary.md).
+ * Returns one violation per offending file, naming the file and the detected table header.
+ */
+export function checkAgentSsotIntegrity(files: ReadonlyMap<string, string>): FlagViolation[] {
+    const violations: FlagViolation[] = [];
+    for (const [filename, raw] of files) {
+        if (filename in SSOT_FILES) continue;
+        // Split into table blocks: consecutive lines starting with `|`
+        const tableBlocks: string[][] = [];
+        let current: string[] = [];
+        for (const line of raw.split('\n')) {
+            if (line.trim().startsWith('|')) {
+                current.push(line);
+            } else {
+                if (current.length > 0) tableBlocks.push(current);
+                current = [];
+            }
+        }
+        if (current.length > 0) tableBlocks.push(current);
+
+        for (const block of tableBlocks) {
+            const valuesFound = new Set<string>();
+            for (const row of block) {
+                const firstCell = row.replace(/^\|/, '').split('|')[0].replace(/`/g, '').trim();
+                const token = firstCell.split(/\s/)[0].toLowerCase();
+                if (token === 'inline' || token === 'auto' || token === '<name>') {
+                    valuesFound.add(token);
+                }
+            }
+            if (valuesFound.size === 3) {
+                violations.push({
+                    flag: '--agent',
+                    gate: 'C4',
+                    surfaces: [
+                        {
+                            name: filename,
+                            claim: `restates --agent value table (${[...valuesFound].sort().join(', ')})`,
+                        },
+                    ],
+                    authority: 'cross-cutting.md § Inline-default execution surface',
+                    message: `${filename} restates the --agent value table instead of linking to the SSOT anchor. See cross-cutting.md § Inline-default execution surface.`,
+                });
+                break; // one violation per file is enough
+            }
+        }
+    }
+    return violations;
+}
+
+// ─── C5: SSOT anchor resolution (task 0480 R1 regression guard) ─────────────
+
+/**
+ * GitHub's heading→anchor slug: lowercase, drop everything that is not a word
+ * character, space, or hyphen, then spaces → hyphens. `## Executor precedence chain (R7)`
+ * → `executor-precedence-chain-r7`; `` ## Inline-default execution surface `` →
+ * `inline-default-execution-surface`.
+ */
+export function headingSlug(heading: string): string {
+    return heading
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s/g, '-');
+}
+
+/** Every anchor a reader can actually land on in `raw` (all heading levels). */
+export function headingAnchors(raw: string): Set<string> {
+    const anchors = new Set<string>();
+    for (const line of raw.split('\n')) {
+        const m = line.match(/^#{1,6}\s+(.*)$/);
+        if (m) anchors.add(headingSlug(m[1]));
+    }
+    return anchors;
+}
+
+/**
+ * Detect `cross-cutting.md#<anchor>` links whose anchor names no heading in the SSOT file.
+ * A dangling anchor satisfies every substring assertion in the suite (the correct short
+ * anchor is a prefix of the wrong long one) while landing the reader nowhere near the
+ * contract, so R1's "every other mention is a link to that anchor" decays undetected.
+ *
+ * @param crossCuttingRaw - contents of the SSOT file, the anchor authority
+ * @param files - candidate linking surfaces, keyed by display name
+ */
+export function checkSsotAnchorsResolve(crossCuttingRaw: string, files: ReadonlyMap<string, string>): FlagViolation[] {
+    const anchors = headingAnchors(crossCuttingRaw);
+    const violations: FlagViolation[] = [];
+    for (const [filename, raw] of files) {
+        const seen = new Set<string>();
+        for (const m of raw.matchAll(/cross-cutting\.md#([\w-]+)/g)) {
+            const anchor = m[1];
+            if (anchors.has(anchor) || seen.has(anchor)) continue;
+            seen.add(anchor);
+            violations.push({
+                flag: '--agent',
+                gate: 'C5',
+                surfaces: [{ name: filename, claim: `links to cross-cutting.md#${anchor}` }],
+                authority: 'cross-cutting.md headings',
+                message: `${filename} links to cross-cutting.md#${anchor}, which names no heading in cross-cutting.md. The link drops the reader at the top of the file instead of the SSOT anchor.`,
+            });
+        }
+    }
+    return violations;
+}
+
 // ─── Full-tree gate ─────────────────────────────────────────────────────────
 
 // ── R4: module-relative default so validate() is CWD-independent ──
@@ -617,13 +744,32 @@ export function validate(root: string = MODULE_ROOT): FlagValidationResult {
     const opsRaw = readFileSync(join(refsDir, 'dev-operations.md'), 'utf8');
     const adrRaw = readFileSync(join(root, 'docs', '00_ADR.md'), 'utf8');
 
+    // C4: scan all reference + help files for paraphrased --agent value tables
+    // (cross-cutting.md and flag-glossary.md are exempt as SSOT + parity surface)
+    const c4Files = new Map<string, string>();
+    for (const file of readdirSync(refsDir).filter((f) => f.endsWith('.md'))) {
+        c4Files.set(file, readFileSync(join(refsDir, file), 'utf8'));
+    }
+    const helpDir = join(root, 'docs', 'help');
+    for (const file of readdirSync(helpDir).filter((f) => f.endsWith('.md'))) {
+        c4Files.set(file, readFileSync(join(helpDir, file), 'utf8'));
+    }
+    const c4Count = c4Files.size;
+
+    // C5: anchor resolution over every surface that can link to the SSOT — the C4 set
+    // (references + help) plus the command files, which carry the contract pointer too.
+    const c5Files = new Map<string, string>(c4Files);
+    for (const [name, raw] of commandTables) c5Files.set(`${name}.md`, raw);
+
     const violations: FlagViolation[] = [
         ...checkGlossaryMembership(glossaryRaw, commandHints),
         ...checkDefaultsParity(commandTables, opsRaw),
         ...checkAgentValueTables(crossCuttingRaw, glossaryRaw, adrRaw),
+        ...checkAgentSsotIntegrity(c4Files),
+        ...checkSsotAnchorsResolve(crossCuttingRaw, c5Files),
     ];
 
-    return { violations, fileCount: commandFiles.length + 4 };
+    return { violations, fileCount: commandFiles.length + 4 + c4Count };
 }
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
@@ -656,8 +802,10 @@ export function renderHelp(): string {
         'Gates:',
         '  C1   glossary declaring-command lists ↔ command argument-hints (exact equality)',
         '  C2   command Argument Flags table defaults ↔ dev-operations.md Inputs',
-        '  C3a  --agent value→behavior table: cross-cutting.md ↔ flag-glossary.md ↔ ADR-041',
+        '  C3a  --agent value→behavior table: cross-cutting.md ↔ flag-glossary.md ↔ ADR-047 (ADR-041 legacy)',
         '  C3b  --agent <name> in-file unanimity within cross-cutting.md',
+        '  C4   --agent SSOT integrity: no reference restates the value table outside cross-cutting.md / flag-glossary.md',
+        '  C5   SSOT anchor resolution: every cross-cutting.md#anchor link names a real heading',
     ].join('\n');
 }
 

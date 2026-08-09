@@ -367,7 +367,9 @@ spur agent delete reviewer --force
 > **Single LLM execution surface:** every model call in Spur routes through `spur agent run`.
 > Workflow `agent.run` actions and sp skills all delegate to this same command. Spur owns no
 > other model-reaching path. `--agent` resolution goes through the `agent` config block —
-> `auto` (default) / explicit name / `current` (reads `SPUR_AGENT`).
+> `auto` (default) / explicit name. See
+> [cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
+> for the full value table.
 
 ### 5.3 Checking: Rules and Constraints
 
@@ -841,7 +843,7 @@ features:
 | `SPUR_TELEMETRY_ENABLED` | Toggle telemetry (`true`/`1`/`yes`/`on`) |
 | `SPUR_TELEMETRY_ENDPOINT` | Telemetry endpoint |
 | `SPUR_LOG_LEVEL` | Log level (`debug`/`info`/`warn`/`error`) |
-| `SPUR_AGENT` | Read by `spur agent run --agent current` |
+| `SPUR_AGENT` | Read by `spur agent run --agent <name>` (explicit executor selector) |
 | `PORT` | Server port for `spur serve` (default: 3000) |
 | `HOST` | Bind address for `spur serve` (default: localhost) |
 

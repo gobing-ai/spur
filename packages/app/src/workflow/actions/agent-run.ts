@@ -322,7 +322,7 @@ export class AgentRunActionRunner implements ActionRunner {
             }
 
             if (!ok) {
-                await writePartialWorkArtifact(context, agentLabel, model, traced, cwd);
+                await writePartialWorkArtifact(context, agentLabel, model, traced, cwd, sessionDir);
             }
 
             // Actionable failure message (R4 / task 0295): identify the workflow
@@ -529,6 +529,7 @@ async function writePartialWorkArtifact(
     model: string | undefined,
     traced: AgentRunTracedResult,
     cwd: string,
+    sessionDir: string | undefined,
 ): Promise<void> {
     try {
         const signal = traced.signal;
@@ -544,6 +545,19 @@ async function writePartialWorkArtifact(
         const headerLine = model !== undefined ? `${agentLabel} (model: ${model})` : agentLabel;
         const inv = traced.invocation;
         const argvLine = inv ? `${inv.command} ${inv.argv.join(' ')}` : '(invocation not captured)';
+
+        // R4 (0482): resume-context block — the dead agent's transcript lives in
+        // the session dir (plus the latched sidecar when affinity is on). Naming
+        // it here lets an operator resume without re-deriving the output contract.
+        const latchedSessionPath = join(cwd, '.spur', 'run', `${context.runId}-agent-session.json`);
+        const resumeContext = [
+            '',
+            '## resume context',
+            '',
+            `- session dir: ${sessionDir ?? '(none captured)'}`,
+            `- latched session file: ${latchedSessionPath}`,
+            '',
+        ].join('\n');
 
         // R4 (0454): completed-requirements heuristic section
         let completedSection = '';
@@ -608,6 +622,7 @@ async function writePartialWorkArtifact(
             '```',
             stderrTail || '(empty)',
             '```',
+            resumeContext,
             completedSection,
         ].join('\n');
 

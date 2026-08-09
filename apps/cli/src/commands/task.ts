@@ -255,6 +255,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Update a task status or replace a section.')
         .argument('<wbs>', 'Task WBS number')
         .argument('[status]', 'New status (for lifecycle transition)')
+        .addHelpText(
+            'after',
+            [
+                'Lifecycle: `task update <wbs> <status>` moves a task through',
+                'backlog → todo → wip → testing → done, running the lifecycle guards on',
+                '`wip → testing` (`spur task check`) and `testing → done` (`--strict-core`).',
+                'A GuardDeniedError on `testing → done` means no pipeline run is recorded for the',
+                'task: run `/sp:dev-verify <wbs> --next` to PASS it, or record the audited bypass with',
+                '`SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done --reason "…"`.',
+                'See the gate checklist (spur-dev/references/gate-checklists.md).',
+            ].join('\n'),
+        )
         .option('--section <name>', 'Section name to replace')
         .option('--from-file <path>', 'File to read section body from (requires --section)')
         .option('--feature <id>', 'Set the feature_id frontmatter field (traceability edge)')

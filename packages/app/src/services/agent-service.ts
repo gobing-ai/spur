@@ -845,8 +845,71 @@ export class AgentService {
         if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner);
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`. No phase map is consulted
-        // (R8: --agent wins; default-by-phase removed 0452).
-        return this.resolveExecutorSelector(raw, doctorRunner, 'explicit');
+        // for the *starting* pick (R8: --agent wins; default-by-phase removed
+        // 0452). The pin chooses where a run starts; it must not disable the
+        // escalation ladder (0482 R1) — see resolvePinned.
+        return this.resolvePinned(raw, prompt, flags, doctorRunner);
+    }
+
+    /**
+     * Resolve a pinned executor (0482 R1). The pin decides which executor a run
+     * *starts* on; it must not silently opt the run out of the resource-exhaustion
+     * escalation ladder (the 0407 mechanism was unreachable because a pinned
+     * dispatch resolved with no stage, so `currentStage`/`maxEscalations` were 0).
+     * Two cases:
+     *  - Escalation hop (`signal` present): the pin already chose the failed
+     *    starting executor — route through the phase-resolved stage's model_policy
+     *    so the fallback tier chain can move to the next eligible executor.
+     *  - Initial pick: resolve the concrete pinned executor, then attach the
+     *    phase-resolved stage context (policy only) so executeRun's escalation
+     *    loop is reachable with `currentStage` populated.
+     */
+    private async resolvePinned(
+        selector: string,
+        prompt: string | undefined,
+        flags: Record<string, string | boolean>,
+        doctorRunner: DoctorRunner,
+    ): Promise<AgentResolveResult> {
+        if (stringFlag(flags, 'signal', '') !== '') {
+            const stageRecord = this.resolveCanonicalStage(prompt, flags);
+            if (stageRecord !== undefined) {
+                const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
+                if (stageRes !== undefined) return stageRes;
+            }
+        }
+        const base = await this.resolveExecutorSelector(selector, doctorRunner, 'explicit');
+        if (!base.ok) return base;
+        const stageRecord = this.resolveCanonicalStage(prompt, flags);
+        if (stageRecord !== undefined) {
+            const executors = this.ctx.agentConfig?.executors;
+            const pinned = executors?.find((e) => e.name === selector);
+            const tier = pinned !== undefined ? getExecutorTier(pinned) : stageRecord.model_policy.min_tier;
+            return {
+                ...base,
+                stage: {
+                    stageId: stageRecord.id,
+                    policy: stageRecord.model_policy,
+                    executorName: selector,
+                    executorTier: tier,
+                },
+            };
+        }
+        return base;
+    }
+
+    /**
+     * Resolve the canonical stage from the explicit `--stage` flag or the prompt
+     * phase/alias, if any.
+     */
+    private resolveCanonicalStage(
+        prompt: string | undefined,
+        flags: Record<string, string | boolean>,
+    ): StageRecord | undefined {
+        const phase = extractPhase(prompt);
+        const stageFlag = stringFlag(flags, 'stage', '');
+        const targetStageId = stageFlag !== '' ? stageFlag : phase !== undefined ? phase : undefined;
+        if (targetStageId === undefined) return undefined;
+        return getCanonicalStage(targetStageId);
     }
 
     /**
@@ -863,19 +926,13 @@ export class AgentService {
         doctorRunner: DoctorRunner,
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
-        const phase = extractPhase(prompt);
 
         // Stage-registry adaptive model routing (R1/R2/R3)
-        const stageFlag = stringFlag(flags, 'stage', '');
-        const targetStageId = stageFlag !== '' ? stageFlag : phase !== undefined ? phase : undefined;
-
-        if (targetStageId !== undefined) {
-            const stageRecord = getCanonicalStage(targetStageId);
-            if (stageRecord !== undefined) {
-                const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
-                if (stageRes !== undefined) {
-                    return stageRes;
-                }
+        const stageRecord = this.resolveCanonicalStage(prompt, flags);
+        if (stageRecord !== undefined) {
+            const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
+            if (stageRes !== undefined) {
+                return stageRes;
             }
         }
 

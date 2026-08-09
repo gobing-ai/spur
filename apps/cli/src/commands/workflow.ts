@@ -63,6 +63,47 @@ async function spawnAsyncWorkflowWorker(spurBin: string, cmd: string[]): Promise
 }
 
 /**
+ * Registration-confirmation budget in ms. 5s is ample for a local worker to write its
+ * run row, but a heavily loaded host can legitimately start slower — and a false
+ * negative here reports a working run as failed. `SPUR_ASYNC_REGISTER_TIMEOUT_MS`
+ * raises the ceiling on such hosts (and lets tests drive the failure branch without
+ * paying the full wait). Invalid or non-positive values fall back to the default
+ * rather than disabling the check (task 0484 R2).
+ */
+function asyncRegisterTimeoutMs(): number {
+    const raw = Number(process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS);
+    return Number.isFinite(raw) && raw > 0 ? raw : 5000;
+}
+
+/**
+ * Wait up to `timeoutMs` for the async worker to register `runId`, returning true
+ * once `spur workflow trace <runId>` resolves. The nohup + `&` wrapper in
+ * `spawnAsyncWorkflowWorker` makes a dead-on-arrival worker invisible on every
+ * channel (the shell exits 0, output is discarded, `rejectOnError: false`), so a
+ * failed spawn otherwise reports a phantom run id that a caller polls forever. Only
+ * an existing run row proves the handle is real (task 0484 R2).
+ */
+export async function waitForRunRegistration(
+    service: Pick<WorkflowAppService, 'trace'>,
+    runId: string,
+    timeoutMs = asyncRegisterTimeoutMs(),
+    pollMs = 250,
+): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            await service.trace(runId);
+            return true;
+        } catch {
+            if (Date.now() >= deadline) {
+                return false;
+            }
+            await sleep(pollMs);
+        }
+    }
+}
+
+/**
  * Parse the `--vars` flag into a string→string map, or `undefined` when absent.
  * Workflow vars are `Record<string, string>`; reject anything else loudly rather
  * than passing malformed values into the engine's template resolution.
@@ -257,6 +298,25 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         );
                     }
                     context.setExitCode(result.status === 'done' ? 0 : 1);
+                    return;
+                }
+                // Confirm the run actually registered before reporting 'started'. The nohup + `&`
+                // wrapper in spawnAsyncWorkflowWorker makes a dead-on-arrival worker invisible on
+                // every channel, so a failed spawn would otherwise print a phantom run id that
+                // `spur workflow trace` cannot resolve and the caller would poll forever (0484 R2).
+                if (!(await waitForRunRegistration(makeSvc(options.json), runId))) {
+                    // Deliberately omit runId from BOTH payloads: this handle is precisely the
+                    // phantom R2 exists to suppress, and a machine caller reading `.runId`
+                    // without checking `.status` would poll it forever — the exact failure the
+                    // human-readable branch already avoids (0484 R2).
+                    const reason = 'async worker failed to start or register the run';
+                    const hint = 'run the workflow synchronously (omit --async) to see the failure';
+                    if (json) {
+                        context.output.write(toJson({ status: 'failed', reason, hint }));
+                    } else if (!silent) {
+                        context.output.write(`async spawn failed: ${reason} — ${hint}.`);
+                    }
+                    context.setExitCode(1);
                     return;
                 }
                 const asyncResult = { runId, status: 'started', workflowName: file };

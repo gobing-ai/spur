@@ -215,6 +215,65 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(text).not.toContain('@gobing-ai/ts-dual-workflow-engine/schemas');
     });
 
+    test('R2 (task 0482): every `bun plugins/sp/scripts/...` step passes --spur-bin so spur resolves regardless of shell PATH', () => {
+        // Regression for 0471's double precheck FAIL (`could not fetch task 0471 via spur`):
+        // task-size-precheck.ts already honors `--spur-bin` / `SPUR_BIN`, but the workflow
+        // invoked it without either, so the workflow shell (`/bin/sh -c`, no user PATH)
+        // could not resolve bare `spur`. Sibling steps (doctor, feature-sync) already pass
+        // `$spurBin`. Guard: any shell step that shells spur through a bundled script must
+        // hand it the resolved binary.
+        const allCmds = yaml.states
+            .flatMap((s) => s.onEnter ?? [])
+            .filter((a) => a.kind === 'shell')
+            .map((a) => String(a.options?.command ?? ''));
+        const spurShellingScripts = allCmds.filter((c) => c.includes('bun plugins/sp/scripts/'));
+        expect(spurShellingScripts.length).toBeGreaterThan(0);
+        for (const cmd of spurShellingScripts) {
+            expect(cmd).toContain('--spur-bin');
+        }
+    });
+
+    test('R3 (task 0482): the fix hop is handed the failing file:line anchors, not a discovery run', () => {
+        // 0471 burned ~39 min (8m50s + a 30m timeout kill) on ONE anchored finding
+        // (`raw-sql-only-in-domain … history-service.ts:360`) because the test-fix hop
+        // dispatched an unscoped /sp:dev-fixall that re-derived the failure from scratch.
+        // The contract is a closed loop: the gate hop must EXTRACT anchors to a digest file,
+        // and the fix hop must READ that digest into a var and NAME it in the dispatch input.
+        // Breaking any link silently restores the re-derivation cost, so all three are asserted.
+        const shellCmds = (id: string) =>
+            (yaml.states.find((s) => s.id === id)?.onEnter ?? [])
+                .filter((a) => a.kind === 'shell')
+                .map((a) => String(a.options?.command ?? ''));
+
+        // 1. Both gate hops extract anchors into the digest file.
+        for (const gateState of ['test', 'test-recheck']) {
+            const cmds = shellCmds(gateState).join('\n');
+            expect(cmds, `${gateState}: must capture the gate log`).toContain('-test-gate.log');
+            expect(cmds, `${gateState}: must extract file:line anchors`).toContain('-test-gate.findings');
+            expect(cmds, `${gateState}: anchors must be bounded`).toContain('head -20');
+        }
+
+        // 2. test-fix projects the digest into a var (a vars template cannot shell out).
+        const fixSteps = yaml.states.find((s) => s.id === 'test-fix')?.onEnter ?? [];
+        const readIdx = fixSteps.findIndex((a) => a.kind === 'file.read.into-var');
+        expect(readIdx, 'test-fix must read the findings digest into a var').toBeGreaterThanOrEqual(0);
+        const readStep = fixSteps[readIdx];
+        expect(String(readStep?.options?.path ?? '')).toContain('-test-gate.findings');
+        const varName = String(readStep?.options?.var ?? '');
+        expect(varName).toBe('gateFindings');
+        expect(yaml.vars, 'the var must be declared or the template throws at runtime').toHaveProperty(varName);
+
+        // 3. The dispatch input NAMES the anchors — R3's measurable, not merely a log path.
+        const dispatchIdx = fixSteps.findIndex((a) => a.kind === 'agent.run');
+        const fixInput = String(fixSteps[dispatchIdx]?.options?.input ?? '');
+        expect(fixInput).toContain('/sp:dev-fixall');
+        expect(fixInput, 'input must name the extracted anchors').toContain(`--findings "\${vars.${varName}}"`);
+        expect(fixInput, 'the full log stays available as the escape hatch').toContain('--gate-log');
+
+        // 4. The read must precede the dispatch, or the var is still the empty default.
+        expect(readIdx).toBeLessThan(dispatchIdx);
+    });
+
     test('every transition endpoint is a declared state', () => {
         const ids = new Set(stateIds);
         for (const t of yaml.transitions) {

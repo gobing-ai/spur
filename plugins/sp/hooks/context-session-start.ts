@@ -14,23 +14,9 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Best-effort agent name from env (never required). */
-export function resolveAgentHint(env: NodeJS.ProcessEnv = process.env): string | undefined {
-    const candidates = [env.SPUR_AGENT, env.CLAUDE_CODE_ENTRYPOINT, env.TERM_PROGRAM, env.SPUR_DEFAULT_AGENT];
-    for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) return c.trim();
-    }
-    return undefined;
-}
+import { resolveAgentHint, resolveModelHint } from './agent-hint';
 
-/** Best-effort model id from env (never required). */
-export function resolveModelHint(env: NodeJS.ProcessEnv = process.env): string | undefined {
-    const candidates = [env.SPUR_MODEL, env.ANTHROPIC_MODEL, env.OPENAI_MODEL, env.CLAUDE_MODEL];
-    for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) return c.trim();
-    }
-    return undefined;
-}
+export { resolveAgentHint, resolveModelHint } from './agent-hint';
 
 /**
  * Ancestor-run marker exported by `@gobing-ai/ts-ai-runner` ≥ 0.4.15 (`AGENT_RUN_ID_ENV`).

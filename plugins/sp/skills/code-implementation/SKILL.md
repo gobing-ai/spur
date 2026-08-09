@@ -52,6 +52,20 @@ When this skill is entered via `/sp:dev-run --mode implement <wbs>` (the form
 The structural guard is the slash form itself (`--mode implement`). Prose in the workflow YAML
 `agent.run` `input` is the wrong place for this rule; it belongs here and in `dev-run.md`.
 
+## Implement scope: do not run the project quality gate
+
+During implement, the pipeline's `test` hop runs `${vars.qualityGateCmd}` (the full project gate:
+`bun run format && bun run spur-check`) immediately after this step and is the gate that actually
+decides pass/fail. Running it inside implement is pure redundancy — it cannot change the outcome and
+only burns wall clock and context budget.
+
+- **Run only targeted probes** to validate your changes: `bun test <file>`,
+  `bun test <file> --test-name-pattern "<test>"`, or `bunx tsc --noEmit` on a single package.
+- **NEVER run** `bun run test`, `bun run spur-check`, `bun run check`, or any other full-suite /
+  project-gate command from inside implement. These belong to the pipeline's `test` hop.
+- If a targeted probe reveals a failure you cannot fix within implement scope, note it in
+  `## Solution` and let the `test` hop's fixall handle it — do not pre-empt the gate.
+
 ## Behavior
 
 This skill behaves as a **technique**: given a task (read its Background, AC, Design, Plan), it maps

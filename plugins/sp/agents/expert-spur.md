@@ -1,21 +1,6 @@
 ---
 name: expert-spur
-description: |
-  Use PROACTIVELY for multi-step Spur CLI corpus work warranting its own context, across any `spur` noun — task, feature, rule, or workflow: batch task/feature creation, status sweeps, section-editing campaigns, traceability audits, rule catalog hardening, workflow authoring/refactoring. Triggers: "create tasks for this feature", "update all task statuses", "audit task traceability", "create a feature with acceptance criteria", "harden the rule catalog", "author a batch of workflows", "expert-spur". Use when corpus work spans many files or operations across one or more nouns and a lifecycle handoff beats one command.
-
-  <example>
-  Context: Batch task status update across a feature's tasks.
-  user: "Move all A1 tasks from backlog to wip."
-  assistant: "Delegating to sp:expert-spur — reads the spur-cli task reference, then runs spur task update for each."
-  <commentary>Multi-task batch work warrants context isolation.</commentary>
-  </example>
-
-  <example>
-  Context: Cross-noun corpus work — feature with AC, then linked tasks.
-  user: "Create the notification feature with acceptance criteria and decompose it."
-  assistant: "Delegating to sp:expert-spur — spur feature create + AC authoring via the spur-cli feature reference; decomposition itself routes to the spine (sp:spur-dev)."
-  <commentary>Multi-noun, multi-step corpus work in its own context.</commentary>
-  </example>
+description: Use PROACTIVELY for multi-step Spur CLI corpus work warranting its own context, across any `spur` noun — task, feature, rule, or workflow: batch task/feature creation, status sweeps, section-editing campaigns, traceability audits, rule catalog hardening, workflow authoring/refactoring. Triggers: "create tasks for this feature", "update all task statuses", "audit task traceability", "harden the rule catalog", "author a batch of workflows", "expert-spur". For a single operation, use the `spur` CLI directly; for the planning/execution lifecycle, use `sp:spur-dev`.
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green
@@ -63,7 +48,7 @@ For a single operation, use the `spur` CLI directly. For the planning/execution 
 Invoke `sp:spur-cli` for verb guidance and per-noun conventions:
 
 | Platform | Invocation |
-|----------|-----------|
+| ---------- | ----------- |
 | Claude Code | `Skill(skill="sp:spur-cli", args="<noun> <query>")` |
 | Other platforms | Invoke `sp:spur-cli` directly as a skill |
 
