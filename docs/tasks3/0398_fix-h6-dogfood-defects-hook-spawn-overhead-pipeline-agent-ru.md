@@ -18,11 +18,12 @@ updated_at: "2026-08-01T04:13:41.758Z"
 ## 0398. Fix H6 dogfood defects: hook spawn overhead, pipeline agent.run timeouts, and verdict AC parser/linkage traps
 
 ### Background
+
 The H6 batch (`/skill:sp-dev-runall --feature H6 --auto`, 6 tasks driven by `omp` under a Pi
 session) completed PASS but burned ~20h wall-clock and required four manual timeout recoveries.
 Two post-mortems were produced:
 
-- `/tmp/findissue-H6-report.md` — `/skill:sp-dev-findissue` output (Pi session + omp session
+- `/tmp/findissue-H6-report.md` — `/skill:sp-dev-find-issue` output (Pi session + omp session
   `019fb512-71c5-7000-89f2-1bd28a14ad53`).
 - `docs/dogfood/2026-07-31-sp-dev-runall-H6-dogfood.md` — dogfood report, findings P1–P4.
 
@@ -35,15 +36,15 @@ budget, and the verdict/AC linkage contract.
 The two reports were written from estimates. Re-measuring the same evidence before writing this
 task **overturned two of their conclusions and found a larger defect neither reported**:
 
-| Claim in the reports | Measured reality | Verdict |
-|---|---|---|
-| "1347 hook spawns *this session*" | `.spur/context/token-ledger.jsonl` holds 1353 lines spanning **2026-07-13 → 2026-07-31** (18 days), not one session | **Overstated ~18×** |
-| "331 `session_start` this session (331× expected)" | 332 total over 18 days; **39** on 2026-07-30/31 (the H6 window) | Real but far smaller |
-| "`write` 542 / `read` 322 → PostToolUse storm" | On 2026-07-30/31: **7 writes, 15 reads**. PostToolUse barely fired during H6 | **Not supported** — fix 1b dropped |
-| "~200–500 ms per hook spawn" | `superskill hook run sp context-post-tool` = **1.22–1.53 s**; `bun -e ''` = **1.41–2.00 s**; `node -e ''` = **0.02 s** | **Understated ~4×**; cost is bun cold start, not dispatch |
-| (not reported) | `task-write-guard` shells out to `spur task resolve` = **2.40 s**, on **every** Write/Edit regardless of path | **New P1** |
+| Claim in the reports                               | Measured reality                                                                                                       | Verdict                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| "1347 hook spawns _this session_"                  | `.spur/context/token-ledger.jsonl` holds 1353 lines spanning **2026-07-13 → 2026-07-31** (18 days), not one session    | **Overstated ~18×**                                       |
+| "331 `session_start` this session (331× expected)" | 332 total over 18 days; **39** on 2026-07-30/31 (the H6 window)                                                        | Real but far smaller                                      |
+| "`write` 542 / `read` 322 → PostToolUse storm"     | On 2026-07-30/31: **7 writes, 15 reads**. PostToolUse barely fired during H6                                           | **Not supported** — fix 1b dropped                        |
+| "~200–500 ms per hook spawn"                       | `superskill hook run sp context-post-tool` = **1.22–1.53 s**; `bun -e ''` = **1.41–2.00 s**; `node -e ''` = **0.02 s** | **Understated ~4×**; cost is bun cold start, not dispatch |
+| (not reported)                                     | `task-write-guard` shells out to `spur task resolve` = **2.40 s**, on **every** Write/Edit regardless of path          | **New P1**                                                |
 
-The reports framed Issue 1 as *too many spawns*. It is actually *each spawn is enormous*, and the
+The reports framed Issue 1 as _too many spawns_. It is actually _each spawn is enormous_, and the
 worst offender — a ~3.7 s tax on every single `Write`/`Edit` tool call — was missed by both.
 
 #### Where the time actually went
@@ -68,13 +69,15 @@ that cannot be `[doc-only]`-tagged). It also measured the consequence on the shi
 `acceptanceCriteria` array, and every gate in the chain still passed. R7 is therefore not a
 theoretical contract wart — it silently degrades verification evidence, and the gates do not
 notice. Details in `### Root Cause` RC-3; artifacts in `### References`.
+
 ### Requirements
+
 Eight requirements in three clusters. R1 gates R2/R3; the clusters are otherwise independent and
 can land in any order.
 
 R1. **Re-baseline hook latency outside the agent sandbox.** Every timing in `### Background` was measured inside the Claude Code Bash sandbox, where syscall filtering may inflate process startup. Before changing any hook code, re-run on a bare shell (no agent, no sandbox) and record the medians in `### Root Cause`: `bun -e ''`, `node -e ''`, `spur task resolve <task-file> --strict --json`, and `superskill hook run sp task-write-guard` fed a `Write` payload. Then apply this decision rule in writing — if bare-shell `bun -e ''` is under 150 ms the cold-start figure is a sandbox artifact and R2 stands on spawn-count grounds alone (drop any runtime-swap framing and say so); if it stays above 500 ms the cold-start tax is real and R2 is urgent.
 
-R2. **`task-write-guard` must not spawn `spur task resolve` for paths that cannot be task files.** `runSpTaskWriteGuard` currently delegates *every* `Write`/`Edit` with a non-empty `file_path` straight to a 2.4 s `spawnSync` (`hook-run.ts:143` → `resolveSpurTaskOwnership`, `hook-run.ts:101-113`). Editing `src/foo.ts`, `package.json`, or a scratch file pays the same toll as editing a real task file. Add a cheap in-process prefilter **before** the spawn: allow immediately unless the path could plausibly be a task-corpus file. Ownership semantics must not change — `spur task resolve` stays the sole authority for any path that survives the prefilter, and the guard stays fail-open. **Cross-repo:** this code lives in `~/xprojects/superskill`, not in this monorepo; see `### Design` for the split and the sequencing constraint.
+R2. **`task-write-guard` must not spawn `spur task resolve` for paths that cannot be task files.** `runSpTaskWriteGuard` currently delegates _every_ `Write`/`Edit` with a non-empty `file_path` straight to a 2.4 s `spawnSync` (`hook-run.ts:143` → `resolveSpurTaskOwnership`, `hook-run.ts:101-113`). Editing `src/foo.ts`, `package.json`, or a scratch file pays the same toll as editing a real task file. Add a cheap in-process prefilter **before** the spawn: allow immediately unless the path could plausibly be a task-corpus file. Ownership semantics must not change — `spur task resolve` stays the sole authority for any path that survives the prefilter, and the guard stays fail-open. **Cross-repo:** this code lives in `~/xprojects/superskill`, not in this monorepo; see `### Design` for the split and the sequencing constraint.
 
 R3. **`session_start` must be idempotent per real host session.** `recordSessionStart` (`plugins/sp/hooks/context-session-start.ts:37-60`) unconditionally mints a new `session-YYYY-MM-DD-HHMM` id and appends `session_start`, so every nested `agent.run` subprocess that fires `SessionStart` registers as a fresh session and clobbers the `.spur/context/.session.json` pointer that `context-post-tool` reads. Ledger evidence: 332 `session_start` against 157 `session_end` (a 2:1 imbalance no real session pattern produces), 298 distinct session ids, and 39 `session_start` on 2026-07-30/31 for a handful of actual sessions. A nested run must reuse the ancestor session id; a genuinely new host session must still open a new one.
 
@@ -84,10 +87,12 @@ R5. **Document the timeout-recovery runbook.** Force-done with provenance overri
 
 R6. **`normalizeEvidenceType` must accept documentation aliases and stop dropping rows silently.** `packages/app/src/services/task-verdict.ts:187-196` returns `null` for anything outside its six literals, and the caller (:169) then skips the row with no diagnostic — the operator authored `doc`, saw an empty AC list with no explanation, and had to read the parser source to learn the vocabulary. Map `doc` / `docs` / `documentation` → `static-ref`, and surface unrecognised values instead of discarding them in silence.
 
-R7. **Bracket tags must not break scenario-to-AC matching.** `requiresExecutableEvidence` (`task-verdict.ts:212-219`) demotes a `MET` row to `PARTIAL` unless the id carries `[doc-only]` / `[docs-only]` / `[non-behavior]` / `[advisory]` / `[non-core]` — so a documentation scenario *must* be tagged to keep `MET` with static evidence. But `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:640-648`) compares via `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:30-38`), which strips only a leading `R\d+` prefix — a bracket tag survives normalization and the id no longer equals the scenario title. The two rules are in direct contradiction: tag the row and lose the linkage, or keep the linkage and lose `MET`. That contradiction is what forced test/command evidence onto pure-documentation scenarios and blocked `spur feature advance H6 --to done --strict` until every AC was rewritten. Strip bracket tags in the matching path so a tagged row matches its untagged scenario title. The tag must remain visible in the authored id (`requiresExecutableEvidence` reads it) — the fix belongs in matching, not in authoring.
+R7. **Bracket tags must not break scenario-to-AC matching.** `requiresExecutableEvidence` (`task-verdict.ts:212-219`) demotes a `MET` row to `PARTIAL` unless the id carries `[doc-only]` / `[docs-only]` / `[non-behavior]` / `[advisory]` / `[non-core]` — so a documentation scenario _must_ be tagged to keep `MET` with static evidence. But `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:640-648`) compares via `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:30-38`), which strips only a leading `R\d+` prefix — a bracket tag survives normalization and the id no longer equals the scenario title. The two rules are in direct contradiction: tag the row and lose the linkage, or keep the linkage and lose `MET`. That contradiction is what forced test/command evidence onto pure-documentation scenarios and blocked `spur feature advance H6 --to done --strict` until every AC was rewritten. Strip bracket tags in the matching path so a tagged row matches its untagged scenario title. The tag must remain visible in the authored id (`requiresExecutableEvidence` reads it) — the fix belongs in matching, not in authoring.
 
 R8. **Document the linkage contract.** Add a section to `plugins/sp/skills/spur-dev/references/ac-style-guide.md` stating, with a worked example: the four accepted id forms (exact title, `Scenario: <title>`, the `AC-N` alias, or any of these plus a bracket tag), the evidence-type vocabulary including the R6 aliases, which tags exempt a row from executable evidence, and that `spur feature advance --strict` requires a `done` task with a `PASS` verdict carrying a `MET` row matching the scenario.
+
 ### Acceptance Criteria
+
 Scenario-to-requirement map: baseline→R1 · guard-skip/deny/fail-open→R2 · session→R3 ·
 timeout→R4 · runbook→R5 · evidence-alias→R6 · tag-matching→R7 · contract→R8 · gate→all.
 
@@ -176,7 +181,9 @@ Feature: H6 dogfood defect repairs
     When lint, test, and build are run
     Then all three pass with no skipped tests introduced to reach green
 ```
+
 ### Q&A
+
 **Q: Why one task instead of eight?**
 The operator asked for a single consolidated fix task from the two H6 post-mortems. The three
 clusters are independent enough to split later if the batch driver wants finer granularity, but
@@ -211,18 +218,20 @@ This task. The report figures were estimates written during the run; every numbe
 re-measured against the same artifacts before the task was authored, and the deltas are tabulated
 in `### Background`. The reports remain useful for narrative and for the timeout timeline, which
 this task does not dispute.
+
 ### Design
+
 #### Repository split — read this before starting
 
 R2 is the largest single win and it is **not in this repo**:
 
-| Requirement | Repo | Path |
-|---|---|---|
-| R2 write-guard prefilter | `~/xprojects/superskill` | `apps/cli/src/commands/hook-run.ts:101-154` |
-| R3 session idempotency | this monorepo | `plugins/sp/hooks/context-session-start.ts` |
-| R4 timeout | this monorepo | `config/workflows/task-pipeline.yaml`, `apps/cli/config/workflows/task-pipeline.yaml` |
-| R5, R8 docs | this monorepo | `plugins/sp/skills/spur-dev/references/` |
-| R6, R7 parser/matching | this monorepo | `packages/app/src/services/`, `packages/domain/src/bdd/` |
+| Requirement              | Repo                     | Path                                                                                  |
+| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------- |
+| R2 write-guard prefilter | `~/xprojects/superskill` | `apps/cli/src/commands/hook-run.ts:101-154`                                           |
+| R3 session idempotency   | this monorepo            | `plugins/sp/hooks/context-session-start.ts`                                           |
+| R4 timeout               | this monorepo            | `config/workflows/task-pipeline.yaml`, `apps/cli/config/workflows/task-pipeline.yaml` |
+| R5, R8 docs              | this monorepo            | `plugins/sp/skills/spur-dev/references/`                                              |
+| R6, R7 parser/matching   | this monorepo            | `packages/app/src/services/`, `packages/domain/src/bdd/`                              |
 
 Land the in-repo work first; it is self-contained and gate-verifiable here. R2 lands in the
 superskill repo and only takes effect after `superskill` is rebuilt and re-linked — verify it by
@@ -271,7 +280,7 @@ contract: any error path exits 0 silently.
 Strip bracket tags in the **matching** path, not in `normalizeTitle` itself — `normalizeTitle` is
 shared by `checkAcCoverage` (`packages/domain/src/bdd/coverage.ts`) and by task-side coverage
 (`task-check.ts:951`), and changing it moves behavior for callers this task did not audit. Confirm
-whether those callers *want* the same tag-stripping (they probably do — the same `[doc-only]` id
+whether those callers _want_ the same tag-stripping (they probably do — the same `[doc-only]` id
 flows through coverage matching) and, if so, fix it once in the shared helper and note the
 widened blast radius in `### Solution`. One guard in the shared function beats a guard in every
 caller; just verify the callers first.
@@ -291,7 +300,9 @@ caller; just verify the callers first.
   and the runtime path actually executing them is superskill's own bundle — a shebang change is
   both insufficient and aimed at the wrong process. Revisit only if R1 proves bun cold start is
   real outside the sandbox, and then as a superskill-side decision.
+
 ### Plan
+
 Ordered. Cluster A gates on step 1; clusters B and C are independent — run them in any order, or
 in parallel if fanning out.
 
@@ -357,7 +368,9 @@ in parallel if fanning out.
       rather than passing on requirement rows alone. Scope this with R6/R7 — it is the same defect
       surface, and the 0395 empty-`acceptanceCriteria` PASS is the case to regression-test.
 - [ ] `spur task verdict 0398 --from-answer`; then `spur task check 0398`.
+
 ### Root Cause
+
 Three independent root causes. Confidence is stated per cause; the timing figures carry the
 sandbox caveat until R1 clears it.
 
@@ -371,14 +384,14 @@ tool other than `Write`/`Edit` or an empty path (:136-139). Every other call rea
 
 Measured (sandbox, medians of 3):
 
-| Command | Wall |
-|---|---|
-| `spur task resolve … --strict --json` | **2.40 s** |
-| `superskill hook run sp context-post-tool` | **1.22 s** |
-| `superskill --version` | 1.35 s |
-| `bun plugins/sp/hooks/context-post-tool.ts` | 1.22 s |
-| `bun -e ''` | 1.41–2.00 s |
-| `node -e ''` | **0.02 s** |
+| Command                                     | Wall        |
+| ------------------------------------------- | ----------- |
+| `spur task resolve … --strict --json`       | **2.40 s**  |
+| `superskill hook run sp context-post-tool`  | **1.22 s**  |
+| `superskill --version`                      | 1.35 s      |
+| `bun plugins/sp/hooks/context-post-tool.ts` | 1.22 s      |
+| `bun -e ''`                                 | 1.41–2.00 s |
+| `node -e ''`                                | **0.02 s**  |
 
 Two readings follow. First, the guard's own dispatch is not the cost — `bun -e ''` alone accounts
 for essentially all of `superskill hook run`'s 1.22 s (user CPU was 0.06–0.14 s against 1.2 s wall;
@@ -399,13 +412,13 @@ that `context-post-tool` reads.
 
 Ledger evidence (`.spur/context/token-ledger.jsonl`, 1353 lines, 2026-07-13 → 2026-07-31):
 
-| | Count |
-|---|---|
-| `session_start` | 332 |
-| `session_end` | 157 |
-| distinct session ids | 298 |
-| `session_start` on 2026-07-30/31 (H6 window) | 39 |
-| `read` + `write` on 2026-07-30/31 | 15 + 7 |
+|                                              | Count  |
+| -------------------------------------------- | ------ |
+| `session_start`                              | 332    |
+| `session_end`                                | 157    |
+| distinct session ids                         | 298    |
+| `session_start` on 2026-07-30/31 (H6 window) | 39     |
+| `read` + `write` on 2026-07-30/31            | 15 + 7 |
 
 The 2:1 start:end ratio is the signature: nested starts fire, nested ends do not pair with them.
 Note the last row — PostToolUse recorded 22 events across the entire H6 window. The findissue
@@ -449,7 +462,7 @@ at all.
 
 **Consequence measured on the H6 corpus.** Because the contradiction forces evidence rewriting, the
 H6 force-done recovery authored only the AC rows needed to clear `spur feature check` — which
-requires one matching MET row per *feature* scenario, not per *task* scenario. Result: **23 of 48
+requires one matching MET row per _feature_ scenario, not per _task_ scenario. Result: **23 of 48
 declared task scenarios (52%) had no verdict AC row at all**, and `0395-verdict.json` carried an
 empty `acceptanceCriteria` array while still reading PASS on requirement rows alone. Nothing in the
 gate chain flagged this — `spur task check` passed on all nine, and `spur feature check H6 --strict`
@@ -463,7 +476,9 @@ The ~20 h wall-clock is **not** explained by hook latency. Four `agent.run` time
 an unattended overnight batch. RC-1 and RC-2 are steady-state taxes on every future session, worth
 fixing on their own merits — but do not expect R2/R3 to move a 20 h batch to 2 h. R4 is the
 requirement that addresses the wall-clock.
+
 ### Solution
+
 **6 of 8 requirements implemented. R1 and R2 are blocked by the execution environment, not by the
 work** — see "Not implemented" below. Nothing was partially landed: each requirement below is
 complete with tests.
@@ -480,7 +495,7 @@ complete with tests.
 #### R5 — timeout-recovery runbook
 
 - `plugins/sp/skills/spur-dev/references/done-housekeeping.md` — new `## F6 - Recovering from a
-  pipeline agent.run timeout`, placed before the terminal-gate checklist and matching the F1-F5
+pipeline agent.run timeout`, placed before the terminal-gate checklist and matching the F1-F5
   house style. Five numbered steps: recognise (`*-partial.md`, `exited with code 3`), establish
   green by hand, finish the abandoned sections (incl. the L3 `review-priority-table` gate), the
   exact `SPUR_PROVENANCE_OVERRIDE=1 … --force-done --reason` invocation, and the mandatory
@@ -530,15 +545,15 @@ the id, so tagging still exempts a row. Both halves of the contradiction now hol
 #### R8 — linkage contract documented
 
 - `plugins/sp/skills/spur-dev/references/ac-style-guide.md` — new `## Verdict AC ↔ feature scenario
-  linkage` section next to "Scenario-title stability". Covers the table shape, the full evidence-type
+linkage` section next to "Scenario-title stability". Covers the table shape, the full evidence-type
   vocabulary incl. the R6 aliases, the four accepted id forms plus bracket tags, the five
   exempting tags with a worked `[doc-only]` example, the three `--strict` advance preconditions, and
   an explicit warning to cover every declared scenario rather than the gate's minimum.
 
 #### A pre-existing test encoded the bug
 
-`plugins/sp/hooks/context-hooks.test.ts:91` was named *"is idempotent across two starts — appends a
-second event"* and asserted that two `SessionStart` fires produce two `session_start` rows. That is
+`plugins/sp/hooks/context-hooks.test.ts:91` was named _"is idempotent across two starts — appends a
+second event"_ and asserted that two `SessionStart` fires produce two `session_start` rows. That is
 RC-2 written down as intended behavior — the defect shipped with test cover, which is why it
 survived. Rewritten to assert one row per session, with a comment recording what it used to claim
 and why that was wrong.
@@ -550,12 +565,12 @@ Re-measured 2026-07-31 after the upstream releases. Still inside the agent sandb
 R1's literal "bare shell" condition is **still unmet**. But the decisive comparison no longer needs
 one, because both runtimes were measured under identical conditions:
 
-| Command | Wall (n=3 avg) |
-|---|---|
-| `bun -e ''` | **2.29 s** |
-| `node -e ''` | **0.02 s** |
-| `superskill --version` | 2.36 s |
-| `spur task resolve <task>.md --strict --json` | 2.39 s |
+| Command                                       | Wall (n=3 avg) |
+| --------------------------------------------- | -------------- |
+| `bun -e ''`                                   | **2.29 s**     |
+| `node -e ''`                                  | **0.02 s**     |
+| `superskill --version`                        | 2.36 s         |
+| `spur task resolve <task>.md --strict --json` | 2.39 s         |
 
 `node` is ~115× faster than `bun` **in the same sandbox**, so the cost is not a uniform per-spawn
 sandbox tax — it is bun-specific. Applying R1's decision rule (">500 ms → the cold-start tax is
@@ -579,14 +594,14 @@ spawns (now `await`ed via an executor) for paths that survive it.
 
 **Timing check (n=5 each, very low variance):**
 
-| Path | Wall |
-|---|---|
-| `SPUR_WRITE_GUARD=off` — pure hook floor | 2.37 s |
-| non-corpus — prefilter skips the spawn | **2.36 s** (indistinguishable from the floor) |
-| corpus — still spawns `spur task resolve` | 2.48 s |
+| Path                                      | Wall                                          |
+| ----------------------------------------- | --------------------------------------------- |
+| `SPUR_WRITE_GUARD=off` — pure hook floor  | 2.37 s                                        |
+| non-corpus — prefilter skips the spawn    | **2.36 s** (indistinguishable from the floor) |
+| corpus — still spawns `spur task resolve` | 2.48 s                                        |
 
 The prefilter works perfectly: a skipped path costs exactly the floor. **But the saving is ~0.12 s,
-not the ~2.4 s this task predicted.** The 3.7 s figure in `### Background` was derived by *adding*
+not the ~2.4 s this task predicted.** The 3.7 s figure in `### Background` was derived by _adding_
 two independently-measured cold starts (1.3 s + 2.4 s). That addition was wrong: a child process
 spawned from an already-running process does not pay a second full cold start here — the measured
 marginal cost of the `spur task resolve` spawn is 0.12 s, not 2.39 s.
@@ -600,6 +615,7 @@ over-estimate.
 
 The real lever on hook latency is the 2.29 s bun startup, i.e. runtime choice or a resident hook
 process. That is a new, separate problem; do not reopen this task for it.
+
 #### R3 — upgraded to the exact ancestor signal (ts-ai-runner 0.4.15)
 
 The wall-clock heuristic is no longer the primary path. `@gobing-ai/ts-ai-runner@0.4.15` publishes
@@ -624,7 +640,7 @@ threads its own `env` through, so the marker is injectable rather than read from
 process.
 
 **`SESSION_REUSE_IDLE_MS` was kept, deviating from this task's Plan**, which called its deletion the
-acceptance signal. Reason: the marker is only set on *correlated* paths. Deleting the fallback would
+acceptance signal. Reason: the marker is only set on _correlated_ paths. Deleting the fallback would
 regress every nesting path that arrives without a correlation (a host spawning its own helpers, or
 an `agent.run` invoked without one) straight back to the original bug, and the set of hosts —
 Claude Code, Codex, pi, omp, Gemini, OpenCode, Antigravity — is not enumerable from here. The
@@ -641,18 +657,18 @@ The R1 entry above concluded "the cold-start tax is real, at 2.29 s" from the bu
 differential. A follow-up experiment shows that was **overstated**, and also confirms the
 explanation R2 offered for its own small saving. Four chains, n=3 each:
 
-| Chain | Wall |
-|---|---|
-| shell → `node -e ''` | 0.03 s |
-| shell → `bun -e ''` | 2.29 s |
-| `node` → spawn `bun -e ''` | 2.31 s (fresh bun exec pays full price) |
-| `bun` → spawn `bun -e ''` | 2.31 s **total** — the inner bun costs ≈0.01 s |
+| Chain                      | Wall                                           |
+| -------------------------- | ---------------------------------------------- |
+| shell → `node -e ''`       | 0.03 s                                         |
+| shell → `bun -e ''`        | 2.29 s                                         |
+| `node` → spawn `bun -e ''` | 2.31 s (fresh bun exec pays full price)        |
+| `bun` → spawn `bun -e ''`  | 2.31 s **total** — the inner bun costs ≈0.01 s |
 
 Two conclusions, both now tested rather than inferred:
 
 1. **The penalty attaches to exec'ing the `bun` binary, and warms per process tree.** A bun exec'd
    by an already-running bun is essentially free; one exec'd by `node`, or from the shell, pays the
-   full ~2.28 s. This *confirms* the explanation offered for R2's 0.12 s marginal spawn cost — the
+   full ~2.28 s. This _confirms_ the explanation offered for R2's 0.12 s marginal spawn cost — the
    hook pays the cold exec, and the `spur task resolve` child it spawns does not. That explanation
    was previously an untested inference; it is now measured.
 2. **Whether the ~2.28 s survives outside the sandbox is UNVERIFIED.** `node` execs in 0.03 s in the
@@ -661,12 +677,14 @@ Two conclusions, both now tested rather than inferred:
    an order of magnitude smaller. R1's decision rule was applied to a number that may be a sandbox
    artifact after all.
 
-**Corrected R1 verdict:** the tax is real *in this environment* and is bun-binary-specific; the
-claim that it is real *generally* is not established and should not be cited as such. The one
+**Corrected R1 verdict:** the tax is real _in this environment_ and is bun-binary-specific; the
+claim that it is real _generally_ is not established and should not be cited as such. The one
 measurement that does transfer is the marginal one: the spawn R2 avoids costs 0.12 s here, and
 would cost less on a box where bun execs quickly — so R2's absolute saving is a ceiling, not a
 floor. This does not change any requirement's status; it narrows what R1's number licenses.
+
 ### Testing
+
 43 tests added across 4 files over the task's life. Suite **4104 → 4147 pass**, failure set
 byte-identical to the pre-task baseline throughout.
 
@@ -713,20 +731,20 @@ shapes, missing pointer. Every null path mints a new session, preserving the fai
 Tag stripping at the shared helper across all four orderings and all five tag spellings, a mid-title
 `[bracket]` left intact, and a tag-only title terminating rather than looping. End-to-end through
 the real `FeatureCheckService`: seven tagged id forms verify the untagged scenario with zero
-`L4.scenario-unverified`, plus an over-match guard proving `[doc-only] beta` still does *not* verify
+`L4.scenario-unverified`, plus an over-match guard proving `[doc-only] beta` still does _not_ verify
 scenario `alpha`.
 
 #### R6 — `packages/app/tests/services/task-verdict.test.ts` (9)
 
 Five evidence-type aliases normalize to `static-ref` at MET; `vibes` emits an `ac-row-dropped` check
 naming the row, the value, and the vocabulary; an unrecognised status is reported the same way; a
-clean table emits no such check; an *untagged* `static-ref` MET row is still demoted to PARTIAL,
+clean table emits no such check; an _untagged_ `static-ref` MET row is still demoted to PARTIAL,
 proving the evidence rule survived R7.
 
 #### R2 — verified by measurement, upstream
 
 Owned by superskill 0.3.10; its suite (43 pass in `hook-run.test.ts`, 778 vs 765 baseline) ran there
-during authoring. Verified *here* by behavior (deny/allow both correct) and by timing (n=5 per path,
+during authoring. Verified _here_ by behavior (deny/allow both correct) and by timing (n=5 per path,
 floor 2.37 s / skip 2.36 s / spawn 2.48 s). See `### Solution` — the timing also **falsified this
 task's predicted saving**, which is recorded rather than quietly dropped.
 
@@ -735,22 +753,24 @@ task's predicted saving**, which is recorded rather than quietly dropped.
 R1 has no test: it is a measurement, and its literal bare-shell precondition remains unmet inside
 the sandbox. The `node` vs `bun` differential recorded in `### Solution` answers its decision rule
 without one.
+
 ### Review
+
 Self-review across the whole task, re-run after the ts-libs 0.4.15 / superskill 0.3.10 releases
 closed the two upstream blockers. Dimensions: functional traceability, SECUA, architecture.
 
-| Priority | Finding | Disposition |
-|---|---|---|
-| P1 | **This task's headline cost claim was wrong and is now measured.** `### Background` and RC-1 assert ~3.7 s per file mutation, derived by adding two independently-measured cold starts (1.3 s + 2.4 s). Measured reality with the fix installed: floor 2.37 s, prefilter-skip 2.36 s, spawn path 2.48 s — the avoided spawn is worth **0.12 s, not 2.4 s**. The real saving is ≈5%, not ≈65%. | **Corrected in `### Solution`, not quietly dropped.** R2 remains correct work (a pointless subprocess is gone) but was mis-sized. The dominant cost is the hook's own 2.29 s bun startup, which nothing in either repo addresses. Flagged as a new, separate problem — deliberately not reopened here. |
-| P1 | **R1's literal precondition is still unmet.** No bare shell available; the sandbox persists (re-probed this session). | **Answered by a different route, stated as such.** `node -e ''` at 0.02 s vs `bun -e ''` at 2.29 s *in the same sandbox* shows the cost is bun-specific rather than a uniform spawn tax, which is what R1's decision rule needed. Residual: sandbox amplification of bun specifically cannot be excluded. |
-| P2 | **R3 keeps `SESSION_REUSE_IDLE_MS`, deviating from this task's own Plan**, which named its deletion the acceptance signal. | **Deliberate, justified in `### Solution`.** The marker only exists on correlated paths; deleting the fallback regresses every uncorrelated nesting path to the original bug, across a host set (Claude Code, Codex, pi, omp, Gemini, OpenCode, Antigravity) not enumerable from here. The constant is now scoped in-source as a residual backstop with an explicit deletion condition. Reviewer should confirm they accept the deviation. |
-| P2 | **A pre-existing test encoded the defect.** `plugins/sp/hooks/context-hooks.test.ts:91` asserted two `SessionStart` fires produce two `session_start` rows, under the name "is idempotent". | **Fixed**, with a comment recording the superseded claim. Lesson worth keeping: a test asserting *current* behavior is not a test asserting *intended* behavior. |
-| P3 | **`context-session-stop` remains the unfixed symmetric half.** A nested `SessionEnd` still appends `session_end` and deletes `.session.json`, retiring a session its parent is still using — and it now has an exact signal available to prevent exactly that. | **Out of scope, flagged for follow-up.** R3's text and AC are start-scoped. Cheaper to fix now than before (the same `SPUR_RUN_ID` check applies), which strengthens the case for a follow-up task rather than silently widening this one. |
-| P3 | Ordering bug found during implementation: the first `stripScenarioPrefixes` did not strip the `R{n}` prefix, so `R3 — [doc-only] Foo` kept its tag. | **Fixed** by folding the R-prefix into the same fixed-point loop; regression test added. |
-| P3 | Session ids are minute-granular, so two sessions opened in the same minute share an id. | **Pre-existing, out of scope.** Noted in a test comment so it is not mistaken for R3 fallout. |
-| P4 | `normalizeTitle` is shared by three consumers; changing it widened blast radius beyond `feature-check`. | **Audited before landing.** All three want the behavior; `bun test packages/domain packages/app` shows zero BDD/coverage/verdict/feature-check failures. |
-| P4 | R6 could have added a `warnings[]` field to the verdict artifact. | **Avoided** — reused the existing `checks[]` channel. No schema change, no new consumer contract. |
-| P4 | R3's env var name is a string literal rather than an import from ts-ai-runner. | **Intentional**, and pinned by a test asserting it equals `SPUR_RUN_ID`. The hook is self-contained by design (0232/0246) and must not depend on the workspace module graph; the test converts an invisible coupling into a loud one. |
+| Priority | Finding                                                                                                                                                                                                                                                                                                                                                                                       | Disposition                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1       | **This task's headline cost claim was wrong and is now measured.** `### Background` and RC-1 assert ~3.7 s per file mutation, derived by adding two independently-measured cold starts (1.3 s + 2.4 s). Measured reality with the fix installed: floor 2.37 s, prefilter-skip 2.36 s, spawn path 2.48 s — the avoided spawn is worth **0.12 s, not 2.4 s**. The real saving is ≈5%, not ≈65%. | **Corrected in `### Solution`, not quietly dropped.** R2 remains correct work (a pointless subprocess is gone) but was mis-sized. The dominant cost is the hook's own 2.29 s bun startup, which nothing in either repo addresses. Flagged as a new, separate problem — deliberately not reopened here.                                                                                                                                     |
+| P1       | **R1's literal precondition is still unmet.** No bare shell available; the sandbox persists (re-probed this session).                                                                                                                                                                                                                                                                         | **Answered by a different route, stated as such.** `node -e ''` at 0.02 s vs `bun -e ''` at 2.29 s _in the same sandbox_ shows the cost is bun-specific rather than a uniform spawn tax, which is what R1's decision rule needed. Residual: sandbox amplification of bun specifically cannot be excluded.                                                                                                                                  |
+| P2       | **R3 keeps `SESSION_REUSE_IDLE_MS`, deviating from this task's own Plan**, which named its deletion the acceptance signal.                                                                                                                                                                                                                                                                    | **Deliberate, justified in `### Solution`.** The marker only exists on correlated paths; deleting the fallback regresses every uncorrelated nesting path to the original bug, across a host set (Claude Code, Codex, pi, omp, Gemini, OpenCode, Antigravity) not enumerable from here. The constant is now scoped in-source as a residual backstop with an explicit deletion condition. Reviewer should confirm they accept the deviation. |
+| P2       | **A pre-existing test encoded the defect.** `plugins/sp/hooks/context-hooks.test.ts:91` asserted two `SessionStart` fires produce two `session_start` rows, under the name "is idempotent".                                                                                                                                                                                                   | **Fixed**, with a comment recording the superseded claim. Lesson worth keeping: a test asserting _current_ behavior is not a test asserting _intended_ behavior.                                                                                                                                                                                                                                                                           |
+| P3       | **`context-session-stop` remains the unfixed symmetric half.** A nested `SessionEnd` still appends `session_end` and deletes `.session.json`, retiring a session its parent is still using — and it now has an exact signal available to prevent exactly that.                                                                                                                                | **Out of scope, flagged for follow-up.** R3's text and AC are start-scoped. Cheaper to fix now than before (the same `SPUR_RUN_ID` check applies), which strengthens the case for a follow-up task rather than silently widening this one.                                                                                                                                                                                                 |
+| P3       | Ordering bug found during implementation: the first `stripScenarioPrefixes` did not strip the `R{n}` prefix, so `R3 — [doc-only] Foo` kept its tag.                                                                                                                                                                                                                                           | **Fixed** by folding the R-prefix into the same fixed-point loop; regression test added.                                                                                                                                                                                                                                                                                                                                                   |
+| P3       | Session ids are minute-granular, so two sessions opened in the same minute share an id.                                                                                                                                                                                                                                                                                                       | **Pre-existing, out of scope.** Noted in a test comment so it is not mistaken for R3 fallout.                                                                                                                                                                                                                                                                                                                                              |
+| P4       | `normalizeTitle` is shared by three consumers; changing it widened blast radius beyond `feature-check`.                                                                                                                                                                                                                                                                                       | **Audited before landing.** All three want the behavior; `bun test packages/domain packages/app` shows zero BDD/coverage/verdict/feature-check failures.                                                                                                                                                                                                                                                                                   |
+| P4       | R6 could have added a `warnings[]` field to the verdict artifact.                                                                                                                                                                                                                                                                                                                             | **Avoided** — reused the existing `checks[]` channel. No schema change, no new consumer contract.                                                                                                                                                                                                                                                                                                                                          |
+| P4       | R3's env var name is a string literal rather than an import from ts-ai-runner.                                                                                                                                                                                                                                                                                                                | **Intentional**, and pinned by a test asserting it equals `SPUR_RUN_ID`. The hook is self-contained by design (0232/0246) and must not depend on the workspace module graph; the test converts an invisible coupling into a loud one.                                                                                                                                                                                                      |
 
 #### Residual risk
 
@@ -769,10 +789,12 @@ closed the two upstream blockers. Dimensions: functional traceability, SECUA, ar
 task is +43 pass, +0 fail. No test was skipped, `.skip`-ed, or suppressed to reach green, and no
 `biome-ignore` was added. One formatting-only lint failure was introduced by the new tests and fixed
 with `bun run format`, not by relaxing the rule.
+
 ### References
+
 #### Source post-mortems
 
-- `/tmp/findissue-H6-report.md` — `/skill:sp-dev-findissue` output, 2026-07-31. Issue 1 (hooks),
+- `/tmp/findissue-H6-report.md` — `/skill:sp-dev-find-issue` output, 2026-07-31. Issue 1 (hooks),
   Issue 2 (execution time). Numbers superseded by `### Background`.
 - `docs/dogfood/2026-07-31-sp-dev-runall-H6-dogfood.md` — dogfood report, findings P1–P4.
 - omp session `019fb512-71c5-7000-89f2-1bd28a14ad53` — 473 events, 38 timeout/exit-code-3 mentions.
@@ -834,7 +856,9 @@ with `bun run format`, not by relaxing the rule.
 - `plugins/sp/skills/spur-dev/references/ac-style-guide.md` — R8 contract; place near
   "Scenario-title stability" (:65).
 - `docs/dogfood/2026-07-31-sp-dev-runall-H6-dogfood.md` — close-out correction note.
+
 ### History
+
 - 2026-07-31T05:19:10.875Z backlog → todo (system)
 - 2026-07-31T05:19:13.379Z todo → wip (system)
 - 2026-08-01T04:07:45.866Z wip → testing (system)

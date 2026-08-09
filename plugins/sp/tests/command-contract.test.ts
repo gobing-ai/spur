@@ -1076,8 +1076,8 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });
 
-    test('dev-findissue wrapper passes contract gates and delegates to sp:issue-finding', () => {
-        const raw = readFileSync(join(COMMANDS_DIR, 'dev-findissue.md'), 'utf8');
+    test('dev-find-issue wrapper passes contract gates and delegates to sp:issue-finding', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-find-issue.md'), 'utf8');
         expect(raw).toContain('description:');
         expect(raw).toMatch(/^argument-hint:.*\[<topic>\]/m);
         expect(raw).toContain('allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]');

@@ -476,7 +476,7 @@ Inline force-done review (no pipeline record→done; the pipeline implement stag
 - Skill/command ownership: `docs/00_ADR.md` — ADR-023 and ADR-032
 - Product scope: `docs/01_PRD.md`
 - Current command surface: `docs/04_DESIGN.md` §1.3 and `plugins/sp/README.md`
-- Existing thin-wrapper precedent: `plugins/sp/commands/dev-findissue.md`
+- Existing thin-wrapper precedent: `plugins/sp/commands/dev-find-issue.md`
 - Existing backbone-skill precedent: `plugins/sp/skills/issue-finding/SKILL.md`
 - Command validation: `plugins/sp/scripts/validate-commands.ts`
 - Contract tests: `plugins/sp/tests/command-contract.test.ts`, `plugins/sp/tests/command-flag-parity.test.ts`, `plugins/sp/tests/skill-structure.test.ts`

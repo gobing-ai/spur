@@ -20,6 +20,7 @@ done_reason: "Pipeline implement step timed out (30-min subprocess limit); imple
 ## 0412. Normalize dev-command argument contracts: Argument Flags tables, syntax-only hints, flag audit
 
 ### Background
+
 > **Depends on task 0413 (feature H82) — land that first.** 0413 collapses
 > `--agent` / `--inline` / `--subprocess` into a single `--agent <inline|auto|<agent>|<executor>>`
 > selector across the same 19 commands this task migrates. Running this migration first would
@@ -41,7 +42,7 @@ should see `--agent <name|auto>`.
 
 #### 2. Defaults and command-local meaning are undiscoverable
 
-There is no uniform place in a wrapper stating what each flag does *here* and what happens when it is
+There is no uniform place in a wrapper stating what each flag does _here_ and what happens when it is
 omitted. Three wrappers (`dev-featurechange`, `dev-idea`, `dev-run`) already grew ad hoc flag tables
 in different shapes and different sections — evidence that the need is real and the location must be
 fixed by contract, not convention.
@@ -50,16 +51,16 @@ fixed by contract, not convention.
 
 This is the substantive half of the work. Measured inventory (2026-08-01, all 28 `dev-*` wrappers):
 
-| Metric | Count |
-|--------|-------|
-| Commands | 28 |
-| Unique flag spellings in `argument-hint` | 64 |
-| Additional spellings appearing only in body prose | 7 |
-| Flag declarations across all hints | 200 |
-| Markdown links inside `argument-hint` | 89 (24/28 commands) |
-| Commands with an existing ad hoc flag table | 3 |
-| Flags declared by exactly one command | 34 |
-| Commands with zero flags | 1 (`dev-handover`) |
+| Metric                                            | Count               |
+| ------------------------------------------------- | ------------------- |
+| Commands                                          | 28                  |
+| Unique flag spellings in `argument-hint`          | 64                  |
+| Additional spellings appearing only in body prose | 7                   |
+| Flag declarations across all hints                | 200                 |
+| Markdown links inside `argument-hint`             | 89 (24/28 commands) |
+| Commands with an existing ad hoc flag table       | 3                   |
+| Flags declared by exactly one command             | 34                  |
+| Commands with zero flags                          | 1 (`dev-handover`)  |
 
 After 0413 lands, expect roughly 162 declarations and the `--agent`/`--inline`/`--subprocess` rows to
 collapse into one. Do not hardcode either number — re-measure.
@@ -82,7 +83,9 @@ resolve every one of them with evidence.
 
 These three make the migration **atomic**: the heading gate flips for all 28 files in one commit or
 the tree does not validate.
+
 ### Requirements
+
 - **R1 — Audit every input before changing any.** Build a 28-command ledger covering every hint spelling and
   body-only spelling **present in the tree at implementation time** (2026-08-01 pre-0413 baseline:
   64 + 7; re-derive rather than trusting it — 0413 lands first and changes the set). Per input record: classification (supported / compatibility
@@ -118,7 +121,9 @@ the tree does not validate.
   registry, generator, package, runtime, schema, or DTO; commit no per-platform adapter; keep the
   `ValidationResult`/`Violation` JSON envelope shape unchanged; leave non-`dev-*` commands on the
   two-heading contract. (H81 R7, R9)
+
 ### Acceptance Criteria
+
 Derived from feature **H81** scenarios R1–R9 (`docs/features/H81_dev-command-argument-contract-clarity.md:31-102`).
 Every box needs mechanical evidence — a passing assertion, a validator diagnostic, or a named
 `file:line` — not a self-report.
@@ -212,8 +217,7 @@ Every box needs mechanical evidence — a passing assertion, a validator diagnos
 - [x] `bun run test-cf` **not green — environmental, not a regression.** It fails in this sandbox
       with a localhost-bind denial in the Vitest pool (the known `test-cf` limitation); it passes
       outside the sandbox. Not run to green here; flagged rather than ticked silently.
-- [x] `bun run autofix && bun run spur-check` **not run this session** — `bun run lint` + `bun run test`
-      + `validate-commands` cover the same surface for this change (docs/markdown + one test file).
+- [x] `bun run autofix && bun run spur-check` **not run this session** — `bun run lint` + `bun run test` + `validate-commands` cover the same surface for this change (docs/markdown + one test file).
       Run it before commit if the project gate is required verbatim.
 
 **Feature scenario cover (DD-09 titles — mechanical evidence already above)**
@@ -263,6 +267,7 @@ Feature: Clear and coherent dev-command argument contracts
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
+
 Approach A from the brainstorm, approved 2026-08-01. Full surface contract lives in
 `docs/design/dev-command-argument-contract.md` — **read it before implementing**; this section records
 only the deltas and the measured audit input.
@@ -282,12 +287,12 @@ allowed-tools: [...]
 
 ## Argument Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `<wbs>` | Task WBS to run | `required` |
-| `--mode <full\|implement>` | Select execution mode | `full` |
-| `--agent <inline\|auto\|name>` | Execution surface + executor (post-0413 selector) | `inline` |
-| `--auto` | Skip objective HITL confirmations | `off` |
+| Flag                           | Description                                       | Default    |
+| ------------------------------ | ------------------------------------------------- | ---------- |
+| `<wbs>`                        | Task WBS to run                                   | `required` |
+| `--mode <full\|implement>`     | Select execution mode                             | `full`     |
+| `--agent <inline\|auto\|name>` | Execution surface + executor (post-0413 selector) | `inline`   |
+| `--auto`                       | Skip objective HITL confirmations                 | `off`      |
 
 **For the details of the above flags, refer to the [flag glossary](../skills/spur-dev/references/flag-glossary.md).**
 
@@ -305,14 +310,14 @@ meaning + default; **glossary** = shared cross-command semantics, linked exactly
 
 #### Deltas from the current tree
 
-| Surface | Change |
-|---------|--------|
-| `validate-commands.ts` gate (a) | `ALLOWED_HEADINGS`/`REQUIRED_HEADINGS` become `['Argument Flags','Usage','Implementation']`, **order-enforced**, `Argument Flags` immediately before `Usage` |
-| `validate-commands.ts` gate (b) | new: reject `](` in a `dev-*` `argument-hint`; new: require exactly one `Flag`/`Description`/`Default` table; new: require exactly one canonical glossary reference |
-| `validate-commands.ts` new gate (e) | canonical hint-token ↔ table-row bidirectional parity, including positionals; diagnostic names command + offending token |
-| `command-contract.test.ts` | `toEqual(['Usage','Implementation'])` → the three-heading ordered list; add negative fixtures per new rule |
-| `command-flag-parity.test.ts` | invert derivation: shared-flag membership from **all 28 wrappers**, not the `dev-operations.md` subset; drop the per-flag deep-link requirement; keep numbered-operation parity as a *separate* bidirectional check |
-| non-`dev-*` commands | unchanged — the new headings apply to the `dev-*` surface only; keep the two-heading contract for the rest |
+| Surface                             | Change                                                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate-commands.ts` gate (a)     | `ALLOWED_HEADINGS`/`REQUIRED_HEADINGS` become `['Argument Flags','Usage','Implementation']`, **order-enforced**, `Argument Flags` immediately before `Usage`                                                        |
+| `validate-commands.ts` gate (b)     | new: reject `](` in a `dev-*` `argument-hint`; new: require exactly one `Flag`/`Description`/`Default` table; new: require exactly one canonical glossary reference                                                 |
+| `validate-commands.ts` new gate (e) | canonical hint-token ↔ table-row bidirectional parity, including positionals; diagnostic names command + offending token                                                                                            |
+| `command-contract.test.ts`          | `toEqual(['Usage','Implementation'])` → the three-heading ordered list; add negative fixtures per new rule                                                                                                          |
+| `command-flag-parity.test.ts`       | invert derivation: shared-flag membership from **all 28 wrappers**, not the `dev-operations.md` subset; drop the per-flag deep-link requirement; keep numbered-operation parity as a _separate_ bidirectional check |
+| non-`dev-*` commands                | unchanged — the new headings apply to the `dev-*` surface only; keep the two-heading contract for the rest                                                                                                          |
 
 `validate-commands.ts` keeps its `ValidationResult` JSON envelope and `Violation` shape unchanged;
 only `gate` gains a value and `renderHelp()` gains lines. No registry, no generator, no new dependency
@@ -326,36 +331,36 @@ missing) with an evidence path, and record the resulting ledger in `### Solution
 
 **Shared (n ≥ 2) — these are the glossary's jurisdiction:**
 
-| Flag | n | Declaring commands |
-|------|---|--------------------|
+| Flag                                        | n       | Declaring commands                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--agent` ~~`--inline`~~ ~~`--subprocess`~~ | 19 each | arch, brainstorm, debug, dogfood, findissue, next, parallel, plan, refine, refineall, refresh, reverse, review, run, runall, simplify, unit, verify, verifyall — **task 0413 collapses this triple into `--agent <inline\|auto\|<agent>\|<executor>>` on all 19.** Expect one row here, not three; `--inline`/`--subprocess` survive only as deprecated aliases (omit from canonical hints) |
-| `--auto` | 14 | idea, next, plan, refine, refineall, refresh, run, runall, simplify, unit, verify, verifyall, wrap, wrapall |
-| `--feature` | 8 | brainstorm, findissue, parallel, plan, refineall, runall, verifyall, wrapall |
-| `--focus` | 6 | refine, refineall, reverse, review, verify, verifyall |
-| `--json` | 6 | arch, findissue, parallel, refineall, runall, verifyall |
-| `--next` | 6 | brainstorm, refine, run, runall, verify, verifyall |
-| `--dry-run` | 5 | daily, featurechange, next, wrap, wrapall |
-| `--scope` | 5 | arch, debug, fixall, gitmsg, simplify |
-| `--mode` | 4 | parallel, reverse, run, runall |
-| `--tasks` | 4 | parallel, refineall, runall, verifyall |
-| `--fix` | 3 | review, verify, verifyall |
-| `--since` | 3 | changelog, findissue, wrapall |
-| `--task` | 3 | brainstorm, debug, dogfood |
-| `--approve-taste` | 2 | idea, plan |
-| `--bdd` | 2 | verify, verifyall |
-| `--continue` | 2 | run, runall |
-| `--description` | 2 | refine, refineall |
-| `--force` | 2 | verify, verifyall |
-| `--full` | 2 | dogfood, next |
-| `--keep-going` | 2 | refineall, runall |
-| `--max-retry` | 2 | dogfood, fixall |
-| `--merge` | 2 | wrap, wrapall |
-| `--output` | 2 | daily, reverse |
-| `--skip-design` | 2 | idea, plan |
-| `--skip-shippable` | 2 | verify, verifyall |
-| `--status` | 2 | refineall, wrapall |
-| `--until` | 2 | changelog, findissue |
-| `--wrap` | 2 | run, runall |
+| `--auto`                                    | 14      | idea, next, plan, refine, refineall, refresh, run, runall, simplify, unit, verify, verifyall, wrap, wrapall                                                                                                                                                                                                                                                                                 |
+| `--feature`                                 | 8       | brainstorm, findissue, parallel, plan, refineall, runall, verifyall, wrapall                                                                                                                                                                                                                                                                                                                |
+| `--focus`                                   | 6       | refine, refineall, reverse, review, verify, verifyall                                                                                                                                                                                                                                                                                                                                       |
+| `--json`                                    | 6       | arch, findissue, parallel, refineall, runall, verifyall                                                                                                                                                                                                                                                                                                                                     |
+| `--next`                                    | 6       | brainstorm, refine, run, runall, verify, verifyall                                                                                                                                                                                                                                                                                                                                          |
+| `--dry-run`                                 | 5       | daily, featurechange, next, wrap, wrapall                                                                                                                                                                                                                                                                                                                                                   |
+| `--scope`                                   | 5       | arch, debug, fixall, gitmsg, simplify                                                                                                                                                                                                                                                                                                                                                       |
+| `--mode`                                    | 4       | parallel, reverse, run, runall                                                                                                                                                                                                                                                                                                                                                              |
+| `--tasks`                                   | 4       | parallel, refineall, runall, verifyall                                                                                                                                                                                                                                                                                                                                                      |
+| `--fix`                                     | 3       | review, verify, verifyall                                                                                                                                                                                                                                                                                                                                                                   |
+| `--since`                                   | 3       | changelog, findissue, wrapall                                                                                                                                                                                                                                                                                                                                                               |
+| `--task`                                    | 3       | brainstorm, debug, dogfood                                                                                                                                                                                                                                                                                                                                                                  |
+| `--approve-taste`                           | 2       | idea, plan                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--bdd`                                     | 2       | verify, verifyall                                                                                                                                                                                                                                                                                                                                                                           |
+| `--continue`                                | 2       | run, runall                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--description`                             | 2       | refine, refineall                                                                                                                                                                                                                                                                                                                                                                           |
+| `--force`                                   | 2       | verify, verifyall                                                                                                                                                                                                                                                                                                                                                                           |
+| `--full`                                    | 2       | dogfood, next                                                                                                                                                                                                                                                                                                                                                                               |
+| `--keep-going`                              | 2       | refineall, runall                                                                                                                                                                                                                                                                                                                                                                           |
+| `--max-retry`                               | 2       | dogfood, fixall                                                                                                                                                                                                                                                                                                                                                                             |
+| `--merge`                                   | 2       | wrap, wrapall                                                                                                                                                                                                                                                                                                                                                                               |
+| `--output`                                  | 2       | daily, reverse                                                                                                                                                                                                                                                                                                                                                                              |
+| `--skip-design`                             | 2       | idea, plan                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--skip-shippable`                          | 2       | verify, verifyall                                                                                                                                                                                                                                                                                                                                                                           |
+| `--status`                                  | 2       | refineall, wrapall                                                                                                                                                                                                                                                                                                                                                                          |
+| `--until`                                   | 2       | changelog, findissue                                                                                                                                                                                                                                                                                                                                                                        |
+| `--wrap`                                    | 2       | run, runall                                                                                                                                                                                                                                                                                                                                                                                 |
 
 **Single-command (n = 1) — 34 spellings, glossary membership must be justified per flag, not assumed:**
 `--all` (refresh) · `--apply` `--limit` `--map` `--wave` `--yes` (featurechange) · `--category`
@@ -367,14 +372,14 @@ missing) with an evidence path, and record the resulting ledger in `### Solution
 
 **Body-only spellings (never in any hint) — classify before migrating:**
 
-| Spelling | Appears in | Measured context (verify before acting) |
-|----------|-----------|------------------------------------------|
-| `--skip-shipable` | verify, verifyall | Typo-tolerant **alias** of `--skip-shippable`, explicitly documented at `dev-verify.md:19`, `dev-verifyall.md:39`. Keep as compatibility; **omit from hint**; assert the mapping in a regression test |
-| `--next` | review, refineall | **Removal notices** (H8, 2026-07-31), not declarations — `dev-review.md:20` "removed", `dev-refineall.md:26-30` "dropped". Do **not** re-add; the notices are marked for post-release deletion |
-| `--continue`, `--keep-going` | verifyall | **Disambiguation prose** at `dev-verifyall.md:31-32` pointing at *other* commands' flags. Not declarations |
-| `--strict-core` | verifyall | `dev-verifyall.md:26` names it as a Review L3 guard. **Ambiguous** — determine whether it is a real accepted input or prose about a downstream gate, then advertise or drop |
-| `--design`, `--design-approved`, `--idea-approved` | idea, plan | Approval-gate aliases per the design satellite (`:108-110`). Compatibility evidence, not canonical hint syntax |
-| `--json-out`, `--docs-glob` | featurechange | In the existing ad hoc table but absent from the hint. Decide: promote to hint, or mark internal |
+| Spelling                                           | Appears in        | Measured context (verify before acting)                                                                                                                                                               |
+| -------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--skip-shipable`                                  | verify, verifyall | Typo-tolerant **alias** of `--skip-shippable`, explicitly documented at `dev-verify.md:19`, `dev-verifyall.md:39`. Keep as compatibility; **omit from hint**; assert the mapping in a regression test |
+| `--next`                                           | review, refineall | **Removal notices** (H8, 2026-07-31), not declarations — `dev-review.md:20` "removed", `dev-refineall.md:26-30` "dropped". Do **not** re-add; the notices are marked for post-release deletion        |
+| `--continue`, `--keep-going`                       | verifyall         | **Disambiguation prose** at `dev-verifyall.md:31-32` pointing at _other_ commands' flags. Not declarations                                                                                            |
+| `--strict-core`                                    | verifyall         | `dev-verifyall.md:26` names it as a Review L3 guard. **Ambiguous** — determine whether it is a real accepted input or prose about a downstream gate, then advertise or drop                           |
+| `--design`, `--design-approved`, `--idea-approved` | idea, plan        | Approval-gate aliases per the design satellite (`:108-110`). Compatibility evidence, not canonical hint syntax                                                                                        |
+| `--json-out`, `--docs-glob`                        | featurechange     | In the existing ad hoc table but absent from the hint. Decide: promote to hint, or mark internal                                                                                                      |
 
 **Lesson this encodes:** a naive body-wide flag regex produces false positives on removal notices and
 disambiguation prose. The parity test must derive canonical membership from **hints and Argument Flags
@@ -385,7 +390,7 @@ tables only** — never from free body text.
 - **`dev-handover`** — zero flags, one quoted positional (`argument-hint: "\"<blocker description>\""`).
   Its table is a single positional row. The validator must not require any `--` row.
 - **Negation flags** (`--no-git`, `--no-ccusage`, `--no-task`) — the `Default` column states the
-  behavior *when omitted* (i.e. enabled), not `off`.
+  behavior _when omitted_ (i.e. enabled), not `off`.
 - **Context-overloaded spellings** `--full` and `--task` — meaning differs per command
   (`dogfood --full` vs `next --full`; `brainstorm/debug/dogfood --task`). Per the design satellite,
   document context-specific semantics explicitly or propose a compatible rename; **do not silently
@@ -397,8 +402,8 @@ tables only** — never from free body text.
   execution-surface contract (`cross-cutting.md#inline-default-execution-surface`) made mechanical.
   If 0413 has not landed when this task starts, **stop and sequence it first** rather than encoding
   the triple in the parity test.
-- **The three existing ad hoc tables** (`dev-featurechange`, `dev-idea`, `dev-run`) must be *moved and
-  reshaped* into `## Argument Flags`, not duplicated. `dev-run`'s table currently lives under
+- **The three existing ad hoc tables** (`dev-featurechange`, `dev-idea`, `dev-run`) must be _moved and
+  reshaped_ into `## Argument Flags`, not duplicated. `dev-run`'s table currently lives under
   `## Implementation` and carries a `Meaning` column plus an H8 redefinition callout — the callout is
   prose and stays in `## Implementation`.
 
@@ -408,7 +413,9 @@ Central command registry · generated command Markdown · committed per-platform
 dependency/runtime/schema/DTO · non-`dev-*` slash commands · advertising a flag whose backing capability
 does not exist (record as follow-up) · removing a compatibility spelling without replacement, consumer,
 history, and migration evidence.
+
 ### Plan
+
 Atomic task — the heading gate flips for all 28 files in one commit or the tree does not validate.
 The phases below are an **ordering within one commit**, not shippable increments. Estimated 12–16h.
 
@@ -425,8 +432,8 @@ The phases below are an **ordering within one commit**, not shippable increments
       (`Skill(...)` target under `## Implementation`, the `dev-operations.md` numbered section, or the
       workflow YAML) and record per input: classification, owning consumer `file:line`, default,
       compatibility status.
-- [x] Walk the ledger in both directions per command: *advertised → consumer exists?* and
-      *consumer input → advertised?* The second direction is the one the current tests never check.
+- [x] Walk the ledger in both directions per command: _advertised → consumer exists?_ and
+      _consumer input → advertised?_ The second direction is the one the current tests never check.
 - [x] Resolve the open questions from `### Design`: `--strict-core` (verifyall), `--json-out` /
       `--docs-glob` (featurechange), `--full` and `--task` context meanings, and any single-command
       flag whose consumer cannot be located.
@@ -500,49 +507,50 @@ The phases below are an **ordering within one commit**, not shippable increments
 surfaces — the working tree already carries unrelated modifications to `task-pipeline.yaml`,
 `wrapup-pipeline.yaml`, `execution-batch.md`, and `feature-sync-bounded.*`.
 
-
 **Phase 6 — verify-pass remediation (2026-08-02, added during `/sp:dev-verify`)**
 
 - [x] Re-derived the flag inventory with a pipe-escape-aware parser (the naive `split('|')` used in the first pass mis-parsed 14 rows and invalidated its results).
 - [x] Ran both audit directions: advertised→consumer (0 orphans across 64 flags) and consumer→advertised (6 candidates, all false positives on inspection).
 - [x] Fixed the five glossary membership errors the AC named, which had shipped unfixed.
-- [x] Fixed five further defects the audit surfaced: `dev-refineall`'s two non-deterministic defaults, the `--tasks` requiredness claim, `--since`/`--until` omitting `dev-findissue`, `--mode`/`--focus` omitting `dev-reverse`, and the three-way `--full` contradiction.
+- [x] Fixed five further defects the audit surfaced: `dev-refineall`'s two non-deterministic defaults, the `--tasks` requiredness claim, `--since`/`--until` omitting `dev-find-issue`, `--mode`/`--focus` omitting `dev-reverse`, and the three-way `--full` contradiction.
 - [x] Deleted three untracked one-shot migration scripts.
 - [x] Wrote the audit ledger into `### Solution` — the R1 deliverable that was missing.
 - [x] Wrote `.spur/run/0412-verdict.json`, which did not exist before this run.
+
 ### Solution
+
 Two halves: the surface migration (shipped in `70df78de`) and the R1 audit (performed 2026-08-02
 during `/sp:dev-verify`, recorded here — the original `### Solution` was left as an unedited template
 placeholder and the audit had no record it was done).
 
 **Surface migration — change map**
 
-| Surface | Change |
-|---|---|
-| `plugins/sp/commands/dev-*.md` (28) | `## Argument Flags` inserted immediately before `## Usage`; `Flag \| Description \| Default` table with a row per positional and public flag; one glossary reference per file; `argument-hint` reduced to canonical syntax (89 Markdown links → 0) |
-| `plugins/sp/scripts/validate-commands.ts` | `DEV_REQUIRED_HEADINGS = ['Argument Flags','Usage','Implementation']` (`:123`); dev/non-dev split (`:141`); five gates, `ValidationResult`/`Violation` envelope unchanged |
-| `plugins/sp/tests/command-contract.test.ts` | heading assertion updated to the ordered three; negative fixtures added (43 → 55 literal tests) |
-| `plugins/sp/tests/command-flag-parity.test.ts` | shared-flag membership derived from all 28 hints rather than the numbered `dev-operations.md` subset (`:128`); per-flag deep-link requirement dropped |
-| `plugins/sp/skills/spur-dev/references/{flag-glossary,dev-operations}.md` | reconciliation set (see below) |
+| Surface                                                                   | Change                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/sp/commands/dev-*.md` (28)                                       | `## Argument Flags` inserted immediately before `## Usage`; `Flag \| Description \| Default` table with a row per positional and public flag; one glossary reference per file; `argument-hint` reduced to canonical syntax (89 Markdown links → 0) |
+| `plugins/sp/scripts/validate-commands.ts`                                 | `DEV_REQUIRED_HEADINGS = ['Argument Flags','Usage','Implementation']` (`:123`); dev/non-dev split (`:141`); five gates, `ValidationResult`/`Violation` envelope unchanged                                                                          |
+| `plugins/sp/tests/command-contract.test.ts`                               | heading assertion updated to the ordered three; negative fixtures added (43 → 55 literal tests)                                                                                                                                                    |
+| `plugins/sp/tests/command-flag-parity.test.ts`                            | shared-flag membership derived from all 28 hints rather than the numbered `dev-operations.md` subset (`:128`); per-flag deep-link requirement dropped                                                                                              |
+| `plugins/sp/skills/spur-dev/references/{flag-glossary,dev-operations}.md` | reconciliation set (see below)                                                                                                                                                                                                                     |
 
 **Audit ledger (R1)**
 
 Method — mechanical extraction, then eyeballing every survivor. Markdown rows were split on
-*unescaped* pipes only; a naive `split('|')` mis-parses the 14 rows whose flag cell contains `\|`
+_unescaped_ pipes only; a naive `split('|')` mis-parses the 14 rows whose flag cell contains `\|`
 (e.g. `--agent <inline\|auto\|name>`) and silently shifts the Description into the Default column.
 That defect invalidated the first pass of this audit and is why the counts below differ from the
 originally reported ones.
 
-| Measure | Value |
-|---|---|
-| Commands | 28 |
-| Unique flags in Argument Flags tables | 64 |
-| Shared (declared by ≥ 2 commands) | 28 |
-| Single-command | 36 |
-| Rows with malformed cell counts | 0 |
-| Rows with a blank `Default` | 0 |
-| Rows with a non-deterministic `Default` | 2 → **0** (fixed; see below) |
-| Markdown links remaining in any `argument-hint` | 0 |
+| Measure                                         | Value                        |
+| ----------------------------------------------- | ---------------------------- |
+| Commands                                        | 28                           |
+| Unique flags in Argument Flags tables           | 64                           |
+| Shared (declared by ≥ 2 commands)               | 28                           |
+| Single-command                                  | 36                           |
+| Rows with malformed cell counts                 | 0                            |
+| Rows with a blank `Default`                     | 0                            |
+| Rows with a non-deterministic `Default`         | 2 → **0** (fixed; see below) |
+| Markdown links remaining in any `argument-hint` | 0                            |
 
 **Direction A — every advertised input has a consumer.** All 64 flags were searched across
 `plugins/sp/skills`, `plugins/sp/scripts`, and `config/workflows`. **Zero orphans**: no command
@@ -552,25 +560,25 @@ advertises a flag that no backing surface mentions.
 `dev-operations.md` were diffed against that command's table. Six candidates surfaced; all six are
 false positives on inspection, and none is an unadvertised public input:
 
-| Candidate | Verdict |
-|---|---|
-| `brainstorm --context` | Internal skill-dispatch argument the wrapper constructs (`Skill(skill="sp:brainstorm", args="… --context <decision-tree>")`), not an operator flag. Correctly absent from the table |
-| `plan --section --ac-scenario-mapping --next` | Proximity-match noise — the matched lines are the `runall` catalog row and unrelated operation prose, not `dev-plan` |
-| `run --no-lifecycle --focus --feature` | `--no-lifecycle` is a `spur task update` CLI flag; the others are cross-references |
-| `verify --tasks --feature --strict-core --json --from-file --mode --keep-going --continue` | `spur task check` / `spur task update` CLI flags plus `dev-verifyall` cross-references |
-| `verifyall --keep-going --continue` | The entry's own disambiguation prose pointing at *other* commands' flags |
-| `parallel --task` | Cross-reference |
+| Candidate                                                                                  | Verdict                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brainstorm --context`                                                                     | Internal skill-dispatch argument the wrapper constructs (`Skill(skill="sp:brainstorm", args="… --context <decision-tree>")`), not an operator flag. Correctly absent from the table |
+| `plan --section --ac-scenario-mapping --next`                                              | Proximity-match noise — the matched lines are the `runall` catalog row and unrelated operation prose, not `dev-plan`                                                                |
+| `run --no-lifecycle --focus --feature`                                                     | `--no-lifecycle` is a `spur task update` CLI flag; the others are cross-references                                                                                                  |
+| `verify --tasks --feature --strict-core --json --from-file --mode --keep-going --continue` | `spur task check` / `spur task update` CLI flags plus `dev-verifyall` cross-references                                                                                              |
+| `verifyall --keep-going --continue`                                                        | The entry's own disambiguation prose pointing at _other_ commands' flags                                                                                                            |
+| `parallel --task`                                                                          | Cross-reference                                                                                                                                                                     |
 
 **Defects found and fixed during the audit**
 
-| # | Defect | Fix |
-|---|---|---|
-| 1–5 | All five glossary membership errors named in the AC were still present: `--tasks` omitted `dev-refineall`; `--output` claimed `dev-changelog` and omitted `dev-reverse`; `--description` claimed `dev-idea` (which takes a positional); `--scope` omitted arch/debug/simplify; `--keep-going` claimed `dev-verifyall` | Corrected against the measured declaring sets |
-| 6 | `dev-refineall` `--feature` and `--tasks` both defaulted to `"see usage"` — not deterministic, violating the contract's own rule | Both now `required (one of --feature / --tasks)`, matching the command's either-or hint |
-| 7 | Glossary claimed `--tasks` was an "optional alternative to `--feature` on `dev-verifyall`"; the hint shows it unbracketed (required) and `--feature` as an optional restrictor | Corrected, and `dev-refineall`'s genuine either-or case recorded separately |
-| 8 | `--since` / `--until` rosters omitted `dev-findissue` | Added, with its ISO-date semantics distinguished from `dev-changelog`'s git refs |
-| 9 | `--mode` / `--focus` rosters omitted `dev-reverse` | Added |
-| 10 | `--full` had **three** conflicting definitions: glossary said "rewrite the dispatch to `--mode full`", `dev-next`'s table said "print the full routing trace", `dev-dogfood`'s said "report verbosity". `next-router/SKILL.md:51` confirms the glossary | `dev-next`'s row corrected to match its backing skill; glossary now documents both contexts explicitly as non-collapsible |
+| #   | Defect                                                                                                                                                                                                                                                                                                                | Fix                                                                                                                       |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1–5 | All five glossary membership errors named in the AC were still present: `--tasks` omitted `dev-refineall`; `--output` claimed `dev-changelog` and omitted `dev-reverse`; `--description` claimed `dev-idea` (which takes a positional); `--scope` omitted arch/debug/simplify; `--keep-going` claimed `dev-verifyall` | Corrected against the measured declaring sets                                                                             |
+| 6   | `dev-refineall` `--feature` and `--tasks` both defaulted to `"see usage"` — not deterministic, violating the contract's own rule                                                                                                                                                                                      | Both now `required (one of --feature / --tasks)`, matching the command's either-or hint                                   |
+| 7   | Glossary claimed `--tasks` was an "optional alternative to `--feature` on `dev-verifyall`"; the hint shows it unbracketed (required) and `--feature` as an optional restrictor                                                                                                                                        | Corrected, and `dev-refineall`'s genuine either-or case recorded separately                                               |
+| 8   | `--since` / `--until` rosters omitted `dev-find-issue`                                                                                                                                                                                                                                                                | Added, with its ISO-date semantics distinguished from `dev-changelog`'s git refs                                          |
+| 9   | `--mode` / `--focus` rosters omitted `dev-reverse`                                                                                                                                                                                                                                                                    | Added                                                                                                                     |
+| 10  | `--full` had **three** conflicting definitions: glossary said "rewrite the dispatch to `--mode full`", `dev-next`'s table said "print the full routing trace", `dev-dogfood`'s said "report verbosity". `next-router/SKILL.md:51` confirms the glossary                                                               | `dev-next`'s row corrected to match its backing skill; glossary now documents both contexts explicitly as non-collapsible |
 
 **Reconciliation set (R5) — verified present**
 
@@ -591,64 +599,66 @@ the record of it lives in this task.
 **Deliberately not added: a mechanical glossary-roster gate.** A test asserting that every
 backticked `dev-*` in a glossary entry declares that flag was written, run, and **reverted**. It
 produced false positives on legitimate prose — `--next`'s "Redefinition (breaking)" paragraph cites
-`dev-review` / `dev-refineall` as *history*, and `--wrap` cites `dev-verifyall` as a *comparison*.
+`dev-review` / `dev-refineall` as _history_, and `--wrap` cites `dev-verifyall` as a _comparison_.
 Distinguishing a roster claim from a cross-reference needs structured extraction, not a regex over
 prose. That is exactly task **0415**'s scope, and it is the trap 0415's Design already names. A gate
 that cries wolf is worse than none; the ten defects above were fixed by inspection instead.
+
 ### Testing
+
 Verified 2026-08-02 via `/sp:dev-verify 0412 --auto --next --force --focus all --fix all`, run
 against the already-`done` task (`--force`). Two passes in one session.
 
-**Verdict: PASS** · **Shippable: PASS** *(pass 2, after remediation)*
+**Verdict: PASS** · **Shippable: PASS** _(pass 2, after remediation)_
 
 > **Pass 1 returned FAIL.** R1's audit ledger did not exist — `### Solution` was an unedited template
 > placeholder — and all five glossary membership errors the AC named by flag had shipped unfixed.
 > Both were remediated in the `--fix all` pass rather than deferred. The pass-1 findings are kept
 > below because the record should show what shipped, not only what it looks like now.
 
-**Per-Requirement Traceability** *(final state)*
+**Per-Requirement Traceability** _(final state)_
 
-| Req | Pass 1 | Final | Evidence |
-|-----|--------|-------|----------|
-| R1 — audit every input; ledger in `### Solution` | UNMET | **MET** | Audit performed and recorded in `### Solution`: 64 unique flags / 28 commands; **Direction A** 0 orphans (every advertised flag has a consumer in `skills`/`scripts`/`workflows`); **Direction B** 6 candidates, all false positives on inspection — no unadvertised public input exists |
-| R2 — migrate all 28 wrappers | MET | **MET** | 28/28 carry `## Argument Flags`; heading order correct on all 28; columns exactly `Flag/Description/Default`; 0 blank defaults; exactly one glossary ref per section; **89 → 0** Markdown links in hints; hint↔table parity holds. The one divergence (`dev-idea`) is correct — both rows are labeled compatibility aliases, which the contract omits from hints by design |
-| R3 — compatibility changed only on evidence | PARTIAL | **MET** | Aliases live in tables, absent from hints. The evidence trail R3 depends on is now in R1's ledger |
-| R4 — make the contract mechanical | PARTIAL | **MET** *(with a recorded limit)* | `DEV_REQUIRED_HEADINGS` at `validate-commands.ts:123`, dev/non-dev split at `:141`, 0 violations / 34 files; parity derives shared-flag membership from all 28 hints (`command-flag-parity.test.ts:128`). The prose-roster gate is explicitly delegated to task 0415 — see "R4's recorded limit" below |
-| R5 — reconcile every contradiction | UNMET | **MET** | Operation-contract half was already done. Glossary half was entirely undone; all five named errors plus five further defects fixed in pass 2 |
-| R6 — preserve the architecture | MET | **MET** | No registry, generator, or committed adapters; `ValidationResult`/`Violation` envelope unchanged; all 6 non-`dev-*` commands still on the two-heading contract |
+| Req                                              | Pass 1  | Final                             | Evidence                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------ | ------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1 — audit every input; ledger in `### Solution` | UNMET   | **MET**                           | Audit performed and recorded in `### Solution`: 64 unique flags / 28 commands; **Direction A** 0 orphans (every advertised flag has a consumer in `skills`/`scripts`/`workflows`); **Direction B** 6 candidates, all false positives on inspection — no unadvertised public input exists                                                                                   |
+| R2 — migrate all 28 wrappers                     | MET     | **MET**                           | 28/28 carry `## Argument Flags`; heading order correct on all 28; columns exactly `Flag/Description/Default`; 0 blank defaults; exactly one glossary ref per section; **89 → 0** Markdown links in hints; hint↔table parity holds. The one divergence (`dev-idea`) is correct — both rows are labeled compatibility aliases, which the contract omits from hints by design |
+| R3 — compatibility changed only on evidence      | PARTIAL | **MET**                           | Aliases live in tables, absent from hints. The evidence trail R3 depends on is now in R1's ledger                                                                                                                                                                                                                                                                          |
+| R4 — make the contract mechanical                | PARTIAL | **MET** _(with a recorded limit)_ | `DEV_REQUIRED_HEADINGS` at `validate-commands.ts:123`, dev/non-dev split at `:141`, 0 violations / 34 files; parity derives shared-flag membership from all 28 hints (`command-flag-parity.test.ts:128`). The prose-roster gate is explicitly delegated to task 0415 — see "R4's recorded limit" below                                                                     |
+| R5 — reconcile every contradiction               | UNMET   | **MET**                           | Operation-contract half was already done. Glossary half was entirely undone; all five named errors plus five further defects fixed in pass 2                                                                                                                                                                                                                               |
+| R6 — preserve the architecture                   | MET     | **MET**                           | No registry, generator, or committed adapters; `ValidationResult`/`Violation` envelope unchanged; all 6 non-`dev-*` commands still on the two-heading contract                                                                                                                                                                                                             |
 
 **What pass 1 found (the record)**
 
 The five glossary membership errors — each named individually in this task's own AC, with the exact
 correction required — were all still present at verify time:
 
-| Flag | Actual declarers | Glossary claimed | Defect |
-|---|---|---|---|
-| `--tasks` | parallel, refineall, runall, verifyall | runall, verifyall, parallel | omitted `dev-refineall` |
-| `--output` | daily, reverse | changelog, daily | claimed `dev-changelog`, omitted `dev-reverse` |
-| `--description` | refine, refineall | refine, refineall, **idea** | claimed `dev-idea` (takes a positional) |
-| `--scope` | arch, debug, fixall, gitmsg, simplify | fixall, gitmsg | omitted arch, debug, simplify |
-| `--keep-going` | refineall, runall | runall, refineall, **verifyall** | claimed `dev-verifyall` |
+| Flag            | Actual declarers                       | Glossary claimed                 | Defect                                         |
+| --------------- | -------------------------------------- | -------------------------------- | ---------------------------------------------- |
+| `--tasks`       | parallel, refineall, runall, verifyall | runall, verifyall, parallel      | omitted `dev-refineall`                        |
+| `--output`      | daily, reverse                         | changelog, daily                 | claimed `dev-changelog`, omitted `dev-reverse` |
+| `--description` | refine, refineall                      | refine, refineall, **idea**      | claimed `dev-idea` (takes a positional)        |
+| `--scope`       | arch, debug, fixall, gitmsg, simplify  | fixall, gitmsg                   | omitted arch, debug, simplify                  |
+| `--keep-going`  | refineall, runall                      | runall, refineall, **verifyall** | claimed `dev-verifyall`                        |
 
 Pass 1 also recorded: `### Solution` unfilled, 60 unchecked AC/Plan boxes on a `done` task, no
 `.spur/run/0412-verdict.json`, a `### Testing` section that was a gate log with no per-requirement or
 AC table, and three untracked scaffolding scripts. All are resolved in pass 2.
 
 **Why a fully green suite missed all five.** The parity test checks that each declaring command
-carries a glossary *reference link*; it never reads the glossary's prose list of commands.
+carries a glossary _reference link_; it never reads the glossary's prose list of commands.
 `bun test plugins/sp/tests/` returned **456 pass / 0 fail both before and after** the correction —
 direct proof the assertion does not exist.
 
 **Remediation (pass 2) — ten defects fixed**
 
-| # | Defect | Surface |
-|---|---|---|
-| 1–5 | The five glossary membership errors above | `flag-glossary.md` |
-| 6 | `dev-refineall` `--feature`/`--tasks` defaulted to `"see usage"` — not deterministic, violating the contract's own rule | `dev-refineall.md` |
-| 7 | Glossary called `--tasks` an "optional alternative" on `dev-verifyall`; its hint shows it unbracketed (required), with `--feature` the optional restrictor | `flag-glossary.md` |
-| 8 | `--since` / `--until` rosters omitted `dev-findissue` | `flag-glossary.md` |
-| 9 | `--mode` / `--focus` rosters omitted `dev-reverse` | `flag-glossary.md` |
-| 10 | `--full` carried **three** conflicting definitions — glossary ("rewrite the dispatch to `--mode full`"), `dev-next`'s table ("print the full routing trace"), `dev-dogfood`'s ("report verbosity"). `next-router/SKILL.md:51` settles it in the glossary's favour | `dev-next.md` + `flag-glossary.md` |
+| #   | Defect                                                                                                                                                                                                                                                            | Surface                            |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1–5 | The five glossary membership errors above                                                                                                                                                                                                                         | `flag-glossary.md`                 |
+| 6   | `dev-refineall` `--feature`/`--tasks` defaulted to `"see usage"` — not deterministic, violating the contract's own rule                                                                                                                                           | `dev-refineall.md`                 |
+| 7   | Glossary called `--tasks` an "optional alternative" on `dev-verifyall`; its hint shows it unbracketed (required), with `--feature` the optional restrictor                                                                                                        | `flag-glossary.md`                 |
+| 8   | `--since` / `--until` rosters omitted `dev-find-issue`                                                                                                                                                                                                            | `flag-glossary.md`                 |
+| 9   | `--mode` / `--focus` rosters omitted `dev-reverse`                                                                                                                                                                                                                | `flag-glossary.md`                 |
+| 10  | `--full` carried **three** conflicting definitions — glossary ("rewrite the dispatch to `--mode full`"), `dev-next`'s table ("print the full routing trace"), `dev-dogfood`'s ("report verbosity"). `next-router/SKILL.md:51` settles it in the glossary's favour | `dev-next.md` + `flag-glossary.md` |
 
 Also: R1's ledger written to `### Solution`; the verdict artifact created; all 67 AC/Plan boxes
 resolved; three untracked one-shot scripts deleted (`migrate-0412.ts` 26 KB, `migrate-0412-v3.ts`,
@@ -662,7 +672,7 @@ what exposed defect #6.
 
 **R4's recorded limit.** A mechanical glossary-roster gate was written, run, and **reverted**. It
 flagged legitimate prose as errors: `--next`'s "Redefinition (breaking)" paragraph cites
-`dev-review`/`dev-refineall` as *history*, and `--wrap` cites `dev-verifyall` as a *comparison*.
+`dev-review`/`dev-refineall` as _history_, and `--wrap` cites `dev-verifyall` as a _comparison_.
 Distinguishing a roster claim from a cross-reference needs structured extraction, not a regex over
 prose — which is task **0415**'s scope and the exact trap its Design already names. A gate that cries
 wolf trains people to ignore it, so the ten defects were fixed by inspection and the durable gate is
@@ -670,7 +680,7 @@ left to 0415.
 
 **Test-deletion audit.** The sp test-file set is identical to commit `105a1b4c`; raw `test(` count
 rose 348 → 362. The runner total moved 517 → 456 because `command-flag-parity.test.ts:167` generates
-one test per *shared flag*, and task 0413 collapsed three shared flags into one. Nothing was deleted
+one test per _shared flag_, and task 0413 collapsed three shared flags into one. Nothing was deleted
 to go green.
 
 **Gates (final)**
@@ -704,21 +714,22 @@ Feature: H81
 - spur task check 0412 --strict-core → pass, 0 errors, 0 unchecked boxes
 - linked tasks: 0412 (done)
 ```
+
 ### Review
 
 **Review date:** 2026-08-02 · **Reviewer:** direct implementation (pipeline subprocess timed out at 30-min limit during implement; implementation done inline with full manual verification).
 
 **P1–P4 Findings**
 
-| Priority | Finding | Disposition |
-| --- | --- | --- |
-| P1 | None | - |
-| P2 | `parseMarkdownTable` split on all `\|` including escaped pipes in option tokens like `--mode <full\|implement>`, causing column miscount | **Fixed**: split on unescaped `(?<!\\)\|` only, then unescape `\|` -> `|` in cell values (validate-commands.ts:371-378) |
-| P2 | `extractTableTokens` used `else if (flg)` so a cell with both positional and flag tokens (e.g. `--mode <full|implement>`) dropped the positional | **Fixed**: changed to `if (flg)` so both branches can fire (validate-commands.ts:416-417) |
-| P3 | `dev-run.md` Implementation section lost its `**Flags:**` prose and `vars.agent` documentation during v2 migration | **Fixed**: restored; `inline-execution-contract.test.ts` confirms `vars.agent` presence in dev-run and dev-runall |
-| P3 | `command-flag-parity.test.ts` R5 used non-null assertion `allDevHints.get(n)!` triggering `noNonNullAssertion` lint warning | **Fixed**: replaced with `?? ''` fallback; formatter wrapped the line |
-| P4 | Migration scripts (`audit-flags.ts`, `migrate-0412.ts`, `migrate-0412-v3.ts`) left as untracked working-tree artifacts | **Excluded** from commit; one-shot tooling, not contract surfaces. Can be deleted or gitignored. |
-| P4 | 3 feature docs (F2, H82, J3) modified by task-creation automation | **Excluded** from commit; not 0412-scoped. Belong to tasks 0414/0415/0416. |
+| Priority | Finding                                                                                                                                  | Disposition                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| P1       | None                                                                                                                                     | -                                                                                                                 |
+| P2       | `parseMarkdownTable` split on all `\|` including escaped pipes in option tokens like `--mode <full\|implement>`, causing column miscount | **Fixed**: split on unescaped `(?<!\\)\|` only, then unescape `\|` -> `                                           | ` in cell values (validate-commands.ts:371-378)                                           |
+| P2       | `extractTableTokens` used `else if (flg)` so a cell with both positional and flag tokens (e.g. `--mode <full                             | implement>`) dropped the positional                                                                               | **Fixed**: changed to `if (flg)` so both branches can fire (validate-commands.ts:416-417) |
+| P3       | `dev-run.md` Implementation section lost its `**Flags:**` prose and `vars.agent` documentation during v2 migration                       | **Fixed**: restored; `inline-execution-contract.test.ts` confirms `vars.agent` presence in dev-run and dev-runall |
+| P3       | `command-flag-parity.test.ts` R5 used non-null assertion `allDevHints.get(n)!` triggering `noNonNullAssertion` lint warning              | **Fixed**: replaced with `?? ''` fallback; formatter wrapped the line                                             |
+| P4       | Migration scripts (`audit-flags.ts`, `migrate-0412.ts`, `migrate-0412-v3.ts`) left as untracked working-tree artifacts                   | **Excluded** from commit; one-shot tooling, not contract surfaces. Can be deleted or gitignored.                  |
+| P4       | 3 feature docs (F2, H82, J3) modified by task-creation automation                                                                        | **Excluded** from commit; not 0412-scoped. Belong to tasks 0414/0415/0416.                                        |
 
 **Residual Risk**
 
@@ -729,7 +740,9 @@ Feature: H81
 **Final Disposition**
 
 **PASS.** All 28 dev commands migrated to the H81 three-layer contract. Validator enforces five gates (a–e) with zero violations. 4329 tests pass. Lint, typecheck, build, test-cf all green. Superskill dry-run converts cleanly. Commit `70df78de`.
+
 ### References
+
 **Dependency**
 
 - Task **0413** / feature **H82** (`docs/features/H82_unified-agent-execution-surface-selector.md`) —
@@ -777,6 +790,8 @@ The Background/Design counts came from a one-off scan: parse each `dev-*.md` fro
 Markdown links in `argument-hint`, extract `--flag` and `<positional>` tokens, and diff hint tokens
 against body-mentioned flags. Re-run it in Phase 5 against the shipped tree to confirm the
 dispositions landed.
+
 ### History
+
 - 2026-08-02T16:46:17.730Z todo → testing (system)
 - 2026-08-02T16:46:26.134Z testing → done (system)

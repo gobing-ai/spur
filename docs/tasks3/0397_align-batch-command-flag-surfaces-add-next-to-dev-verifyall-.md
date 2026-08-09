@@ -31,9 +31,10 @@ The single-task semantic is unambiguous and generalizes cleanly (`dev-operations
 
 **3. `dev-runall.md` is 19 lines with zero flag explanation**, which is how the drift went unnoticed. It restates the argument-hint as Usage and delegates, with no meaning attached to any flag.
 
-Operator questions that motivated this task also establish what must be *documented*, not just fixed: `--keep-going` (batch failure policy — `execution-batch.md:265` §4.2), `--continue` (resume-from-checkpoint — `cross-cutting.md:343`, `execution-workflow.md:260`), and `--next` (per-task lifecycle chaining) sit on three orthogonal axes and are currently easy to confuse. `routing-table.md:128` offers `--continue` and implement `--next` as competing options for the same situation, which is the clearest evidence they are distinct.
+Operator questions that motivated this task also establish what must be _documented_, not just fixed: `--keep-going` (batch failure policy — `execution-batch.md:265` §4.2), `--continue` (resume-from-checkpoint — `cross-cutting.md:343`, `execution-workflow.md:260`), and `--next` (per-task lifecycle chaining) sit on three orthogonal axes and are currently easy to confuse. `routing-table.md:128` offers `--continue` and implement `--next` as competing options for the same situation, which is the clearest evidence they are distinct.
 
 ### Requirements
+
 R1. Add `--next` to `dev-verifyall`: declare it in `dev-verifyall.md`'s argument-hint and Usage, and document it in the verifyall Inputs line of `dev-operations.md`.
 R2. Define `--next` batch semantics: per task, a PASS verdict transitions `testing → done` through the FSM with guards honored; PARTIAL/FAIL does not transition. One task's non-PASS must not block another task's transition.
 R3. Order `--next` transitions before the batch-once shippable gate, so `spur feature check` observes final statuses.
@@ -43,7 +44,9 @@ R6. Expand `dev-runall.md` to state the meaning of each flag it declares, matchi
 R7. Document the three orthogonal axes — `--keep-going` (batch failure policy), `--continue` (resume from checkpoint), `--next` (per-task lifecycle chaining) — in one place the batch commands cite, so the distinction is stated rather than inferred.
 R8. Extend the parity gate from task 0396 to the slash-command layer: assert every flag in a command's `argument-hint` appears in that command's `dev-operations.md` entry, and vice versa.
 R9. The command parity check carries a named ignore-list for deprecated flags, with the reason stated — `dev-operations.md:98` already documents `--fix` and `--next` as deprecated no-ops on `dev-review`.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: Batch command flag surface alignment
 
@@ -91,11 +94,13 @@ Feature: Batch command flag surface alignment
     Then those flags are skipped via a named ignore-list
     And the ignore-list states the deprecation reason
 ```
+
 ### Q&A
 
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
+
 R4 is a deliberate non-change and needs its rationale recorded, because "add `--next` for symmetry with `dev-run`" is the obvious-looking move and will be re-proposed otherwise. `--next` on `dev-run` is meaningful only because dev-run has two modes: `dev-operations.md:129` states that under `--next` the mode resolves to `implement`, "full mode runs every stage itself, so there is nothing to advance to." `dev-runall` has one mode — it drives the complete `task-pipeline.yaml` per task, so every step `--next` could chain to is already inside the pipeline. Adding it would be a no-op, or a redefinition into implement-only-then-chain, which is what `/sp:dev-refineall --next` already does and what `dev-operations.md:179` warns is a token bomb.
 
 `dev-verifyall` is the opposite case and that asymmetry is the point: `dev-verify --next` is not a mode switch but a status transition on a verdict, so it generalizes to a batch without reinterpretation. Per-task independence (R2) follows the existing per-task verdict model — verifyall already treats each task's verdict as its own, and the deterministic rollup at `spur task verifyall-aggregate` is a report-level concern, not a gate on individual transitions.
@@ -105,7 +110,9 @@ R3 exists because the shippable gate runs `spur feature check` once after all pe
 R8 extends 0396's mechanism to a second artifact pair rather than inventing one. The CLI gate parses `apps/cli/src/commands/*.ts` against `spur-cli` references; this parses command frontmatter against `dev-operations.md` rows. Same bidirectional shape, same failure-message contract, different sources — which is why this task depends on 0396 and reuses its harness instead of standing up a parallel checker.
 
 R9 is required for R8 to be implementable at all: `dev-review` intentionally declares `--fix` and `--next` as deprecated no-ops, so a naive bidirectional check would fail on a correct state. The ignore-list makes deprecation explicit rather than letting it look like drift.
+
 ### Plan
+
 - [ ] Document the three-axis distinction (`--keep-going` / `--continue` / `--next`) in the shared location the batch commands cite
 - [ ] Add `--next` to `dev-verifyall.md` argument-hint and Usage
 - [ ] Document `--next` in the verifyall Inputs line of `dev-operations.md`, with per-task PASS-only transition semantics
@@ -116,7 +123,9 @@ R9 is required for R8 to be implementable at all: `dev-review` intentionally dec
 - [ ] Extend the 0396 parity harness to the command layer with the deprecated-flag ignore-list
 - [ ] Verify the gate fires: add a throwaway flag to one command, confirm failure, remove it
 - [ ] Run `bun run test` and confirm green
+
 ### Solution
+
 Aligned the batch command flag surfaces and extended the parity gate to the slash-command layer.
 
 - `plugins/sp/commands/dev-verifyall.md:3` — added `--next` to argument-hint + Usage; documented per-task lifecycle-chaining semantics (PASS → testing→done via FSM with `--strict-core`; PARTIAL/FAIL does not transition; transitions run before the shippable gate). (R1, R2, R3)
@@ -128,8 +137,11 @@ Aligned the batch command flag surfaces and extended the parity gate to the slas
 - `plugins/sp/tests/command-flag-parity.test.ts:1-136` — NEW (R8/R9). Bidirectional parity: for every command WITH a numbered dev-operations.md table entry, every argument-hint flag appears in the table row and vice versa. Deprecated-flag ignore-list (`dev-review` `--fix`/`--next`) with stated reasons. Plus a regression test pinning the three drift defects 0397 closes (dev-verifyall `--next`, dev-runall `--mode`/`--continue`, dev-runall no `--next`). 38 tests, 194 assertions.
 
 R8 extends 0396's mechanism to the command layer: 0396 parses CLI source ↔ spur-cli references; this parses command frontmatter ↔ dev-operations.md table rows. Same bidirectional shape, different sources.
+
 ### Testing
+
 **Commands run:**
+
 ```
 cd plugins/sp && bun test tests/command-flag-parity.test.ts   # 38 pass, 0 fail, 194 assertions
 cd plugins/sp && bun test                                      # 465 pass, 0 fail, 2234 assertions
@@ -139,6 +151,7 @@ bun run lint                                                   # biome clean + 7
 **R8 negative test (gate proven to fire):** temporarily appended `--zzz-phantom` to `dev-wrap.md`'s argument-hint → the forward-parity test failed with `dev-wrap argument-hint declares --zzz-phantom but its dev-operations.md table row omits it`. Restored, retested green.
 
 **Drifts the gate surfaced and fixed** (pre-existing, closed by this task):
+
 - dev-verify/dev-verifyall: `--next` in arg-hint, missing from table row → added.
 - dev-run: `--next`/`--wrap`/`--continue` in arg-hint, missing from table row → added.
 - dev-runall: `--mode`/`--continue` in arg-hint, missing from table row + Inputs → added.
@@ -148,7 +161,9 @@ bun run lint                                                   # biome clean + 7
 - dev-review: stale `--auto` in table row, absent from arg-hint + Inputs → removed.
 
 **Coverage:** test + documentation task. The parity test is the coverage instrument. No implementation code.
+
 ### Review
+
 Three-dimensional review for the batch command flag-surface alignment. Documentation + test task; the command-flag-parity gate is the coverage instrument.
 
 **Scope:** `plugins/sp/commands/dev-verifyall.md`, `plugins/sp/commands/dev-runall.md`, `plugins/sp/skills/spur-dev/references/dev-operations.md` (table + 3 Inputs sections), `plugins/sp/tests/command-flag-parity.test.ts` (new).
@@ -157,10 +172,10 @@ Three-dimensional review for the batch command flag-surface alignment. Documenta
 
 **P1–P4 findings**
 
-| Priority | Finding | Location | Remediation |
-|----------|---------|----------|-------------|
-| P4 | The parity gate only covers commands WITH a numbered dev-operations.md table entry. Commands documented only in prose notes (dev-findissue, dev-next, dev-parallel, rule-*, workflow-*, spur-init) are out of scope — they have no SSOT row to check against. Documented limitation, not a defect; those commands' flags live in their .md + prose only. | `plugins/sp/tests/command-flag-parity.test.ts` § scope comment | If those commands need parity, give them numbered table entries first |
-| P4 | `--skip-shipable` (misspelled alias) appears in dev-verify/dev-verifyall arg-hints as an accepted alias; the parity test treats `--skip-shippable` as the canonical token. The alias is intentional (typo-tolerance) and documented. | `plugins/sp/commands/dev-verifyall.md` | None — intentional alias |
+| Priority | Finding                                                                                                                                                                                                                                                                                                                                                   | Location                                                       | Remediation                                                           |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| P4       | The parity gate only covers commands WITH a numbered dev-operations.md table entry. Commands documented only in prose notes (dev-find-issue, dev-next, dev-parallel, rule-_, workflow-_, spur-init) are out of scope — they have no SSOT row to check against. Documented limitation, not a defect; those commands' flags live in their .md + prose only. | `plugins/sp/tests/command-flag-parity.test.ts` § scope comment | If those commands need parity, give them numbered table entries first |
+| P4       | `--skip-shipable` (misspelled alias) appears in dev-verify/dev-verifyall arg-hints as an accepted alias; the parity test treats `--skip-shippable` as the canonical token. The alias is intentional (typo-tolerance) and documented.                                                                                                                      | `plugins/sp/commands/dev-verifyall.md`                         | None — intentional alias                                              |
 
 No P1 (blocker), P2 (major), or P3 (minor) findings. No security findings (docs + test). No correctness contradictions — `--next` asymmetry (verifyall yes, runall no) is deliberate and recorded (R4).
 
@@ -171,6 +186,7 @@ The gate extends 0396's parity mechanism to a second artifact pair (command fron
 No deepening or friction introduced. The gate reduces drift recurrence (the same failure class H6 exists to close).
 
 **Verdict: PASS** - functional traceability complete (9/9 R MET), SECUA clean (no P1–P3; two P4 advisory, both bounded), architecture clean (gate reuses 0396's mechanism). Ready for `done`.
+
 ### References
 
 H6
@@ -178,6 +194,7 @@ H6
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-07-31T03:46:45.495Z todo → wip (system)
 - 2026-07-31T03:46:46.834Z wip → testing (system)
 - 2026-07-31T03:47:19.060Z testing → done (system)

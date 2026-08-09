@@ -18,7 +18,8 @@ updated_at: "2026-08-02T20:44:21.452Z"
 ## 0415. Mechanical consistency gate for sp contract surfaces: cross-surface flag parity, replacing prose-literal test assertions
 
 ### Background
-Surfaced by `/sp:dev-findissue` on 2026-08-02, reviewing the 0411 → 0412 → 0413 session.
+
+Surfaced by `/sp:dev-find-issue` on 2026-08-02, reviewing the 0411 → 0412 → 0413 session.
 
 The `sp` plugin documents each flag's contract across up to five surfaces: the 28 command files, the
 flag glossary, `cross-cutting.md`, `dev-operations.md`, and the ADR. **Nothing mechanically checks
@@ -27,12 +28,12 @@ release of a dedicated centralization effort.
 
 #### Evidence: this exact class of drift, four times, in one session
 
-| # | Drift | Found by |
-|---|-------|----------|
-| 1 | `cross-cutting.md:45-47` said `--agent auto` does **not** force subprocess; `flag-glossary.md` `#flag-agent` said it means **a fresh process**. Opposite answers for the most common value of the most common flag — **one release after feature H8 centralized the glossary specifically to stop this** | Task 0413's brainstorm |
-| 2 | After 0413 shipped, `cross-cutting.md` contradicted **itself** three ways on `--agent <name>`: unconditional subprocess in the resolution order, conditional in the value table, conditional again in the paragraph below | `/sp:dev-verify 0413` |
-| 3 | Five glossary membership errors: `--keep-going` naming a command that never declared it, `--tasks` omitting `dev-refineall`, `--output` naming `dev-changelog` instead of the two real declarers, `--description` naming `dev-idea`, `--scope` omitting three wrappers | Task 0412's audit |
-| 4 | `dev-review` target optionality, `dev-runall --next`, `dev-wrap --dry-run`, `dev-fixall` inputs, `dev-dogfood --full` — command files and `dev-operations.md` disagreeing | Task 0412's audit |
+| #   | Drift                                                                                                                                                                                                                                                                                                    | Found by               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 1   | `cross-cutting.md:45-47` said `--agent auto` does **not** force subprocess; `flag-glossary.md` `#flag-agent` said it means **a fresh process**. Opposite answers for the most common value of the most common flag — **one release after feature H8 centralized the glossary specifically to stop this** | Task 0413's brainstorm |
+| 2   | After 0413 shipped, `cross-cutting.md` contradicted **itself** three ways on `--agent <name>`: unconditional subprocess in the resolution order, conditional in the value table, conditional again in the paragraph below                                                                                | `/sp:dev-verify 0413`  |
+| 3   | Five glossary membership errors: `--keep-going` naming a command that never declared it, `--tasks` omitting `dev-refineall`, `--output` naming `dev-changelog` instead of the two real declarers, `--description` naming `dev-idea`, `--scope` omitting three wrappers                                   | Task 0412's audit      |
+| 4   | `dev-review` target optionality, `dev-runall --next`, `dev-wrap --dry-run`, `dev-fixall` inputs, `dev-dogfood --full` — command files and `dev-operations.md` disagreeing                                                                                                                                | Task 0412's audit      |
 
 Every one was found by a **human-directed audit**, never by a gate. Absent someone specifically
 looking, each would have shipped.
@@ -63,10 +64,10 @@ claimed the carve-out had been deleted. **A green test was actively enforcing th
 requirement.**
 
 The same failure mode in test form, from task 0411: the verdict-mtime tests mocked `Bun.spawnSync`
-*including the `stat` call whose portability was the defect*. BSD-only `stat -f %m` silently returned
+_including the `stat` call whose portability was the defect_. BSD-only `stat -f %m` silently returned
 nothing on Linux, dropping a fingerprint input; 57 tests stayed green because the broken syscall was
-mocked away. `sp:test-driven-development` already states the rule — *"Mock what crosses a process/IO
-boundary; never mock the code under test"* (`SKILL.md:164`) — so the gap is **enforcement, not
+mocked away. `sp:test-driven-development` already states the rule — _"Mock what crosses a process/IO
+boundary; never mock the code under test"_ (`SKILL.md:164`) — so the gap is **enforcement, not
 knowledge**.
 
 These two halves are one problem: the contract surfaces have no real consistency check, and the
@@ -78,7 +79,9 @@ string-pinning that stands in for one silently locks contradictions in place.
 the **prose** surfaces 0412 does not reach: glossary narrative, `cross-cutting.md`, and the ADR.
 Complementary, not overlapping. Sequence after 0412 so the command-side inventory is already
 canonical.
+
 ### Requirements
+
 - R1 — **Detect cross-surface contradictions mechanically.** For any flag documented on two or more
   of {command files, `flag-glossary.md`, `cross-cutting.md`, `dev-operations.md`, `docs/00_ADR.md`},
   a gate compares the stated semantics and fails when they disagree. "Disagree" must be defined
@@ -116,7 +119,9 @@ canonical.
   from `### Background`: the `--agent auto` cross-file contradiction, the in-file three-way
   disagreement, a glossary membership error, and a command↔`dev-operations` default mismatch. Each
   must fail the gate before the fix and pass after.
+
 ### Acceptance Criteria
+
 **Cross-surface parity (R1, R2, R5)**
 
 - [x] A gate exists that, for every flag documented on two or more contract surfaces, extracts the comparable claims and fails when they disagree.
@@ -156,11 +161,13 @@ canonical.
 - [x] `bun plugins/sp/scripts/validate-commands.ts --json` → zero violations.
 - [x] `bun run lint`, `bun run test`, `bun run build` green. Full suite, not a subset; failures bucketed by cause.
 - [x] The new gate runs in the same place the existing sp tests run, so it cannot be forgotten.
+
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
 
 ### Design
+
 **Phase 0 decisions (2026-08-02, executed inline per AGENTS.md).**
 
 #### Shape: new gate script beside `validate-commands.ts`, NOT a doc-evolve scope extension
@@ -175,8 +182,8 @@ for three reasons, all mechanical:
 2. **Its heuristics are human, not deterministic.** `drift-audit` §7 pairs a detection command with
    a doc and expects the agent to interpret deltas. R2 requires deterministic extraction from
    structured markers with loud parse failure — that is script logic, not a doc-audit checklist.
-3. **Scope mismatch in kind.** doc-evolve audits *reality vs docs* (`apps/cli` verbs vs
-   `docs/04`); this gate audits *doc-vs-doc* across five reference surfaces. Different comparison
+3. **Scope mismatch in kind.** doc-evolve audits _reality vs docs_ (`apps/cli` verbs vs
+   `docs/04`); this gate audits _doc-vs-doc_ across five reference surfaces. Different comparison
    domain.
 
 Decision: new cross-file gate `plugins/sp/scripts/validate-flag-contracts.ts`, reusing the
@@ -228,13 +235,14 @@ The 0411 pattern is expressible as a `spur rule` with an `rg` evaluator only if 
 subprocess/syscall boundary AND assert on boundary-determined behavior" reduces to one or more
 file-level patterns. Existing tests already monkey-patch `Bun.spawnSync`
 (`feature-sync-bounded.test.ts:480-518`, `daily-summary.test.ts`) — those are boundary mocks with
-assertions on *batching counts*, not on stat/mtime-derived behavior, so the rule must discriminate
+assertions on _batching counts_, not on stat/mtime-derived behavior, so the rule must discriminate
 the stat/fingerprint aggravator (the 0411 defect). Decided in Phase 4 with the rule engine's actual
 pattern semantics in hand; a bespoke script is the fallback and is recorded there.
 
 #### Fixtures (Phase 1)
 
 Four failing-first regression cases, mutation-checked (fail with defect, pass without):
+
 1. `--agent auto`: cross-cutting value table row "does not force subprocess" vs glossary
    "a fresh process" → C3 cross-file.
 2. `--agent <name>`: reintroduced numbered resolution-order list (unconditional subprocess) vs
@@ -242,7 +250,9 @@ Four failing-first regression cases, mutation-checked (fail with defect, pass wi
 3. Glossary membership error: `--keep-going` parenthetical names `dev-verifyall` → C1 exact-match.
 4. Command↔`dev-operations.md` default mismatch (e.g. `dev-wrapall --status` `done` vs `omitted`)
    → C2.
+
 ### Plan
+
 **Phase 0 — decide the shape before building (blocks everything)**
 
 - [x] Evaluate extending `sp:doc-evolve drift-audit`'s scope to `plugins/sp/skills/**/references/*.md` versus a new cross-file gate beside `validate-commands.ts`. Record the choice and why. The extension is the simpler answer if it fits — prefer it.
@@ -251,7 +261,7 @@ Four failing-first regression cases, mutation-checked (fail with defect, pass wi
 
 **Phase 1 — fixtures first, so the gate is proven to bind**
 
-- [x] Build the four regression fixtures from `### Background` as failing cases *before* the gate exists.
+- [x] Build the four regression fixtures from `### Background` as failing cases _before_ the gate exists.
 - [x] Confirm each fails for the intended reason, not incidentally.
 
 **Phase 2 — extraction + comparison**
@@ -277,11 +287,13 @@ Four failing-first regression cases, mutation-checked (fail with defect, pass wi
 - [x] The gate runs where the existing sp tests run, so it cannot be forgotten.
 - [x] `bun run lint`, `bun run test`, `bun run build` green. **Full suite, not a subset** (`sp:code-verification` Step 11); bucket failures by cause — port/listen/`ps` is environmental, anything else is yours.
 - [x] Re-run the four fixtures against the shipped tree and record the result.
+
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+
 Executed inline per AGENTS.md ("run dev skills inline by default"), all phases complete.
 
 **Change map (file:line):**
@@ -336,12 +348,12 @@ C3 `--agent` value→behavior (cross-cutting ↔ glossary ↔ ADR-041, in-file u
 
 Per-assertion inventory + disposition, all in `plugins/sp/tests/`:
 
-| File | Assertions | Disposition |
-|---|---|---|
-| `inline-execution-contract.test.ts` | 23 prose `toContain('<sentence>')` pins (Default/one-rule/single-hop/trigger/trade-off wording) | Converted to extracted-claim assertions via `extractValueBehaviorTable`/`extractTriggerTable` (value→surface rows, trigger table rows, `vars.agent` tokens) or deleted as redundant with the gate. The `'Pipeline-wrapper carve-out'`-class pin (`'the same rule, not an exception'`) is gone — C3b unanimity + ADR-041 "dissolved, not removed" now enforce the claim structurally |
-| `skill-structure.test.ts` | 2 prose sentences (`'AC evaluation is mandatory…'`, `'Objective AC cannot be cleared by llm-judge alone'`) | Deleted as redundant — the AC-table header + `evidenceType` schema union in the same test already carry the claim structurally |
-| `command-contract.test.ts` | 1 (`'one block'`) | Deleted as redundant — `invocations.length === 1` + `spur init --json $ARGUMENTS` + `scaffoldResult` tokens carry it |
-| daily-summary / dogfood / feature-sync | `toContain` on CLI output, generated report format, protocol tokens | Kept — assert tool *output* behavior, not doc wording (out of R3 scope) |
+| File                                   | Assertions                                                                                                 | Disposition                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline-execution-contract.test.ts`    | 23 prose `toContain('<sentence>')` pins (Default/one-rule/single-hop/trigger/trade-off wording)            | Converted to extracted-claim assertions via `extractValueBehaviorTable`/`extractTriggerTable` (value→surface rows, trigger table rows, `vars.agent` tokens) or deleted as redundant with the gate. The `'Pipeline-wrapper carve-out'`-class pin (`'the same rule, not an exception'`) is gone — C3b unanimity + ADR-041 "dissolved, not removed" now enforce the claim structurally |
+| `skill-structure.test.ts`              | 2 prose sentences (`'AC evaluation is mandatory…'`, `'Objective AC cannot be cleared by llm-judge alone'`) | Deleted as redundant — the AC-table header + `evidenceType` schema union in the same test already carry the claim structurally                                                                                                                                                                                                                                                      |
+| `command-contract.test.ts`             | 1 (`'one block'`)                                                                                          | Deleted as redundant — `invocations.length === 1` + `spur init --json $ARGUMENTS` + `scaffoldResult` tokens carry it                                                                                                                                                                                                                                                                |
+| daily-summary / dogfood / feature-sync | `toContain` on CLI output, generated report format, protocol tokens                                        | Kept — assert tool _output_ behavior, not doc wording (out of R3 scope)                                                                                                                                                                                                                                                                                                             |
 
 Mutation-checked post-conversion: changing the cross-cutting `auto` row → 3 tests fail; removing a
 trigger row → 1 fails. Conversion is binding, not vacuous.
@@ -362,48 +374,50 @@ correlation in one bounded window.
 - **Existing violations**: zero — the 0411 remediation already replaced the mocked-stat mtime
   tests with real files + real `statSync`. Rule validated (schema) and smoke-tested both
   directions; wired into `recommended-pre-check` (auto-discovered via `typescript` category).
+
 ### Testing
+
 All verification run 2026-08-02 in `/Users/robin/xprojects/spur-new`. Re-audited independently via
 `/sp:dev-verify 0415 --force --focus all --fix all --next` (task already `done`; `--force` re-audit).
 
 #### Per-requirement traceability
 
-| Req | Status | Evidence |
-|---|---|---|
-| R1 — detect cross-surface contradictions mechanically | MET | `plugins/sp/scripts/validate-flag-contracts.ts` C1 `checkGlossaryMembership:160`, C2 `checkDefaultsParity:280`, C3a/C3b `checkAgentValueTables:451`. Live check this run: mutating `plugins/sp/skills/spur-dev/references/cross-cutting.md:38` (`auto` → "Inline — does not force subprocess") made the CLI emit 2 C3a violations; reverted, tree clean |
-| R2 — comparable claims from structured markers, loud on parse failure | MET | Extractors read argument-hints, `## Argument Flags` tables, ops `(default: X)` markers, `\| Value \| … \| Derived surface \|` tables. Loud-failure tests `plugins/sp/tests/flag-contract-parity.test.ts:252-277` (missing cross-cutting table / missing glossary table / missing one-rule blockquote → violation, never a silent skip) |
-| R3 — replace prose-literal assertions with intent assertions | MET (repaired this run) | `plugins/sp/tests/inline-execution-contract.test.ts:44-183` converted to `extractValueBehaviorTable` / `extractTriggerTable` / `checkAgentValueTables`; mutation-checked this run — mutating the `auto` row failed exactly 3 tests there + the real-tree gate. Re-audit found the inventory incomplete in `skill-structure.test.ts`; 5 residual free-prose pins fixed this run (see **R3 residual audit**) |
-| R4 — forbid mocking the code under test (detectable case) | MET | `config/rules/typescript/no-syscall-emulation-in-boundary-mock.yaml`. Independently smoke-tested this run in both directions (see **R4 independent smoke test**) |
-| R5 — actionable drift diagnostic | MET | Live diagnostic captured this run names flag, every surface's claim, and the authority (verbatim below) |
-| R6 — no new authority, no new duplication | MET | New files are script + test + rule yaml only — no registry, no generated data file. Authority ordering encoded: command files own C1/C2, `cross-cutting.md` owns C3 |
-| R7 — gate catches the four evidenced drift cases | MET | `plugins/sp/tests/flag-contract-parity.test.ts:170-244` — four describe blocks, each a with-defect/without-defect pair; 24 pass / 0 fail |
+| Req                                                                   | Status                  | Evidence                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1 — detect cross-surface contradictions mechanically                 | MET                     | `plugins/sp/scripts/validate-flag-contracts.ts` C1 `checkGlossaryMembership:160`, C2 `checkDefaultsParity:280`, C3a/C3b `checkAgentValueTables:451`. Live check this run: mutating `plugins/sp/skills/spur-dev/references/cross-cutting.md:38` (`auto` → "Inline — does not force subprocess") made the CLI emit 2 C3a violations; reverted, tree clean                                                    |
+| R2 — comparable claims from structured markers, loud on parse failure | MET                     | Extractors read argument-hints, `## Argument Flags` tables, ops `(default: X)` markers, `\| Value \| … \| Derived surface \|` tables. Loud-failure tests `plugins/sp/tests/flag-contract-parity.test.ts:252-277` (missing cross-cutting table / missing glossary table / missing one-rule blockquote → violation, never a silent skip)                                                                     |
+| R3 — replace prose-literal assertions with intent assertions          | MET (repaired this run) | `plugins/sp/tests/inline-execution-contract.test.ts:44-183` converted to `extractValueBehaviorTable` / `extractTriggerTable` / `checkAgentValueTables`; mutation-checked this run — mutating the `auto` row failed exactly 3 tests there + the real-tree gate. Re-audit found the inventory incomplete in `skill-structure.test.ts`; 5 residual free-prose pins fixed this run (see **R3 residual audit**) |
+| R4 — forbid mocking the code under test (detectable case)             | MET                     | `config/rules/typescript/no-syscall-emulation-in-boundary-mock.yaml`. Independently smoke-tested this run in both directions (see **R4 independent smoke test**)                                                                                                                                                                                                                                           |
+| R5 — actionable drift diagnostic                                      | MET                     | Live diagnostic captured this run names flag, every surface's claim, and the authority (verbatim below)                                                                                                                                                                                                                                                                                                    |
+| R6 — no new authority, no new duplication                             | MET                     | New files are script + test + rule yaml only — no registry, no generated data file. Authority ordering encoded: command files own C1/C2, `cross-cutting.md` owns C3                                                                                                                                                                                                                                        |
+| R7 — gate catches the four evidenced drift cases                      | MET                     | `plugins/sp/tests/flag-contract-parity.test.ts:170-244` — four describe blocks, each a with-defect/without-defect pair; 24 pass / 0 fail                                                                                                                                                                                                                                                                   |
 
 #### Acceptance Criteria Verification
 
-| AC | Status | Evidence Type | Evidence |
-|---|---|---|---|
-| Gate extracts comparable claims and fails on disagreement | MET | command | `bun plugins/sp/scripts/validate-flag-contracts.ts` → `All 32 contract surfaces agree across all claims.` (exit 0) |
-| Extraction reads structured markers, no sentence parsing | MET | static-ref | `plugins/sp/scripts/validate-flag-contracts.ts:200-262` (tables), `:348-397` (value/trigger tables), `:399-425` (ADR) |
-| Unparseable surface fails loudly, never skipped | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts:253,258,263` — 3 loud-failure tests |
-| Diagnostic names flag, each surface's claim, authority | MET | command | Verbatim capture below |
-| `--agent auto` cross-file contradiction fails the gate | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts:171` (violation) / `:185` (clean) |
-| `--agent <name>` in-file three-way disagreement fails | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts:196` / `:203` |
-| Glossary membership error fails the gate | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts:210` / `:218` |
-| Command↔`dev-operations.md` default mismatch fails | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts:225` / `:236` |
-| All four mutation-checked (fail with defect, pass without) | MET | test | Each fixture is an explicit violation/clean pair; 24 pass / 0 fail |
-| Every prose-literal assertion inventoried with disposition | MET (repaired) | command | Mechanical audit this run over all `plugins/sp/tests/*.test.ts`; see **R3 residual audit** |
-| No test pins contract wording as enforcement | MET (repaired) | static-ref | 5 residual free-prose pins converted/deleted this run |
-| `inline-execution-contract.test.ts` converted; carve-out class cannot recur | MET | test | Mutation-check: mutated `auto` row → 3 tests fail there; reverted → 8 pass / 0 fail |
-| Mechanical check flags boundary-mock + boundary-determined assertion | MET | command | Rule fires 2 findings on the reconstructed 0411 fixture |
-| 0411 pattern is the fixture | MET | command | See **R4 independent smoke test** |
-| Expressed as a `spur rule`; rationale recorded | MET | command | `spur rule validate …` → `valid file`, `rules: 1`; rationale in `### Solution` Phase 4 |
-| Existing violations fixed or waived, none left failing | MET | command | `spur rule run --file … --fail-on warning --json` on shipped tree → `"findings": []` |
-| No registry/generated file/sixth home | MET | static-ref | `git status` adds only `validate-flag-contracts.ts`, `flag-contract-parity.test.ts`, the rule yaml |
-| Per-claim authority ordering explicit and documented | MET | static-ref | `### Design` authority paragraph; encoded in diagnostics as `[authority: …]` |
-| Scope stays clear of task 0412 | MET | static-ref | C1/C2/C3 cover glossary narrative + `cross-cutting.md` + ADR; 0412 owns command↔numbered-table parity |
-| `validate-commands.ts --json` → zero violations | MET | command | `{"violations":[],"fileCount":34}` |
-| `bun run lint` / `test` / `build` green, failures bucketed | PARTIAL | command | lint exit 0; build exit 0; full suite **4353 pass / 24 fail / 4377 total** — all 24 are sandbox denials (16× `Failed to listen at 127.0.0.1`, 1× `EPERM mkdtemp` in `$HOME`), confined to `ProjectRegistry` / `startServer` / `healthModule` / `project-start` / `rpc client` / `createServerContext` / `spur projects CLI`, none touching this task's diff. Not reproducible as 0-fail under this sandbox |
-| Gate runs where existing sp tests run | MET | command | `bun test plugins/sp/tests/` → 480 pass / 0 fail across 11 files, including `flag-contract-parity.test.ts` |
+| AC                                                                          | Status         | Evidence Type | Evidence                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------- | -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gate extracts comparable claims and fails on disagreement                   | MET            | command       | `bun plugins/sp/scripts/validate-flag-contracts.ts` → `All 32 contract surfaces agree across all claims.` (exit 0)                                                                                                                                                                                                                                                                                         |
+| Extraction reads structured markers, no sentence parsing                    | MET            | static-ref    | `plugins/sp/scripts/validate-flag-contracts.ts:200-262` (tables), `:348-397` (value/trigger tables), `:399-425` (ADR)                                                                                                                                                                                                                                                                                      |
+| Unparseable surface fails loudly, never skipped                             | MET            | test          | `plugins/sp/tests/flag-contract-parity.test.ts:253,258,263` — 3 loud-failure tests                                                                                                                                                                                                                                                                                                                         |
+| Diagnostic names flag, each surface's claim, authority                      | MET            | command       | Verbatim capture below                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--agent auto` cross-file contradiction fails the gate                      | MET            | test          | `plugins/sp/tests/flag-contract-parity.test.ts:171` (violation) / `:185` (clean)                                                                                                                                                                                                                                                                                                                           |
+| `--agent <name>` in-file three-way disagreement fails                       | MET            | test          | `plugins/sp/tests/flag-contract-parity.test.ts:196` / `:203`                                                                                                                                                                                                                                                                                                                                               |
+| Glossary membership error fails the gate                                    | MET            | test          | `plugins/sp/tests/flag-contract-parity.test.ts:210` / `:218`                                                                                                                                                                                                                                                                                                                                               |
+| Command↔`dev-operations.md` default mismatch fails                          | MET            | test          | `plugins/sp/tests/flag-contract-parity.test.ts:225` / `:236`                                                                                                                                                                                                                                                                                                                                               |
+| All four mutation-checked (fail with defect, pass without)                  | MET            | test          | Each fixture is an explicit violation/clean pair; 24 pass / 0 fail                                                                                                                                                                                                                                                                                                                                         |
+| Every prose-literal assertion inventoried with disposition                  | MET (repaired) | command       | Mechanical audit this run over all `plugins/sp/tests/*.test.ts`; see **R3 residual audit**                                                                                                                                                                                                                                                                                                                 |
+| No test pins contract wording as enforcement                                | MET (repaired) | static-ref    | 5 residual free-prose pins converted/deleted this run                                                                                                                                                                                                                                                                                                                                                      |
+| `inline-execution-contract.test.ts` converted; carve-out class cannot recur | MET            | test          | Mutation-check: mutated `auto` row → 3 tests fail there; reverted → 8 pass / 0 fail                                                                                                                                                                                                                                                                                                                        |
+| Mechanical check flags boundary-mock + boundary-determined assertion        | MET            | command       | Rule fires 2 findings on the reconstructed 0411 fixture                                                                                                                                                                                                                                                                                                                                                    |
+| 0411 pattern is the fixture                                                 | MET            | command       | See **R4 independent smoke test**                                                                                                                                                                                                                                                                                                                                                                          |
+| Expressed as a `spur rule`; rationale recorded                              | MET            | command       | `spur rule validate …` → `valid file`, `rules: 1`; rationale in `### Solution` Phase 4                                                                                                                                                                                                                                                                                                                     |
+| Existing violations fixed or waived, none left failing                      | MET            | command       | `spur rule run --file … --fail-on warning --json` on shipped tree → `"findings": []`                                                                                                                                                                                                                                                                                                                       |
+| No registry/generated file/sixth home                                       | MET            | static-ref    | `git status` adds only `validate-flag-contracts.ts`, `flag-contract-parity.test.ts`, the rule yaml                                                                                                                                                                                                                                                                                                         |
+| Per-claim authority ordering explicit and documented                        | MET            | static-ref    | `### Design` authority paragraph; encoded in diagnostics as `[authority: …]`                                                                                                                                                                                                                                                                                                                               |
+| Scope stays clear of task 0412                                              | MET            | static-ref    | C1/C2/C3 cover glossary narrative + `cross-cutting.md` + ADR; 0412 owns command↔numbered-table parity                                                                                                                                                                                                                                                                                                      |
+| `validate-commands.ts --json` → zero violations                             | MET            | command       | `{"violations":[],"fileCount":34}`                                                                                                                                                                                                                                                                                                                                                                         |
+| `bun run lint` / `test` / `build` green, failures bucketed                  | PARTIAL        | command       | lint exit 0; build exit 0; full suite **4353 pass / 24 fail / 4377 total** — all 24 are sandbox denials (16× `Failed to listen at 127.0.0.1`, 1× `EPERM mkdtemp` in `$HOME`), confined to `ProjectRegistry` / `startServer` / `healthModule` / `project-start` / `rpc client` / `createServerContext` / `spur projects CLI`, none touching this task's diff. Not reproducible as 0-fail under this sandbox |
+| Gate runs where existing sp tests run                                       | MET            | command       | `bun test plugins/sp/tests/` → 480 pass / 0 fail across 11 files, including `flag-contract-parity.test.ts`                                                                                                                                                                                                                                                                                                 |
 
 #### Live drift diagnostic (R5, captured this run)
 
@@ -433,30 +447,30 @@ prose pins**. Twelve anchor to structured markers (`###` headings in `plugins/sp
 bold labels, `- [ ]` checklist items) and are legitimate under R2. **Five pinned genuinely free prose**
 and were repaired:
 
-| Pin | Source line | Disposition |
-|---|---|---|
-| `using it correctly under its contract` | `plugins/sp/skills/source-driven-development/SKILL.md:40` | Converted to the bold label `**Am I using it correctly under its contract?**` (and `Does the API exist?` → `**Does the API exist?**`) |
-| `never emit an html` | `plugins/sp/skills/sys-architecture/references/upkeep-survey.md:55` | Converted to the bullet's bold label `**Markdown only.**` |
-| `target under 500 tokens` | `plugins/sp/skills/code-testing/references/test-output-discipline.md:45` | Deleted as redundant — `--reporter=dots` / `--test-name-pattern` asserted above are the enforcement |
-| `two task checks per task` | `plugins/sp/skills/spur-dev/references/section-batching.md:23` | Deleted as redundant — the `stageIndex`/`firstCheckIndex` ordering assertions carry the discipline |
-| `A stash touching different files has no causal evidence` | `plugins/sp/skills/sys-debugging/SKILL.md:52` | Deleted as redundant — `### Source before git state` heading asserted immediately above |
+| Pin                                                       | Source line                                                              | Disposition                                                                                                                           |
+| --------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `using it correctly under its contract`                   | `plugins/sp/skills/source-driven-development/SKILL.md:40`                | Converted to the bold label `**Am I using it correctly under its contract?**` (and `Does the API exist?` → `**Does the API exist?**`) |
+| `never emit an html`                                      | `plugins/sp/skills/sys-architecture/references/upkeep-survey.md:55`      | Converted to the bullet's bold label `**Markdown only.**`                                                                             |
+| `target under 500 tokens`                                 | `plugins/sp/skills/code-testing/references/test-output-discipline.md:45` | Deleted as redundant — `--reporter=dots` / `--test-name-pattern` asserted above are the enforcement                                   |
+| `two task checks per task`                                | `plugins/sp/skills/spur-dev/references/section-batching.md:23`           | Deleted as redundant — the `stageIndex`/`firstCheckIndex` ordering assertions carry the discipline                                    |
+| `A stash touching different files has no causal evidence` | `plugins/sp/skills/sys-debugging/SKILL.md:52`                            | Deleted as redundant — `### Source before git state` heading asserted immediately above                                               |
 
 Post-repair: `bun test plugins/sp/tests/` → 480 pass / 0 fail; `bun run lint` exit 0; full suite fail
 bucket unchanged at the same 24 sandbox denials, so the repair introduced no new failures.
 
 #### Gates re-run this session
 
-| Gate | Command | Result |
-|---|---|---|
-| Flag-contracts CLI | `bun plugins/sp/scripts/validate-flag-contracts.ts` | `All 32 contract surfaces agree across all claims.` |
-| validate-commands | `bun plugins/sp/scripts/validate-commands.ts --json` | `{"violations":[],"fileCount":34}` |
-| Lint + typecheck | `bun run lint` | exit 0 |
-| sp suite | `bun test plugins/sp/tests/` | 480 pass / 0 fail (11 files) |
-| Gate file | `bun test plugins/sp/tests/flag-contract-parity.test.ts` | 24 pass / 0 fail |
-| Full suite | `bun run test` | 4353 pass / 24 fail / 4377 — all 24 sandbox-environmental |
-| Build | `bun run build` | exit 0 |
-| Rule pre-check | `bun run test-pre-check` | 43 rules pass |
-| Rule post-check | `bun run test-post-check` | 2 rules pass |
+| Gate               | Command                                                  | Result                                                    |
+| ------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| Flag-contracts CLI | `bun plugins/sp/scripts/validate-flag-contracts.ts`      | `All 32 contract surfaces agree across all claims.`       |
+| validate-commands  | `bun plugins/sp/scripts/validate-commands.ts --json`     | `{"violations":[],"fileCount":34}`                        |
+| Lint + typecheck   | `bun run lint`                                           | exit 0                                                    |
+| sp suite           | `bun test plugins/sp/tests/`                             | 480 pass / 0 fail (11 files)                              |
+| Gate file          | `bun test plugins/sp/tests/flag-contract-parity.test.ts` | 24 pass / 0 fail                                          |
+| Full suite         | `bun run test`                                           | 4353 pass / 24 fail / 4377 — all 24 sandbox-environmental |
+| Build              | `bun run build`                                          | exit 0                                                    |
+| Rule pre-check     | `bun run test-pre-check`                                 | 43 rules pass                                             |
+| Rule post-check    | `bun run test-post-check`                                | 2 rules pass                                              |
 
 #### Coverage
 
@@ -524,31 +538,33 @@ which is gitignored and therefore invisible to `git status` and drift guards:
 
 #### Task-check hygiene repaired this run
 
-| Finding | Count at entry | Repair |
-|---|---|---|
-| `L3.unchecked-checklist` | 39 unchecked boxes on a `done` task | 22 AC + 17 Plan boxes flipped to `[x]` — every AC row is MET and every Plan phase is recorded complete in `### Solution` |
-| `L4.stale-line-anchor` | 10 (0415) + 1 (0413) | Bare-basename anchors rewritten to repo-root-relative paths so they resolve; 0413's historical `plugins/sp/tests/inline-execution-contract.test.ts:145` annotated as the pre-0415 location |
-| `L3.requirements-format` | 1 each on 0415 and 0413 | `- **R1 — …**` → `- R1 — **…**` so the R-number leads the item |
+| Finding                  | Count at entry                      | Repair                                                                                                                                                                                     |
+| ------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `L3.unchecked-checklist` | 39 unchecked boxes on a `done` task | 22 AC + 17 Plan boxes flipped to `[x]` — every AC row is MET and every Plan phase is recorded complete in `### Solution`                                                                   |
+| `L4.stale-line-anchor`   | 10 (0415) + 1 (0413)                | Bare-basename anchors rewritten to repo-root-relative paths so they resolve; 0413's historical `plugins/sp/tests/inline-execution-contract.test.ts:145` annotated as the pre-0415 location |
+| `L3.requirements-format` | 1 each on 0415 and 0413             | `- **R1 — …**` → `- R1 — **…**` so the R-number leads the item                                                                                                                             |
 
 Residual on both tasks: `L4.uncovered-task-scenario` (22 on 0415, 25 on 0413) — the DD-09 subset
 advisory firing because task AC rows are deliberately finer-grained than the feature's 10 scenarios.
 Collapsing them to match would delete the per-row evidence these tasks exist to carry. Left as-is;
 both tasks report `pass: true` and the feature check is clean.
+
 ### Review
+
 **Review date:** 2026-08-02 · **Reviewer:** direct implementation + pipeline verification
 (executed inline per AGENTS.md default; `sp:code-verification` Step 11 evidence below).
 
 **P1–P4 Findings**
 
-| Priority | Finding | Disposition |
-| --- | --- | --- |
-| P1 | None | - |
-| P2 | `adrAgentClaims` used a `(?=\n## ADR-|$)` lookahead with the `m` flag — `$` matches at every newline, so the lazy body capture stopped after the ADR-041 header line and ADR participation was silently absent | **Fixed**: section sliced by index arithmetic (`plugins/sp/scripts/validate-flag-contracts.ts:399-410`); caught by the new ADR-contradiction fixture |
-| P2 | ADR collapse-mapping regex required `--subprocess` followed by whitespace, but the source is `` `--subprocess` `` (backtick) — a drifted mapping target (`→ --agent inline`) produced an *absent* claim instead of a *stated disagreeing* claim | **Fixed**: parse the mapping target generically and emit the target's behavior (auto→subprocess / inline→inline), so a drift is a stated disagreement (R1) |
-| P3 | `commandTableDefaults` split on all `|` including escaped pipes (`<tag\|commit>`) — `dev-changelog` defaults parsed as description text | **Fixed**: split on unescaped `(?<!\\)\|` then unescape, mirroring `plugins/sp/scripts/validate-commands.ts:371-378` |
-| P3 | `opsSectionDefaults` paired each default marker with the *first* flag on the line, not the flag immediately preceding the marker (multi-flag Inputs lines) | **Fixed**: pair by position (flag with greatest index < marker index) |
-| P3 | `extractTriggerTable` returned trigger names with `**bold**` markers; `[^`)]` class also silently excluded the backtick in `(default: `done`)` | **Fixed**: strip `**` in extractor; value regex rewritten with explicit optional backtick |
-| P4 | Coverage of the new gate module was 74.8% lines (threshold 90) — CLI + loud-failure + ADR branches untested | **Fixed**: added 13 tests (loud-failure paths, ADR agree/contradict/absent, C2 skip paths, C1 single-name exclusion, CLI runCli/bootMain/clean+dirty); now 97.19% lines / 97.50% functions |
+| Priority | Finding                                                                                                                                                                                                                                         | Disposition                                                                                                                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1       | None                                                                                                                                                                                                                                            | -                                                                                                                                                                                          |
+| P2       | `adrAgentClaims` used a `(?=\n## ADR-                                                                                                                                                                                                           | $)` lookahead with the `m` flag — `$` matches at every newline, so the lazy body capture stopped after the ADR-041 header line and ADR participation was silently absent                   | **Fixed**: section sliced by index arithmetic (`plugins/sp/scripts/validate-flag-contracts.ts:399-410`); caught by the new ADR-contradiction fixture |
+| P2       | ADR collapse-mapping regex required `--subprocess` followed by whitespace, but the source is `` `--subprocess` `` (backtick) — a drifted mapping target (`→ --agent inline`) produced an _absent_ claim instead of a _stated disagreeing_ claim | **Fixed**: parse the mapping target generically and emit the target's behavior (auto→subprocess / inline→inline), so a drift is a stated disagreement (R1)                                 |
+| P3       | `commandTableDefaults` split on all `                                                                                                                                                                                                           | ` including escaped pipes (`<tag\|commit>`) — `dev-changelog` defaults parsed as description text                                                                                          | **Fixed**: split on unescaped `(?<!\\)\|` then unescape, mirroring `plugins/sp/scripts/validate-commands.ts:371-378`                                 |
+| P3       | `opsSectionDefaults` paired each default marker with the _first_ flag on the line, not the flag immediately preceding the marker (multi-flag Inputs lines)                                                                                      | **Fixed**: pair by position (flag with greatest index < marker index)                                                                                                                      |
+| P3       | `extractTriggerTable` returned trigger names with `**bold**` markers; `[^`)]`class also silently excluded the backtick in`(default: `done`)`                                                                                                    | **Fixed**: strip `**` in extractor; value regex rewritten with explicit optional backtick                                                                                                  |
+| P4       | Coverage of the new gate module was 74.8% lines (threshold 90) — CLI + loud-failure + ADR branches untested                                                                                                                                     | **Fixed**: added 13 tests (loud-failure paths, ADR agree/contradict/absent, C2 skip paths, C1 single-name exclusion, CLI runCli/bootMain/clean+dirty); now 97.19% lines / 97.50% functions |
 
 **Residual Risk**
 
@@ -575,10 +591,12 @@ fail/pass; prose-literal assertions converted or deleted across three test files
 with zero existing violations; four real C2 drifts found and fixed on the shipped surfaces. Full
 gates green: lint + typecheck, 4377 tests / 0 fail, build, both rule presets, validate-commands
 0 violations, flag-contracts CLI clean.
+
 ### References
+
 **Origin**
 
-- `/sp:dev-findissue` review, 2026-08-02, over the 0411 → 0412 → 0413 session.
+- `/sp:dev-find-issue` review, 2026-08-02, over the 0411 → 0412 → 0413 session.
 
 **Evidenced drift (all four reproduced as fixtures — see `### Background`)**
 
@@ -610,7 +628,9 @@ gates green: lint + typecheck, 4377 tests / 0 fail, build, both rule presets, va
 **Dependencies**
 
 - Task **0412** (feature H81) — makes the command-side Argument Flags table canonical. Land first.
+
 ### History
+
 - 2026-08-02T20:13:40.063Z todo → wip (system)
 - 2026-08-02T20:13:49.098Z wip → testing (system)
 - 2026-08-02T20:14:03.649Z testing → done (system)

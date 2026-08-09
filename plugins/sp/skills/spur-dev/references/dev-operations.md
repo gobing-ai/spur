@@ -32,11 +32,11 @@ each would be scope creep for one-liner procedures.
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
 > it does not map to a numbered dev-\* operation. See its command file and the backing skill for details.
 
-> **`dev-findissue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
+> **`dev-find-issue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
 > (session-log forensics → optional CLI-gated fix task). Hygiene / post-batch analysis — not a spine
-> pipeline stage. See `plugins/sp/commands/dev-findissue.md` and
+> pipeline stage. See `plugins/sp/commands/dev-find-issue.md` and
 > `plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
-> `/sp:dev-findissue [<topic>]` before re-running the batch.
+> `/sp:dev-find-issue [<topic>]` before re-running the batch.
 
 > **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
 > **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,

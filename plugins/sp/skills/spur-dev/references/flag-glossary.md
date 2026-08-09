@@ -25,7 +25,7 @@ in that command's body and are not listed here.
 markdown link whose link target is the entry's anchor — `[`--next`](#flag-next)`. The anchor is
 always `#flag-<name>` where `<name>` is the flag minus its leading `--` (so `--keep-going` →
 `#flag-keep-going`). The test gate (`command-flag-parity.test.ts`, task 0403) finds these references
-with the regex `` \[`--<flag>`\]\(#flag- `` over each command file — **a shared flag declared without
+with the regex ``\[`--<flag>`\]\(#flag-`` over each command file — **a shared flag declared without
 this reference fails the build.** Prose-only citations (the flag name mentioned in a sentence but not
 in the link form) do not count; the reference must be the link.
 
@@ -45,11 +45,11 @@ as a follow-up, not quietly left inconsistent.
 The value table below is the C3a cross-file parity surface (kept in lockstep with the SSOT by
 `validate-flag-contracts.ts`), not an independent restatement.
 
-| Value | Who does the work | Derived surface |
-|---|---|---|
+| Value                           | Who does the work                                                           | Derived surface                                                             |
+| ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline (host session); headless: subprocess of `agent.default` |
-| `auto` | Tier-resolved from the stage's `min_tier` + `fallback` | Subprocess |
-| `<name>` | That coding agent or configured executor | Inline when it is the current session's agent; subprocess otherwise |
+| `auto`                          | Tier-resolved from the stage's `min_tier` + `fallback`                      | Subprocess                                                                  |
+| `<name>`                        | That coding agent or configured executor                                    | Inline when it is the current session's agent; subprocess otherwise         |
 
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
 selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no
@@ -204,7 +204,7 @@ lands at `todo` ready for `dev-refine`. Optional feature id scopes it.
 
 **Anchor:** `#flag-since`.
 
-Lower bound on a range: a git ref on `dev-changelog`, or an ISO date on `dev-findissue` and
+Lower bound on a range: a git ref on `dev-changelog`, or an ISO date on `dev-find-issue` and
 `dev-wrapall` (filters done
 tasks by `updated_at >= date`).
 
@@ -221,7 +221,7 @@ Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`):
 **Anchor:** `#flag-until`.
 
 Upper bound on a range: a git ref on `dev-changelog` (defaults to `HEAD`), or an ISO date on
-`dev-findissue` (defaults to now).
+`dev-find-issue` (defaults to now).
 
 ### `--status <s>` — filter by task status
 
@@ -297,12 +297,12 @@ tree (default `detailed`). Unrelated to task-section readiness.
 
 **`dev-refine` / `dev-refineall`:** `--depth <standard|ready>` — how deep refine must take target
 sections (Background, Requirements, Acceptance Criteria, Design, Plan) before SKIP/success.
-Orthogonal to `--focus` (which *narrows* domains) and to `--mode` on other commands.
+Orthogonal to `--focus` (which _narrows_ domains) and to `--mode` on other commands.
 
-| Value (refine family) | Bar | `--auto` SKIP behavior |
-|---|---|---|
-| `standard` (default when omitted) | L3 structural completeness (not empty/placeholder; check-clean for target sections) | **SKIP** when no L3 findings on target sections |
-| `ready` | **Implement-ready** freeze: another agent can implement without inventing design (frozen names/APIs or explicit "no new API", anti-patterns, file targets, handoffs, out-of-scope) | **Do not SKIP** on L3-clean alone — run the ready checklist; rewrite sections until the bar is met |
+| Value (refine family)             | Bar                                                                                                                                                                                | `--auto` SKIP behavior                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `standard` (default when omitted) | L3 structural completeness (not empty/placeholder; check-clean for target sections)                                                                                                | **SKIP** when no L3 findings on target sections                                                    |
+| `ready`                           | **Implement-ready** freeze: another agent can implement without inventing design (frozen names/APIs or explicit "no new API", anti-patterns, file targets, handoffs, out-of-scope) | **Do not SKIP** on L3-clean alone — run the ready checklist; rewrite sections until the bar is met |
 
 Default for refine stays `standard` so ordinary `refineall --auto` remains cheap. Use `ready` for
 multi-package / multi-agent handoffs and flaky-pipeline features where a wrong implement is costly.
@@ -357,13 +357,13 @@ describe successors.
 **Stop conditions.** A chain running under `--next` halts, cleanly, when any of these is true. Each
 is named so the operator can tell **which step halted the chain and why**:
 
-| Halt cause | Who reports it | Report shape |
-|---|---|---|
-| A failing gate (lint/type/test/rule) | The step that hit it | "chain halted at `<step>` — `<gate>` failed: `<one-line cause>`" |
-| A non-PASS verdict (PARTIAL/FAIL) | The verify step | "chain halted at `dev-verify <wbs>` — verdict `<VERDICT>`; see `.spur/run/<wbs>-verdict.json`" |
-| A HITL pause (taste gate, irreversible gate, multi-candidate fork) | The step that paused | "chain halted at `<step>` — HITL pause (`<which>`); resume after operator input" |
-| Unmet dependencies | `dev-refine`/`dev-run` precheck or router A2 | "chain halted at `<step>` — unmet deps: `<WBS list>`" |
-| Terminal status (`done`, `cancelled`) | The router | "chain complete — task `<wbs>` is `<status>`" (distinct from a halt) |
+| Halt cause                                                         | Who reports it                               | Report shape                                                                                   |
+| ------------------------------------------------------------------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| A failing gate (lint/type/test/rule)                               | The step that hit it                         | "chain halted at `<step>` — `<gate>` failed: `<one-line cause>`"                               |
+| A non-PASS verdict (PARTIAL/FAIL)                                  | The verify step                              | "chain halted at `dev-verify <wbs>` — verdict `<VERDICT>`; see `.spur/run/<wbs>-verdict.json`" |
+| A HITL pause (taste gate, irreversible gate, multi-candidate fork) | The step that paused                         | "chain halted at `<step>` — HITL pause (`<which>`); resume after operator input"               |
+| Unmet dependencies                                                 | `dev-refine`/`dev-run` precheck or router A2 | "chain halted at `<step>` — unmet deps: `<WBS list>`"                                          |
+| Terminal status (`done`, `cancelled`)                              | The router                                   | "chain complete — task `<wbs>` is `<status>`" (distinct from a halt)                           |
 
 A chain that stops at a gate is a **normal outcome, not an error**: it reports where and why and
 exits cleanly. It is distinct from a chain that stops because the task is complete — the report

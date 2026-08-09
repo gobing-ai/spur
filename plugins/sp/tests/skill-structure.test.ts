@@ -280,7 +280,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const skillDir = join(SKILLS_DIR, 'issue-finding');
         const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
         const sessionFormats = readFileSync(join(skillDir, 'references', 'session-formats.md'), 'utf8');
-        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-findissue.md'), 'utf8');
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-find-issue.md'), 'utf8');
         const fixture = readFileSync(join(skillDir, 'examples', 'session-test-loop.jsonl'), 'utf8');
         const expected = JSON.parse(readFileSync(join(skillDir, 'examples', 'expected-findings.json'), 'utf8')) as {
             expectedCategories: Array<{ id: string; commandContains?: string; minIdenticalCommandRuns?: number }>;

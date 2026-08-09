@@ -20,7 +20,7 @@
 - docs(tasks): land E1/N task corpus for refine-loop friction analysis (ab9a23f2)
 - chore(config): update executor roster and local IDE permissions (0504154e)
 - chore(pipeline-meta): post-mortem children 0475/0476, batch hardening tasks 0480/0482 (7d8cdfcb)
-- chore(deps): bump @gobing-ai/ts-* to 0.4.23 (02851926)
+- chore(deps): bump @gobing-ai/ts-\* to 0.4.23 (02851926)
 - chore(tools): bump lefthook to 2.1.10, drop LEFTHOOK_SANDBOX skip guard (5ab3558b)
 - chore(hooks): skip pre-commit format in spawn-restricted sandboxes via LEFTHOOK_SANDBOX=1 (a67d09a0)
 - chore(0475): merge prose-prerequisite heuristic fix into main (14cc3afe)
@@ -230,7 +230,7 @@
 
 - feature action job stream, progress tracking UI, and project start service (F83) (40ece606)
 - add multi-project registry, spur projects CLI, server endpoints, and UI switcher (aa6498c9)
-- add issue-finding skill and dev-findissue command (37d0a12c, 36e858ab)
+- add issue-finding skill and dev-find-issue command (37d0a12c, 36e858ab)
 - redesign JobsTab as purpose-built queue/scheduler view (c45e5ef6)
 - add Tasks tabview backed by run store (53f36a02)
 - add Supervisor tab as Teams default (ba3ea3c5)
@@ -239,7 +239,7 @@
 - redact configured secrets across observability surfaces (ed75fa9e)
 - workflow run store read API (55b18904)
 - event history filtering + pagination read API (464b1123)
-- author and emit team.* event family for team/member lifecycle (91e60536)
+- author and emit team.\* event family for team/member lifecycle (91e60536)
 - bridge CLI process/workflow/agent events into the ledger (c3775124)
 - add correlation columns to system_events + migration (9503a238)
 - demote heartbeat to diagnostic tier + per-prefix retention quotas (1809a48e)
@@ -256,7 +256,7 @@
 ### Changed
 
 - split Worker-safe HTTP root and portable server config (93085672)
-- update command map 31→34; add dev-refineall, dev-featurechange, dev-findissue rows (1628af87)
+- update command map 31→34; add dev-refineall, dev-featurechange, dev-find-issue rows (1628af87)
 - add H51 batch execution reliability guardrails feature (e117b1e6)
 - add J4 batch-execution guardrails (ed1a146f)
 - allow Root Cause section on meta tasks; bump design v1.8.0 (6d492046)
@@ -312,13 +312,13 @@
 - assert resume skips prior onEnter side effects (R5 of 0366) (cb238168)
 - harden token-ledger-watcher contract gaps (b10abe5b)
 - cover task-check line-anchor extraction and verdict dir helpers (2b614ebb)
-- bump @gobing-ai/ts-* catalog to 0.4.14 (45ac4598)
-- resync bun.lock to published @gobing-ai/ts-* 0.4.12 (48ccf276)
+- bump @gobing-ai/ts-\* catalog to 0.4.14 (45ac4598)
+- resync bun.lock to published @gobing-ai/ts-\* 0.4.12 (48ccf276)
 - advance 0365 to done (solution + testing + review + status) (4b7b8251)
 - advance 0366 to done (review + status) (2217247c)
 - add 0365/0366 task files and orphaned discovery artifact (66c99b22)
 - add yaml catalog dep and sync lockfile (c4af81e7)
-- gitignore docs/**/.spur/ (8142cba9)
+- gitignore docs/\*\*/.spur/ (8142cba9)
 - update task status after implementation (c94c0a0b)
 
 ## [0.3.24] — 2026-07-27
@@ -458,11 +458,11 @@
 
 ### Fixed
 
-- **Verify line-anchor fidelity rule (anti-stale-citation).** A `--force` re-audit of task 0282 exposed that the prior verify run certified the task `done` citing `file:line` anchors that resolved to a *different ticket's* content (0281 telemetry text), with requirement rows marked MET on material absent from the deliverable. The `code-verification` skill now requires every `file:line` evidence citation in the Testing table (and in Acceptance Criteria evidence) to be re-read at the cited lines this run and confirmed to name the requirement's subject before a MET row is written. Stale or cross-ticket anchors fail the row to UNMET and surface as a P2+ finding. Closes task 0299 (R1).
+- **Verify line-anchor fidelity rule (anti-stale-citation).** A `--force` re-audit of task 0282 exposed that the prior verify run certified the task `done` citing `file:line` anchors that resolved to a _different ticket's_ content (0281 telemetry text), with requirement rows marked MET on material absent from the deliverable. The `code-verification` skill now requires every `file:line` evidence citation in the Testing table (and in Acceptance Criteria evidence) to be re-read at the cited lines this run and confirmed to name the requirement's subject before a MET row is written. Stale or cross-ticket anchors fail the row to UNMET and surface as a P2+ finding. Closes task 0299 (R1).
 
 - **`--next` no-op surfaced in the verify report line.** When `--next` is invoked on a task already at `done` or `cancelled`, the transition cannot fire - but the no-op previously lived only in the CLI print, not in the verify report. The skill's Step 13 now requires the report line itself to state `--next: no-op - task already terminal (<status>)`, so a terminal-task re-audit cannot be misread as a successful `testing -> done` transition. Closes task 0299 (R2).
 
-- **Gitignored `.spur/run/**` fix-pass writes now disclosed in Testing.** A `--fix all` verify pass can mutate deliverables under `.spur/run/**` that are invisible to `git status` and to drift guards. The skill's Step 12 now requires the Testing write-back to name the exact artifact path and line range the fix pass touched, so the mutation is discoverable from the tracked task file alone without diffing untracked directories. Closes task 0299 (R3).
+- **Gitignored `.spur/run/**`fix-pass writes now disclosed in Testing.** A`--fix all`verify pass can mutate deliverables under`.spur/run/\*\*`that are invisible to`git status` and to drift guards. The skill's Step 12 now requires the Testing write-back to name the exact artifact path and line range the fix pass touched, so the mutation is discoverable from the tracked task file alone without diffing untracked directories. Closes task 0299 (R3).
 
 ### Documentation
 
@@ -599,7 +599,7 @@
 
 - **`spur serve` board 404 after global install.** The published `@gobing-ai/spur` package did not ship the Astro board static assets, so `http://localhost:<port>/board` returned `{"error":"Not Found"}` from any non-monorepo cwd (e.g. after `bun i -g @gobing-ai/spur`). `build:bundle` now runs `bundle-web` (copies `dist/web` → `apps/cli/web`), `package.json` `files` includes `web/`, and `resolveWebDistPath` looks next to the bundled `spur.js` / binary. Missing assets log a warning and browser-open falls back to `/api/health` instead of a JSON 404.
 
-- **Restore package-root `config/` in the npm release (ADR-015).** After the bin moved to package-root `spur.js`, default config assets were nested under the leftover `spur-cli/config/` path and docs still said `dist/config`. Releases now ship top-level `config/` (via `bundle-config config` + `files: ["config", …]`); `bundledConfigRoot()` still accepts legacy `spur-cli/config`. **`spur init` full-tree seeds** every bundled asset into project `.spur/` (rules/**, workflows/**, tasks/**, templates/**, plugins/**), then applies the scaffold manifest for remaps and root-scoped docs/AGENTS — matching the monorepo symlink intent with real copies for end-user projects.
+- **Restore package-root `config/` in the npm release (ADR-015).** After the bin moved to package-root `spur.js`, default config assets were nested under the leftover `spur-cli/config/` path and docs still said `dist/config`. Releases now ship top-level `config/` (via `bundle-config config` + `files: ["config", …]`); `bundledConfigRoot()` still accepts legacy `spur-cli/config`. **`spur init` full-tree seeds** every bundled asset into project `.spur/` (rules/**, workflows/**, tasks/**, templates/**, plugins/\*\*), then applies the scaffold manifest for remaps and root-scoped docs/AGENTS — matching the monorepo symlink intent with real copies for end-user projects.
 
 - **`POST /:team/up` now starts only `autoStart=true` members.** Prior implementation started every materialized member regardless of the spec's autoStart flag — contradicting the docs, the CLI, and the team definition. Routes now filter via `listAgentSpecs` so an `autoStart=false` member is created but not started.
 
