@@ -461,6 +461,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             // without forcing their construction at context build time.
             workflowSvc ??= new WorkflowAppServiceImpl({
                 cwd,
+                secretValues: configuredSecretValues(options.env ?? process.env),
+                warn: (message) => appRt.logger.warn(message),
                 getDb: this.getDb.bind(this),
                 agentService: this.agentService.bind(this),
                 ruleService: this.ruleService.bind(this),

@@ -2294,14 +2294,18 @@ describe('AgentService automatic tier escalation (0407)', () => {
         const sidewaysConfig: AgentConfig = {
             executors: [
                 { name: 'std-a', agent: 'pi', tier: 'standard' },
+                // Aliases on an exhausted binary must be skipped run-wide.
+                { name: 'std-a-alias', agent: 'pi', model: 'alternate-pi-model', tier: 'standard' },
                 { name: 'std-b', agent: 'claude', tier: 'standard' },
+                { name: 'std-b-alias', agent: 'claude', model: 'alternate-claude-model', tier: 'standard' },
+                { name: 'cap-same-dead-binary', agent: 'pi', tier: 'capable-1' },
                 { name: 'cap-exec', agent: 'codex', tier: 'capable-1' },
             ],
         };
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, sidewaysConfig);
-        // pi (std-a) exhausted → sideways to claude (std-b) → also exhausted →
-        // no same-tier different-binary left → fallback tier capable-1 → codex (cap-exec).
+        // pi (std-a) exhausted → skip every pi alias → sideways to claude
+        // (std-b) → skip every claude alias and the capable pi alias → codex.
         const results: AgentRunResult[] = [
             makeRunResult({ exitCode: 1, stderr: 'rate limit exceeded' }),
             makeRunResult({ exitCode: 1, stderr: 'usage limit reached' }),

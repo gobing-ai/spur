@@ -96,16 +96,33 @@ describe('AgentRunActionRunner', () => {
         const result = await runner.execute({ input: 'hello' }, makeCtx());
         expect(result.ok).toBe(false);
         const data = result.data as Record<string, unknown>;
-        // 0485 R6: exhaustion post-mortems need what the provider emitted. The
-        // truncation marker is presentational; the STREAM CONTENT is capped at 4096.
-        const content = (t: string) => t.replace(/^\.\.\. \(truncated\) \.\.\.\n/, '');
         expect(typeof data.stdoutTail).toBe('string');
         expect(typeof data.stderrTail).toBe('string');
-        expect(content(data.stdoutTail as string).length).toBeLessThanOrEqual(4096);
-        expect(content(data.stderrTail as string).length).toBeLessThanOrEqual(4096);
+        expect((data.stdoutTail as string).length).toBeLessThanOrEqual(4096);
+        expect((data.stderrTail as string).length).toBeLessThanOrEqual(4096);
         // Tails are the LAST 4096 characters of each stream.
         expect((data.stdoutTail as string).endsWith('end-out')).toBe(true);
         expect((data.stderrTail as string).endsWith('end-err')).toBe(true);
+    });
+
+    test('0485 R6: failed captured agent.run redacts and bounds every persisted output field', async () => {
+        const secret = 'configured-secret-value';
+        const svc = svcWithRunTraced({
+            exitCode: 1,
+            stdout: `${'x'.repeat(5000)} stdout ${secret}`,
+            stderr: `stderr ${secret}`,
+            invocation: invocation(),
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { secretValues: [secret] });
+        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const data = result.data as Record<string, unknown>;
+        const serialized = JSON.stringify(result.data);
+
+        expect(serialized).not.toContain(secret);
+        expect(serialized).toContain('[REDACTED]');
+        expect((data.answer as string).length).toBeLessThanOrEqual(4096);
+        expect((data.stdoutTail as string).length).toBeLessThanOrEqual(4096);
+        expect((data.stderrTail as string).length).toBeLessThanOrEqual(4096);
     });
 
     test('requires input when continue is not set', async () => {

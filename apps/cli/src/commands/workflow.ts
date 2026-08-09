@@ -163,6 +163,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     const makeSvc = (json?: boolean, bus?: WorkflowObservabilityBus) =>
         new WorkflowAppService({
             cwd: context.cwd,
+            secretValues: configuredSecretValues(context.env),
+            warn: (message) => context.output.error(`Warning: ${message}`),
             getDb: () => context.getDb(),
             // Intentionally leave AgentService without a server-style events bus: the
             // workflow-dispatched agent lifecycle is the single `workflow.agent` series

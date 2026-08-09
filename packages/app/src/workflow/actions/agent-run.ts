@@ -1,7 +1,7 @@
 import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import type { AgentExecutionObserver } from '../../observability/agent-execution';
+import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import { TaskLocator } from '../../services/task-locator';
 import type { WorkflowObservabilityBus } from '../observability';
@@ -19,6 +19,8 @@ const KIND = 'agent.run';
 export interface AgentRunAgentConfig {
     default?: string;
     sessionAffinity?: boolean;
+    /** Configured secret values that must never reach persisted action results. */
+    secretValues?: readonly string[];
     /**
      * Pathspec exclude globs for the requireDiff empty-implement gate (R4, task 0451).
      * Defaults to `['docs/tasks3/*', 'docs/features/*']` when absent.
@@ -389,6 +391,7 @@ export class AgentRunActionRunner implements ActionRunner {
                     // 0485 R6: carry stream tails on failure records only.
                     ok ? undefined : traced.stdout,
                     ok ? undefined : (traced.stderr ?? undefined),
+                    this.agentConfig.secretValues,
                 ),
                 error,
                 // Latch: mark the session open after the first successful agent.run so later
@@ -457,15 +460,27 @@ function buildResultData(
     invocation: AgentRunInvocation | undefined,
     stdout?: string,
     stderr?: string,
+    secretValues: readonly string[] = [],
 ): Record<string, unknown> {
     const data: Record<string, unknown> = { exitCode, agent: agentLabel };
-    if (capture) data.answer = answer;
+    if (capture) {
+        // On success, `answer` is the explicit capture contract. On failure it
+        // becomes persisted diagnostic output, so apply the same redaction and
+        // total bound as the tails; otherwise raw stdout would bypass R6 through
+        // `data.answer` whenever capture/answerFile is enabled.
+        data.answer =
+            exitCode === 0 ? answer : tail(redactAndBound(answer, secretValues, Number.MAX_SAFE_INTEGER), 4096);
+    }
     if (invocation !== undefined) data.invocation = invocation;
     // 0485 R6: persist the last ≤4 KB of each stream on FAILURE records so an
     // exhaustion post-mortem can confirm what the provider actually emitted.
     // Omitted on success and when a stream is empty (lean records).
-    if (stdout !== undefined && stdout.length > 0) data.stdoutTail = tail(stdout, 4096);
-    if (stderr !== undefined && stderr.length > 0) data.stderrTail = tail(stderr, 4096);
+    if (stdout !== undefined && stdout.length > 0) {
+        data.stdoutTail = tail(redactAndBound(stdout, secretValues, Number.MAX_SAFE_INTEGER), 4096);
+    }
+    if (stderr !== undefined && stderr.length > 0) {
+        data.stderrTail = tail(redactAndBound(stderr, secretValues, Number.MAX_SAFE_INTEGER), 4096);
+    }
     return data;
 }
 
@@ -703,5 +718,7 @@ async function gitHasNonCorpusChanges(
 
 function tail(text: string, maxChars: number): string {
     if (text.length <= maxChars) return text;
-    return `... (truncated) ...\n${text.slice(text.length - maxChars)}`;
+    const marker = '... (truncated) ...\n';
+    if (maxChars <= marker.length) return marker.slice(0, maxChars);
+    return `${marker}${text.slice(text.length - (maxChars - marker.length))}`;
 }

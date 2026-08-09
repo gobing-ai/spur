@@ -1617,7 +1617,8 @@ terminalStates:
 
         test('AC3: stale agent.default warns once and the YAML literal stands', async () => {
             const dir = await seedBoth('spur-wf-r2-stale-', 'agent:\n  default: commented-out-exec\n');
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const emitted: string[] = [];
+            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-stale-1' });
 
@@ -1628,6 +1629,24 @@ terminalStates:
             const warnings = (result as Record<string, unknown>).warnings as string[] | undefined;
             expect(Array.isArray(warnings)).toBe(true);
             expect(warnings?.filter((w) => w.includes('commented-out-exec'))).toHaveLength(1);
+            expect(emitted.filter((w) => w.includes('commented-out-exec'))).toHaveLength(1);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('AC3: a throwing warning sink cannot fail an otherwise completed workflow', async () => {
+            const dir = await seedBoth('spur-wf-r2-warn-failure-', 'agent:\n  default: commented-out-exec\n');
+            const svc = new WorkflowAppService({
+                ...makeCtx(dir),
+                warn: () => {
+                    throw new Error('output unavailable');
+                },
+            });
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-warn-failure-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgents(dir)).toBe('omp');
+            expect(((result as Record<string, unknown>).warnings as string[] | undefined)?.length).toBe(1);
             await rm(dir, { recursive: true, force: true });
         });
     });

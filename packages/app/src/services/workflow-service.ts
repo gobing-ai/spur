@@ -319,6 +319,10 @@ export interface WorkflowTraceTimeline {
 /** Runtime dependencies injected into WorkflowAppService. */
 export interface WorkflowAppServiceContext {
     cwd: string;
+    /** Secret values redacted before workflow action results are persisted. */
+    secretValues?: readonly string[];
+    /** Optional operational warning sink (CLI stderr / server logger). */
+    warn?(message: string): void;
     getDb(): Promise<DbAdapter>;
     agentService(): AgentService;
     ruleService(): RuleService;
@@ -522,8 +526,17 @@ export class WorkflowAppService {
         await this.maybeLinkPipelineRun(file, runId, opts);
         const runResult = result as WorkflowRunResult;
         if (warnings.length > 0) {
-            // 0485 R2: surface a stale `agent.default` validation warning on the
-            // result so the CLI and tests can see it (no new public API field).
+            // 0485 R2: retain warnings in the serializable result and emit them
+            // through the composition-root sink for human/server observability.
+            // A logging/output failure must not turn a completed workflow into a
+            // dispatch failure, so the optional sink stays best-effort.
+            for (const warning of warnings) {
+                try {
+                    this.ctx.warn?.(warning);
+                } catch {
+                    // Warning delivery cannot change workflow semantics.
+                }
+            }
             (runResult as Record<string, unknown>).warnings = warnings;
         }
         return runResult;
@@ -937,10 +950,14 @@ export class WorkflowAppService {
             default?: string;
             sessionAffinity?: boolean;
             excludeGlobs?: string[];
-        } = {};
+            secretValues?: readonly string[];
+        } = {
+            ...(this.ctx.secretValues !== undefined ? { secretValues: this.ctx.secretValues } : {}),
+        };
         try {
             const agent = (await loadSpurConfig(this.ctx.cwd)).agent;
             agentSlice = {
+                ...agentSlice,
                 ...(agent?.default !== undefined ? { default: agent.default } : {}),
                 ...(agent?.sessionAffinity !== undefined ? { sessionAffinity: agent.sessionAffinity } : {}),
             };

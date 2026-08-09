@@ -583,7 +583,6 @@ export class AgentService {
         let currentModel = resolved.model;
         let currentSource = resolved.source;
         let currentStage = resolved.stage;
-        const maxEscalations = currentStage?.policy.fallback.length ?? 0;
         const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
 
         // Tier-2 warning (suppressed in json/silent mode) — first agent only.
@@ -752,7 +751,20 @@ export class AgentService {
 
                 // Attempt escalation (0407 R1/R2/R6).
                 const escalationSignal = classifyObjectiveFailure(result);
-                if (escalationSignal === undefined || currentStage === undefined || attempt >= maxEscalations) {
+                if (escalationSignal === undefined || currentStage === undefined) {
+                    break;
+                }
+                const matchingFallbacks = currentStage.policy.fallback.filter(
+                    (fallback) => fallback.trigger === escalationSignal,
+                );
+                // Resource exhaustion is availability routing: the run-scoped
+                // attempted set makes the executor walk finite and lets the next
+                // resolution produce the honest chain-exhausted diagnostic. Other
+                // signals retain the policy's explicit fallback-count bound.
+                if (
+                    matchingFallbacks.length === 0 ||
+                    (escalationSignal !== 'resource-exhaustion' && attempt >= matchingFallbacks.length)
+                ) {
                     break;
                 }
 
@@ -982,13 +994,26 @@ export class AgentService {
             if (failed !== undefined) {
                 const failedTier = getExecutorTier(failed);
                 const failedCanonical = resolveAgentName(failed.agent);
-                const sideways = executors.filter(
-                    (e) =>
+                // An exhaustion signal invalidates the underlying binary/account,
+                // not only one executor alias. Derive every exhausted binary from
+                // the run-scoped attempted set so the ladder never bounces back to
+                // another model entry backed by the same dead account.
+                const exhaustedAgents = new Set(
+                    executors
+                        .filter((executor) => executor.name === fromExecutor || (exclude?.has(executor.name) ?? false))
+                        .map((executor) => resolveAgentName(executor.agent))
+                        .filter((agent): agent is AgentName => agent !== undefined),
+                );
+                const sideways = executors.filter((e) => {
+                    const canonical = resolveAgentName(e.agent);
+                    return (
                         e.name !== fromExecutor &&
                         getExecutorTier(e) === failedTier &&
-                        resolveAgentName(e.agent) !== failedCanonical &&
-                        !(exclude?.has(e.name) ?? false),
-                );
+                        canonical !== failedCanonical &&
+                        (canonical === undefined || !exhaustedAgents.has(canonical)) &&
+                        !(exclude?.has(e.name) ?? false)
+                    );
+                });
                 for (const executor of sideways) {
                     const canonical = resolveAgentName(executor.agent);
                     if (canonical === undefined) {
@@ -1041,9 +1066,23 @@ export class AgentService {
         // re-select an executor already attempted this run — exclusion empties the
         // list, resolveStageModelPolicy returns undefined, and the caller reports
         // "chain exhausted" instead of re-dispatching the same dead executor).
-        const eligible = executors.filter(
-            (e) => isTierEligible(getExecutorTier(e), targetTier) && !(exclude?.has(e.name) ?? false),
-        );
+        const exhaustedAgents =
+            signal === 'resource-exhaustion'
+                ? new Set(
+                      executors
+                          .filter((executor) => exclude?.has(executor.name) ?? false)
+                          .map((executor) => resolveAgentName(executor.agent))
+                          .filter((agent): agent is AgentName => agent !== undefined),
+                  )
+                : undefined;
+        const eligible = executors.filter((e) => {
+            const canonical = resolveAgentName(e.agent);
+            return (
+                isTierEligible(getExecutorTier(e), targetTier) &&
+                !(exclude?.has(e.name) ?? false) &&
+                (canonical === undefined || !(exhaustedAgents?.has(canonical) ?? false))
+            );
+        });
         if (eligible.length === 0) {
             return undefined;
         }

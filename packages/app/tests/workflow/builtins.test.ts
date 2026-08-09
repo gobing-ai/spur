@@ -181,6 +181,57 @@ describe('registerSpurBuiltins', () => {
         expect(traceJson).not.toContain('never-persist-this');
     });
 
+    test('0485 R6: failed agent output is persisted redacted and bounded', async () => {
+        const secret = 'configured-secret-value';
+        const persistence = new MemoryWorkflowPersistenceAdapter();
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: {
+                runTraced: async () => ({
+                    exitCode: 1,
+                    stdout: `${'x'.repeat(5000)} ${secret} stdout-end`,
+                    stderr: `${'y'.repeat(5000)} ${secret} stderr-end`,
+                }),
+            } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+            agentConfig: { secretValues: [secret] },
+        });
+
+        const result = await new StateMachineDriver({ host, persistence }).run(
+            {
+                name: 'failed-agent-output-e2e',
+                initialState: 'invoke',
+                terminalStates: ['done'],
+                states: [
+                    {
+                        id: 'invoke',
+                        onEnter: [
+                            { kind: 'agent.run', options: { input: 'hello', capture: true }, onError: 'continue' },
+                        ],
+                    },
+                    { id: 'done' },
+                ],
+                transitions: [{ from: 'invoke', to: 'done' }],
+            },
+            { runId: 'failed-agent-output-e2e-1' },
+        );
+        await Promise.resolve();
+
+        expect(result.status).toBe('done');
+        const traceJson = persistence.actionRuns[0]?.resultJson ?? '';
+        expect(traceJson).not.toContain(secret);
+        const persisted = JSON.parse(traceJson) as {
+            data?: { answer?: string; stdoutTail?: string; stderrTail?: string };
+        };
+        expect(persisted.data?.answer).toContain('[REDACTED]');
+        expect(persisted.data?.stdoutTail).toContain('[REDACTED]');
+        expect(persisted.data?.stderrTail).toContain('[REDACTED]');
+        expect(persisted.data?.answer?.length).toBeLessThanOrEqual(4096);
+        expect(persisted.data?.stdoutTail?.length).toBeLessThanOrEqual(4096);
+        expect(persisted.data?.stderrTail?.length).toBeLessThanOrEqual(4096);
+    });
+
     test('http.request templates are resolved once, by the engine, end-to-end', async () => {
         // The runner deliberately does no template expansion of its own. Driving it
         // through the real host proves the engine still resolves `${vars.*}` — the
