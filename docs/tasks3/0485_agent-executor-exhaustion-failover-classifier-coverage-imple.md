@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: H1
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-09T02:53:14.788Z"
-updated_at: "2026-08-09T06:01:35.166Z"
+updated_at: "2026-08-09T06:31:09.658Z"
 ---
 
 ## 0485. Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics
@@ -282,3 +282,6 @@ lint/typecheck, coverage/TSDoc, and `git diff --check` all PASS.
 - Prior art: 0407 (escalation mechanism), 0482 R1 (pinned-executor ladder), ADR-033 (tier
   routing), ADR-047 (inline/default surfaces)
 ### History
+- 2026-08-09T06:31:07.927Z todo → wip (system)
+- 2026-08-09T06:31:08.672Z wip → testing (system)
+- 2026-08-09T06:31:09.658Z testing → done (system)
