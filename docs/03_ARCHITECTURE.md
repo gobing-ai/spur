@@ -45,8 +45,7 @@ apps/cli ────► packages/{app, config, domain}
                + @gobing-ai/ts-{utils, infra, runtime, ai-runner,        (semver)
                                 rule-engine, dual-workflow-engine, llm-jsonl-importer}
 apps/server ─► packages/{config, contracts} + @gobing-ai/ts-{infra, runtime}
-               (gains packages/app — never direct DB — when the planning layer
-                lands, per ADR-021.b)
+               (+ packages/app — never direct DB — per ADR-021.b)
 apps/web ────► packages/contracts (types via oRPC client only)
 packages/app ───► packages/domain + the engine packages
 packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
@@ -284,7 +283,7 @@ model, and aggregates by source/model/day — a domain consumer, not part of the
 | `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015) |
 | SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
 | Agent JSONL files | Canonical raw history (never copied into the DB) |
-| Task/feature markdown *(planned — ADR-020)* | Planning SSOT; the DB holds only derived data (§12.1) |
+| Task/feature markdown | Planning SSOT (ADR-020); the DB holds only derived data (§12.1) |
 | `logs/` | Process and observer logs |
 
 Schema is composed from package-owned SQL and applied through the `__spur_cli_migrations` journal
@@ -348,7 +347,7 @@ Deferred/removed until a real plugin consumer exists (shapes in `04 §6`):
 - Harness registry (Phase 5d) — blocked on upstream `AiRunner` shim injection; task 0015
   (`Blocked`).
 
-## 12. Planning Layer (accepted design — ADR-020–023; not yet built)
+## 12. Planning Layer (built — ADR-020–023)
 
 The task/feature domain migrated from `cc-agents/plugins/rd3`. This section records the mechanism
 and invariants the implementation must satisfy; per-item scope lives in
@@ -433,7 +432,7 @@ task ## Acceptance Criteria (subset coverage)
 - Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
   FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
 
-## 13. Dev-Command Argument Contract (accepted design — ADR-032 amendment; not yet built)
+## 13. Dev-Command Argument Contract (built — ADR-032 amendment)
 
 The agent-facing input contract stays inside each hand-authored command file and is projected to
 platform adapters by Superskill. The three representations have separate ownership:
