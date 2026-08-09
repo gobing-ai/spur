@@ -31,3 +31,11 @@ Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry,
 {"wbs":"0470","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0471","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0474","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
+Appended two JSONL lines to `.spur/run/wrapup-metrics.jsonl`:
+
+```
+{"wbs":"0480","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
+{"wbs":"0482","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
+```
+
+Both `status=done` (task show) and `verdict=PASS` (verdict files). `feature_id=H1` from frontmatter. Timestamps = capture time.

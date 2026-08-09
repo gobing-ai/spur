@@ -195,3 +195,20 @@ File write declined — say "approve" to capture this to `.spur/run/wrapup-learn
 - **Daily pipeline as single run-once invocation.** `spur history daily`: import-all → analyze → write artifact → prune (90-day retention). Scheduled via external launchd plist, not an embedded scheduler. History `.*` events emitted to the event ledger for observability. Pre-logging failures captured by routing launchd stdout/stderr to `.spur/logs/` (tasks 0470, 0471).
 - **SQL aggregation over load-all+JS.** `spur history analyze` uses SQL `GROUP BY` and `HAVING` queries (`forensic-query.ts`) instead of loading every ETL record into memory. Every query carries a `GROUP BY` or `LIMIT` — a benchmark passing on a small fixture proves nothing about a 600k-row corpus (task 0474).
 - **Four detection layers, no single sole signal.** Artifact freshness, ledger events, per-source coverage status, and launchd error log — designed so no single layer is the sole signal for nightly failure detection (task 0471 R5, 0464 R8).
+Captured to `.spur/run/wrapup-learnings.md`. Preserved the existing 0481 entry and appended 0480 + 0482 (both 2026-08-08) in the same grouped format — `## date — task WBS (title)` with `### Conventions/patterns` and `### Errors fixed / gotchas`.
+
+Key learnings extracted per task:
+
+**0480 — SSOT for `--agent` contract**
+- One SSOT or drift is the default (8+ files restated the value table); a parity gate is what keeps an SSOT an SSOT (R1 without R8 decays at next ADR).
+- "Declared impossible" ≠ impossible — host-agent detection was implemented twice in hooks while a test rationale recorded it absent.
+- A shipped reference contradicted the code (`execution-batch.md:223` said `auto` detects the runtime; `resolveAgentAuto` does no detection).
+- Freeze behavior when the real fix needs an ADR, so cleanup lands without blocking on a decision.
+
+**0482 — E1 batch waste**
+- A pin chooses where a run *starts*, not whether it may *recover* — pinned executor silently set `maxEscalations=0`, severing the 0407 tier-fallback ladder.
+- The proof must exercise the mode production actually uses; 0407's `agent:'auto'` test passed with the path severed.
+- Preflight can't see the wall — doctor degrades to `usable · auth:no · model:unknown` and the dominant burn consumed quota mid-run.
+- Read the script before blaming it (size precheck already honored `--spur-bin`; the YAML just omitted it).
+- Handoffs must point at the dead agent's transcript (`.spur/run/<runId>/agent-sessions/<executor>/`).
+- Every executor can exhaust; guidance is "survivable", not "pin away".
