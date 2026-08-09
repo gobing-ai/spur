@@ -24,6 +24,10 @@ const FOG = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE = /^###\s+Out of scope\b/;
 const REPO = join(import.meta.dir, '..', '..');
 
+function inspectFog(cwd: string, opts: { since?: string; head?: string } = {}) {
+    return ungraduatedFog(cwd, { ...opts, report: () => {} });
+}
+
 /* ------------------------------------------------------------ real corpus */
 
 describe('sectionLabels against the real maps', () => {
@@ -185,7 +189,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        const errors = await ungraduatedFog(root);
+        const errors = await inspectFog(root);
         expect(errors).toHaveLength(1);
         const [e] = errors;
         expect(e?.kind).toBe('feature');
@@ -204,7 +208,7 @@ describe('ungraduatedFog decision table', () => {
                 write(r, 'docs/tasks3/0900_redaction-posture.md', taskMd('Z1'));
             },
         );
-        expect(await ungraduatedFog(root)).toEqual([]);
+        expect(await inspectFog(root)).toEqual([]);
     });
 
     test('row 3 — fog ruled out of scope passes', async () => {
@@ -212,7 +216,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2, ['Redaction posture'])),
         );
-        expect(await ungraduatedFog(root)).toEqual([]);
+        expect(await inspectFog(root)).toEqual([]);
     });
 
     test('row 1 — reflowed fog passes (nothing was removed)', async () => {
@@ -220,7 +224,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd([...FOG_3].reverse().map((f) => f.toUpperCase()))),
         );
-        expect(await ungraduatedFog(root)).toEqual([]);
+        expect(await inspectFog(root)).toEqual([]);
     });
 
     test('row 2 — re-parenting an existing ticket counts as graduation', async () => {
@@ -234,7 +238,7 @@ describe('ungraduatedFog decision table', () => {
                 write(r, 'docs/tasks3/0900_redaction-posture.md', taskMd('Z1'));
             },
         );
-        expect(await ungraduatedFog(root)).toEqual([]);
+        expect(await inspectFog(root)).toEqual([]);
     });
 
     test('a ticket that already belonged to the feature is not a graduation', async () => {
@@ -245,7 +249,7 @@ describe('ungraduatedFog decision table', () => {
             },
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        expect(await ungraduatedFog(root)).toHaveLength(1);
+        expect(await inspectFog(root)).toHaveLength(1);
     });
 
     test('the working tree is part of the range, not just committed history', async () => {
@@ -254,7 +258,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
             false,
         );
-        expect(await ungraduatedFog(root)).toHaveLength(1);
+        expect(await inspectFog(root)).toHaveLength(1);
     });
 
     test('a violation is baselineable through the shared identity, not a second mechanism', async () => {
@@ -262,7 +266,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        const [error] = await ungraduatedFog(root);
+        const [error] = await inspectFog(root);
         // `corpusCheck` diffs observed errors against `config/corpus-baseline.json` on exactly this
         // triple, and that two-sided diff (unexpected fails, stale fails) is pre-existing shared
         // code. What is new here is that a fog finding carries an identity it can match on.
@@ -275,7 +279,7 @@ describe('ungraduatedFog decision table', () => {
             (r) => write(r, 'docs/features/Z2_other.md', '## Notes\n'),
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
         );
-        expect(await ungraduatedFog(root)).toEqual([]);
+        expect(await inspectFog(root)).toEqual([]);
     });
 });
 
@@ -361,13 +365,7 @@ describe('resolveFogRange', () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-fog-nogit-'));
         write(root, MAP_FILE, mapMd(FOG_3));
         const lines: string[] = [];
-        const real = console.log;
-        console.log = (...args: unknown[]) => lines.push(args.join(' '));
-        try {
-            expect(await ungraduatedFog(root)).toEqual([]);
-        } finally {
-            console.log = real;
-        }
+        expect(await ungraduatedFog(root, { report: (message) => lines.push(message) })).toEqual([]);
         expect(lines.join('\n')).toContain('SKIPPED');
         expect(lines.join('\n')).toContain('..');
     });
@@ -386,13 +384,13 @@ describe('replay of the E1 graduation', () => {
     );
 
     test.if(reachable)('the whole session span passes — the fog edit and its tickets are both inside', async () => {
-        expect(await ungraduatedFog(REPO, { since: 'ee0771ab~1', head: 'c9bc177b' })).toEqual([]);
+        expect(await inspectFog(REPO, { since: 'ee0771ab~1', head: 'c9bc177b' })).toEqual([]);
     });
 
     test.if(reachable)(
         'a range that stops at the fog commit false-positives — why the range is branch-scoped',
         async () => {
-            const errors = await ungraduatedFog(REPO, { since: 'ee0771ab~1', head: 'ee0771ab' });
+            const errors = await inspectFog(REPO, { since: 'ee0771ab~1', head: 'ee0771ab' });
             expect(errors.map((e) => e.id)).toEqual(['E1']);
         },
     );

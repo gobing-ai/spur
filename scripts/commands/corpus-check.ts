@@ -341,11 +341,12 @@ function taskAddedForFeature(before: TreeReader, after: TreeReader, featureId: s
  */
 export async function ungraduatedFog(
     cwd: string = process.cwd(),
-    opts: { since?: string; head?: string } = {},
+    opts: { since?: string; head?: string; report?: (message: string) => void } = {},
 ): Promise<CorpusError[]> {
+    const report = opts.report ?? ((message: string) => console.log(message));
     const range = resolveFogRange(cwd, opts.since);
     if ('skip' in range) {
-        console.log(`corpus-check: fog check SKIPPED (${range.skip}) — range ${range.spec} was not evaluated.`);
+        report(`corpus-check: fog check SKIPPED (${range.skip}) — range ${range.spec} was not evaluated.`);
         return [];
     }
     const before = gitReader(cwd, range.base);
@@ -384,7 +385,7 @@ export async function ungraduatedFog(
                 `or record the cut under \`### Out of scope\` in ${file}.`,
         });
     }
-    console.log(`corpus-check: fog check evaluated ${spec} — ${maps} map(s) inspected.`);
+    report(`corpus-check: fog check evaluated ${spec} — ${maps} map(s) inspected.`);
     return errors;
 }
 
