@@ -23,32 +23,33 @@ Repository-root `DESIGN.md` owns all UI/UX design documentation (industry standa
 By contrast, `docs/04_DESIGN.md` is our SSOT of non-UI surface design by default — covering CLI command signatures, flags, config schemas, DTOs, tables, and system boundaries.
 
 When collaborating with the design team:
+
 - **UI/UX & Visual Design:** Refer to and update repository-root `DESIGN.md`.
 - **Non-UI Surface & API/Schema DTOs:** Refer to and update `docs/04_DESIGN.md` (and `docs/design/<slug>.md` satellites).
 
 ## 0. Design satellites (`docs/design/`)
 
-| Satellite | Area | Status |
-| ----------- | ------ | -------- |
-| [`rd3-migration-design.md`](design/rd3-migration-design.md) | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023) | finalized; surface in §1.x / §7 |
-| [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
-| [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
-| [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
-| [`workflow-observability.md`](design/workflow-observability.md) | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365) | partial |
-| [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124) | implemented |
-| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | Dev execution surface — unified `--agent <inline\|auto\|name>` selector (0125, ADR-041/047), named escalation triggers (0406), and `sp:dogfood-testing` extraction | implemented |
-| [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md) | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment) | implemented |
-| [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
-| [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
-| [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
-| [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md) | Features detail action progress — F83 job-queue runner, queue.job.* SSE correlation, floating progress layer (implements F81/0352–0354) | design |
-| [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md) | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410) | implemented |
-| [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
-| [`inbox-board-module.md`](design/inbox-board-module.md) | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented |
-| [`workflow-run-log.md`](design/workflow-run-log.md) | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045) | built |
-| [`brainstorm-workflow-observability-steering.md`](design/brainstorm-workflow-observability-steering.md) | Brainstorm — tiered `spur workflow run` output, richer lifecycle/execution events, `--json` machine mode, steering axes (0114/0310 foundation) | brainstorm |
-| [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md) | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only) | proposed design only |
-| [`workspace-design.md`](design/workspace-design.md) | Workspace module — data model, config, board surface, agent-team + inbox composition layer (ADR-025, feature G3) | design |
+| Satellite                                                                                               | Area                                                                                                                                                                                                  | Status                          |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| [`rd3-migration-design.md`](design/rd3-migration-design.md)                                             | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023)                                                                                                      | finalized; surface in §1.x / §7 |
+| [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md)                           | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface                                                                                              | design (in progress)            |
+| [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md)     | Server/Web — finalized feature decisions for the above                                                                                                                                                | finalized                       |
+| [`spur-team-mode-design.md`](design/spur-team-mode-design.md)                                           | Team mode — agent specs, inbox, `TeamService`                                                                                                                                                         | design                          |
+| [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365)                                                               | partial                         |
+| [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                      | implemented                     |
+| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector (0125, ADR-041/047), named escalation triggers (0406), and `sp:dogfood-testing` extraction                                    | implemented                     |
+| [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md)                           | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment)                                                            | implemented                     |
+| [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md)               | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167)                                                      | design                          |
+| [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md)                     | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md`                                                                           | implemented                     |
+| [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md)                         | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2)                                               | implemented                     |
+| [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md)             | Features detail action progress — F83 job-queue runner, queue.job.\* SSE correlation, floating progress layer (implements F81/0352–0354)                                                              | design                          |
+| [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md)             | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410)                                                                                         | implemented                     |
+| [`project-switcher.md`](design/project-switcher.md)                                                     | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1)                                                                                                                       | design                          |
+| [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented                     |
+| [`workflow-run-log.md`](design/workflow-run-log.md)                                                     | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045)                       | built                           |
+| [`brainstorm-workflow-observability-steering.md`](design/brainstorm-workflow-observability-steering.md) | Brainstorm — tiered `spur workflow run` output, richer lifecycle/execution events, `--json` machine mode, steering axes (0114/0310 foundation)                                                        | brainstorm                      |
+| [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
+| [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace module — data model, config, board surface, agent-team + inbox composition layer (ADR-025, feature G3)                                                                                      | design                          |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -77,10 +78,10 @@ spur <noun> [<verb>] [positionals] [--flags]
 
 **Help dispatch:**
 
-| Invocation | Behavior |
-| --- | --- |
+| Invocation                           | Behavior                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `spur` / `spur help` / `spur --help` | Top-level help: commander's standard flat command listing (alphabetical, with summaries) |
-| `spur <noun> --help` | Commander-generated command-scoped help (options, subcommands) |
+| `spur <noun> --help`                 | Commander-generated command-scoped help (options, subcommands)                           |
 
 The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each noun exports a
 `registerXxxCommand(program, context)` function from `apps/cli/src/commands/<noun>.ts`. Adding a
@@ -111,7 +112,7 @@ clobbering a configured project. `--json` emits
   `--force` overwrites non-preserve entries, never overwrites preserve-marked docs; `--minimal`
   skips `.spur/rules` + `.spur/workflows`. The manifest is pure data — adding a default is a
   one-line edit, no control-flow change. **AGENTS.md** (`preserve: true`): when scaffolding a
-  *new* file from `config/templates/AGENTS.md`, init substitutes `{project-name}` (from `--name`
+  _new_ file from `config/templates/AGENTS.md`, init substitutes `{project-name}` (from `--name`
   or cwd basename) and `{project-description}` (stub: `local Spur project`) so fresh projects
   never ship residual brace tokens (task 0242). The seed names Spur and Superskill as complementary
   first-class harness tools, routes each operation to its owning plane, and conditionally makes a
@@ -124,8 +125,8 @@ clobbering a configured project. `--json` emits
   retains the result envelope, reports one concise created/skipped summary, and reuses
   `result.project` for customization without replaying the human transcript. Two probes sit between
   scaffold and customization:
-  - *Functional probe (Phase 1.5):* `spur status`, `spur task create`, `spur workflow validate`.
-  - *Rule glob adaptation (Phase 1.6):* the `recommended-pre-check` preset ships globs calibrated
+  - _Functional probe (Phase 1.5):_ `spur status`, `spur task create`, `spur workflow validate`.
+  - _Rule glob adaptation (Phase 1.6):_ the `recommended-pre-check` preset ships globs calibrated
     to Spur's monorepo (`apps/**/*.ts` etc.). On any other layout these match zero files and `rg`
     exits 2, surfacing as `kind: "error"` findings. The command detects the project layout
     (monorepo / single-package / flat / polyglot) and writes adapted overrides under
@@ -133,10 +134,10 @@ clobbering a configured project. `--json` emits
     scaffold materialization. The probe `spur rule run --preset recommended-pre-check` must then
     report zero `kind: "error"` findings. Adapted rule files are customization overlays, analogous
     to the Phase 2 doc edits — NOT `SCAFFOLD_MANIFEST` entries.
-  - *Doc customization (Phase 2):* routes every doc touch through `sp:doc-evolve` (project naming,
+  - _Doc customization (Phase 2):_ routes every doc touch through `sp:doc-evolve` (project naming,
     stack detection, PRD/ADR drafts).
-  The command NEVER creates `SCAFFOLD_MANIFEST` files itself — it edits content the CLI already
-  wrote, or writes local-layer overlays the CLI never owned.
+    The command NEVER creates `SCAFFOLD_MANIFEST` files itself — it edits content the CLI already
+    wrote, or writes local-layer overlays the CLI never owned.
 
 **Scaffold-variant parity invariant.** `SCAFFOLD_MANIFEST` ships exactly one
 `templates/task/<variant>.md` entry per `TASK_VARIANTS`
@@ -292,14 +293,14 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   execution order with finding counts, duration, and status. `--json` returns structured DTOs.
   Runs are persisted inline by `spur rule run` when a DB is available (direct writes from the
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
-Backed by `ts-rule-engine`. Help dispatch per §1.0.
+  Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
 #### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
 > streams that log as a tail -f-equivalent source and is rejected with `--json`; `spur workflow
-> clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30 days). Shapes:
+clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30 days). Shapes:
 > [`design/workflow-run-log.md`](design/workflow-run-log.md).
 
 - `validate <file>` — load + Zod-validate a workflow definition.
@@ -352,7 +353,7 @@ Backed by `ts-rule-engine`. Help dispatch per §1.0.
   cache token dims, `cacheHitRatio`, `estimated`), additive so existing consumers are unaffected. Cost
   is read from already-imported ETL; `trace` never triggers an import. Join + math:
   `packages/domain/src/analytics/run-cost.ts`.
-Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
+  Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
 #### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--source-timeout <ms>] [--json]`
 
@@ -467,11 +468,11 @@ evidence the loop ran. Three `history.*` events declared in `packages/app/src/se
 emit from `apps/cli/src/commands/history.ts` (daily verb) via the existing
 `attachSystemEventLedger(bus, context)` bridge:
 
-| Event | Renderer | When |
-| --- | --- | --- |
-| `history.import.completed` | `history-import` | fan-out import finished (regardless of per-source failures) |
-| `history.analyze.completed` | `history-analyze` | analyze + artifact write finished |
-| `history.daily.failed` | `history-daily` | the daily command exited non-zero or threw |
+| Event                       | Renderer          | When                                                        |
+| --------------------------- | ----------------- | ----------------------------------------------------------- |
+| `history.import.completed`  | `history-import`  | fan-out import finished (regardless of per-source failures) |
+| `history.analyze.completed` | `history-analyze` | analyze + artifact write finished                           |
+| `history.daily.failed`      | `history-daily`   | the daily command exited non-zero or threw                  |
 
 All three are `metadata-only`, `default` tier — history payloads may carry `cwd`, file paths, and error
 text quoting source content; `raw-safe` would persist that. The normalizer
@@ -482,12 +483,12 @@ exact "0 rows" symptom this task exists to end.
 
 **Four-layer missed-run detection (R5, R6).** No single layer is the sole signal:
 
-| Layer | Signal | Detects |
-| --- | --- | --- |
-| 1 — artifact freshness | `latest.json` older than 36 h ⇒ staleness banner | the whole loop stopped |
-| 2 — ledger events | `history.*` rows present / absent | started-and-failed vs never-started (R6) |
-| 3 — per-source coverage | `coverage[].status` per source | one source stopped while others kept working |
-| 4 — launchd error log | `.spur/logs/history-daily.err` | failures before Spur's own logging initializes |
+| Layer                   | Signal                                           | Detects                                        |
+| ----------------------- | ------------------------------------------------ | ---------------------------------------------- |
+| 1 — artifact freshness  | `latest.json` older than 36 h ⇒ staleness banner | the whole loop stopped                         |
+| 2 — ledger events       | `history.*` rows present / absent                | started-and-failed vs never-started (R6)       |
+| 3 — per-source coverage | `coverage[].status` per source                   | one source stopped while others kept working   |
+| 4 — launchd error log   | `.spur/logs/history-daily.err`                   | failures before Spur's own logging initializes |
 
 R6 is what layer 2 buys and layer 1 cannot: "no artifact" is ambiguous (launchd never fired vs the run
 started and failed). A `history.daily.failed` row ⇒ it ran and failed; **no** `history.*` row in the
@@ -516,27 +517,27 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 
 ### 1.2 Supporting utilities
 
-| Command | Behavior |
-|---------|----------|
-| `spur status [path] [--json]` | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory). |
+| Command                                                                       | Behavior                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spur status [path] [--json]`                                                 | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory).                                                                                                                                                              |
 | `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. |
-| `spur projects [add|remove|list|start|stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
-| `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
+| `spur projects [add                                                           | remove                                                                                                                                                                                                                                                                                                                                                                                                     | list | start | stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
+| `spur migrate [--json]`                                                       | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`.                                                                                                                                                                                                                                                                                                                            |
 
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
 ### 1.3 Agent command surface — commands as SSOT (feature H5 (was O), ADR-032)
 
-The `plugins/sp` agent-facing command surface (28 `/sp:dev-*` wrappers; 34 command wrappers total) is
+The `plugins/sp` agent-facing command surface (30 `/sp:dev-*` wrappers; 36 command wrappers total) is
 **hand-authored** — each `commands/<name>.md` is the authoritative, directly-editable source.
 Per-platform adapters are **install-time output** owned by `superskill` (`superskill install sp`)
 and never committed in plugin `sp` (ADR-032).
 
-| Artifact | Role |
-| ---------- | ------ |
-| `plugins/sp/commands/<name>.md` | Hand-editable SSOT — frontmatter + invocation syntax + delegation line only |
-| `plugins/sp/scripts/validate-commands.ts` | Thin-wrapper contract validator: (a) heading whitelist, (b) frontmatter schema, (c) target resolution, (d) allowed-tools coherence |
-| `plugins/sp/tests/command-contract.test.ts` | Contract test — validates the same four gates against the live corpus + negative-path coverage |
+| Artifact                                    | Role                                                                                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/sp/commands/<name>.md`             | Hand-editable SSOT — frontmatter + invocation syntax + delegation line only                                                        |
+| `plugins/sp/scripts/validate-commands.ts`   | Thin-wrapper contract validator: (a) heading whitelist, (b) frontmatter schema, (c) target resolution, (d) allowed-tools coherence |
+| `plugins/sp/tests/command-contract.test.ts` | Contract test — validates the same four gates against the live corpus + negative-path coverage                                     |
 
 Invariants: wrappers carry invocation syntax + the delegation line only — lifecycle semantics live
 in the dispatched skill/workflow/procedure (0283 R4). The thin-wrapper contract is enforced by
@@ -549,8 +550,47 @@ Supersedes the 0308 generated-adapter approach (ADR-032 records the decision).
 `argument-hint`; each body adds `## Argument Flags` immediately before `## Usage`, with exact
 `Flag | Description | Default` columns and one canonical glossary reference. The validator enforces
 the ordered three-heading contract and five gates (a–e); parity tests derive coverage from all
-28 dev commands. Full shapes:
+dev commands. Full shapes:
 [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md).
+
+#### 1.3.1 `/sp:dev-find-conflict` — authority-aware conflict audit (feature H11, task 0486)
+
+Thin wrapper over the `sp:conflict-finding` skill. Standalone audit, not a spine pipeline stage.
+
+```text
+/sp:dev-find-conflict [<scope>]
+    [--pillar <source|tasks|features|authority|all>]   # default all
+    [--mode <adaptive|full>]                            # default adaptive
+    [--resolve]                                         # default off
+    [--agent <inline|auto|name>]                        # default inline
+    [--json]                                            # default off
+```
+
+Behavior: audits the four pillars (source code, task files, feature files, project authority files)
+for within-pillar and cross-pillar semantic conflicts. Authority is resolved per **subject + claim
+type** — never by a global `docs > features > tasks > code` ranking; incomparable or missing
+authority yields a `needs-authority-decision` item rather than a fabricated winner. Without
+`--resolve` the run is read-only with respect to source, corpus, and numbered docs. With `--resolve`
+the skill presents a repair set, requires explicit confirmation, revalidates evidence freshness, then
+routes each approved repair through its owner surface (`spur task`/`spur feature`, `sp:doc-evolve`,
+the Spur dev lifecycle, or the Superskill capability lifecycle).
+
+Result envelope (identical content in Markdown and `--json`):
+
+```text
+schema_version, command, scope, mode, pillars, authority_map,
+inventory, findings, unresolved, coverage, cost, remediation, errors
+```
+
+Each finding carries `id, subject, claim_type, conflict_type, pillars, artifacts,
+normative_authority, observed_reality, precedence_reason, evidence, freshness, severity, confidence,
+false_positive_check, proposed_repair, repair_owner, status`. `conflict_type` ∈ {`contradiction`,
+`stale`, `duplicate`, `omission`, `orphan`, `ambiguous-authority`}; `status` ∈ {`open`,
+`needs-authority-decision`, `confirmed`, `repairing`, `resolved`, `failed`}. `coverage.complete`
+is `false` whenever a selected pillar was skipped or a preflight tool failed — "comprehensive" may
+not be claimed against a false value. v1 adds no production analyzer, index/cache/database,
+dependency, CLI noun, workflow, or dedicated subagent. SSOT:
+`plugins/sp/skills/conflict-finding/SKILL.md` + its four references.
 
 ## 2. Configuration
 
@@ -582,24 +622,24 @@ name: <project-name>
 bootstrap:
   logging:
     enabled: true
-    level: info           # debug | info | warn | error
+    level: info # debug | info | warn | error
     console: false
     json: false
     file: true
     filePath: .spur/logs/spur.log
   telemetry:
-    enabled: false        # CLI: off by default (per-invocation latency)
+    enabled: false # CLI: off by default (per-invocation latency)
     serviceName: spur
     environment: development
   database:
     enabled: true
     driver: bun-sqlite
-    url: .spur/spur.db    # ${DATABASE_URL} interpolation supported
+    url: .spur/spur.db # ${DATABASE_URL} interpolation supported
   scheduler:
-    enabled: false        # CLI is run-once; no scheduler
+    enabled: false # CLI is run-once; no scheduler
 agent:
-  default: omp            # executor selector first, then legacy agent name
-  executors:              # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
+  default: omp # executor selector first, then legacy agent name
+  executors: # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
     - name: omp
       agent: omp
       tier: standard
@@ -618,10 +658,10 @@ redaction:
   enabled: false
 tasks:
   folders:
-    docs/tasks: { baseCounter: 0, label: Core }   # legacy folders/base_counter absorbed
-  active: docs/tasks                               # default folder for `spur task create`
+    docs/tasks: { baseCounter: 0, label: Core } # legacy folders/base_counter absorbed
+  active: docs/tasks # default folder for `spur task create`
   severity:
-    L3.plan-format: off                            # rule severity overrides by code (error | warning | off)
+    L3.plan-format: off # rule severity overrides by code (error | warning | off)
 features:
   dir: docs/features
 ```
@@ -633,16 +673,16 @@ features:
 
 Env-derived config (`ln(env)`), consumed by both the CLI context and the server Bun entry:
 
-| Key | Env var | Default |
-| ----- | --------- | --------- |
-| `database.url` | `DATABASE_URL` | `:memory:` |
-| `server.port` | `PORT` | `3000` |
-| `server.host` | `HOST` | `localhost` |
-| `server.openBrowser` | — | `true` (spur serve only) |
-| `server.webDistPath` | — | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
-| `telemetry.enabled` | `SPUR_TELEMETRY_ENABLED` | `false` |
-| `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | — |
-| `logging.level` | `SPUR_LOG_LEVEL` | `info` (debug\|info\|warn\|error) |
+| Key                  | Env var                   | Default                                                                                                              |
+| -------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `database.url`       | `DATABASE_URL`            | `:memory:`                                                                                                           |
+| `server.port`        | `PORT`                    | `3000`                                                                                                               |
+| `server.host`        | `HOST`                    | `localhost`                                                                                                          |
+| `server.openBrowser` | —                         | `true` (spur serve only)                                                                                             |
+| `server.webDistPath` | —                         | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
+| `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
+| `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | —                                                                                                                    |
+| `logging.level`      | `SPUR_LOG_LEVEL`          | `info` (debug\|info\|warn\|error)                                                                                    |
 
 Boolean env vars are parsed strictly (`true/1/yes/on` vs `false/0/no/off`); other values throw.
 
@@ -677,13 +717,13 @@ config/
 
 **Build → install → init flow:**
 
-| Stage | Action |
-| ------- | -------- |
-| Build (`build:bundle`) | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; shipped via the package `files` array as top-level `config/`. |
-| Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both. |
-| First run / `spur init` | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites). |
-| `spur init` scaffold | Full-tree seed of every bundled asset into project `.spur/` (natural paths: `rules/**`, `workflows/**`, `tasks/**`, `templates/**`, `plugins/**`), then the `scaffold-manifest.ts` pass for remaps (`templates/task` → `tasks/templates`), root-scoped `docs/` + `AGENTS.md`, and `preserve`-marked entries (never overwritten, even with `--force`). |
-| Runtime resolution | `bundled` (package `config/` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`). |
+| Stage                      | Action                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build (`build:bundle`)     | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; shipped via the package `files` array as top-level `config/`.                                                                                                                                                                                                         |
+| Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both.                                                                                                                                         |
+| First run / `spur init`    | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites).                                                                                                                                                                                                                            |
+| `spur init` scaffold       | Full-tree seed of every bundled asset into project `.spur/` (natural paths: `rules/**`, `workflows/**`, `tasks/**`, `templates/**`, `plugins/**`), then the `scaffold-manifest.ts` pass for remaps (`templates/task` → `tasks/templates`), root-scoped `docs/` + `AGENTS.md`, and `preserve`-marked entries (never overwritten, even with `--force`). |
+| Runtime resolution         | `bundled` (package `config/` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`).                                                                                                                                                                                                                                              |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
 evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
@@ -697,11 +737,11 @@ No symlinks participate in install or init — config propagates by copy-and-res
 
 **Monorepo path model (Spur self-dev — avoid triple-sync thrash):**
 
-| Path | Role | Agent rule |
-| --- | --- | --- |
-| `config/workflows/` | **Tracked SSOT** for this checkout | **Edit here** when changing pipeline/lifecycle YAML |
-| `.spur/workflows/` | **Symlink → `config/workflows/`** in this monorepo | Runtime / command examples (`.spur/workflows/task-pipeline.yaml`). Do **not** copy between `config/` and `.spur/` — same inodes |
-| `apps/cli/config/` | **`build:bundle` / `bundle-config` artifact** (gitignored) | Do **not** hand-`cp` or hand-edit. Regenerated on CLI package build for npm ship |
+| Path                | Role                                                       | Agent rule                                                                                                                      |
+| ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `config/workflows/` | **Tracked SSOT** for this checkout                         | **Edit here** when changing pipeline/lifecycle YAML                                                                             |
+| `.spur/workflows/`  | **Symlink → `config/workflows/`** in this monorepo         | Runtime / command examples (`.spur/workflows/task-pipeline.yaml`). Do **not** copy between `config/` and `.spur/` — same inodes |
+| `apps/cli/config/`  | **`build:bundle` / `bundle-config` artifact** (gitignored) | Do **not** hand-`cp` or hand-edit. Regenerated on CLI package build for npm ship                                                |
 
 Wrong pattern (0454/0455 waste): “keep `config/`, `.spur/`, and `apps/cli/config/` in sync” after every YAML edit. Right pattern: edit SSOT once; refresh the package tree only via `bun run --filter @gobing-ai/spur build:bundle` (or `spur-dev bundle-config`) when testing the **published** layout.
 
@@ -710,10 +750,10 @@ Wrong pattern (0454/0455 waste): “keep `config/`, `.spur/`, and `apps/cli/conf
 `.spur/config.yaml` has exactly one loader. The package splits into two entry points so the
 dependency graph stays Workers-safe:
 
-| Entry | Imports | Exports | Consumed by |
-|-------|---------|---------|-------------|
-| `@gobing-ai/spur-config` (core) | zod only — no `yaml`, no `node:fs` | `spurConfigSchema`, `DEFAULT_TASKS_DIR`/`DEFAULT_FEATURES_DIR`, all config types (`SpurConfig`, `TaskFoldersConfig`, …) | server (Cloudflare Workers bundle), any runtime-agnostic consumer |
-| `@gobing-ai/spur-config/loader` (node) | `yaml`, `node:fs`, ts-runtime | `loadSpurConfig(cwd)`, `resolveConfigFile(cwd)`, `resolvePlanningFolders(fs)`, embedded-schema resolution | CLI, `packages/app` services (on Bun) |
+| Entry                                  | Imports                            | Exports                                                                                                                 | Consumed by                                                       |
+| -------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `@gobing-ai/spur-config` (core)        | zod only — no `yaml`, no `node:fs` | `spurConfigSchema`, `DEFAULT_TASKS_DIR`/`DEFAULT_FEATURES_DIR`, all config types (`SpurConfig`, `TaskFoldersConfig`, …) | server (Cloudflare Workers bundle), any runtime-agnostic consumer |
+| `@gobing-ai/spur-config/loader` (node) | `yaml`, `node:fs`, ts-runtime      | `loadSpurConfig(cwd)`, `resolveConfigFile(cwd)`, `resolvePlanningFolders(fs)`, embedded-schema resolution               | CLI, `packages/app` services (on Bun)                             |
 
 - `loadSpurConfig(cwd, opts?)` returns a fully-typed, validated `SpurConfig`. Missing file → schema
   defaults; invalid YAML/schema → throws (fail fast). `validateJsonSchema` defaults on outside tests;
@@ -731,16 +771,16 @@ dependency graph stays Workers-safe:
 
 ### 3.1 Tables (composed package-owned schema, ADR-007)
 
-| Table | Owner | Purpose |
-| ------- | ------- | --------- |
-| `workspaces` | CLI | Static workspace binding (name, root, purpose, default agent) |
-| `runs`, `phase_runs`, `transition_runs`, `workflow_states` | CLI + workflow engine | Workflow run model |
-| `artifacts` | CLI | Captured output references |
-| `history_import_ledger` | importer | One row per imported record (hash, source, file, line) |
-| `history_import_checkpoint` | importer | Incremental position, composite PK `(source, source_file)` |
-| `history_etl_<source>` | importer | Validated per-source ETL rows (`payload_json`, `imported_at`) |
-| `inbox_messages` | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
-| `rule_runs`, `rule_eval_runs` | ts-rule-engine (≥0.3.15) | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`. |
+| Table                                                      | Owner                     | Purpose                                                                                                                                                                         |
+| ---------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaces`                                               | CLI                       | Static workspace binding (name, root, purpose, default agent)                                                                                                                   |
+| `runs`, `phase_runs`, `transition_runs`, `workflow_states` | CLI + workflow engine     | Workflow run model                                                                                                                                                              |
+| `artifacts`                                                | CLI                       | Captured output references                                                                                                                                                      |
+| `history_import_ledger`                                    | importer                  | One row per imported record (hash, source, file, line)                                                                                                                          |
+| `history_import_checkpoint`                                | importer                  | Incremental position, composite PK `(source, source_file)`                                                                                                                      |
+| `history_etl_<source>`                                     | importer                  | Validated per-source ETL rows (`payload_json`, `imported_at`)                                                                                                                   |
+| `inbox_messages`                                           | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
+| `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)
 
@@ -767,11 +807,11 @@ forensic dimensions (`messages`, `toolCalls`, `durationMs`, `durationUnmeasured`
 
 ## 5. Server/Web Surface (current slice)
 
-| Endpoint | Source |
-| ---------- | -------- |
-| `GET /api/health` | oRPC `health` procedure → `{ status, timestamp, service, version }` |
-| `GET /openapi.json` | Generated from the oRPC contract |
-| `GET /` | Redirect to `/api/health` |
+| Endpoint            | Source                                                              |
+| ------------------- | ------------------------------------------------------------------- |
+| `GET /api/health`   | oRPC `health` procedure → `{ status, timestamp, service, version }` |
+| `GET /openapi.json` | Generated from the oRPC contract                                    |
+| `GET /`             | Redirect to `/api/health`                                           |
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
 
@@ -779,18 +819,18 @@ Web (`apps/web`) renders live health from the typed oRPC client. Deeper read sur
 
 The server bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split:
 
-| Entry | Bootstrap | Subpath | Workers-Safe? |
-|-------|-----------|---------|---------------|
-| `src/index.ts` (Bun) | `runNodeApplication` | `ts-infra/application-node` | No (uses `node:fs`) |
-| `src/worker.ts` (CF Workers) | `runApplication` | `ts-infra/application` | Yes |
+| Entry                        | Bootstrap            | Subpath                     | Workers-Safe?       |
+| ---------------------------- | -------------------- | --------------------------- | ------------------- |
+| `src/index.ts` (Bun)         | `runNodeApplication` | `ts-infra/application-node` | No (uses `node:fs`) |
+| `src/worker.ts` (CF Workers) | `runApplication`     | `ts-infra/application`      | Yes                 |
 
 **Runtime seams:**
 
-| Export | Runtime | Role |
-| -------- | --------- | ------ |
-| `serverBootstrapConfig(env)` | Shared | Portable `logging`/`telemetry`/`events` config with test-mute guard |
-| `createApp(appRt?, opts?)` | Bun | Full Hono module registry, oRPC context, and local static assets |
-| `createWorkerApp(env?)` | Workers | Health, readiness, project identity, OpenAPI, and explicit 503 for local-runtime API routes |
+| Export                       | Runtime | Role                                                                                        |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `serverBootstrapConfig(env)` | Shared  | Portable `logging`/`telemetry`/`events` config with test-mute guard                         |
+| `createApp(appRt?, opts?)`   | Bun     | Full Hono module registry, oRPC context, and local static assets                            |
+| `createWorkerApp(env?)`      | Workers | Health, readiness, project identity, OpenAPI, and explicit 503 for local-runtime API routes |
 
 The Worker entry uses a **lazy singleton** (`let rtPromise`) — no top-level await, `runApplication`
 initialized on first `fetch`. Its static asset directory is `../../dist/web`, resolved relative to
@@ -809,7 +849,7 @@ initialized on first `fetch`. Its static asset directory is `../../dist/web`, re
 Spur consumes the ts-infra `Plugin` interface directly:
 
 ```ts
-import type { Plugin, PluginHost } from '@gobing-ai/ts-infra/application';
+import type { Plugin, PluginHost } from "@gobing-ai/ts-infra/application";
 ```
 
 The `Plugin` interface provides lifecycle hooks only: `onLoad`, `onStart`, `onStop`, `onUnload`,
@@ -821,15 +861,15 @@ and drives the plugin lifecycle natively — no Spur-side host wiring needed.
 
 ### 6.2 Deferred (not permanently rejected)
 
-| Concern | Status | Notes |
-| --------- | -------- | ------- |
-| Manifest (`plugin.yaml`) | Removed | Re-addable as YAML + Zod on the ts-infra `Plugin` interface |
-| Capability registries | Removed | 9 registries (api, command, event, harness, provider, rule, skill, ui, worker) — re-addable |
-| Trust ladder | Removed | 4-tier (`bundled` > `curated` > `local` > `untrusted`) — re-addable as registration-time gating |
-| CLI plugin command | Removed | `spur plugin list | info` — re-addable when plugin discovery returns |
-| Server route seam | Removed | `mountPluginRoutes` / `collectPluginOpenApiPaths` — re-addable when plugins exist |
-| Plugin config override | Removed | Per-plugin `.spur/plugins/<name>.yaml` — re-addable |
-| Event registry | Removed | Glob-pattern + rate-limiting wrapper over `EventBus` — re-addable |
+| Concern                  | Status  | Notes                                                                                           |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Manifest (`plugin.yaml`) | Removed | Re-addable as YAML + Zod on the ts-infra `Plugin` interface                                     |
+| Capability registries    | Removed | 9 registries (api, command, event, harness, provider, rule, skill, ui, worker) — re-addable     |
+| Trust ladder             | Removed | 4-tier (`bundled` > `curated` > `local` > `untrusted`) — re-addable as registration-time gating |
+| CLI plugin command       | Removed | `spur plugin list                                                                               | info` — re-addable when plugin discovery returns |
+| Server route seam        | Removed | `mountPluginRoutes` / `collectPluginOpenApiPaths` — re-addable when plugins exist               |
+| Plugin config override   | Removed | Per-plugin `.spur/plugins/<name>.yaml` — re-addable                                             |
+| Event registry           | Removed | Glob-pattern + rate-limiting wrapper over `EventBus` — re-addable                               |
 
 ## 7. Planning Layer Surface (reserved — ADR-020; filled by Roadmap §1.5 Stage D)
 
@@ -837,36 +877,36 @@ Landing zone for the rd3-migration design output, reserved now so the system des
 home and lands as subsection fills, not doc restructuring. Nothing below is invokable until
 shipped (`05 §9` tracks status).
 
-| Subsection | Will own | Design input until filled |
-| ------------ | ---------- | --------------------------- |
-| 7.1 `spur task` commands | Verbs, flags, exit codes — CRUD, WBS, `--section --from-file`, list/kanban, check, batch-create, resolve, migrate | triage doc Group A |
-| 7.2 `spur feature` commands | Verbs/flags — CRUD, INDEX refresh, task-links, check, goal derivation | triage doc Group B + the feature-file design spec (`cc-agents/docs/plans/2026-06-10-rd3-tasks-operator-feedback.md`) |
-| 7.3 Frontmatter schemas | Zod field tables for task + feature files incl. `schema_version`, `parent_wbs`, `feature-id`, status enums | same design spec + triage A18/X02 | `packages/domain/src/planning/schema.ts`; `taskFrontmatterSchema`, `featureFrontmatterSchema`, `TaskStatus`, `FeatureStatus` (DD-01/02/03/07/10/13/14). |
-| 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
-| 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
-| 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
-| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 9 `Skill()`-backed + 4 inline; `implement` is a sub-mode of `run`; `dev-dogfood` → `sp:dogfood-testing`) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
+| Subsection                               | Will own                                                                                                                               | Design input until filled                                                                                            |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 7.1 `spur task` commands                 | Verbs, flags, exit codes — CRUD, WBS, `--section --from-file`, list/kanban, check, batch-create, resolve, migrate                      | triage doc Group A                                                                                                   |
+| 7.2 `spur feature` commands              | Verbs/flags — CRUD, INDEX refresh, task-links, check, goal derivation                                                                  | triage doc Group B + the feature-file design spec (`cc-agents/docs/plans/2026-06-10-rd3-tasks-operator-feedback.md`) |
+| 7.3 Frontmatter schemas                  | Zod field tables for task + feature files incl. `schema_version`, `parent_wbs`, `feature-id`, status enums                             | same design spec + triage A18/X02                                                                                    | `packages/domain/src/planning/schema.ts`; `taskFrontmatterSchema`, `featureFrontmatterSchema`, `TaskStatus`, `FeatureStatus` (DD-01/02/03/07/10/13/14). |
+| 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core                                                          | triage A13/A14; `03 §12.3`                                                                                           |
+| 7.5 Lifecycle workflow definitions       | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring                                                                  | ADR-022; `03 §12.2`                                                                                                  |
+| 7.6 Task DTOs                            | oRPC contract shapes for the board                                                                                                     | server/web design task (ADR-021.b)                                                                                   |
+| 7.8 `sp:dev-*` command operations        | Dev-\* operation map (13 ops: 9 `Skill()`-backed + 4 inline; `implement` is a sub-mode of `run`; `dev-dogfood` → `sp:dogfood-testing`) | `plugins/sp/skills/spur-dev/references/dev-operations.md`                                                            |
 
 ### 7.1 `spur task` commands
 
 Core CRUD and utility verbs. Every subcommand supports `--json` (ADR-010 invariant).
 Source: delivery §1.1, design §10.
 
-| Command | Flags | Exit | Notes |
-| --------- | ------- | ------ | ------- |
-| `spur task` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
-| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <seconds>` `--allow-duplicate-name` `--folder <path>` `--json` | 0/1/2/3 | Race-safe WBS allocation; feature-scoped creates reject an identical case-insensitive title created within 300 seconds by default (exit 3, `duplicate-follow-up`); `--dedupe-within` accepts a positive-integer override; `--allow-duplicate-name` disables the guard. `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant or invalid dedup window → exit 2. With `--json`, duplicate errors include `error.code`, `existingWbs`, `existingName`, and `attemptedName`. |
-| `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
-| `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--ac-numbering <mode>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority`/`--ac-numbering` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`/`ac_numbering`, plus `done_forced`/`done_reason` written by the verdict-guard override). `--ac-numbering task-local` opts a pre-existing task into the L3 Requirements↔AC coverage check; new tasks receive the field from the task templates. |
-| `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`; `--feature` filters to tasks carrying that `feature_id` edge (exact match) — the enumeration primitive for feature-level execution loops. Filters combine (AND). |
-| `spur task refresh` | `--folder <path>` `--json` | 0/1 | Re-scan the task corpus and report counts. The generated `kanban.md` artifact was retired in the A17 cutover (task 0192) once the web task-kanban board (task 0191) became the daily driver — this verb no longer writes any file. `--json`: `{folders, tasks}`. |
-| `spur task refresh-roster <wbs>` | `--folder <path>` `--json` | 0/1 | Regenerate a parent's sub-task roster block inside its `## Plan` (the generator half of the 0121 roll-up gate, task 0123). Scans `parent_wbs` children, renders a WBS·title·status table between `refresh-roster` auto-gen markers, and writes it idempotently — inserting the block (preserving hand-written Plan content) when absent, rewriting it in place when present. Zero children → clean no-op (`written:false`); no `## Plan` → error. `--json`: `{wbs, childCount, written}`. |
-| `spur task migrate` | `--dry-run` `--folder <path>` `--json` | 0/1 | Run the A17 task corpus normalization pass over the active task folder or `--folder`. `--dry-run` computes the full per-file report with zero writes; apply writes through the corpus migrator's atomic write path. Idempotent: a second run over a migrated corpus is a no-op. The live `docs/tasks2/` corpus was migrated 2026-07-04 (task 0192). |
-| `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing for child creation; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). After children land, every distinct `parent_wbs` is wired best-effort: parent roster refresh + `todo→wip` lifecycle transition. `--json`: `{created, wbs, parentsWired:[{wbs, rostered, transitionedTo, errors[]}]}`. |
-| `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
-| `spur task check [<wbs>]` | `--strict` `--strict-core` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default) + **parent↔child roll-up** (ADR-020 amendment 2026-06-25, task 0121: for a decomposition parent, warn when the parent is `done` with an open child, when all children are closed but the parent is still open, or when the parent `## Plan` lacks a sub-task roster table — all warnings, `--strict` elevates; inert for tasks with no children). Validates all tasks when `<wbs>` omitted; `--strict` elevates ALL warnings; `--strict-core` is the `testing→done` gate variant (fails only on hard-core errors — Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — without the blanket elevation). Matrix loaded from `config/tasks/section-matrix.yaml`. |
-| `spur task verdict <wbs>` | `--from-answer <path>` `--folder <path>` `--json` | 0/1 | Derive the PASS/PARTIAL/FAIL/UNKNOWN gate verdict from the verify-step answer file and write `.spur/run/<wbs>-verdict.json`. Parses requirement rows, AC rows, and checks rows; behavior-bearing CORE AC rows marked `MET` without `test`/`command` evidence are downgraded to `PARTIAL` and surfaced via `evidence-rule-failed`. The deterministic replacement for grep-over-prose in the pipeline verify step (0109). Consumed by the completion gate and by `spur task record`. |
-| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Preserves `acceptanceCriteria[]` evidence rows in Testing when present. A `--transition done` with a **PASS** verdict auto-walks `wip → testing → done` through the FSM and auto-creates the `pipeline` run-link the provenance gate requires (task 0436 R4); a non-PASS verdict to `done` surfaces a single `GuardDeniedError` instead of a bookkeeping retry loop. |
+| Command                                | Flags                                                                                                                                    | Exit    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spur task`                            | — (noun help)                                                                                                                            | 0       | Lists subcommands if no subcommand given.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `spur task create <title>`             | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <seconds>` `--allow-duplicate-name` `--folder <path>` `--json` | 0/1/2/3 | Race-safe WBS allocation; feature-scoped creates reject an identical case-insensitive title created within 300 seconds by default (exit 3, `duplicate-follow-up`); `--dedupe-within` accepts a positive-integer override; `--allow-duplicate-name` disables the guard. `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant or invalid dedup window → exit 2. With `--json`, duplicate errors include `error.code`, `existingWbs`, `existingName`, and `attemptedName`.                                                                                                                                                                                                                                                                        |
+| `spur task show <wbs>`                 | `--folder <path>` `--json`                                                                                                               | 0/1     | Frontmatter is a top-level field in `--json` output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `spur task update <wbs> <status>`      | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--ac-numbering <mode>` `--folder <path>` `--json`               | 0/1/2   | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority`/`--ac-numbering` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`/`ac_numbering`, plus `done_forced`/`done_reason` written by the verdict-guard override). `--ac-numbering task-local` opts a pre-existing task into the L3 Requirements↔AC coverage check; new tasks receive the field from the task templates.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `spur task list`                       | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder <path>` `--json`                                                | 0/1     | `--phase` is a legacy alias for `--status`; `--feature` filters to tasks carrying that `feature_id` edge (exact match) — the enumeration primitive for feature-level execution loops. Filters combine (AND).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `spur task refresh`                    | `--folder <path>` `--json`                                                                                                               | 0/1     | Re-scan the task corpus and report counts. The generated `kanban.md` artifact was retired in the A17 cutover (task 0192) once the web task-kanban board (task 0191) became the daily driver — this verb no longer writes any file. `--json`: `{folders, tasks}`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `spur task refresh-roster <wbs>`       | `--folder <path>` `--json`                                                                                                               | 0/1     | Regenerate a parent's sub-task roster block inside its `## Plan` (the generator half of the 0121 roll-up gate, task 0123). Scans `parent_wbs` children, renders a WBS·title·status table between `refresh-roster` auto-gen markers, and writes it idempotently — inserting the block (preserving hand-written Plan content) when absent, rewriting it in place when present. Zero children → clean no-op (`written:false`); no `## Plan` → error. `--json`: `{wbs, childCount, written}`.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `spur task migrate`                    | `--dry-run` `--folder <path>` `--json`                                                                                                   | 0/1     | Run the A17 task corpus normalization pass over the active task folder or `--folder`. `--dry-run` computes the full per-file report with zero writes; apply writes through the corpus migrator's atomic write path. Idempotent: a second run over a migrated corpus is a no-op. The live `docs/tasks2/` corpus was migrated 2026-07-04 (task 0192).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `spur task batch-create --file <json>` | `--folder <path>` `--json`                                                                                                               | 0/1     | Create many tasks from validated JSON — all-or-nothing for child creation; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). After children land, every distinct `parent_wbs` is wired best-effort: parent roster refresh + `todo→wip` lifecycle transition. `--json`: `{created, wbs, parentsWired:[{wbs, rostered, transitionedTo, errors[]}]}`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `spur task resolve <file-path>`        | `--folder <path>` `--json`                                                                                                               | 0/1     | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `spur task check [<wbs>]`              | `--strict` `--strict-core` `--folder <path>` `--json`                                                                                    | 0/1     | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default) + **parent↔child roll-up** (ADR-020 amendment 2026-06-25, task 0121: for a decomposition parent, warn when the parent is `done` with an open child, when all children are closed but the parent is still open, or when the parent `## Plan` lacks a sub-task roster table — all warnings, `--strict` elevates; inert for tasks with no children). Validates all tasks when `<wbs>` omitted; `--strict` elevates ALL warnings; `--strict-core` is the `testing→done` gate variant (fails only on hard-core errors — Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — without the blanket elevation). Matrix loaded from `config/tasks/section-matrix.yaml`. |
+| `spur task verdict <wbs>`              | `--from-answer <path>` `--folder <path>` `--json`                                                                                        | 0/1     | Derive the PASS/PARTIAL/FAIL/UNKNOWN gate verdict from the verify-step answer file and write `.spur/run/<wbs>-verdict.json`. Parses requirement rows, AC rows, and checks rows; behavior-bearing CORE AC rows marked `MET` without `test`/`command` evidence are downgraded to `PARTIAL` and surfaced via `evidence-rule-failed`. The deterministic replacement for grep-over-prose in the pipeline verify step (0109). Consumed by the completion gate and by `spur task record`.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `spur task record <wbs>`               | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json`                                        | 0/1     | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Preserves `acceptanceCriteria[]` evidence rows in Testing when present. A `--transition done` with a **PASS** verdict auto-walks `wip → testing → done` through the FSM and auto-creates the `pipeline` run-link the provenance gate requires (task 0436 R4); a non-PASS verdict to `done` surfaces a single `GuardDeniedError` instead of a bookkeeping retry loop.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -878,17 +918,17 @@ position-encoding hierarchical IDs (DD-14): single-letter top-level groups, chil
 digit 1–9 per level; ID length = depth; parent = drop the last character; **no `parent_id` field**.
 Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, design §2.2/§2.4.
 
-| Command | Flags | Exit | Notes |
-| --------- | ------- | ------ | ------- |
-| `spur feature` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
-| `spur feature create <name>` | `--parent <id>` `--folder <path>` `--json` | 0/1 | ID allocated under the create-lock (R1): `--parent` → next free child digit 1–9; no parent → next free group letter A–Z. |
-| `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
-| `spur feature update <id> [status]` | `--field <key> --value <v>` `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field; `--section/--from-file` replaces an existing feature section body using the same body-only contract as `spur task update --section`. Section, field, and status updates may be composed in one invocation and apply in that order. 2 if an option pair is incomplete. |
-| `spur feature advance <id>` | `--to <status>` `--folder <path>` `--json` | 0/1 | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`. |
-| `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
-| `spur feature check [<id>]` | `--strict` `--as <status>` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over `active` (0418: `verifying` is terminal-bound and no longer counts as a goal; `--as <status>` evaluates the rule against the post-transition status so lifecycle guards never deny the exit they relieve) + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09) + verdict-backed AC satisfaction from canonical `id` rows or the `scenario` compatibility alias + bounded malformed-artifact diagnostics + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. Details: [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md). |
-| `spur feature refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved. |
-| `spur feature move <id> --parent <id>` | `--parent <id>` `--dry-run` `--folder <path>` `--json` | 0/1 | Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames their files, rewrites each `id` frontmatter + appends a move History line, and updates every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 / not-into-own-subtree); applies atomically with best-effort rollback. `--dry-run` returns the old→new map + affected tasks with zero writes. Omit `--parent` to move to a top-level group. |
+| Command                                | Flags                                                                                        | Exit  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spur feature`                         | — (noun help)                                                                                | 0     | Lists subcommands if no subcommand given.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `spur feature create <name>`           | `--parent <id>` `--folder <path>` `--json`                                                   | 0/1   | ID allocated under the create-lock (R1): `--parent` → next free child digit 1–9; no parent → next free group letter A–Z.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `spur feature show <id>`               | `--folder <path>` `--json`                                                                   | 0/1   | Returns the feature summary + content; 1 if not found.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `spur feature update <id> [status]`    | `--field <key> --value <v>` `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field; `--section/--from-file` replaces an existing feature section body using the same body-only contract as `spur task update --section`. Section, field, and status updates may be composed in one invocation and apply in that order. 2 if an option pair is incomplete.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `spur feature advance <id>`            | `--to <status>` `--folder <path>` `--json`                                                   | 0/1   | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `spur feature list`                    | `--status <s>` `--priority <p>` `--folder <path>` `--json`                                   | 0/1   | Lists features sorted by ID; optional status/priority filters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `spur feature check [<id>]`            | `--strict` `--as <status>` `--folder <path>` `--json`                                        | 0/1   | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over `active` (0418: `verifying` is terminal-bound and no longer counts as a goal; `--as <status>` evaluates the rule against the post-transition status so lifecycle guards never deny the exit they relieve) + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09) + verdict-backed AC satisfaction from canonical `id` rows or the `scenario` compatibility alias + bounded malformed-artifact diagnostics + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. Details: [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md). |
+| `spur feature refresh`                 | `--folder <path>` `--json`                                                                   | 0/1   | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `spur feature move <id> --parent <id>` | `--parent <id>` `--dry-run` `--folder <path>` `--json`                                       | 0/1   | Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames their files, rewrites each `id` frontmatter + appends a move History line, and updates every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 / not-into-own-subtree); applies atomically with best-effort rollback. `--dry-run` returns the old→new map + affected tasks with zero writes. Omit `--parent` to move to a top-level group.                                                                                                                                                                                                                                                                                                                                                                           |
 
 ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. The `## Tasks` auto-gen markers are
 `<!-- AUTO-GENERATED by spur feature refresh -->` … `<!-- END AUTO-GENERATED -->` (recognized by
@@ -906,21 +946,21 @@ in `packages/domain/src/planning/schema.ts` (`taskFrontmatterSchema`, `featureFr
 Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
 `@gobing-ai/spur-domain` from `packages/domain/src/planning/schema.ts`.
 
-| Field | Zod type | Req | Notes |
-| ----------------- | ---------- | ----- | ------- |
-| `schema_version` | `z.literal(1)` | ✔ | Strictness gate; future evolution (DD-03). |
-| `name` | `z.string().min(1)` | ✔ | Title; used in slug. |
-| `description` | `z.string().optional()` | — | No `description == name` default (DD-10). |
-| `status` | `z.enum(TASK_STATUSES)` (transform → lowercase) | ✔ | See §7.3.3; aliases accepted on input only. |
-| `type` | `z.enum(['task','brainstorm']).default('task')` | — | `brainstorm` retained for corpus compat. |
-| `profile` | `z.enum(PROFILES).optional()` | — | Single key (DD-02); legacy `preset` collapsed. |
-| `feature_id` | `z.string().regex(/^[A-Z][1-9]*$/).nullable().optional()` | — | Single traceability edge (DD-07). |
-| `parent_wbs` | `z.string().regex(/^\d{4}$/).nullable().optional()` | — | Single sub-task convention (X02). |
-| `priority` | `z.enum(['P0','P1','P2','P3']).optional()` | — | Aligned with the feature priority scale. |
-| `tags` | `z.array(z.string()).optional()` | — | Free-form filtering. |
-| `dependencies` | `z.array(z.string()).optional()` | — | Soft WBS refs; `check` warns on dangling. |
-| `created_at` | ISO 8601 string | ✔ | Write-service-owned. |
-| `updated_at` | ISO 8601 string | ✔ | Written **only** by the write service. |
+| Field            | Zod type                                                  | Req | Notes                                          |
+| ---------------- | --------------------------------------------------------- | --- | ---------------------------------------------- |
+| `schema_version` | `z.literal(1)`                                            | ✔   | Strictness gate; future evolution (DD-03).     |
+| `name`           | `z.string().min(1)`                                       | ✔   | Title; used in slug.                           |
+| `description`    | `z.string().optional()`                                   | —   | No `description == name` default (DD-10).      |
+| `status`         | `z.enum(TASK_STATUSES)` (transform → lowercase)           | ✔   | See §7.3.3; aliases accepted on input only.    |
+| `type`           | `z.enum(['task','brainstorm']).default('task')`           | —   | `brainstorm` retained for corpus compat.       |
+| `profile`        | `z.enum(PROFILES).optional()`                             | —   | Single key (DD-02); legacy `preset` collapsed. |
+| `feature_id`     | `z.string().regex(/^[A-Z][1-9]*$/).nullable().optional()` | —   | Single traceability edge (DD-07).              |
+| `parent_wbs`     | `z.string().regex(/^\d{4}$/).nullable().optional()`       | —   | Single sub-task convention (X02).              |
+| `priority`       | `z.enum(['P0','P1','P2','P3']).optional()`                | —   | Aligned with the feature priority scale.       |
+| `tags`           | `z.array(z.string()).optional()`                          | —   | Free-form filtering.                           |
+| `dependencies`   | `z.array(z.string()).optional()`                          | —   | Soft WBS refs; `check` warns on dangling.      |
+| `created_at`     | ISO 8601 string                                           | ✔   | Write-service-owned.                           |
+| `updated_at`     | ISO 8601 string                                           | ✔   | Written **only** by the write service.         |
 
 Removed from the legacy schema (A17): `impl_progress` (frozen-state problem), `folder` (derivable from
 file location), `preset` (collapsed into `profile`).
@@ -930,25 +970,25 @@ file location), `preset` (collapsed into `profile`).
 Mirrors `docs/design/rd3-migration-design.md` §2.2. No `parent_id` field (DD-14): the parent is derived
 by dropping the last character of `id`.
 
-| Field | Zod type | Req | Notes |
-| ----------------- | ---------- | ----- | ------- |
-| `schema_version` | `z.literal(1)` | ✔ | Same evolution mechanism as tasks. |
-| `id` | `z.string().regex(/^[A-Z][1-9]*$/)` | ✔ | Position-encoding hierarchical ID (DD-14). |
-| `name` | `z.string().min(1)` | ✔ | |
-| `status` | `z.enum(FEATURE_STATUSES)` (transform → lowercase) | ✔ | See §7.3.3; `verifying` is canonical. |
-| `priority` | `z.enum(['P0','P1','P2','P3']).optional()` | — | Optional for parity with tasks; consumers default a missing value to `P2`. The P0 feature in `active`/`verifying` is the project goal (B09). |
-| `tags` | `z.array(z.string()).optional()` | — | |
-| `created_at` | ISO 8601 string | ✔ | Write-service-owned. |
-| `updated_at` | ISO 8601 string | ✔ | Write-service-owned. |
+| Field            | Zod type                                           | Req | Notes                                                                                                                                        |
+| ---------------- | -------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version` | `z.literal(1)`                                     | ✔   | Same evolution mechanism as tasks.                                                                                                           |
+| `id`             | `z.string().regex(/^[A-Z][1-9]*$/)`                | ✔   | Position-encoding hierarchical ID (DD-14).                                                                                                   |
+| `name`           | `z.string().min(1)`                                | ✔   |                                                                                                                                              |
+| `status`         | `z.enum(FEATURE_STATUSES)` (transform → lowercase) | ✔   | See §7.3.3; `verifying` is canonical.                                                                                                        |
+| `priority`       | `z.enum(['P0','P1','P2','P3']).optional()`         | —   | Optional for parity with tasks; consumers default a missing value to `P2`. The P0 feature in `active`/`verifying` is the project goal (B09). |
+| `tags`           | `z.array(z.string()).optional()`                   | —   |                                                                                                                                              |
+| `created_at`     | ISO 8601 string                                    | ✔   | Write-service-owned.                                                                                                                         |
+| `updated_at`     | ISO 8601 string                                    | ✔   | Write-service-owned.                                                                                                                         |
 
 ### 7.3.3 Canonical status vocabularies
 
 Lowercase canonical values (DD-01); display layers capitalize. Input is case-insensitive and
 alias-tolerant. The legacy alias map is preserved as input normalization — never as storage.
 
-| Domain    | Canonical values |
-|-----------|------------------|
-| `TaskStatus`    | `backlog · todo · wip · testing · blocked · done · cancelled` |
+| Domain          | Canonical values                                                    |
+| --------------- | ------------------------------------------------------------------- |
+| `TaskStatus`    | `backlog · todo · wip · testing · blocked · done · cancelled`       |
 | `FeatureStatus` | `backlog · active · verifying · blocked · done · cancelled` (DD-13) |
 
 Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normalizeFeatureStatus`):
@@ -966,21 +1006,22 @@ Storage values stay lowercase canonical (DD-01); the icon is presentation-only a
 
 **Section-Status-Matrix.** Source: `config/tasks/section-matrix.yaml` (schema:
 `apps/cli/schemas/section-matrix.schema.json`). The YAML declares a root `$schema` ref and is loaded
-- validated by the standard `loadStructuredConfig` path (`loadSpurConfig` in
-`apps/cli/src/config/loader.ts`, with the schema embedded for `--compile` binaries) — a typo'd section
-name or status key fails loud at load instead of becoming a dead rule. (The Zod `sectionMatrixSchema`
-in domain remains the typed contract + unit-test surface.) Each **template variant**
-(`standard·feature-impl·issue·review·meta·brainstorm` — the unified
-`TASK_VARIANTS` axis selected by a task's `template:` frontmatter, defaulting to `standard`) maps a
-status → { required, optional, forbidden } section lists, evaluated by `spur task check` /
-`spur feature check` (the L2 layer, design §3.2). `spur task check` resolves the variant from
-`fm.template ?? 'standard'` (not `type`). Ships permissive (warning-first); the hard-gate core is the
-`done` status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format
-rules. `Root Cause` is optional for `meta` tasks because process/chore investigations may retain
-causal evidence without adopting the stricter `issue` template. Authority for matrix semantics:
-design §3 (the L2 layer), delivery §3.2.
 
-**Matrix-driven creation (single producer).** The same matrix drives which sections a *new* task
+- validated by the standard `loadStructuredConfig` path (`loadSpurConfig` in
+  `apps/cli/src/config/loader.ts`, with the schema embedded for `--compile` binaries) — a typo'd section
+  name or status key fails loud at load instead of becoming a dead rule. (The Zod `sectionMatrixSchema`
+  in domain remains the typed contract + unit-test surface.) Each **template variant**
+  (`standard·feature-impl·issue·review·meta·brainstorm` — the unified
+  `TASK_VARIANTS` axis selected by a task's `template:` frontmatter, defaulting to `standard`) maps a
+  status → { required, optional, forbidden } section lists, evaluated by `spur task check` /
+  `spur feature check` (the L2 layer, design §3.2). `spur task check` resolves the variant from
+  `fm.template ?? 'standard'` (not `type`). Ships permissive (warning-first); the hard-gate core is the
+  `done` status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format
+  rules. `Root Cause` is optional for `meta` tasks because process/chore investigations may retain
+  causal evidence without adopting the stricter `issue` template. Authority for matrix semantics:
+  design §3 (the L2 layer), delivery §3.2.
+
+**Matrix-driven creation (single producer).** The same matrix drives which sections a _new_ task
 file carries, **per variant**. `spur task create` / `batch-create` render the body via the canonical
 `buildTaskSkeleton` (`packages/domain/src/planning/task-skeleton.ts`) from the matrix entry for the
 chosen variant + creation status — there is no second, inline section list in `task-service.ts` (the
@@ -1003,22 +1044,22 @@ events. All planning events are emitted by `PlanningWriteService` (design §7) a
 the code: `packages/app/src/services/planning-write-service.ts` (`PlanningEventName` union) and
 `packages/app/src/services/planning-events.ts` (`PlanningEventMap`). Document, never invent.
 
-| Event | Fired when |
-| --- | --- |
-| `task.created` | A task file is created (including each item of a `batch-create`). |
-| `task.updated` | Any non-status write to a task (section edit, frontmatter change). |
-| `task.transitioned` | A task status change completes through the lifecycle workflow (includes cancellation). |
-| `feature.created` | A feature file is created. |
-| `feature.updated` | Any non-status write to a feature. |
-| `feature.transitioned` | A feature status change completes (includes cancellation). |
+| Event                  | Fired when                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `task.created`         | A task file is created (including each item of a `batch-create`).                      |
+| `task.updated`         | Any non-status write to a task (section edit, frontmatter change).                     |
+| `task.transitioned`    | A task status change completes through the lifecycle workflow (includes cancellation). |
+| `feature.created`      | A feature file is created.                                                             |
+| `feature.updated`      | Any non-status write to a feature.                                                     |
+| `feature.transitioned` | A feature status change completes (includes cancellation).                             |
 
 Engine-seam events (from `ts-dual-workflow-engine`, per lifecycle/pipeline run — ADR-022):
 
-| Event | Fired when |
-| --- | --- |
+| Event           | Fired when                                                                  |
+| --------------- | --------------------------------------------------------------------------- |
 | `on_transition` | A workflow run moves between states — the seam planning events derive from. |
-| `on_guard_fail` | A guard (e.g. `spur task check` pre-gate) blocks a transition. |
-| `on_complete` | A workflow run reaches its terminal state. |
+| `on_guard_fail` | A guard (e.g. `spur task check` pre-gate) blocks a transition.              |
+| `on_complete`   | A workflow run reaches its terminal state.                                  |
 
 ### 7.5 Lifecycle workflow definitions
 
@@ -1030,9 +1071,9 @@ the engine schema shipped by the CLI, referenced as
 `apps/cli/schemas/state-machine-workflow.schema.json` and is exported via the package's
 `./schemas/*` map).
 
-| File | States (§2.3) | Initial | Terminal | Guards |
-|------|---------------|---------|----------|--------|
-| `task-lifecycle.yaml` | `backlog · todo · wip · testing · blocked · done · cancelled` | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs>`; `testing→done`: `spur task check <wbs> --strict-core` |
+| File                     | States (§2.3)                                                       | Initial   | Terminal      | Guards                                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------- | --------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task-lifecycle.yaml`    | `backlog · todo · wip · testing · blocked · done · cancelled`       | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs>`; `testing→done`: `spur task check <wbs> --strict-core`                                                                                                                                    |
 | `feature-lifecycle.yaml` | `backlog · active · verifying · blocked · done · cancelled` (DD-13) | `backlog` | `[cancelled]` | `active→verifying`: `spur feature check <id> --as verifying`; `verifying→done`: `spur feature check <id> --strict --as done` (0418: guards pass the edge target so the one-active-goal rule evaluates the post-transition state) |
 
 Guard commands reference the check verbs (tasks: 0051/0057). The engine integration is **live**:
@@ -1091,7 +1132,7 @@ by `agent.default` — and is used only by the implement `agent.run` hop. Overri
 **Step→command mapping (ADR-026, amended by ADR-043):** `implement` → `/sp:dev-run --mode implement`
 (NOT `--mode full` — that drives this pipeline, so calling it here recurses); `test` → **the project
 quality gate**, a soft shell probe of `${vars.qualityGateCmd}` plus a bounded pure-slash
-`/sp:dev-fixall` loop — *not* `/sp:dev-unit`, which is the coverage gap-fill competency (router
+`/sp:dev-fixall` loop — _not_ `/sp:dev-unit`, which is the coverage gap-fill competency (router
 C3/C5). The gate run is tee'd to `.spur/run/${wbs}-test-gate.log`, and the `test-fix` hop passes
 `--gate-log .spur/run/${wbs}-test-gate.log` to `/sp:dev-fixall` so the fix agent starts at the
 captured finding's `file:line` anchor rather than re-deriving the failure (task 0482 R3);
@@ -1130,11 +1171,11 @@ terminal as `done` (backward compatible).
 **Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
 `done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:
 
-| Required section | Owning step | When |
-| ------------------ | ------------- | ------ |
-| `Solution` (change-map) | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
-| `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
-| `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
+| Required section          | Owning step                    | When                                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Solution` (change-map)   | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
+| `Testing` (verdict table) | `record`                       | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`.                                                                                       |
+| `Review` (P1–P4 findings) | `record`                       | Post-verify — transcribes SECU findings from the verify output.                                                                                                                                                                     |
 
 The `record` step provides a **Solution safety-net**: if the implement step didn't write
 `## Solution`, `record` backfills a minimal change-map from `git diff --name-only`. A
@@ -1163,22 +1204,22 @@ index edits to `docs/plans/` for human commit. Every authoritative-doc touch inv
 Transport DTOs live in `packages/contracts/src/task.ts` and are the single source of truth for the
 wire shape. Domain types stay in `@gobing-ai/spur-domain`; transport DTOs belong in `packages/contracts`.
 
-| DTO | Key fields | Notes |
-| --- | --- | --- |
-| `taskSummarySchema` | `wbs, name, status, priority?, featureId?, parentWbs?, type?, filePath, updatedAt?` | List response. `type` and `priority` are extracted from frontmatter by the server handler. `priority` is a free-form `z.string()` (not the `PRIORITIES` enum) because the corpus mixes `P0–P3` with `high/medium/low`; the raw value is passed through. |
-| `taskCreateInputSchema` | `title, featureId?, parentWbs?, folder?, template?` | `template` selects a `TASK_VARIANTS` scaffold (R8); defaults to `standard` or `feature-impl` (when `featureId` set). |
-| `taskActionInputSchema` | `wbs, action, channel?, skipDeps?` | `action` ∈ `refine\|plan\|run\|verify\|decompose\|evaluate`. `channel` ∈ `claude\|codex\|gemini\|pi\|opencode\|antigravity\|openclaw`; `skipDeps` is persisted in the queued job metadata for dependency-bypass-aware runners (R9). |
-| `taskFolderSchema` | `path, label?` | Folder entry from `docs/.tasks/config.jsonc` (R6). |
+| DTO                     | Key fields                                                                          | Notes                                                                                                                                                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `taskSummarySchema`     | `wbs, name, status, priority?, featureId?, parentWbs?, type?, filePath, updatedAt?` | List response. `type` and `priority` are extracted from frontmatter by the server handler. `priority` is a free-form `z.string()` (not the `PRIORITIES` enum) because the corpus mixes `P0–P3` with `high/medium/low`; the raw value is passed through. |
+| `taskCreateInputSchema` | `title, featureId?, parentWbs?, folder?, template?`                                 | `template` selects a `TASK_VARIANTS` scaffold (R8); defaults to `standard` or `feature-impl` (when `featureId` set).                                                                                                                                    |
+| `taskActionInputSchema` | `wbs, action, channel?, skipDeps?`                                                  | `action` ∈ `refine\|plan\|run\|verify\|decompose\|evaluate`. `channel` ∈ `claude\|codex\|gemini\|pi\|opencode\|antigravity\|openclaw`; `skipDeps` is persisted in the queued job metadata for dependency-bypass-aware runners (R9).                     |
+| `taskFolderSchema`      | `path, label?`                                                                      | Folder entry from `docs/.tasks/config.jsonc` (R6).                                                                                                                                                                                                      |
 
 ### 7.7 Workflow action primitives for anti-hallucination (ADR-024)
 
 Two primitives back the anti-hallucination migration (superskill task 0041):
 
-| Primitive | Surface | Description |
-| --- | --- | --- |
-| `AgentService.runCapture` | `packages/app/src/services/agent-service.ts` | Opt-in capture path: returns `{ exitCode, answer }` without streaming or diagnostics. Uses buffered output mode. |
-| Workflow `agent.run` | `packages/app/src/workflow/actions/agent-run.ts` | Always dispatches through `AgentService.runTraced`: buffered output, non-interactive stdin, and a sanitized resolved invocation persisted in `ActionResult.data`. `capture: true` only surfaces buffered stdout as `data.answer`. Direct `spur agent run` keeps its TTY-aware `run` / `runCapture` paths. |
-| `response.validate` action | `packages/app/src/workflow/actions/response-validate.ts` | Reads `text` from options, calls injected `ResponseValidateEngine.validate()`, maps `{ ok, reason, issues }` to `ActionResult`. Engine injected via `SpurWorkflowBuiltinsOptions.responseValidateEngine` in `builtins.ts`. |
+| Primitive                  | Surface                                                  | Description                                                                                                                                                                                                                                                                                               |
+| -------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AgentService.runCapture`  | `packages/app/src/services/agent-service.ts`             | Opt-in capture path: returns `{ exitCode, answer }` without streaming or diagnostics. Uses buffered output mode.                                                                                                                                                                                          |
+| Workflow `agent.run`       | `packages/app/src/workflow/actions/agent-run.ts`         | Always dispatches through `AgentService.runTraced`: buffered output, non-interactive stdin, and a sanitized resolved invocation persisted in `ActionResult.data`. `capture: true` only surfaces buffered stdout as `data.answer`. Direct `spur agent run` keeps its TTY-aware `run` / `runCapture` paths. |
+| `response.validate` action | `packages/app/src/workflow/actions/response-validate.ts` | Reads `text` from options, calls injected `ResponseValidateEngine.validate()`, maps `{ ok, reason, issues }` to `ActionResult`. Engine injected via `SpurWorkflowBuiltinsOptions.responseValidateEngine` in `builtins.ts`.                                                                                |
 
 **Engine seam:** `ResponseValidateEngine` interface (`{ validate(text: string): { ok, reason, issues? } }`) is the contract. The concrete engine is owned by superskill 0041 and provided by the externally-installed `cc:anti-hallucination` skill; the caller wires a thin adapter over its surface. The in-repo copy (`plugins/sp/skills/anti-hallucination/`) was removed once the migration completed (ADR-024 amendment, 2026-06-20); the seam itself is DI-only and unchanged.
 
@@ -1203,10 +1244,10 @@ The `review` operation resolves to deterministic modes: WBS mode runs functional
 The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.
 See [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
-| Pattern | Operations | Backing |
-| --------- | ----------- | --------- |
+| Pattern              | Operations                                                                                          | Backing                                                                                                                                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall, debug, daily | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:sys-debugging`, `sp:daily-summary` |
-| Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
+| Inline procedure     | changelog, gitmsg, fixall, handover                                                                 | git CLI + `spur` CLI + agent reasoning                                                                                                                                                                                            |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an
 artifact via one of two **mutually exclusive** exits:
@@ -1232,13 +1273,13 @@ operator-invoked, not pipeline-driven.
 Task **0243**. The Processes tab is a **read-only** serve-rooted runtime inventory — not the
 team control plane (`/api/team/*`).
 
-| Surface | Contract |
-| --- | --- |
-| `GET /api/observability/processes` | Snapshot of the serve PID tree + supervisor overlay |
-| Success body | `{ processes: ProcessInventoryRow[], rootPid: number, capturedAt: string }` |
-| Row fields | `pid`, `ppid`, `depth`, `source` (`serve` \| `supervisor` \| `descendant`), `label`, optional `agentId`, `command` (may be truncated), `status`, `rssBytes`, `elapsedSeconds`, `startedAt` |
-| Unsupported OS | `501` + `{ error, code: "UNSUPPORTED_PLATFORM" }` (macOS + Linux only in v1) |
-| Team APIs | Unchanged — `GET /api/team/processes` remains supervised-agents-only for control clients |
+| Surface                            | Contract                                                                                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/observability/processes` | Snapshot of the serve PID tree + supervisor overlay                                                                                                                                        |
+| Success body                       | `{ processes: ProcessInventoryRow[], rootPid: number, capturedAt: string }`                                                                                                                |
+| Row fields                         | `pid`, `ppid`, `depth`, `source` (`serve` \| `supervisor` \| `descendant`), `label`, optional `agentId`, `command` (may be truncated), `status`, `rssBytes`, `elapsedSeconds`, `startedAt` |
+| Unsupported OS                     | `501` + `{ error, code: "UNSUPPORTED_PLATFORM" }` (macOS + Linux only in v1)                                                                                                               |
+| Team APIs                          | Unchanged — `GET /api/team/processes` remains supervised-agents-only for control clients                                                                                                   |
 
 **Mechanism:** `ProcessInventoryService` (`packages/app`) walks OS processes via a
 `ProcessInspector` port (default: `ps -axo pid=,ppid=,rss=,etime=,command=`), filters to
@@ -1252,22 +1293,22 @@ Tasks **0245** / **0246** / **0247** / **0248**. The Tool Using tab is a **read-
 project token ledger written by indexed-context hooks (task 0232) — not a second event store and not
 a control plane.
 
-| Surface | Contract |
-| --- | --- |
-| `GET /api/observability/tool-use?limit=&before=` | Newest-first page; `before` = exclusive ISO cursor for older pages |
-| Query | `limit` default **200** max **1000**; optional `before` |
-| Success body | `{ events, count, limit, truncated, path, capturedAt, sparseToolActivity, nextBefore }` |
-| `nextBefore` | Oldest `ts` in page when more older events exist; else `null` (load-more cursor) |
-| Event fields | `seq` (0=newest in page), `ts`, `session`, `type`, optional `file`, `summary`, `tokens`, `action`, `totals`, `sessionId`, `agent`, `model` |
-| Types | `session_start` / `session_end` / `read` / `write` / `bash` / `grep` / `glob` (Edit → `write` + `action=edit`) |
-| Token semantics | Present only when estimated; **omit** when unknown (UI shows `—`). Cascade: response → Write input → Edit strings → Read stat; Bash/Grep/Glob from **capped** response size only |
-| Capture tools | PostToolUse matcher `Bash\|Grep\|Glob\|Read\|Write\|Edit` — no `*` / MCP without allowlist |
-| Redaction | Summary only (command / pattern / glob, ≤~200 chars); never full stdout; cap estimate input **4 KiB**; strip secret-like patterns |
-| `GET /api/observability/tool-use/stream` | SSE: `connected` then `tool-use` frames when the JSONL grows (`fs.watch` + byte poll) |
-| Missing file | `200` + empty `events` (calm empty UI — not an error) |
-| Hard I/O failure | `500` + `{ error }` |
-| Write path | Hooks append JSONL only; Board never writes; no HTTP from hooks |
-| UI | Live prefers **SSE** (poll fallback if `EventSource` missing); **Load older** uses `before=nextBefore`; columns Time \| Type \| **Target** (file basename or summary) \| Action \| Tokens \| Session \| Agent? \| Model? |
+| Surface                                          | Contract                                                                                                                                                                                                                 |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/observability/tool-use?limit=&before=` | Newest-first page; `before` = exclusive ISO cursor for older pages                                                                                                                                                       |
+| Query                                            | `limit` default **200** max **1000**; optional `before`                                                                                                                                                                  |
+| Success body                                     | `{ events, count, limit, truncated, path, capturedAt, sparseToolActivity, nextBefore }`                                                                                                                                  |
+| `nextBefore`                                     | Oldest `ts` in page when more older events exist; else `null` (load-more cursor)                                                                                                                                         |
+| Event fields                                     | `seq` (0=newest in page), `ts`, `session`, `type`, optional `file`, `summary`, `tokens`, `action`, `totals`, `sessionId`, `agent`, `model`                                                                               |
+| Types                                            | `session_start` / `session_end` / `read` / `write` / `bash` / `grep` / `glob` (Edit → `write` + `action=edit`)                                                                                                           |
+| Token semantics                                  | Present only when estimated; **omit** when unknown (UI shows `—`). Cascade: response → Write input → Edit strings → Read stat; Bash/Grep/Glob from **capped** response size only                                         |
+| Capture tools                                    | PostToolUse matcher `Bash\|Grep\|Glob\|Read\|Write\|Edit` — no `*` / MCP without allowlist                                                                                                                               |
+| Redaction                                        | Summary only (command / pattern / glob, ≤~200 chars); never full stdout; cap estimate input **4 KiB**; strip secret-like patterns                                                                                        |
+| `GET /api/observability/tool-use/stream`         | SSE: `connected` then `tool-use` frames when the JSONL grows (`fs.watch` + byte poll)                                                                                                                                    |
+| Missing file                                     | `200` + empty `events` (calm empty UI — not an error)                                                                                                                                                                    |
+| Hard I/O failure                                 | `500` + `{ error }`                                                                                                                                                                                                      |
+| Write path                                       | Hooks append JSONL only; Board never writes; no HTTP from hooks                                                                                                                                                          |
+| UI                                               | Live prefers **SSE** (poll fallback if `EventSource` missing); **Load older** uses `before=nextBefore`; columns Time \| Type \| **Target** (file basename or summary) \| Action \| Tokens \| Session \| Agent? \| Model? |
 
 **Mechanism:** `TokenLedgerService` reverse-tails with optional `before` filter; `TokenLedgerWatcher`
 fans out appends to SSE subscribers. The Node-only watcher loads only when a local SSE request has a
@@ -1286,11 +1327,11 @@ module derive their subscriptions from it.
 
 **Tier rules (task 0221 R5).**
 
-| Tier        | Meaning                                                                                                           |
-| ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `default`   | Persisted and streamed on the SSE channel without extra runtime config.                                          |
-| `diagnostic` | Persisted and streamed only when `SPUR_DIAGNOSTIC_EVENTS=1` (or `true`) is set on the server runtime.            |
-| (out of catalog) | Emit is not part of the board contract — CLI-local buses, browser store notifications, raw Node signals.    |
+| Tier             | Meaning                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `default`        | Persisted and streamed on the SSE channel without extra runtime config.                                  |
+| `diagnostic`     | Persisted and streamed only when `SPUR_DIAGNOSTIC_EVENTS=1` (or `true`) is set on the server runtime.    |
+| (out of catalog) | Emit is not part of the board contract — CLI-local buses, browser store notifications, raw Node signals. |
 
 The `SPUR_DIAGNOSTIC_EVENTS` flag ships through `serverBootstrapConfig(env).events.diagnostic`
 (`apps/server/src/bootstrap.ts`) and is consulted in two places: the system-event tap
@@ -1321,13 +1362,13 @@ its own typed bus; it produces a separate `system_events` row only if the engine
 **Producer invariant (R3).** Board-visible server work receives the canonical bus,
 directly or through a typed adapter. Each app service has an optional `events?()`:
 
-| Service                                          | Wiring                                                                                              |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `AgentService.run()` / `runCapture()` (0219 + 0221) | `AiRunner({ events: bridge(events), processEvents: bridge(events) })`                                 |
-| `RuleService.evaluate()` / `evaluateVerbose()`    | `RuleEngine({ events: bridge(events) })` plus a forwarding subscription over the verbose local bus. |
-| `WorkflowAppService.run()`                        | `EngineWorkflowService.runFile({ events: bridgeEngineEvents(events) })` via `createEngineService`. |
-| `TaskActionJob` (server-side queued job)         | `new AgentService({ events: ctx.eventBus(), ... })` in `serve.ts:runTaskActionJob`.                  |
-| `JobQueue` / `QueueConsumer` (0190)              | Already wired via `createServerContext` (forwards `queue.*`).                                       |
+| Service                                             | Wiring                                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `AgentService.run()` / `runCapture()` (0219 + 0221) | `AiRunner({ events: bridge(events), processEvents: bridge(events) })`                               |
+| `RuleService.evaluate()` / `evaluateVerbose()`      | `RuleEngine({ events: bridge(events) })` plus a forwarding subscription over the verbose local bus. |
+| `WorkflowAppService.run()`                          | `EngineWorkflowService.runFile({ events: bridgeEngineEvents(events) })` via `createEngineService`.  |
+| `TaskActionJob` (server-side queued job)            | `new AgentService({ events: ctx.eventBus(), ... })` in `serve.ts:runTaskActionJob`.                 |
+| `JobQueue` / `QueueConsumer` (0190)                 | Already wired via `createServerContext` (forwards `queue.*`).                                       |
 
 **Server-context integration tests (0219 AC).** `apps/server/tests/context.test.ts`
 proves that `task.*` events flow through the canonical bus into `system_events`;
@@ -1341,12 +1382,12 @@ are added in 0221 by emitting the upstream event through a service constructed w
 so a run- or entity-scoped read is one indexed round trip instead of a client-side
 scan of the newest-N window:
 
-| Column        | Type      | Source                                                    |
-| ------------- | --------- | --------------------------------------------------------- |
-| `run_id`      | `TEXT`    | 0365 envelope `runId` (`workflow.*`, agent events)        |
-| `sequence`    | `INTEGER` | 0365 envelope `sequence` — monotonic within one run       |
-| `entity_kind` | `TEXT`    | Planning event `entity.kind` (`task`, `feature`)          |
-| `entity_id`   | `TEXT`    | Planning event `entity.id`                                |
+| Column        | Type      | Source                                              |
+| ------------- | --------- | --------------------------------------------------- |
+| `run_id`      | `TEXT`    | 0365 envelope `runId` (`workflow.*`, agent events)  |
+| `sequence`    | `INTEGER` | 0365 envelope `sequence` — monotonic within one run |
+| `entity_kind` | `TEXT`    | Planning event `entity.kind` (`task`, `feature`)    |
+| `entity_id`   | `TEXT`    | Planning event `entity.id`                          |
 
 Indexes: `idx_system_events_run_id` and the pair index `idx_system_events_entity
 (entity_kind, entity_id)` — the pair, because entity ids are only unique within a kind.
@@ -1373,17 +1414,17 @@ field is renamed, dropped, or re-typed.
 post-filtering a prefetched page). Order is `occurred_at DESC, id DESC` so a keyset
 cursor is a total order under concurrent inserts.
 
-| Surface | Contract |
-| --- | --- |
-| `GET /api/events/history` | Newest-first page over `system_events` |
-| Query (v1, preserved) | `name`, `since`, `limit` (default **100**, max **500**) |
-| Query (0372) | `prefix`, `names` (comma or repeated), `runId`, `actor`, `cursor` |
-| Success body | `{ events, count, catalog, nextCursor, hasMore }` — `nextCursor`/`hasMore` are additive |
-| `nextCursor` | Opaque base64url keyset of the last returned row when `hasMore`; else `null` |
-| `prefix` | Cataloged family only (`SYSTEM_EVENT_PREFIXES`); unknown → **400** `{ error, code: "UNKNOWN_PREFIX" }` |
-| `cursor` | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }` — never falls back to unfiltered |
-| DAO filters | `prefix` (`LIKE 'prefix.%'`), `names` (`IN`), `actor`, `before: { occurred_at, id }` exclusive keyset |
-| Stability | Newer concurrent inserts do not reappear on later pages; rows older than the cursor are not skipped |
+| Surface                   | Contract                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET /api/events/history` | Newest-first page over `system_events`                                                                 |
+| Query (v1, preserved)     | `name`, `since`, `limit` (default **100**, max **500**)                                                |
+| Query (0372)              | `prefix`, `names` (comma or repeated), `runId`, `actor`, `cursor`                                      |
+| Success body              | `{ events, count, catalog, nextCursor, hasMore }` — `nextCursor`/`hasMore` are additive                |
+| `nextCursor`              | Opaque base64url keyset of the last returned row when `hasMore`; else `null`                           |
+| `prefix`                  | Cataloged family only (`SYSTEM_EVENT_PREFIXES`); unknown → **400** `{ error, code: "UNKNOWN_PREFIX" }` |
+| `cursor`                  | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }` — never falls back to unfiltered             |
+| DAO filters               | `prefix` (`LIKE 'prefix.%'`), `names` (`IN`), `actor`, `before: { occurred_at, id }` exclusive keyset  |
+| Stability                 | Newer concurrent inserts do not reappear on later pages; rows older than the cursor are not skipped    |
 
 ## Workflow run-store read API (0373)
 
@@ -1395,21 +1436,21 @@ progress and action log. Query composition and `result_json` redaction live in
 `RunStoreService` (`packages/app`); the server module is transport-only and does
 not import `ts-db` (ADR-021).
 
-| Surface | Contract |
-| --- | --- |
-| `GET /api/runs` | Newest-first list over `runs` |
-| Query | `status`, `limit` (default **50**, max **200**), `cursor` (opaque keyset) |
-| Success body | `{ runs, count, nextCursor, hasMore }` |
-| List entry | `{ id, workflowName, status, mode, agent, startedAt, completedAt }` |
-| `cursor` | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }` |
-| Order | `started_at DESC, id DESC` exclusive keyset (stable under concurrent inserts) |
-| `GET /api/runs/:runId` | One run + ordered `phases`, `transitions`, `actions` |
-| Action fields | `id, node, kind, status, durationMs, ok, resultSummary, startedAt, completedAt` |
-| `resultSummary` | Redacted/bounded projection of `result_json`: sensitive-key blanking plus recursive credential-pattern and configured-secret replacement; never the raw blob |
-| Unknown id | **404** `{ error, code: "RUN_NOT_FOUND", runId }` — no partial/fabricated object |
-| `GET /api/runs/by-wbs/:wbs` | Every `task_run_links` row for the WBS with link `kind` + run digest |
-| Empty WBS | **200** `{ wbs, links: [], count: 0 }` — not an error |
-| Optional query | `limit` (default **50**, max **200**) on the WBS lookup |
+| Surface                     | Contract                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/runs`             | Newest-first list over `runs`                                                                                                                                |
+| Query                       | `status`, `limit` (default **50**, max **200**), `cursor` (opaque keyset)                                                                                    |
+| Success body                | `{ runs, count, nextCursor, hasMore }`                                                                                                                       |
+| List entry                  | `{ id, workflowName, status, mode, agent, startedAt, completedAt }`                                                                                          |
+| `cursor`                    | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }`                                                                                                    |
+| Order                       | `started_at DESC, id DESC` exclusive keyset (stable under concurrent inserts)                                                                                |
+| `GET /api/runs/:runId`      | One run + ordered `phases`, `transitions`, `actions`                                                                                                         |
+| Action fields               | `id, node, kind, status, durationMs, ok, resultSummary, startedAt, completedAt`                                                                              |
+| `resultSummary`             | Redacted/bounded projection of `result_json`: sensitive-key blanking plus recursive credential-pattern and configured-secret replacement; never the raw blob |
+| Unknown id                  | **404** `{ error, code: "RUN_NOT_FOUND", runId }` — no partial/fabricated object                                                                             |
+| `GET /api/runs/by-wbs/:wbs` | Every `task_run_links` row for the WBS with link `kind` + run digest                                                                                         |
+| Empty WBS                   | **200** `{ wbs, links: [], count: 0 }` — not an error                                                                                                        |
+| Optional query              | `limit` (default **50**, max **200**) on the WBS lookup                                                                                                      |
 
 **Layering.** Domain DAOs own SQL (`RunDao.traceRows` / `traceRowById` with `agent` +
 keyset `before`; `PhaseRunDao` / `TransitionRunDao` / `ActionRunDao` /
@@ -1425,26 +1466,26 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 ### Team routes (`apps/server/src/modules/team/index.ts`)
 
-| Method | Path | Body / Query | Response | Notes |
-| -------- | ------ | ------------- | ---------- | ------- |
-| GET | `/api/team/processes` | — | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }` | List supervised processes (0243). |
-| POST | `/api/team/agents/:id/start` | — | `{ ok, pid, status }` (201) or `{ error }` (400) | Spawn a supervised agent. |
-| POST | `/api/team/agents/:id/stop` | — | `{ ok }` or `{ error }` (400) | Stop a supervised agent. |
-| POST | `/api/team/processes/:id/stdin` | `{ line: string }` | `{ ok }` or `{ error }` (400) | Forward a line to the process stdin. |
-| GET | `/api/team/processes/:id/stream` | — | SSE stream of `{stream, ts, line, seq}` frames | Ring-buffer replay + live tail. Heartbeat every 15s. |
-| GET | `/api/team/teams` | — | `{ teams: [{teamId, name, members: [{id, type, status, pid?}]}], count }` | Teams grouped by `team:<id>` tag + config (0256 R2). |
-| POST | `/api/team/:team/up` | `?check=true` (dry-run) | `{ materialized: {upserted, orphaned, written}, started: [{id, ok, pid?}] }` | Materialize + best-effort start (0256 R3/R5). |
-| POST | `/api/team/:team/down` | `?purge=true` | `{ stopped: string[], purged: string[] }` | Stop members + optional purge (0256 R3). |
-| GET | `/api/team/health` | — | `{ ok: true }` | Liveness probe for CLI `team up` best-effort start (0256 R4). |
+| Method | Path                             | Body / Query            | Response                                                                     | Notes                                                         |
+| ------ | -------------------------------- | ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| GET    | `/api/team/processes`            | —                       | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }`        | List supervised processes (0243).                             |
+| POST   | `/api/team/agents/:id/start`     | —                       | `{ ok, pid, status }` (201) or `{ error }` (400)                             | Spawn a supervised agent.                                     |
+| POST   | `/api/team/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
+| POST   | `/api/team/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
+| GET    | `/api/team/processes/:id/stream` | —                       | SSE stream of `{stream, ts, line, seq}` frames                               | Ring-buffer replay + live tail. Heartbeat every 15s.          |
+| GET    | `/api/team/teams`                | —                       | `{ teams: [{teamId, name, members: [{id, type, status, pid?}]}], count }`    | Teams grouped by `team:<id>` tag + config (0256 R2).          |
+| POST   | `/api/team/:team/up`             | `?check=true` (dry-run) | `{ materialized: {upserted, orphaned, written}, started: [{id, ok, pid?}] }` | Materialize + best-effort start (0256 R3/R5).                 |
+| POST   | `/api/team/:team/down`           | `?purge=true`           | `{ stopped: string[], purged: string[] }`                                    | Stop members + optional purge (0256 R3).                      |
+| GET    | `/api/team/health`               | —                       | `{ ok: true }`                                                               | Liveness probe for CLI `team up` best-effort start (0256 R4). |
 
 ### Message routes (`apps/server/src/modules/messages/index.ts`)
 
-| Method | Path | Body / Query | Response | Notes |
-| -------- | ------ | ------------- | ---------- | ------- |
-| GET | `/api/messages/inbox` | `?agent=<id>&limit=<n>` | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue. |
-| GET | `/api/messages` | `?limit=<n>` | `{ messages: [...], count }` | Global message feed (all agents). |
-| POST | `/api/messages` | `{ fromId, toId, body, inReplyTo? }` | `{ msgId, toId, status: 'queued' }` (201) | Enqueue a message. |
-| POST | `/api/messages/:id/reply` | `{ fromId, body }` | `{ msgId, toId, status: 'queued' }` (201) | Reply to a message. |
+| Method | Path                      | Body / Query                         | Response                                                                  | Notes                             |
+| ------ | ------------------------- | ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- |
+| GET    | `/api/messages/inbox`     | `?agent=<id>&limit=<n>`              | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue.          |
+| GET    | `/api/messages`           | `?limit=<n>`                         | `{ messages: [...], count }`                                              | Global message feed (all agents). |
+| POST   | `/api/messages`           | `{ fromId, toId, body, inReplyTo? }` | `{ msgId, toId, status: 'queued' }` (201)                                 | Enqueue a message.                |
+| POST   | `/api/messages/:id/reply` | `{ fromId, body }`                   | `{ msgId, toId, status: 'queued' }` (201)                                 | Reply to a message.               |
 
 **Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
 matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.

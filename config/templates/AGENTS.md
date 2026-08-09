@@ -140,7 +140,7 @@ spur <noun> <verb> … --json
 spur <noun> --help
 ```
 
-**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, dogfood, reverse, arch,
+**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in the project plugin README (`plugins/sp/README.md` when present).
 
 **Outside spur-cli:** Nouns not fully documented in `sp:spur-cli` (`agent`, `history`, `message`,

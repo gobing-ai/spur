@@ -46,33 +46,33 @@ The missing product is a unified harness layer behind one CLI.
 
 ## 3. Principles
 
-| Principle | Implication |
-|-----------|-------------|
-| Local-first | SQLite + local files; no network in the core loop. Cloud surface is optional and read-oriented. |
-| Agent-agnostic | One abstraction for all agents; vendor glue lives behind it. Spur never stores agent keys. |
-| Config over code | Rules and workflows are declarative (YAML + Zod); engines interpret normalized definitions. |
-| Reusable engines | Generic capabilities are external `@gobing-ai/ts-*` packages; Spur is a domain consumer. |
-| Inspectable & reversible | Raw data stays in files; only validated, redacted data is persisted and re-derivable. |
-| MVP-first | Ship the smallest useful loop; defer speculative surface until its need is reconfirmed. |
+| Principle                | Implication                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| Local-first              | SQLite + local files; no network in the core loop. Cloud surface is optional and read-oriented. |
+| Agent-agnostic           | One abstraction for all agents; vendor glue lives behind it. Spur never stores agent keys.      |
+| Config over code         | Rules and workflows are declarative (YAML + Zod); engines interpret normalized definitions.     |
+| Reusable engines         | Generic capabilities are external `@gobing-ai/ts-*` packages; Spur is a domain consumer.        |
+| Inspectable & reversible | Raw data stays in files; only validated, redacted data is persisted and re-derivable.           |
+| MVP-first                | Ship the smallest useful loop; defer speculative surface until its need is reconfirmed.         |
 
 ## 4. Users & Use Cases
 
 **Primary user:** a developer running coding agents daily who wants discipline and visibility
 around them.
 
-| Use case | Command |
-|----------|---------|
-| Check which agents are installed and usable | `spur agent list` / `spur agent doctor` |
-| Execute a prompt through any agent | `spur agent run` |
-| Enforce project constraints (imports, secrets, structure) | `spur rule run` |
-| Run a multi-step agent workflow / dev loop | `spur workflow run <file>.yaml` |
-| Import and analyze agent conversation history & cost | `spur history import` / `spur history analyze` |
-| Coordinate team agents and durable messages | `spur message ...` / `spur team ...` |
-| Inspect rule/workflow run history | `spur rule trace` / `spur workflow trace` |
-| Scaffold a Spur project | `spur init` |
-| Manage markdown task files (WBS, sections, status) | `spur task ...` *(ADR-020)* |
-| Manage feature files with BDD acceptance criteria | `spur feature ...` *(ADR-020)* |
-| Plan a feature from a vague description | sp planning skill → `spur agent run` + CLI verbs *(ADR-020/023)* |
+| Use case                                                  | Command                                                          |
+| --------------------------------------------------------- | ---------------------------------------------------------------- |
+| Check which agents are installed and usable               | `spur agent list` / `spur agent doctor`                          |
+| Execute a prompt through any agent                        | `spur agent run`                                                 |
+| Enforce project constraints (imports, secrets, structure) | `spur rule run`                                                  |
+| Run a multi-step agent workflow / dev loop                | `spur workflow run <file>.yaml`                                  |
+| Import and analyze agent conversation history & cost      | `spur history import` / `spur history analyze`                   |
+| Coordinate team agents and durable messages               | `spur message ...` / `spur team ...`                             |
+| Inspect rule/workflow run history                         | `spur rule trace` / `spur workflow trace`                        |
+| Scaffold a Spur project                                   | `spur init`                                                      |
+| Manage markdown task files (WBS, sections, status)        | `spur task ...` _(ADR-020)_                                      |
+| Manage feature files with BDD acceptance criteria         | `spur feature ...` _(ADR-020)_                                   |
+| Plan a feature from a vague description                   | sp planning skill → `spur agent run` + CLI verbs _(ADR-020/023)_ |
 
 ## 5. Scope
 
@@ -80,23 +80,24 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 
 ### 5.1 In scope (committed product surface)
 
-| Capability | Command | Backed by |
-|------------|---------|-----------|
-| Project scaffold | `spur init` | local CLI + DAOs |
-| Agent detection / health | `spur agent list\|doctor` | `ts-ai-runner` |
-| Agent run execution | `spur agent run` | `ts-ai-runner` (`AiRunner`) |
-| Agent spec management | `spur agent create\|edit\|delete`, `list --specs` | `ts-ai-runner` spec helpers |
-| Inter-agent durable messages | `spur message send\|inbox\|reply` | `MessageService` + ts-db |
-| Team coordination | `spur team assign\|status` (+ `start\|stop` stubs) | `TeamService` (packages/app) |
-| Constraint rule evaluation / discovery / validation | `spur rule run\|list\|validate` | `ts-rule-engine` |
-| Rule / workflow run history | `spur rule trace` / `spur workflow trace` | engine persistence via ts-db |
-| Workflow validate / run / list | `spur workflow ...` | `ts-dual-workflow-engine` |
-| History import (7 sources) | `spur history import` | `ts-llm-jsonl-importer` |
-| History cost analytics | `spur history analyze` | local analytics consumer |
-| History report surface | `spur history report` | reserved (TODO marker) |
-| Task management (markdown CRUD, WBS, sections, check) | `spur task ...` | task domain in `packages/` (ADR-021) |
-| Feature management (`docs/features/`, INDEX, traceability) | `spur feature ...` | feature domain in `packages/` (ADR-021) |
-| Spec-driven planning pipeline (fat skill) | `plugins/sp` skill → `spur agent run` + CLI verbs | `ts-ai-runner` + task/feature domain |
+| Capability                                                 | Command                                            | Backed by                                  |
+| ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| Project scaffold                                           | `spur init`                                        | local CLI + DAOs                           |
+| Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
+| Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
+| Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
+| Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
+| Team coordination                                          | `spur team assign\|status` (+ `start\|stop` stubs) | `TeamService` (packages/app)               |
+| Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
+| Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
+| Workflow validate / run / list                             | `spur workflow ...`                                | `ts-dual-workflow-engine`                  |
+| History import (7 sources)                                 | `spur history import`                              | `ts-llm-jsonl-importer`                    |
+| History cost analytics                                     | `spur history analyze`                             | local analytics consumer                   |
+| History report surface                                     | `spur history report`                              | reserved (TODO marker)                     |
+| Task management (markdown CRUD, WBS, sections, check)      | `spur task ...`                                    | task domain in `packages/` (ADR-021)       |
+| Feature management (`docs/features/`, INDEX, traceability) | `spur feature ...`                                 | feature domain in `packages/` (ADR-021)    |
+| Spec-driven planning pipeline (fat skill)                  | `plugins/sp` skill → `spur agent run` + CLI verbs  | `ts-ai-runner` + task/feature domain       |
+| Semantic conflict audit (authority-aware, four-pillar)     | `/sp:dev-find-conflict`                            | `sp:conflict-finding` skill (`plugins/sp`) |
 
 ### 5.2 Supporting utilities
 

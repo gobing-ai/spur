@@ -232,7 +232,7 @@ spur <noun> --help
 | `migrate`  | CLI schema migrations                            |
 | `serve`    | Local web server                                 |
 
-**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, dogfood, reverse, arch,
+**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
 
 **Outside spur-cli:** Nouns not fully documented in `sp:spur-cli` (`agent`, `history`, `message`,
