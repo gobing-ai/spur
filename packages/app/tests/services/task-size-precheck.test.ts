@@ -185,3 +185,35 @@ describe('evaluateTaskSize', () => {
         expect(report.ok).toBe(true);
     });
 });
+
+describe('R3 (0487): size-vs-executor-capability gate', () => {
+    const RAISED: TaskSizeLimits = { maxReqs: 10, maxPlanItems: 12 };
+
+    test('a large task on a sub-capable executor blocks even with raised limits', () => {
+        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'omp-dsv4-flash-volc', tier: 'cheap' });
+        expect(report.ok).toBe(false);
+        expect(report.reasons[0]).toContain('requires a capable executor');
+        expect(report.reasons[0]).toContain('omp-dsv4-flash-volc');
+        expect(report.reasons[0]).toContain('tier cheap');
+    });
+
+    test('a large task on a capable executor passes', () => {
+        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'claude-opus', tier: 'capable-1' });
+        expect(report.ok).toBe(true);
+    });
+
+    test('an unknown tier is treated as standard and blocks', () => {
+        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'mystery', tier: undefined });
+        expect(report.ok).toBe(false);
+        expect(report.reasons[0]).toContain('tier standard');
+    });
+
+    test('a small task on a cheap executor is untouched by the gate', () => {
+        const report = evaluateTaskSize(SMALL_TASK, RAISED, { name: 'omp-flash', tier: 'cheap' });
+        expect(report.ok).toBe(true);
+    });
+
+    test('no executor supplied → size limits only (0454 behavior preserved)', () => {
+        expect(evaluateTaskSize(LARGE_TASK, RAISED).ok).toBe(true);
+    });
+});

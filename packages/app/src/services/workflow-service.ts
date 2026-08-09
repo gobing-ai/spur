@@ -1088,21 +1088,34 @@ async function fileExists(path: string): Promise<boolean> {
  * executor nor a canonical agent binary, one warning is emitted and nothing is
  * injected, so a stale `agent.default` (e.g. a commented-out executor) never fails
  * dispatch (AC3) — the pipeline YAML literal governs instead.
+ *
+ * Precedence, per var (task 0487 R4): caller `vars.implementAgent` > caller
+ * `vars.agent` > `agent.default` > YAML literal. `--vars '{"agent":"claude"}'`
+ * previously reached review/verify/test-fix but NOT the implement hop, which kept
+ * getting `agent.default` — an operator who explicitly picked an executor watched
+ * the run dispatch a different one (run `e8cb00e7`). The caller's choice is the
+ * strongest signal, so it also seeds `implementAgent`; it is not validated against
+ * config here because an explicit `--vars` agent is the operator's own assertion
+ * (a bad one fails loudly at dispatch), unlike a stale config default.
  */
 async function resolveDefaultAgentVar(
     cwd: string,
     callerVars: Record<string, string> | undefined,
     warn: (message: string) => void,
 ): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    if (callerVars?.implementAgent === undefined && callerVars?.agent !== undefined) {
+        result.implementAgent = callerVars.agent;
+    }
     let config: Awaited<ReturnType<typeof loadSpurConfig>>;
     try {
         config = await loadSpurConfig(cwd);
     } catch {
-        return {};
+        return result;
     }
     const configured = config.agent?.default;
     if (typeof configured !== 'string' || configured.length === 0) {
-        return {};
+        return result;
     }
     // Validate before injecting (AC3): accept iff the default names a configured
     // executor or a canonical agent binary. On mismatch, warn once and inject
@@ -1115,11 +1128,13 @@ async function resolveDefaultAgentVar(
         warn(
             `agent.default "${configured}" does not name a configured executor or agent binary; leaving the pipeline's literal agent in force`,
         );
-        return {};
+        return result;
     }
-    const result: Record<string, string> = {};
     if (callerVars?.agent === undefined) result.agent = configured;
-    if (callerVars?.implementAgent === undefined) result.implementAgent = configured;
+    // Only when the caller pinned neither var does `agent.default` reach implement.
+    if (result.implementAgent === undefined && callerVars?.implementAgent === undefined) {
+        result.implementAgent = configured;
+    }
     return result;
 }
 

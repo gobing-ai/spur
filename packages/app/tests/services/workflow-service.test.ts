@@ -1597,7 +1597,7 @@ terminalStates:
             await rm(dir, { recursive: true, force: true });
         });
 
-        test('AC2: caller-set agent but no implementAgent — only implementAgent is injected', async () => {
+        test('0487 R4: caller-set agent seeds implementAgent, outranking agent.default', async () => {
             const dir = await seedBoth(
                 'spur-wf-r2-impl-',
                 'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
@@ -1610,8 +1610,40 @@ terminalStates:
             });
 
             expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
-            // agent comes from the caller; implementAgent is injected from agent.default.
-            expect(await capturedAgents(dir)).toBe('operator-pick my-exec');
+            // Was `operator-pick my-exec` under 0485: the caller's explicit agent never
+            // reached the implement hop. Caller choice now outranks agent.default.
+            expect(await capturedAgents(dir)).toBe('operator-pick operator-pick');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('0487 R4: caller-set agent seeds implementAgent even with no usable agent.default', async () => {
+            const dir = await seedBoth('spur-wf-r2-impl-nodefault-', 'agent:\n  default: commented-out-exec\n');
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), {
+                runId: 'r2-impl-2',
+                vars: { agent: 'operator-pick' },
+            });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgents(dir)).toBe('operator-pick operator-pick');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('0487 R4: caller-set implementAgent is never overridden by vars.agent', async () => {
+            const dir = await seedBoth(
+                'spur-wf-r2-impl-pinned-',
+                'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+
+            const result = await svc.run(join(dir, 'test.yaml'), {
+                runId: 'r2-impl-3',
+                vars: { agent: 'operator-pick', implementAgent: 'pinned-impl' },
+            });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgents(dir)).toBe('operator-pick pinned-impl');
             await rm(dir, { recursive: true, force: true });
         });
 

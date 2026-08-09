@@ -52,6 +52,32 @@ When this skill is entered via `/sp:dev-run --mode implement <wbs>` (the form
 The structural guard is the slash form itself (`--mode implement`). Prose in the workflow YAML
 `agent.run` `input` is the wrong place for this rule; it belongs here and in `dev-run.md`.
 
+## One WBS per implement pass (task 0487 R1)
+
+The target WBS is the **only** task you implement. Sibling tasks in the corpus are context you do
+not have and work you were not asked to do.
+
+- **Read** the target task file, the tasks named in its `dependencies`, its `feature_id` feature
+  file, and the source files its Requirements / Design / Plan name. That is the whole input set.
+- **Ignore every other `todo` / `wip` task in the tree**, including ones whose files changed
+  recently. A task that looks half-finished is not an invitation — a freshly *committed* task can
+  legitimately still be `status: todo` because its verify/wrap hops have not run yet.
+- **Never implement a requirement belonging to another WBS**, even when it looks like a
+  prerequisite. If the target genuinely cannot proceed without it, stop and say so — a blocked task
+  is a cheap finding; a two-task diff costs the reverts.
+
+Why this is a rule and not a nicety: driving task 0486 lost several hours to exactly this. Task 0485
+was committed but still `todo` in the tree, and two different executors (omp run `ca130182`, claude
+run `b16bfbf4`) each pulled 0485's observability feature and its tests into 0486's diff, unprompted.
+A third agent reproduced it. The scope creep had to be detected and reverted four times.
+
+The pipeline enforces this on the way out: the implement step's `requireDiff` gate also checks diff
+*scope* against the files and explicit directory/glob prefixes the task body backticks, and routes
+the run to `failed` naming any file outside them (new files beside a declared file are allowed;
+bypass: run var `implementScopeGuard: "off"`). It compares snapshots taken immediately before and
+after dispatch, so dirt already in the tree is not attributed to this pass. Keeping the diff to one task's
+surfaces is what keeps that gate quiet.
+
 ## Implement scope: do not run the project quality gate
 
 During implement, the pipeline's `test` hop runs `${vars.qualityGateCmd}` (the full project gate:
@@ -99,6 +125,7 @@ reproduce → isolate → minimal fix → regression guard.
 | "This abstraction will be useful later." | Speculative abstraction is complexity without a caller (R2). Build for the requirement in front of you; add the seam when the second use arrives. |
 | "Close enough to the AC — the intent is there." | "Close enough" is a FAIL at verify. Implement to the literal AC; if the AC is wrong, fix the AC, don't approximate it. |
 | "I'll improve this adjacent code while I'm here." | Drive-by edits widen the diff and the blast radius (R3). Stay in scope; split unrelated cleanup into its own task. |
+| "Task 0485 is still `todo` and clearly unfinished — I'll finish it while I'm in here." | It is not your WBS. `todo` often just means the verify/wrap hops have not run yet. Implementing it costs the reverts and fails the scope guard (0487 R1). |
 | "It compiles and runs, so it's done." | Compiling is not the bar. Done is the AC met, tests green, and the `## Solution` change-map written. |
 
 ## Red Flags
@@ -108,6 +135,7 @@ reproduce → isolate → minimal fix → regression guard.
 - A `## Solution` section with file references that are not in backtick `` `path:line` `` form (L3 requirement: `` `packages/app/src/foo.ts:123` `` or `` `packages/app/src/bar.ts:10-20` ``; paths from repo root).
 - A new abstraction with exactly one caller and no second use in sight.
 - The diff touches files unrelated to the task's scope.
+- The diff touches another WBS's surfaces, or the pass reads sibling `todo` / `wip` task files.
 - "Done" claimed with no test run pasted.
 - Silently changing an AC's meaning to match what was built.
 - From implement mode: launching `spur workflow run …task-pipeline…` or `/sp:dev-run` without

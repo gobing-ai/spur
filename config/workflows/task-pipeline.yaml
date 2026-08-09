@@ -104,6 +104,12 @@ vars:
   # Max checklist items under ## Plan before size precheck fails (R2, task 0454).
   # Override with `--vars '{"maxImplementPlanItems":"15"}'`.
   maxImplementPlanItems: "8"
+  # Diff-scope guard on the implement hop (R1, task 0487). When the target task
+  # body backticks at least one path, non-corpus changes outside those paths
+  # fail the step by name. New files beside a declared file are allowed. Empty
+  # (default) = on; set to "off" to bypass:
+  # `--vars '{"implementScopeGuard":"off"}'`.
+  implementScopeGuard: ""
 
 states:
   - id: precheck
@@ -114,16 +120,58 @@ states:
     onEnter:
       # Soft doctor — write status and always exit 0 so transitions can branch to
       # `failed` cleanly (same pattern as the quality-gate soft probe).
+      #
+      # R2 (0487): probe BOTH resolved executors ($agent and $implementAgent) and
+      # FAIL on `authenticated: unauthenticated`. Previously only $agent was probed
+      # and auth was informational, so a run whose implement executor had no
+      # provider key sailed through precheck into a guaranteed implement failure
+      # (runs e8cb00e7 / b16bfbf4: "auth: no … API key not found for provider
+      # 'volc'" → precheck ✓). `unknown` auth keeps the old soft behavior — some
+      # agents expose no auth-status verb. `spur agent doctor` CLI exit-code
+      # semantics are deliberately untouched; the gate lives here.
+      # R4 (0487): one divergence line when the two executors differ (legitimate
+      # when only implementAgent is pinned, but it must be visible in the log).
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
             DOCTOR_FILE=".spur/run/$wbs-precheck-doctor.status" &&
-            if $spurBin agent doctor $agent; then
-              echo PASS > "$DOCTOR_FILE";
+            STATUS=PASS;
+            if [ -n "$implementAgent" ] && [ "$implementAgent" != "$agent" ]; then
+              echo "precheck: agent=$agent implementAgent=$implementAgent (executors diverge)";
+              EXECS="$agent $implementAgent";
             else
-              echo FAIL > "$DOCTOR_FILE";
-            fi &&
+              EXECS="$agent";
+            fi;
+            for EXE in $EXECS; do
+              OUT=$($spurBin agent doctor "$EXE" --json 2>&1) || {
+                echo "precheck: FAIL - doctor exited non-zero for $EXE";
+                echo "$OUT";
+                STATUS=FAIL;
+                continue;
+              };
+              AUTH=$(printf '%s' "$OUT" | jq -r '.agents[0].authenticated // "unknown"' 2>/dev/null || echo unknown);
+              DETAIL=$(printf '%s' "$OUT" | jq -r '.agents[0].modelStatus.detail // ""' 2>/dev/null || echo "");
+              echo "precheck: $EXE auth=$AUTH $DETAIL";
+              if [ "$AUTH" = unauthenticated ]; then
+                echo "precheck: FAIL - executor $EXE is unauthenticated; $DETAIL";
+                STATUS=FAIL;
+              fi;
+            done;
+            echo "$STATUS" > "$DOCTOR_FILE";
+            exit 0
+      # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
+      # a tree already dirty with another task's implementation is how 0485's diff
+      # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
+      # those itself.
+      - kind: shell
+        options:
+          command: >-
+            DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null);
+            if [ -n "$DIRTY" ]; then
+              echo "precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:";
+              echo "$DIRTY";
+            fi;
             exit 0
       - kind: note
         options:
@@ -149,13 +197,17 @@ states:
       # R2 (0454): task size precheck — evaluate R-item and Plan-item counts.
       # Writes PASS/FAIL to .spur/run/<wbs>-precheck-size.status. Always exit 0
       # (soft check, like doctor). The precheck→implement guard reads the file.
+      # R3 (0487): `--executor` adds the size-vs-capability gate — a task past the
+      # DEFAULT caps routed to a sub-`capable-1` executor blocks here instead of
+      # burning the full implementTimeoutMs and exiting 3 (run ca130182).
       - kind: shell
         options:
           command: >-
             SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
             mkdir -p .spur/run &&
             bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
-            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems" &&
+            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"
+            --executor "$implementAgent" &&
             exit 0
 
   - id: implement

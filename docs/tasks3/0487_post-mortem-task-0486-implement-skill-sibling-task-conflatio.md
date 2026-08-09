@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Post-mortem (task 0486): implement-skill sibling-task conflation, precheck auth gate, and large-task executor sizing"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: N
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-09T05:50:21.046Z"
-updated_at: "2026-08-09T06:06:54.259Z"
+updated_at: "2026-08-09T21:48:35.820Z"
 ---
 
 ## 0487. Post-mortem (task 0486): implement-skill sibling-task conflation, precheck auth gate, and large-task executor sizing
@@ -37,17 +37,15 @@ Every finding was re-verified against the tree; all seven hold. Corrections appl
 - **Self-application:** this task has 7 R-items, which FAILS the size precheck (max 5) — measured with the real script. The pipeline run for 0487 must pass `--vars '{"maxImplementReqs":"10"}'` (see Notes).
 
 ### Requirements
-
-- [ ] R1. **Scope the implement stage to the target WBS** — `/sp:dev-run --mode implement <wbs>` must not pull in or implement other `todo`/`wip` tasks found in the tree; add a diff-scope guard so non-corpus changes outside the target task's declared surfaces fail the implement step naming the rogue file(s). (Finding 1, S0)
-- [ ] R2. **Fail precheck when a resolved executor is unauthenticated** — probe BOTH `$agent` and `$implementAgent` via `spur agent doctor <exec> --json`; when either reports `authenticated: "unauthenticated"`, write FAIL to the doctor status file so the run routes to `failed` naming the executor and the missing provider key. CLI doctor exit semantics stay unchanged. (Finding 3, S1)
-- [ ] R3. **Large-task executor sizing gate** — when the task exceeds the size caps (> 5 R-items or > 8 Plan items) AND the resolved implement executor's capability tier is below `capable-1`, the size precheck emits a blocking finding requiring `--agent <capable>` / `--vars '{"implementAgent":...}'` or an explicit split, instead of silently dispatching a flash model into the 30-min timeout. Tier source is the declared `tier` in `agent.executors` (inference via the shared `getExecutorTier` when undeclared), NOT the doctor JSON `tier` field. (Finding 2, S1)
-- [ ] R4. **Eliminate the `agent` vs `implementAgent` footgun** — when the caller sets `vars.agent` but not `vars.implementAgent`, inject `implementAgent := vars.agent` (caller choice outranks `agent.default`); the `agent.default` injection from 0485 remains the fallback when neither is caller-set. (Finding 4, S2)
-- [ ] R5. **Document the one-writer-per-repo coordination rule** — no code fix; add an AGENTS.md + `cross-cutting.md` note that two concurrent agent sessions in one working tree will clobber each other, and that parallel agent work uses git worktree isolation. (Finding 5, S1 — process)
-- [ ] R6. **Commit-per-task hygiene** — surface a pre-launch "working tree has uncommitted non-corpus changes" warning (with the file list) so a task is not started on a tree dirty with another task's implementation; document commit-per-task in AGENTS.md. (Finding 6, S2 — hygiene)
-- [ ] R7. **Review gate robustness + force-done path** — (a) accept prose severity cells like `P1 (blocker)` in `hasPopulatedPriorityTable`; (b) document or auto-perform the `todo→wip→testing→done` hops so `--force-done` reaches `done` from any pre-state; (c) fix the `extractReviewSectionBody` lookahead that truncates Review bodies at a literal `Z` and fails to match when Review is the last section. (Finding 7, S2)
+- [x] R1. **Scope the implement stage to the target WBS** — `/sp:dev-run --mode implement <wbs>` must not pull in or implement other `todo`/`wip` tasks found in the tree; add a diff-scope guard so non-corpus changes outside the target task's declared surfaces fail the implement step naming the rogue file(s). (Finding 1, S0)
+- [x] R2. **Fail precheck when a resolved executor is unauthenticated** — probe BOTH `$agent` and `$implementAgent` via `spur agent doctor <exec> --json`; when either reports `authenticated: "unauthenticated"`, write FAIL to the doctor status file so the run routes to `failed` naming the executor and the missing provider key. CLI doctor exit semantics stay unchanged. (Finding 3, S1)
+- [x] R3. **Large-task executor sizing gate** — when the task exceeds the size caps (> 5 R-items or > 8 Plan items) AND the resolved implement executor's capability tier is below `capable-1`, the size precheck emits a blocking finding requiring `--agent <capable>` / `--vars '{"implementAgent":...}'` or an explicit split, instead of silently dispatching a flash model into the 30-min timeout. Tier source is the declared `tier` in `agent.executors` (inference via the shared `getExecutorTier` when undeclared), NOT the doctor JSON `tier` field. (Finding 2, S1)
+- [x] R4. **Eliminate the `agent` vs `implementAgent` footgun** — when the caller sets `vars.agent` but not `vars.implementAgent`, inject `implementAgent := vars.agent` (caller choice outranks `agent.default`); the `agent.default` injection from 0485 remains the fallback when neither is caller-set. (Finding 4, S2)
+- [x] R5. **Document the one-writer-per-repo coordination rule** — no code fix; add an AGENTS.md + `cross-cutting.md` note that two concurrent agent sessions in one working tree will clobber each other, and that parallel agent work uses git worktree isolation. (Finding 5, S1 — process)
+- [x] R6. **Commit-per-task hygiene** — surface a pre-launch "working tree has uncommitted non-corpus changes" warning (with the file list) so a task is not started on a tree dirty with another task's implementation; document commit-per-task in AGENTS.md. (Finding 6, S2 — hygiene)
+- [x] R7. **Review gate robustness + force-done path** — (a) accept prose severity cells like `P1 (blocker)` in `hasPopulatedPriorityTable`; (b) document or auto-perform the `todo→wip→testing→done` hops so `--force-done` reaches `done` from any pre-state; (c) fix the `extractReviewSectionBody` lookahead that truncates Review bodies at a literal `Z` and fails to match when Review is the last section. (Finding 7, S2)
 
 ### Acceptance Criteria
-
 ```gherkin
 Feature: 0486-session post-mortem hardening
 
@@ -60,6 +58,7 @@ Feature: 0486-session post-mortem hardening
     And a post-implement diff-scope guard rejects any non-corpus change outside 0486's allowlist
     And on an out-of-scope change the run routes to `failed` naming the rogue file(s)
     And the guard is disabled when the run var `implementScopeGuard` is "off"
+    And pre-existing out-of-scope dirt is not attributed to the implementer
 
   @core
   Scenario: R2 — precheck fails on an unauthenticated executor
@@ -87,18 +86,26 @@ Feature: 0486-session post-mortem hardening
     And the landed 0485 AC2 second-case test is updated to the new expectation
     And when caller sets neither var, the 0485 `agent.default` injection behavior is unchanged
 
+  Scenario: R5 — [docs-only] concurrent agent work uses worktree isolation
+    Given two agent sessions need to write in parallel
+    When an agent reads the project and portable harness guidance
+    Then both contracts require one writer per working tree
+    And they route parallel writers to isolated git worktrees
+
+  Scenario: R6 — dirty-tree precheck warning names non-corpus files
+    Given a task starts with uncommitted non-corpus changes
+    When the pipeline runs precheck
+    Then it prints a warning with the dirty file list
+    And the warning recommends committing or stashing before the new task
+    And the warning does not block the run
+
   Scenario: R7 — Review gate accepts prose severities and parses robustly
     Given a Review table row with severity cell `P1 (blocker)` and real content
     Then `hasPopulatedPriorityTable` accepts it
     And a Review body containing an uppercase `Z` is parsed in full
     And a Review section that is the task file's last section still matches
     And `--force-done` from `todo` either auto-traverses wip→testing→done or the hops are documented in `--help`
-
-  # R5/R6 are documentation-only changes: verified by the review step (rule text present in
-  # AGENTS.md + cross-cutting.md; pre-launch dirty-tree warning prints the file list), no
-  # automated scenario.
 ```
-
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
@@ -164,14 +171,13 @@ Each finding is independently implementable. Severity: S0 (critical/major time s
 - (c) **NEW (found in this review):** `extractReviewSectionBody` (`task-check.ts:114`) matches with lookahead `(?=^### |Z)` — the literal `Z` alternative truncates the Review body at any uppercase Z, and when Review is the final section with no following `### ` heading the match FAILS entirely (returns null → gate reads the Review as absent). Fix the lookahead to terminate at the next `^### ` heading or end-of-input; add regression tests for both cases.
 
 ### Plan
-
-- [ ] Scope `sp:code-implementation` to the target WBS (skill text) and add the diff-scope allowlist guard to the implement `requireDiff` path with the `implementScopeGuard:"off"` escape hatch; focused test reproducing the 0485↔0486 conflation (R1)
-- [ ] Rewrite the precheck doctor shell to probe `$agent` + `$implementAgent` via `doctor --json` and FAIL on `unauthenticated`, keeping CLI exit semantics unchanged (R2)
-- [ ] Add the tier-aware blocking finding to the size precheck (script `--executor` flag + YAML call site + exported `getExecutorTier` reuse) and document the heuristic in `execution-workflow.md` (R3)
-- [ ] Implement caller-agent→implementAgent precedence in `resolveDefaultAgentVar`, update the landed 0485 AC2 test at `workflow-service.test.ts:1600`, add the precheck divergence notice (R4)
-- [ ] Relax the severity-cell regex, fix the `extractReviewSectionBody` `Z` lookahead with regression tests, and implement or document the force-done multi-hop path (R7)
-- [ ] Add the one-writer-per-repo + commit-per-task rules to AGENTS.md and `cross-cutting.md`; add the pre-launch dirty-tree warning (R5, R6)
-- [ ] Validate: `bun run autofix && bun run spur-check`, focused plugin tests, and a reproduction dogfood (implement pass with a sibling todo task — confirm no conflation). NOTE: this task has 7 R-items — the pipeline run needs `--vars '{"maxImplementReqs":"10"}'` or it fails its own precheck (see Notes). Update Solution/Testing/Review and transition to done (R1–R7)
+- [x] Scope `sp:code-implementation` to the target WBS (skill text) and add the diff-scope allowlist guard to the implement `requireDiff` path with the `implementScopeGuard:"off"` escape hatch; focused test reproducing the 0485↔0486 conflation (R1)
+- [x] Rewrite the precheck doctor shell to probe `$agent` + `$implementAgent` via `doctor --json` and FAIL on `unauthenticated`, keeping CLI exit semantics unchanged (R2)
+- [x] Add the tier-aware blocking finding to the size precheck (script `--executor` flag + YAML call site + exported `getExecutorTier` reuse) and document the heuristic in `execution-workflow.md` (R3)
+- [x] Implement caller-agent→implementAgent precedence in `resolveDefaultAgentVar`, update the landed 0485 AC2 test at `workflow-service.test.ts:1600`, add the precheck divergence notice (R4)
+- [x] Relax the severity-cell regex, fix the `extractReviewSectionBody` `Z` lookahead with regression tests, and implement or document the force-done multi-hop path (R7)
+- [x] Add the one-writer-per-repo + commit-per-task rules to AGENTS.md and `cross-cutting.md`; add the pre-launch dirty-tree warning (R5, R6)
+- [x] Validate: `bun run autofix && bun run spur-check`, focused plugin tests, and a reproduction dogfood (implement pass with a sibling todo task — confirm no conflation). NOTE: this task has 7 R-items — the pipeline run needs `--vars '{"maxImplementReqs":"10"}'` or it fails its own precheck (see Notes). Update Solution/Testing/Review and transition to done (R1–R7)
 
 ### Root Cause
 
@@ -186,17 +192,77 @@ The hours trace to **one reproducible defect compounding a sizing mismatch**.
 **Net effect:** what should have been "1 pipeline run → done" became "3 failed/cancelled runs + a manual inline finish." The 6 good files omp produced prove the pipeline mechanics worked; the conflation (Finding 1) is what forced the detour. **Fixing Finding 1 + Finding 3 would have made this a single clean run.**
 
 ### Solution
+Seven post-mortem findings landed across the pipeline, executor selection, lifecycle help, and agent guidance.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — target-WBS scope.** `plugins/sp/skills/code-implementation/SKILL.md:55` restricts implement context to the target task, dependencies, feature, and declared paths. `packages/app/src/workflow/actions/agent-run.ts:238` snapshots the non-corpus tree before dispatch; the post-run comparison at `packages/app/src/workflow/actions/agent-run.ts:326` enforces exact declared files and explicit directory/glob prefixes while ignoring pre-existing dirt. Regression coverage includes same-package rejection and dirty-tree isolation at `packages/app/tests/workflow/actions/agent-run.test.ts:958`.
 
+**R2 — authenticated precheck.** `config/workflows/task-pipeline.yaml:125` probes both resolved executors, writes FAIL for unauthenticated/non-zero doctor results, and keeps unknown auth soft. Standalone doctor exit semantics remain unchanged.
+
+**R3 — size/capability gate.** `packages/app/src/services/task-size-precheck.ts:112` blocks large tasks below `capable-1`; `plugins/sp/scripts/task-size-precheck.ts:107` consumes the doctor capability projection through argv-safe `execFileSync` calls. `plugins/sp/tests/task-size-precheck.test.ts:48` locks the duplicated shipping thresholds to application defaults without adding a runtime API.
+
+**R4 — executor precedence.** `packages/app/src/services/workflow-service.ts:1107` applies caller `implementAgent` > caller `agent` > `agent.default` > YAML literal. Tests at `packages/app/tests/services/workflow-service.test.ts:1600` cover caller propagation, missing defaults, and explicit implement pins; `config/workflows/task-pipeline.yaml:140` logs divergence.
+
+**R5/R6 — coordination hygiene.** One-writer/worktree isolation and commit-per-task are recorded in `AGENTS.md:340`, portable `config/templates/AGENTS.md:176`, and the Spur development guidance. `config/workflows/task-pipeline.yaml:172` prints the non-corpus dirty-tree warning without blocking.
+
+**R7 — Review/force-done robustness.** `packages/app/src/services/task-check.ts:100` accepts prose severity cells and `packages/app/src/services/task-check.ts:123` reads Review through the next heading or EOF. `apps/cli/src/commands/task.ts:283` documents the mandatory lifecycle hops for `--force-done`.
+
+**Surface/docs.** `docs/04_DESIGN.md:1140` documents auth/size gates, executor precedence, exact-path scope semantics, and pre-dispatch snapshot attribution. The workflow SSOT remains `config/workflows/task-pipeline.yaml`.
+
+**Verification remediation.** The final audit removed all Review findings: R1 now isolates per-dispatch changes, the shipped size script is argv-safe, threshold parity is regression-tested, and portable guidance is synchronized. Fresh gates passed 444 targeted tests and 4,794 repository tests; `spur-check`, `test-cf`, and `build` exited 0.
 ### Testing
+**Per-Requirement Traceability**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Target-only skill contract `plugins/sp/skills/code-implementation/SKILL.md:55`; baseline/delta guard `packages/app/src/workflow/actions/agent-run.ts:238,326`; pre-existing dirt regression `packages/app/tests/workflow/actions/agent-run.test.ts:958`. |
+| R2 | MET | Dual-executor auth gate and FAIL status write `config/workflows/task-pipeline.yaml:125`; standalone doctor semantics unchanged. |
+| R3 | MET | Capability gate `packages/app/src/services/task-size-precheck.ts:112`; argv-safe shipped script `plugins/sp/scripts/task-size-precheck.ts:107`; threshold parity regression `plugins/sp/tests/task-size-precheck.test.ts:48`; dogfood returned PASS for 7 R-items / 7 Plan items on `claude`. |
+| R4 | MET | Caller-agent propagation `packages/app/src/services/workflow-service.ts:1107`; precedence regressions `packages/app/tests/services/workflow-service.test.ts:1600`. |
+| R5 | MET | One-writer/worktree isolation in `AGENTS.md:340` and portable `config/templates/AGENTS.md:176`. |
+| R6 | MET | Commit-per-task contract `AGENTS.md:343`; non-blocking dirty-tree file list `config/workflows/task-pipeline.yaml:172`. |
+| R7 | MET | Prose priority parsing and EOF-safe Review extraction `packages/app/src/services/task-check.ts:100,123`; force-done lifecycle help `apps/cli/src/commands/task.ts:283`. |
 
+**Fresh Commands**
+
+- `bun test packages/app/tests/workflow/actions/agent-run.test.ts packages/app/tests/services/task-check.test.ts packages/app/tests/services/task-size-precheck.test.ts packages/app/tests/services/workflow-service.test.ts packages/app/tests/services/agent-service.test.ts plugins/sp/tests/task-size-precheck.test.ts` — 444 pass, 0 fail.
+- `bun plugins/sp/scripts/task-size-precheck.ts 0487 --spur-bin /Users/robin/xprojects/spur-new/dist/cli/spur --max-reqs 10 --max-plan-items 12 --executor claude` — PASS, 7 R-items / 7 Plan items.
+- `bun run autofix && bun run spur-check` — formatting/typechecks, 43 pre-rules, 4,794 tests, and 2 post-rules passed; aggregate coverage 99.29% functions / 99.33% lines.
+- `bun run test-cf` — 1 test passed.
+- `bun run build` — CLI, server, and web builds exited 0.
+
+Coverage: 99.29% functions / 99.33% lines (full `spur-check`).
+
+**Fix-pass artifacts:** `.spur/run/0487-fix-created.json:1` records no follow-up tasks; `.spur/run/0487-verify-answer.txt:1` and `.spur/run/0487-verdict.json:1` are regenerated after the final bounded fix pass.
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | — | — | No open findings. |
+| P2 | — | — | No open findings. |
+| P3 | — | — | No open findings. |
+| P4 | — | — | No open findings. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional Verdict: PASS**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Target-only skill contract and the pre/post-dispatch Git snapshot guard enforce exact declared files, explicit directory/glob prefixes, and new siblings without attributing pre-existing dirt; regressions cover rogue same-package edits and dirty-tree isolation. |
+| R2 | MET | Precheck probes both resolved executors and writes FAIL for unauthenticated or failed doctor results while preserving standalone doctor semantics. |
+| R3 | MET | Size/capability logic blocks oversized work below `capable-1`; the shipped script passes argv without shell interpolation and a parity regression locks its thresholds to application defaults. |
+| R4 | MET | Executor precedence is caller `implementAgent` > caller `agent` > configured default > YAML literal, with divergence logging and regression coverage. |
+| R5 | MET | Repository and portable project guidance require one writer per working tree and git-worktree isolation for parallel work. |
+| R6 | MET | Precheck names dirty non-corpus files without blocking; repository guidance requires a clean task boundary and commit per task. |
+| R7 | MET | Review parsing accepts prose severities through EOF/next heading, and force-done help states the required lifecycle traversal. |
+
+**SECUA:** PASS. No open security, efficiency, correctness, usability, or architecture findings.
+
+**Resolved during verification:**
+
+- Threshold duplication is guarded by a CI parity test; no new runtime surface was added.
+- R5/R6 guidance is present in `config/templates/AGENTS.md` as well as the monorepo contract.
+- The scope guard now compares Git snapshots around the agent dispatch, eliminating the former full-tree attribution risk.
+- Shell-interpolated `execSync` calls were replaced with argv-safe `execFileSync` calls.
+
+**Architecture disposition:** keep scope helpers co-located with their sole caller; extract only if a second caller appears.
 ### References
 
 - **Source session:** task 0486 drive (2026-08-08/09) — the subject of this post-mortem.
@@ -213,6 +279,9 @@ The hours trace to **one reproducible defect compounding a sizing mismatch**.
 
 ### History
 
+- 2026-08-09T19:05:48.473Z todo → wip (system)
+- 2026-08-09T19:32:52.643Z wip → testing (system)
+- 2026-08-09T19:32:53.480Z testing → done (system)
 ### Notes
 
 - **Self-application of the size precheck:** this task carries 7 R-items (> the max-5 default). Its own pipeline run must pass `--vars '{"maxImplementReqs":"10"}'`, or precheck fails exactly like run `d5f4f7cd`. After R3 lands, the same run also needs a `capable`-tier implement executor (`--vars '{"implementAgent":"claude"}'` or equivalent) or the new gate blocks it. This is intentional dogfooding: the run exercises the R2/R3 gates.

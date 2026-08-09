@@ -516,6 +516,11 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: The command-surface block was missing 11 shipped verbs across 4 nouns;
   it had been edited from memory. Regenerate factual blocks from code registrations, never from
   recall (§6.7 rule 1).
+- [2026-08-09] spur-new: R5/R6 (one-writer + commit-per-task) landed in the monorepo `AGENTS.md`
+  and `cross-cutting.md` but not the portable `config/templates/AGENTS.md` that `spur init` seeds —
+  new projects missed the coordination rule until a follow-up pass. When a convention change has
+  portable reach, propagate it to the template in the same change, or it silently forks the derived
+  `AGENTS.md` surface (§4.4 / §6.7).
 
 ### Lessons for this file (`99`)
 

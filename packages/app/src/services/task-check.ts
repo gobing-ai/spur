@@ -97,7 +97,11 @@ export function hasPopulatedPriorityTable(body: string): boolean {
     for (const line of body.split('\n')) {
         const cells = line.split('|');
         if (cells.length < 3) continue; // not a table row
-        const severityIdx = cells.findIndex((c) => /^\s*P[1-4]\s*$/.test(c));
+        // R7a (task 0487): the severity cell may carry prose — `P1 (blocker)`,
+        // `P2 — deferred`. Anchor on the label, not on the whole cell; `\b`
+        // still rejects `P12`. The non-placeholder content check below is what
+        // separates a real finding row from the empty scaffold.
+        const severityIdx = cells.findIndex((c) => /^\s*P[1-4]\b/.test(c));
         if (severityIdx === -1) continue;
         const hasContent = cells.some((c, i) => i !== severityIdx && !isPlaceholderCell(c));
         if (hasContent) return true;
@@ -108,10 +112,20 @@ export function hasPopulatedPriorityTable(body: string): boolean {
 /**
  * Extract the `### Review` section body from a task markdown document.
  * Returns null when the section is absent.
+ *
+ * R7c (task 0487): the previous single-regex form ended the body at
+ * `(?=^### |Z)` — a literal `Z`, not the `\Z` end-anchor JS does not have. That
+ * truncated every Review body at its first uppercase `Z`, and when `### Review`
+ * was the file's last section (no following `### ` heading and no `Z`) the match
+ * failed outright, so the gate read a populated Review as absent. Slice to the
+ * next `### ` heading or to end-of-input instead.
  */
 export function extractReviewSectionBody(markdown: string): string | null {
-    const match = markdown.match(/^### Review[ \t]*\n([\s\S]*?)(?=^### |Z)/m);
-    return match ? (match[1] ?? '') : null;
+    const heading = markdown.match(/^### Review[ \t]*\n/m);
+    if (!heading) return null;
+    const rest = markdown.slice((heading.index ?? 0) + heading[0].length);
+    const next = rest.match(/^### /m);
+    return next ? rest.slice(0, next.index ?? 0) : rest;
 }
 
 /**

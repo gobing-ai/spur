@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.16.0
+version: 1.16.1
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-08
+updated_at: 2026-08-09
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -217,7 +217,11 @@ alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.
 Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an aligned table —
 `<✓|✗> <usable|missing> <agent> <tier> <auth:yes|no|?> <version>` with a
 `STATUS AGENT TIER AUTH VERSION` header and an `N usable, M missing (tier-1)` footer; `--json`
-emits `{ agents: [...] }`. Auth is informational (its own column, not a state label —
+emits `{ agents: [...] }`, each row carrying `capabilityTier` (task 0487 R3 — the executor's
+**capability** tier `cheap|standard|capable-*`, distinct from the row's `tier`, which is the agent's
+support tier 1/2/3; consumed by the pipeline size precheck). It is the declared
+`agent.executors[].tier` when the probed name matches a configured executor, else inferred from the
+name. Auth is informational (its own column, not a state label —
 liveness-only gate, ADR/0127). For **grok**, auth is tri-state from `XAI_API_KEY` and/or
 non-empty `~/.grok/auth.json` (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not
 usable. Backed by `ts-ai-runner` `DoctorRunner`.
@@ -897,7 +901,7 @@ Source: delivery §1.1, design §10.
 | `spur task`                            | — (noun help)                                                                                                                            | 0       | Lists subcommands if no subcommand given.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `spur task create <title>`             | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <seconds>` `--allow-duplicate-name` `--folder <path>` `--json` | 0/1/2/3 | Race-safe WBS allocation; feature-scoped creates reject an identical case-insensitive title created within 300 seconds by default (exit 3, `duplicate-follow-up`); `--dedupe-within` accepts a positive-integer override; `--allow-duplicate-name` disables the guard. `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant or invalid dedup window → exit 2. With `--json`, duplicate errors include `error.code`, `existingWbs`, `existingName`, and `attemptedName`.                                                                                                                                                                                                                                                                        |
 | `spur task show <wbs>`                 | `--folder <path>` `--json`                                                                                                               | 0/1     | Frontmatter is a top-level field in `--json` output.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `spur task update <wbs> <status>`      | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--ac-numbering <mode>` `--folder <path>` `--json`               | 0/1/2   | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority`/`--ac-numbering` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`/`ac_numbering`, plus `done_forced`/`done_reason` written by the verdict-guard override). `--ac-numbering task-local` opts a pre-existing task into the L3 Requirements↔AC coverage check; new tasks receive the field from the task templates.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `spur task update <wbs> <status>`      | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--ac-numbering <mode>` `--folder <path>` `--json`               | 0/1/2   | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority`/`--ac-numbering` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`/`ac_numbering`, plus `done_forced`/`done_reason` written by the verdict-guard override). `--force-done` waives the verify **verdict** only — the FSM path still applies, so from an earlier status walk the hops first: `todo → wip → testing → done`, each running the structural `spur task check` (task 0487 R7b). `--ac-numbering task-local` opts a pre-existing task into the L3 Requirements↔AC coverage check; new tasks receive the field from the task templates.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `spur task list`                       | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder <path>` `--json`                                                | 0/1     | `--phase` is a legacy alias for `--status`; `--feature` filters to tasks carrying that `feature_id` edge (exact match) — the enumeration primitive for feature-level execution loops. Filters combine (AND).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `spur task refresh`                    | `--folder <path>` `--json`                                                                                                               | 0/1     | Re-scan the task corpus and report counts. The generated `kanban.md` artifact was retired in the A17 cutover (task 0192) once the web task-kanban board (task 0191) became the daily driver — this verb no longer writes any file. `--json`: `{folders, tasks}`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `spur task refresh-roster <wbs>`       | `--folder <path>` `--json`                                                                                                               | 0/1     | Regenerate a parent's sub-task roster block inside its `## Plan` (the generator half of the 0121 roll-up gate, task 0123). Scans `parent_wbs` children, renders a WBS·title·status table between `refresh-roster` auto-gen markers, and writes it idempotently — inserting the block (preserving hand-written Plan content) when absent, rewriting it in place when present. Zero children → clean no-op (`written:false`); no `## Plan` → error. `--json`: `{wbs, childCount, written}`.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -1114,18 +1118,30 @@ identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profil
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`,
-`formatCmd`, `__hitlAnswer`. The three command-shaped vars are the per-project override surface:
+`formatCmd`, `implementScopeGuard`, `__hitlAnswer`. The three command-shaped vars are the per-project override surface:
 `qualityGateCmd` (default `bun run autofix && bun run spur-check`) is single-sourced across the soft
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
 post-implement auto-format. `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
-that actually decides. **Implement-only pin (task 0454):** `implementAgent` resolves to its own
-YAML literal default (`'omp'` in `task-pipeline.yaml`) — independent of `agent` and not affected
-by `agent.default` — and is used only by the implement `agent.run` hop. Override with
-`--vars '{"implementAgent":"omp-zai"}'` without retargeting review/verify. **Size precheck (0454):**
-`maxImplementReqs` (default `5`) and `maxImplementPlanItems` (default `8`) feed
-`plugins/sp/scripts/task-size-precheck.ts`; precheck→implement requires
-`.spur/run/<wbs>-precheck-size.status=PASS`. **Edit surface:** change this YAML under
+that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the
+implement `agent.run` hop; override with `--vars '{"implementAgent":"omp-zai"}'` without retargeting
+review/verify. **Agent var precedence (task 0487 R4):** caller `vars.implementAgent` > caller
+`vars.agent` > `agent.default` > YAML literal, resolved per var — `--vars '{"agent":"claude"}'`
+therefore reaches the implement hop too, where it previously lost to `agent.default`. Precheck logs
+one divergence line when the two resolved executors differ. **Precheck auth gate (task 0487 R2):**
+precheck probes both `$agent` and `$implementAgent` via `spur agent doctor <exec> --json` and writes
+FAIL when either reports `authenticated: "unauthenticated"` or the doctor call exits non-zero;
+`unknown` stays soft, and the `spur agent doctor` CLI exit-code contract is unchanged.
+**Size precheck (0454, extended 0487 R3):** `maxImplementReqs` (default `5`) and
+`maxImplementPlanItems` (default `8`) feed `plugins/sp/scripts/task-size-precheck.ts`, now also
+passed `--executor "$implementAgent"`: a task past the **default** caps routed to an executor whose
+`capabilityTier` is below `capable-1` fails the gate regardless of raised caps (unknown tier ⇒
+`standard` ⇒ blocked). precheck→implement requires `.spur/run/<wbs>-precheck-size.status=PASS`.
+**Diff-scope guard (task 0487 R1):** the implement step's `requireDiff` also rejects changes outside
+the exact files and explicit directory/glob prefixes backticked in the target task's body, naming
+the rogue files; new files beside an exact declared file are allowed, and a task body naming no
+paths fails open. The guard snapshots the non-corpus tree before dispatch, so pre-existing dirt is
+not attributed to the implementer. Set `--vars '{"implementScopeGuard":"off"}'` to bypass. **Edit surface:** change this YAML under
 `config/workflows/task-pipeline.yaml` only (see §2.3 monorepo path model) — no hand-sync to
 `.spur/workflows` or `apps/cli/config`.
 

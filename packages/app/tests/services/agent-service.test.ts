@@ -217,6 +217,36 @@ describe('AgentService.doctor', () => {
         expect(jsonLine).toBeDefined();
     });
 
+    test('R3 (0487): --json carries the executor capability tier, distinct from the support tier', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [
+                { name: 'omp-dsv4-flash-volc', agent: 'omp' },
+                { name: 'pinned-capable', agent: 'omp', tier: 'capable-2' },
+            ],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'omp-dsv4-flash-volc', tier: 1 }),
+                    mockDoctorResult({ agent: 'pinned-capable', tier: 1 }),
+                    mockDoctorResult({ agent: 'unconfigured', tier: 2 }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: true }, { doctorRunner });
+
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        // Inferred from the executor name (`flash`), not read off the support tier.
+        expect(parsed.agents[0].capabilityTier).toBe('cheap');
+        expect(parsed.agents[0].tier).toBe(1);
+        expect(parsed.agents[1].capabilityTier).toBe('capable-2');
+        // No matching executor entry → inferred from the bare agent name.
+        expect(parsed.agents[2].capabilityTier).toBe('standard');
+    });
+
     test('non-usable Tier-1 agent exits 1', async () => {
         const svc = makeService();
         const doctorRunner = {

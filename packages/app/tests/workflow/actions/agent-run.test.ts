@@ -15,6 +15,7 @@ import {
     AGENT_RUN_PROGRESS_INTERVAL_MS,
     AgentRunActionRunner,
     extractCompletedRequirementsHeuristic,
+    extractTaskScopeAllowlist,
 } from '../../../src/workflow/actions/agent-run';
 import type { WorkflowObservabilityBus, WorkflowObservabilityEventMap } from '../../../src/workflow/observability';
 import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
@@ -51,6 +52,15 @@ function svcWithRunTraced(result: Partial<AgentRunTracedResult>): AgentService {
         ...result,
     };
     return { runTraced: async () => full } as unknown as AgentService;
+}
+
+function svcWithEffect(effect: () => void, result: Partial<AgentRunTracedResult> = {}): AgentService {
+    return {
+        runTraced: async () => {
+            effect();
+            return { exitCode: 0, stdout: '', invocation: invocation(), ...result };
+        },
+    } as unknown as AgentService;
 }
 
 /** Build a fake AgentService whose `runTraced` observes the flags it receives. */
@@ -687,8 +697,7 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         mkdirSync(dirname(taskFile), { recursive: true });
         writeFileSync(taskFile, 'base');
         gitCommitAll(dir, 'base');
-        writeFileSync(taskFile, 'changed');
-        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const svc = svcWithEffect(() => writeFileSync(taskFile, 'changed'));
         // No excludeGlobs → defaults only exclude docs/tasks3/*, docs/features/*
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
@@ -702,8 +711,7 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         mkdirSync(dirname(srcFile), { recursive: true });
         writeFileSync(srcFile, 'base');
         gitCommitAll(dir, 'base');
-        writeFileSync(srcFile, 'changed');
-        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const svc = svcWithEffect(() => writeFileSync(srcFile, 'changed'));
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
         expect(result.ok).toBe(true);
@@ -715,12 +723,31 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         writeFileSync(join(dir, 'base.txt'), 'base');
         gitCommitAll(dir, 'base');
         const newModule = join(dir, 'new-module/index.ts');
-        mkdirSync(dirname(newModule), { recursive: true });
-        writeFileSync(newModule, 'new');
-        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const svc = svcWithEffect(() => {
+            mkdirSync(dirname(newModule), { recursive: true });
+            writeFileSync(newModule, 'new');
+        });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
         expect(result.ok).toBe(true);
+    });
+
+    test('pre-existing non-corpus dirt does not satisfy requireDiff', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-preexisting-'));
+        gitInit(dir);
+        const srcFile = join(dir, 'src/probe.ts');
+        mkdirSync(dirname(srcFile), { recursive: true });
+        writeFileSync(srcFile, 'base');
+        gitCommitAll(dir, 'base');
+        writeFileSync(srcFile, 'dirty before dispatch');
+
+        const runner = new AgentRunActionRunner(
+            svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() }),
+        );
+        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('empty implement');
     });
 
     test('exit-0 without requireDiff → ok:true even with zero changes', async () => {
@@ -743,6 +770,206 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         expect(result.error).toContain('exited with code 3');
         expect(result.error).toContain('.spur/run/test-1-s1-partial.md');
         expect(result.error).toContain('execution-workflow.md');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner diff-scope guard (R1, task 0487)
+// ---------------------------------------------------------------------------
+
+describe('extractTaskScopeAllowlist (R1, task 0487)', () => {
+    test('collects exact files and explicit path prefixes, stripping line anchors and glob tails', () => {
+        const body = [
+            'See `packages/app/src/services/task-check.ts:96` and `plugins/sp/commands/dev-run.md`.',
+            'The redaction work touched `packages/app/**` and `.spur/workflows/task-pipeline.yaml:186`.',
+        ].join('\n');
+        expect(extractTaskScopeAllowlist(body)).toEqual([
+            { path: 'packages/app/src/services/task-check.ts', prefix: false },
+            { path: 'plugins/sp/commands/dev-run.md', prefix: false },
+            { path: 'packages/app', prefix: true },
+            { path: '.spur/workflows/task-pipeline.yaml', prefix: false },
+        ]);
+    });
+
+    test('includes root-level files named without a slash (AGENTS.md) as exact prefixes', () => {
+        // R5/R6 edits AGENTS.md; without this the package-path allowlist would
+        // treat the root file as rogue once the body also names packages/*.
+        const body = 'Document in `AGENTS.md` and `plugins/sp/skills/spur-dev/references/cross-cutting.md`.';
+        expect(extractTaskScopeAllowlist(body)).toEqual([
+            { path: 'AGENTS.md', prefix: false },
+            { path: 'plugins/sp/skills/spur-dev/references/cross-cutting.md', prefix: false },
+        ]);
+    });
+
+    test('skips backticked prose that is not a path', () => {
+        const body = 'Run `spur task check` with `--force-done` and the `implementAgent` var.';
+        // Commands, flags, and bare identifiers never widen the allowlist.
+        expect(extractTaskScopeAllowlist(body)).toEqual([]);
+    });
+});
+
+describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    /** Seed a git repo with task <wbs> whose body names `plugins/sp` surfaces only. */
+    function seedConflationRepo(prefix: string, taskBody: string): string {
+        const repo = mkdtempSync(join(tmpdir(), prefix));
+        gitInit(repo);
+        const taskFile = join(repo, 'docs/tasks3/0486_dev-find-conflict.md');
+        mkdirSync(dirname(taskFile), { recursive: true });
+        writeFileSync(taskFile, taskBody);
+        const owned = join(repo, 'plugins/sp/commands/dev-find-conflict.md');
+        mkdirSync(dirname(owned), { recursive: true });
+        writeFileSync(owned, 'base');
+        gitCommitAll(repo, 'base');
+        return repo;
+    }
+
+    const TASK_0486 = [
+        '## 0486. dev-find-conflict',
+        '',
+        '### Design',
+        '',
+        'Author `plugins/sp/commands/dev-find-conflict.md` and the `plugins/sp/skills/conflict-finding/SKILL.md` runbook.',
+        '',
+    ].join('\n');
+
+    test('a sibling task’s surfaces in the diff → ok:false naming the rogue file', async () => {
+        dir = seedConflationRepo('agent-run-scope-rogue-', TASK_0486);
+        // In scope: the command the task owns. Rogue: 0485's observability feature —
+        // exactly the conflation runs ca130182 / b16bfbf4 produced.
+        const rogue = join(dir, 'packages/app/src/observability/agent-execution.ts');
+        const svc = svcWithEffect(() => {
+            writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented');
+            mkdirSync(dirname(rogue), { recursive: true });
+            writeFileSync(rogue, 'export function redactAndBound() {}');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('packages/app/src/observability/agent-execution.ts');
+        expect(result.error).toContain("outside task 0486's declared surfaces");
+    });
+
+    test('changes confined to the declared surfaces → ok:true (new sibling files included)', async () => {
+        dir = seedConflationRepo('agent-run-scope-ok-', TASK_0486);
+        // A new file beside a declared path is allowed by the frozen R1 contract.
+        const sibling = join(dir, 'plugins/sp/skills/conflict-finding/README.md');
+        const svc = svcWithEffect(() => {
+            writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented');
+            mkdirSync(dirname(sibling), { recursive: true });
+            writeFileSync(sibling, 'runbook');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    test('a tracked sibling-task file in the same package is rejected', async () => {
+        dir = seedConflationRepo('agent-run-scope-same-package-', TASK_0486);
+        const rogue = join(dir, 'plugins/sp/skills/other-task/SKILL.md');
+        mkdirSync(dirname(rogue), { recursive: true });
+        writeFileSync(rogue, 'base');
+        gitCommitAll(dir, 'seed sibling task');
+        const runner = new AgentRunActionRunner(
+            svcWithEffect(() => {
+                writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented');
+                writeFileSync(rogue, 'sibling implementation');
+            }),
+        );
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('plugins/sp/skills/other-task/SKILL.md');
+    });
+
+    test('implementScopeGuard: "off" bypasses the guard', async () => {
+        dir = seedConflationRepo('agent-run-scope-off-', TASK_0486);
+        const rogue = join(dir, 'packages/app/src/observability/agent-execution.ts');
+        const svc = svcWithEffect(() => {
+            mkdirSync(dirname(rogue), { recursive: true });
+            writeFileSync(rogue, 'rogue');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486', implementScopeGuard: 'off' } }),
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    test('a task body that names no paths fails open rather than rejecting everything', async () => {
+        dir = seedConflationRepo('agent-run-scope-open-', '## 0486. prose only\n\nNo backticked paths here.\n');
+        const anywhere = join(dir, 'packages/app/src/anything.ts');
+        const svc = svcWithEffect(() => {
+            mkdirSync(dirname(anywhere), { recursive: true });
+            writeFileSync(anywhere, 'change');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    test('a root-level file named in the body (AGENTS.md) is in scope', async () => {
+        // Self-dogfood: 0487 R5 edits AGENTS.md alongside packages/* paths.
+        dir = seedConflationRepo(
+            'agent-run-scope-agents-',
+            [
+                '## 0487. post-mortem',
+                '',
+                'Document in `AGENTS.md` and `plugins/sp/skills/spur-dev/references/cross-cutting.md`.',
+                '',
+            ].join('\n'),
+        );
+        const crossCutting = join(dir, 'plugins/sp/skills/spur-dev/references/cross-cutting.md');
+        const svc = svcWithEffect(() => {
+            writeFileSync(join(dir, 'AGENTS.md'), 'one writer per tree');
+            mkdirSync(dirname(crossCutting), { recursive: true });
+            writeFileSync(crossCutting, 'one writer per tree');
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    test('pre-existing out-of-scope dirt is ignored when the agent changes only a declared file', async () => {
+        dir = seedConflationRepo('agent-run-scope-baseline-', TASK_0486);
+        const preExisting = join(dir, 'packages/app/src/other-task.ts');
+        mkdirSync(dirname(preExisting), { recursive: true });
+        writeFileSync(preExisting, 'dirty before dispatch');
+
+        const runner = new AgentRunActionRunner(
+            svcWithEffect(() => writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented')),
+        );
+        const result = await runner.execute(
+            { input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0486' } }),
+        );
+
+        expect(result.ok).toBe(true);
     });
 });
 

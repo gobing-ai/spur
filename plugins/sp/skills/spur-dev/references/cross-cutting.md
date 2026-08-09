@@ -327,6 +327,26 @@ work, and still belong to a sibling's session.
 Full treatment, the worked example, and the tunable knobs:
 [`../../spec-decomposition/references/decomposition.md`](../../spec-decomposition/references/decomposition.md).
 
+## One writer per working tree (task 0487 R5/R6)
+
+**One agent session writes a given working tree at a time.** Two sessions in the same tree do not
+merge — they overwrite. Nothing detects it: the second writer's edit simply reappears after the
+first reverts it, and the symptom reads as a model regression. During the 0486 drive a background
+Codex session (PID 4087) re-applied a reverted change three times before a live-process check found
+it, costing ~10 minutes of misdiagnosis.
+
+- **Parallel agent work uses git worktree isolation** — one branch and one tree per agent, merged
+  back through the WT-4 sequence above. Not two agents, one checkout.
+- **Suspect a second writer** when an edit you just made is gone, or a reverted change returns.
+  Check for live agent processes before blaming the model.
+
+**Commit per task.** Start each task on a tree clean of other tasks' implementations. A dirty tree
+mixes two tasks' evidence into one diff — 0486's run launched on top of 0485's uncommitted work
+across nine files, forcing a commit-0485-first detour mid-pipeline, and the mixed diff is what the
+implement stage then conflated. The pipeline precheck prints a WARNING with the file list when the
+tree has uncommitted non-corpus changes; treat it as a stop-and-commit, not noise. It warns rather
+than blocks because a legitimately in-progress tree is the operator's call.
+
 ## Iron Laws
 
 Seven non-negotiable invariants for the spur-dev lifecycle. These are laws, not guidelines — a

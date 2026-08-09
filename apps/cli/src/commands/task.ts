@@ -281,7 +281,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         )
         .option(
             '--force-done',
-            'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292)',
+            'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292). Waives the verdict only — the FSM path still applies, so from an earlier status walk the hops first: `todo` → `wip` → `testing` → `done` (each hop runs the structural `spur task check`)',
         )
         .option(
             '--reason <text>',

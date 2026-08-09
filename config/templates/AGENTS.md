@@ -173,6 +173,12 @@ catalog here or maintain generated per-platform capability copies in the project
 - Surgical changes only — no drive-by refactors or speculative abstractions.
 - Surface changes keep `docs/04_DESIGN.md` in the **same commit** (T3); run `sp:doc-evolve`
   sync-check when unsure.
+- **One writer per working tree.** Two agent sessions in one checkout overwrite each other silently
+  — the symptom reads as a model regression. Parallel agent work uses git worktree isolation (one
+  branch + one tree per agent).
+- **Commit per task.** Start a task on a tree clean of other tasks' implementations; a dirty tree
+  mixes two tasks' evidence into one diff. The pipeline precheck warns (never blocks) with the file
+  list.
 <!-- PROJECT-SPECIFIC: import aliases, forbidden paths, CI rules. -->
 
 ---

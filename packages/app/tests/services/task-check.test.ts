@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FINDING_CODES } from '../../src/services/finding-codes';
-import { TaskCheckService } from '../../src/services/task-check';
+import { extractReviewSectionBody, hasPopulatedPriorityTable, TaskCheckService } from '../../src/services/task-check';
 import { TaskLocator } from '../../src/services/task-locator';
 
 const matrix = {
@@ -2758,5 +2758,42 @@ describe('TaskCheckService', () => {
                 cleanup();
             }
         });
+    });
+});
+
+describe('R7 (0487): Review gate robustness', () => {
+    test('a prose severity cell (`P1 (blocker)`) counts as a populated findings row', () => {
+        const body = ['| Sev | File | Finding |', '| --- | --- | --- |', '| P1 (blocker) | a.ts:1 | leaks |'].join(
+            '\n',
+        );
+        expect(hasPopulatedPriorityTable(body)).toBe(true);
+    });
+
+    test('the empty scaffold table is still rejected, prose severity or not', () => {
+        const body = ['| Sev | File | Finding |', '| --- | --- | --- |', '| P1 (blocker) | | |'].join('\n');
+        expect(hasPopulatedPriorityTable(body)).toBe(false);
+    });
+
+    test('a severity-like label beyond P4 is not a findings row', () => {
+        const body = '| P12 | a.ts:1 | not a severity |';
+        expect(hasPopulatedPriorityTable(body)).toBe(false);
+    });
+
+    test('a Review body containing an uppercase Z is not truncated', () => {
+        const markdown = ['### Review', '', 'Zero blockers found.', '', '### References', '', 'x', ''].join('\n');
+        const body = extractReviewSectionBody(markdown);
+        expect(body).toContain('Zero blockers found.');
+        expect(body).not.toContain('### References');
+    });
+
+    test('a Review section that is the last section still matches', () => {
+        const markdown = ['### Design', '', 'd', '', '### Review', '', '| P2 | a.ts:1 | nit |', ''].join('\n');
+        const body = extractReviewSectionBody(markdown);
+        expect(body).not.toBeNull();
+        expect(hasPopulatedPriorityTable(body ?? '')).toBe(true);
+    });
+
+    test('an absent Review section still returns null', () => {
+        expect(extractReviewSectionBody('### Design\n\nd\n')).toBeNull();
     });
 });

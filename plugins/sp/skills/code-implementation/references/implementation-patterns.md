@@ -37,6 +37,14 @@ The task is the source of scope. Implement only behavior that traces to the task
 criteria or design. If you discover adjacent cleanup, record it as a follow-up unless it directly
 unblocks the requirement.
 
+**Scope the context to the target WBS (task 0487 R1).** The input set is the target task file, the
+tasks named in its `dependencies`, its `feature_id` feature file, and the source files its
+Requirements / Design / Plan name — nothing else. Other `todo` / `wip` tasks in the corpus are out
+of scope even when recently changed: a committed task can still read `todo` because its verify/wrap
+hops have not run. Implementing one alongside the target is the 0486 conflation (see
+`../SKILL.md` § One WBS per implement pass), and the pipeline's diff-scope guard fails the step for
+it.
+
 Use this sequence:
 
 1. **Map requirement to files.** Identify the module, seam, config, docs, or tests that must change.

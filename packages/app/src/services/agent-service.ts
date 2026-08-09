@@ -343,7 +343,20 @@ export class AgentService {
             }
         }
         if (args.json) {
-            this.ctx.output.write(toJson({ agents: results }));
+            // R3 (task 0487): expose the executor's *capability* tier so out-of-process
+            // callers (the pipeline size precheck) can gate a large task on executor
+            // strength without re-implementing the inference regex. Distinct from the
+            // row's existing `tier`, which is the agent's support tier (1/2/3).
+            const executorByName = new Map((executors ?? []).map((e) => [e.name, e]));
+            const rows = results.map((result) => {
+                // No matching executor entry (a bare agent binary, or a project with no
+                // `agent.executors` block) still gets the name-based inference rather
+                // than an absent tier — the consumer's fallback is `standard`, which
+                // would block a large task on a plainly capable agent.
+                const executor = executorByName.get(result.agent) ?? { name: result.agent, agent: result.agent };
+                return { ...result, capabilityTier: getExecutorTier(executor) };
+            });
+            this.ctx.output.write(toJson({ agents: rows }));
         } else if (args.agent !== undefined) {
             // Single-executor mode: show full model detail when available.
             this.ctx.output.write(renderDoctorDetail(results[0] ?? null));

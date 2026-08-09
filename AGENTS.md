@@ -337,6 +337,12 @@ when the task used the pipeline.
 - No `.github/workflows/` edits without approval.
 - Surgical diffs only.
 - Surface code + `docs/04_DESIGN.md` same commit (T3); use `sp:doc-evolve` sync-check.
+- **One writer per working tree.** Two agent sessions in one checkout overwrite each other silently
+  — the symptom looks like a model regression. Parallel agent work uses git worktree isolation (one
+  branch + one tree per agent). Task 0487 R5.
+- **Commit per task.** Start a task on a tree clean of other tasks' implementations; a dirty tree
+  mixes two tasks' evidence into one diff and is what the implement stage conflates. The pipeline
+  precheck warns (never blocks) with the file list. Task 0487 R6.
 
 ---
 

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -68,6 +69,9 @@ export interface AgentRunAgentConfig {
  *   agent run, fail the step unless the working tree has non-corpus changes
  *   (untracked/staged/unstaged, docs/tasks3|docs/features excluded). Catches the
  *   silent no-op defect — "agent exited 0 but did nothing" (R3, task 0424).
+ *   Also gates diff *scope* (R1, task 0487): when `vars.wbs` names a task whose
+ *   body backticks at least one path, changes outside those paths fail
+ *   the step by name. Bypass with the run var `implementScopeGuard: "off"`.
  * - `timeoutMs` (number): subprocess timeout in milliseconds. Forwarded via
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
@@ -231,6 +235,8 @@ export class AgentRunActionRunner implements ActionRunner {
         let resumeRetried = false;
         let steeringNote: string | undefined;
         let traced: AgentRunTracedResult;
+        const diffBaseline =
+            requireDiff === true ? await createGitWorkingTreeSnapshot(cwd, this.agentConfig.excludeGlobs) : undefined;
         try {
             // Outer loop: resume-mode fallback (task 0406). If the session latch
             // auto-set continue and the agent's resume mode rejects a new prompt
@@ -315,12 +321,34 @@ export class AgentRunActionRunner implements ActionRunner {
             // writes docs/tasks3|docs/features). Tree-level approximation: a
             // pre-existing dirty tree reads as non-empty — safe direction, a false
             // pass would silently certify an empty implement.
-            if (ok && requireDiff === true && !(await gitHasNonCorpusChanges(cwd, this.agentConfig.excludeGlobs))) {
-                return {
-                    ok: false,
-                    data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
-                    error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
-                };
+            if (ok && requireDiff === true) {
+                const changed =
+                    diffBaseline === undefined
+                        ? await gitNonCorpusChangedFiles(cwd, this.agentConfig.excludeGlobs)
+                        : await gitChangesSinceSnapshot(cwd, diffBaseline, this.agentConfig.excludeGlobs);
+                if (changed.length === 0) {
+                    return {
+                        ok: false,
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                        error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
+                    };
+                }
+                // R1 (task 0487): diff-scope guard. An implement step that wandered
+                // into a *sibling* task's surfaces is the 0486 failure mode — two
+                // separate executors each pulled freshly-committed-but-still-`todo`
+                // 0485 work into 0486's diff, costing three reverts and a full run.
+                // The empty-implement gate above cannot see it: the diff is non-empty,
+                // just partly someone else's. Reject on the way out, naming the file.
+                const wbs = String(context.vars.wbs ?? '');
+                const guardOff = String(context.vars.implementScopeGuard ?? '') === 'off';
+                const rogue = guardOff ? [] : await findOutOfScopeChanges(cwd, wbs, changed);
+                if (rogue.length > 0) {
+                    return {
+                        ok: false,
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                        error: `agent.run '${stepLabel}' (${agentLabel}) changed files outside task ${wbs}'s declared surfaces: ${rogue.join(', ')}. Implement only the target WBS; revert the out-of-scope changes (or name those paths in the task body). Set the run var implementScopeGuard: "off" to bypass.`,
+                    };
+                }
             }
 
             if (!ok) {
@@ -411,8 +439,7 @@ export class AgentRunActionRunner implements ActionRunner {
                     : undefined,
             };
         } finally {
-            // Nothing to clean up per-step: agent output is owned by the consolidated
-            // run-log sink via the observability bus (feature D2 / task 0426).
+            if (diffBaseline !== undefined) await deleteSnapshotIndex(diffBaseline);
         }
     }
 }
@@ -684,8 +711,8 @@ async function gitDiffStat(cwd: string): Promise<string> {
 }
 
 /**
- * Empty-implement gate probe (R3, task 0424): does the working tree have any
- * non-corpus changes? `git status --porcelain` — covers untracked new files
+ * Empty-implement gate probe (R3, task 0424): which non-corpus files did the
+ * working tree change? `git status --porcelain` — covers untracked new files
  * (which `git diff` misses) plus staged and unstaged modifications — with the
  * corpus pathspecs excluded. Non-git or unreadable trees read as "no changes"
  * so the gate rejects (conservative: a false rejection is a diagnostic, a false
@@ -695,24 +722,215 @@ async function gitDiffStat(cwd: string): Promise<string> {
  * all configured task folders (docs/tasks, docs/tasks2, ...) plus docs/features
  * are excluded. When called from tests without excludeGlobs, defaults cover
  * the active folder + docs/features for backward compatibility.
+ *
+ * R1 (0487): returns the paths rather than a boolean — the scope guard needs to
+ * name the rogue file, and "is the diff empty" is just `length === 0`.
  */
-async function gitHasNonCorpusChanges(
+interface ChangedPath {
+    path: string;
+    untracked: boolean;
+}
+
+interface GitWorkingTreeSnapshot {
+    indexFile: string;
+    tree: string;
+}
+
+async function createGitWorkingTreeSnapshot(
     cwd: string,
     excludeGlobs: string[] = ['docs/tasks3/*', 'docs/features/*'],
-): Promise<boolean> {
+): Promise<GitWorkingTreeSnapshot | undefined> {
+    const indexFile = join(tmpdir(), `spur-implement-scope-${crypto.randomUUID()}.index`);
+    const fs = createNodeFileSystem(cwd);
+    let keepIndex = false;
     try {
-        const excludes = excludeGlobs.map((g) => `:(exclude)${g}`);
+        await fs.ensureDir(dirname(indexFile));
+        const env = Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        );
+        env.GIT_INDEX_FILE = indexFile;
+        const executor = new NodeProcessExecutor();
+        const common = { cwd, env, forceBuffered: true, rejectOnError: false } as const;
+        const read = await executor.run({ command: 'git', args: ['read-tree', 'HEAD'], ...common });
+        if (read.exitCode !== 0) return undefined;
+        const excludes = excludeGlobs.map((glob) => `:(exclude)${glob}`);
+        const add = await executor.run({ command: 'git', args: ['add', '-A', '--', '.', ...excludes], ...common });
+        if (add.exitCode !== 0) return undefined;
+        const tree = await executor.run({ command: 'git', args: ['write-tree'], ...common });
+        if (tree.exitCode !== 0 || tree.stdout.trim() === '') return undefined;
+        keepIndex = true;
+        return { indexFile, tree: tree.stdout.trim() };
+    } catch {
+        return undefined;
+    } finally {
+        if (!keepIndex && (await fs.exists(indexFile))) await fs.deleteFile(indexFile);
+    }
+}
+
+async function deleteSnapshotIndex(snapshot: GitWorkingTreeSnapshot): Promise<void> {
+    try {
+        await createNodeFileSystem().deleteFile(snapshot.indexFile);
+    } catch {
+        // Best-effort scratch cleanup; a stale ignored index cannot affect the real Git index.
+    }
+}
+
+async function gitChangesSinceSnapshot(
+    cwd: string,
+    before: GitWorkingTreeSnapshot,
+    excludeGlobs: string[] = ['docs/tasks3/*', 'docs/features/*'],
+): Promise<ChangedPath[]> {
+    const after = await createGitWorkingTreeSnapshot(cwd, excludeGlobs);
+    if (after === undefined) return gitNonCorpusChangedFiles(cwd, excludeGlobs);
+    try {
         const result = await new NodeProcessExecutor().run({
             command: 'git',
-            args: ['status', '--porcelain', '--', '.', ...excludes],
+            args: ['diff', '--name-status', '-z', before.tree, after.tree],
             cwd,
             maxOutput: 1024 * 1024,
             forceBuffered: true,
             rejectOnError: false,
         });
-        return result.exitCode === 0 && result.stdout.trim() !== '';
+        return result.exitCode === 0
+            ? parseNameStatusPaths(result.stdout)
+            : gitNonCorpusChangedFiles(cwd, excludeGlobs);
+    } finally {
+        await deleteSnapshotIndex(after);
+    }
+}
+
+function parseNameStatusPaths(stdout: string): ChangedPath[] {
+    const fields = stdout.split('\0').filter(Boolean);
+    const changes: ChangedPath[] = [];
+    for (let i = 0; i < fields.length; ) {
+        const status = fields[i++] ?? '';
+        if (/^[RC]/.test(status)) i++;
+        const path = fields[i++] ?? '';
+        if (path) changes.push({ path, untracked: status === 'A' });
+    }
+    return changes;
+}
+
+async function gitNonCorpusChangedFiles(
+    cwd: string,
+    excludeGlobs: string[] = ['docs/tasks3/*', 'docs/features/*'],
+): Promise<ChangedPath[]> {
+    try {
+        const excludes = excludeGlobs.map((g) => `:(exclude)${g}`);
+        const result = await new NodeProcessExecutor().run({
+            command: 'git',
+            // `-uall`: without it git collapses an untracked directory to a single
+            // `packages/` entry, so the scope guard could only name the directory
+            // (R1, 0487). The empty/non-empty answer is unaffected.
+            args: ['status', '--porcelain', '-uall', '--', '.', ...excludes],
+            cwd,
+            maxOutput: 1024 * 1024,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (result.exitCode !== 0) return [];
+        return parsePorcelainPaths(result.stdout);
     } catch {
-        return false;
+        return [];
+    }
+}
+
+/**
+ * Repo-relative paths out of `git status --porcelain` v1 lines (`XY <path>`, or
+ * `R  <old> -> <new>` for renames — the new path is the one that exists now).
+ * Quoted paths (non-ASCII / spaces under core.quotePath) are unquoted shallowly:
+ * the guard only needs a comparable prefix, not a byte-exact filename.
+ */
+function parsePorcelainPaths(stdout: string): ChangedPath[] {
+    const paths: ChangedPath[] = [];
+    for (const line of stdout.split('\n')) {
+        if (line.length < 4) continue;
+        let path = line.slice(3);
+        const arrow = path.indexOf(' -> ');
+        if (arrow !== -1) path = path.slice(arrow + 4);
+        path = path.trim().replace(/^"|"$/g, '');
+        if (path) paths.push({ path, untracked: line.startsWith('??') });
+    }
+    return paths;
+}
+
+/** One exact file or explicit directory/glob prefix declared by the target task. */
+export interface TaskScopeRule {
+    path: string;
+    prefix: boolean;
+}
+
+/**
+ * The scope allowlist a task body declares: exact backticked files plus explicit
+ * directory/glob prefixes. Line anchors (`file.ts:12`, `file.ts:10-20`) and glob
+ * tails (`plugins/sp/**`) are stripped. New files beside an exact declared file
+ * are allowed; an existing sibling file is not. Prose in backticks (commands,
+ * flags, bare identifiers) is skipped; tokens that look like paths are kept:
+ *   - contain `/` (package/module path), or
+ *   - look like a root-level file (`AGENTS.md`, `README.md`) — a single segment
+ *     with a short extension. Without this, a task that legitimately edits
+ *     `AGENTS.md` (R5/R6) fails its own scope guard once the body also names
+ *     package paths (non-empty allowlist + exact-match root files rejected).
+ *
+ * Exported for tests — the allowlist derivation is the guard's whole risk
+ * surface (too narrow → it fails honest work; too wide → it lets conflation in).
+ */
+export function extractTaskScopeAllowlist(taskMarkdown: string): TaskScopeRule[] {
+    const rules = new Map<string, TaskScopeRule>();
+    for (const match of taskMarkdown.matchAll(/`([^`\n]+)`/g)) {
+        let token = (match[1] ?? '').trim();
+        const prefix = /\/\*+$/.test(token);
+        token = token
+            .replace(/:\d+(-\d+)?$/, '')
+            .replace(/\/\*+$/, '')
+            .replace(/\/$/, '')
+            .replace(/^\.\//, '');
+        if (/\s/.test(token) || token.startsWith('-') || token.startsWith('/') || token.startsWith('../')) {
+            continue;
+        }
+        // Path-like: has a slash, or is a single segment with a file extension.
+        const isPath = token.includes('/') || /^[\w.-]+\.\w{1,10}$/.test(token);
+        if (!isPath) continue;
+        const isFile = /\.[\w-]{1,10}$/.test(token);
+        const rule = { path: token, prefix: prefix || !isFile };
+        rules.set(`${rule.prefix ? 'prefix' : 'file'}:${rule.path}`, rule);
+    }
+    return [...rules.values()];
+}
+
+/** Exact declared paths, declared directory/glob prefixes, and new sibling files are in scope. */
+function isInScope(change: ChangedPath, allowlist: readonly TaskScopeRule[]): boolean {
+    return allowlist.some((rule) => {
+        if (rule.prefix) return change.path === rule.path || change.path.startsWith(`${rule.path}/`);
+        if (change.path === rule.path) return true;
+        return change.untracked && dirname(change.path) === dirname(rule.path);
+    });
+}
+
+/**
+ * Changed files outside the target task's declared surfaces (R1, task 0487).
+ *
+ * Fails **open** when the task file is unreadable or names no paths at all: an
+ * empty allowlist would reject every change, converting a missing task body into
+ * a blanket pipeline halt. The guard exists to catch a diff that reaches into
+ * another task's surface, not to police tasks that describe their scope in prose.
+ */
+async function findOutOfScopeChanges(cwd: string, wbs: string, changed: readonly ChangedPath[]): Promise<string[]> {
+    if (!wbs) return [];
+    try {
+        const fs = createNodeFileSystem(cwd);
+        const locator = TaskLocator.forDirs(fs, [
+            join(cwd, 'docs', 'tasks3'),
+            join(cwd, 'docs', 'tasks2'),
+            join(cwd, 'docs', 'tasks'),
+        ]);
+        const hit = await locator.findByWbs(wbs);
+        if (!hit) return [];
+        const allowlist = extractTaskScopeAllowlist(await fs.readFile(hit.filePath));
+        if (allowlist.length === 0) return [];
+        return changed.filter((change) => !isInScope(change, allowlist)).map((change) => change.path);
+    } catch {
+        return [];
     }
 }
 
