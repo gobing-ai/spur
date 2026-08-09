@@ -13,10 +13,10 @@ table is the index; the per-operation sections below are the detail.
 
 ## Two backing patterns
 
-| Pattern | Meaning | Commands |
-|---------|---------|----------|
+| Pattern   | Meaning                                                                                                                                             | Commands                                                                                                                    |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, verifyall, run, refine, refineall, plan, brainstorm, runall, parallel, wrap, wrapall, idea |
-| `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
+| `inline`  | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps.                                 | changelog, gitmsg, fixall, handover                                                                                         |
 
 The `Skill()` commands back onto six skills: `sp:spur-dev` (planning + execution workflow + batch),
 `sp:code-implementation` (single implement step), `sp:code-testing` (unit/coverage work),
@@ -30,7 +30,7 @@ each would be scope creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a thin `Skill()` wrapper over the **`sp:dogfood-testing`**
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
-> it does not map to a numbered dev-* operation. See its command file and the backing skill for details.
+> it does not map to a numbered dev-\* operation. See its command file and the backing skill for details.
 
 > **`dev-findissue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
 > (session-log forensics → optional CLI-gated fix task). Hygiene / post-batch analysis — not a spine
@@ -38,8 +38,16 @@ each would be scope creep for one-liner procedures.
 > `plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
 > `/sp:dev-findissue [<topic>]` before re-running the batch.
 
+> **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
+> **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,
+> owner-routed remediation). Standalone audit — not a spine pipeline stage. Audit mode is read-only;
+> `--resolve` opens a proposal/confirmation workflow that routes each approved repair through its
+> owner surface (`spur task`/`spur feature`, `sp:doc-evolve`, the Spur dev lifecycle, or the
+> Superskill capability lifecycle). See `plugins/sp/commands/dev-find-conflict.md` and
+> `plugins/sp/skills/conflict-finding/SKILL.md`.
+
 > **`dev-next`** is likewise not a numbered spine operation. It is a thin `Skill()` wrapper over the
-> **`sp:next-router`** skill — a status→command *meta-router* that dispatches into the operations
+> **`sp:next-router`** skill — a status→command _meta-router_ that dispatches into the operations
 > above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.
 > See `plugins/sp/skills/next-router/references/routing-table.md` for the routing SSOT.
 >
@@ -51,27 +59,27 @@ each would be scope creep for one-liner procedures.
 
 ## Operation map
 
-| # | Operation | Command | Backing | Skill / Verb | Arg-hint |
-| --- | ----------- | --------- | --------- | -------------- | ---------- |
-| 1 | unit | `dev-unit` | `Skill()` | `sp:code-testing` | `<target> [--coverage <pct>] [--agent <inline\|auto\|name>] [--auto]` |
-| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `[<wbs\|path>] [--agent <inline\|auto\|name>] [--focus <dims>] [--fix (deprecated)]` |
-| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]` |
-| 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]` |
-| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <inline\|auto\|name>] [--auto] [--next] [--wrap] [--continue]` |
-| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--next]` |
-| 5a | refineall | `dev-refineall` | `Skill()` | `sp:spur-dev` (`refineall`) | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree]` |
-| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <inline\|auto\|name>] [--skip-design] [--auto] [--approve-taste]` |
-| 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
-| 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
-| 9 | gitmsg | `dev-gitmsg` | `inline` | per-file diff summary → group → conventional commit | `[--commit] [--squash] [--scope <path>]` |
-| 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]` |
-| 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
-| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner` | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel>] [--keep-going] [--auto] [--agent <inline\|auto\|name>] [--json] [--wrap] [--next] [--continue] [--worktree]` |
-| 13a | parallel | `dev-parallel` | `Skill()` | `sp:parallel-execution` | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <inline\|auto\|name>] [--json]` |
-| 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge] [--dry-run]` |
-| 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]` |
-| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--skip-design] [--approve-taste]` |
+| #   | Operation  | Command             | Backing           | Skill / Verb                                                                       | Arg-hint                                                                                                                                                                                               |
+| --- | ---------- | ------------------- | ----------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | unit       | `dev-unit`          | `Skill()`         | `sp:code-testing`                                                                  | `<target> [--coverage <pct>] [--agent <inline\|auto\|name>] [--auto]`                                                                                                                                  |
+| 2   | review     | `dev-review`        | `Skill()`         | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `[<wbs\|path>] [--agent <inline\|auto\|name>] [--focus <dims>] [--fix (deprecated)]`                                                                                                                   |
+| 3   | verify     | `dev-verify`        | `Skill()`         | `sp:code-verification` (`verify`)                                                  | `<wbs> [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]`                                                     |
+| 3a  | verifyall  | `dev-verifyall`     | `Skill()` → agent | `sp:spur-dev` (`verifyall`)                                                        | `--tasks <selector> [--feature <id>] [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]` |
+| 4   | run        | `dev-run`           | `Skill()`         | `sp:spur-dev` (`run` / `implement`)                                                | `<wbs> [--mode <full\|implement>] [--agent <inline\|auto\|name>] [--auto] [--next] [--wrap] [--continue]`                                                                                              |
+| 5   | refine     | `dev-refine`        | `Skill()`         | `sp:spur-dev` (`refine`)                                                           | `<wbs> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--next]`                                                                           |
+| 5a  | refineall  | `dev-refineall`     | `Skill()`         | `sp:spur-dev` (`refineall`)                                                        | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree]` |
+| 6   | plan       | `dev-plan`          | `Skill()`         | `sp:spur-dev` (`plan`)                                                             | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <inline\|auto\|name>] [--skip-design] [--auto] [--approve-taste]`                                                                   |
+| 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
+| 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                                    |
+| 9   | gitmsg     | `dev-gitmsg`        | `inline`          | per-file diff summary → group → conventional commit                                | `[--commit] [--squash] [--scope <path>]`                                                                                                                                                               |
+| 10  | fixall     | `dev-fixall`        | `inline`          | lint + test fix loop                                                               | `[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]`                                                                                                 |
+| 11  | handover   | `dev-handover`      | `inline`          | structured doc generation                                                          | `"<blocker description>"`                                                                                                                                                                              |
+| 12  | brainstorm | `dev-brainstorm`    | `Skill()`         | `sp:brainstorm` (`dev-brainstorm`)                                                 | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]`          |
+| 13  | runall     | `dev-runall`        | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner`                                      | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel>] [--keep-going] [--auto] [--agent <inline\|auto\|name>] [--json] [--wrap] [--next] [--continue] [--worktree]`                      |
+| 13a | parallel   | `dev-parallel`      | `Skill()`         | `sp:parallel-execution`                                                            | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <inline\|auto\|name>] [--json]`                                                                          |
+| 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--auto] [--merge] [--dry-run]`                                                                                                                                                                 |
+| 15  | wrapall    | `dev-wrapall`       | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]`                                                                                                                       |
+| 16  | idea       | `dev-idea`          | `Skill()`         | `spur workflow run` (idea-pipeline)                                                | `"<idea>" [--auto] [--skip-design] [--approve-taste]`                                                                                                                                                  |
 
 ## Skill-backed operations
 
@@ -120,7 +128,7 @@ must not be changed without updating the backing skill.
 - **Purpose:** Batch verification of a set of tasks (or all tasks under a feature) against their requirements and AC. Produces per-task verdicts + a summary report with aggregate statistics (counts, table, overall batch verdict). With `--fix all`, also evaluates **feature shippable readiness** once for the set.
 - **Inputs:** `--tasks <selector>` (required unless `--feature`). `--feature <id>` (convenience for `--tasks feature:<id>`). Shared verify flags from `dev-verify` (`--agent <inline|auto|name>`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, **`--skip-shippable`**). `--next` (per-task lifecycle chaining: on a PASS verdict transition `testing → done` through the FSM with `--strict-core` honored; PARTIAL/FAIL does not transition; transitions run **before** the shippable gate so `spur feature check` sees final statuses). `--json` for machine-readable summary report.
 - **Backing:** `sp:spur-dev` skill, `verifyall` operation (resolves the set using the shared selector grammar, dispatches per-task verify via `sp:code-verification` verify mode, writes per-task artifacts, aggregates and emits the batch summary report, then optional shippable gate).
-- **Behavior:** Resolve + freeze the set (supports `--feature` sugar). For each task: apply status guard, requirements traceability + AC + SECUA review, write `## Testing` + verdict.json (per-task fix pass under `--fix`). After the batch: **shippable gate once** when active (see below). Emit a structured summary report (markdown or `--json`). Per-task behavior matches single `dev-verify` (except shippable is batch-once). **Batch verdict rollup is deterministic** — computed by `spur task verifyall-aggregate --from-file <batch-input.json> --json` (a tested service module, not agent discretion). **Per-task outcome grammar:** `PASS` / `PARTIAL` / `FAIL` for implemented tasks; `NOT-STARTED` for tasks that have not entered implementation (status `backlog`/`todo`/`blocked` — reachable only via `--force`). **Rollup rule:** all-NOT-STARTED → `UNKNOWN`; any `FAIL` → `FAIL`; any `PARTIAL` or `UNKNOWN` → `PARTIAL`; all `PASS` → `PASS`. NOT-STARTED rows are *excluded* from the FAIL/PARTIAL rollup (they cannot manufacture a batch failure) but are *reported explicitly* in the summary ("N NOT-STARTED, excluded from rollup"). This closes the 0341 dogfood gap where a healthy feature with 5 PASS + 2 unstarted tasks read as FAIL. **Shippable FAIL:** treat the batch as not clean — force rollup to at least **PARTIAL** and set `"shippable": false` under `--json` even if every task outcome is PASS.
+- **Behavior:** Resolve + freeze the set (supports `--feature` sugar). For each task: apply status guard, requirements traceability + AC + SECUA review, write `## Testing` + verdict.json (per-task fix pass under `--fix`). After the batch: **shippable gate once** when active (see below). Emit a structured summary report (markdown or `--json`). Per-task behavior matches single `dev-verify` (except shippable is batch-once). **Batch verdict rollup is deterministic** — computed by `spur task verifyall-aggregate --from-file <batch-input.json> --json` (a tested service module, not agent discretion). **Per-task outcome grammar:** `PASS` / `PARTIAL` / `FAIL` for implemented tasks; `NOT-STARTED` for tasks that have not entered implementation (status `backlog`/`todo`/`blocked` — reachable only via `--force`). **Rollup rule:** all-NOT-STARTED → `UNKNOWN`; any `FAIL` → `FAIL`; any `PARTIAL` or `UNKNOWN` → `PARTIAL`; all `PASS` → `PASS`. NOT-STARTED rows are _excluded_ from the FAIL/PARTIAL rollup (they cannot manufacture a batch failure) but are _reported explicitly_ in the summary ("N NOT-STARTED, excluded from rollup"). This closes the 0341 dogfood gap where a healthy feature with 5 PASS + 2 unstarted tasks read as FAIL. **Shippable FAIL:** treat the batch as not clean — force rollup to at least **PARTIAL** and set `"shippable": false` under `--json` even if every task outcome is PASS.
 - **Shippable readiness (default on with `--fix all`):** Active when `--fix all` and feature context exists (`--feature` or unique shared `feature_id`) and not `--skip-shippable`. Procedure: `sp:code-verification` Step 13 once after all per-task legs. Without `--fix all`, do not run the hard gate (optional note: use `--fix all` for ship evaluation).
 - **Cache discipline (batch):** freeze the `spur task list --feature <id> --json` (or selector) capture once at resolve; reuse that snapshot for every per-task verify leg. Do not re-list the set mid-batch. Re-read a task body only when that task's sections changed (e.g. after a `--fix` write). Prefer re-reading only cited `file:line` anchors over re-tokenizing full Solution sections when prior Testing is already present.
 - **Dogfood / mutation composition:** prefer step-split when dogfooding verifyall with `--fix all` and/or `--next` — first observe-only verifyall, then a separate fix pass, then `--next` only if status transitions are still needed. See `sp:dogfood-testing` §step-splitting.
@@ -146,7 +154,7 @@ must not be changed without updating the backing skill.
   `{Background, Requirements, Acceptance Criteria, Design, Plan}`.
   These are the anti-drift surfaces: constraints + planning that cheaper implementers must follow.
   **Solution is not a refine target** (as-built change-map owned by implement). If there are no L3
-  findings for any of those sections (regardless of whether the *overall* exit code is 0 — other
+  findings for any of those sections (regardless of whether the _overall_ exit code is 0 — other
   sections may have findings), emit a structured SKIP result instead of synthesizing:
 
   ```
@@ -160,12 +168,25 @@ must not be changed without updating the backing skill.
   (observe-only) driver need not re-run `spur task check` to reconstruct it:
 
   ```json
-  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"], "reason": "no L3 findings for target sections", "depth": "standard", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
+  {
+    "result": "SKIP",
+    "sections-considered": [
+      "Background",
+      "Requirements",
+      "Acceptance Criteria",
+      "Design",
+      "Plan"
+    ],
+    "reason": "no L3 findings for target sections",
+    "depth": "standard",
+    "l4Advisories": [{ "message": "Missing feature_id — ..." }]
+  }
   ```
 
   Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto` + `standard`; it is not a failure.
   **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Acceptance Criteria, Design, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`, `### Solution`) do not block the SKIP — refine does not own those sections.
   **Variant note:** for templates that omit Design or AC (e.g. `review`, `meta`, `issue`), only apply the target sections that the section-matrix allows at the current status (`spur task check` `requiredSections` / optional list).
+
 - **`--depth ready` (implement-ready — never L3-SKIP alone):** When `--depth ready` is set, **do not**
   apply the L3-only SKIP gate above, even under `--auto`. Instead evaluate the **implement-ready
   checklist** against target sections (read codebases, ADRs, dependent WBS, dogfood evidence as
@@ -200,6 +221,7 @@ must not be changed without updating the backing skill.
 
   Ready depth is for multi-package work, multi-agent implement handoffs, and costly pipeline
   failures — not for every small task. Default remains `standard`.
+
 - **SKIP short-circuits synthesis, not `--next`.** A SKIP means no synthesis was needed — it does **not** cancel the `--next` chain. Under `--auto --next`, a SKIP still flows into the (idempotent) status transition and the chained `/sp:dev-run --mode implement`. "`refine --auto --next` on a well-specified task" is therefore effectively "run the implement→verify chain"; an operator who wanted refinement only should drop `--next`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
@@ -260,6 +282,7 @@ must not be changed without updating the backing skill.
   - **Plan** ← the brainstorm's Next Steps, converted to an ordered checklist
 
   Report the new task WBS and file path; the task lands at `todo`, ready for `/sp:dev-refine`.
+
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
 
 ### 13. runall
@@ -310,20 +333,21 @@ must not be changed without updating the backing skill.
   - `--auto` — skip **objective** HITL (feature-check, batch-create); taste gates still pause.
   - `--skip-design` — design package off (system-design + task Design).
   - `--approve-taste` — with `--auto`, skip **all** remaining taste pauses this run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`.
-  Aliases (prefer `--approve-taste`): `--idea-approved` → `idea_approved`; `--design-approved` → `design_approved`. There is **no** `--design` force flag.
+    Aliases (prefer `--approve-taste`): `--idea-approved` → `idea_approved`; `--design-approved` → `design_approved`. There is **no** `--design` force flag.
 - **Backing:** `spur workflow run .spur/workflows/idea-pipeline.yaml` — direct workflow invocation.
 - **Behavior:** Builds vars from the table above and invokes the idea pipeline. Flow: discovery → **idea-eval** (taste; reject → cancelled) → feature-create → ac-generate → feature-check → system-design (conditional) → design-approval (taste) → decompose → batch-create → handoff. STOPS at handoff — no task execution, no pipeline nesting.
 - **Delegation:** Direct `spur workflow run .spur/workflows/idea-pipeline.yaml` (command maps flags → vars, then `Bash`).
 - **Idea-evaluation gate:** After discovery, operator reviews `.spur/run/idea-eval-report.md` ([idea-evaluation.md](idea-evaluation.md)). Approve continues; reject/cancel → no feature. Under `--auto`, still pauses unless taste pre-cleared (`--approve-taste` / alias). Enhanced idea is a sidecar — `vars.idea` is not overwritten.
 - **Design package (`--skip-design` only):**
 
-  | Flags | Feature satellite (`system-design`) | Task `### Design` in batch |
-  | --- | --- | --- |
-  | (default) | seam / `needs_design` signal | **author `design` on each batch item** |
-  | `--skip-design` | skip (keep brainstorm summary) | **omit `design`** — refine fallback later |
+  | Flags           | Feature satellite (`system-design`) | Task `### Design` in batch                |
+  | --------------- | ----------------------------------- | ----------------------------------------- |
+  | (default)       | seam / `needs_design` signal        | **author `design` on each batch item**    |
+  | `--skip-design` | skip (keep brainstorm summary)      | **omit `design`** — refine fallback later |
 
   Ties lean design — when the signal is ambiguous, `system-design` runs. Task Design defaults on
   unless `--skip-design`. Plan path uses the same package contract (no `--design` force flag).
+
 - **Taste pre-clear (`--approve-taste`):** owned with design-approval var semantics in [cross-cutting.md](cross-cutting.md) § "Design Approval Gate"; idea-eval uses the parallel `idea_approved` var. One CLI flag sets both.
 
 ---
@@ -370,9 +394,11 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
        ```
 
        Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body: only when the change is non-obvious.
+
   5. **Resolve groups:** one group → emit its message; multiple groups (default) → emit one message per group **plus a split recommendation** (stage per concern, re-run); `--squash` → collapse to one combined message (dominant type/scope, per-file bullets).
   6. Print the resolved message + a copy-paste `git commit -m` line. With `--commit`: execute it for a single group or under `--squash`; on a multi-group staging without `--squash`, **do not commit** — print the split guidance instead (one `git commit` can't honor per-group messages).
   7. `rm "$TEMP_FILE"` once done — no `/tmp` diff residue (the F5 cleanup discipline).
+
 - **Invariants:** Without `--commit`, never runs `git commit` — message only, the operator commits. With `--commit`, only commits when the staging is a single concern OR `--squash` was given — a mixed staging without `--squash` is reported, never silently squashed. Never leave the temp diff file behind.
 
 ### 10. fixall
@@ -380,8 +406,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 - **Purpose:** Fix all lint, type, and test errors systematically across the working tree.
 - **Inputs:** `--scope <path>` (default: entire working tree) — limits fixes to a file or directory. `--gate-log <path>` (R3, task 0482) — before fixing, read this captured validation-run log and start at the `file:line` anchors its findings name, rather than re-deriving the failure from a fresh gate run. `--findings <anchors>` (R3, task 0482) — space-separated `file:line` anchors already extracted from that log by the `test` hop; when present these ARE the failing set, so fix them in order and do not run the gate to discover what broke.
 - **Backing:** `inline` — lint + test fix loop.
-- **Behavior:**
-  0. **Start at the anchors, never at a discovery run.** If `--findings <anchors>` is given, that space-separated `file:line` list IS the failing set — open those locations first, in order, and fix them; do not run the gate to find out what broke. If only `--gate-log <path>` is given, read that log first and identify the failing findings (lint/test errors with their `file:line` anchors) before running the loop — the captured log is the authoritative source. Either way the first action of this hop is a read, not a gate run (R3, task 0482).
+- **Behavior:** 0. **Start at the anchors, never at a discovery run.** If `--findings <anchors>` is given, that space-separated `file:line` list IS the failing set — open those locations first, in order, and fix them; do not run the gate to find out what broke. If only `--gate-log <path>` is given, read that log first and identify the failing findings (lint/test errors with their `file:line` anchors) before running the loop — the captured log is the authoritative source. Either way the first action of this hop is a read, not a gate run (R3, task 0482).
   1. Run `bun run format` (add `-- <path>` if `--scope` is given) to settle formatter-only diffs first — `bun run lint` asserts `--error-on-warnings` + typecheck but does **not** rewrite formatting, so a formatter-only change (e.g. a multi-line import reflow) can pass `lint` locally yet still be unformatted. Formatting before linting removes that class of false-green.
   2. Run `bun run lint` (add `-- <path>` if `--scope` is given). Collect all errors.
   3. If lint is clean, skip to step 5.
@@ -405,6 +430,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   - "The errors look fixed" — check exit code, not appearance
   - "Most tests pass" — partial success = FAILURE
   - "Good enough for now" — 0 is the ONLY acceptable exit code
+
 - **7-Phase Workflow:**
 
   ```text
@@ -428,25 +454,27 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   ```
 
   The 7 phases map onto the format→lint→test behavior loop above: Phases 1–2 capture the gate, Phase 3 settles auto-fixable formatting, Phases 4–6 are the per-group root-cause fix loops, Phase 7 is the final verification re-run.
+
 - **Fix Priority:**
 
-  | Priority | Type | Rationale |
-  | ---------- | ------ | ----------- |
-  | 1 | Build/compile | Blocks everything downstream |
-  | 2 | Import/module | May cause cascading type failures |
-  | 3 | Type errors | Often reveals logic bugs |
-  | 4 | Test failures | Confirms behavior correctness |
-  | 5 | Lint warnings | Code quality (lowest priority) |
+  | Priority | Type          | Rationale                         |
+  | -------- | ------------- | --------------------------------- |
+  | 1        | Build/compile | Blocks everything downstream      |
+  | 2        | Import/module | May cause cascading type failures |
+  | 3        | Type errors   | Often reveals logic bugs          |
+  | 4        | Test failures | Confirms behavior correctness     |
+  | 5        | Lint warnings | Code quality (lowest priority)    |
 
   **Critical Rule**: If THREE fixes fail consecutively, STOP. This signals architectural problems.
+
 - **Error Patterns — TypeScript:**
 
-  | Issue | Root Cause Approach |
-  | ------- | --------------------- |
-  | `any` type | Trace where untyped data enters; add types at source |
-  | Unused variable | Check if removal breaks anything |
-  | Missing return type | Read function to understand actual return |
-  | Type mismatch | Compare expected vs. actual; find divergence |
+  | Issue               | Root Cause Approach                                  |
+  | ------------------- | ---------------------------------------------------- |
+  | `any` type          | Trace where untyped data enters; add types at source |
+  | Unused variable     | Check if removal breaks anything                     |
+  | Missing return type | Read function to understand actual return            |
+  | Type mismatch       | Compare expected vs. actual; find divergence         |
 
 - **Bun/V8 Coverage Quirk.** Bun uses V8's function coverage which does NOT count implicit class constructors:
 
@@ -474,21 +502,27 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      # Handover — <task WBS / title>
 
      ## Goal
+
      <one-sentence goal>
 
      ## Progress
+
      - <what was done — reference existing artifacts by path, don't restate their content>
 
      ## Blocker
+
      <blocker description>
 
      ## Rejected Approaches
+
      - <approach> — <why it failed>
 
      ## Suggested Skills
+
      - <sp:skill-name> — <why the next agent should invoke it here>
 
      ## Next Steps
+
      1. <concrete action>
      ```
 
@@ -496,6 +530,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - Always write the standalone handover document to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent). This document is the durable SSOT.
      - If a task context exists, append a pointer link (`- Handover: [docs/handover/<YYYY-MM-DD>-<slug>.md](docs/handover/<YYYY-MM-DD>-<slug>.md) — <blocker summary>`) into the task's `## References` section (or non-destructively append to `## Notes` if `References` is unavailable), preserving any pre-existing content without replacing or clobbering it.
   5. Print the path to the handover document.
+
 - **Suggested Skills section:** Name the `sp:*` skill(s) the next agent should invoke to continue —
   inferred from the task's remaining Requirements/AC and the blocker itself (e.g. a design
   disagreement suggests `sp:sys-architecture`; an unmet AC suggests `sp:code-verification`). Omit

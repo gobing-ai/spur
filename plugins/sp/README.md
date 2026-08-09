@@ -70,17 +70,17 @@ single-task wrap-up closes out a whole set of completed tasks in one pass.
 
 Two different problems, two different tools:
 
-- **The harness compacts your context mid-task.** That's normal. Keep the *planning* half in one
+- **The harness compacts your context mid-task.** That's normal. Keep the _planning_ half in one
   unbroken context window, because HITL gates and decomposition state don't survive a context reset;
-  *execution* is designed to survive it — pick a fresh session, reload task state via the CLI, and
+  _execution_ is designed to survive it — pick a fresh session, reload task state via the CLI, and
   resume. Prefer a fresh context per task execution over carrying a long history forward.
 - **You're blocked and need to hand off** — to another session, another agent, or a human. That's
   what the **handover generator** is for: it captures goal, progress, the blocker, rejected
   approaches, and next steps as a structured document, so whoever picks this up next doesn't have to
   re-derive what's already been ruled out.
 
-Rule of thumb: a fresh session is for *continuing the same work*; a handover document is for
-*someone else picking it up cold*.
+Rule of thumb: a fresh session is for _continuing the same work_; a handover document is for
+_someone else picking it up cold_.
 
 ### Command index
 
@@ -89,72 +89,73 @@ list this README is checked against.
 
 #### Lifecycle — planning
 
-| Command | What it does |
-| --- | --- |
-| `dev-idea` | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff |
-| `dev-plan` | Plan a feature from a written description — intake → feature create → AC generation → feature check gate → decomposition → batch-create |
-| `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring |
-| `dev-refine` | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; `--depth ready` for implement-ready freeze |
+| Command          | What it does                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev-idea`       | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff |
+| `dev-plan`       | Plan a feature from a written description — intake → feature create → AC generation → feature check gate → decomposition → batch-create                                         |
+| `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring                                              |
+| `dev-refine`     | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; `--depth ready` for implement-ready freeze                    |
 
 #### Lifecycle — execution
 
-| Command | What it does |
-| --- | --- |
-| `dev-next` | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
-| `dev-run` | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement) |
-| `dev-review` | Multi-dimensional review for a task or path — functional requirements traceability, SECUA framework, and architectural depth |
-| `dev-verify` | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence |
-| `dev-unit` | Generate or extend tests until the unit target is met |
-| `dev-wrap` | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup |
-| `dev-refresh` | Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync |
-| `dev-featurechange` | Restructure feature tree from a mapping file — dry-run/apply via `spur feature move`, task edges, root `docs/*.md` only |
+| Command             | What it does                                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev-next`          | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
+| `dev-run`           | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)                               |
+| `dev-review`        | Multi-dimensional review for a task or path — functional requirements traceability, SECUA framework, and architectural depth                    |
+| `dev-verify`        | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence         |
+| `dev-unit`          | Generate or extend tests until the unit target is met                                                                                           |
+| `dev-wrap`          | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup                                  |
+| `dev-refresh`       | Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync                                                            |
+| `dev-featurechange` | Restructure feature tree from a mapping file — dry-run/apply via `spur feature move`, task edges, root `docs/*.md` only                         |
 
 #### Lifecycle — batch and parallel
 
-| Command | What it does |
-| --- | --- |
-| `dev-runall` | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report |
-| `dev-parallel` | Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results |
+| Command         | What it does                                                                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev-runall`    | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report              |
+| `dev-parallel`  | Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results                                                |
 | `dev-refineall` | Batch-refine tasks (feature or selector) — planning-half bulk fill of Background/Requirements/AC/Design/Plan before runall; `--depth ready` for implement-ready freeze |
-| `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report |
-| `dev-wrapall` | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup |
+| `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report                    |
+| `dev-wrapall`   | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup                                                         |
 
 #### Lifecycle — operations and hygiene
 
-| Command | What it does |
-| --- | --- |
-| `dev-handover` | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps |
-| `dev-debug` | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests |
-| `dev-daily` | Generate a daily summary report from agent usage data, git history, and notes |
-| `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
-| `dev-findissue` | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes |
-| `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
-| `dev-simplify` | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression |
-| `dev-arch` | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors |
-| `dev-reverse` | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation |
-| `dev-gitmsg` | Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit |
-| `dev-gtd` | Get things done — quality gate (auto-fix) → act CI simulation → conventional commit → push → gh verify in one flow |
-| `dev-changelog` | Generate changelog from git commits |
+| Command             | What it does                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev-handover`      | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps                                                                      |
+| `dev-debug`         | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests                                                                      |
+| `dev-daily`         | Generate a daily summary report from agent usage data, git history, and notes                                                                                                                     |
+| `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |
+| `dev-findissue`     | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes                                                 |
+| `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
+| `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
+| `dev-simplify`      | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression                                                                         |
+| `dev-arch`          | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors                   |
+| `dev-reverse`       | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation                                              |
+| `dev-gitmsg`        | Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit                                                                                         |
+| `dev-gtd`           | Get things done — quality gate (auto-fix) → act CI simulation → conventional commit → push → gh verify in one flow                                                                                |
+| `dev-changelog`     | Generate changelog from git commits                                                                                                                                                               |
 
 #### Rule authoring
 
-| Command | What it does |
-| --- | --- |
-| `rule-scan` | Discover recurring anti-patterns worth codifying as rules |
-| `rule-add` | Author a validated, smoke-tested constraint rule |
-| `rule-refine` | Refine a constraint rule or preset, then re-verify it |
+| Command       | What it does                                              |
+| ------------- | --------------------------------------------------------- |
+| `rule-scan`   | Discover recurring anti-patterns worth codifying as rules |
+| `rule-add`    | Author a validated, smoke-tested constraint rule          |
+| `rule-refine` | Refine a constraint rule or preset, then re-verify it     |
 
 #### Workflow authoring
 
-| Command | What it does |
-| --- | --- |
-| `workflow-add` | Author a validated, dry-run-verified workflow in the right execution mode |
-| `workflow-refine` | Refine an existing workflow, then re-validate and re-dry-run it |
+| Command           | What it does                                                              |
+| ----------------- | ------------------------------------------------------------------------- |
+| `workflow-add`    | Author a validated, dry-run-verified workflow in the right execution mode |
+| `workflow-refine` | Refine an existing workflow, then re-validate and re-dry-run it           |
 
 #### Project bootstrap
 
-| Command | What it does |
-|---|---|
+| Command     | What it does                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
 | `spur-init` | Initialize a new Spur project — scaffold config + docs, then customize for this project's stack and scope |
 
 ---
@@ -170,7 +171,7 @@ and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, 
 `spur` noun) and standalone technique skills (`sp:next-router`, `sp:test-driven-development`, `sp:brainstorm`,
 `sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:code-simplification`, `sp:code-improvement`,
 `sp:parallel-execution`, `sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`,
-`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:indexed-context`). See
+`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:conflict-finding`, `sp:indexed-context`). See
 [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md)'s Step routing table for which skill owns which
 pipeline step.
 
@@ -178,7 +179,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (26 skills)
+├── skills/                          # Domain knowledge + workflow docs (27 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -232,12 +233,14 @@ plugins/sp/
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/{session-test-loop.jsonl, expected-findings.json}
 │   │   └── references/session-formats.md
+│   ├── conflict-finding/            # Authority-aware four-pillar semantic conflict audit
+│   │   └── references/{authority-resolution.md, comparison-protocol.md, finding-contract.md, remediation-routing.md}
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 34 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
+├── commands/                        # 36 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
@@ -277,34 +280,35 @@ self-contained knowledge module that teaches the agent how to operate one slice 
 surface or run one workflow. All skills target the same five platforms: `claude-code`, `codex`,
 `antigravity`, `opencode`, `openclaw`.
 
-| Skill | Ver | Domain |
-| ------- | ----- | -------- |
-| `spur-dev` | 1.1 | Thin orchestration spine — drives planning→execution, gates, HITL, and dispatches competencies; never inlines implementation/testing/decomposition/review |
-| `spur-cli` | 1.0 | CLI facade — one reference per `spur` noun (`task`, `feature`, `rule`, `workflow`), each with verb tables, flag guides, `--json` shapes, and write-contract rules |
-| `sys-architecture` | 1.0 | Architecture / ADR judgment — module boundaries, data flow, transport/storage/auth choices, build-vs-extend decisions |
-| `spec-decomposition` | 1.0 | Feature/spec → validated task-batch decomposition — scenario-to-task mapping, variant selection, granularity sizing, batch-JSON production |
-| `code-implementation` | 1.0 | Implementation competency — task-driven code changes, stack-pattern selection, root-cause debugging, and Solution change-map production |
-| `code-testing` | 1.0 | Testing competency — run tests, measure coverage, categorize gaps, extend targeted tests with per-stack adapters (Bun/TS, Go, Python) |
-| `code-verification` | 1.0 | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECUA code review (Security, Efficiency, Correctness, Usability, Architecture); backs `/sp:dev-verify` and `/sp:dev-review` |
-| `code-review` | 1.0 | Pre-commit self-review checklist (6 categories, catches 60-80% of issues) + SECUA review lenses + findings processing |
-| `code-simplification` | 1.0 | Behavior-preserving simplification — Chesterton's Fence, signal tables, incremental change + test-after-each, scope-to-changed |
-| `code-improvement` | 1.0 | Architectural deepening — surface shallow/tightly-coupled modules and propose refactors that make them deep, testable, AI-navigable; backs `/sp:dev-arch` |
-| `functional-review` | 1.0 | Requirements-traceability assessment — per-requirement verdicts with file:line evidence that the implementation satisfies ALL task requirements; pipeline Phase 8b gate |
-| `doubt-driven-development` | 1.0 | In-flight adversarial review of a non-trivial decision before committing it — hand artifact + contract to a fresh-context skeptic, reconcile, stop at 3 cycles |
-| `source-driven-development` | 1.0 | Source-first verification — verify framework/API/library facts against primary sources before generating code; separates "the API exists" from "used correctly under its contract" |
-| `dogfood-testing` | 1.2 | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; @1.2 adds footer-mandatory reports, 7-check finalize-or-abort, and the `validate-report` CLI; backs `/sp:dev-dogfood` |
-| `next-router` | 1.0 | Status→command router — resolve a task WBS or feature frontier, TABLE A/B/C lookup with light-gate short-circuit, single dispatch or HITL stop; backs `/sp:dev-next` |
-| `parallel-execution` | 1.0 | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-parallel` |
-| `sys-debugging` | 1.0 | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle |
-| `branch-workflow` | 1.0 | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches |
-| `test-driven-development` | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns |
-| `brainstorm` | 1.0.0 | Structured ideation workflow — generate solution options with trade-offs and confidence scoring |
-| `wayfinder` | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear |
-| `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
-| `doc-evolve` | 1.0 | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons |
-| `reverse-engineering` | 1.1 | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse` |
-| `issue-finding` | 1.1 | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-findissue` |
-| `indexed-context` | 1.0 | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks |
+| Skill                       | Ver   | Domain                                                                                                                                                                                                                                     |
+| --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `spur-dev`                  | 1.1   | Thin orchestration spine — drives planning→execution, gates, HITL, and dispatches competencies; never inlines implementation/testing/decomposition/review                                                                                  |
+| `spur-cli`                  | 1.0   | CLI facade — one reference per `spur` noun (`task`, `feature`, `rule`, `workflow`), each with verb tables, flag guides, `--json` shapes, and write-contract rules                                                                          |
+| `sys-architecture`          | 1.0   | Architecture / ADR judgment — module boundaries, data flow, transport/storage/auth choices, build-vs-extend decisions                                                                                                                      |
+| `spec-decomposition`        | 1.0   | Feature/spec → validated task-batch decomposition — scenario-to-task mapping, variant selection, granularity sizing, batch-JSON production                                                                                                 |
+| `code-implementation`       | 1.0   | Implementation competency — task-driven code changes, stack-pattern selection, root-cause debugging, and Solution change-map production                                                                                                    |
+| `code-testing`              | 1.0   | Testing competency — run tests, measure coverage, categorize gaps, extend targeted tests with per-stack adapters (Bun/TS, Go, Python)                                                                                                      |
+| `code-verification`         | 1.0   | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECUA code review (Security, Efficiency, Correctness, Usability, Architecture); backs `/sp:dev-verify` and `/sp:dev-review`                                                        |
+| `code-review`               | 1.0   | Pre-commit self-review checklist (6 categories, catches 60-80% of issues) + SECUA review lenses + findings processing                                                                                                                      |
+| `code-simplification`       | 1.0   | Behavior-preserving simplification — Chesterton's Fence, signal tables, incremental change + test-after-each, scope-to-changed                                                                                                             |
+| `code-improvement`          | 1.0   | Architectural deepening — surface shallow/tightly-coupled modules and propose refactors that make them deep, testable, AI-navigable; backs `/sp:dev-arch`                                                                                  |
+| `functional-review`         | 1.0   | Requirements-traceability assessment — per-requirement verdicts with file:line evidence that the implementation satisfies ALL task requirements; pipeline Phase 8b gate                                                                    |
+| `doubt-driven-development`  | 1.0   | In-flight adversarial review of a non-trivial decision before committing it — hand artifact + contract to a fresh-context skeptic, reconcile, stop at 3 cycles                                                                             |
+| `source-driven-development` | 1.0   | Source-first verification — verify framework/API/library facts against primary sources before generating code; separates "the API exists" from "used correctly under its contract"                                                         |
+| `dogfood-testing`           | 1.2   | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; @1.2 adds footer-mandatory reports, 7-check finalize-or-abort, and the `validate-report` CLI; backs `/sp:dev-dogfood` |
+| `next-router`               | 1.0   | Status→command router — resolve a task WBS or feature frontier, TABLE A/B/C lookup with light-gate short-circuit, single dispatch or HITL stop; backs `/sp:dev-next`                                                                       |
+| `parallel-execution`        | 1.0   | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-parallel`                                                                                                             |
+| `sys-debugging`             | 1.0   | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle                                                                                                              |
+| `branch-workflow`           | 1.0   | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches                                                                                                                |
+| `test-driven-development`   | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns                                                                                                |
+| `brainstorm`                | 1.0.0 | Structured ideation workflow — generate solution options with trade-offs and confidence scoring                                                                                                                                            |
+| `wayfinder`                 | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear                                                                      |
+| `daily-summary`             | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries                                                                                                                                 |
+| `doc-evolve`                | 1.0   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
+| `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
+| `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-findissue`                                                                                         |
+| `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
+| `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 
 Each skill directory contains:
 
@@ -318,7 +322,7 @@ Each skill directory contains:
   `dogfood-testing`) — split from the prompt layer (`skills/`), with their suites in `tests/<skill>/`.
 - Some skills (`brainstorm`, `daily-summary`, `reverse-engineering`, `issue-finding`) carry `agents/openai.yaml` for multi-model dispatch.
 
-**Design principle:** Skills are **knowledge, not execution**. They describe *what to do and why*;
+**Design principle:** Skills are **knowledge, not execution**. They describe _what to do and why_;
 the `spur` CLI performs every deterministic, corpus-mutating operation and validates before writing.
 Skills contain zero validation logic — the CLI is the gate.
 
@@ -326,21 +330,21 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**34 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**36 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
-| Prefix | Count | Delegates to | Purpose |
-| -------- | ------- | ------------- | --------- |
-| `dev-*` | 28 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
-| `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
-| `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
-| `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
+| Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
+| ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `dev-*`      | 30    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
+| `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
+| `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
 
 Each command file contains:
 
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 34 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 36 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -348,7 +352,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 34 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 36 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
@@ -380,11 +384,11 @@ dependency-ordered task batch through the `sp:spur-dev` pipeline; **`super-revie
 multi-dimensional review (functional traceability + SECUA + architectural depth) standalone or as
 the pipeline's Phase 7 review step.
 
-| Agent | Shape | Delegates to | Color | Trigger examples |
-| ------- | ------- | ------------- | ------- | ------------------ |
-| `expert-spur` | expert | `sp:spur-cli` | green | "create tasks", "feature lifecycle", "add a rule", "author a workflow" |
-| `super-planner` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run this task end to end", "run all tasks", "run the batch", "runall" |
-| `super-reviewer` | reviewer | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
+| Agent            | Shape        | Delegates to                                                            | Color   | Trigger examples                                                                |
+| ---------------- | ------------ | ----------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
+| `expert-spur`    | expert       | `sp:spur-cli`                                                           | green   | "create tasks", "feature lifecycle", "add a rule", "author a workflow"          |
+| `super-planner`  | orchestrator | `sp:spur-dev` + `sp:dogfood-testing`                                    | green   | "run this task end to end", "run all tasks", "run the batch", "runall"          |
+| `super-reviewer` | reviewer     | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
 
 Each agent has:
 
@@ -407,12 +411,12 @@ phases or a batch, the agent provides an isolated context window.
 Event-driven enforcement that runs automatically without user invocation. `hooks.json` registers
 four handlers:
 
-| Event | Matcher | Handler | Timeout |
-| ------- | --------- | --------- | --------- |
-| `PreToolUse` | `Write\|Edit` | `superskill hook run sp task-write-guard` | 10s |
-| `PostToolUse` | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool` | 5s |
-| `SessionStart` | — | `superskill hook run sp context-session-start` | 5s |
-| `Stop` | — | `superskill hook run sp context-session-stop` | 5s |
+| Event          | Matcher                               | Handler                                        | Timeout |
+| -------------- | ------------------------------------- | ---------------------------------------------- | ------- |
+| `PreToolUse`   | `Write\|Edit`                         | `superskill hook run sp task-write-guard`      | 10s     |
+| `PostToolUse`  | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool`     | 5s      |
+| `SessionStart` | —                                     | `superskill hook run sp context-session-start` | 5s      |
+| `Stop`         | —                                     | `superskill hook run sp context-session-stop`  | 5s      |
 
 **Write guard.** The `PreToolUse` hook fires on every `Write`/`Edit` tool call and checks whether
 the target path is **owned by a task** (i.e. it is a file in the task corpus under `docs/tasks/`).
@@ -439,16 +443,16 @@ the runtime layer — they run as processes, not as LLM context. Per **ADR-031**
 live at plugin level: `scripts/<skill>/` with their suites at `tests/<skill>/`; skill directories
 hold `SKILL.md` and prompt-side companions only.
 
-| Script | Role |
-| -------- | ------ |
-| `hooks/task-write-guard.ts` | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
-| `hooks/context-*.ts` | Runtime for the three registered context hooks (session-start, post-tool, session-stop) — token-cost estimation + ledger append for `sp:indexed-context` |
-| `hooks/careful-guard.ts` | Opt-in destructive-command guard (unwired — see Hooks above) |
-| `scripts/batch-preflight.ts` | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop |
-| `scripts/dogfood-testing/detect-pipeline-driving.ts` | Word-boundary detector for pipeline-driving testees (leading-space invariant) |
-| `scripts/dogfood-testing/validate-report.ts` | Pure `validateReport(md)` — footer-mandatory + 7-check finalize-or-abort contract with stable error codes |
-| `scripts/daily-summary/{daily-summary,logger}.ts` | ccusage + git-history orchestration helpers for `sp:daily-summary` |
-| `*.test.ts` | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing |
+| Script                                               | Role                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks/task-write-guard.ts`                          | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
+| `hooks/context-*.ts`                                 | Runtime for the three registered context hooks (session-start, post-tool, session-stop) — token-cost estimation + ledger append for `sp:indexed-context`                                                                                                                                          |
+| `hooks/careful-guard.ts`                             | Opt-in destructive-command guard (unwired — see Hooks above)                                                                                                                                                                                                                                      |
+| `scripts/batch-preflight.ts`                         | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop                                                                                                               |
+| `scripts/dogfood-testing/detect-pipeline-driving.ts` | Word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                                                                                                     |
+| `scripts/dogfood-testing/validate-report.ts`         | Pure `validateReport(md)` — footer-mandatory + 7-check finalize-or-abort contract with stable error codes                                                                                                                                                                                         |
+| `scripts/daily-summary/{daily-summary,logger}.ts`    | ccusage + git-history orchestration helpers for `sp:daily-summary`                                                                                                                                                                                                                                |
+| `*.test.ts`                                          | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                                                     |
 
 **Design principle:** Scripts are **deterministic enforcement**. Unlike skills (which are advisory
 knowledge consumed by the LLM), scripts run as code and make binary allow/deny decisions. They are
@@ -459,7 +463,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>33 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
+        CMD["Commands<br/>36 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
         AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end
@@ -556,28 +560,28 @@ graph TB
 The plugin ships workflow YAMLs under `.spur/workflows/` (symlinked from `.spur/workflows/`). Each
 pipeline owns one lifecycle phase:
 
-| Workflow | Phase | Entry command |
-| --- | --- | --- |
-| `basic.yaml` | Generic implement/check/fix | direct `spur workflow run` |
-| `feature-lifecycle.yaml` | Feature status FSM | `spur feature update` |
-| `task-lifecycle.yaml` | Task status FSM | `spur task update` |
-| `planning-pipeline.yaml` | Planning/design from known slug | `/sp:dev-plan` |
-| `task-pipeline.yaml` | Single-task execution | `/sp:dev-run` |
-| `feature-dev.yaml` | Feature umbrella execution | `/sp:dev-runall --feature` |
-| `idea-pipeline.yaml` | Idea to feature + AC + task batch | `/sp:dev-idea` |
-| `wrapup-pipeline.yaml` | Post-execution wrap-up | `/sp:dev-wrap`, `/sp:dev-wrapall` |
+| Workflow                 | Phase                             | Entry command                     |
+| ------------------------ | --------------------------------- | --------------------------------- |
+| `basic.yaml`             | Generic implement/check/fix       | direct `spur workflow run`        |
+| `feature-lifecycle.yaml` | Feature status FSM                | `spur feature update`             |
+| `task-lifecycle.yaml`    | Task status FSM                   | `spur task update`                |
+| `planning-pipeline.yaml` | Planning/design from known slug   | `/sp:dev-plan`                    |
+| `task-pipeline.yaml`     | Single-task execution             | `/sp:dev-run`                     |
+| `feature-dev.yaml`       | Feature umbrella execution        | `/sp:dev-runall --feature`        |
+| `idea-pipeline.yaml`     | Idea to feature + AC + task batch | `/sp:dev-idea`                    |
+| `wrapup-pipeline.yaml`   | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
 
 ### Lifecycle operations
 
 All planning entities (tasks and features) share a common lifecycle, managed by the `spur` CLI:
 
-| Operation | Task verb | Feature verb | Quality gate |
-| ----------- | ----------- | ------------- | -------------- |
-| **create** | `spur task create` / `batch-create` | `spur feature create` | Structural validation (WBS race-safe, ID hierarchical) |
-| **check** | `spur task check` | `spur feature check` | 4-layer readiness matrix (schema, sections, traceability, AC) |
-| **update** | `spur task update <wbs> [status]` | `spur feature update <id> [status]` | Lifecycle transition or scalar field set |
-| **record** | `spur task record <wbs>` | — | Write Testing/Review from a verify verdict; optional Solution backfill (never transitions to `done`) |
-| **refresh** | `spur task refresh` | `spur feature refresh` | Index + feature-tree roll-up regeneration |
+| Operation   | Task verb                           | Feature verb                        | Quality gate                                                                                         |
+| ----------- | ----------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **create**  | `spur task create` / `batch-create` | `spur feature create`               | Structural validation (WBS race-safe, ID hierarchical)                                               |
+| **check**   | `spur task check`                   | `spur feature check`                | 4-layer readiness matrix (schema, sections, traceability, AC)                                        |
+| **update**  | `spur task update <wbs> [status]`   | `spur feature update <id> [status]` | Lifecycle transition or scalar field set                                                             |
+| **record**  | `spur task record <wbs>`            | —                                   | Write Testing/Review from a verify verdict; optional Solution backfill (never transitions to `done`) |
+| **refresh** | `spur task refresh`                 | `spur feature refresh`              | Index + feature-tree roll-up regeneration                                                            |
 
 The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace /
 refine), documented in their respective `sp:spur-cli` references.
@@ -589,12 +593,12 @@ Antigravity, pi, OpenCode, OpenClaw), translation scripts adapt plugin entities 
 locations. OpenClaw is implicitly supported — it reads skills from `~/.agents/skills/`, the same
 root codex/opencode use in global mode.
 
-| Plugin entity | Claude Code | Other platforms |
-| -------------- | ------------- | ----------------- |
-| `skills/*.md` | `~/.claude/skills/` | Adapted as Skills 2.0 skill directories — all platforms receive skills uniformly |
-| `commands/*.md` | `~/.claude/commands/` | Adapted as Skills 2.0 skill entries (`disable-model-invocation: true`) |
-| `agents/*.md` | `~/.claude/agents/` | Adapted as Skills 2.0 skill entries (model-invocable); Pi additionally gets native agent format |
-| `hooks/hooks.json` | `~/.claude/hooks/` | Converted to target-native format (pi-hooks shim for pi/omp, HOOK.yaml for hermes) |
-| `hooks/*.ts` | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly |
+| Plugin entity      | Claude Code                              | Other platforms                                                                                 |
+| ------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `skills/*.md`      | `~/.claude/skills/`                      | Adapted as Skills 2.0 skill directories — all platforms receive skills uniformly                |
+| `commands/*.md`    | `~/.claude/commands/`                    | Adapted as Skills 2.0 skill entries (`disable-model-invocation: true`)                          |
+| `agents/*.md`      | `~/.claude/agents/`                      | Adapted as Skills 2.0 skill entries (model-invocable); Pi additionally gets native agent format |
+| `hooks/hooks.json` | `~/.claude/hooks/`                       | Converted to target-native format (pi-hooks shim for pi/omp, HOOK.yaml for hermes)              |
+| `hooks/*.ts`       | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly  |
 
 Each skill declares its own platform support in `metadata.platforms` frontmatter.
