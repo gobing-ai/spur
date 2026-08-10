@@ -11,7 +11,7 @@ agents installed and authenticated (Claude Code, Codex, Gemini CLI, pi, omp, Ope
 OpenClaw, Hermes, Grok), then wraps them with execution discipline: agent detection and health
 checks, constraint checking, workflow orchestration, conversation-history import and analytics, and
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.18"`, `source: "./plugins/sp"` (`plugin.json`,
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.41"`, `source: "./plugins/sp"` (`plugin.json`,
 
 ---
 
@@ -53,6 +53,13 @@ Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both e
 bun add -g @gobing-ai/spur   # global `spur` command
 # or run ad-hoc, no install:
 bunx @gobing-ai/spur --help
+```
+
+The npm package also ships the `sp` plugin and its marketplace manifest. Install the plugin into
+your supported coding agents without cloning this repo:
+
+```bash
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
 ```
 
 **Without Bun — standalone binary (macOS / Linux):**

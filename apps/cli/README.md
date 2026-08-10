@@ -23,6 +23,20 @@ spur --help
 bunx @gobing-ai/spur --help
 ```
 
+#### Install the `sp` plugin to your coding agents
+
+The npm package ships the `sp` plugin and its marketplace manifest alongside the CLI. Install it
+into your supported coding agents without cloning this repository:
+
+```bash
+# point superskill at the installed @gobing-ai/spur package root
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+```
+
+(With Bun: `bun install -g @gobing-ai/spur`; the package root is `$(npm root -g)/@gobing-ai/spur`
+or `$(bun pm bin -g)/../lib/node_modules/@gobing-ai/spur`.) This registers the marketplace and
+installs the `sp` plugin to Claude Code, Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, etc.
+
 ### If you don't have Bun — standalone binary
 
 A self-contained executable (Bun embedded) for macOS and Linux. No runtime to install.
@@ -50,7 +64,7 @@ Windows: use the Bun path under WSL.
 The published tarball is a self-contained Bun bundle plus static assets:
 
 | Path | Purpose |
-|------|---------|
+| ------ | --------- |
 | `spur.js` | CLI entry (`bin.spur`) |
 | `config/` | Default rules, workflows, tasks, templates, plugins (ADR-015 SSOT) |
 | `web/` | Spur Board SPA served by `spur serve` |

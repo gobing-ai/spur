@@ -12,6 +12,9 @@
  *   publish <package-dir>                       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
+ *   stage-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
+ *   check-marketplace-version                    fail if marketplace/plugin versions drifted from the CLI package
+ *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
@@ -22,15 +25,18 @@ import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { bundleConfig } from './commands/bundle-config';
 import { bundleWeb } from './commands/bundle-web';
+import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { corpusCheck } from './commands/corpus-check';
 import { devAll } from './commands/dev-all';
 import { linkCheck } from './commands/link-check';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
+import { stagePlugins } from './commands/stage-plugins';
+import { verifyPack } from './commands/verify-pack';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all, corpus-check, link-check',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, stage-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, corpus-check, link-check',
     );
     process.exit(message ? 1 : 0);
 }
@@ -62,6 +68,20 @@ try {
         case 'bundle-web': {
             const result = await bundleWeb(args[0]);
             console.log(`Bundled board assets ${result.source} -> ${result.target}`);
+            break;
+        }
+        case 'stage-plugins': {
+            const result = await stagePlugins();
+            console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
+            break;
+        }
+        case 'check-marketplace-version':
+            process.exit(await checkMarketplaceVersion());
+            break;
+        case 'verify-pack': {
+            const tarball = args[0];
+            if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
+            process.exit(await verifyPack(tarball));
             break;
         }
         case 'build-cli':

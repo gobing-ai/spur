@@ -60,6 +60,14 @@ spur --help
 
 > The npm bundle ships a Bun bundle with a `#!/usr/bin/env bun` shebang — Bun must be on PATH.
 
+**Install the `sp` plugin to your coding agents.** The npm package ships the `sp` plugin and its
+marketplace manifest. Point superskill at the installed package root — no repository clone needed:
+
+```bash
+npm i -g @gobing-ai/spur
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+```
+
 ### From standalone binary (Bun-less machines)
 
 ```bash

@@ -33,7 +33,7 @@ checkable without operator judgment - if you cannot point to concrete evidence o
 native subagent.
 
 | # | Trigger | What it means | Example evidence |
-|---|---------|---------------|------------------|
+| --- | --------- | --------------- | ------------------ |
 | 1 | **Different model or coding agent required** | The step needs a model or a coding agent the host session cannot provide (`--model`, `--agent`). | "verify on o3" where the host is Claude Code; "run this through omp" from a non-omp host. |
 | 2 | **Headless or unattended step** | The step must run without a live session - scheduled, detached, or driven by a non-interactive caller. | A batch launched by `spur workflow run --async` with no operator attached. |
 | 3 | **Durable auditable run record required** | The dispatch must produce a persisted run record (cost ledger, trace, exit code) for after-the-fact audit. | `spur agent run` writes `.spur/run/` artifacts; a native subagent does not. |
@@ -78,7 +78,7 @@ SQLiteError: attempt to write a readonly database (SQLITE_READONLY)
   at .../pi-coding-agent/dist/cli.js:2825
 ```
 
-The cause: omp writes its `AgentStorage` SQLite DB under `/Users/robin/node_modules/`, a path the
+The cause: omp writes its `AgentStorage` SQLite DB under `$HOME/node_modules/`, a path the
 sandboxed Bash session holds read-only. The same failure took down the idea-pipeline's `discovery`
 step (exit code 3, ~1.5s) - the step never reached the agent's logic; it died on storage init.
 

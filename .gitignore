@@ -80,6 +80,9 @@ out
 /apps/cli/config
 # Board static assets copied into the CLI package for npm publish (bundle-web)
 /apps/cli/web
+# Plugin + marketplace content copied into the CLI package for npm publish (stage-plugins)
+/apps/cli/plugins
+/apps/cli/.claude-plugin
 dist/
 .pi-lens/
 # Gatsby files
