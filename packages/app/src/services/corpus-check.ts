@@ -17,11 +17,17 @@
  * too. Without the second half the file would rot into a permanent suppression
  * list — the exact invisible-debt pattern this command exists to end.
  */
-import { readdirSync, readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { parse } from 'yaml';
+import { FeatureCheckService } from './feature-check';
+import type { SectionMatrix } from './planning-check-base';
+import { TaskCheckService } from './task-check';
+import { TaskLocator } from './task-locator';
 
 /** One accepted-error record from `config/corpus-baseline.json`. */
-interface BaselineEntry {
+export interface BaselineEntry {
     kind: 'task' | 'feature';
     id: string;
     code: string;
@@ -35,11 +41,20 @@ interface Baseline {
 }
 
 /** A single error observed in the corpus sweep. */
-interface CorpusError {
+export interface CorpusError {
     kind: 'task' | 'feature';
     id: string;
     code: string;
     message: string;
+}
+
+/** Result of a full-corpus sweep: observed/baselined counts plus the two-sided findings. */
+export interface CorpusCheckResult {
+    observed: number;
+    baselined: number;
+    newErrors: CorpusError[];
+    staleEntries: BaselineEntry[];
+    ok: boolean;
 }
 
 /** `<kind>:<id>:<code>` — the identity a baseline entry and an observed error share. */
@@ -47,46 +62,112 @@ export function key(e: { kind: string; id: string; code: string }): string {
     return `${e.kind}:${e.id}:${e.code}`;
 }
 
-/**
- * Run one `spur <noun> check --json` sweep and collect its errors.
- *
- * The CLI exits non-zero when findings exist, so the exit code is expected and
- * ignored; stdout is the signal. A sweep that produces unparseable output is a
- * hard failure — silently treating it as "no errors" would disable the gate.
- */
-async function sweep(noun: 'task' | 'feature', cwd: string): Promise<CorpusError[]> {
-    const proc = Bun.spawn(['bun', 'run', join('apps', 'cli', 'src', 'index.ts'), noun, 'check', '--json'], {
-        cwd,
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    const start = stdout.indexOf('[');
-    if (start === -1) {
-        throw new Error(
-            `corpus-check: \`spur ${noun} check --json\` produced no JSON array. ` +
-                `Output was:\n${stdout.slice(0, 400)}`,
-        );
+function resolveProjectRoot(cwd: string): string {
+    const fs = createNodeFileSystem(cwd);
+    let current = resolve(cwd);
+    while (true) {
+        if (
+            fs.exists(join(current, '.spur', 'config.yaml')) ||
+            fs.exists(join(current, 'config', 'corpus-baseline.json'))
+        ) {
+            return current;
+        }
+        const parent = dirname(current);
+        if (parent === current) return resolve(cwd);
+        current = parent;
     }
-    let rows: { wbs?: string; id?: string; findings?: { code: string; severity: string; message: string }[] }[];
-    try {
-        rows = JSON.parse(stdout.slice(start));
-    } catch (err) {
-        throw new Error(`corpus-check: could not parse \`spur ${noun} check --json\` output: ${String(err)}`);
-    }
+}
 
-    const errors: CorpusError[] = [];
-    for (const row of rows) {
-        const id = row.wbs ?? row.id;
-        if (id === undefined) continue;
-        for (const f of row.findings ?? []) {
-            if (f.severity !== 'error') continue;
-            errors.push({ kind: noun, id, code: f.code, message: f.message });
+async function loadTaskMatrix(projectRoot: string): Promise<SectionMatrix> {
+    const fs = createNodeFileSystem(projectRoot);
+    const candidates = [join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml')];
+    const bundledRoot = bundledConfigRoot();
+    if (bundledRoot !== null) candidates.push(join(bundledRoot, 'tasks', 'section-matrix.yaml'));
+
+    let matrixPath: string | undefined;
+    for (const candidate of candidates) {
+        if (await fs.exists(candidate)) {
+            matrixPath = candidate;
+            break;
         }
     }
-    return errors;
+    if (matrixPath === undefined) {
+        throw new Error('corpus-check: task section matrix is unavailable');
+    }
+
+    try {
+        const parsed = parse(await Bun.file(matrixPath).text());
+        if (typeof parsed !== 'object' || parsed === null || !('variants' in parsed)) {
+            throw new Error('missing variants object');
+        }
+        return parsed as SectionMatrix;
+    } catch (error) {
+        throw new Error(`corpus-check: could not parse task section matrix at ${matrixPath}: ${String(error)}`);
+    }
+}
+
+async function structuralSweep(projectRoot: string): Promise<{
+    errors: CorpusError[];
+    taskDirs: string[];
+    featuresDir: string;
+}> {
+    const fs = createNodeFileSystem(projectRoot);
+    const planning = await resolvePlanningFolders(fs);
+    const taskDirs = Object.keys(planning.foldersConfig.folders).map((dir) => fs.resolve(dir));
+    const activeTasksDir = fs.resolve(planning.foldersConfig.active_folder);
+    if (!taskDirs.includes(activeTasksDir)) taskDirs.unshift(activeTasksDir);
+    const featuresDir = fs.resolve(planning.featuresDir);
+    const locator = new TaskLocator({
+        fs,
+        tasksDir: activeTasksDir,
+        foldersConfig: planning.foldersConfig,
+    });
+    const taskService = new TaskCheckService(fs, await loadTaskMatrix(projectRoot), locator);
+    const errors: CorpusError[] = [];
+
+    // Sweep scope is frozen by Design ("no behavior change to the gate itself" —
+    // ADR-050/T10 semantics kept): the same corpus the `task check` no-WBS verb
+    // covers, i.e. the active task folder, plus every feature. The configured
+    // inactive folders are scanned only for cross-folder duplicate ids and fog
+    // graduation (taskDirs above). Broadening the per-file check to every
+    // configured folder is a gate-behavior change that surfaces the legacy
+    // corpora's ratchet drift (404 findings in docs/tasks{2,3} as of 2026-08-10)
+    // and would force a massive config/corpus-baseline.json reconciliation —
+    // out of scope for this promotion task (see Review P1 disposition).
+    if (await fs.exists(activeTasksDir)) {
+        for (const fileName of await fs.readDir(activeTasksDir)) {
+            const wbs = fileName.match(/^(\d{4})_.+\.md$/)?.[1];
+            if (wbs === undefined) continue;
+            const result = await taskService.check(join(activeTasksDir, fileName), wbs, {
+                severityOverrides: planning.severityOverrides,
+            });
+            for (const finding of result.findings) {
+                if (finding.severity !== 'error') continue;
+                errors.push({ kind: 'task', id: wbs, code: finding.code, message: finding.message });
+            }
+        }
+    }
+
+    if (await fs.exists(featuresDir)) {
+        const featureService = new FeatureCheckService(fs);
+        for (const fileName of await fs.readDir(featuresDir)) {
+            const id = fileName.match(/^([A-Z][1-9]*)_.+\.md$/)?.[1];
+            if (id === undefined) continue;
+            const result = await featureService.check(join(featuresDir, fileName), id, {
+                featuresDir,
+                tasksDir: activeTasksDir,
+                tasksDirs: taskDirs,
+                runDir: fs.resolve('.spur/run'),
+                severityOverrides: planning.severityOverrides,
+            });
+            for (const finding of result.findings) {
+                if (finding.severity !== 'error') continue;
+                errors.push({ kind: 'feature', id, code: finding.code, message: finding.message });
+            }
+        }
+    }
+
+    return { errors, taskDirs, featuresDir };
 }
 
 /**
@@ -99,11 +180,15 @@ async function sweep(noun: 'task' | 'feature', cwd: string): Promise<CorpusError
  * hand-written file bypassed `spur task create`, so the race-safe allocator never saw it, and
  * every per-file gate passed while one ticket was unreachable.
  */
-async function duplicateIds(cwd: string): Promise<CorpusError[]> {
-    const scan = (dir: string, kind: 'task' | 'feature'): { id: string; file: string; kind: typeof kind }[] => {
+async function duplicateIds(cwd: string, taskDirs: string[], featuresDir: string): Promise<CorpusError[]> {
+    const fs = createNodeFileSystem(cwd);
+    const scan = async (
+        dir: string,
+        kind: 'task' | 'feature',
+    ): Promise<{ id: string; file: string; kind: typeof kind }[]> => {
         let names: string[];
         try {
-            names = readdirSync(join(cwd, dir));
+            names = await fs.readDir(dir);
         } catch {
             return [];
         }
@@ -111,14 +196,12 @@ async function duplicateIds(cwd: string): Promise<CorpusError[]> {
         return names
             .map((n) => ({ m: n.match(pattern), n }))
             .filter((x): x is { m: RegExpMatchArray; n: string } => x.m !== null)
-            .map((x) => ({ id: x.m[1] as string, file: `${dir}/${x.n}`, kind }));
+            .map((x) => ({ id: x.m[1] as string, file: relative(cwd, join(dir, x.n)), kind }));
     };
 
     const all = [
-        ...scan('docs/tasks', 'task'),
-        ...scan('docs/tasks2', 'task'),
-        ...scan('docs/tasks3', 'task'),
-        ...scan('docs/features', 'feature'),
+        ...(await Promise.all(taskDirs.map((dir) => scan(dir, 'task')))).flat(),
+        ...(await scan(featuresDir, 'feature')),
     ];
 
     const byId = new Map<string, string[]>();
@@ -159,36 +242,40 @@ async function duplicateIds(cwd: string): Promise<CorpusError[]> {
 const FOG_HEADING = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE_HEADING = /^###\s+Out of scope\b/;
 const FEATURE_ID = /^([A-Z][0-9]*)_/;
-const TASK_DIRS = ['docs/tasks', 'docs/tasks2', 'docs/tasks3'];
 /** Preference order for the branch point; the first that resolves wins. */
 const DEFAULT_BRANCHES = ['origin/main', 'origin/master', 'main', 'master'];
 
 /** Read a tree of corpus files — either from disk (working tree) or from a git ref. */
 interface TreeReader {
     /** Repo-relative paths of the files directly under `dir`. */
-    list(dir: string): string[];
+    list(dir: string): Promise<string[]>;
     /** File content, or null when it does not exist in this tree. */
-    read(path: string): string | null;
+    read(path: string): Promise<string | null>;
 }
 
 /** Run git, returning stdout or null when the command failed (missing ref, no repo, …). */
-function git(cwd: string, args: string[]): string | null {
-    const p = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
-    return p.exitCode === 0 ? p.stdout.toString() : null;
+async function git(cwd: string, args: string[]): Promise<string | null> {
+    try {
+        const p = await new NodeProcessExecutor().run({ command: 'git', args, cwd, rejectOnError: false });
+        return p.exitCode === 0 ? p.stdout : null;
+    } catch {
+        return null;
+    }
 }
 
 function diskReader(cwd: string): TreeReader {
+    const fs = createNodeFileSystem(cwd);
     return {
-        list: (dir) => {
+        list: async (dir) => {
             try {
-                return readdirSync(join(cwd, dir)).map((n) => `${dir}/${n}`);
+                return (await fs.readDir(join(cwd, dir))).map((n) => `${dir}/${n}`);
             } catch {
                 return [];
             }
         },
-        read: (path) => {
+        read: async (path) => {
             try {
-                return readFileSync(join(cwd, path), 'utf8');
+                return await fs.readFile(join(cwd, path));
             } catch {
                 return null;
             }
@@ -199,10 +286,12 @@ function diskReader(cwd: string): TreeReader {
 function gitReader(cwd: string, ref: string): TreeReader {
     const listed = new Map<string, string[]>();
     return {
-        list: (dir) => {
+        list: async (dir) => {
             let files = listed.get(dir);
             if (files === undefined) {
-                files = (git(cwd, ['ls-tree', '-r', '--name-only', ref, '--', dir]) ?? '').split('\n').filter(Boolean);
+                files = ((await git(cwd, ['ls-tree', '-r', '--name-only', ref, '--', dir])) ?? '')
+                    .split('\n')
+                    .filter(Boolean);
                 listed.set(dir, files);
             }
             return files;
@@ -225,23 +314,23 @@ export type FogRange = { base: string; spec: string } | { skip: string; spec: st
  * Every unusable range skips rather than fails (R8): a gate that breaks a tarball checkout or a
  * CI shallow fetch gets disabled, which costs more than the check buys.
  */
-export function resolveFogRange(cwd: string, since?: string): FogRange {
+export async function resolveFogRange(cwd: string, since?: string): Promise<FogRange> {
     const spec = since ? `${since}..(working tree)` : `merge-base(${DEFAULT_BRANCHES[0]}, HEAD)..(working tree)`;
-    if (git(cwd, ['rev-parse', '--git-dir']) === null) return { skip: 'not a git repository', spec };
-    if (git(cwd, ['rev-parse', '--is-shallow-repository'])?.trim() === 'true') {
+    if ((await git(cwd, ['rev-parse', '--git-dir'])) === null) return { skip: 'not a git repository', spec };
+    if ((await git(cwd, ['rev-parse', '--is-shallow-repository']))?.trim() === 'true') {
         return { skip: 'shallow clone — the branch point is not in this history', spec };
     }
-    const head = git(cwd, ['rev-parse', 'HEAD'])?.trim();
+    const head = (await git(cwd, ['rev-parse', 'HEAD']))?.trim();
     if (!head) return { skip: 'HEAD resolves to no commit', spec };
 
     if (since) {
-        const base = git(cwd, ['rev-parse', '--verify', `${since}^{commit}`])?.trim();
+        const base = (await git(cwd, ['rev-parse', '--verify', `${since}^{commit}`]))?.trim();
         if (!base) return { skip: `--since ref '${since}' does not resolve to a commit`, spec };
         return { base, spec };
     }
     for (const branch of DEFAULT_BRANCHES) {
-        if (git(cwd, ['rev-parse', '--verify', `${branch}^{commit}`]) === null) continue;
-        const base = git(cwd, ['merge-base', branch, 'HEAD'])?.trim();
+        if ((await git(cwd, ['rev-parse', '--verify', `${branch}^{commit}`])) === null) continue;
+        const base = (await git(cwd, ['merge-base', branch, 'HEAD']))?.trim();
         if (!base) continue;
         const named = `merge-base(${branch}, HEAD)=${base.slice(0, 8)}..(working tree)`;
         // Undiverged HEAD means there is no session to measure. This is the accepted cost of the
@@ -308,15 +397,20 @@ function frontmatterFeatureId(markdown: string): string | null {
  * Both a brand-new task file and an existing task re-parented onto the feature count: re-parenting
  * is a legitimate graduation, and requiring a new file would false-positive on it (R2).
  */
-function taskAddedForFeature(before: TreeReader, after: TreeReader, featureId: string): boolean {
-    for (const dir of TASK_DIRS) {
-        const existedBefore = new Set(before.list(dir));
-        for (const file of after.list(dir)) {
+async function taskAddedForFeature(
+    before: TreeReader,
+    after: TreeReader,
+    featureId: string,
+    taskDirs: string[],
+): Promise<boolean> {
+    for (const dir of taskDirs) {
+        const existedBefore = new Set(await before.list(dir));
+        for (const file of await after.list(dir)) {
             if (!file.endsWith('.md')) continue;
-            const md = after.read(file);
+            const md = await after.read(file);
             if (md === null || frontmatterFeatureId(md) !== featureId) continue;
             if (!existedBefore.has(file)) return true;
-            const was = before.read(file);
+            const was = await before.read(file);
             if (was === null || frontmatterFeatureId(was) !== featureId) return true;
         }
     }
@@ -343,23 +437,27 @@ export async function ungraduatedFog(
     cwd: string = process.cwd(),
     opts: { since?: string; head?: string; report?: (message: string) => void } = {},
 ): Promise<CorpusError[]> {
-    const report = opts.report ?? ((message: string) => console.log(message));
-    const range = resolveFogRange(cwd, opts.since);
+    const report = opts.report ?? (() => {});
+    const range = await resolveFogRange(cwd, opts.since);
     if ('skip' in range) {
         report(`corpus-check: fog check SKIPPED (${range.skip}) — range ${range.spec} was not evaluated.`);
         return [];
     }
+    const fs = createNodeFileSystem(resolveProjectRoot(cwd));
+    const planning = await resolvePlanningFolders(fs);
+    const taskDirs = Object.keys(planning.foldersConfig.folders).map((dir) => relative(cwd, fs.resolve(dir)));
+    const featuresDir = relative(cwd, fs.resolve(planning.featuresDir));
     const before = gitReader(cwd, range.base);
     const after = opts.head ? gitReader(cwd, opts.head) : diskReader(cwd);
     const spec = opts.head ? range.spec.replace('(working tree)', opts.head) : range.spec;
 
     const errors: CorpusError[] = [];
     let maps = 0;
-    for (const file of after.list('docs/features')) {
+    for (const file of await after.list(featuresDir)) {
         const id = featureIdOf(file);
-        const endMd = id === null ? null : after.read(file);
+        const endMd = id === null ? null : await after.read(file);
         if (id === null || endMd === null) continue;
-        const startMd = before.read(file);
+        const startMd = await before.read(file);
         // No file history (new map, tarball checkout of one file) means nothing could be removed.
         const startFog = startMd === null ? null : sectionLabels(startMd, FOG_HEADING);
         if (startFog === null) continue;
@@ -372,7 +470,7 @@ export async function ungraduatedFog(
         const startCut = sectionLabels(startMd as string, OUT_OF_SCOPE_HEADING) ?? new Map();
         const endCut = sectionLabels(endMd, OUT_OF_SCOPE_HEADING) ?? new Map();
         if ([...endCut.keys()].some((norm) => !startCut.has(norm))) continue;
-        if (taskAddedForFeature(before, after, id)) continue;
+        if (await taskAddedForFeature(before, after, id, taskDirs)) continue;
 
         errors.push({
             kind: 'feature',
@@ -389,28 +487,24 @@ export async function ungraduatedFog(
     return errors;
 }
 
-/** Sweep the corpus and diff it against the baseline. Returns the process exit code. */
-export async function corpusCheck(cwd: string = process.cwd(), since?: string): Promise<number> {
-    const baselineFile = join(cwd, 'config', 'corpus-baseline.json');
+/** Sweep the corpus in-process and reconcile it against the two-sided baseline. */
+export async function runCorpusCheck(cwd: string, since?: string): Promise<CorpusCheckResult> {
+    const projectRoot = resolveProjectRoot(cwd);
+    const baselineFile = join(projectRoot, 'config', 'corpus-baseline.json');
     // A missing baseline degrades to "no exemptions" rather than crashing. The file is a gate
     // INPUT and belongs in git; but a tarball export, a sparse checkout, or a forgotten `git add`
     // must produce a legible strictest-mode run, not an opaque module/JSON error.
     let baseline: Baseline = { entries: [] };
     if (await Bun.file(baselineFile).exists()) {
         baseline = await Bun.file(baselineFile).json();
-    } else {
-        console.warn(
-            `corpus-check: no baseline at ${baselineFile} — running with zero exemptions. ` +
-                'If this is a git checkout, the file is missing from version control.',
-        );
     }
     const accepted = new Map(baseline.entries.map((e) => [key(e), e]));
 
-    const fogErrors = await ungraduatedFog(cwd, { since });
+    const sweep = await structuralSweep(projectRoot);
+    const fogErrors = await ungraduatedFog(projectRoot, { since, report: () => {} });
     const observed = [
-        ...(await sweep('task', cwd)),
-        ...(await sweep('feature', cwd)),
-        ...(await duplicateIds(cwd)),
+        ...sweep.errors,
+        ...(await duplicateIds(projectRoot, sweep.taskDirs, sweep.featuresDir)),
         ...fogErrors,
     ];
     const observedKeys = new Set(observed.map(key));
@@ -420,32 +514,17 @@ export async function corpusCheck(cwd: string = process.cwd(), since?: string): 
     // corpus.ungraduated-fog entries were never evaluated — "not evaluated" is not "no
     // longer reproduces", so exclude them from the stale sweep to keep the gate green
     // on main and CI without removing legitimate exemptions.
-    const fogSkipped = resolveFogRange(cwd, since);
-    const stale = baseline.entries.filter((e) => {
+    const fogSkipped = await resolveFogRange(projectRoot, since);
+    const staleEntries = baseline.entries.filter((e) => {
         if ('skip' in fogSkipped && e.code === 'corpus.ungraduated-fog') return false;
         return !observedKeys.has(key(e));
     });
 
-    console.log(
-        `corpus-check: swept tasks + features — ${observed.length} error(s) observed, ` +
-            `${accepted.size} baselined, ${unexpected.length} new, ${stale.length} stale.`,
-    );
-
-    for (const e of unexpected) {
-        console.error(`  NEW    ${e.kind} ${e.id}: ${e.code} — ${e.message}`);
-    }
-    for (const e of stale) {
-        console.error(`  STALE  ${e.kind} ${e.id}: ${e.code} — fixed; remove this entry from ${baselineFile}`);
-    }
-
-    if (unexpected.length > 0 || stale.length > 0) {
-        console.error(
-            '\ncorpus-check FAILED.\n' +
-                '  NEW   → fix the finding, or add it to config/corpus-baseline.json with a reason and a date.\n' +
-                '  STALE → the finding is gone; delete its baseline entry so the list stays honest.',
-        );
-        return 1;
-    }
-    console.log('corpus-check OK — no corpus errors outside the accepted baseline.');
-    return 0;
+    return {
+        observed: observed.length,
+        baselined: accepted.size,
+        newErrors: unexpected,
+        staleEntries,
+        ok: unexpected.length === 0 && staleEntries.length === 0,
+    };
 }

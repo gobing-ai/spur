@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Promote corpus-check from spur-dev to spur task check --corpus (ADR-051 misplacement fix)"
 description: ""
-status: backlog
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T21:12:13.589Z"
-updated_at: "2026-08-10T21:26:56.000Z"
+updated_at: "2026-08-10T23:30:43.279Z"
 ---
 
 ## 0502. Promote corpus-check from spur-dev to spur task check --corpus (ADR-051 misplacement fix)
@@ -230,17 +230,54 @@ the corpus-check family host.
   (the last exercises the retargeted script end-to-end). If a baseline entry goes stale because of
   the move, reconcile `config/corpus-baseline.json` in the same commit (T10).
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `packages/app/src/services/corpus-check.ts` moves the structural task/feature sweep, duplicate-ID and fog checks, project-root baseline resolution, and two-sided reconciliation into the application layer; task/feature validators run in-process (no CLI self-spawn) and return the frozen `CorpusCheckResult` JSON shape.
+- The port is rule-gate compliant: `node:fs` direct IO replaced by the ts-runtime `FileSystem` seam, the `Bun.spawnSync` git helper by `ProcessExecutor.run` (sync tree readers converted to async), hardcoded planning folders derived from `resolvePlanningFolders`, and the `console.log` report default dropped. Fog readers/git range resolution are async throughout.
+- `apps/cli/src/commands/task.ts:921` adds `--corpus` and `--since <ref>` to `task check`, enforces WBS+`--corpus` usage errors (exit 2), rejects missing/flag-like `--since` values (R3 fail-loud), restores the spur-dev-era visible fog SKIPPED diagnostic on stderr for unresolvable refs (P3), and maps new/stale findings to exit 1.
+- `packages/app/src/index.ts` barrels `runCorpusCheck`, `resolveFogRange`, and `CorpusCheckResult`.
+- `packages/app/tests/services/corpus-check.test.ts` covers baseline reconciliation, new and stale failures, unparseable in-process sweeps, nested-cwd root resolution, and the moved fog decision table; `apps/cli/tests/commands/task.test.ts:537` covers JSON keys, exit codes, `--since` misuse (missing value, flag-like value, ref), and WBS+`--corpus`.
+- `scripts/spur-dev.ts` drops the misplaced command (case/import/header/usage); `scripts/commands/corpus-check.{ts,test.ts}` are deleted; `package.json:87` retargets `bun run corpus-check` to `spur task check --corpus`, so `spur-check-new` exercises the promoted gate unchanged.
+- `docs/00_ADR.md` (ADR-051 Detail), `docs/04_DESIGN.md:753`, and `AGENTS.md` (verification gate + misplacement note) record the promotion same-commit (T3); ADR-050 historical text untouched.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `spur task check --corpus` (no WBS) sweeps the active task corpus + every feature and reconciles against the two-sided baseline; real run: 2 observed / 2 baselined / 0 new / 0 stale, exit 0 (final spur-check-new 2026-08-10). Sweep scope matches the `task check` no-WBS verb per the Design's frozen gate semantics (P1 disposition in ## Review). |
+| R2 | MET | `packages/app/src/services/corpus-check.ts` owns the in-process sweep + two-sided reconciliation via `task-check.ts`/`feature-check.ts`; `apps/cli/src/commands/task.ts:920-965` is a thin flag/output adapter; the deleted `sweep()` self-spawn is not ported. |
+| R3 | MET | Missing `--since` value → commander usage error (non-zero, names `--since`); flag-like value → exit 2 + usage message (`apps/cli/src/commands/task.ts:940-944`); unresolvable ref → visible SKIPPED diagnostic on stderr, exit 0 (spur-dev parity; CLI tests `task.test.ts:537-592` cover all three). |
+| R4 | MET | JSON output exactly `{ observed, baselined, newErrors, staleEntries, ok }`; asserted in `apps/cli/tests/commands/task.test.ts`; parsed on the real repo: `{observed:2, baselined:2, newErrors:[], staleEntries:[], ok:true}`. |
+| R5 | MET | `package.json:87` `corpus-check` → `spur task check --corpus`; `spur-check-new`/`spur-check-new:full` chain it unchanged (final run green); `scripts/spur-dev.ts` has no corpus-check case/import/usage; `scripts/commands/corpus-check.{ts,test.ts}` deleted. |
+| R6 | MET | New-error fail, stale-entry fail, unparseable-sweep hard fail all covered (`packages/app/tests/services/corpus-check.test.ts` — 30/30 green); real corpus exit 0 with only baselined findings. |
+| R7 | MET | `AGENTS.md` (verification gate + misplacement note), `docs/04_DESIGN.md:753`, ADR-051 Detail synced same-commit; ADR-050 historical text untouched. |
+| R8 | MET | `bun run lint`, `bun run test`, `bun run build`, `bun run spur-check-new` all exit 0 (2026-08-10; spur-check-new final run green after the operator's concurrent `spur history import` DB locks cleared). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | Correctness / functional | `packages/app/src/services/corpus-check.ts:116-163` | `structuralSweep()` validates only the active task folder, not every configured folder. **Disposition: out of scope — gate semantics are Design-frozen.** The task's Design invariants ("no behavior change to the gate itself", "Baseline file unchanged") fix the sweep to the `task check` no-WBS corpus (active folder + features), matching the superseded spur-dev gate exactly. Broadening to all configured folders surfaces 404 legacy ratchet-drift errors (docs/tasks 294, docs/tasks2 108, docs/tasks3 2 — measured 2026-08-10) and would force a massive `config/corpus-baseline.json` reconciliation (T10). Tracked as follow-up work, not this promotion. |
+| P3 | Correctness / usability | `apps/cli/src/commands/task.ts:944-959`; `packages/app/src/services/corpus-check.ts:305-330` | Unresolved explicit `--since` refs silently skipped the fog check with no visible diagnostic (the port dropped the spur-dev-era console report). **Fixed:** the CLI now emits the SKIPPED reason on stderr (human and JSON modes, exit 0 — original semantics) and rejects missing/flag-like values with a usage error (exit 2). |
+| P3 | Architecture / scope | `packages/app/src/services/history-service.ts:41,185-192`; `.spur/config.yaml:32,84-88` | Unrelated concurrent changes (OpenCode history-import feature and executor config) share the working tree. **Disposition:** neither is 0502 work; both excluded from 0502's commit via selective staging; the diff is otherwise task-scoped. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `spur task check --corpus` sweeps the task corpus (active folder — the `task check` no-WBS scope the Design freezes) plus every feature, reconciled against the two-sided baseline. Real repo: 2 observed / 2 baselined / 0 new / 0 stale, exit 0. P1 disposition above. |
+| R2 | MET | `packages/app/src/services/corpus-check.ts` owns the in-process sweep + reconciliation; `apps/cli/src/commands/task.ts:920-965` is a thin flag/output adapter; no self-spawn (the deleted `sweep()` pattern is not ported). |
+| R3 | MET | Missing `--since` value → commander usage error (non-zero, names `--since`); flag-like value (`--since --json`) → exit 2 with usage message; unresolvable ref → visible SKIPPED diagnostic on stderr, exit 0 (spur-dev parity). CLI tests cover all three. |
+| R4 | MET | JSON output is exactly `{ observed, baselined, newErrors, staleEntries, ok }` (asserted in `apps/cli/tests/commands/task.test.ts`); parses cleanly on the real repo with exit 0. |
+| R5 | MET | `package.json:87` retargets `bun run corpus-check` to the CLI verb; `spur-check-new`/`spur-check-new:full` chain it unchanged; `scripts/spur-dev.ts` has no corpus-check case/import/usage; `scripts/commands/corpus-check.{ts,test.ts}` deleted. |
+| R6 | MET | Two-sided semantics ported verbatim: new-error fails, stale-entry fails, unparseable sweep is a hard failure; service tests cover all four cases; real repo exit 0. |
+| R7 | MET | `AGENTS.md` (verification gate + misplacement note), `docs/04_DESIGN.md:753`, ADR-051 Detail synced same-commit; ADR-050 historical text not rewritten. |
+| R8 | MET | `bun run lint`, `bun run test`, `bun run build`, `bun run spur-check-new` each exit 0 (spur-check-new's rule-gate intermittently collided with the operator's concurrent `spur history import` DB lock and was re-run to green after it finished). |
+
+**Architecture depth**
+
+The app service presents a narrow `runCorpusCheck()` entry over cohesive sweep/reconciliation logic; the CLI boundary stays thin. The P1 is a deliberate scope boundary (see disposition), not a missing abstraction.
+
+Functional Verdict: PASS
 ### References
 - **Decision authority:** `docs/00_ADR.md` ADR-051 (surface boundary + noun discipline + consent
   gate — consent recorded in Q&A), ADR-050 (two-sided baseline + T10), ADR-021 (apps are thin
@@ -259,3 +296,6 @@ the corpus-check family host.
 - **Constitution:** T3 (surface + docs/04 same commit), T10 (baseline reconciliation same commit).
 - **Prior naming work:** commit 86975fe7 (`bundle-plugins` rename) — the conformance precedent.
 ### History
+- 2026-08-10T22:33:17.612Z backlog → wip (system)
+- 2026-08-10T23:30:37.549Z wip → testing (system)
+- 2026-08-10T23:30:43.279Z testing → done (system)

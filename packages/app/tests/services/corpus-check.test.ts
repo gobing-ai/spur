@@ -1,9 +1,8 @@
 /**
  * Behavioral checks for the ungraduated-fog gate (task 0472).
  *
- * NOTE: `scripts/` is outside the default `bun run test` roots (same as `link-check`), so run
- * this explicitly:
- *   bun test scripts/commands/corpus-check.test.ts
+ * Run directly while iterating:
+ *   bun test packages/app/tests/services/corpus-check.test.ts
  *
  * Two things are pinned here that fixtures alone cannot pin:
  *
@@ -18,11 +17,96 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { key, resolveFogRange, sectionLabels, ungraduatedFog } from './corpus-check';
+import { key, resolveFogRange, runCorpusCheck, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
 
 const FOG = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE = /^###\s+Out of scope\b/;
-const REPO = join(import.meta.dir, '..', '..');
+const REPO = join(import.meta.dir, '..', '..', '..', '..');
+
+function corpusFixture(): string {
+    const root = mkdtempSync(join(tmpdir(), 'spur-corpus-check-'));
+    mkdirSync(join(root, 'config'), { recursive: true });
+    mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
+    writeFileSync(join(root, 'config', 'corpus-baseline.json'), JSON.stringify({ entries: [] }));
+    return root;
+}
+
+function writeBaseline(root: string, entries: unknown[]): void {
+    writeFileSync(join(root, 'config', 'corpus-baseline.json'), JSON.stringify({ entries }));
+}
+
+describe('runCorpusCheck', () => {
+    test('reconciles a baselined finding and preserves the result contract', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
+
+        const first = await runCorpusCheck(root);
+        const finding = first.newErrors[0];
+        expect(finding).toBeDefined();
+        if (finding === undefined) throw new Error('expected malformed task finding');
+
+        writeBaseline(root, [
+            {
+                kind: finding.kind,
+                id: finding.id,
+                code: finding.code,
+                reason: 'fixture',
+                since: '2026-08-10',
+            },
+        ]);
+        expect(await runCorpusCheck(root)).toEqual({
+            observed: first.observed,
+            baselined: 1,
+            newErrors: [],
+            staleEntries: [],
+            ok: true,
+        });
+    });
+
+    test('returns new findings and stale baseline entries as failures', async () => {
+        const newRoot = corpusFixture();
+        write(newRoot, 'docs/tasks/0001_broken.md', 'not task markdown\n');
+        const newResult = await runCorpusCheck(newRoot);
+        expect(newResult.ok).toBe(false);
+        expect(newResult.newErrors.length).toBeGreaterThan(0);
+
+        const staleRoot = corpusFixture();
+        const stale = {
+            kind: 'task',
+            id: '0999',
+            code: 'L1.fixture',
+            reason: 'fixture',
+            since: '2026-08-10',
+        };
+        writeBaseline(staleRoot, [stale]);
+        expect(await runCorpusCheck(staleRoot)).toMatchObject({
+            observed: 0,
+            baselined: 1,
+            newErrors: [],
+            staleEntries: [stale],
+            ok: false,
+        });
+    });
+
+    test('fails hard when the in-process sweep configuration is unparseable', async () => {
+        const root = corpusFixture();
+        write(root, '.spur/tasks/section-matrix.yaml', 'variants: [\n');
+        await expect(runCorpusCheck(root)).rejects.toThrow('could not parse task section matrix');
+    });
+
+    test('resolves the project baseline from a nested cwd', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
+        const finding = (await runCorpusCheck(root)).newErrors[0];
+        expect(finding).toBeDefined();
+        if (finding === undefined) throw new Error('expected malformed task finding');
+        writeBaseline(root, [{ ...finding, message: undefined, reason: 'fixture', since: '2026-08-10' }]);
+        const nested = join(root, 'packages', 'nested');
+        mkdirSync(nested, { recursive: true });
+
+        expect((await runCorpusCheck(nested)).ok).toBe(true);
+    });
+});
 
 function inspectFog(cwd: string, opts: { since?: string; head?: string } = {}) {
     return ungraduatedFog(cwd, { ...opts, report: () => {} });
@@ -162,6 +246,24 @@ function scaffold(base: (root: string) => void, after: (root: string) => void, c
     git(root, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
     git(root, ['config', 'user.email', 'test@example.com']);
     git(root, ['config', 'user.name', 'Test']);
+    // The fog check scans the task folders the project configures (no-hardcoded-planning-folder).
+    // Fixtures configure the legacy trio so graduation tickets land in a scanned dir.
+    write(
+        root,
+        '.spur/config.yaml',
+        [
+            'tasks:',
+            '  active: docs/tasks',
+            '  folders:',
+            '    docs/tasks:',
+            '      baseCounter: 0',
+            '    docs/tasks2:',
+            '      baseCounter: 100',
+            '    docs/tasks3:',
+            '      baseCounter: 200',
+            '',
+        ].join('\n'),
+    );
     base(root);
     git(root, ['add', '-A']);
     git(root, ['commit', '-m', 'base']);
@@ -286,59 +388,59 @@ describe('ungraduatedFog decision table', () => {
 /* ------------------------------------------------- range + degradation */
 
 describe('resolveFogRange', () => {
-    test('names the range it evaluated', () => {
+    test('names the range it evaluated', async () => {
         const root = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        const range = resolveFogRange(root);
+        const range = await resolveFogRange(root);
         expect('base' in range).toBe(true);
         expect(range.spec).toContain('merge-base(main, HEAD)');
         expect(range.spec).toContain('(working tree)');
     });
 
-    test('an explicit --since overrides the default range', () => {
+    test('an explicit --since overrides the default range', async () => {
         const root = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        const range = resolveFogRange(root, 'HEAD~1');
+        const range = await resolveFogRange(root, 'HEAD~1');
         expect('base' in range).toBe(true);
         expect(range.spec).toBe('HEAD~1..(working tree)');
     });
 
-    test('skips, still naming the range, when HEAD has not diverged from the default branch', () => {
+    test('skips, still naming the range, when HEAD has not diverged from the default branch', async () => {
         const root = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             () => {},
         );
         git(root, ['checkout', 'main']);
-        const range = resolveFogRange(root);
+        const range = await resolveFogRange(root);
         expect('skip' in range && range.skip).toContain('no divergence');
         expect(range.spec).toContain('..');
     });
 
-    test('skips outside a git repository', () => {
+    test('skips outside a git repository', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-fog-nogit-'));
         write(root, MAP_FILE, mapMd(FOG_3));
-        const range = resolveFogRange(root);
+        const range = await resolveFogRange(root);
         expect('skip' in range && range.skip).toContain('not a git repository');
         expect(range.spec).toContain('..');
     });
 
-    test('skips on a shallow clone rather than measuring a truncated history', () => {
+    test('skips on a shallow clone rather than measuring a truncated history', async () => {
         const source = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
         const dest = join(mkdtempSync(join(tmpdir(), 'spur-fog-shallow-')), 'clone');
         git(source, ['clone', '--depth', '1', '--branch', 'work', `file://${source}`, dest]);
-        const range = resolveFogRange(dest);
+        const range = await resolveFogRange(dest);
         expect('skip' in range && range.skip).toContain('shallow');
         expect(range.spec).toContain('..');
     });
 
-    test('skips when no default branch exists to bound the range', () => {
+    test('skips when no default branch exists to bound the range', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-fog-nomain-'));
         git(root, ['init']);
         git(root, ['symbolic-ref', 'HEAD', 'refs/heads/work']);
@@ -347,17 +449,17 @@ describe('resolveFogRange', () => {
         write(root, MAP_FILE, mapMd(FOG_3));
         git(root, ['add', '-A']);
         git(root, ['commit', '-m', 'base']);
-        const range = resolveFogRange(root);
+        const range = await resolveFogRange(root);
         expect('skip' in range && range.skip).toContain('no default branch');
         expect(range.spec).toContain('..');
     });
 
-    test('skips when --since names a ref that does not resolve', () => {
+    test('skips when --since names a ref that does not resolve', async () => {
         const root = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
-        const range = resolveFogRange(root, 'no-such-ref');
+        const range = await resolveFogRange(root, 'no-such-ref');
         expect('skip' in range && range.skip).toContain('does not resolve');
     });
 

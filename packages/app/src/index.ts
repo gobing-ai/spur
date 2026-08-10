@@ -35,6 +35,8 @@ export type {
     AgentServiceOutput,
 } from './services/agent-service';
 export { AgentService } from './services/agent-service';
+export type { CorpusCheckResult } from './services/corpus-check';
+export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
 export type {
     CorpusMigratorOptions,
     FileReport,

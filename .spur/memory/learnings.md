@@ -221,3 +221,31 @@ Core learnings:
 - **Errors fixed:** implement stage didn't scope to target WBS (dominant S0 — sibling committed-but-`todo` 0485 pulled in, reverted 4+ times); unauth `agent.default` isn't a precheck failure; `--vars '{"agent":...}'` never reached the implement hop; parallel-session collision mis-read as regression; `extractReviewSectionBody` literal-`Z` lookahead truncation; prose severity `P1 (blocker)` rejected; `--force-done` from `todo` denied.
 
 `0487` was absent from the prior file (it only held 0480–0482), so no duplicate.
+Captured to `.spur/run/wrapup-learnings.md`.
+
+## 2026-08-10 — 0502
+
+### Conventions / patterns
+
+- **ADR-051 noun discipline: a flag on an existing verb beats a new first-layer noun.** The corpus sweep became `spur task check --corpus` (not `spur corpus check`) — the rejected one-gate `corpus` noun; `task check` already sweeps the full corpus when no WBS is given (`apps/cli/src/commands/task.ts`). First layer = nouns grouping similar actions; verbs/flags are the expansion mechanism.
+- **Apps are thin transports (ADR-021).** Sweep + two-sided baseline reconciliation live in a `packages/app` service (`runCorpusCheck(cwd, since?)`), not the CLI transport and not `scripts/`; the CLI verb is a thin flag/output adapter.
+- **Move-and-delete, never wrap/delegate.** Two surfaces for one gate is the defect being fixed — the spur-dev `corpus-check` command was removed outright, not kept as a compatibility wrapper; no parallel copies survive the transition.
+- **Kill the CLI self-spawn.** The old `sweep()` shelled out to `bun run apps/cli/src/index.ts …`; the promoted service calls `task-check.ts`/`feature-check.ts` in-process.
+- **Frozen names contract.** Design pinned exact file/export/type/flag names (`runCorpusCheck`, `CorpusCheckResult = {observed, baselined, newErrors, staleEntries, ok}`, `key()`, JSON keys) — implement exactly, don't rename.
+- **Baseline semantics + format frozen (ADR-050/T10).** Two-sided: a new error fails AND a stale baseline entry fails; unparseable sweep is a hard failure (never "no errors"). `config/corpus-baseline.json` schema untouched.
+- **Port compliance on the move into app layer:** `node:fs` direct IO → ts-runtime `FileSystem` seam; `Bun.spawnSync` git helper → `ProcessExecutor.run` (sync tree readers converted async); hardcoded planning folders → `resolvePlanningFolders`; `console.log` report dropped.
+
+### Errors fixed
+
+- **Unresolved `--since` refs silently skipped the fog check.** The port dropped the spur-dev-era console report, so an unresolvable ref produced no visible diagnostic. Fixed: CLI emits a SKIPPED reason on stderr (human + JSON, exit 0 — original semantics).
+- **`--since` misuse wasn't loud.** Missing value → commander usage error (non-zero, names `--since`); flag-like value (`--since --json`) → exit 2 + usage message (R3 fail-loud).
+- **Concurrent DB-lock collision.** `spur-check-new`'s rule-gate intermittently collided with the operator's concurrent `spur history import` DB lock; re-run to green after it finished — not a code regression.
+
+### Gotchas
+
+- **Verify evidence-type whitelist is strict.** The `--corpus` verdict check flagged `ac-row-dropped`: 8 AC rows used unrecognised evidence types (`live run`, `grep`, `CLI tests`, `git diff`, `task file`). Only `test` / `command` / `static-ref` are accepted — phrase AC evidence as an accepted type.
+- **Baseline path resolution must use project root, not bare `process.cwd()` of the caller.** Covered by a nested-cwd test (T2).
+- **Design-frozen scope is a deliberate boundary, not a missing abstraction.** Review P1 flagged that `structuralSweep()` validates only the active task folder; broadening to all configured folders would surface 404 legacy ratchet-drift errors and force a massive baseline reconciliation (T10) — tracked as follow-up, out of scope.
+- **Selective staging for unrelated tree changes.** Unrelated concurrent work (`history-service.ts`, executor config) shared the working tree; excluded from 0502's commit via selective staging. One writer per tree / commit per task.
+
+Key evidence: real repo `spur task check --corpus` → 2 observed / 2 baselined / 0 new / 0 stale, exit 0; injected unbaselined fixture error exits 1; `bun run lint` / `test` / `build` / `spur-check-new` all exit 0. Service tests 30/30 green (new-error, stale-entry, unparseable-sweep, nested-cwd, fog decision table).

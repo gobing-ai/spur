@@ -533,6 +533,53 @@ describe('spur task CLI', () => {
         expect([0, 1]).toContain(exitCode); // may fail depending on task content
         expect(output.messages.join('')).toMatch(/\d{4}/);
     });
+
+    test('check --corpus preserves JSON, exit, and usage contracts', async () => {
+        const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-corpus-cli-'));
+        await mkdir(join(isoCwd, 'config'), { recursive: true });
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await writeFile(join(isoCwd, 'config', 'corpus-baseline.json'), JSON.stringify({ entries: [] }));
+        try {
+            const clean = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus', '--json'], { cwd: isoCwd, output: clean })).toBe(0);
+            const result = JSON.parse(lastMessage(clean));
+            expect(Object.keys(result)).toEqual(['observed', 'baselined', 'newErrors', 'staleEntries', 'ok']);
+            expect(result).toMatchObject({ observed: 0, baselined: 0, newErrors: [], staleEntries: [], ok: true });
+
+            const since = createCapturedOutput();
+            expect(
+                await main(['task', 'check', '--corpus', '--since', 'HEAD', '--json'], {
+                    cwd: isoCwd,
+                    output: since,
+                }),
+            ).toBe(0);
+
+            await writeFile(join(isoCwd, 'docs', 'tasks', '0001_broken.md'), 'not task markdown\n');
+            const failing = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus', '--json'], { cwd: isoCwd, output: failing })).toBe(1);
+            expect(JSON.parse(lastMessage(failing))).toMatchObject({ ok: false });
+
+            const mixed = createCapturedOutput();
+            expect(await main(['task', 'check', '0001', '--corpus'], { cwd: isoCwd, output: mixed })).toBe(2);
+            expect(mixed.errors.join('')).toContain('cannot be combined with a WBS');
+
+            const unscoped = createCapturedOutput();
+            expect(await main(['task', 'check', '--since', 'HEAD'], { cwd: isoCwd, output: unscoped })).toBe(2);
+            expect(unscoped.errors.join('')).toContain('--since requires --corpus');
+
+            for (const argv of [
+                ['task', 'check', '--corpus', '--since'],
+                ['task', 'check', '--corpus', '--since', '--json'],
+            ]) {
+                const invalid = createCapturedOutput();
+                expect(await main(argv, { cwd: isoCwd, output: invalid })).not.toBe(0);
+                expect(invalid.errors.join('')).toContain('--since');
+            }
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
     test('check with unknown WBS prints error and exits 1', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', '9999'], { cwd, output });

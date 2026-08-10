@@ -84,7 +84,7 @@
         "spur-check:full": "bun run link-check && bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full",
         "spur-check-new:full": "bun run link-check && bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full && bun run corpus-check",
         "eval": "bun run plugins/sp/evals/run-eval.ts",
-        "corpus-check": "bun scripts/spur-dev.ts corpus-check",
+        "corpus-check": "bun run apps/cli/src/index.ts task check --corpus",
         "link-check": "bun scripts/spur-dev.ts link-check"
     },
     "dependencies": {

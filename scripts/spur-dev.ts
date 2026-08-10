@@ -18,7 +18,6 @@
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
- *   corpus-check [--since <ref>]                sweep task/feature corpus against the baseline
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  */
 import { buildBinaries } from './commands/build-binaries';
@@ -27,7 +26,6 @@ import { bundleConfig } from './commands/bundle-config';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { checkMarketplaceVersion } from './commands/check-marketplace-version';
-import { corpusCheck } from './commands/corpus-check';
 import { devAll } from './commands/dev-all';
 import { linkCheck } from './commands/link-check';
 import { publish } from './commands/publish';
@@ -36,7 +34,7 @@ import { verifyPack } from './commands/verify-pack';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, corpus-check, link-check',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check',
     );
     process.exit(message ? 1 : 0);
 }
@@ -93,17 +91,6 @@ try {
         case 'dev-all':
             devAll();
             break;
-        case 'corpus-check': {
-            const sinceIndex = args.indexOf('--since');
-            const since = sinceIndex === -1 ? undefined : args[sinceIndex + 1];
-            // Fail loud: `--since` with no value would otherwise silently fall back to the default
-            // branch-scoped range, i.e. an audit that quietly measured something else than asked.
-            if (sinceIndex !== -1 && (since === undefined || since.startsWith('--'))) {
-                throw new Error('corpus-check: --since requires a git ref (e.g. --since ee0771ab~1)');
-            }
-            process.exit(await corpusCheck(process.cwd(), since));
-            break;
-        }
         case 'link-check':
             process.exit(await linkCheck());
             break;

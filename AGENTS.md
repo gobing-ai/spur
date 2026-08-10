@@ -239,10 +239,9 @@ spur <noun> --help
 | `spur` CLI (`apps/cli/`) | **Public** — end-user harness; stays simple and easy to use. Default home for anything a Spur end user would run. **First layer = nouns only** (`task check`, `rule run`) so similar actions group; verbs/flags are the expansion mechanism — a new noun is justified only when no existing noun can host the action. | Adding/changing/removing any noun or verb requires **explicit operator consent** with design context. Present the surface choice + options first; never land a CLI surface change unilaterally. |
 | `scripts/spur-dev.ts` | **Internal** — Spur self-dev only: packaging/release (`publish`, `bundle-*`, `verify-pack`, `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), monorepo gates (`link-check`). | No consent gate; one module per command under `scripts/commands/` + test sibling + `bundle-*`-style verb naming. |
 
-Known misplacement (task filed — fix per ADR-051 noun discipline): `corpus-check` lives in spur-dev but
-operates on any Spur-managed project's corpus — a user-facing gate in disguise; promote to
-`spur task check --corpus` (NOT a new `corpus` noun). All twelve CLI nouns are legitimately public;
-all other spur-dev commands are correctly internal.
+Promoted in task 0502 per ADR-051 noun discipline: corpus validation is `spur task check --corpus`
+(NOT a new `corpus` noun); the misplaced spur-dev command is removed. All twelve CLI nouns are
+legitimately public; all other spur-dev commands are correctly internal.
 
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
@@ -281,10 +280,10 @@ Before “done”:
 3. `bun run test` green (workspaces + `plugins/sp`; no skipped tests to pass)
 4. `bun run test-cf` green
 5. `bun run build` green
-6. `bun run corpus-check` green (runs inside `spur-check`; see below)
+6. `spur task check --corpus` green (`bun run corpus-check`, inside `spur-check`; see below)
 7. `git status` intentional only
 
-**`corpus-check` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
+**`spur task check --corpus` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
 structural error outside `config/corpus-baseline.json`. It exists because per-task gates run **once**,
 at a transition, and nothing re-validates afterwards — so both a bypassed gate and a tightened rule
 go unnoticed indefinitely. The baseline is two-sided: an unlisted error fails, **and** a listed entry

@@ -46,4 +46,6 @@ Both `status=done` (task show) and `verdict=PASS` (verdict files). `feature_id=H
 {"wbs":"0487","feature_id":"N","status":"done","verdict":"PASS","timestamp":"2026-08-09T19:50:49Z"}
 ```
 
-- `wbs` 0487; `feature_id` N (frontmatter); `status` done (`spur task show`); `verdict` PASS (`0487-verdict.json`).
+- `wbs` 0487; `feature_id` N (frontmatter); `status` done (`spur task show`); `verdict` PASS (`0487-verdict.json`).`{"wbs":"0502","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-10T23:30:43Z"}`
+
+Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0502 --json` (wbs, feature_id=null, status=done, updated_at) + `.spur/run/0502-verdict.json` (PASS). Also repaired the file — a prior botched append had baked the command's annotation text into the JSONL; rewrote clean.

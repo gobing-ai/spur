@@ -11,7 +11,9 @@ import {
     type MigrationReport,
     PlanningWriteService,
     readVerdictArtifact,
+    resolveFogRange,
     resolvePlanningFolders,
+    runCorpusCheck,
     type SectionMatrix,
     SectionMutationError,
     TASK_LIFECYCLE_PROFILE,
@@ -910,10 +912,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
         .option('--strict', 'Elevate ALL warnings to failures')
         .option('--strict-core', 'Gate variant: fail only on hard-core errors (the testing→done guard)')
+        .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
+        .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, options) => {
-            const svc = await makeCheckService(context);
             const json = options.json === true;
             // `--strict` elevates every advisory; `--strict-core` is the done-gate
             // variant — the hard-core L3 rules (Solution file:line, Review P1–P4)
@@ -922,6 +925,70 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
             try {
+                if (options.corpus === true) {
+                    if (wbs !== undefined) {
+                        context.output.error('--corpus validates the whole corpus and cannot be combined with a WBS');
+                        context.setExitCode(2);
+                        return;
+                    }
+                    if (String(options.since ?? '').startsWith('-')) {
+                        // Commander eats a following flag as a missing option's value
+                        // (`--since --json` → since='--json'); reject flag-like values
+                        // instead of silently running an unscoped sweep (R3 parity with
+                        // the deleted spur-dev throw at scripts/spur-dev.ts:102). A
+                        // truly absent value already throws "option '--since <ref>'
+                        // argument missing" via exitOverride.
+                        context.output.error('--since requires a git ref value (e.g. --since HEAD~1)');
+                        context.setExitCode(2);
+                        return;
+                    }
+                    if (options.since !== undefined) {
+                        // Restore the spur-dev-era visible SKIPPED diagnostic (P3): an
+                        // explicitly supplied but unresolvable ref skips the fog half of
+                        // the sweep; the runCorpusCheck result cannot carry the reason
+                        // (frozen JSON shape), so the transport surfaces it on stderr.
+                        const fogRange = await resolveFogRange(context.cwd, options.since);
+                        if ('skip' in fogRange) {
+                            context.output.error(
+                                `corpus-check: fog check SKIPPED (${fogRange.skip}) — range ${fogRange.spec} was not evaluated.`,
+                            );
+                        }
+                    }
+                    const result = await runCorpusCheck(context.cwd, options.since);
+                    if (json) {
+                        context.output.write(toJson(result));
+                    } else {
+                        context.output.write(
+                            `corpus-check: swept tasks + features — ${result.observed} error(s) observed, ` +
+                                `${result.baselined} baselined, ${result.newErrors.length} new, ` +
+                                `${result.staleEntries.length} stale.`,
+                        );
+                        for (const error of result.newErrors) {
+                            context.output.error(
+                                `  NEW    ${error.kind} ${error.id}: ${error.code} — ${error.message}`,
+                            );
+                        }
+                        for (const entry of result.staleEntries) {
+                            context.output.error(
+                                `  STALE  ${entry.kind} ${entry.id}: ${entry.code} — fixed; remove this baseline entry`,
+                            );
+                        }
+                        context.output.write(
+                            result.ok
+                                ? 'corpus-check OK — no corpus errors outside the accepted baseline.'
+                                : 'corpus-check FAILED — reconcile new and stale findings in config/corpus-baseline.json.',
+                        );
+                    }
+                    if (!result.ok) context.setExitCode(1);
+                    return;
+                }
+                if (options.since !== undefined) {
+                    context.output.error('--since requires --corpus');
+                    context.setExitCode(2);
+                    return;
+                }
+
+                const svc = await makeCheckService(context);
                 const planningFolders = await resolvePlanningFolders(context.fs);
                 const activeFolder = planningFolders.foldersConfig.active_folder;
                 const tasksDir = options.folder ?? context.fs.resolve(activeFolder);

@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.6.0
+version: 1.7.0
 owner: Robin Min
-updated_at: 2026-08-09
+updated_at: 2026-08-10
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -394,3 +394,6 @@ statuses, and decision outcomes remain stable; future changes follow the append-
   the noun discipline above), tracked in its own task. All twelve CLI nouns
   (`init agent history rule workflow message team task feature status migrate serve`) are
   legitimately public; all other spur-dev commands are correctly internal.
+
+  **Amendment (2026-08-10):** Task 0502 completed the recorded promotion: the public gate is now
+  `spur task check --corpus`; the spur-dev command was removed. **Detail:** `04 §7.1`.
