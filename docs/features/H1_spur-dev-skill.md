@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-08T20:21:45.518Z"
+updated_at: "2026-08-10T06:39:45.583Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -315,8 +315,8 @@ Feature: spur-dev umbrella skill
   Scenario: R6.1 A marker is written under .spur/run at creation
     When a --worktree batch creates its worktree
     Then a marker file is written under .spur/run
-    And it records marker id, worktree path, branch, base ref, base SHA,
-        originating command, task selector, created-at, and status
+    And it records marker id, worktree path, branch, base ref, and base SHA
+    And it records originating command, task selector, created-at, and status
 
   Scenario: R6.2 A killed session leaves a recoverable marker
     Given a --worktree batch whose session is killed mid-run
@@ -454,8 +454,7 @@ Feature: spur-dev umbrella skill
   # ── E1 batch forensics (task 0482 — reachable escalation, precheck wiring, fix-hop scope) ──
   Scenario: R1 — a pinned executor still escalates on resource exhaustion
     Given the implement step pins a concrete executor (not the literal `auto`)
-    And the prompt resolves to the `implement` stage whose model_policy declares a
-      resource-exhaustion fallback
+    And the prompt resolves to the `implement` stage whose model_policy declares a resource-exhaustion fallback
     When the dispatch exits non-zero with a 429 quota body
     Then the run escalates to the next eligible tier and re-dispatches
     And the escalation is reported naming the failed executor, the signal, and the target tier
@@ -511,7 +510,7 @@ Feature: spur-dev umbrella skill
 | 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | done |
 | 0483 | Fix H1 pipeline contract defects: implement scope, agent pin, review table, fixall repeats | done |
 | 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | done |
-| 0496 | Extend --worktree to accept an existing worktree name for batch reuse | todo |
+| 0496 | Extend --worktree to accept an existing worktree name for batch reuse | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -333,20 +333,41 @@ Planning commands (`dev-idea`, `dev-plan`): with `--auto`, skip all remaining ta
 run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`. One CLI
 flag sets both.
 
-### `--worktree` — run the batch in an isolated git worktree
+### `--worktree [<name>]` — run the batch in an isolated git worktree (create or reuse)
 
 **Anchor:** `#flag-worktree`.
 
 Batch commands only (`dev-refineall`, `dev-runall`, `dev-verifyall`): run the entire driver loop
-inside an isolated git worktree instead of the operator's working directory. On a fully successful
-batch the worktree branch is fast-forward-merged onto its base ref and removed; on any failure,
-halt, or non-fast-forward base, the worktree is **retained intact** — never auto-deleted, never
-auto-merged. `/sp:dev-next` does not get the flag (single step; not worth the worktree cost), and
-`--worktree --mode parallel` is rejected (per-task parallel isolation stays task 0142). The full
-lifecycle — dirty-tree precheck, creation, crash-safe marker, merge-or-retain, and `--continue`
-re-entry — is specified in
-[execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree). Portable
-`git worktree` commands only; the git mechanics are reused from
+inside an isolated git worktree instead of the operator's working directory. One flag, two modes:
+
+- **Create mode** — bare `--worktree` (no value). Cut a fresh branch from the current HEAD's ref,
+  create a sibling worktree with a derived name, run the batch there. On a fully successful batch
+  the worktree branch is fast-forward-merged onto its base ref, then the worktree is removed and the
+  branch deleted; on any failure, halt, or non-fast-forward base, the worktree is **retained intact**
+  — never auto-deleted, never auto-merged.
+- **Reuse mode** — `--worktree <name>` / `--worktree=<name>`. Attach the batch to a worktree that
+  already exists. `<name>` resolves against `git worktree list --porcelain` (exact path → basename →
+  checked-out branch); exactly one match must survive or the batch aborts **before any task work**
+  (see [execution-batch.md § Name resolution](execution-batch.md#name-resolution---worktree-name)).
+  Reuse mode **never creates a worktree** — an unresolvable name is an error, not a create. The batch
+  adopts the worktree's checked-out branch (a detached HEAD aborts), adopts or synthesizes the
+  `.spur/run/` state marker, and runs. On a fully successful batch the branch is fast-forward-merged
+  onto its base ref **but the worktree and branch are retained**; on failure/halt/non-FF the tree is
+  retained, same as create mode.
+
+**Ownership rule (one statement, both modes): the flag removes only what it created.** In create
+mode the flag owns the tree, so cleanup is its job; in reuse mode the operator owns it, so the flag
+merges but never removes. This keeps the continue-the-work loop stable — after a green reuse batch
+`baseRef == $BRANCH`, so the same worktree keeps fast-forwarding on the next invocation.
+
+**Value binding.** The following token is consumed as `<name>` **only when it does not begin with
+`-`**, so `--worktree --auto` is the bare create form and `--agent`/`--feature`/etc. are never
+swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
+the flag (single step; not worth the worktree cost), and `--worktree --mode parallel` is rejected
+(per-task parallel isolation stays task 0142). The full lifecycle — name resolution, dirty-tree
+precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is
+specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree).
+Portable `git worktree` commands only; the git mechanics are reused from
 [worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md).
 
 ---

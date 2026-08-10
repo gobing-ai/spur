@@ -340,17 +340,24 @@ The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `no
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
-## Worktree isolation (`--worktree`)
+## Worktree isolation (`--worktree [<name>]`)
 
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
-[`--worktree`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an isolated git
-worktree instead of the operator's working directory. This section owns the worktree lifecycle for
-the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out of scope
-(task 0142 Slice A); `--worktree --mode parallel` is rejected.
+[`--worktree [<name>]`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an
+isolated git worktree instead of the operator's working directory. This section owns the worktree
+lifecycle for the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out
+of scope (task 0142 Slice A); `--worktree --mode parallel` is rejected.
 
-The lifecycle wraps Steps 1–5 unchanged: a precheck creates the worktree before selector resolution
-runs, the loop executes with the worktree as process cwd, and a terminal action merges or retains
-after the batch report is emitted. Steps 1–5 themselves are not modified — only their cwd differs.
+One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create
+mode** (cut a fresh branch + sibling tree). `--worktree <name>` is **reuse mode** (attach to a tree
+that already exists); name resolution (§ WT-2 below) runs before WT-1. The deltas each mode applies
+are stated inline in WT-1…WT-4. `--continue` re-entry (WT-6) resolves by explicit name first, then
+falls back to the command+selector marker scan.
+
+The lifecycle wraps Steps 1–5 unchanged: a precheck creates or adopts the worktree before selector
+resolution runs, the loop executes with the worktree as process cwd, and a terminal action merges or
+retains after the batch report is emitted. Steps 1–5 themselves are not modified — only their cwd
+differs.
 
 **Portability (R10).** Use portable `git worktree` commands only. Do **not** depend on the Claude
 Code `EnterWorktree`/`ExitWorktree` tools — the `sp` plugin ships to Codex, Gemini CLI, pi, omp, and
@@ -375,7 +382,20 @@ git status --porcelain
   files. The worktree is created and the batch proceeds against the committed base ref, not the
   operator's working-directory state.
 
-### WT-2 — Worktree creation (R2)
+**Reuse-mode delta.** The main-tree precheck is unchanged — the divergence hazard is identical (the
+batch still runs somewhere the operator is not standing). The *target* worktree being dirty is
+**expected** (it holds retained partial work from a prior halt) and must **not** abort: report the
+file list once and proceed. The batch runs against the target worktree's working-directory state, not
+a clean checkout — which is exactly the point of reuse mode.
+
+### WT-2 — Worktree creation or adoption
+
+**Name resolution runs first** for both modes — bare `--worktree` skips it (no name to resolve);
+`--worktree <name>` must resolve before WT-1's precheck touches anything. Resolution is specified
+in [§ Name resolution](#name-resolution---worktree-name) below; this section covers creation
+(create mode) and adoption (reuse mode).
+
+#### Create mode (bare `--worktree`)
 
 Create one worktree on a new branch cut from the current HEAD's ref (the **base ref** — often a
 `feat/…` branch, not literally `main`). Location follows the sibling-directory convention in
@@ -388,8 +408,9 @@ BRANCH="sp/<command>-<selector-slug>-<short-id>"     # e.g. sp/runall-h1-a3f2
 git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF"
 ```
 
-Branch and directory names are derived (command + selector slug + short id); no operator-supplied
-name in this slice (R8.3).
+Branch and directory names are derived (command + selector slug + short id); the create path never
+takes an operator-supplied name (R8.3 — no create-with-name; `--worktree <name>` where `<name>` does
+not resolve is an error, not a create).
 
 A fresh worktree has no `node_modules` (gitignored), so the first `bun test` or
 typecheck fails on the first workspace import. Install before any task work:
@@ -399,10 +420,45 @@ typecheck fails on the first workspace import. Install before any task work:
 `--frozen-lockfile` pins the worktree to `bun.lock` rather than re-resolving,
 so the worktree's dependency tree matches the base ref's.
 
-After creation, immediately write the state marker (WT-3), then run the
+#### Reuse mode (`--worktree <name>`)
+
+Creation is **skipped entirely**. `$BRANCH` is the resolved worktree's already-checked-out branch; a
+detached HEAD aborts (no branch can serve as `$BRANCH` for WT-4's FF-merge). `BASE_REF` is the
+invoking tree's current HEAD ref (not the worktree's branch) and `BASE_SHA` is
+`git merge-base <BASE_REF> <BRANCH>` — so WT-4's FF-merge lands the worktree's accumulated commits
+onto the invoking tree's base ref, exactly as create mode does.
+
+`bun install --frozen-lockfile` runs **only when `node_modules` is absent** in the resolved
+worktree. A warm reused tree does not re-pay the install; a cold one (hand-made, or a retained tree
+whose deps were removed) installs exactly once before the first task. This is the R3 conditional
+install rule (source: task 0481) — create mode always installs because a fresh tree is always cold.
+
+After creation or adoption, immediately write/adopt the state marker (WT-3), then run the
 existing batch loop (Steps 1–5) with the worktree as process cwd. `spur workflow run` resolves cwd
 from the process (`apps/cli/src/commands/workflow.ts:124`), so no CLI change is needed — `cd` into
 the worktree directory before launching the loop.
+
+#### Name resolution (`--worktree <name>`)
+
+<a id="name-resolution---worktree-name"></a>
+
+Authority: **git**, not the marker store — a marker may be stale, git is not. A foreign worktree
+with no marker is a valid target (R3 synthesizes one). Resolve `<name>` against
+`git worktree list --porcelain`, matching in this order and stopping at the first tier that yields
+≥1 hit:
+
+1. **exact `worktree <path>`** (after path normalization against the invoking tree)
+2. **`basename(<path>)`**
+3. **checked-out branch** — accept both `<name>` and the full `refs/heads/<name>` form
+
+Then require exactly one survivor across the tiers:
+
+- **0 hits** → abort before any task work. Print each candidate worktree as
+  `<basename>  <branch>  <path>`, and the line: *"`--worktree <name>` selects an existing worktree;
+  it never creates one. Use bare `--worktree` to create."*
+- **≥2 hits** → abort naming the candidates and require the path form (tier 1).
+- **1 hit, but** the worktree is `locked`, `prunable`, or belongs to a different repo → abort naming
+  the condition.
 
 ### `spur` on PATH is not this checkout
 
@@ -448,15 +504,44 @@ terminal transition (merged / retained). Schema:
 }
 ```
 
-`status` transitions: `active` → `merged` (WT-4 success) | `retained` (WT-5 failure/halt/non-FF).
-The marker file is named `.spur/run/worktree-<marker-id>.json`. It is the authority for WT-5 resume
-and for operator recovery after a crash: a killed session leaves the marker at `status: active`,
-which the operator reads to find the worktree path, branch, and base ref.
+`status` transitions: `active` → `merged` (WT-4 success) | `retained` (WT-5 failure/halt/non-FF),
+and `retained` → `active` on a reuse re-entry (WT-6). The marker file is named
+`.spur/run/worktree-<marker-id>.json`. It is the authority for WT-6 resume and for operator recovery
+after a crash: a killed session leaves the marker at `status: active`, which the operator reads to
+find the worktree path, branch, and base ref.
+
+**Reuse-mode marker adoption.** Two new optional fields record when a run did not create the tree:
+
+```json
+{
+  "adopted": true,
+  "adoptedAt": "<iso-8601>"
+}
+```
+
+`adopted` is what WT-4 reads to decide retain-vs-remove, so it is set whenever the current run did
+not create the tree — including when reuse mode adopts a marker that create mode originally wrote.
+It records "this run did not create this tree", not "this tree was never created by the flag".
+
+Reuse mode resolves the marker by the resolved worktree's `path` (not by `command`+`selector`):
+
+- **Existing marker for that path** → adopt it in place: update `command`/`selector` to the current
+  invocation, set `status` to `active`, set `adopted: true` + `adoptedAt`, **preserve `baseRef` and
+  `baseSha`**. This makes cross-command resume — `dev-runall` halted, now `dev-verifyall` over the
+  same tree — a supported path (R5.2).
+- **No marker** (hand-made or foreign worktree) → synthesize one with `baseRef` = the invoking
+  tree's current HEAD ref, `baseSha` = `git merge-base <baseRef> <BRANCH>`, `adopted: true`.
+- **Marker already at `status: active`** → **abort** — another session may own that tree
+  (AGENTS.md one-writer-per-tree; task 0487 R5). Overridable with `--force` (the operator can tell
+  a crashed-session marker from a live-session one; the harness cannot).
 
 ### WT-4 — Success path (R4)
 
 When the batch completes with **no failed task**, fast-forward-merge the worktree branch onto the
-base ref, then remove the worktree and delete the branch:
+base ref. The terminal action after the merge differs by mode (ownership rule: *the flag removes
+only what it created*):
+
+#### Create mode — merge, remove, delete
 
 ```bash
 # Run these from the main tree (not inside the worktree) - you merge the worktree branch
@@ -469,6 +554,21 @@ git branch -d "$BRANCH"
 # update marker: status = "merged"
 ```
 
+#### Reuse mode — merge, retain
+
+The FF-merge runs identically (same `git checkout "$BASE_REF" && git merge --ff-only "$BRANCH"`),
+but then the worktree and branch are **retained**, not removed:
+
+```bash
+git checkout "$BASE_REF"
+git merge --ff-only "$BRANCH"
+# update marker: status = "merged"  (worktree and branch are intentionally NOT removed)
+```
+
+The operator supplied the tree, so the operator owns its lifetime. After a green reuse batch
+`baseRef == $BRANCH`, so the same worktree keeps fast-forwarding on the next invocation instead of
+having to be rebuilt — the continue-the-work loop is stable.
+
 **Fast-forward only.** If the base ref has moved since the worktree was created and FF is
 impossible, do **not** rebase, merge-commit, or resolve conflicts — fall through to the retention
 path (WT-5) and report the divergence. The corpus files (`docs/tasks*/`, kanban/index) are
@@ -476,12 +576,14 @@ auto-generated and conflict-prone; automated conflict resolution over generated 
 wrong thing to attempt unattended. FF-only means the merge either is trivially correct or does not
 happen.
 
-**Auto-decision carve-out.** This success path runs unattended on a fully-passing `--worktree
---auto` batch — it does **not** pause even though it performs a merge and a branch deletion. That is
-the explicit single exception to Auto-Decision Principle #6 (`cross-cutting.md`), which otherwise
-pauses any `--merge` / branch-deletion action regardless of `--auto`. The exception is safe because
-`git merge --ff-only` and `git branch -d` both fail closed (they refuse rather than risk losing
-work); WT-5 retains the worktree and branch whenever FF is impossible or any task fails.
+**Auto-decision carve-out.** The create-mode success path runs unattended on a fully-passing
+`--worktree --auto` batch — it does **not** pause even though it performs a merge and a branch
+deletion. That is the explicit single exception to Auto-Decision Principle #6 (`cross-cutting.md`),
+which otherwise pauses any `--merge` / branch-deletion action regardless of `--auto`. The exception
+is safe because `git merge --ff-only` and `git branch -d` both fail closed (they refuse rather than
+risk losing work); WT-5 retains the worktree and branch whenever FF is impossible or any task fails.
+Reuse mode is **narrower** than the carve-out (it merges but does not delete the branch), so the
+carve-out text needs no widening.
 
 ### WT-5 — Failure path: retain and report (R5)
 
@@ -501,7 +603,7 @@ marker: `status = "retained"`. Emit a retention report in the existing halt-repo
 The worktree and its branch are intact. Nothing was merged onto the base ref.
 Resume, merge, or discard:
 
-  resume:  cd <worktree-path> && <command> --continue --worktree <selector>
+  resume:  cd <worktree-path> && <command> --continue --worktree <worktree-path>
   merge:   git checkout <base-ref> && git merge <branch>     # resolve conflicts manually
   discard: git worktree remove <worktree-path> && git branch -D <branch>
 ```
@@ -515,16 +617,26 @@ and we tell you where the work is."
 ### WT-6 — `--continue` re-entry (R7)
 
 A `--continue` resume of a batch started with `--worktree` must re-enter the existing worktree via
-its WT-3 marker rather than creating a second one. Marker lookup:
+its WT-3 marker rather than creating a second one. Marker lookup tries two paths in order:
 
-1. Scan `.spur/run/worktree-*.json` for a marker whose `command` + `selector` match the current
-   invocation and whose `status` is `active` or `retained`.
-2. **Found** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and resume the loop
-   from the checkpoint (Steps 1–5 with `--continue` semantics).
-3. **Not found** → fail loudly: "no resolvable worktree marker for `<command> <selector>` under
+1. **Name-resolution path (when `--worktree <name>` is present)** — run the [§ Name resolution](#name-resolution---worktree-name)
+   algorithm against `<name>`. The resolved worktree's path identifies the marker file to adopt.
+   This path covers the common resume shapes: the operator remembers the name used last time, or
+   passes the path (tier-1 match).
+2. **Command+selector fallback (bare `--worktree` or absent flag)** — scan
+   `.spur/run/worktree-*.json` for a marker whose `command` + `selector` match the current
+   invocation and whose `status` is `active` or `retained`. Create-mode runs that did not name their
+   tree resolve here.
+3. **Found by either path** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and
+   resume the loop from the checkpoint (Steps 1–5 with `--continue` semantics).
+4. **Not found** → fail loudly: "no resolvable worktree marker for `<command> <selector>` under
    `.spur/run/`; cannot resume a `--worktree` batch without one. Re-run without `--worktree` to
    start a new batch in the main tree, or inspect `.spur/run/` for prior markers." Do **not**
    silently run in the main tree.
+
+Name resolution failing at resume (0 or ≥2 hits) has the same abort semantics as a fresh run: it
+names candidates and requires the path form — it does **not** fall through to the command+selector
+fallback, because `<name>` was explicit and unambiguous intent.
 
 ### WT-7 — Exclusions (R8)
 
@@ -532,8 +644,8 @@ its WT-3 marker rather than creating a second one. Marker lookup:
   worth the worktree cost.
 - **`--mode parallel`** is rejected when combined with `--worktree` — per-task worktrees and
   parallel isolation remain task 0142 Slice A.
-- **No** operator-supplied worktree name, no `--worktree-keep` variant, no auto-cleanup of stale
-  worktrees from prior runs.
+- **No** create-with-name (`--worktree <name>` never creates; an unresolvable name is an error),
+  no `--worktree-keep` variant, no auto-cleanup of stale worktrees or markers from prior runs.
 
 ### Corpus visibility note
 

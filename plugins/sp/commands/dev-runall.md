@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -22,14 +22,14 @@ Wraps the **sp:spur-dev** skill.
 | `--wrap` | Run the wrap hop per task. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
-| `--worktree` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. | off |
+| `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -44,8 +44,9 @@ there as a synonym for omit, resolving to `agent.default`, ADR-047; the orchestr
 report as JSON), `--wrap` (trigger
 `wrapup-pipeline.yaml` after the batch completes), `--next`
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
-`--continue` (resume from checkpoint), `--worktree` (run the batch in an isolated git worktree —
-FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; see
+`--worktree` `[<name>]` (run the batch in an isolated git worktree —
+FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form
+creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
 `execution-batch.md` § Worktree isolation).
 
 **`--worktree` is sequential-only.** `--worktree --mode parallel` is **rejected**. This flag gives

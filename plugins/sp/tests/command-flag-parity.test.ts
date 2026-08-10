@@ -216,4 +216,30 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
             ).toBe(false);
         });
     }
+
+    // ---------- task 0496 (feature H1): --worktree [<name>] placeholder ----------
+    //
+    // The three batch commands (dev-runall, dev-refineall, dev-verifyall) must all document
+    // the optional <name> argument to --worktree consistently. extractFlags still captures
+    // --worktree (the regex stops at `[`), so R8 parity passes either way — this test pins
+    // the placeholder spelling so the three commands cannot drift.
+
+    const WORKTREE_BATCH_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall'];
+    for (const command of WORKTREE_BATCH_COMMANDS) {
+        test(`R7 — ${command} documents optional --worktree name as [<name>]`, () => {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            const hint = argumentHint(raw);
+            expect(
+                hint.includes('[--worktree [<name>]]'),
+                `${command} argument-hint must include '[--worktree [<name>]]' to document the optional name argument (task 0496). Got: ${hint}`,
+            ).toBe(true);
+        });
+    }
+
+    test('R7 — dev-next does not declare --worktree in any form (task 0496)', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-next.md'), 'utf8');
+        expect(raw.includes('--worktree'), 'dev-next must stay free of --worktree (WT-7 exclusion, task 0496)').toBe(
+            false,
+        );
+    });
 });

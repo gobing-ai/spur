@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Extend --worktree to accept an existing worktree name for batch reuse"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H1
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T04:12:40.831Z"
-updated_at: "2026-08-10T04:22:11.978Z"
+updated_at: "2026-08-10T06:47:51.171Z"
 ---
 
 ## 0496. Extend --worktree to accept an existing worktree name for batch reuse
@@ -400,80 +400,172 @@ process, `apps/cli/src/commands/workflow.ts:124`).
 - Flag extraction is `/(--[a-z][a-z0-9-]*)/g`, so the added value placeholder cannot introduce a
   phantom flag.
 ### Plan
-- [ ] Rewrite `#flag-worktree` in `flag-glossary.md` for the two modes, the value-binding rule, and the removes-only-what-it-created ownership line (R1, R4)
-- [ ] Amend `execution-batch.md` WT-1/WT-2/WT-3 with the reuse-mode deltas: main-tree precheck unchanged, target dirt reported, creation skipped, conditional install, marker adopt/synthesize/active-abort (R3)
-- [ ] Add the `<name>` resolution algorithm to `execution-batch.md` as a new sub-section under WT-2, including the 0-hit and ≥2-hit abort messages (R2)
-- [ ] Split WT-4 into create-mode and reuse-mode terminal paths, add `adopted` + `adoptedAt` to the WT-3 marker schema (R4)
-- [ ] Make WT-6 resolve by explicit name first, falling back to the command+selector marker scan; fix the WT-5 retention-report resume line to `--continue --worktree <worktree-path>` (R5)
-- [ ] Narrow WT-7 exclusions: drop "no operator-supplied worktree name", keep no-create-with-name, no auto-cleanup, parallel-rejected, dev-next-excluded (R5)
-- [ ] Update all three command docs — argument-hint, Argument Flags row, Usage block — and the three `dev-operations.md` Inputs cells (R1)
-- [ ] Run `bun test plugins/sp` and `bun run lint`; extend `command-flag-parity.test.ts` with an assertion that the three hints carry the `[<name>]` placeholder (R5)
+
+- [x] Rewrite `#flag-worktree` in `flag-glossary.md` for the two modes, the value-binding rule, and the removes-only-what-it-created ownership line (R1, R4)
+- [x] Amend `execution-batch.md` WT-1/WT-2/WT-3 with the reuse-mode deltas: main-tree precheck unchanged, target dirt reported, creation skipped, conditional install, marker adopt/synthesize/active-abort (R3)
+- [x] Add the `<name>` resolution algorithm to `execution-batch.md` as a new sub-section under WT-2, including the 0-hit and ≥2-hit abort messages (R2)
+- [x] Split WT-4 into create-mode and reuse-mode terminal paths, add `adopted` + `adoptedAt` to the WT-3 marker schema (R4)
+- [x] Make WT-6 resolve by explicit name first, falling back to the command+selector marker scan; fix the WT-5 retention-report resume line to `--continue --worktree <worktree-path>` (R5)
+- [x] Narrow WT-7 exclusions: drop "no operator-supplied worktree name", keep no-create-with-name, no auto-cleanup, parallel-rejected, dev-next-excluded (R5)
+- [x] Update all three command docs — argument-hint, Argument Flags row, Usage block — and the three `dev-operations.md` Inputs cells (R1)
+- [x] Run `bun test plugins/sp` and `bun run lint`; extend `command-flag-parity.test.ts` with an assertion that the three hints carry the `[<name>]` placeholder (R5)
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map (2026-08-09).** Prose-contract only — no TypeScript (Design § Scope shape).
 
+- `plugins/sp/commands/dev-runall.md:3,25,32,47-49` — argument-hint `[--worktree [<name>]]`, Argument
+  Flags row (Default `off`), Usage line, flag prose (bare = create / `<name>` = adopt). Same
+  three-surface edit in `dev-refineall.md:3,27,34-35,42-44` and `dev-verifyall.md:3,26,33,41-43`.
+- `plugins/sp/skills/spur-dev/references/dev-operations.md:67,70,78` — Inputs cells for rows
+  3a / 5a / 13 carry `[--worktree [<name>]]`.
+- `plugins/sp/skills/spur-dev/references/flag-glossary.md:336-368` — `#flag-worktree` rewritten for
+  the two modes, with the ownership rule (`:358-361`) and the value-binding rule (`:363-365`).
+- `plugins/sp/skills/spur-dev/references/execution-batch.md` — WT-1 reuse-mode delta (`:385-389`);
+  WT-2 split into create (`:398`) / reuse (`:423`) plus the Name resolution sub-section (`:441-461`);
+  WT-3 marker adoption with `adopted` / `adoptedAt` (`:513-536`); WT-4 mode split (`:544`, `:557`);
+  WT-5 resume-line fix (`:606`); WT-6 name-first re-entry (`:617-639`); WT-7 narrowed (`:647-648`).
+- `plugins/sp/tests/command-flag-parity.test.ts:220-246` — the three `[<name>]` placeholder
+  assertions plus the dev-next negative assertion.
+
+**Documented deviation (Design § parity-gate constraints).** The Argument Flags first cell is
+written as two code spans (`` `--worktree` `[<name>]` ``), not the single-span literal the Design
+note sketched. This matches the established convention of every other value-taking flag row (e.g.
+`` `--mode` `<sequential\|parallel>` ``) and satisfies the actual gate — `validate-commands.ts`
+`extractHintTokens`/`extractTableTokens` token parity passes (command-contract gate (e) green in the
+647/647 suite run). Goal-equivalent: the Design's "matching literals" intent is hint↔table token
+parity, which holds.
+
+**Fix pass (verify `--fix all`, this run).** WT-7 bullet gained "no create-with-name" and "or
+markers" (`execution-batch.md:647-648`, closes AC R5.3); test comment placeholder `H??` → `H1`;
+dev-next negative assertion added (`command-flag-parity.test.ts:239-245`, declared in the approved
+Testing text); missing blank line before `### WT-2` restored (`execution-batch.md:390`).
 ### Testing
-**Coverage target: N/A.** This task adds no TypeScript — the deliverable is the `sp` plugin's prose
-contract. The `bunfig.toml` per-file ≥ 90% line/function gate has no new production code to bind, and
-the one test edit below extends an existing suite rather than adding a measurable unit. Report
-coverage as unchanged, not as a number.
 
-#### Automated
+**Verdict: PASS** — `/sp:dev-verify 0496 --auto --next --force --focus all --fix all` (2026-08-09).
 
-`--worktree` is a prose contract, not code, so the executable surface is the plugin contract suite —
-that is where the check belongs, not in a new file:
+**Scope.** Markdown/contract-only deliverable — no TypeScript, no CLI change (Design § Scope shape).
+The `sp` plugin's execution model is agent-read-markdown, so the contract prose *is* the
+implementation; AC evidence is deterministic anchors against the shipped contract plus the executable
+plugin contract suite (same model as task 0477's PASS).
+Coverage: N/A (documentation-only change; no runtime code path added).
 
-```bash
-bun test plugins/sp
-```
+**Suite evidence (this run).** `bun test plugins/sp` → **647 pass / 0 fail** / 2610 expects, run
+after the fix pass. Includes `command-contract`, `command-flag-parity` (with the 3 new placeholder
+assertions + new dev-next negative assertion), and `flag-contract-parity` (Default-column parity,
+`#flag-worktree` anchor resolution).
 
-Must stay green, specifically:
+**Per-Requirement Traceability**
 
-- `command-contract.test.ts` — gate (b) frontmatter schema, gate (e) Argument Flags table shape and
-  hint↔table token parity. The nested `[<name>]` placeholder is the risk: the hint's `<name>`
-  positional must have a matching literal in the table's first cell.
-- `command-flag-parity.test.ts` — bidirectional parity between each `dev-operations.md` row and the
-  matching argument-hint; glossary membership for flags declared by ≥2 commands (`--worktree` is
-  declared by 3, so it must keep exactly one canonical glossary entry).
-- `flag-contract-parity.test.ts` — `checkDefaultsParity` (command table `Default` vs
-  `dev-operations.md` Inputs) and `checkSsotAnchorsResolve` (the `#flag-worktree` anchor stays
-  resolvable from `execution-batch.md`).
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | hints `plugins/sp/commands/dev-runall.md:3`, `dev-refineall.md:3`, `dev-verifyall.md:3`; flag rows `dev-runall.md:25`, `dev-refineall.md:27`, `dev-verifyall.md:26` (Default `off`); usage `dev-runall.md:32`, `dev-refineall.md:34-35`, `dev-verifyall.md:33`; dev-operations `plugins/sp/skills/spur-dev/references/dev-operations.md:67,70,78`; value binding `plugins/sp/skills/spur-dev/references/flag-glossary.md:363-365`; dev-next excluded (`grep worktree plugins/sp/commands/dev-next.md` → 0 matches; pinned by `plugins/sp/tests/command-flag-parity.test.ts:239-245`) |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:441-461` — tiers path/basename/branch `:450-452`; 0-hit abort + never-creates line `:456-458`; ≥2-hit abort `:459`; locked/prunable/foreign-repo abort `:460-461`; git-not-marker authority `:444-445` |
+| R3 | MET | WT-1 reuse delta `:385-389` (main-tree precheck unchanged `:378-383`); WT-2 reuse `:423-438` (creation skipped `:425`, detached-HEAD abort `:425-426`, conditional install `:431-434`, cwd `:435-438`); WT-3 marker adoption `:513-536` (adopt-in-place `:528-531`, synthesize `:532-533`, active-marker abort + `--force` `:534-536`) |
+| R4 | MET | WT-4 split `:538-570` — create merge/remove/delete `:544-554`, reuse merge/retain `:557-566`, marker `merged` `:560-562`; ownership rule `plugins/sp/skills/spur-dev/references/flag-glossary.md:358-361` + `execution-batch.md:568`; non-FF fall-through `:572-579`; WT-5 retain+report unchanged `:588-614` |
+| R5 | MET | glossary two-mode rewrite `flag-glossary.md:336-368`; WT-6 name-first resolution `execution-batch.md:621-628` + no-fall-through `:637-639`; WT-7 narrowed `:641-648` (**repaired this run** `:647-648` — added "no create-with-name" + "or markers"); WT-5 resume line `:606`; `bun test plugins/sp` 647 pass / 0 fail |
 
-**One new assertion** in `command-flag-parity.test.ts`: the three batch hints contain
-`--worktree [<name>]` and `dev-next` contains no `--worktree` at all. This is the only part of the
-contract a test can bind — it fails if a future edit silently drops the optional value from one of
-the three surfaces, which is the drift class this task's parity gates exist for.
+**Acceptance Criteria Verification**
 
-Then the full gate:
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1.1 The three batch commands declare the optional value | MET | test | `plugins/sp/tests/command-flag-parity.test.ts:229-237` (3 placeholder assertions, green); `plugins/sp/commands/dev-runall.md:3,25,32`, `dev-refineall.md:3,27,34-35`, `dev-verifyall.md:3,26,33` |
+| R1.2 dev-operations.md rows match the hints | MET | static-ref | `plugins/sp/skills/spur-dev/references/dev-operations.md:67` (3a), `:70` (5a), `:78` (13) |
+| R1.3 Bare --worktree still creates | MET | static-ref | create mode preserved verbatim `plugins/sp/skills/spur-dev/references/execution-batch.md:398-421`; `plugins/sp/skills/spur-dev/references/flag-glossary.md:343-347` |
+| R1.4 A following flag is not consumed as the name | MET | static-ref | value-binding rule `plugins/sp/skills/spur-dev/references/flag-glossary.md:363-365` |
+| R1.5 dev-next still has no --worktree | MET | test | `plugins/sp/tests/command-flag-parity.test.ts:239-245` (new negative assertion, green); `grep worktree plugins/sp/commands/dev-next.md` → 0 matches this run |
+| R2.1 A basename resolves to exactly one worktree | MET | static-ref | tier 2 `plugins/sp/skills/spur-dev/references/execution-batch.md:451` |
+| R2.2 A branch name resolves to its worktree | MET | static-ref | tier 3 `plugins/sp/skills/spur-dev/references/execution-batch.md:452` |
+| R2.3 An unresolvable name aborts without creating | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:456-458` (abort, candidate list, never-creates line) |
+| R2.4 An ambiguous name aborts and demands the path form | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:459` |
+| R2.5 A locked or prunable worktree aborts | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:460-461` |
+| R3.1 A dirty main tree still aborts in reuse mode | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:378-383` (unchanged precheck) + `:385-389` (reuse delta) |
+| R3.2 A dirty target worktree is reported, not fatal | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:385-389` |
+| R3.3 No second worktree and no redundant install | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:425` (creation skipped), `:431-434` (install only when absent), `:435-438` (worktree as cwd) |
+| R3.4 A cold reused worktree installs once | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:431-434` |
+| R3.5 A detached-HEAD worktree aborts | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:425-426` |
+| R3.6 An existing marker is adopted, not duplicated | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:528-531` (in-place update; command/selector set; baseRef/baseSha preserved; status active) |
+| R3.7 A foreign worktree gets a synthesized marker | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:532-533` (`adopted: true`, baseRef = invoking HEAD ref, baseSha = merge-base) |
+| R3.8 An active marker blocks a second writer | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:534-536` (abort citing one-writer-per-tree; `--force` override) |
+| R4.1 A green reuse batch merges but retains | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:557-566` (FF-merge; no remove/branch-delete; marker `merged`) |
+| R4.2 Create mode still removes on success | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:544-554` |
+| R4.3 Non-FF falls through to retention in both modes | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:572-579` (FF-only paragraph, mode-agnostic) |
+| R4.4 A failed reuse batch retains and reports | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:588-614` (WT-5 unchanged; retain + halt report) |
+| R5.1 The retention report's resume line is correct | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:606` — `--continue --worktree <worktree-path>` |
+| R5.2 An explicit name outranks the marker scan | MET | static-ref | `plugins/sp/skills/spur-dev/references/execution-batch.md:621-628` (name-resolution path first) + `:530-531` (cross-command resume note) |
+| R5.3 WT-7 no longer forbids operator-supplied names | MET | static-ref | **repaired this run** — `plugins/sp/skills/spur-dev/references/execution-batch.md:641-648`: "operator-supplied name" gone; "no create-with-name" + "no auto-cleanup of stale worktrees or markers" present (`:647-648`); parallel-rejected `:644-645`; dev-next excluded `:642-643` |
+| R5.4 The plugin contract gates stay green | MET | test | `bun test plugins/sp` → 647 pass / 0 fail this run (post-fix); command-contract, command-flag-parity, flag-contract-parity all green; Default `off` parity holds |
 
-```bash
-bun run autofix && bun run spur-check
-```
+**Design Conformance**
 
-#### Manual smoke (the lifecycle a test cannot bind)
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| Two modes, one flag (mode table semantics) | DONE | `plugins/sp/skills/spur-dev/references/flag-glossary.md:343-356`; `execution-batch.md:349-353` |
+| Resolution algorithm (3 tiers, stop at first hit, exactly-one survivor) | DONE | `execution-batch.md:441-461` |
+| Marker delta (`adopted`/`adoptedAt`; "this run did not create"; retained→active) | DONE | `execution-batch.md:505-536` |
+| Two-writer abort rationale (0487 R5) | DONE | `execution-batch.md:534-536` |
+| Surfaces touched (6 files + declared test edit) | DONE | Solution change map |
+| Parity-gate constraints (hint↔table tokens; Default off; no phantom flag) | DONE | suite green; `off` on both sides |
+| Table first-cell literal single-span | CHANGED | two-span form per established `--mode` convention; token-parity gate green — documented in Solution § Documented deviation |
 
-Run from a scratch feature branch; the point is to confirm the prose is executable as written.
+**SECUA Review (focus all)**
 
-1. **Reuse resolves and does not duplicate.** `git worktree add ../spur-new-smoke -b sp/smoke HEAD`,
-   then run `/sp:dev-verifyall --tasks <small-set> --worktree spur-new-smoke`. Confirm:
-   `git worktree list` still shows exactly two trees, and a marker with `adopted: true` appears
-   under `.spur/run/`.
-2. **Cold vs warm install.** Repeat with `node_modules` present in the target; confirm
-   `bun install --frozen-lockfile` is skipped.
-3. **Fail-loud on a typo.** `--worktree spur-new-smoek` aborts, lists candidates, creates nothing.
-4. **Retain on success.** After a fully-green reuse batch, confirm the FF-merge landed on the base
-   ref **and** `../spur-new-smoke` plus `sp/smoke` still exist, marker `status: merged`.
-5. **Two-writer abort.** Hand-set the marker to `status: active`, re-run, confirm the abort, then
-   confirm `--force` proceeds.
-6. **Cross-command resume.** Halt a `dev-runall --worktree` batch, then
-   `dev-verifyall --continue --worktree <path>` — the path resolves without the command+selector
-   marker scan matching (R5.2). This is the case that is unsupported today.
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P2 | Correctness | `execution-batch.md` WT-7 | narrowed exclusions dropped "no create-with-name" and "or markers" (AC R5.3) — **fixed this run** `:647-648` |
+| P4 | Correctness | `command-flag-parity.test.ts:220` | placeholder comment `H??` — **fixed** → `H1` |
+| P4 | Correctness | `command-flag-parity.test.ts:239-245` | dev-next negative assertion declared in approved Testing text was missing — **fixed** |
+| P4 | Usability | `execution-batch.md:390` | missing blank line before `### WT-2` — **fixed** |
 
-Cleanup: `git worktree remove ../spur-new-smoke && git branch -D sp/smoke`.
+Residual (non-blocking, out of task scope): `spur task check 0496` reports 26
+`L4.uncovered-task-scenario` warnings — 0496's scenarios are not appended to feature H1's AC (the
+0478/0479/0482-era tasks appended theirs). Feature-AC amendment is feature-scope work, not one of
+this task's declared surfaces; reported to the operator, not auto-fixed. Exit code 0 (warnings only).
+
+**Gitignored fix-pass disclosure.** This run's fixes touched tracked files only
+(`execution-batch.md`, `command-flag-parity.test.ts`); the verdict artifact written by this run is
+`.spur/run/0496-verdict.json` (gitignored by design).
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Review (2026-08-09)** — three-dimensional review of the 0496 diff (7 files, +217/−63):
+functional traceability, SECUA, architecture. Scope: `--worktree [<name>]` reuse-mode prose
+contract across the three batch commands + `dev-operations.md` + `execution-batch.md` +
+`flag-glossary.md` + parity test. Inline review, `--focus all`.
 
+**Functional** — every requirement traces to contract text with re-read anchors: R1 flag surface
+(hints/rows/usage/dev-operations, value binding, dev-next exclusion), R2 name resolution
+(`execution-batch.md:441-461`), R3 reuse lifecycle deltas (`:385-389`, `:423-438`, `:513-536`),
+R4 terminal-path split + ownership rule (`:538-570`, `flag-glossary.md:358-361`), R5 doc
+consistency incl. WT-5 resume line (`:606`) and WT-6 name-first re-entry (`:617-639`).
+26/26 AC scenarios MET. Full tables in `## Testing`.
+
+**SECUA findings**
+
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P1 | — | — | none | — |
+| P2 | Correctness | `execution-batch.md` WT-7 | narrowed exclusions dropped "no create-with-name" and "or markers" required by R5 / AC R5.3 | **fixed** (`:647-648`) |
+| P3 | — | — | none | — |
+| P4 | Correctness | `command-flag-parity.test.ts:220` | placeholder comment `H??` in shipped test | **fixed** → `H1` |
+| P4 | Correctness | `command-flag-parity.test.ts:239-245` | dev-next negative assertion declared in the approved Testing text was missing | **fixed** (assertion added, green) |
+| P4 | Usability | `execution-batch.md:390` | missing blank line before `### WT-2` heading | **fixed** |
+
+**Architecture** — no structural friction. The change extends 0477's established prose-contract
+pattern in the files that already own the contract (WT-1…WT-7, glossary, command docs); no module
+boundary moves, no new seam, no coupling added. Single-flag/two-modes over a second flag is the
+recorded design decision with rejected alternatives documented in the task Design. The one deviation
+from the Design note (two-span Argument Flags cell vs single-span literal) follows the codebase's
+existing `--mode` `<…>` row convention and passes the token-parity gate — documented in
+`## Solution` § Documented deviation. No code-improvement follow-up candidates.
+
+**Residual risk** — non-blocking observations, out of task scope: (1) `spur task check 0496`
+reports 26 `L4.uncovered-task-scenario` warnings — this task's scenarios were not appended to
+feature H1's AC (the 0478/0479/0482-era tasks appended theirs); feature-AC amendment is
+feature-scope work. (2) Feature H1 carries 30 `L4.scenario-unverified` + 4
+`L4.uncovered-feature-scenario` warnings predating this task — see the Shippable block in the
+verify report.
+
+**Disposition** — all in-scope findings repaired and re-gated (`bun test plugins/sp` → 647 pass /
+0 fail post-fix). No unresolved majors or blockers.
 ### References
 #### Prior art
 
@@ -509,3 +601,6 @@ Cleanup: `git worktree remove ../spur-new-smoke && git branch -D sp/smoke`.
 - `AGENTS.md` § Conventions — one writer per working tree; commit per task
 - `AGENTS.md` § Verification gate — `bun run autofix && bun run spur-check`
 ### History
+- 2026-08-10T06:46:56.603Z todo → wip (system)
+- 2026-08-10T06:46:57.024Z wip → testing (system)
+- 2026-08-10T06:47:51.171Z testing → done (system)

@@ -1,6 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report; optional implement-ready depth
-argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree]"
+argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -24,23 +24,24 @@ operation, applied to a resolved set (typically every task under a feature). Pas
 | `--keep-going` | Continue past per-task failures. | off |
 | `--status` `<s>` | Only refine tasks in a status. | backlog,todo |
 | `--json` | Emit structured JSON. | off |
-| `--worktree` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. | off |
+| `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-refineall --feature <id> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree]
-/sp:dev-refineall --tasks <selector> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree]
+/sp:dev-refineall --feature <id> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree [<name>]]
+/sp:dev-refineall --tasks <selector> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree [<name>]]
 ```
 
 Flags: `--feature` (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
 (`--focus`, `--description`, `--depth`, `--agent`, `--auto`),
 plus `--keep-going`,
 `--status` (default `backlog,todo`),
-`--json`, `--worktree` (run the batch in an isolated git worktree — FF-merge onto the base ref on
-full success, retain intact on any failure/halt/non-FF; see `execution-batch.md` § Worktree
+`--json`, `--worktree` `[<name>]` (run the batch in an isolated git worktree — FF-merge onto the base ref on
+full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree, `<name>`
+form adopts an existing worktree by name/path/branch; see `execution-batch.md` § Worktree
 isolation). Prefer `--auto` for batch
 scale. Full procedure: `plugins/sp/skills/spur-dev/references/dev-operations.md` § refineall.
 **`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes land in the

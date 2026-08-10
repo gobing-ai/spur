@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]"
+argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -23,14 +23,14 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 | `--next` | Hand off to the next-router on success. | off |
 | `--json` | Emit structured JSON. | off |
 | `--skip-shippable` | Compatibility alias for --skip-shipable; skip the shippable gate. | off |
-| `--worktree` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. | off |
+| `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree]
+/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]
 ```
 
 Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sugar for
@@ -38,8 +38,9 @@ Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sug
 `--focus`, `--bdd`,
 `--auto`, `--force`),
 `--next` (per-task lifecycle chaining — see below),
-`--json`, `--skip-shippable`, `--worktree` (run the batch in an isolated git worktree — FF-merge
-onto the base ref on full success, retain intact on any failure/halt/non-FF; see
+`--json`, `--skip-shippable`, `--worktree` `[<name>]` (run the batch in an isolated git worktree — FF-merge
+onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a
+fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
 `execution-batch.md` § Worktree isolation).
 **`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
 statuses, verdicts) land in the worktree copy; your main tree still shows pre-run statuses until
