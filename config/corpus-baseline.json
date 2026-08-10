@@ -2,20 +2,6 @@
     "note": "Accepted `spur task check` / `spur feature check` errors. This is a POLICY file, not a status dump: it is an INPUT to `bun run corpus-check`, so it must be committed — an untracked baseline means the gate behaves differently on every clone and CI, and the first person to meet 8 unexplained failures disables it. Do not move it under `.spur/` (gitignored, ephemeral run artifacts). The gate fails on any error NOT listed here, and ALSO on any entry that no longer reproduces, so this cannot rot into a silent suppression list. Every entry needs a real diagnosis, a reason, and a date — 'pre-existing, not investigated' is not a reason.",
     "entries": [
         {
-            "kind": "task",
-            "id": "0368",
-            "code": "L3.required-section-placeholder",
-            "reason": "RATCHET DRIFT, not a bypass. Closed 2026-07-28; the rule that flags it landed 2026-08-01 (f373e90b), four days later. It was legally closed under the rules of its day and became non-compliant retroactively. Backfill Testing/Solution or exempt permanently when someone next touches it.",
-            "since": "2026-08-07"
-        },
-        {
-            "kind": "task",
-            "id": "0454",
-            "code": "L3.solution-file-line",
-            "reason": "GENUINE PRE-FIX BYPASS. Closed 2026-08-06, well after the rule existed (2026-07-24), via the `--no-lifecycle` hole closed on 2026-08-07. Its Solution needs one file:line citation. The only entry here representing real unpaid debt.",
-            "since": "2026-08-07"
-        },
-        {
             "kind": "feature",
             "id": "F821",
             "code": "L3.ac-bdd-error",
