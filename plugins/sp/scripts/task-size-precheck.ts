@@ -97,6 +97,19 @@ function parseArgs(argv: string[]): {
 }
 
 /**
+ * Split a multi-token `spurBin` (`<runtime> <mainModule>`) the same way
+ * `runSpurJson` does in feature-sync-bounded.ts — execFileSync's first arg is
+ * one executable path, not a shell command line.
+ */
+function runSpur(spurBin: string, args: string[]): string {
+    const [file = 'spur', ...lead] = spurBin.split(/\s+/).filter(Boolean);
+    return execFileSync(file, [...lead, ...args], {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+    });
+}
+
+/**
  * Capability tier of `executor` per `spur agent doctor <exec> --json`.
  * Unknown executor, unreadable doctor output, or an undeclared-and-uninferrable
  * tier all read as `standard` — conservative: a false block is one flag away,
@@ -104,10 +117,7 @@ function parseArgs(argv: string[]): {
  */
 function resolveCapabilityTier(spurBin: string, executor: string): string {
     try {
-        const out = execFileSync(spurBin, ['agent', 'doctor', executor, '--json'], {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
+        const out = runSpur(spurBin, ['agent', 'doctor', executor, '--json']);
         const tier = JSON.parse(out)?.agents?.[0]?.capabilityTier;
         return typeof tier === 'string' && tier ? tier : 'standard';
     } catch {
@@ -121,10 +131,7 @@ function main(): void {
     // Fetch task content via spur
     let taskContent: string;
     try {
-        const result = execFileSync(spurBin, ['task', 'show', wbs, '--json'], {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
+        const result = runSpur(spurBin, ['task', 'show', wbs, '--json']);
         const task = JSON.parse(result);
         taskContent = task.content ?? task.body ?? '';
     } catch {
