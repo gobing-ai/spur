@@ -53,10 +53,10 @@ agent:
     - name: omp
       agent: omp
       tier: standard
-    - name: omp-zai
-      agent: omp
-      model: zai/glm-5.2
-      tier: standard
+    # - name: omp-zai
+    #   agent: omp
+    #   model: zai/glm-5.2
+    #   tier: standard
     - name: omp-zai-nvidia
       agent: omp
       model: nvidia/z-ai/glm-5.2
