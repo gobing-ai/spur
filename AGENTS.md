@@ -232,6 +232,18 @@ spur <noun> --help
 | `migrate`  | CLI schema migrations                            |
 | `serve`    | Local web server                                 |
 
+**Adding a command? Two surfaces, one rule (ADR-051):**
+
+| Surface | Audience | Gate |
+| --- | --- | --- |
+| `spur` CLI (`apps/cli/`) | **Public** — end-user harness; stays simple and easy to use. Default home for anything a Spur end user would run. | Adding/changing/removing any noun or verb requires **explicit operator consent** with design context. Present the surface choice + options first; never land a CLI surface change unilaterally. |
+| `scripts/spur-dev.ts` | **Internal** — Spur self-dev only: packaging/release (`publish`, `bundle-*`, `verify-pack`, `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), monorepo gates (`link-check`). | No consent gate; one module per command under `scripts/commands/` + test sibling + `bundle-*`-style verb naming. |
+
+Known misplacement (deferred — do not move without a task): `corpus-check` lives in spur-dev but
+operates on any Spur-managed project's corpus — a user-facing gate in disguise; CLI-promotion
+candidate (ADR-051). All twelve CLI nouns are legitimately public; all other spur-dev commands are
+correctly internal.
+
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
 

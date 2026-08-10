@@ -360,3 +360,28 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 - **Decision:** `--no-lifecycle` suppresses only lifecycle run records, never structural checks; `--force-done` waives only verdict checks. `corpus-check` validates every task/feature on `spur-check` against a two-sided baseline, and T10 requires same-change reconciliation when findings tighten.
 - **Why:** Combined flags bypassed all guards, while one-time transition checks missed later rule drift; a stale-aware corpus sweep closes both gaps.
 - **Detail:** task CLI backstop; corpus-check script; baseline; `99 §5 T10`.
+
+## ADR-051: Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate
+
+- **Status:** Accepted · **Date:** 2026-08-10
+- **Decision:** Two command surfaces with a strict boundary. The `spur` CLI (`apps/cli/`) is the
+  **public, end-user harness surface** — it must stay simple and easy to use, and hosts anything a
+  Spur end user would run. `scripts/spur-dev.ts` is **internal, Spur self-dev tooling only** —
+  packaging/release (`publish`, `bump-ver`, `drop-tags`, `bundle-*`, `verify-pack`,
+  `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), and
+  monorepo-specific gates (`link-check`). Adding, changing, or removing any CLI noun/verb requires
+  **explicit operator consent** with enough design context to evaluate the decision; agents must
+  present the surface choice before implementing, never land a CLI surface change unilaterally.
+  spur-dev commands are unconstrained by the consent gate but follow the one-module-per-command
+  pattern under `scripts/commands/` with `bundle-*`-style verb naming and a test sibling.
+- **Why:** The CLI is a published, versioned contract to end users — every noun/verb is a public
+  API commitment (docs, `--help`, scripts, muscle memory). Unilateral growth erodes the
+  simple-harness design goal. spur-dev has no such contract; it is repo plumbing and may evolve
+  freely. Task 0500 surfaced the ambiguity (bundle-plugins added to spur-dev) and the boundary was
+  previously implicit.
+- **Detail:** routing rule operationalized in `AGENTS.md` § Spur CLI surface. Known misplacement
+  (deferred — list only, move later via its own task): `corpus-check` lives in spur-dev but operates
+  on any Spur-managed project's task/feature corpus, making it a user-facing gate in disguise —
+  CLI-promotion candidate (e.g. `spur corpus check` or folding into `spur task check`). All twelve
+  CLI nouns (`init agent history rule workflow message team task feature status migrate serve`) are
+  legitimately public; all other spur-dev commands are correctly internal.
