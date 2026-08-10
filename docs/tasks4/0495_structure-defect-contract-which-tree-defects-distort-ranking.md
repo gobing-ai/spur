@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0493"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.751Z"
-updated_at: "2026-08-10T03:54:59.552Z"
+updated_at: "2026-08-10T04:15:58.684Z"
 done_forced: "true"
 ---
 
@@ -370,6 +370,21 @@ The contract specifies: a tree with no D1–D4 instances emits zero proposals. T
 
 
 `## Rejected merges` (`map:54-59`) lists B∪H and J∪K body-merge. Contract (Solution, R6) loads this as a suppression list and does not re-propose. Verified the live K⊕F8 candidate (D2) is a *different* pair from the rejected J∪K body-merge — no re-litigation.
+**Re-audit (`/sp:dev-verifyall --feature H12 --force`, 2026-08-10).** Every cited anchor re-read at the cited line this session:
+
+| Citation | Re-read result | Match? |
+|---|---|---|
+| `plugins/sp/commands/dev-featurechange.md:87` / `:89` / `:94` | "Apply (CLI only)" / "Forbidden: raw Write/Edit" / `spur feature move <old_id> --parent <new_parent> --json` | Exact — sole write path confirmed |
+| `docs/plans/feature-tree-restructure-map.md:10` / `:15` / `:54` / `:59` / `:78` / `:82` / `:84` | `## Schema` / disposition values / `## Rejected merges` / J∪K reject row / `## Applied mapping` / `K→J1` / `N→H4` | Exact |
+| `plugins/sp/skills/conflict-finding/references/finding-contract.md:100` / `:105-110` / `:153` | false_positive_check mandatory / four challenge classes / two-opposing-anchors rule | Exact |
+| `plugins/sp/skills/next-router/references/routing-table.md:83-87` | B3 frontier predicate; B4–B7 all fire on `frontier tasks == 0` | Exact — disjointness invariant holds |
+| `docs/features/K_*.md` / `F8_*.md` frontmatter | K created 2026-07-29 (post-dates applied mapping 2026-07-28), F8 2026-07-03; both backlog P2 | Exact — recycled-letter trap real |
+| K intentional-split text | `docs/features/K_*.md:26` "prefer extend F8 / children when the Goal is already owned there" | Exact — D2 demotion to low-confidence candidate correct per `plugins/sp/skills/conflict-finding/references/finding-contract.md:110` |
+| `group` tag scan | A–H tagged; I/J/K/N `[]`; M `wayfinder-map` | Exact — D3 confirmed |
+| 0493 bound (surviving signals) | 0493 Artifact B re-audited same session; edge-count correction does not touch the surviving-signal list (fan-out rejected either way) | Holds |
+
+Coverage: N/A (research spike; no runtime code path added). Re-audit verdict artifact: `.spur/run/0495-verdict.json`.
+
 ### Review
 **Review (wayfinder investigation — evidential, no code shipped).**
 
