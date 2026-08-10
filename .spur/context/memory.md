@@ -257,3 +257,5 @@
 | Time | Action | File(s) | Outcome | ~Tokens |
 | 12:10 | Completed task 0226: all 7 findings (F1-F7) implemented, coverage fix to 97.14%, tsdoc-export rule enhanced | apps/server/src/context.ts, serve.ts, middleware/error-handler.ts; apps/server/tests/upstream-system-events-wiring.test.ts, error-handler.test.ts; packages/app/src/services/system-event-tap.ts; docs/inventory/0221-emit-sites.md | lint clean, 2499 tests pass, build exit 0, CF tests pass, task 0226 done | ~85k |
 |------|--------|---------|---------|--------|
+
+| 09:48 | Created task 0500: ship plugins/sp + marketplace.json in npm tarball for superskill install | docs/tasks4/0500_*.md | PASS (feature_id warn only) | ~n/a |
