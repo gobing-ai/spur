@@ -230,6 +230,16 @@ ticket was claimed; these are recorded so the next session does not re-derive th
 - **The `group` tag is not a reliable container marker** — `A–H` carry it; `I, J, K, M, N` do not,
   though `J` and `K` have children. Any traversal filtering on it ranks containers as work items.
   Third seed case for [0495]; also why [0493]'s 25 is an upper bound.
+- **[0493] closed (2026-08-10, `wayfind/0493-ranking-model-spike`).** The spike falsified the
+  candidate-ranking model's implicit premise. The "25-feature frontier" is illusory: a dry-run
+  `spur feature sync --all` shows 24 of 25 would advance to `done` (96% status drift), leaving only
+  H12→active, G3→blocked (0197), H1→blocked (0142) as non-done. The actionable rankable set after
+  sync is **empty** — H12's own 3 tasks are the only live work. The honest prioritizer output today is
+  "sync first, then rank." Signals that discriminate among an empty set do not exist yet. Decision:
+  the `sp:next-feature` command's first action must be a status-sync precondition check, not a
+  ranking pass. Structure-defect signals (near-duplicates K/F8, group-tag unreliability) are
+  confirmed real and route to 0495. Full artifacts (signal matrix, framework comparison, dependency
+  graph, anti-patterns) in `docs/tasks4/0493_*.md` § Solution.
 
 ### Not yet specified
 
