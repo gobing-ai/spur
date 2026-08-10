@@ -16,6 +16,7 @@ metadata:
     - derive
     - rank
     - report
+    - dispatch
 see_also:
   - sp:next-router
   - sp:spur-cli
@@ -36,8 +37,12 @@ frontier in **tiers with per-candidate evidence**, and emits rank-distorting tre
 no new spur verbs, no feature frontmatter fields. The `priority` field is never used as an ordering —
 in this corpus it is 76% one value (0493 measurement).
 
-**Propose, never apply.** This skill performs no `spur feature move` and no corpus mutation. The only
-path from its output to a changed tree is `/sp:dev-featurechange` (dry-run → confirm → apply).
+**Propose, never apply.** This skill performs no `spur feature move` and writes nothing under
+`docs/features/**`. The only path from a structure proposal to a changed tree is
+`/sp:dev-featurechange` (dry-run → confirm → apply). Ranking runs are read-only; the sole exception is
+`--task`, which after an **explicit operator confirm** dispatches `/sp:dev-plan` and
+`/sp:dev-refineall` — commands that write `docs/tasks*/` through their own gates. This skill still
+creates no tasks itself.
 
 ## When to Use
 
@@ -80,8 +85,17 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
    conforms to the `docs/plans/feature-tree-restructure-map.md` schema and clears the evidence bar
    (`false_positive_check` mandatory). **Silence is a valid outcome.**
 6. **Report + handoff.** Ranked frontier table + gated list + proposals, per
-   [references/handoff-routing.md](references/handoff-routing.md). The report stops at the ranking;
-   advancing a chosen feature is `/sp:dev-next`'s job.
+   [references/handoff-routing.md](references/handoff-routing.md). Without `--task` the report stops
+   at the ranking; advancing a chosen feature is `/sp:dev-next`'s job.
+7. **`--task` only — confirm, then dispatch the planning half.** Offer the rank-1 candidate (or the
+   id passed as `--task <feature-id>` — which may name a **gated** feature, since T2/T3/T4 are tiers
+   the rubric assigns to the gated list and only T1 comes from the ranked frontier), take an
+   **explicit** operator confirmation, then route on the
+   tier step 4 already assigned: T3 with zero tasks → `/sp:dev-plan --feature <id>` then
+   `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 → refineall only; T3 with invalid AC,
+   T2, and T4 stop with their reason. **This skill creates no tasks itself** — the dispatched
+   commands own decomposition and its schema gate. The confirm pauses regardless of `--auto`. Full
+   contract: [references/handoff-routing.md](references/handoff-routing.md).
 
 ## Anti-patterns — do not do these
 
@@ -90,6 +104,10 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
 - Emitting a numeric score (WSJF/RICE arithmetic) from absent value/effort estimates.
 - Copying the B3 predicate into this skill. Cite it; read it at runtime.
 - Any `spur feature move`, or writing proposals anywhere `docs/features/**` — featurechange owns apply.
+- Decomposing a feature here, or calling `spur task create` / `spur task batch-create` under `--task`.
+  Dispatch `/sp:dev-plan`; it owns decomposition and the batch-create schema gate. Equally: skipping
+  the `--task` confirm because `--auto` was passed, or decomposing a T1 feature that already has a
+  live task frontier.
 - Padding the defect list with tidiness findings that move no rank.
 - Re-proposing F31's rejected merges (B∪H, J∪K body-merge) or reading
   `## Applied mapping` as current state — letters are recycled; resolve against live features.
@@ -101,7 +119,7 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
 | [references/signal-derivation.md](references/signal-derivation.md) | Sync precondition, B3 runtime citation, per-signal derivation commands, degenerate-spread rejection |
 | [references/ranking-rubric.md](references/ranking-rubric.md) | Tier definitions, tie-breaks, evidence-per-candidate output contract |
 | [references/proposal-contract.md](references/proposal-contract.md) | D1–D4 defect set, evidence bar, mapping-schema conformance, silence |
-| [references/handoff-routing.md](references/handoff-routing.md) | featurechange handoff, next-router seam, OQ1 conditional dispatch |
+| [references/handoff-routing.md](references/handoff-routing.md) | featurechange handoff, next-router seam, the `--task` tier→hop routing table and its confirm contract |
 
 Grounding: tickets 0493 (measured signals), 0494 (reuse ledger), 0495 (defect contract) under
 feature H12.

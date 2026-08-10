@@ -24,15 +24,62 @@ There is no path from this skill to a mutated tree that bypasses step 4. Proposa
 inline in the default report; writing them into `docs/plans/feature-tree-restructure-map.md` as new
 rows is allowed (that file is the handoff artifact, not corpus) but never required.
 
-## OQ1 — conditional dispatch (deferred, not implemented)
+## `--task` — confirmed dispatch into the planning half
 
-OQ1 (dispatch vs report) is an open operator question on map H12. **This skill ships the report
-reading only.** The dispatch reading — a `--next` flag chaining into `/sp:dev-next` on the winner —
-is documented here as the extension point and intentionally not built:
+OQ1 (dispatch vs report) is **resolved** (task 0498): the command dispatches, and the dispatch target
+is the **planning half**, not `/sp:dev-next`. The useful follow-on to "which feature should we work on
+now?" is a set of implement-ready tasks under that feature, not within-target step routing.
 
-- Report reading (shipped): print the ranked frontier + gated list + proposals; stop.
-- Dispatch reading (deferred): after the report, invoke `/sp:dev-next <winner>` — requires next-router
-  argv shaping and chain semantics owned by `sp:next-router`. Do not hand-roll it here.
+Without `--task`, behaviour is unchanged — print the report and stop.
+
+### Compose, never rebuild
+
+This skill **creates no tasks**. It invokes neither `spur task create` nor `spur task batch-create`,
+and it carries no decomposition procedure. Two existing surfaces already own that work, both gated:
+
+| Need | Owner | Gate it enforces |
+| --- | --- | --- |
+| Feature → task set | `/sp:dev-plan --feature <id>` | `spur feature check`, then `task-batch.schema.json` + atomic `spur task batch-create` |
+| Tasks → implement-ready | `/sp:dev-refineall --feature <id> --auto --depth ready` | the implement-ready checklist (`dev-operations.md` §5) |
+
+A decomposer inside this skill would duplicate `sp:spec-decomposition` and bypass the batch-create
+schema gate. That is the CLI-gated-corpus-writes non-negotiable, not a style preference.
+
+### Routing — keyed to the tier already assigned
+
+Read the tier from protocol step 4. **Do not re-derive it.** No new classification logic exists here,
+so a change to `ranking-rubric.md` cannot desynchronise this table.
+
+**`--task` spans the ranked frontier *and* the gated list.** Only **T1** comes from the ranked
+frontier; **T2/T3/T4** are tiers the rubric assigns to *gated* features (`ranking-rubric.md`: T2 is
+"fails the gate, but would be T1 if unblocked"; T4 is the gate reason "all tasks terminal"). A
+feature with zero tasks is gated at step 2 and tiered **T3** — so restricting `--task` to gate
+survivors would make its primary case unreachable. Offer the rank-1 ranked candidate by default;
+`--task <feature-id>` may name any tiered feature, gated or not.
+
+| Tier of confirmed target | State | Action |
+| --- | --- | --- |
+| **T3 — specify first** | valid AC, zero tasks | `/sp:dev-plan --feature <id>` → then `/sp:dev-refineall --feature <id> --auto --depth ready`. **The primary case** — automates `ranking-rubric.md`'s own "decompose T3 candidates". |
+| **T3 — specify first** | AC placeholder / invalid | **Stop.** Print `/sp:dev-plan --feature <id>` and the reason. This is next-router row **B4**: plan continuation needs an operator description — never invent idea text. |
+| **T1 — work now** | open unblocked tasks exist (B3 passed) | `/sp:dev-refineall --feature <id> --auto --depth ready` **only**. Never decompose — a T1 feature has a live frontier by construction, so a second decomposition manufactures duplicates. |
+| **T2 — unblock first** | gated on a blocker | **Refuse.** Name the blocker and its owner. Tasks created under a blocked feature cannot run. |
+| **T4 — stale-done** | post-sync status would be `done` | **Refuse.** Route to `/sp:dev-wrapall --feature <id>` or the sync-first block; the work is finished, not startable. |
+
+### The confirmation is unconditional
+
+| Rule | Detail |
+| --- | --- |
+| Default offer | The rank-1 candidate. The operator may confirm it, name another candidate from the report, or decline. |
+| `--task <feature-id>` | An explicit id skips the *default-offer* step. It does **not** skip the confirm. |
+| `--auto` | Forwarded to the dispatched children (`dev-plan --auto`, `dev-refineall --auto`). It **never** answers the confirm — choosing what to invest in is a taste decision (Auto-Decision Principle #5), and `ranking-rubric.md` already states the operator overrides the ranking. |
+| No escape | There is no `--yes` / `--force` bypass. No path exists from `--task` to a created task file without an explicit operator decision. |
+| Refusal | Declining ends the run at the report. Nothing is written. |
+
+### What `--task` does not change
+
+The defect half is untouched: still no `spur feature move`, still nothing written under
+`docs/features/**`, still `/sp:dev-featurechange` as the sole applier of structure proposals. `--task`
+adds one gated path to `docs/tasks*/`, through commands that own their own gates.
 
 ## Where outputs go
 
@@ -42,3 +89,4 @@ is documented here as the extension point and intentionally not built:
 | Defect proposals | stdout; optionally appended to `docs/plans/feature-tree-restructure-map.md` |
 | "Sync first" block | top of report when the dry-run proposes frontier changes |
 | Winner handoff | printed `/sp:dev-next <id>` hint — operator runs it |
+| `--task` dispatch | after an explicit confirm: `/sp:dev-plan` and/or `/sp:dev-refineall`, which write `docs/tasks*/` through their own gates |

@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T05:32:15.299Z"
-updated_at: "2026-08-10T05:40:00.235Z"
+updated_at: "2026-08-10T05:49:59.284Z"
 ---
 
 ## 0498. Add --task to /sp:dev-find-next — confirm the ranked winner, then dispatch the planning half to implement-ready tasks
@@ -188,35 +188,75 @@ heading are unchanged, so no inbound link moved.
 heading). The design did not anticipate the C1 pre-existing gap; fixing it was required to make the
 gate pass and is reported here rather than folded silently into the diff.
 ### Testing
-**Evidential verification — prompt-first markdown surface; no runtime code path added.** All commands
-run 2026-08-10 on branch `wayfind/0495-structure-defect`. Every line anchor below re-read at the
-cited line after the final edit.
+**Forced re-audit — `/sp:dev-verify 0498 --auto --next --force --focus all --fix all`, 2026-08-10.**
+This pass **executed** the shipped protocol against the live corpus rather than reading it, and
+found two defects that the original inline verification missed. Both were repaired in the fix pass;
+both are recorded below rather than folded silently into the diff.
 
-| R | Check | Evidence |
-|---|---|---|
-| R1 | Flag declared on all command surfaces; report unchanged without it | `plugins/sp/commands/dev-find-next.md:3` (argument-hint), `:21` (flag table, default `omitted`), `:32-33` (usage); `plugins/sp/skills/next-feature/SKILL.md:87` step 6 now reads "Without `--task` the report stops at the ranking" |
-| R2 | No task-creation verb or decomposition in the skill | `rg 'spur task create\|spur task batch-create'` over `plugins/sp/skills/next-feature/` + the command → **5 hits, all prohibition or owner-attribution prose, zero invocations** (`plugins/sp/skills/next-feature/SKILL.md:105-106`; `plugins/sp/skills/next-feature/references/handoff-routing.md:37`, `:42`, `:45`). Dispatched surfaces present: `rg -c 'sp:dev-plan\|sp:dev-refineall'` on handoff-routing → 6 |
-| R3 | Five tier rows, keyed to step 4's placement | `plugins/sp/skills/next-feature/references/handoff-routing.md:55-59` — T3/zero-tasks → plan+refineall; T3/invalid-AC → stop with B4; T1 → refineall only; T2 → refuse with blocker; T4 → refuse to wrap/sync. `:50` states "Read the tier from protocol step 4. **Do not re-derive it.**" |
-| R4 | Confirm unwaivable | `plugins/sp/skills/next-feature/references/handoff-routing.md:65-68` confirm table — `--auto` "never answers the confirm"; `rg -- '--yes'` on that file → single hit, the "There is no `--yes` / `--force` bypass" row (`:68`) |
-| R5 | Honesty contract narrowed, not deleted | `plugins/sp/skills/next-feature/SKILL.md:40` still "performs no `spur feature move` and writes nothing under `docs/features/**`"; `:104` anti-pattern retained verbatim; `plugins/sp/commands/dev-find-next.md` read-only claim now scoped to runs without `--task` |
-| R6 | Contract surfaces agree | `bun plugins/sp/scripts/validate-flag-contracts.ts` → **"All 66 contract surfaces agree across all claims"** (C1 clean after the glossary family fix); `docs/04_DESIGN.md:599` heading + `:626` behavior step record the flag in this commit |
+**Per-Requirement Traceability**
 
-**Contract suite:** `bun test` in `plugins/sp` → **642 pass, 0 fail** (19 files, 2605 `expect()`
-calls). No test-count constant needed updating — the flag rides existing command and skill files,
-adding no new command or skill.
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/commands/dev-find-next.md:3` argument-hint, `:21` flag row (default `omitted`), `:32-33` usage; `plugins/sp/skills/next-feature/SKILL.md:87` scopes step 6 to "Without `--task`" |
+| R2 | MET | `rg 'spur task create\|spur task batch-create'` over skill + command → 5 hits, **all prohibition/owner-attribution prose, zero invocations**; `plugins/sp/skills/next-feature/references/handoff-routing.md:44-45` names `/sp:dev-plan` + `/sp:dev-refineall` as the owners |
+| R3 | MET *(after fix)* | `plugins/sp/skills/next-feature/references/handoff-routing.md:62-66` tier rows; **`:53` added this pass** — see Defect 2. Executed: B3 gate over 32 live features → T1={H1} (task 0496 open+unblocked), 31 gated; T3-reachable set = **18 candidates** (was 0 pre-fix) |
+| R4 | PARTIAL | `plugins/sp/skills/next-feature/references/handoff-routing.md:71-75` confirm table, `:75` "no `--yes` / `--force` bypass" — **static evidence only.** The interactive pause was not executed; firing a real prompt inside a verify run would be a spurious interruption. Residual, see Review P2. |
+| R5 | MET | `plugins/sp/skills/next-feature/SKILL.md:40` still "performs no `spur feature move` and writes nothing under `docs/features/**`"; `:104` anti-pattern intact; command read-only claim scoped, not deleted |
+| R6 | MET *(after fix)* | See Defect 1. `plugins/sp/skills/spur-dev/references/flag-glossary.md:200` now carries the declaring set in a first-paragraph parenthetical; C1 **proven live** by probe + negative control below |
 
-**Regression caught by the gate, then fixed:** the first suite run failed
-`plugins/sp/tests/flag-contract-parity.test.ts:250` with one C1 violation (`glossary
-declaring-commands list for --task omits dev-debug, dev-dogfood`). This was a **pre-existing**
-inconsistency the gate could not previously see — the glossary named `dev-brainstorm` only, in
-unparseable prose. Rewriting the entry as a four-command flag family cleared it; second run green.
-Documented in `### Solution`.
+**Acceptance Criteria Verification**
 
-**Project gates:** `bun run lint` clean (7 workspaces typecheck 0) · `bun run corpus-check` OK
-(2 baselined, 0 new, 0 stale) · `bun run build` green.
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — command answers which feature, not which step | MET | static | `plugins/sp/commands/dev-find-next.md:3`, `:21`, `:32-33` re-read this run |
+| R2 — task creation composes existing surfaces | MET | command | `rg` over shipped surface → zero `spur task create` / `batch-create` invocations |
+| R3 — unactionable features gated, not ranked | MET | command | executed B3 gate on live corpus: 1 ranked (H1), 31 gated with reasons; T1 routes to refineall-only |
+| R4 — confirmation cannot be waived | PARTIAL | static | contract text in 3 places, no escape hatch; **interactive pause unexecuted** |
+| R5 — honesty contract narrows, not deleted | MET | static | `plugins/sp/skills/next-feature/SKILL.md:40`, `:104` re-read this run |
+| R6 — contract surfaces agree | MET | command | `validate-flag-contracts` → "All 66 contract surfaces agree"; **plus** live-coverage probe (below) |
 
-Coverage: N/A (prompt-first markdown surface; no runtime code path added — the 642-test plugin
-contract suite plus `validate-flag-contracts` are the executable gates for this surface).
+**Defect 1 — the original R6 evidence was invalid (my own fix had disabled the gate).**
+The first inline verification cited `validate-flag-contracts` reporting "All 66 contract surfaces
+agree" as proof C1 was satisfied for `--task`. It was not. `glossaryDeclaringClaims`
+(`plugins/sp/scripts/validate-flag-contracts.ts:130-142`) registers a flag **only** when its
+first paragraph carries a parenthetical with ≥2 backticked `dev-*` names (`:139`). The bullet-list
+rewrite moved those names out of the parenthetical, so C1 stopped registering `--task` altogether —
+the green meant *the gate stopped looking*, not that the surfaces agreed. Repaired at
+`plugins/sp/skills/spur-dev/references/flag-glossary.md:200` by restoring the parenthetical
+enumeration while keeping the per-command semantics. **Now proven live, not assumed:**
+
+- baseline on the real tree → **0 violations**
+- probe (inject a bogus `dev-zzprobe` declarer) → **caught**: "omits dev-zzprobe that declared it"
+- negative control (drop `dev-dogfood` from the list) → **caught**: "omits dev-dogfood that declared it"
+
+**Defect 2 — the primary `--task` case was unreachable.** Executing the protocol showed step 2's B3
+gate excludes zero-task features from the frontier, while the T3 row calls "valid AC, zero tasks"
+**the primary case** — so that row could never fire. `ranking-rubric.md` already tiers gated
+features (T2 = "fails the gate"; T4 = gate reason "all tasks terminal"), so the rubric was right and
+the routing wording was wrong. Repaired at
+`plugins/sp/skills/next-feature/references/handoff-routing.md:53` and
+`plugins/sp/skills/next-feature/SKILL.md:91`: T1 comes from the ranked frontier, T2/T3/T4 from the
+gated list. Measured effect on this tree: T3-reachable candidates **0 → 18**.
+
+**Executed protocol evidence (live corpus, read-only — nothing written):**
+
+| Step | Command | Result |
+| --- | --- | --- |
+| 0 sync-first | `spur feature sync --all --dry-run --json` | 25 proposals would change status → report leads "sync first" |
+| 1 candidate set | `spur feature list --json` | 32 non-terminal features |
+| 2 B3 gate | child-task open+unblocked walk | **1 ranked (H1, via task 0496)**, 31 gated |
+| 3-4 tier | rubric placement | H1 = T1 → routes to refineall only, **not** decompose (R3's T1 row exercised) |
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P2 | Correctness | `plugins/sp/scripts/validate-flag-contracts.ts:139` | The `≥2 names in a first-paragraph parenthetical` rule means an entry written in prose silently disables C1 for that flag. Measured: **14 of 30 multi-declarer flags currently have C1 off** — `--agent`(21 declarers), `--auto`(14), `--json`(8), `--feature`(8), `--next`(6), `--focus`(6), `--mode`(5), `--depth`(3), `--since`(3), `--dry-run`(6), `--full`, `--until`, `--wrap`, and `--task` until this pass. Pre-existing and out of 0498's scope — reported, not fixed. |
+| P2 | Correctness | `plugins/sp/skills/next-feature/references/handoff-routing.md` | The interactive confirm (R4/AC-4) remains unexecuted; no run has driven `--task` through a real pause and dispatch. |
+| P4 | Architecture | `plugins/sp/scripts/validate-flag-contracts.ts:733` | C1 considers only `dev-*` command files, so `rule-*` / `workflow-*` / `spur-init` declarations are invisible to it (e.g. `--force` on `spur-init`, `--scope` on `rule-refine`). Likely intentional scoping; noted for the record. |
+
+`spur task check 0498` → pass, 0 findings (run this pass, not stale). `plugins/sp` suite → 642 pass,
+0 fail. Coverage: N/A (prompt-first markdown surface; no runtime code path added).
 ### Review
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|

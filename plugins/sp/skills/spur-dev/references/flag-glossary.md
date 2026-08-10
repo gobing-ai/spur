@@ -197,8 +197,18 @@ to `--next`.
 
 **Anchor:** `#flag-task`.
 
-Seed a new task from the current command's result (`dev-brainstorm`'s chosen approach). The task
-lands at `todo` ready for `dev-refine`. Optional feature id scopes it.
+Connect the current command's result to task work (`dev-brainstorm`, `dev-debug`, `dev-dogfood`,
+`dev-find-next`). The optional value and the effect are per-command — this flag is a family, not one
+behavior:
+
+- `dev-brainstorm` `[<feature-id>]` — **creates** one task from the chosen approach, landing at
+  `todo` ready for refine. Optional feature id scopes it.
+- `dev-find-next` `[<feature-id>]` — after an **explicit operator confirm**, dispatches the planning
+  half on the ranked winner (`/sp:dev-plan` to decompose, then `/sp:dev-refineall --depth ready` to
+  freeze implement-ready). Creates no task itself; the confirm pauses regardless of `--auto`.
+  Optional feature id names the target instead of offering rank 1.
+- `dev-debug` `[<wbs>]` — **attaches** findings to an existing task. Optional WBS names it.
+- `dev-dogfood` (no value) — **records** run outcomes against the task under test.
 
 ### `--since <ref>` — lower bound on a range
 

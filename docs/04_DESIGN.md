@@ -596,7 +596,7 @@ not be claimed against a false value. v1 adds no production analyzer, index/cach
 dependency, CLI noun, workflow, or dedicated subagent. SSOT:
 `plugins/sp/skills/conflict-finding/SKILL.md` + its four references.
 
-#### 1.3.2 `/sp:dev-find-next` — feature frontier prioritizer (feature H12, task 0497)
+#### 1.3.2 `/sp:dev-find-next` — feature frontier prioritizer (feature H12, tasks 0497, 0498)
 
 Thin wrapper over the `sp:next-feature` skill. Standalone report, not a spine pipeline stage.
 Answers "which feature should we work on now?" — the target-omitted case `sp:next-router`
@@ -604,6 +604,7 @@ declares out of v1 (routing-table §0 step 1c); within-target routing stays `/sp
 
 ```text
 /sp:dev-find-next
+    [--task [<feature-id>]]                             # default omitted
     [--agent <inline|auto|name>]                        # default inline
     [--json]                                            # default off
 ```
@@ -620,10 +621,19 @@ evidence** — no numeric scores (the corpus carries no value/effort estimates; 
 is degenerate and never used as an ordering). (5) Defect pass — rank-distorting tree defects D1–D4
 are emitted as proposals conforming to `docs/plans/feature-tree-restructure-map.md`'s schema, each
 clearing the `sp:conflict-finding` evidence bar (`false_positive_check` mandatory); silence is a
-valid outcome. (6) Report and stop — the command performs no `spur feature move` and no corpus
-mutation; `/sp:dev-featurechange` (dry-run → confirm → apply) is the sole mutation path. OQ1
-(dispatch into `/sp:dev-next` vs report-only) is deferred: v1 ships report-only. v1 adds no
-TypeScript, schema, frontmatter field, CLI verb, or subagent. SSOT:
+valid outcome. (6) Report — the command performs no `spur feature move` and writes nothing under
+`docs/features/**`; `/sp:dev-featurechange` (dry-run → confirm → apply) is the sole path from a
+structure proposal to a changed tree. (7) **`--task` only (task 0498, resolving OQ1 toward the
+planning half):** offer the rank-1 candidate (or the id passed to `--task`), take an **explicit**
+operator confirmation, then route on the tier step 4 assigned — T3 with valid AC and zero tasks →
+`/sp:dev-plan --feature <id>` then `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 →
+refineall only (a live frontier already exists; a second decomposition duplicates it); T3 with
+invalid AC → stop with next-router's B4 hop, never inventing idea text; T2 (blocked) and T4
+(stale-done) → refuse with the reason. The skill **creates no tasks itself** — decomposition and the
+`task-batch.schema.json` gate belong to `/sp:dev-plan`. The confirm pauses regardless of `--auto`
+(Auto-Decision Principle #5, taste); `--auto` is forwarded only to the dispatched children, and no
+`--yes`/`--force` bypass exists. Adds no TypeScript, schema, frontmatter field, CLI verb, or
+subagent. SSOT:
 `plugins/sp/skills/next-feature/SKILL.md` + its four references
 (`signal-derivation`, `ranking-rubric`, `proposal-contract`, `handoff-routing`).
 
