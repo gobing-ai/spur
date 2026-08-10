@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.277Z"
-updated_at: "2026-08-10T03:19:53.935Z"
+updated_at: "2026-08-10T04:13:39.906Z"
 done_forced: "true"
 done_reason: "Wayfinder research+prototype spike: corpus-only investigation (no code diff). Structural gate spur task check PASS (2026-08-10). Solution/Testing carry evidential verification per Design. Artifacts A/B/C written, all R1-R6 resolved."
 ---
@@ -255,7 +255,7 @@ Candidate signals measured over the 25-feature frontier (upper bound). Each row 
 
 | # | Signal | Derivation command | Spread across 25 | Discriminates? | Verdict |
 |---|---|---|---|---|---|
-| 1 | Unblocking fan-out (R3) | Walk child tasks' `dependencies[]` across feature boundaries | **0 cross-feature edges.** 124 numeric task→task edges exist, but every edge is *intra-feature* (parent task → child task under the same feature_id). No task in one feature depends on a task in another. Fan-out distribution among tasks with deps: {1dep: 75, 2dep: 17, 3dep: 1, 4dep: 3}. | **No** | **REJECTED** — graph is too sparse to rank by; the map's "highest-leverage signal" is absent from this corpus. The hypothesis that cross-feature unblocking is the top signal is falsified. |
+| 1 | Unblocking fan-out (R3) | Walk child tasks' `dependencies[]` across feature boundaries | **1 genuine cross-root edge.** 128 numeric task→task edges exist across 495 task files; 12 cross `feature_id`, but 9 are same-root sub-feature pairs (J4→J3 ×5, H81↔H82 ×2, D1→D ×1) and 2 originate from unparented tasks (0452→H83, 0484→H1) — leaving exactly **1** genuine cross-root feature→feature edge (0434 H82→D3). Fan-out distribution among the 99 tasks with deps: {1dep: 77, 2dep: 18, 3dep: 1, 4dep: 3}. | **No** | **REJECTED** — graph is too sparse to rank by; the map's "highest-leverage signal" is effectively absent (1 genuine cross-root edge in 495 tasks). The hypothesis that cross-feature unblocking is the top signal is falsified. *(Counts corrected in the 2026-08-10 verifyall re-audit — the original measurement reported 124 edges / 0 cross-feature; the corrected traversal counts sub-feature pairs and unparented tasks explicitly. The corrected data is sparser than the claim, not denser; the rejection stands.)* |
 | 2 | Dogfood proximity | `grep` for `plugins/sp`, `apps/cli`, `task-pipeline`, `dev-`, `sp:`, `harness`, `pipeline` in feature + child-task bodies | Range 0–7 hits. Degenerate: 21 of 25 score 3–7 (this is a dogfooding harness — everything touches itself). Only K (0) and F83 (0) separate. | **Marginally** — but only to *exclude*, not to rank | **SURVIVES as a tie-break (high-touch)**, not a primary signal. Nearly all features score high because Spur develops itself; the discriminating move is flagging the ~2 features with zero harness contact as "specify, don't ship." |
 | 3 | Authority pull (roadmap / ADR) | `grep` feature ID in `docs/02_ROADMAP.md` and `docs/00_ADR.md` | 3 of 25 mentioned (J, K, M). 22 of 25 unmentioned. | **Marginally** — 3 hits is thin but non-degenerate | **SURVIVES as weak evidence.** Named-in-roadmap is a positive signal for those 3; absence is not a negative. |
 | 4 | AC coverage (Gherkin scenario count) | Count `Scenario:` in feature body | Range 0–70. Meaningful spread: {0 scenarios: 7, 1–5: 5, 6–12: 8, 13+: 5}. Bimodal — features either have rich AC or none. | **Yes** | **SURVIVES.** A feature with 0 scenarios and zero open tasks is *not ready to be worked next* — it is ready to be *specified* next (synced to done, then re-scoped). H1 (70 scenarios) is the outlier. |
@@ -265,11 +265,11 @@ Candidate signals measured over the 25-feature frontier (upper bound). Each row 
 | 8 | Churn exposure (recent git churn on feature's files) | `git rev-list --count --max-age=<epoch> HEAD -- <dirs>` per feature's likely file scope (40d window) | Range 5–368 commits. Wide spread: {<100: 5, 100–200: 12, 200–300: 5, >300: 3}. | **Yes** | **SURVIVES.** High churn on the files a feature would touch means cost-of-delay is real — the longer it waits, the more it costs to land. This is the closest the corpus gets to a genuine urgency signal. H1 (368), F31 (329), F7 (304) top this axis. |
 
 
-**Edge count:** 124 numeric task→task dependency edges across the full 494-task corpus. **Cross-feature edges: 0.** Every `dependencies[]` link resolves within the same `feature_id`. The graph is intra-feature chains only; it cannot produce a cross-feature unblocking fan-out because no such edges exist.
+**Edge count:** 128 numeric task→task dependency edges across the full 495-task corpus. **Cross-`feature_id` edges: 12, of which 9 are same-root sub-feature pairs and 2 originate from unparented tasks — exactly 1 genuine cross-root feature→feature edge exists (0434 H82→D3).** The graph is intra-feature chains for ranking purposes; it cannot produce a cross-feature unblocking fan-out because effectively no such edges exist. *(Corrected 2026-08-10 verifyall re-audit: originally "124 edges, 0 cross-feature, 494-task corpus" — the measurement was wrong; see Testing re-audit block.)*
 
-**Fan-out distribution** (tasks with ≥1 numeric dep): 1 dep = 75 tasks, 2 deps = 17, 3 deps = 1, 4 deps = 3. The graph is shallow and chain-shaped, not a branching fan-out.
+**Fan-out distribution** (99 tasks with ≥1 numeric dep): 1 dep = 77 tasks, 2 deps = 18, 3 deps = 1, 4 deps = 3. The graph is shallow and chain-shaped, not a branching fan-out.
 
-**Verdict: the dependency graph is NOT dense enough to rank by.** The map's hypothesis that unblocking fan-out is the highest-leverage signal is **falsified by measurement** — the corpus carries zero cross-feature dependency edges to rank with. Feature frontmatter carries no dependency field, and child tasks do not link across feature boundaries. This signal cannot be salvaged by better traversal; the data does not exist.
+**Verdict: the dependency graph is NOT dense enough to rank by.** The map's hypothesis that unblocking fan-out is the highest-leverage signal is **falsified by measurement** — the corpus carries one genuine cross-root dependency edge to rank with. Feature frontmatter carries no dependency field, and child tasks effectively do not link across feature boundaries. This signal cannot be salvaged by better traversal; the data effectively does not exist.
 
 
 The 25-feature upper bound breaks into:
@@ -351,7 +351,7 @@ Every claim above is reproducible from the corpus via the stated command or a `f
 | 67 features, status distribution (34/15/13/5) | `spur feature list --json \| jq '[.[].status] \| group_by . \| map {status: .[0], count: length}'` | Reproduced |
 | 25-feature frontier, P2=19 (76%) | `spur feature list --json \| jq '[.[] \| select(.status!="done" and (.frontmatter.tags//[] \| index("group") \| not) and .id!="H12")] \| length'` | 25 confirmed |
 | 24 of 25 would change status on sync | `spur feature sync --all --dry-run --json` → `.results[] \| select(.proposal.from != .proposal.to)` | 27 total changes, 24 in the 25-frontier |
-| 0 cross-feature dependency edges | `grep -rh '^dependencies:' docs/tasks*/*.md` + parse + cross-reference `feature-id` of src vs dst | 124 numeric edges, all intra-feature |
+| Cross-feature dependency edges ≈ 0 | `grep -rh '^dependencies:' docs/tasks*/*.md` + parse + cross-reference `feature_id` of src vs dst | 128 numeric edges; 12 cross `feature_id` — 9 same-root sub-feature pairs, 2 from unparented tasks, 1 genuine cross-root (0434 H82→D3); ruling unchanged (corrected 2026-08-10 re-audit) |
 | Only 3 open tasks in entire corpus (0493/0494/0495) | `spur task list --json \| jq '[.[] \| select(.status\|test("todo\|wip\|testing\|blocked"))] \| length'` | 3 confirmed |
 | Blocked tasks: 0142 (H1), 0197 (G3) | `grep -rl '^status: blocked' docs/tasks*/*.md` + frontmatter `feature-id` check | 6 blocked total; 0142→H1, 0197→G3 relevant |
 | Churn exposure per feature | `git rev-list --count --max-age=<epoch_40d_ago> HEAD -- <dir>` | Reproduced (H1=368, F31=329, F7=304 top) |
@@ -365,6 +365,21 @@ Every claim above is reproducible from the corpus via the stated command or a `f
 **What was NOT verified (out of scope):**
 - Whether `spur feature sync --all` (applied, not dry-run) would succeed without gate denials — only the dry-run proposal was measured, per the non-mutating constraint.
 - Whether H1's blocked task 0142 can be unblocked — that is an operator decision, not a corpus measurement.
+
+**Re-audit (`/sp:dev-verifyall --feature H12 --force`, 2026-08-10, branch `wayfind/0495-structure-defect`).** Every derivation re-run fresh this session:
+
+| Claim | Fresh result | Match? |
+|---|---|---|
+| Status distribution 34/15/13/5 | `spur feature list --json` → active=15 backlog=13 done=34 verifying=5 | Exact |
+| 25-feature frontier | same jq filter → 25 | Exact |
+| 24 of 25 frontier drift on sync | `spur feature sync --all --dry-run --json` → 26 changes total; 24 of 25 frontier (K the only unchanged frontier feature; remaining 2 are group roots F, H) | Reproduced (26 vs claimed 27 total: H12 no longer drifts — 0493/0495 are now done) |
+| 0 cross-feature dependency edges | **12 cross `feature_id`** (9 same-root sub-feature, 2 unparented-task origins, 1 genuine cross-root) | **Falsified — corrected in Artifact B above; R3 ruling unchanged (corrected data is sparser, not denser)** |
+| Only 3 open tasks in corpus | Now 1 (0494 todo) — 0493/0495 done since measurement | Time-stamped claim; expected drift |
+| Churn H1=368 (packages/app + plugins/sp, 40d window) | 343 | Absolute count window-sensitive; top-of-tree ranking (H1/F31/F7) holds |
+| AC counts H1=70, J3=25, J=16 | 70, 25, 16 | Exact |
+| Blocked 0142 (H1), 0197 (G3) | both `status: blocked` in `docs/tasks2/` | Exact |
+
+Coverage: N/A (research spike; no runtime code path added). Re-audit verdict artifact: `.spur/run/0493-verdict.json`.
 ### Review
 
 <!-- Risks, open concerns, and follow-up review notes. -->
