@@ -374,14 +374,23 @@ statuses, and decision outcomes remain stable; future changes follow the append-
   present the surface choice before implementing, never land a CLI surface change unilaterally.
   spur-dev commands are unconstrained by the consent gate but follow the one-module-per-command
   pattern under `scripts/commands/` with `bundle-*`-style verb naming and a test sibling.
+  **First-layer noun discipline:** the first layer of the `spur` CLI (the nouns) is added
+  **extremely carefully** to keep the surface clean and neat — the first layer MUST be a noun so
+  that similar actions group under it (`task check`, `feature check`, `rule run`). Verbs and flags
+  are the preferred expansion mechanism; a new first-layer noun is justified only when no existing
+  noun can host the action. Consequence: `spur corpus check` is the wrong design for promoting
+  corpus-check — `corpus` would be a one-gate noun. The correct promotion hosts the sweep under the
+  existing `task` noun (`spur task check --corpus`), since `spur task check` with no WBS already
+  sweeps the full corpus and corpus-check's only delta is baseline reconciliation and fail
+  semantics.
 - **Why:** The CLI is a published, versioned contract to end users — every noun/verb is a public
   API commitment (docs, `--help`, scripts, muscle memory). Unilateral growth erodes the
   simple-harness design goal. spur-dev has no such contract; it is repo plumbing and may evolve
   freely. Task 0500 surfaced the ambiguity (bundle-plugins added to spur-dev) and the boundary was
   previously implicit.
-- **Detail:** routing rule operationalized in `AGENTS.md` § Spur CLI surface. Known misplacement
-  (deferred — list only, move later via its own task): `corpus-check` lives in spur-dev but operates
-  on any Spur-managed project's task/feature corpus, making it a user-facing gate in disguise —
-  CLI-promotion candidate (e.g. `spur corpus check` or folding into `spur task check`). All twelve
-  CLI nouns (`init agent history rule workflow message team task feature status migrate serve`) are
+- **Detail:** routing rule operationalized in `AGENTS.md` § Spur CLI surface. Known misplacement:
+  `corpus-check` lives in spur-dev but operates on any Spur-managed project's task/feature corpus,
+  making it a user-facing gate in disguise — promotion target is `spur task check --corpus` (per
+  the noun discipline above), tracked in its own task. All twelve CLI nouns
+  (`init agent history rule workflow message team task feature status migrate serve`) are
   legitimately public; all other spur-dev commands are correctly internal.
