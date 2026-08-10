@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T16:46:26.837Z"
-updated_at: "2026-08-10T18:47:15.096Z"
+updated_at: "2026-08-10T18:56:06.193Z"
 ---
 
 ## 0500. Ship plugins/sp and marketplace.json in the @gobing-ai/spur npm tarball for superskill install
@@ -483,53 +483,47 @@ clone, which is what makes it worth an explicit AC (AC7).
 **Not modified (authority):** `plugin.json`, `.claude-plugin/marketplace.json`, workflow YAMLs.
 Release version lockstep (`syncMarketplaceAndPlugins`) unchanged.
 ### Testing
-**Verdict: PASS** (inline implement + verify, 2026-08-10)
+**Verdict: PASS** (re-audit `--force --fix all`, 2026-08-10 — task was `done`, committed `0dc2edd5`)
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `npm pack` → extract: `<extract>/package/plugins/sp/plugin.json` + `.claude-plugin/marketplace.json` exist (AC3, `verify-pack` OK); `skills/ commands/ agents/ hooks/ scripts/` ship |
-| R2 | MET | `scripts/commands/stage-plugins.ts` copies `../../plugins` → `apps/cli/plugins`, `../../.claude-plugin` → `apps/cli/.claude-plugin`; `/apps/cli/plugins` + `/apps/cli/.claude-plugin` gitignored (git status shows neither) |
-| R3 | MET | `apps/cli/package.json` `prepack: bun run build:bundle` (runs for `npm pack` + `npm publish`); staging appended to `build:bundle`; `prepublishOnly` = drift guard reading repo-root sources |
-| R4 | MET | `stage-plugins.test.ts` 3 tests: no `tests/` dir, no `*.test.ts`, no `evals/`, OS junk pruned; staged tree asserts `skills/commands/hooks/hooks.json/scripts` retained |
-| R5 | MET | `files` array includes `"plugins/"` + `".claude-plugin/"` + existing entries (spur.js, config, schemas, web, README.md) |
-| R6 | MET | `check-marketplace-version.ts` guard; `bun run ../../scripts/spur-dev.ts check-marketplace-version` → "versions match package version" (all 0.3.41); extract assert: pkg=plugin=marketplace=0.3.41 |
-| R7 | MET | `superskill install sp --marketplace <extract>/package --dry-run --verbose` → `Plugin root: <extract>/package/plugins/sp`, exit 0, no network/clone; negative control `nope-not-a-plugin` → exit 1 |
-| R8 | MET | `apps/cli/README.md`, root `README.md` (+`0.3.18`→`0.3.41`), help install guide all document `superskill install sp --marketplace <pkg-root>`; `docs/04_DESIGN.md` build/publish tables list `apps/cli/plugins/` + `apps/cli/.claude-plugin/` |
-| R9 | MET | `bun run lint` exit 0; `bun run test` 4806 pass / 0 fail; `bun run build` exit 0; `bun run spur-check-new` exit 0 (link-check, lint, test-pre/post-check, corpus-check OK, 0 new) |
+| R1 | MET | fresh `build:bundle` + `npm pack` → `gobing-ai-spur-0.3.41.tgz` (2.75MB); `verify-pack` OK — `plugins/sp/plugin.json` + `.claude-plugin/marketplace.json` at package root |
+| R2 | MET | `stage-plugins.ts` copies `../../plugins` + `../../.claude-plugin` → `apps/cli/`; `git status --porcelain` shows neither (gitignored), re-verified this run |
+| R3 | MET | `prepack: bun run build:bundle` runs on pack (observed in this run's pack); `prepublishOnly` = drift guard on repo-root sources |
+| R4 | MET | staged tree this run: 0 `*.test.ts`, 0 `tests/` dirs under `apps/cli/plugins`; `stage-plugins.test.ts` 3 tests pass |
+| R5 | MET | `files` = spur.js, config, schemas, web, README.md, plugins/, .claude-plugin/ (printed this run) |
+| R6 | MET | `check-marketplace-version` → "versions match package version" (0.3.41 across pkg/plugin/marketplace), this run |
+| R7 | MET | `superskill 0.3.13 install sp --marketplace /tmp/v0500-extract/package --dry-run --verbose` → `Plugin root: /tmp/v0500-extract/package/plugins/sp`, exit 0; control `nope-not-a-plugin` exit 1; temp CWD deleted |
+| R8 | MET | `superskill install sp --marketplace` present in README.md, apps/cli/README.md, help doc (1 each); zero `0.3.18` literals; 04_DESIGN tables reference stage-plugins ×2 |
+| R9 | MET | `spur-check-new` exit 0 this run (lint + test 4806 pass/0 fail + rules + corpus-check); `bun run build` exit 0; 7 new unit tests pass |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| AC1 files array | MET | command | `apps/cli/package.json` files includes `plugins/`, `.claude-plugin/`, existing entries intact |
-| AC2 prepack stages pruned | MET | command | `stage-plugins` run: `apps/cli/plugins/sp/plugin.json` + `.claude-plugin/marketplace.json` exist; no tests/ evals/ *.test.ts; gitignored |
-| AC3 pack/extract | MET | command | `npm pack` → `gobing-ai-spur-0.3.41.tgz` (314 entries); `verify-pack` OK: paths, versions 0.3.41, source `./plugins/sp`, no tests/test.ts/evals |
-| AC4 superskill install | MET | command | `superskill --version` = 0.3.13; dry-run verbose from temp CWD → `Plugin root:` line, exit 0; `nope-not-a-plugin` control → exit 1; temp CWD (`.rulesync/`) deleted |
-| AC5 release sync intact | MET | static | `scripts/commands/release.ts:139` `syncMarketplaceAndPlugins` unchanged; drift guard passes at current lockstep (all 0.3.41) |
-| AC6 docs zero-clone | MET | command | grep `superskill install sp --marketplace` in all 3 doc surfaces; `0.3.18` gone; 04_DESIGN tables list plugin artifacts |
-| AC7 no double-discovery | MET | command | staged test files = 0; root `bun test` 4806/267 files 0 fail; no test id under `apps/cli/plugins` |
-| AC8 gates green | MET | command | lint, test, build, spur-check-new all exit 0; git status intentional |
+| AC1 files array | MET | command | `python3` print of `files` array (above R5) |
+| AC2 prepack stages pruned | MET | command | fresh stage: plugin.json + marketplace.json exist; 0 tests/evals/*.test.ts; gitignored |
+| AC3 pack/extract | MET | command | fresh `npm pack` + `verify-pack` OK (versions 0.3.41, source ./plugins/sp, no test content) |
+| AC4 superskill install | MET | command | pos exit 0 with `Plugin root:` line; neg exit 1 (`Available: sp`) — /tmp/v0500-pos.log, /tmp/v0500-neg.log |
+| AC5 release sync intact | MET | static | `syncMarketplaceAndPlugins` untouched; drift guard green at current lockstep |
+| AC6 docs zero-clone | MET | command | grep counts above (R8) |
+| AC7 no double-discovery | MET | command | root test log has zero `apps/cli/plugins` matches; staged test-file count = 0; 4806 tests / 267 files / 0 fail |
+| AC8 gates green | MET | command | spur-check-new exit 0, build exit 0, this run |
 
-**SECUA Review**
+**SECUA Review (re-audit)**
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P3 | S | `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:81` | Absolute local path `/Users/robin/node_modules/` shipped in the published artifact → generalized to `$HOME` (T5) |
-| P4 | — | — | No P1–P2 findings. New scripts/ files carry only the pre-existing scripts/ LSP scope artifact, resolved by `scripts/tsconfig.json` |
+| P4 | — | — | No P1–P3 findings. Prior P3 (`/Users/robin` abs path) fixed in 0dc2edd5 — confirmed `$HOME` in staged tree. |
 
-**Fix-pass / tooling notes.**
+**Design-conformance:** 15 files in `0dc2edd5` match the Design surface list; one addition (`scripts/tsconfig.json`, documented in Solution §tooling hygiene). No scope creep — foreign WIP (plugins/sp/README.md, .spur/config.yaml, docs/tasks4/0501) not in the diff.
 
-- `scripts/tsconfig.json` added to resolve the pre-existing LSP scope artifact on all `scripts/`
-  files (identical false positives on committed `bundle-config.ts`/`spur-dev.ts`). Not referenced by
-  any workspace `tsc`; `bun run typecheck` unchanged (verified: zero `scripts/` references).
-- New unit coverage: 7 tests (`stage-plugins.test.ts` + `verify-pack.test.ts`) — all pass.
-- T4 temp CWD `/tmp/spur-install-cwd` (contained `.rulesync/`) deleted; `.rulesync` at repo root is
-  pre-existing (gitignored, mtime before this session) — not from this task's dry-run.
+**Fix-pass:** `--fix all` — no UNMET/PARTIAL rows, no findings; nothing to repair.
 
-Coverage: N/A for docs-only edits; new scripts covered by 7 unit tests. `verify-pack` / pack/extract
-runs are repeatable via `spur-dev verify-pack <tgz>` (landed, not manual-only).
+**--next:** no-op — task already terminal (done).
+Coverage: N/A (docs/packaging); new scripts covered by 7 unit tests. Re-audit verdict artifact updated: `.spur/run/0500-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
