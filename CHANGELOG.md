@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.40] — 2026-08-09
+
+### Added
+
+- Ship `/sp:dev-find-next` + `sp:next-feature` prompt-first feature frontier prioritizer with ranking rubric, signal derivation, handoff routing, and proposal contract references (4669a905)
+- Create task 0498 — `--task` flag on `/sp:dev-find-next` to confirm ranked winner and dispatch to planning half (39383129, ce2a11f0)
+- Create task 0496 — extend `--worktree` to accept an existing worktree name for batch isolation (0d75afde)
+
+### Changed
+
+- Switch agent default to `omp-zai` and activate `tasks4` folder (563be28d)
+- Drop stale corpus-baseline entries for tasks 0368 and 0454 (86e42982)
+- Fix 4 stale ADR projections in `docs/03_ARCHITECTURE.md` from dogfood run 0488 (4aa0997b)
+
+### Other
+
+- Resolve task 0493 — ranking-model spike: falsifies frontier premise; surviving signals are AC coverage, churn exposure, dogfood proximity, authority pull (a879dc8d, 629fd930)
+- Resolve task 0494 — reuse inventory: bounds next-router, `spur` CLI `--json`, and conflict-finding surfaces that `dev-find-next` must compose (8a0aa017)
+- Resolve task 0495 — structure-defect contract: narrows to detector rules; only near-duplicate defects produce `/sp:dev-featurechange` mapping rows (ba7cc911, 1b58e2af)
+- Re-verify H12 batch and repair evidence anchors across tasks 0493–0497 (6545abff)
+- Chart E2 session-forensics history-plane extension (558d681f)
+- Chart H12 feature frontier prioritizer (4a9082dd)
+- Close E2 session-forensics wayfinder tickets 0489–0492 (63f62212)
+- Refresh feature tree status — 0485/0486 done, E2/H12 indexed, N complete (2b30f8eb)
+- Refresh H12 tasks table and feature index — all four tasks done, feature closed (91c0d06b)
+- Dogfood `/sp:dev-find-next` live run — H1 frontier, G3/K gated, D1–D4 defect pass (31acd749)
+
 ## [0.3.39] — 2026-08-09
 
 ### Fixed
