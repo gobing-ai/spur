@@ -10,7 +10,7 @@ lifecycle step a deterministic entry point.
 > orchestration, history analytics, and operational visibility. The `sp` plugin is the Claude Code
 > plugin surface for that toolkit.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.22"`, `source: "./plugins/sp"` (`plugin.json`,
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.41"`, `source: "./plugins/sp"` (`plugin.json`,
   kept in sync with `.claude-plugin/marketplace.json`).
 - **Owner:** Robin Min.
 
@@ -180,7 +180,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (27 skills)
+├── skills/                          # Domain knowledge + workflow docs (28 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -243,7 +243,7 @@ plugins/sp/
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 36 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
+├── commands/                        # 37 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
@@ -334,11 +334,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**36 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**37 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `dev-*`      | 30    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*`      | 31    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
 | `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
 | `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
@@ -348,7 +348,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 36 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 37 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -356,7 +356,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 36 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 37 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
@@ -467,7 +467,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>36 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
+        CMD["Commands<br/>37 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
         AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end
@@ -561,19 +561,21 @@ graph TB
 
 ### Workflow pipelines
 
-The plugin ships workflow YAMLs under `.spur/workflows/` (symlinked from `.spur/workflows/`). Each
+The plugin ships workflow YAMLs under `.spur/workflows/`. Each
 pipeline owns one lifecycle phase:
 
-| Workflow                 | Phase                             | Entry command                     |
-| ------------------------ | --------------------------------- | --------------------------------- |
-| `basic.yaml`             | Generic implement/check/fix       | direct `spur workflow run`        |
-| `feature-lifecycle.yaml` | Feature status FSM                | `spur feature update`             |
-| `task-lifecycle.yaml`    | Task status FSM                   | `spur task update`                |
-| `planning-pipeline.yaml` | Planning/design from known slug   | `/sp:dev-plan`                    |
-| `task-pipeline.yaml`     | Single-task execution             | `/sp:dev-run`                     |
-| `feature-dev.yaml`       | Feature umbrella execution        | `/sp:dev-runall --feature`        |
-| `idea-pipeline.yaml`     | Idea to feature + AC + task batch | `/sp:dev-idea`                    |
-| `wrapup-pipeline.yaml`   | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
+| Workflow                    | Phase                             | Entry command                     |
+| --------------------------- | --------------------------------- | --------------------------------- |
+| `basic.yaml`                | Generic implement/check/fix       | direct `spur workflow run`        |
+| `feature-lifecycle.yaml`    | Feature status FSM                | `spur feature update`             |
+| `task-lifecycle.yaml`       | Task status FSM                   | `spur task update`                |
+| `planning-pipeline.yaml`    | Planning/design from known slug   | `/sp:dev-plan`                    |
+| `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
+| `feature-dev.yaml`          | Feature umbrella execution        | `/sp:dev-runall --feature`        |
+| `idea-pipeline.yaml`        | Idea to feature + AC + task batch | `/sp:dev-idea`                    |
+| `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
+| `docs-pipeline.yaml`        | Docs-only task execution          | `/sp:dev-run --mode implement`    |
+| `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |
 
 ### Lifecycle operations
 
