@@ -511,6 +511,7 @@ Feature: spur-dev umbrella skill
 | 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | done |
 | 0483 | Fix H1 pipeline contract defects: implement scope, agent pin, review table, fixall repeats | done |
 | 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | done |
+| 0496 | Extend --worktree to accept an existing worktree name for batch reuse | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
