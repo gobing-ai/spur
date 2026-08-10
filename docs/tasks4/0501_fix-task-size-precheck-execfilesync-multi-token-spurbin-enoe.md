@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T18:03:36.667Z"
-updated_at: "2026-08-10T21:48:33.078Z"
+updated_at: "2026-08-10T21:53:07.647Z"
 ---
 
 ## 0501. Fix task-size-precheck execFileSync multi-token spurBin ENOENT
@@ -265,14 +265,37 @@ R5 is certified by executing the exact size-precheck action with the real inject
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
+- Coverage: N/A (documentation/bug-fix verification; evidence is the green regression suite + live smoke, not a coverage percentage)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `plugins/sp/scripts/task-size-prechVerdict: **PASS** — R1–R5 and all five AC scenarios are MET. No P1–P3 SECUA findings. |
-| Scenario: R3 — single-token spurBin (compiled binary) still works | MET | test |
-| Scenario: R4 — regression suite covers both shapes and keeps the argv-not-shell guard | MET | test |
-| Scenario: R5 — pipeline precheck transition passes | MET | command |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/scripts/task-size-precheck.ts:104-109` — `runSpur()` splits `spurBin` via `split(/\s+/).filter(Boolean)` → `execFileSync(file, [...lead, ...args])`; task-fetch routes through it at `:134`. Test `plugins/sp/tests/task-size-precheck.test.ts:97-108` (multi-token task-fetch) passed this run. |
+| R2 | MET | `plugins/sp/scripts/task-size-precheck.ts:120` — `resolveCapabilityTier` routes through `runSpur`. Dedicated multi-token tier test at `plugins/sp/tests/task-size-precheck.test.ts:111-132` passed this run (pre-fix: silent `standard` → FAIL). |
+| R3 | MET | Single-token degrades to `lead = []` (`:105`); still `execFileSync` + argv array, no shell. Injection guard test `:7` passed unmodified this run; regex-drift `:48` passed. |
+| R4 | MET | `bun test plugins/sp/tests/task-size-precheck.test.ts` this run → **6 pass, 0 fail**; 4 cases cover multi/single-token × both call sites. |
+| R5 | MET | Live smoke this run: `bun plugins/sp/scripts/task-size-precheck.ts 0501 --spur-bin "$(which bun) $PWD/apps/cli/src/index.ts"` → exit 0, `.spur/run/0501-precheck-size.status` = `PASS`; guard `config/workflows/task-pipeline.yaml:455` requires literal `PASS` — contract satisfied. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — multi-token spurBin resolves on the task-fetch call site | MET | test | `plugins/sp/tests/task-size-precheck.test.ts:97-108` (6 pass, 0 fail this run) |
+| Scenario: R2 — multi-token spurBin resolves on the capability-tier call site | MET | test | `plugins/sp/tests/task-size-precheck.test.ts:111-132` (passed this run) |
+| Scenario: R3 — single-token spurBin (compiled binary) still works | MET | test | `plugins/sp/tests/task-size-precheck.test.ts:135-166` (passed this run) |
+| Scenario: R4 — regression suite covers both shapes and keeps the argv-not-shell guard | MET | test | suite green this run; `:7` and `:48` unmodified |
+| Scenario: R5 — pipeline precheck transition passes | MET | command | direct script invocation with real two-token spurBin → `PASS` in `.spur/run/0501-precheck-size.status` (AC permits script invocation in lieu of full `workflow run`) |
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; re-audit verdict PASS |
+
+**Fix pass (`--fix all`):** no UNMET/PARTIAL rows — nothing to repair. Verdict artifact rewritten this run at `.spur/run/0501-verdict.json`.
+
+**Shippable: PASS** — Feature F: `spur feature check F --json` pass=true, no findings; 0501 is the sole linked task, status `done`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
