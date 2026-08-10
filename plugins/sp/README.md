@@ -129,6 +129,7 @@ list this README is checked against.
 | `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |
 | `dev-find-issue`    | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes                                                 |
 | `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
+| `dev-find-next`     | Prompt-first feature frontier prioritizer — ranks the open feature frontier by derived importance/urgency with per-candidate evidence; gates unactionable features; emits tree defects as proposals only     |
 | `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
 | `dev-simplify`      | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression                                                                         |
 | `dev-arch`          | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors                   |
@@ -235,6 +236,8 @@ plugins/sp/
 │   │   └── references/session-formats.md
 │   ├── conflict-finding/            # Authority-aware four-pillar semantic conflict audit
 │   │   └── references/{authority-resolution.md, comparison-protocol.md, finding-contract.md, remediation-routing.md}
+│   ├── next-feature/                # Prompt-first feature frontier prioritizer (backs /sp:dev-find-next)
+│   │   └── references/{signal-derivation.md, ranking-rubric.md, proposal-contract.md, handoff-routing.md}
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
@@ -308,6 +311,7 @@ surface or run one workflow. All skills target the same five platforms: `claude-
 | `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
 | `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-find-issue`                                                                                        |
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
+| `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 
 Each skill directory contains:

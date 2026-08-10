@@ -596,6 +596,37 @@ not be claimed against a false value. v1 adds no production analyzer, index/cach
 dependency, CLI noun, workflow, or dedicated subagent. SSOT:
 `plugins/sp/skills/conflict-finding/SKILL.md` + its four references.
 
+#### 1.3.2 `/sp:dev-find-next` — feature frontier prioritizer (feature H12, task 0497)
+
+Thin wrapper over the `sp:next-feature` skill. Standalone report, not a spine pipeline stage.
+Answers "which feature should we work on now?" — the target-omitted case `sp:next-router`
+declares out of v1 (routing-table §0 step 1c); within-target routing stays `/sp:dev-next`'s.
+
+```text
+/sp:dev-find-next
+    [--agent <inline|auto|name>]                        # default inline
+    [--json]                                            # default off
+```
+
+Behavior: (0) sync-first precondition — `spur feature sync --all --dry-run --json`; material drift
+leads the report with a "sync first" block and ranking uses the post-sync status view. (1) Assemble
+the candidate set from `spur feature list --json` (containers and terminal features excluded; the
+`group` tag is not a reliable container marker). (2) Gate on actionability — the frontier predicate
+is **cited at runtime** from next-router's routing-table row B3, never restated; gated features are
+reported with reasons, never ranked. (3) Derive the four measured signals (AC coverage, churn
+exposure, dogfood proximity, authority pull) via `spur … --json`, `git`, and `rg`; a signal with a
+degenerate spread is reported rejected-with-spread. (4) Rank in **ordinal tiers with per-candidate
+evidence** — no numeric scores (the corpus carries no value/effort estimates; the `priority` field
+is degenerate and never used as an ordering). (5) Defect pass — rank-distorting tree defects D1–D4
+are emitted as proposals conforming to `docs/plans/feature-tree-restructure-map.md`'s schema, each
+clearing the `sp:conflict-finding` evidence bar (`false_positive_check` mandatory); silence is a
+valid outcome. (6) Report and stop — the command performs no `spur feature move` and no corpus
+mutation; `/sp:dev-featurechange` (dry-run → confirm → apply) is the sole mutation path. OQ1
+(dispatch into `/sp:dev-next` vs report-only) is deferred: v1 ships report-only. v1 adds no
+TypeScript, schema, frontmatter field, CLI verb, or subagent. SSOT:
+`plugins/sp/skills/next-feature/SKILL.md` + its four references
+(`signal-derivation`, `ranking-rubric`, `proposal-contract`, `handoff-routing`).
+
 ## 2. Configuration
 
 ### 2.1 Project config — `.spur/config.yaml` (ADR-017)

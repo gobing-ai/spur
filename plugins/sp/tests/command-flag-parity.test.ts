@@ -192,7 +192,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         const agentCommands = [...allDevHints.keys()].filter((n) =>
             extractFlags(allDevHints.get(n) ?? '').has('--agent'),
         );
-        expect(agentCommands.length).toBe(20);
+        expect(agentCommands.length).toBe(21);
     });
 
     // ---------- compatibility alias owning-contract assertions ----------
