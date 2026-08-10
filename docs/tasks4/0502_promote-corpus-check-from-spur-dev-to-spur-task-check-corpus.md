@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T21:12:13.589Z"
-updated_at: "2026-08-10T21:14:08.453Z"
+updated_at: "2026-08-10T21:26:56.000Z"
 ---
 
 ## 0502. Promote corpus-check from spur-dev to spur task check --corpus (ADR-051 misplacement fix)
@@ -144,21 +144,46 @@ the gate discoverable next to the per-task gate it extends. The feature half is 
 command (one gate, one entry point) — the corpus is the task/feature corpus, and `task check` is
 the corpus-check family host.
 
+**Frozen names (implement exactly — do not rename, do not invent alternatives).**
+
+| Kind | Name |
+| --- | --- |
+| Service file | `packages/app/src/services/corpus-check.ts` |
+| Service export | `runCorpusCheck(cwd: string, since?: string): Promise<CorpusCheckResult>` (async, in-process) |
+| Result type | `CorpusCheckResult = { observed: number; baselined: number; newErrors: CorpusError[]; staleEntries: BaselineEntry[]; ok: boolean }` |
+| Helper export | `key(e: { kind; id; code }): string` — ported verbatim from `scripts/commands/corpus-check.ts:46` |
+| Barrel export | `export { runCorpusCheck } from './services/corpus-check';` + `export type { CorpusCheckResult }` in `packages/app/src/index.ts` |
+| CLI flags | `--corpus` (boolean), `--since <ref>` (string) on the existing `task check` verb — no other surface additions |
+| JSON output keys | exactly `{ observed, baselined, newErrors, staleEntries, ok }` (same shape as the result type) |
+| Sweep seam | in-process calls into the existing `task-check.ts` / `feature-check.ts` services (`packages/app/src/services/`) — the same services the `task check` / `feature check` verbs use |
+| package.json script | `"corpus-check": "bun run apps/cli/src/index.ts task check --corpus"` |
+
+**Anti-patterns (what NOT to implement).**
+
+- No `spur corpus` noun (or any new first-layer noun) — ADR-051 noun discipline; AC2 greps for it.
+- No spur-dev `corpus-check` delegate/wrapper "for compatibility" — move-and-delete in one commit;
+  two surfaces for one gate is the defect being fixed.
+- No CLI self-spawn — the service must not shell out to `bun run apps/cli/src/index.ts` (the current
+  `sweep()` at `scripts/commands/corpus-check.ts:57` does exactly this; do not port that pattern).
+- No baseline schema changes — `config/corpus-baseline.json` format is frozen.
+- `--corpus` must not accept a WBS argument — usage error, not silent ignore.
+- Do not rewrite ADR-050 historical text — only ADR-051 Detail gets a one-line completion note.
+
 **Surfaces to change**
 
 | Surface | Change |
 | --- | --- |
-| `packages/app/src/services/corpus-check.ts` (new) | Service: run full task + feature check sweeps in-process, collect `{kind,id,code,message}` errors, reconcile against `config/corpus-baseline.json` (two-sided), return `{observed, baselined, newErrors, staleEntries, ok}`. Port `key()` from `scripts/commands/corpus-check.ts:44`. Baseline path resolution must work from any project cwd (runtime context, not repo-root assumptions). |
-| `packages/app/tests/services/corpus-check.test.ts` (new) | Port/extend `scripts/commands/corpus-check.test.ts`: baseline reconcile pass, new-error fail, stale-entry fail, unparseable-sweep hard-fail. In-memory fixtures, no repo sweep. |
-| `apps/cli/src/commands/task.ts` (~line 133 registration; check verb) | Add `--corpus` and `--since <ref>` options to `task check`. `--corpus` requires NO WBS argument (usage error otherwise); `--since` without a value or with a flag-like value → exit non-zero with message naming `--since`. Human output mirrors today's summary lines; `--json` emits the structured summary. Exit code via `context.setExitCode`. |
-| `apps/cli/tests/` (task check corpus cases) | CLI-level coverage: `--corpus` exit 0 on clean fixture corpus; non-zero on injected unbaselined error; `--since` misuse fails loud; `--json` parses. |
-| `packages/app/src/index.ts` (or package barrel) | Export the new service for the CLI. |
-| `scripts/spur-dev.ts` | Remove `corpus-check`: case (lines 96–106), import (line 30), header line (line 21), usage string (line 39). |
-| `scripts/commands/corpus-check.ts` + `corpus-check.test.ts` | Delete (logic and coverage superseded by the packages/app service). |
-| `package.json` (line 87) | `"corpus-check": "bun run apps/cli/src/index.ts task check --corpus"`. `spur-check-new` (79) and `spur-check-new:full` (85) unchanged — they chain `bun run corpus-check`. |
-| `AGENTS.md` | Verification-gate bullets (~284, ~287) reference the CLI verb; "Known misplacement" note (~242) becomes "promoted — see ADR-051 + this task". |
-| `docs/04_DESIGN.md:753` | Corpus-baseline comment mentions the CLI invocation (`spur task check --corpus`) instead of the spur-dev script. |
-| `docs/00_ADR.md` ADR-051 Detail | Record the promotion as completed (one-line edit; ADR-050 historical text untouched). |
+| `packages/app/src/services/corpus-check.ts` (new) | `runCorpusCheck`: run full task + feature check sweeps in-process via `task-check.ts` / `feature-check.ts`, collect `{kind,id,code,message}` errors, reconcile against `config/corpus-baseline.json` (two-sided), return `CorpusCheckResult`. Baseline path resolves via runtime context / project root — never bare `process.cwd()` of the caller. |
+| `packages/app/tests/services/corpus-check.test.ts` (new) | Port/extend `scripts/commands/corpus-check.test.ts`: reconcile pass, new-error fail, stale-entry fail, unparseable-sweep hard-fail, nested-cwd baseline resolution. In-memory fixtures, no repo sweep. |
+| `packages/app/src/index.ts` | Barrel exports (see Frozen names). |
+| `apps/cli/src/commands/task.ts` (`registerTaskCommand` at :132; check verb, full-corpus sweep at :963) | Add `--corpus` + `--since <ref>` to `task check`. `--corpus` requires NO WBS argument (usage error otherwise); `--since` missing/flag-like value → non-zero exit naming `--since`. Human output mirrors today's summary lines; `--json` emits `CorpusCheckResult`. Exit via `context.setExitCode`. |
+| `apps/cli/tests/` (task check corpus cases) | CLI coverage: exit 0 on clean fixture corpus; non-zero on injected unbaselined error; `--since` misuse; `--json` parses; WBS+`--corpus` usage error. |
+| `scripts/spur-dev.ts` | Remove `corpus-check`: case (:96–~:105), import (:30), header line (:21), usage string (:39). |
+| `scripts/commands/corpus-check.ts` + `corpus-check.test.ts` | Delete (superseded by the packages/app service + tests). |
+| `package.json` (:87) | Retarget `corpus-check` script (Frozen names). `spur-check-new` (:79) and `spur-check-new:full` (:85) unchanged. |
+| `AGENTS.md` | Verification-gate bullets (:284, :287) reference the CLI verb; misplacement note (:242) becomes "promoted — ADR-051 + task 0502". |
+| `docs/04_DESIGN.md:753` | Corpus-baseline comment names `spur task check --corpus` instead of the spur-dev script. |
+| `docs/00_ADR.md` ADR-051 Detail | One-line completion note. |
 
 **Invariants**
 
@@ -166,7 +191,6 @@ the corpus-check family host.
   unparseable sweep is a hard failure (never "no errors"). Port the `sweep()` doc-comment contract.
 - **No CLI surface addition beyond the flag.** `--corpus` + `--since` on `task check` only; no new
   nouns, no new verbs, no `feature check --corpus` (Q&A).
-- **No self-spawn.** The service calls check services in-process; the CLI never spawns itself.
 - **Baseline format frozen.** `config/corpus-baseline.json` schema is not touched.
 - **`bun run corpus-check` stays a valid gate entry** (script name unchanged; target changes), so
   `spur-check-new` and operator muscle memory keep working.
@@ -174,18 +198,18 @@ the corpus-check family host.
 **Out of scope**
 
 - Promoting any other spur-dev command (all correctly internal per ADR-051 inventory).
-- Changing baseline contents or adding/removing baselined entries (except if the move itself makes
-  a baseline entry stale — then reconcile same-commit per T10).
+- Changing baseline contents (except if the move itself makes a baseline entry stale — reconcile
+  same-commit per T10).
 - Rewriting ADR-050 historical text.
 
 **Risk**
 
 | Risk | Mitigation |
 | --- | --- |
-| Baseline path resolution breaks when the CLI runs from a non-repo-root cwd | Service resolves the baseline via the runtime context / project root, not `process.cwd()` of the caller; cover with a test running from a nested cwd |
+| Baseline path resolution breaks when the CLI runs from a non-repo-root cwd | Baseline resolves via runtime context / project root; covered by the nested-cwd test (T2) |
 | Exit-code regression silently disables the gate | AC6 injects an unbaselined error and asserts non-zero; unparseable-sweep hard-fail test |
-| `spur-check-new` breaks from the script retarget | AC5 runs the full chain before commit |
-| Two implementations drift during transition | Move-then-delete in one commit; no parallel copies survive the commit |
+| `spur-check-new` breaks from the script retarget | AC5 runs the full chain before commit (T7) |
+| Two implementations drift during transition | Move-then-delete in one commit; no parallel copies survive |
 ### Plan
 - [ ] **T1 — Service.** Create `packages/app/src/services/corpus-check.ts`: port sweep (in-process,
   not spawned), `key()`, baseline load + two-sided reconcile from
@@ -221,16 +245,17 @@ the corpus-check family host.
 - **Decision authority:** `docs/00_ADR.md` ADR-051 (surface boundary + noun discipline + consent
   gate — consent recorded in Q&A), ADR-050 (two-sided baseline + T10), ADR-021 (apps are thin
   transports; logic in `packages/app`).
-- **Current implementation:** `scripts/commands/corpus-check.ts` (`corpusCheck` at :393, `sweep()`
-  self-spawn at :60, `key()` at :44, `scripts/spur-dev.ts:96-106` dispatch + :102 `--since`
-  validation); `scripts/commands/corpus-check.test.ts`.
-- **CLI host:** `apps/cli/src/commands/task.ts:133` (`registerTaskCommand`); full-corpus sweep mode
-  at ~:963; feature sweep via the existing `feature check` service.
-- **Callers/config:** root `package.json` lines 79/85/87; `config/corpus-baseline.json`;
+- **Current implementation (verified 2026-08-10):** `scripts/commands/corpus-check.ts`
+  (`corpusCheck` :393, `key()` :46, `sweep()` self-spawn :57); `scripts/spur-dev.ts` (case :96,
+  `--since` validation :102, import :30, header :21, usage :39);
+  `scripts/commands/corpus-check.test.ts`.
+- **CLI host:** `apps/cli/src/commands/task.ts` (`registerTaskCommand` :132; full-corpus sweep
+  mode :963). In-process sweep seam: `packages/app/src/services/task-check.ts` +
+  `feature-check.ts`; barrel `packages/app/src/index.ts`.
+- **Callers/config:** root `package.json` :79/:85/:87; `config/corpus-baseline.json`;
   `docs/04_DESIGN.md:753`.
-- **Docs to touch:** `AGENTS.md` (~242 misplacement note, ~284/287 verification gate),
+- **Docs to touch:** `AGENTS.md` (:242 misplacement note, :284/:287 verification gate),
   `docs/00_ADR.md` ADR-051 Detail.
 - **Constitution:** T3 (surface + docs/04 same commit), T10 (baseline reconciliation same commit).
-- **Prior naming work:** commit 86975fe7 (`bundle-plugins` rename) — the conformance precedent this
-  task follows for surface changes.
+- **Prior naming work:** commit 86975fe7 (`bundle-plugins` rename) — the conformance precedent.
 ### History
