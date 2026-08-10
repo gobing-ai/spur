@@ -80,7 +80,7 @@ out
 /apps/cli/config
 # Board static assets copied into the CLI package for npm publish (bundle-web)
 /apps/cli/web
-# Plugin + marketplace content copied into the CLI package for npm publish (stage-plugins)
+# Plugin + marketplace content copied into the CLI package for npm publish (bundle-plugins)
 /apps/cli/plugins
 /apps/cli/.claude-plugin
 dist/

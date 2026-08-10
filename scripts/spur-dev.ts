@@ -12,7 +12,7 @@
  *   publish <package-dir>                       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
- *   stage-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
+ *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
  *   check-marketplace-version                    fail if marketplace/plugin versions drifted from the CLI package
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
@@ -24,6 +24,7 @@
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { bundleConfig } from './commands/bundle-config';
+import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { corpusCheck } from './commands/corpus-check';
@@ -31,12 +32,11 @@ import { devAll } from './commands/dev-all';
 import { linkCheck } from './commands/link-check';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
-import { stagePlugins } from './commands/stage-plugins';
 import { verifyPack } from './commands/verify-pack';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, stage-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, corpus-check, link-check',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, corpus-check, link-check',
     );
     process.exit(message ? 1 : 0);
 }
@@ -70,8 +70,8 @@ try {
             console.log(`Bundled board assets ${result.source} -> ${result.target}`);
             break;
         }
-        case 'stage-plugins': {
-            const result = await stagePlugins();
+        case 'bundle-plugins': {
+            const result = await bundlePlugins();
             console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
             break;
         }

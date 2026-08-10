@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T16:46:26.837Z"
-updated_at: "2026-08-10T18:56:06.193Z"
+updated_at: "2026-08-10T20:36:03.953Z"
 ---
 
 ## 0500. Ship plugins/sp and marketplace.json in the @gobing-ai/spur npm tarball for superskill install
@@ -331,12 +331,12 @@ repo at 0.3.41 on 2026-08-10):**
 
 | Surface | Change |
 | --- | --- |
-| `scripts/commands/stage-plugins.ts` (new) | `cp` with filter: repo-root `plugins/` → `apps/cli/plugins`, `.claude-plugin/` → `apps/cli/.claude-plugin`; prunes `tests/`, `*.test.ts`, `evals/`, `.DS_Store` |
-| `scripts/spur-dev.ts` | Register `stage-plugins` in the dispatch switch + header usage block |
+| `scripts/commands/bundle-plugins.ts` (new) | `cp` with filter: repo-root `plugins/` → `apps/cli/plugins`, `.claude-plugin/` → `apps/cli/.claude-plugin`; prunes `tests/`, `*.test.ts`, `evals/`, `.DS_Store` |
+| `scripts/spur-dev.ts` | Register `bundle-plugins` in the dispatch switch + header usage block |
 | `apps/cli/package.json` `files` | Add `"plugins/"`, `".claude-plugin/"` |
-| `apps/cli/package.json` scripts | `build:bundle` gains `&& bun run ../../scripts/spur-dev.ts stage-plugins`; add `"prepack": "bun run build:bundle"` |
+| `apps/cli/package.json` scripts | `build:bundle` gains `&& bun run ../../scripts/spur-dev.ts bundle-plugins`; add `"prepack": "bun run build:bundle"` |
 | `.gitignore` | `/apps/cli/plugins` and `/apps/cli/.claude-plugin` (alongside existing `/apps/cli/config`, `/apps/cli/web`) |
-| `scripts/commands/stage-plugins.test.ts` (new) | Prune-filter unit coverage (root suite already globs `./scripts`) |
+| `scripts/commands/bundle-plugins.test.ts` (new) | Prune-filter unit coverage (root suite already globs `./scripts`) |
 | Docs | Install (R8) + `docs/04_DESIGN.md` publish-surface tables + optional release checklist |
 | Verification script | Pack → extract → assert paths/versions/no-tests; dry-run `superskill install` |
 
@@ -349,14 +349,14 @@ tested; superskill's inline `find … -exec rm` one-liner cannot be. Model the f
 **Recommended script shape**
 
 ```text
-scripts/commands/stage-plugins.ts:
+scripts/commands/bundle-plugins.ts:
   EXCLUDE = /(^|\/)(\.DS_Store|tests|evals)($|\/)|\.test\.ts$/
   rm -rf apps/cli/plugins apps/cli/.claude-plugin
   cp ../../plugins        -> apps/cli/plugins        (filter: !EXCLUDE)
   cp ../../.claude-plugin -> apps/cli/.claude-plugin
 
 apps/cli/package.json:
-  build:bundle:   bundle-web && bun build … spur.js && bundle-config config && stage-plugins
+  build:bundle:   bundle-web && bun build … spur.js && bundle-config config && bundle-plugins
   prepack:        bun run build:bundle
   prepublishOnly: (optional) repo-root marketplace version drift guard — R6
 ```
@@ -418,10 +418,10 @@ clone, which is what makes it worth an explicit AC (AC7).
 | Version drift between CLI and marketplace | R6 + release sync path + pack assert |
 | `superskill install --dry-run` littering `.rulesync/` in the repo | R7: run only from a disposable temp CWD |
 ### Plan
-- [ ] **T1 — Staging module.** Add `scripts/commands/stage-plugins.ts` (`cp` + prune filter
-  per R4) plus `scripts/commands/stage-plugins.test.ts` covering the filter; register the
+- [ ] **T1 — Staging module.** Add `scripts/commands/bundle-plugins.ts` (`cp` + prune filter
+  per R4) plus `scripts/commands/bundle-plugins.test.ts` covering the filter; register the
   command in `scripts/spur-dev.ts` dispatch and its header usage block.
-- [ ] **T2 — Wire into the publish path and declare it.** Append `stage-plugins` to `apps/cli`
+- [ ] **T2 — Wire into the publish path and declare it.** Append `bundle-plugins` to `apps/cli`
   `build:bundle`; add `"prepack": "bun run build:bundle"` (R3); add `"plugins/"` and
   `".claude-plugin/"` to `files` (R5); add `/apps/cli/plugins` and `/apps/cli/.claude-plugin`
   to `.gitignore`. If cheap, also wire the repo-root marketplace version-drift guard into
@@ -449,20 +449,20 @@ clone, which is what makes it worth an explicit AC (AC7).
 
 | File:line | Change | Req/AC |
 | --- | --- | --- |
-| `scripts/commands/stage-plugins.ts` (new) | Copy repo-root `plugins/` → `apps/cli/plugins`, `.claude-plugin/` → `apps/cli/.claude-plugin` with EXCLUDE prune (`tests/`, `*.test.ts`, `evals/`, `.DS_Store`) | R2/R4 |
-| `scripts/commands/stage-plugins.test.ts` (new) | Prune-filter + staged-tree assertions (7 tests) | R4/AC2 |
+| `scripts/commands/bundle-plugins.ts` (new) | Copy repo-root `plugins/` → `apps/cli/plugins`, `.claude-plugin/` → `apps/cli/.claude-plugin` with EXCLUDE prune (`tests/`, `*.test.ts`, `evals/`, `.DS_Store`) | R2/R4 |
+| `scripts/commands/bundle-plugins.test.ts` (new) | Prune-filter + staged-tree assertions (7 tests) | R4/AC2 |
 | `scripts/commands/check-marketplace-version.ts` (new) | Pre-publish version-drift guard (`findMarketplaceVersionDriftFrom` pure fn + file reader) | R6 |
 | `scripts/commands/verify-pack.ts` (new) | Extract tarball → assert AC3 (paths, versions, no tests/evals) | R1/AC3 |
 | `scripts/commands/verify-pack.test.ts` (new) | Drift-guard + verifyPackExtract unit coverage | R6/AC3 |
 | `scripts/tsconfig.json` (new) | Give `scripts/` LSP type resolution (extends base, `types: ["bun"]`); not referenced by any workspace gate | tooling hygiene |
-| `scripts/spur-dev.ts` | Register `stage-plugins`, `check-marketplace-version`, `verify-pack` (imports + header + dispatch) | T1/T3 |
-| `apps/cli/package.json` | `files` += `plugins/`, `.claude-plugin/`; `build:bundle` += `&& … stage-plugins`; add `prepack: build:bundle`; `prepublishOnly` = drift guard | R3/R5/R6 |
+| `scripts/spur-dev.ts` | Register `bundle-plugins`, `check-marketplace-version`, `verify-pack` (imports + header + dispatch) | T1/T3 |
+| `apps/cli/package.json` | `files` += `plugins/`, `.claude-plugin/`; `build:bundle` += `&& … bundle-plugins`; add `prepack: build:bundle`; `prepublishOnly` = drift guard | R3/R5/R6 |
 | `.gitignore` | Add `/apps/cli/plugins`, `/apps/cli/.claude-plugin` | R2 |
 | `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:81` | `/Users/robin/node_modules/` → `$HOME/node_modules/` (T5 privacy sweep) | T5 |
 | `apps/cli/README.md` | Add "Install the `sp` plugin" subsection (superskill install) | R8/AC6 |
 | `README.md:14` | Stale `0.3.18` → `0.3.41` marketplace literal; add plugin-install step | R8/AC6 |
 | `docs/help/how_to_use_spur_for_daily_software_development.md` | Add plugin-install step after npm bundle | R8/AC6 |
-| `docs/04_DESIGN.md` | `build:bundle` row + Monorepo path table enumerate `apps/cli/plugins/`, `apps/cli/.claude-plugin/` (`stage-plugins`) | R8/AC6 |
+| `docs/04_DESIGN.md` | `build:bundle` row + Monorepo path table enumerate `apps/cli/plugins/`, `apps/cli/.claude-plugin/` (`bundle-plugins`) | R8/AC6 |
 
 **Key decisions:**
 
@@ -482,6 +482,10 @@ clone, which is what makes it worth an explicit AC (AC7).
 
 **Not modified (authority):** `plugin.json`, `.claude-plugin/marketplace.json`, workflow YAMLs.
 Release version lockstep (`syncMarketplaceAndPlugins`) unchanged.
+
+**Post-verdict rename.** `bundle-plugins` → `bundle-plugins` to align with the existing
+`bundle-config` / `bundle-web` verb convention (files, export `bundlePlugins`, `spur-dev.ts`
+command, `build:bundle` wiring, docs). No shipped release referenced the old name; no alias kept.
 ### Testing
 **Verdict: PASS** (re-audit `--force --fix all`, 2026-08-10 — task was `done`, committed `0dc2edd5`)
 
@@ -490,13 +494,13 @@ Release version lockstep (`syncMarketplaceAndPlugins`) unchanged.
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | MET | fresh `build:bundle` + `npm pack` → `gobing-ai-spur-0.3.41.tgz` (2.75MB); `verify-pack` OK — `plugins/sp/plugin.json` + `.claude-plugin/marketplace.json` at package root |
-| R2 | MET | `stage-plugins.ts` copies `../../plugins` + `../../.claude-plugin` → `apps/cli/`; `git status --porcelain` shows neither (gitignored), re-verified this run |
+| R2 | MET | `bundle-plugins.ts` copies `../../plugins` + `../../.claude-plugin` → `apps/cli/`; `git status --porcelain` shows neither (gitignored), re-verified this run |
 | R3 | MET | `prepack: bun run build:bundle` runs on pack (observed in this run's pack); `prepublishOnly` = drift guard on repo-root sources |
-| R4 | MET | staged tree this run: 0 `*.test.ts`, 0 `tests/` dirs under `apps/cli/plugins`; `stage-plugins.test.ts` 3 tests pass |
+| R4 | MET | staged tree this run: 0 `*.test.ts`, 0 `tests/` dirs under `apps/cli/plugins`; `bundle-plugins.test.ts` 3 tests pass |
 | R5 | MET | `files` = spur.js, config, schemas, web, README.md, plugins/, .claude-plugin/ (printed this run) |
 | R6 | MET | `check-marketplace-version` → "versions match package version" (0.3.41 across pkg/plugin/marketplace), this run |
 | R7 | MET | `superskill 0.3.13 install sp --marketplace /tmp/v0500-extract/package --dry-run --verbose` → `Plugin root: /tmp/v0500-extract/package/plugins/sp`, exit 0; control `nope-not-a-plugin` exit 1; temp CWD deleted |
-| R8 | MET | `superskill install sp --marketplace` present in README.md, apps/cli/README.md, help doc (1 each); zero `0.3.18` literals; 04_DESIGN tables reference stage-plugins ×2 |
+| R8 | MET | `superskill install sp --marketplace` present in README.md, apps/cli/README.md, help doc (1 each); zero `0.3.18` literals; 04_DESIGN tables reference bundle-plugins ×2 |
 | R9 | MET | `spur-check-new` exit 0 this run (lint + test 4806 pass/0 fail + rules + corpus-check); `bun run build` exit 0; 7 new unit tests pass |
 
 **Acceptance Criteria Verification**
@@ -561,7 +565,7 @@ Residual risk: the packed tarball's plugin content was reviewed once (T5) — a 
   - `scripts/commands/release.ts:139` — `syncMarketplaceAndPlugins` (version lockstep).
   - `scripts/commands/bundle-config.ts` / `bundle-web.ts` — the monorepo→package copy
     pattern to mirror (`cp` + `EXCLUDE` filter, with `.test.ts` siblings).
-  - `scripts/spur-dev.ts` — command dispatch to register `stage-plugins` in.
+  - `scripts/spur-dev.ts` — command dispatch to register `bundle-plugins` in.
   - `.claude-plugin/marketplace.json` — marketplace `spur`, plugin `sp`,
     `source: ./plugins/sp`, version `0.3.41`.
   - `plugins/sp/plugin.json` — plugin manifest, version `0.3.41`.

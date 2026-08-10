@@ -16,7 +16,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { EXCLUDE, stagePlugins } from './stage-plugins';
+import { bundlePlugins, EXCLUDE } from './bundle-plugins';
 
 async function listFiles(dir: string): Promise<string[]> {
     const out: string[] = [];
@@ -28,7 +28,7 @@ async function listFiles(dir: string): Promise<string[]> {
     return out;
 }
 
-describe('stagePlugins', () => {
+describe('bundlePlugins', () => {
     let target: string;
 
     afterEach(async () => {
@@ -39,7 +39,7 @@ describe('stagePlugins', () => {
         target = await mkdtemp(join(tmpdir(), 'spur-stage-'));
         const pluginTarget = join(target, 'plugins');
         const marketplaceTarget = join(target, '.claude-plugin');
-        await stagePlugins(pluginTarget, marketplaceTarget);
+        await bundlePlugins(pluginTarget, marketplaceTarget);
 
         const files = await listFiles(pluginTarget);
         const rel = files.map((f) => f.slice(pluginTarget.length + 1));
@@ -65,7 +65,7 @@ describe('stagePlugins', () => {
     test('staged plugin root retains a distribution entry superskill requires', async () => {
         target = await mkdtemp(join(tmpdir(), 'spur-stage-'));
         const pluginTarget = join(target, 'plugins');
-        await stagePlugins(pluginTarget, join(target, '.claude-plugin'));
+        await bundlePlugins(pluginTarget, join(target, '.claude-plugin'));
 
         const top = await readdir(join(pluginTarget, 'sp'), { withFileTypes: true });
         const names = top.filter((e) => e.isDirectory()).map((e) => e.name);

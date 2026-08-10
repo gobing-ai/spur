@@ -42,7 +42,7 @@ export const EXCLUDE = /(^|\/)(\.DS_Store|tests|evals)($|\/)|\.test\.ts$/;
  * @param pluginTarget  - destination for `plugins/` (default `apps/cli/plugins`)
  * @param marketplaceTarget - destination for `.claude-plugin/` (default `apps/cli/.claude-plugin`)
  */
-export async function stagePlugins(
+export async function bundlePlugins(
     pluginTarget: string = PLUGIN_TARGET,
     marketplaceTarget: string = MARKETPLACE_TARGET,
 ): Promise<{ pluginTarget: string; marketplaceTarget: string }> {
