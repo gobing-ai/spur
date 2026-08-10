@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T05:32:15.299Z"
-updated_at: "2026-08-10T05:49:59.284Z"
+updated_at: "2026-08-10T06:51:40.496Z"
 ---
 
 ## 0498. Add --task to /sp:dev-find-next — confirm the ranked winner, then dispatch the planning half to implement-ready tasks
@@ -200,7 +200,7 @@ both are recorded below rather than folded silently into the diff.
 | R1 | MET | `plugins/sp/commands/dev-find-next.md:3` argument-hint, `:21` flag row (default `omitted`), `:32-33` usage; `plugins/sp/skills/next-feature/SKILL.md:87` scopes step 6 to "Without `--task`" |
 | R2 | MET | `rg 'spur task create\|spur task batch-create'` over skill + command → 5 hits, **all prohibition/owner-attribution prose, zero invocations**; `plugins/sp/skills/next-feature/references/handoff-routing.md:44-45` names `/sp:dev-plan` + `/sp:dev-refineall` as the owners |
 | R3 | MET *(after fix)* | `plugins/sp/skills/next-feature/references/handoff-routing.md:62-66` tier rows; **`:53` added this pass** — see Defect 2. Executed: B3 gate over 32 live features → T1={H1} (task 0496 open+unblocked), 31 gated; T3-reachable set = **18 candidates** (was 0 pre-fix) |
-| R4 | PARTIAL | `plugins/sp/skills/next-feature/references/handoff-routing.md:71-75` confirm table, `:75` "no `--yes` / `--force` bypass" — **static evidence only.** The interactive pause was not executed; firing a real prompt inside a verify run would be a spurious interruption. Residual, see Review P2. |
+| R4 | MET *(runtime, 2026-08-10)* | Static: `plugins/sp/skills/next-feature/references/handoff-routing.md:71-75` confirm table, `:75` "no `--yes` / `--force` bypass". **Runtime (dogfood-driven):** `/sp-dev-find-next --task H1 --auto` on the live corpus (H1 = T1, the dispatchable case) halted at the confirm gate awaiting an explicit operator decision — `--auto` did not answer it; operator **declined**, and `git status --porcelain -- docs/` hash was byte-identical before/after (nothing written). Second runtime datapoint from the same session's dogfood: `--task H12 --auto` routed T4 → refuse, no dispatch. See runtime pass note below. |
 | R5 | MET | `plugins/sp/skills/next-feature/SKILL.md:40` still "performs no `spur feature move` and writes nothing under `docs/features/**`"; `:104` anti-pattern intact; command read-only claim scoped, not deleted |
 | R6 | MET *(after fix)* | See Defect 1. `plugins/sp/skills/spur-dev/references/flag-glossary.md:200` now carries the declaring set in a first-paragraph parenthetical; C1 **proven live** by probe + negative control below |
 
@@ -211,7 +211,7 @@ both are recorded below rather than folded silently into the diff.
 | R1 — command answers which feature, not which step | MET | static | `plugins/sp/commands/dev-find-next.md:3`, `:21`, `:32-33` re-read this run |
 | R2 — task creation composes existing surfaces | MET | command | `rg` over shipped surface → zero `spur task create` / `batch-create` invocations |
 | R3 — unactionable features gated, not ranked | MET | command | executed B3 gate on live corpus: 1 ranked (H1), 31 gated with reasons; T1 routes to refineall-only |
-| R4 — confirmation cannot be waived | PARTIAL | static | contract text in 3 places, no escape hatch; **interactive pause unexecuted** |
+| R4 — confirmation cannot be waived | MET | runtime | pause fired under `--auto` on a T1 target (H1); decline → zero corpus writes (hash-verified); no escape hatch in contract text (3 places) |
 | R5 — honesty contract narrows, not deleted | MET | static | `plugins/sp/skills/next-feature/SKILL.md:40`, `:104` re-read this run |
 | R6 — contract surfaces agree | MET | command | `validate-flag-contracts` → "All 66 contract surfaces agree"; **plus** live-coverage probe (below) |
 
@@ -252,15 +252,26 @@ gated list. Measured effect on this tree: T3-reachable candidates **0 → 18**.
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
 | P2 | Correctness | `plugins/sp/scripts/validate-flag-contracts.ts:139` | The `≥2 names in a first-paragraph parenthetical` rule means an entry written in prose silently disables C1 for that flag. Measured: **14 of 30 multi-declarer flags currently have C1 off** — `--agent`(21 declarers), `--auto`(14), `--json`(8), `--feature`(8), `--next`(6), `--focus`(6), `--mode`(5), `--depth`(3), `--since`(3), `--dry-run`(6), `--full`, `--until`, `--wrap`, and `--task` until this pass. Pre-existing and out of 0498's scope — reported, not fixed. |
-| P2 | Correctness | `plugins/sp/skills/next-feature/references/handoff-routing.md` | The interactive confirm (R4/AC-4) remains unexecuted; no run has driven `--task` through a real pause and dispatch. |
+| P2 | Correctness | `plugins/sp/skills/next-feature/references/handoff-routing.md` | ~~The interactive confirm (R4/AC-4) remains unexecuted~~ **Resolved 2026-08-10** — runtime pass below drove `--task` through a real pause (operator declined; hash-verified no writes). The confirm→dispatch hop itself remains exercised only to the pause boundary by design (decline is the safe evidence path). |
 | P4 | Architecture | `plugins/sp/scripts/validate-flag-contracts.ts:733` | C1 considers only `dev-*` command files, so `rule-*` / `workflow-*` / `spur-init` declarations are invisible to it (e.g. `--force` on `spur-init`, `--scope` on `rule-refine`). Likely intentional scoping; noted for the record. |
+
+**Runtime confirm-gate pass — dogfood-driven, 2026-08-10 (closes R4 / Review P2).**
+Following the `/sp-dev-find-next` dogfood (`docs/dogfood/2026-08-10-sp-dev-find-next-h12-dogfood.md`), the `--task` path was executed live against this corpus with operator sanction:
+
+| Step | What happened | Evidence |
+| --- | --- | --- |
+| `--task H12 --auto` (dogfood testee) | H12 `done` → tier T4 → **refuse**, route to wrapall/sync-first; no confirm-to-dispatch, no writes | dogfood report §4 step 10; ledger row 7 |
+| `--task H1 --auto` (this pass) | H1 = T1 (dispatchable) → run **halted at the confirm gate** (~76s) despite `--auto`; operator explicitly declined | interactive pause in session; Auto-Decision Principle #5 honored |
+| Post-decline corpus check | `git status --porcelain -- docs/` sha256 identical before/after (`1df27269…`) | declining writes nothing, per contract |
+
+R4 upgrades PARTIAL → **MET** on runtime evidence: the pause fires regardless of `--auto`, an explicit id skips only the default-offer (never the confirm), and no path from `--task` to a task-file write exists without an operator decision.
 
 `spur task check 0498` → pass, 0 findings (run this pass, not stale). `plugins/sp` suite → 642 pass,
 0 fail. Coverage: N/A (prompt-first markdown surface; no runtime code path added).
 ### Review
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|
-| P2 | major | `plugins/sp/skills/next-feature/references/handoff-routing.md` | The `--task` routing is specified but **unexecuted** — no live run has driven a confirm through `/sp:dev-plan` + `/sp:dev-refineall`. Same class as 0497's shipped-but-undogfooded finding, and on this tree the primary T3 path is hard to exercise: 0493 measured the post-sync actionable frontier as empty. | Dogfood `/sp:dev-find-next --task` once a real T3 candidate exists (or against a deliberately-seeded one). Until then the tier→hop table is a contract, not evidence. |
+| P2 | major → **resolved 2026-08-10** | `plugins/sp/skills/next-feature/references/handoff-routing.md` | ~~The `--task` routing is specified but **unexecuted**~~ Closed by the dogfood-driven runtime pass (see Testing §Runtime confirm-gate pass): `/sp:dev-find-next --task` dogfooded against H12 (T4 refuse) and H1 (T1 confirm pause under `--auto`, operator declined, hash-verified no writes). The tier→hop table now has runtime evidence up to the confirm boundary; the confirm→dispatch hop itself stays contract-only until an operator actually confirms a dispatch. | None — evidence recorded. Residual (dispatch hop itself) is operator-territory, not a defect. |
 | P3 | minor | `plugins/sp/skills/spur-dev/references/flag-glossary.md` | `--task` is now documented as a family with three distinct semantics (create / dispatch / attach / record) under one anchor. That is honest but unusual — most glossary entries describe one behavior. A future reader may take one bullet as the flag's whole meaning. | Acceptable while the family has four members. If a fifth semantic appears, split the entry per-command rather than growing the list. |
 | P4 | advisory | `plugins/sp/commands/dev-find-next.md` | The command's mutation posture is now conditional ("read-only unless `--task`"), stated in three places (command doc, SKILL.md, 04_DESIGN). Three copies of a conditional claim drift more easily than three copies of an absolute one. | The C1/C4 gates cover flag claims but not prose posture. If it drifts, promote the posture sentence to one surface and link it. |
 ### References
