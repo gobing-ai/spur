@@ -510,7 +510,7 @@ Feature: spur-dev umbrella skill
 | 0481 | 0475-verify retrospective: worktree deps install, worktree-local spur CLI, merge commit-type contract, lifecycle transition chain, merge side-effect hygiene | done |
 | 0482 | E1 batch waste: unreachable tier-fallback, precheck spurBin, fix-hop scope | done |
 | 0483 | Fix H1 pipeline contract defects: implement scope, agent pin, review table, fixall repeats | done |
-| 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | todo |
+| 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
