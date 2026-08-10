@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.277Z"
-updated_at: "2026-08-10T04:13:39.906Z"
+updated_at: "2026-08-10T05:13:09.233Z"
 done_forced: "true"
 done_reason: "Wayfinder research+prototype spike: corpus-only investigation (no code diff). Structural gate spur task check PASS (2026-08-10). Solution/Testing carry evidential verification per Design. Artifacts A/B/C written, all R1-R6 resolved."
 ---
@@ -198,14 +198,14 @@ qualifies as rank-distorting only if it corrupts a signal that this ticket found
 0495 must not invent defects against rejected signals. **0494** runs independently and does not
 consume this ticket's output.
 ### Plan
-- [ ] Establish status trust: inspect whether `spur feature sync` / `refresh` are current and how many of the 15 `active` + 5 `verifying` features would change status; write Artifact A (R1)
-- [ ] Walk child-task `dependencies[]` across feature boundaries; report edge count and fan-out distribution; rule on whether the graph is dense enough to rank by (R3)
-- [ ] Apply the B3 actionability predicate per feature; split the 25 into actionable vs gated, recording the unmet dependency for each gated one (R2)
-- [ ] Derive each of the eight candidate signals over the actionable set, recording the derivation command and measured spread; mark degenerate signals rejected; write Artifact B (R2)
-- [ ] Read the prior-art frameworks (WSJF, RICE, Eisenhower, CD3) and state per framework which parts apply here and which are inapplicable for want of estimates (R4)
-- [ ] Assemble the tiered rubric from the surviving signals and emit the ranked ordering with per-candidate evidence; write Artifact C (R5)
-- [ ] Record which hypothesised anti-patterns the spike itself tripped, and whether gate-before-rank survived contact with real data (R6)
-- [ ] Write Artifacts A/B/C into `### Solution` and the verification notes into `### Testing` via `spur task update --section`
+- [x] Establish status trust: inspect whether `spur feature sync` / `refresh` are current and how many of the 15 `active` + 5 `verifying` features would change status; write Artifact A (R1)
+- [x] Walk child-task `dependencies[]` across feature boundaries; report edge count and fan-out distribution; rule on whether the graph is dense enough to rank by (R3)
+- [x] Apply the B3 actionability predicate per feature; split the 25 into actionable vs gated, recording the unmet dependency for each gated one (R2)
+- [x] Derive each of the eight candidate signals over the actionable set, recording the derivation command and measured spread; mark degenerate signals rejected; write Artifact B (R2)
+- [x] Read the prior-art frameworks (WSJF, RICE, Eisenhower, CD3) and state per framework which parts apply here and which are inapplicable for want of estimates (R4)
+- [x] Assemble the tiered rubric from the surviving signals and emit the ranked ordering with per-candidate evidence; write Artifact C (R5)
+- [x] Record which hypothesised anti-patterns the spike itself tripped, and whether gate-before-rank survived contact with real data (R6)
+- [x] Write Artifacts A/B/C into `### Solution` and the verification notes into `### Testing` via `spur task update --section`
 
 **Verification intent:** this ticket ships no code, so verification is evidential, not test-based.
 Every matrix cell and every rank carries either a reproducible command (re-runnable by the reviewer)
@@ -380,6 +380,8 @@ Every claim above is reproducible from the corpus via the stated command or a `f
 | Blocked 0142 (H1), 0197 (G3) | both `status: blocked` in `docs/tasks2/` | Exact |
 
 Coverage: N/A (research spike; no runtime code path added). Re-audit verdict artifact: `.spur/run/0493-verdict.json`.
+
+**Second re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** All derivations re-run fresh: status distribution now `done=35 active=15 backlog=12 verifying=5` (H12 closed since the first re-audit — expected drift); frontier still **25**; priority spread **P0=1 P1=5 P2=19 (76%)** exact; cross-feature dependency walk **130 numeric edges / 12 cross-`feature_id`** — same 12 pairs as the corrected Artifact B (9 same-root, 2 unparented-origin, 1 genuine cross-root `0434 H82→D3`); AC counts H1=70 / J3=25 / J=16 exact; open tasks now 1 (0496, created after this ticket). **Repaired under `--fix all`:** stale anchor at `plugins/sp/skills/next-router/references/routing-table.md` line 32, corrected to line 33 (the target-omitted non-route moved one line; claim unchanged) in `### References`; 8 `### Plan` checkboxes flipped to `[x]`. `spur task check 0493` → pass, 0 findings.
 ### Review
 
 <!-- Risks, open concerns, and follow-up review notes. -->
@@ -388,7 +390,7 @@ Coverage: N/A (research spike; no runtime code path added). Re-audit verdict art
 - Map: [H12 Feature frontier prioritizer](../features/H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md) — `### Candidate ranking model` is the hypothesis this ticket falsifies
 - `plugins/sp/skills/next-router/references/routing-table.md:83` — row B3, the frontier/actionability predicate and its WBS-ascending fallback ordering
 - `plugins/sp/skills/next-router/references/routing-table.md:84-87` — rows B4–B7, existing feature-level hygiene routes (0494 owns the boundary ruling)
-- `plugins/sp/skills/next-router/references/routing-table.md:32` — the target-omitted non-route this map exists to close
+- `plugins/sp/skills/next-router/references/routing-table.md:33` — the target-omitted non-route this map exists to close
 - `spur feature sync --help` / `spur feature refresh --help` — the manual status-derivation verbs R1 tests
 - Dependent ticket: **0495** consumes the surviving-signal list from Artifact B
 - Sibling ticket: **0494** reuse inventory — independent, no shared evidence

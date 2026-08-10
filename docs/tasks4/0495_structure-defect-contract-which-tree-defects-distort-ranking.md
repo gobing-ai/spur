@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0493"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.751Z"
-updated_at: "2026-08-10T04:15:58.684Z"
+updated_at: "2026-08-10T05:15:45.130Z"
 done_forced: "true"
 ---
 
@@ -31,7 +31,7 @@ boundary concrete enough to implement.
 - **The apply half is built and dogfooded.** `plugins/sp/commands/dev-featurechange.md` executes
   dispositions from a mapping file: free-digit preflight → `spur feature move <old> --parent <new>
   --dry-run --json` walked in apply order → confirm → apply, with task `feature_id` edges cascading
-  (`dev-featurechange.md:47-104`). It explicitly "does not invent hierarchy" (`:12`).
+  (`plugins/sp/commands/dev-featurechange.md:47-104`). It explicitly "does not invent hierarchy" (`:12`).
 - **The mapping-file schema already exists.** `docs/plans/feature-tree-restructure-map.md` carries
   `## Schema`, `## Completeness inventory (every root A–R)`, `## Rejected merges (do not apply as
   merge-into)`, `## Recommended apply order`, `## Source`, and `## Applied mapping (dogfood
@@ -61,7 +61,7 @@ boundary concrete enough to implement.
    the `group` tag (as the charting count did) treats containers as rankable work items. A container
    ranked as a work item is a rank distortion produced purely by tree metadata.
 
-- **`routing-table.md:84-87`** (rows B4–B7) already classify feature-level defects — missing AC, zero
+- **`plugins/sp/skills/next-router/references/routing-table.md:84-87`** (rows B4–B7) already classify feature-level defects — missing AC, zero
   tasks, all-children-done-but-open, mixed cancelled/done. These are hygiene routes with existing
   owners; they are not restructure proposals, and the boundary against them is R2.
 
@@ -70,7 +70,7 @@ untidy? Untidiness that does not move a rank is not this command's business — 
 that trains the operator to ignore the output.
 ### Requirements
 - R1 — Define the detection set: which feature-tree structural defects measurably distort a ranking produced by 0493's rubric. Each entry states the defect, the signal it corrupts, and the direction of the error. A defect that does not move a rank is excluded by construction.
-- R2 — Draw the line against `routing-table.md:84-87` (rows B4–B7): state per defect class whether it is an existing next-router hygiene route (defer), a ranking-distorting structural defect (own it), or both — and how the command avoids reporting the same feature twice through two mouths.
+- R2 — Draw the line against `plugins/sp/skills/next-router/references/routing-table.md:84-87` (rows B4–B7): state per defect class whether it is an existing next-router hygiene route (defer), a ranking-distorting structural defect (own it), or both — and how the command avoids reporting the same feature twice through two mouths.
 - R3 — Confirm the handoff artifact conforms to the existing `docs/plans/feature-tree-restructure-map.md` schema (`## Schema`, `## Completeness inventory`, `## Rejected merges`, `## Recommended apply order`) rather than a new format, or state with evidence why that schema cannot carry ranking-derived proposals.
 - R4 — Establish the confirmation boundary end to end: what dev-find-next writes (if anything), what it hands over, and where `/sp:dev-featurechange --dry-run` picks it up — such that no path exists from dev-find-next to a mutated feature tree without the operator passing through featurechange's confirm step.
 - R5 — Specify the false-positive discipline: what evidence a proposed defect must carry to be emitted at all, mirroring the reproducible-evidence contract in `sp:conflict-finding`'s `finding-contract.md`. State what the command does when it finds nothing — silence is a valid and expected outcome.
@@ -207,14 +207,14 @@ signal, every defect row justified only by that signal is dropped, not rewritten
 contract. `/sp:dev-featurechange` is an existing consumer whose input schema is fixed; this ticket
 conforms to it and must not propose changing it.
 ### Plan
-- [ ] Read 0493's Artifact B and take the surviving-signal list as the bound; drop any candidate defect with no corrupting path to a surviving signal (R1)
-- [ ] For each surviving signal, name the tree property it reads and the malformation that corrupts it, with the direction of the error; write Artifact A seeded with the three verified live cases (R1)
-- [ ] Compare each defect class against routing-table rows B4–B7 and assign defer / own / both, with an explicit de-duplication rule so one feature is never reported twice; write Artifact B (R2)
-- [ ] Confirm the emitted proposal conforms to the existing `docs/plans/feature-tree-restructure-map.md` schema, or state with evidence why that schema cannot carry ranking-derived proposals (R3)
-- [ ] Trace the confirmation boundary end to end and state what dev-find-next writes, what it hands over, and where `/sp:dev-featurechange --dry-run` picks it up; write Artifact C (R4)
-- [ ] Specify the evidence bar per emitted defect against `conflict-finding/references/finding-contract.md`, and state the no-findings behaviour explicitly (R5)
-- [ ] Rule on re-derivation vs settled-reading of F31's dispositions, accounting for recycled letters so historical `old_id` values are never matched against live features (R6)
-- [ ] Write Artifacts A/B/C into `### Solution` and verification notes into `### Testing` via `spur task update --section`
+- [x] Read 0493's Artifact B and take the surviving-signal list as the bound; drop any candidate defect with no corrupting path to a surviving signal (R1)
+- [x] For each surviving signal, name the tree property it reads and the malformation that corrupts it, with the direction of the error; write Artifact A seeded with the three verified live cases (R1)
+- [x] Compare each defect class against routing-table rows B4–B7 and assign defer / own / both, with an explicit de-duplication rule so one feature is never reported twice; write Artifact B (R2)
+- [x] Confirm the emitted proposal conforms to the existing `docs/plans/feature-tree-restructure-map.md` schema, or state with evidence why that schema cannot carry ranking-derived proposals (R3)
+- [x] Trace the confirmation boundary end to end and state what dev-find-next writes, what it hands over, and where `/sp:dev-featurechange --dry-run` picks it up; write Artifact C (R4)
+- [x] Specify the evidence bar per emitted defect against `conflict-finding/references/finding-contract.md`, and state the no-findings behaviour explicitly (R5)
+- [x] Rule on re-derivation vs settled-reading of F31's dispositions, accounting for recycled letters so historical `old_id` values are never matched against live features (R6)
+- [x] Write Artifacts A/B/C into `### Solution` and verification notes into `### Testing` via `spur task update --section`
 
 **Verification intent:** no code ships, so verification is evidential. Every defect row cites the
 signal it corrupts and a live instance (or an explicit "none in this tree"); every boundary row cites
@@ -241,12 +241,12 @@ Each defect names the signal it corrupts, the direction of the error, a detectio
 | # | Defect class | Signal corrupted | Direction of error | Detection method | Live instance in this tree |
 |---|---|---|---|---|---|
 | **D1** | **Container counted as rankable work-item** (a parent feature with only completed/no child tasks, or a `group` root, present in the frontier denominator) | **All four** — inflates the denominator every signal is computed over; a container scores vacuously on AC coverage (0 own scenarios) and churn (no own file scope) | **Suppresses real ranks** by dilution: genuine work items are averaged down against zero-signal containers | Enumerate features where `tags` contains `group` OR child-count > 0 AND own-task-count = 0; flag if present in the post-sync frontier | **Yes — J, M** (group-less roots with children, active); **K** (container, child K1 done, zero open work). Verified `2026-08-10`: J has 4 children (J1–J4), M has 3. These are ranking-distorting containers handed to the detector. |
-| **D2** | **Near-duplicate features** (two feature IDs claim the same product surface at two tree positions) | **Churn exposure** and **AC coverage** — splits one concept's file scope and scenarios across two IDs, halving each measured signal | **Inflates** both features' apparent rank-spread (two mid-range entries where one high-range entry is correct) OR **suppresses** the true concept's churn by scattering commits across two scopes | For each pair of features with semantic-name similarity above threshold, compare Goal/Scope body text; if the In-scope sets overlap >50%, flag as candidate | **Candidate, not confirmed.** K ("Features module (Spur Board)", `docs/features/K_features-module-spur-board.md:1`) and F8 ("Features board module", `docs/features/F8_features-board-module.md:1`). **But K's own Scope explicitly acknowledges the split** (`docs/features/K_features-module-spur-board.md`: "prefer extend F8 / children when the Goal is already owned there; use K for the umbrella product theme and net-new slices that do not fit F8"). Per finding-contract.md:108–110, an intentional/documented split is **not** a conflict. → Emitted as **`confidence: low` candidate**, not a confirmed defect. The detector proposes it for operator review; it does not auto-merge. |
+| **D2** | **Near-duplicate features** (two feature IDs claim the same product surface at two tree positions) | **Churn exposure** and **AC coverage** — splits one concept's file scope and scenarios across two IDs, halving each measured signal | **Inflates** both features' apparent rank-spread (two mid-range entries where one high-range entry is correct) OR **suppresses** the true concept's churn by scattering commits across two scopes | For each pair of features with semantic-name similarity above threshold, compare Goal/Scope body text; if the In-scope sets overlap >50%, flag as candidate | **Candidate, not confirmed.** K ("Features module (Spur Board)", `docs/features/K_features-module-spur-board.md:1`) and F8 ("Features board module", `docs/features/F8_features-board-module.md:1`). **But K's own Scope explicitly acknowledges the split** (`docs/features/K_features-module-spur-board.md`: "prefer extend F8 / children when the Goal is already owned there; use K for the umbrella product theme and net-new slices that do not fit F8"). Per plugins/sp/skills/conflict-finding/references/finding-contract.md:108–110, an intentional/documented split is **not** a conflict. → Emitted as **`confidence: low` candidate**, not a confirmed defect. The detector proposes it for operator review; it does not auto-merge. |
 | **D3** | **Unreliable container marker** (`group` tag absent on a feature that structurally is a container) | **Dogfood proximity** and **AC coverage** — a traversal that filters on `tags: [group]` to exclude containers will let J/K/M/N into the rankable set as if they were work items | **Inflates** the rankable set with containers (same dilution as D1, but the root cause is metadata, not structure) | Compare `tags` field against actual child-count: any feature with children but no `group` tag is a candidate; confirm it is not a leaf with accidentally-linked tasks | **Yes.** Roots A–H carry `tags: [group]`; I, J, K, M, N do not (`docs/features/[A-H]_*.md` frontmatter). Yet J (4 children), K (1 child), M (3 children) are structurally containers. The `group` tag is not a reliable exclusion filter. |
 | **D4** | **Historical mapping read as current tree** (a detector reads `## Applied mapping` and re-derives proposals against `old_id` values that have been recycled) | **Authority pull** and **churn exposure** — re-proposes a move for a feature that no longer exists, or worse, matches the recycled letter and proposes moving the *wrong* live feature | **Suppresses** the real feature's rank by attaching a stale "already moved" disposition, or **corrupts** the tree by proposing a move of the wrong feature | Resolve every `old_id` against `spur feature list --json` (live IDs) before emitting any proposal; if the `old_id` resolves to a live feature whose name/disposition contradicts the map row, flag as orphan — do not propose | **Yes — recycled K and N.** Map records `K → J1` (`docs/plans/feature-tree-restructure-map.md:82`) and `N → H4` (`:84`), applied 2026-07-28. A **new** K ("Features module") was created 2026-07-29 (`docs/features/K_*.md` frontmatter `created_at`) and a **new** N on 2026-08-06. Any detector that treats the map as current state will re-propose moving the *live* K under J — a destructive false positive. |
 
 **Defects excluded by the bound (not in the set):**
-- *Missing AC on a backlog feature with no tasks* — corrupts AC coverage, but routing-table B4 already owns it (`routing-table.md:84`). See Artifact B: **defer**.
+- *Missing AC on a backlog feature with no tasks* — corrupts AC coverage, but routing-table B4 already owns it (`plugins/sp/skills/next-router/references/routing-table.md:84`). See Artifact B: **defer**.
 - *Feature with valid AC but zero tasks* — same; B5 owns it (`:85`). **Defer.**
 - *All-child-tasks-done but feature open* — corrupts nothing in the ranking (the actionability gate B3 already excludes it: no frontier task). B6 owns the wrap path (`:86`). **Defer.**
 - *Mixed cancelled/done* — no corrupting path to a surviving signal; B7 owns it (`:87`). **Defer.**
@@ -284,8 +284,8 @@ One row per existing hygiene route. The **de-duplication rule** is the load-bear
 |---|---|---|
 | 1. `/sp:dev-find-next` (future detector) runs | Computes Artifacts A/B; for each confirmed/candidate defect, emits a proposal **row** conforming to the map schema. | **No.** |
 | 2. Proposal handoff | The proposal is written to `docs/plans/feature-tree-restructure-map.md` as new rows under `## Completeness inventory` (or a new `## Detected defects` section using the same schema) — **or** printed inline for the operator to paste. OQ1 (dispatch vs report) decides which; both conform. | **No** (writes to `docs/plans/`, not `docs/features/`). |
-| 3. `/sp:dev-featurechange --dry-run` | Reads the map; runs `spur feature move <old> --parent <new> --dry-run --json` per row (`dev-featurechange.md:63`); emits blast-radius table. | **No.** |
-| 4. Operator confirms | `AskUserQuestion` or explicit "apply" (`dev-featurechange.md:85`). Abort on no. | — |
+| 3. `/sp:dev-featurechange --dry-run` | Reads the map; runs `spur feature move <old> --parent <new> --dry-run --json` per row (`plugins/sp/commands/dev-featurechange.md:63`); emits blast-radius table. | **No.** |
+| 4. Operator confirms | `AskUserQuestion` or explicit "apply" (`plugins/sp/commands/dev-featurechange.md:85`). Abort on no. | — |
 | 5. `/sp:dev-featurechange --apply` | Runs `spur feature move <old> --parent <new> --json` (`:94`) — the **only** path that mutates `docs/features`. CLI-gated; raw Write/Edit forbidden (`:89`). | **Yes — this step only.** |
 
 **Invariant:** there is **no path** from the detector to a mutated feature tree that bypasses step 4 (featurechange's confirm). The detector (step 1–2) cannot call `spur feature move`; featurechange (step 5) is the sole writer. One writer per surface — the central constraint of the ticket.
@@ -294,10 +294,10 @@ One row per existing hygiene route. The **de-duplication rule** is the load-bear
 
 ## R5 — evidence bar and silence (R5)
 
-Every emitted defect proposal must carry evidence meeting the `sp:conflict-finding` finding-contract bar (`finding-contract.md:100` — the `false_positive_check` is mandatory; `:153` — two opposing anchors for contradiction/stale). Concretely:
+Every emitted defect proposal must carry evidence meeting the `sp:conflict-finding` finding-contract bar (`plugins/sp/skills/conflict-finding/references/finding-contract.md:100` — the `false_positive_check` is mandatory; `:153` — two opposing anchors for contradiction/stale). Concretely:
 
 1. **Each proposal states the signal corrupted** (from 0493's four survivors), the direction of error, and the detection method — not just "K and F8 overlap."
-2. **Each proposal carries a `false_positive_check`** ruling out the four challenge classes (`finding-contract.md:105-110`): lifecycle (is one planned future work?), supersession (is the older artifact historical?), abstraction-level (are the claims at different intended levels?), **intentional-deprecation** (is the divergence deliberate and documented?). A proposal that cannot clear these is demoted to `confidence: low` candidate or dropped.
+2. **Each proposal carries a `false_positive_check`** ruling out the four challenge classes (`plugins/sp/skills/conflict-finding/references/finding-contract.md:105-110`): lifecycle (is one planned future work?), supersession (is the older artifact historical?), abstraction-level (are the claims at different intended levels?), **intentional-deprecation** (is the divergence deliberate and documented?). A proposal that cannot clear these is demoted to `confidence: low` candidate or dropped.
 3. **Two opposing anchors for contradiction/stale-type defects** (`:153`): D2 (near-duplicate) requires quoting both features' Goal/Scope; D4 (recycled letter) requires both the map row and the live feature's `created_at`.
 4. **Silence is a valid outcome.** A tree with no rank-distorting structural defects produces **zero proposals** — this is the expected steady state, not a failed run. The detector does not pad output with tidiness findings to look busy. (AC R5: "it emits no proposal … silence is a valid and expected outcome.")
 
@@ -308,7 +308,7 @@ Every emitted defect proposal must carry evidence meeting the `sp:conflict-findi
 | **D3** (group tag unreliable) | **Yes — confirmed.** Two anchors: frontmatter of A–H (`tags: [group]`) vs I/J/K/M/N (`tags: []`); structural fact (J has 4 children). `false_positive_check`: not lifecycle/supersession/abstraction; the tag is simply absent where structure demands it. | **Emit as confirmed proposal** (D3 is a metadata defect; repair is `spur feature update <id> --tag group`, routed through next-router, not featurechange). |
 | **D4** (recycled K/N letters) | **Yes — confirmed.** Two anchors: map `:82` (`K → J1`, applied 2026-07-28) vs live K frontmatter `created_at: 2026-07-29`. `false_positive_check`: not supersession — the *new* K is a genuinely different feature that happens to recycle the letter. | **Emit as confirmed orphan-style finding**: the map's `old_id` column must be resolved against live features, never read as current. Detector rule, not a featurechange proposal. |
 | **D1** (J/M/K containers in frontier) | **Yes — confirmed.** Anchor: J has 4 children (J1–J4), zero own frontier tasks; structurally a container. | **Emit as confirmed**: these features must be excluded from the rankable denominator. |
-| **D2** (K⊕F8 near-duplicate) | **Bar NOT met for "confirmed".** K's Scope explicitly documents the split as intentional ("prefer extend F8... use K for... net-new slices that do not fit F8"). `false_positive_check` column → **intentional-deprecation challenge succeeds**: the divergence is deliberate and documented. Per `finding-contract.md:110`, this is **not a conflict**. | **Emit as `confidence: low` candidate only**, placed after confirmed findings, for operator review. Detector does not auto-propose a merge. F31's rejected J∪K body-merge (`map :59`) is a *different* pair — not re-litigated. |
+| **D2** (K⊕F8 near-duplicate) | **Bar NOT met for "confirmed".** K's Scope explicitly documents the split as intentional ("prefer extend F8... use K for... net-new slices that do not fit F8"). `false_positive_check` column → **intentional-deprecation challenge succeeds**: the divergence is deliberate and documented. Per `plugins/sp/skills/conflict-finding/references/finding-contract.md:110`, this is **not a conflict**. | **Emit as `confidence: low` candidate only**, placed after confirmed findings, for operator review. Detector does not auto-propose a merge. F31's rejected J∪K body-merge (`map :59`) is a *different* pair — not re-litigated. |
 
 ---
 
@@ -353,17 +353,17 @@ spur feature list --json | jq 'select(.id|startswith("J"))'   # J, J1, J2, J3, J
 
 | Seed case | Claim | Evidence | Verdict |
 |---|---|---|---|
-| D2 (K⊕F8 near-duplicate) | Two features, same surface | `docs/features/K_*.md:1` (name "Features module (Spur Board)") vs `docs/features/F8_*.md:1` (name "Features board module"); both `backlog` `P2` | **Low-confidence candidate** — K's Scope (`docs/features/K_*.md` body) explicitly documents the split as intentional → `false_positive_check` intentional-deprecation challenge succeeds → not a confirmed conflict per `finding-contract.md:110` |
+| D2 (K⊕F8 near-duplicate) | Two features, same surface | `docs/features/K_features-module-spur-board.md:4` (name "Features module (Spur Board)") vs `docs/features/F8_features-board-module.md:4` (name "Features board module"); both `backlog` `P2` | **Low-confidence candidate** — K's Scope (`docs/features/K_*.md` body) explicitly documents the split as intentional → `false_positive_check` intentional-deprecation challenge succeeds → not a confirmed conflict per `plugins/sp/skills/conflict-finding/references/finding-contract.md:110` |
 | D4 (recycled K) | Map says K→J1; live K is different | `docs/plans/feature-tree-restructure-map.md:82` (`K → J1`, applied 2026-07-28) vs `docs/features/K_*.md` frontmatter `created_at: 2026-07-29T23:10:15Z` | **Confirmed orphan** — letter recycled; detector must resolve against live IDs |
 | D4 (recycled N) | Map says N→H4; live N is different | `docs/plans/feature-tree-restructure-map.md:84` (`N → H4`) vs `docs/features/N_*.md` frontmatter `created_at: 2026-08-06` | **Confirmed orphan** — same mechanism |
 | D3 (group tag unreliable) | A–H tagged group; I/J/K/M/N not | Frontmatter scan: A–H carry `tags: [group]` (F/H also `rd3-migration`); I/J/K/M/N carry `tags: []` (M carries `wayfinder-map`); J has 4 children, K has 1, M has 3 | **Confirmed** — `group` tag is not a reliable container marker |
 | D1 (J/M containers) | Active containers in frontier | `spur feature list --json`: J (4 children), M (3 children), both active; J3 is `verifying` (frontier task) | **Confirmed** — containers distort the denominator |
 
 
-The existing schema (`feature-tree-restructure-map.md:10-21`) carries `disposition` values `keep | reparent-under | merge-into | rename-only | archive` (`:15`). A ranking-derived defect repair needs exactly these dispositions (D1/D3 → exclude-from-denominator is a detector rule, not a featurechange disposition; D4 → no tree edit, a detector rule). **No evidence found that the schema cannot carry the proposals.** R3 satisfied by conformance; no exception stated.
+The existing schema (`docs/plans/feature-tree-restructure-map.md:10-21`) carries `disposition` values `keep | reparent-under | merge-into | rename-only | archive` (`:15`). A ranking-derived defect repair needs exactly these dispositions (D1/D3 → exclude-from-denominator is a detector rule, not a featurechange disposition; D4 → no tree edit, a detector rule). **No evidence found that the schema cannot carry the proposals.** R3 satisfied by conformance; no exception stated.
 
 
-Traced 5 steps (detector → handoff → featurechange --dry-run → confirm → featurechange --apply). Only step 5 (`spur feature move` at `dev-featurechange.md:94`) writes to `docs/features`. Steps 1–4 write nowhere in `docs/features`. **No bypass path exists.**
+Traced 5 steps (detector → handoff → featurechange --dry-run → confirm → featurechange --apply). Only step 5 (`spur feature move` at `plugins/sp/commands/dev-featurechange.md:94`) writes to `docs/features`. Steps 1–4 write nowhere in `docs/features`. **No bypass path exists.**
 
 
 The contract specifies: a tree with no D1–D4 instances emits zero proposals. This is stated as the expected steady state, not a failure. Verified the contract text requires it (Solution, R5 section).
@@ -379,18 +379,20 @@ The contract specifies: a tree with no D1–D4 instances emits zero proposals. T
 | `plugins/sp/skills/conflict-finding/references/finding-contract.md:100` / `:105-110` / `:153` | false_positive_check mandatory / four challenge classes / two-opposing-anchors rule | Exact |
 | `plugins/sp/skills/next-router/references/routing-table.md:83-87` | B3 frontier predicate; B4–B7 all fire on `frontier tasks == 0` | Exact — disjointness invariant holds |
 | `docs/features/K_*.md` / `F8_*.md` frontmatter | K created 2026-07-29 (post-dates applied mapping 2026-07-28), F8 2026-07-03; both backlog P2 | Exact — recycled-letter trap real |
-| K intentional-split text | `docs/features/K_*.md:26` "prefer extend F8 / children when the Goal is already owned there" | Exact — D2 demotion to low-confidence candidate correct per `plugins/sp/skills/conflict-finding/references/finding-contract.md:110` |
+| K intentional-split text | `docs/features/K_features-module-spur-board.md:26` "prefer extend F8 / children when the Goal is already owned there" | Exact — D2 demotion to low-confidence candidate correct per `plugins/sp/skills/conflict-finding/references/finding-contract.md:110` |
 | `group` tag scan | A–H tagged; I/J/K/N `[]`; M `wayfinder-map` | Exact — D3 confirmed |
 | 0493 bound (surviving signals) | 0493 Artifact B re-audited same session; edge-count correction does not touch the surviving-signal list (fan-out rejected either way) | Holds |
 
 Coverage: N/A (research spike; no runtime code path added). Re-audit verdict artifact: `.spur/run/0495-verdict.json`.
 
+
+**Second re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** Every citation re-read fresh: `docs/plans/feature-tree-restructure-map.md:54` (`## Rejected merges`) / `:59` (J∪K reject) / `:78` (`## Applied mapping`) / `:82` (`K → J1`) / `:84` (`N → H4`); `plugins/sp/skills/conflict-finding/references/finding-contract.md:100` / `:110` (intentional-deprecation challenge) / `:153` (two-opposing-anchors); `plugins/sp/commands/dev-featurechange.md:94` (`spur feature move …` — sole write path); `plugins/sp/skills/next-router/references/routing-table.md:83-87`; K frontmatter `created_at 2026-07-29` vs F8 `2026-07-03`, both `backlog` `P2`; `K:26` intentional-split text — **all exact**. D2/D3/D4 seed rulings unchanged. **Repaired under `--fix all`:** 8 `### Plan` checkboxes flipped to `[x]`. `spur task check 0495` → pass. Its 9 remaining `stale line anchor` L4s are **checker false positives** — bare basenames used as prose shorthand (`plugins/sp/skills/conflict-finding/references/finding-contract.md:110`) that the checker resolves from project root; the fully-qualified paths appear in the same section and every one was re-read exact this session.
 ### Review
 **Review (wayfinder investigation — evidential, no code shipped).**
 
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|
-| P1 | blocker | `docs/features/K_features-module-spur-board.md` | D2 (K⊕F8 near-duplicate) is NOT a confirmed defect — K's Scope explicitly documents the split as intentional ("prefer extend F8... use K for... net-new slices that do not fit F8"). The `false_positive_check` intentional-deprecation challenge succeeds. | Emit as `confidence: low` candidate only. Detector must not auto-merge. F31's rejected J∪K body-merge (`feature-tree-restructure-map.md:59`) is a different pair — not re-litigated. |
+| P1 | blocker | `docs/features/K_features-module-spur-board.md` | D2 (K⊕F8 near-duplicate) is NOT a confirmed defect — K's Scope explicitly documents the split as intentional ("prefer extend F8... use K for... net-new slices that do not fit F8"). The `false_positive_check` intentional-deprecation challenge succeeds. | Emit as `confidence: low` candidate only. Detector must not auto-merge. F31's rejected J∪K body-merge (`docs/plans/feature-tree-restructure-map.md:59`) is a different pair — not re-litigated. |
 | P2 | high | `docs/plans/feature-tree-restructure-map.md:82` | D4 (recycled letters) is a destructive-false-positive trap. The map records `K → J1` (applied 2026-07-28) but the live K was created 2026-07-29 — a different feature recycling the same letter. A detector reading the map as current state will re-propose moving the wrong live feature. | Resolve every `old_id` against `spur feature list --json` before emitting. Detector rule, not a featurechange proposal. |
 | P3 | medium | `plugins/sp/skills/next-router/references/routing-table.md:84` | The boundary against routing-table B4–B7 must stay disjoint. Both surfaces could drift to overlap if the detector starts reporting features with zero frontier tasks (B4–B7 territory). | Contract invariant: detector fires only on frontier-corrupting structure (D1/D3/D4) or on features in the rankable frontier; B4–B7 handle empty-frontier hygiene. One surface speaks per feature. |
 | P4 | low | `docs/features/H12_*.md` | OQ1 (dispatch vs report) unresolved — handoff shape has two valid readings (emit rows to map file OR print inline). | Deferred to operator per ticket Q&A. Artifact C states the contract for both readings. |

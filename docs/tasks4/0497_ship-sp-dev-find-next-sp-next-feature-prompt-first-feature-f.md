@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T04:26:18.025Z"
-updated_at: "2026-08-10T04:36:47.216Z"
+updated_at: "2026-08-10T05:09:52.586Z"
 done_forced: "true"
 done_reason: "Implement task executed inline (prompt-first markdown surface; no pipeline run). Evidence: plugins/sp suite 642 pass 0 fail; wrapper/index/design anchors verified; verdict .spur/run/0497-verdict.json PASS (R1-R6 MET). Structural gate PASS; Review L3 table populated. Provenance override recorded per CLI guidance."
 ---
@@ -147,10 +147,12 @@ Feature: 0497 ship dev-find-next
 **Test constant updates (corpus growth, not logic):** `command-contract.test.ts` 36→37 command files; `command-flag-parity.test.ts` 20→21 mode-aware commands; `skill-structure.test.ts` aggregate budget 7600→7950 with updated skill-count comment.
 
 Coverage: N/A (prompt-first markdown surface; no runtime code path added — the 642-test plugin suite is the executable gate for the command/skill contract).
+
+**Re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** Plugin contract suite re-run: **642 pass, 0 fail** (19 files, 2605 `expect()` calls). All six surface files present; `dev-find-next.md` forwards `$ARGUMENTS` to `sp:next-feature` in a single `Skill()` call; `SKILL.md` protocol step 0 (sync-first) intact; `docs/04_DESIGN.md §1.3.2` and README index rows resolve. R4 re-checked: `rg 'spur feature move'` across the shipped surface → 4 hits, all prohibition or handoff prose, **zero invocations**. R6 shippable: `spur feature check H12` → `pass: true`, 0 findings, all 4 linked tasks `done`. **Under `--fix all`:** the `### Review` P2 major (protocol unexecuted at implement time) is discharged by `docs/dogfood/2026-08-10-H12-dev-find-next-dogfood.md` (result **PASS**, six protocol steps over the live corpus).
 ### Review
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|
-| P2 | major | `plugins/sp/skills/next-feature/SKILL.md` | Prompt-first protocol is unexecuted in this ticket — the rubric's real-world output quality (does the operator agree with the ordering?) is validated only by dogfooding, not by file existence. | Dogfood `/sp:dev-find-next` next session; tune tiers/tie-breaks on evidence (0493's rubric-validation caveat). |
+| P2 | major (**resolved 2026-08-10**) | `plugins/sp/skills/next-feature/SKILL.md` | Prompt-first protocol was unexecuted at implement time — rubric output quality validated only by file existence, not by a live run. | **Discharged:** dogfooded inline the same day — `docs/dogfood/2026-08-10-H12-dev-find-next-dogfood.md` (run `2026-08-10-H12-dev-find-next`, result **PASS**): all six protocol steps executed over the live corpus, sync-first precondition fired (26 proposals), B3 gate read at runtime from `routing-table.md:83`, D1/D3/D4 defect pass reproduced. Residual: tier tie-breaks remain untuned against operator preference — revisit only if a future run's ordering is disputed. |
 | P3 | minor | `plugins/sp/skills/next-feature/references/handoff-routing.md` | OQ1 deferred: report-only v1. If the operator wants dispatch, `--next` chain semantics must come from next-router, not be hand-rolled here. | Operator decision; extension point documented. |
 | P4 | advisory | `plugins/sp/tests/skill-structure.test.ts` | Aggregate description budget bumped 7600→7950 for the 28th skill. The cap is a bloat guard; per-skill caps unchanged. | Keep scaling by +350/non-router skill, or the cap silently blocks legitimate additions. |
 ### References

@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.534Z"
-updated_at: "2026-08-10T04:25:55.831Z"
+updated_at: "2026-08-10T05:13:09.446Z"
 done_forced: "true"
 done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investigation, no code diff — same class as siblings 0493/0495. Structural gate PASS; Review L3 findings table populated; verdict .spur/run/0494-verdict.json PASS (R1-R5 MET). Provenance override recorded per CLI guidance."
 ---
@@ -95,7 +95,7 @@ Feature: 0494 wayfinder investigation
 ### Q&A
 **Closed during charting (2026-08-09) — map `### Decisions so far`:**
 
-- *Is there real overlap with `/sp:dev-next`?* **No overlap, a seam.** `routing-table.md:32` declares
+- *Is there real overlap with `/sp:dev-next`?* **No overlap, a seam.** `routing-table.md:33` declares
   the target-omitted case out of v1. dev-next advances a chosen target; dev-find-next chooses one.
   This ticket's job is to keep that seam clean at the level of concrete capabilities, not to relitigate it.
 - *Does this ticket own the featurechange handoff?* **No** — 0495 does. Scope boundary is explicit in
@@ -273,6 +273,8 @@ Every `must-build` row names the surfaces checked and found wanting (`spur featu
 **0493 dependency note:** R3's ledger uses the map's candidate-signal list per the Q&A (independence), cross-checked against 0493's *measured* results this session: 0493's edge-count correction (verifyall re-audit) does not touch the ledger — the rejected fan-out signal has no ledger row, and the four surviving signals map to rows exactly.
 
 Coverage: N/A (research inventory; no runtime code path added).
+
+**Second re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** Anchors re-read at their cited lines: `plugins/sp/skills/next-router/references/routing-table.md:83` (B3 predicate + WBS-ascending fallback) and `plugins/sp/skills/next-router/references/routing-table.md:84-87` (B4–B7, all firing on `frontier tasks == 0`) exact; conflict-finding template **254/258/277/346/276 = 1411** exact; `plugins/sp/commands/dev-featurechange.md:87` / `:89` exact; `docs/plans/feature-tree-restructure-map.md:10` / `:15` exact; `spur feature list/sync --all --dry-run/check --json` all re-run. **One anchor falsified and repaired under `--fix all`:** the target-omitted non-route cited at `plugins/sp/skills/next-router/references/routing-table.md` line 32 now sits at **line 33** ("Omitted → NOT v1 (see Non-routes); stop with usage"); corrected in `### References` and `### Q&A`. The R1 seam ruling is unaffected — only the line number moved. `spur task check 0494` → pass, 0 findings.
 ### Review
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|
@@ -281,7 +283,7 @@ Coverage: N/A (research inventory; no runtime code path added).
 | P4 | advisory | `docs/tasks4/0494_*.md` Artifact C | Three must-build rows are prompt-side `git`/`rg` derivations; spread thresholds (e.g. churn window 40d) are 0493's measured defaults, not validated constants. | Ship with 0493's values; tune on dogfood. |
 ### References
 - Map: [H12 Feature frontier prioritizer](../features/H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md)
-- `plugins/sp/skills/next-router/references/routing-table.md:32` — the target-omitted non-route (the seam)
+- `plugins/sp/skills/next-router/references/routing-table.md:33` — the target-omitted non-route (the seam)
 - `plugins/sp/skills/next-router/references/routing-table.md:83` — row B3, frontier predicate + WBS-ascending fallback (R1)
 - `plugins/sp/skills/next-router/references/routing-table.md:84-87` — rows B4–B7, feature-level hygiene routes (R2)
 - `plugins/sp/skills/next-router/SKILL.md` — driver protocol; the "never a second pipeline FSM" constraint this ticket generalises
