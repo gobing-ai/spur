@@ -280,8 +280,9 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
-surface or run one workflow. All skills target the same five platforms: `claude-code`, `codex`,
-`antigravity`, `opencode`, `openclaw`.
+surface or run one workflow. All skills target the same five core platforms: `claude-code`, `codex`,
+`antigravity`, `opencode`, `openclaw`; `conflict-finding`, `issue-finding`, `next-feature`, and
+`reverse-engineering` additionally declare `pi`.
 
 | Skill                       | Ver   | Domain                                                                                                                                                                                                                                     |
 | --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -382,8 +383,10 @@ parse `$ARGUMENTS` and forward to the skill, which owns the workflow knowledge.
 
 #### 3. Agents (`agents/`)
 
-Specialist subagents that run in isolated context windows. Three shapes: **expert agents** route a
-request to the single skill they own; **`super-planner`** drives one task end-to-end or a
+Specialist subagents that run in isolated context windows. Four shapes: **expert agents** route a
+request to the single skill they own; **`super-coder`** is the build agent that owns architecture,
+system design, production code, test code, and debugging by dispatching the four build competency
+skills rather than inlining their logic; **`super-planner`** drives one task end-to-end or a
 dependency-ordered task batch through the `sp:spur-dev` pipeline; **`super-reviewer`** runs the
 multi-dimensional review (functional traceability + SECUA + architectural depth) standalone or as
 the pipeline's Phase 7 review step.
@@ -391,12 +394,14 @@ the pipeline's Phase 7 review step.
 | Agent            | Shape        | Delegates to                                                            | Color   | Trigger examples                                                                |
 | ---------------- | ------------ | ----------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
 | `expert-spur`    | expert       | `sp:spur-cli`                                                           | green   | "create tasks", "feature lifecycle", "add a rule", "author a workflow"          |
+| `super-coder`    | builder      | `sp:sys-architecture` + `sp:code-implementation` + `sp:code-testing` + `sp:sys-debugging` | blue    | "implement this", "write the code", "fix this bug", "design the architecture"   |
 | `super-planner`  | orchestrator | `sp:spur-dev` + `sp:dogfood-testing`                                    | green   | "run this task end to end", "run all tasks", "run the batch", "runall"          |
 | `super-reviewer` | reviewer     | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
 
 Each agent has:
 
-- `skills: [sp:<skill-name>]` - bound to one (`expert-spur`), four (`sp:spur-dev`,
+- `skills: [sp:<skill-name>]` - bound to one (`expert-spur`), four (`sp:sys-architecture`,
+  `sp:code-implementation`, `sp:code-testing`, `sp:sys-debugging` for `super-coder`; `sp:spur-dev`,
   `sp:parallel-execution`, `sp:dogfood-testing`, `sp:next-router` for `super-planner`), or three
   (`sp:code-verification`, `sp:functional-review`, `sp:code-improvement` for `super-reviewer`).
 - `model: inherit` — inherits the parent session's model.
@@ -404,11 +409,13 @@ Each agent has:
 - `tools` — allowed tool set (`Read`, `Grep`, `Glob`, `Bash`, `Skill`).
 
 **Design principle:** Agents are **delegates, not implementors**. They never contain domain logic.
-`expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-planner` drives the single-task/batch
-loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`); `super-reviewer` fans a
-review out across its three skill dimensions without reaching into individual pipeline steps. For a
-single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple
-phases or a batch, the agent provides an isolated context window.
+`expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-coder` dispatches the four build
+competencies and does not orchestrate batches (that is `super-planner`) or review (that is
+`super-reviewer`); `super-planner` drives the single-task/batch loop (the algorithm lives in
+`sp:spur-dev/references/execution-batch.md`); `super-reviewer` fans a review out across its three
+skill dimensions without reaching into individual pipeline steps. For a single well-scoped
+operation, the matching `/sp:*` command is lighter; for work spanning multiple phases or a batch,
+the agent provides an isolated context window.
 
 #### 4. Hooks (`hooks/`)
 
@@ -418,9 +425,9 @@ four handlers:
 | Event          | Matcher                               | Handler                                        | Timeout |
 | -------------- | ------------------------------------- | ---------------------------------------------- | ------- |
 | `PreToolUse`   | `Write\|Edit`                         | `superskill hook run sp task-write-guard`      | 10s     |
-| `PostToolUse`  | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool`     | 5s      |
-| `SessionStart` | —                                     | `superskill hook run sp context-session-start` | 5s      |
-| `Stop`         | —                                     | `superskill hook run sp context-session-stop`  | 5s      |
+| `PostToolUse`  | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool`     | 10s     |
+| `SessionStart` | —                                     | `superskill hook run sp context-session-start` | 15s     |
+| `SessionEnd`   | —                                     | `superskill hook run sp context-session-stop`  | 15s     |
 
 **Write guard.** The `PreToolUse` hook fires on every `Write`/`Edit` tool call and checks whether
 the target path is **owned by a task** (i.e. it is a file in the task corpus under `docs/tasks/`).
@@ -456,6 +463,10 @@ hold `SKILL.md` and prompt-side companions only.
 | `scripts/dogfood-testing/detect-pipeline-driving.ts` | Word-boundary detector for pipeline-driving testees (leading-space invariant)                                                                                                                                                                                                                     |
 | `scripts/dogfood-testing/validate-report.ts`         | Pure `validateReport(md)` — footer-mandatory + 7-check finalize-or-abort contract with stable error codes                                                                                                                                                                                         |
 | `scripts/daily-summary/{daily-summary,logger}.ts`    | ccusage + git-history orchestration helpers for `sp:daily-summary`                                                                                                                                                                                                                                |
+| `scripts/feature-sync-bounded.ts`                    | Bounded retry-suppression wrapper for `spur feature sync` during batch/wrap-up runs — suppresses identical L4-blocked repeats                                                                                                              |
+| `scripts/stage-registry-adapter.ts`                  | dev-next golden-path adapter over the canonical stage registry — TABLE A/B/C resolution bridge for the status-aware facade                                                                                                                |
+| `scripts/task-size-precheck.ts`                      | Pipeline size precheck guard (R2) + size-vs-executor-capability gate (R3) — evaluates R-item/Plan-count limits to PASS/FAIL                                                                                                              |
+| `scripts/validate-flag-contracts.ts`                 | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
 | `*.test.ts`                                          | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                                                     |
 
 **Design principle:** Scripts are **deterministic enforcement**. Unlike skills (which are advisory
