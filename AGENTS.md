@@ -68,6 +68,11 @@ Agents need not know “plugin packing.” Use these **entry surfaces**:
    auto`, a name, parallel/headless execution, direct `spur agent run`, and engine-driven workflow
    `agent.run` remain subprocess surfaces.
 
+**Task lookup fast path:** Given a WBS, do not search `docs/tasks*` or guess `--folder`. Use
+`spur task show <wbs> --json` for task metadata and content; its response also includes `filePath`.
+Use `spur task path <wbs> --json` only when a filesystem consumer needs the absolute path. Both
+commands resolve across configured task folders. Reuse the first `show` response within the run.
+
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
 Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,
 `sp:spur-cli`, `sp:code-verification` (and related) plus the `spur` CLI. Do not invent a parallel

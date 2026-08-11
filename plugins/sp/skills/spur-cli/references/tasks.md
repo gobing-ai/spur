@@ -18,6 +18,21 @@ pipeline run) lives in **`sp:spur-dev`** — do not reimplement that loop here. 
 *drive* a task through its lifecycle, reach for `sp:spur-dev`; when you need to know *which verb
 does what*, this skill.
 
+## WBS lookup fast path
+
+Start from the WBS, not the corpus layout:
+
+```bash
+spur task show <wbs> --json  # metadata + full content + filePath
+spur task path <wbs> --json  # absolute path only
+```
+
+Do not search `docs/tasks*` or guess `--folder` to locate a known WBS. `show` is the default when an
+agent needs to read a task; use `path` only when another filesystem command needs the absolute path.
+Both commands resolve across configured task folders. Add `--folder` only when deliberately limiting
+the lookup to one non-default corpus. Capture `show` once per run and reuse its response instead of
+re-reading or re-tokenizing the task.
+
 ## Verb map
 
 | Verb | Purpose | Key flags |

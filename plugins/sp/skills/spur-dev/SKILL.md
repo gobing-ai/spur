@@ -154,13 +154,17 @@ CLI does.
    you ship corrupted corpus.
 2. **The pipeline, not you, writes results.** `## Testing` and `## Review` sections are
    filled by the pipeline's `record` step. Do not edit them directly during execution.
-3. **Check before every write.** Run `spur task check <wbs> --json` to know what sections
+3. **Resolve task IDs through the CLI.** Read a known WBS with `spur task show <wbs> --json`; it
+   returns metadata, full content, and `filePath` across configured task folders. Use `spur task
+   path <wbs> --json` only when another tool needs the absolute path. Never search `docs/tasks*` or
+   guess `--folder`; reuse the first `show` response throughout the run.
+4. **Check before every write.** Run `spur task check <wbs> --json` to know what sections
    the task needs at its current status. Guessing produces matrix violations.
-4. **AC titles are identity keys.** Renaming a scenario after tasks are created breaks
+5. **AC titles are identity keys.** Renaming a scenario after tasks are created breaks
    traceability edges. If you must rename, update the task's scenario references too.
-5. **Batch-create is atomic.** A single schema violation rejects the entire batch. Validate
+6. **Batch-create is atomic.** A single schema violation rejects the entire batch. Validate
    locally against `task-batch.schema.json` before invoking the CLI.
-6. **Two-halves seam.** The planning and execution halves share this skill today but are
+7. **Two-halves seam.** The planning and execution halves share this skill today but are
    designed to split cleanly. Keep new logic in one half or the other — never straddle the
    seam with cross-half dependencies.
 
