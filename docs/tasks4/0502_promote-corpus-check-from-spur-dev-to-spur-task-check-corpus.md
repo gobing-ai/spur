@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T21:12:13.589Z"
-updated_at: "2026-08-10T23:30:43.279Z"
+updated_at: "2026-08-11T00:05:41.664Z"
 ---
 
 ## 0502. Promote corpus-check from spur-dev to spur task check --corpus (ADR-051 misplacement fix)
@@ -249,7 +249,7 @@ the corpus-check family host.
 | R3 | MET | Missing `--since` value → commander usage error (non-zero, names `--since`); flag-like value → exit 2 + usage message (`apps/cli/src/commands/task.ts:940-944`); unresolvable ref → visible SKIPPED diagnostic on stderr, exit 0 (spur-dev parity; CLI tests `task.test.ts:537-592` cover all three). |
 | R4 | MET | JSON output exactly `{ observed, baselined, newErrors, staleEntries, ok }`; asserted in `apps/cli/tests/commands/task.test.ts`; parsed on the real repo: `{observed:2, baselined:2, newErrors:[], staleEntries:[], ok:true}`. |
 | R5 | MET | `package.json:87` `corpus-check` → `spur task check --corpus`; `spur-check-new`/`spur-check-new:full` chain it unchanged (final run green); `scripts/spur-dev.ts` has no corpus-check case/import/usage; `scripts/commands/corpus-check.{ts,test.ts}` deleted. |
-| R6 | MET | New-error fail, stale-entry fail, unparseable-sweep hard fail all covered (`packages/app/tests/services/corpus-check.test.ts` — 30/30 green); real corpus exit 0 with only baselined findings. |
+| R6 | MET | New-error fail, stale-entry fail, unparseable-sweep hard fail all covered (`packages/app/tests/services/corpus-check.test.ts` — 29/29 green (re-audit 2026-08-10)); real corpus exit 0 with only baselined findings. |
 | R7 | MET | `AGENTS.md` (verification gate + misplacement note), `docs/04_DESIGN.md:753`, ADR-051 Detail synced same-commit; ADR-050 historical text untouched. |
 | R8 | MET | `bun run lint`, `bun run test`, `bun run build`, `bun run spur-check-new` all exit 0 (2026-08-10; spur-check-new final run green after the operator's concurrent `spur history import` DB locks cleared). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
