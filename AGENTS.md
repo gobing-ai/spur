@@ -206,6 +206,18 @@ spur task run-link --help                # smoke: new verbs must appear
 If `spur task …` still looks stale: confirm `which spur` resolves under the linked package, re-run
 `build:bundle`, or fall back to `bun run apps/cli/src/index.ts …` for the current tree.
 
+**Real-data history validation must use a source-local binary (task 0504 R4).** A rebuilt CLI
+silently loses to a stale global `spur` on PATH — the 2026-08-10 backfill ran old code for ~83 s
+that way. The contract:
+
+- Invoke `bun run apps/cli/src/index.ts …` or the built `apps/cli/spur.js` directly for
+  `spur history import --mode full --dry-run` / write validation runs. Never a bare global `spur`.
+- Every `spur history import` invocation prints a provenance header (`binary:` + resolved
+  `@gobing-ai/ts-llm-jsonl-importer@<version>`); record it in the transcript before each
+  dry-run/write. `--json` embeds the same `provenance` field.
+- After rebuilding ts-libs importer changes, republish + `bun update` the dependent workspaces so
+  the resolved importer version reflects the rebuild; the header is the proof either way.
+
 ---
 
 ## Spur CLI surface

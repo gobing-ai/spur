@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { Command } from '@commander-js/extra-typings';
 import {
     type DailyResult,
@@ -9,10 +10,37 @@ import {
 } from '@gobing-ai/spur-app';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
+
+/**
+ * Resolve the running CLI's own invocation path and the resolved importer package version
+ * (task 0504 R4). Real-data validation must record which binary actually ran — a rebuilt
+ * source-local CLI can otherwise silently lose to a stale global `spur` on PATH. Best-effort:
+ * provenance is advisory and must never abort an import.
+ */
+export async function resolveImportProvenance(fs: FileSystem): Promise<{ binary: string; importer: string }> {
+    const binary = process.argv[1] ?? 'unknown';
+    let importer = 'unknown';
+    try {
+        const require = createRequire(import.meta.url);
+        const packagePath = require.resolve('@gobing-ai/ts-llm-jsonl-importer/package.json');
+        const raw = JSON.parse(await fs.readFile(packagePath)) as unknown;
+        const version = raw !== null && typeof raw === 'object' && 'version' in raw ? raw.version : undefined;
+        if (typeof version === 'string' && version.length > 0) importer = version;
+    } catch {
+        // best-effort — no resolved package.json (e.g. dev alias) degrades to 'unknown'
+    }
+    return { binary, importer };
+}
+
+/** Render the provenance header line for text output (task 0504 R4). */
+function formatProvenance(provenance: { binary: string; importer: string }): string {
+    return `binary: ${provenance.binary}\nimporter: @gobing-ai/ts-llm-jsonl-importer@${provenance.importer}`;
+}
 
 /** Register `spur history` commands. */
 export function registerHistoryCommand(program: Command, context: CliContext): void {
@@ -68,7 +96,14 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 sourceTimeout,
             });
 
-            context.output.write(options.json ? toJson(fanOut) : formatFanOutResult(fanOut));
+            // R4 (task 0504): record which binary and importer version actually ran. Printed
+            // before the fan-out result in text mode; embedded in the JSON payload for --json.
+            const provenance = await resolveImportProvenance(context.fs);
+            context.output.write(
+                options.json
+                    ? toJson({ ...fanOut, provenance })
+                    : `${formatProvenance(provenance)}\n${formatFanOutResult(fanOut)}`,
+            );
             context.setExitCode(fanOut.exitCode);
         });
     noun.command('analyze')
@@ -236,6 +271,8 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                         });
                     } else {
                         const failing = entries.filter((e) => e.status === 'failed');
+                        const degraded = entries.filter((e) => e.status === 'degraded');
+                        const problems = [...failing, ...degraded];
                         await bus.emit('history.daily.failed', {
                             source: 'history',
                             renderer: 'history-daily',
@@ -244,11 +281,15 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                             okSources,
                             failedSources,
                             detail:
-                                failing.length > 0
-                                    ? failing
-                                          .map((e) => `${e.source}: ${e.parseErrors + e.validationErrors} errors`)
+                                problems.length > 0
+                                    ? problems
+                                          .map(
+                                              (e) =>
+                                                  `${e.source}: ${e.status} (${e.parseErrors + e.validationErrors} ` +
+                                                  'parse/validation errors)',
+                                          )
                                           .join('; ')
-                                    : 'daily fan-out reported non-zero exit with no failing source',
+                                    : 'daily fan-out reported non-zero exit with no failing or degraded source',
                             durationMs,
                             artifactPath,
                         });

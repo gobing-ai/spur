@@ -30,13 +30,15 @@ export interface ArtifactSelector {
 
 /**
  * Per-source coverage entry. `status` is written by this task as `'ok' | 'empty'`
- * (`'failed'` arrives with 0470's per-source fan-out). `parseErrors` /
- * `validationErrors` are **counts**; their samples are bounded to 20 per source in
- * the artifact, with overflow streamed to the `.errors.jsonl` sidecar (R6).
+ * (`'failed'` arrives with 0470's per-source fan-out; `'degraded'` arrives with 0504's
+ * R2 — a source imported records but also skipped malformed/schema-invalid ones, so it
+ * must never read as clean `ok`). `parseErrors` / `validationErrors` are **counts**;
+ * their samples are bounded to 20 per source in the artifact, with overflow streamed to
+ * the `.errors.jsonl` sidecar (R6).
  */
 export interface CoverageEntry {
     source: string;
-    status: 'ok' | 'failed' | 'empty';
+    status: 'ok' | 'failed' | 'empty' | 'degraded';
     files: number;
     messages: number;
     toolCalls: number;

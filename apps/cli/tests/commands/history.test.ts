@@ -469,7 +469,7 @@ describe('history command', () => {
                 const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
                 expect(failedRow).toBeDefined();
                 const payload = JSON.parse(failedRow?.payload_json ?? '{}');
-                expect(payload.detail).toContain('codex: 3 errors');
+                expect(payload.detail).toContain('codex: failed (3 parse/validation errors)');
             } finally {
                 rmSync(cwd, { recursive: true, force: true });
             }
@@ -500,7 +500,7 @@ describe('history command', () => {
                 const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
                 expect(failedRow).toBeDefined();
                 const payload = JSON.parse(failedRow?.payload_json ?? '{}');
-                expect(payload.detail).toBe('daily fan-out reported non-zero exit with no failing source');
+                expect(payload.detail).toBe('daily fan-out reported non-zero exit with no failing or degraded source');
             } finally {
                 rmSync(cwd, { recursive: true, force: true });
             }

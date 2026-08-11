@@ -395,7 +395,21 @@ export class HistoryService {
                 clearTimeout(timer);
             }
 
-            const status = result.scannedFiles === 0 ? 'empty' : 'ok';
+            // R2 (task 0504): a source that imported records while skipping malformed or
+            // schema-invalid ones is `degraded`, never clean `ok` — automated consumers must
+            // not treat a partial import as healthy. `degraded` implies scannedFiles > 0.
+            const hasDegradedInput = result.parseErrors.length > 0 || result.validationErrors.length > 0;
+            const status = result.scannedFiles === 0 ? 'empty' : hasDegradedInput ? 'degraded' : 'ok';
+            if (hasDegradedInput) {
+                sourceWarnings.push({
+                    code: 'source-degraded',
+                    source,
+                    detail:
+                        `source '${source}' imported ${result.importedRecords} records but skipped ` +
+                        `${result.parseErrors.length} parse and ${result.validationErrors.length} ` +
+                        'validation error(s); samples are bounded in the artifact and streamed to the sidecar',
+                });
+            }
             if (status === 'empty' && wasNonEmpty) {
                 sourceWarnings.push({
                     code: 'source-was-nonempty',
@@ -548,11 +562,11 @@ function buildCoverage(
         for (const row of sourceRows) sqlBySource.set(row.source, row);
 
         return importCoverage.map((imp) => {
-            if (imp.status === 'ok') {
+            if (imp.status === 'ok' || imp.status === 'degraded') {
                 const sql = sqlBySource.get(imp.source);
                 return {
                     source: imp.source,
-                    status: 'ok',
+                    status: imp.status,
                     files: sql?.files ?? imp.files,
                     messages: sql?.messages ?? imp.messages,
                     toolCalls: toolCounts[imp.source] ?? 0,
@@ -575,9 +589,12 @@ function buildCoverage(
 
     return sourceRows.map((s) => {
         const err = coverageErrors?.[s.source] ?? { parseErrors: [], validationErrors: [] };
+        // R2 (task 0504): SQL-only coverage is degraded when the import step reported
+        // parse/validation errors for the source — never a clean `ok` with skipped records.
+        const hasErrors = err.parseErrors.length > 0 || err.validationErrors.length > 0;
         return {
             source: s.source,
-            status: s.messages > 0 ? 'ok' : 'empty',
+            status: s.messages > 0 ? (hasErrors ? 'degraded' : 'ok') : 'empty',
             files: s.files,
             messages: s.messages,
             toolCalls: toolCounts[s.source] ?? 0,
@@ -605,6 +622,15 @@ function buildWarnings(
     for (const entry of coverage) {
         if (entry.status === 'empty') {
             warnings.push({ code: 'source-empty', source: entry.source, detail: '0 messages discovered' });
+        }
+        if (entry.status === 'degraded') {
+            warnings.push({
+                code: 'source-degraded',
+                source: entry.source,
+                detail:
+                    `${entry.parseErrors} parse and ${entry.validationErrors} validation error(s) — ` +
+                    'source imported with skipped records (task 0504 R2)',
+            });
         }
     }
     return warnings;
@@ -796,15 +822,17 @@ function parseMode(value: string): ImportMode {
 // ---------------------------------------------------------------------------
 
 /**
- * Compute the fan-out exit code (task 0470 R3).
+ * Compute the fan-out exit code (task 0470 R3; degraded semantics task 0504 R2).
  *
- * - `0` — no source failed (all ok or empty).
+ * - `0` — every source clean (ok or empty; no skipped records, no failures).
  * - `1` — every source failed.
- * - `2` — mixed (at least one ok/empty and at least one failed).
+ * - `2` — mixed, or any source `degraded` (imported with skipped parse/validation
+ *   errors — a partial import must not read as success).
  */
 export function computeExitCode(entries: readonly CoverageEntry[]): 0 | 1 | 2 {
     const failed = entries.filter((e) => e.status === 'failed').length;
-    if (failed === 0) return 0;
+    const degraded = entries.filter((e) => e.status === 'degraded').length;
+    if (failed === 0 && degraded === 0) return 0;
     if (failed === entries.length) return 1;
     return 2;
 }

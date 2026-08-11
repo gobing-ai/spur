@@ -372,6 +372,13 @@ openclaw, omp, grok, agy, **all**} (default `all`). `--mode` ∈ {full, incremen
 processed lines, imported/duplicate records, parse/validation errors. Backed by
 `ts-llm-jsonl-importer`.
 
+**Provenance header (task 0504 R4):** every invocation prints a `binary:` line (the actually
+invoked entry path — source-local `bun run apps/cli/src/index.ts` / built `spur.js`, or the stale
+global `spur` that the header exposes) plus the resolved `@gobing-ai/ts-llm-jsonl-importer@<version>`
+before the fan-out result; `--json` embeds the same `provenance` field (`{ binary, importer }`) in
+the payload. Real-data history validation must run a source-local binary — never a bare global
+`spur` — and record the header before each dry-run/write.
+
 **Fan-out (task 0470):** `--source all` iterates every known source in `SOURCES` order, each in its
 own `try` with its own transaction — a throwing or timing-out source is caught, recorded
 `status: 'failed'` with its error, and the loop continues; one source can never abort another. A
@@ -381,12 +388,19 @@ zero files now emits a `source-was-nonempty` warning. `--source-timeout <ms>` bo
 `failed`. A single `--source <x>` is the n=1 case of the same contract — there is never a second
 import path.
 
-**Exit-code contract (R3) — replaced the old "exit 1 if any errors":** `0` every source ok/empty,
-`2` at least one failed **and** at least one not, `1` every source failed. A source is `failed` only
-if it threw or hit its timeout — parse and validation errors become counts on its `CoverageEntry`,
-not a failed status (deliberate loss of "parse errors ⇒ exit 1", which under fan-out cannot
-distinguish one noisy source from six dead ones; the compensating signals are the artifact's error
-counts and the `history.*` events).
+**Degraded status (task 0504 R2):** a source that imported records while skipping malformed or
+schema-invalid ones is `status: 'degraded'`, never clean `ok` — parse/validation error counts are
+no longer the only signal. The degraded entry carries a `source-degraded` warning with counts, and
+bounded file-and-line samples stay in the artifact (overflow to the `.errors.jsonl` sidecar).
+
+**Exit-code contract (R3, amended 0504 R2) — replaced the old "exit 1 if any errors":** `0` every
+source ok/empty, `2` at least one failed **and** at least one not (or any source `degraded`), `1`
+every source failed. A source is `failed` only if it threw or hit its timeout. Before 0504, parse
+and validation errors were counts only (deliberate loss of "parse errors ⇒ exit 1", which under
+fan-out cannot distinguish one noisy source from six dead ones); 0504 restores the loud signal for
+skipped records at the source level — `degraded` status + non-zero exit — while keeping per-source
+isolation intact. The compensating signals remain the artifact's error counts and the `history.*`
+events.
 
 #### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--json]`
 

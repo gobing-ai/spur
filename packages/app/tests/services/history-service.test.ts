@@ -448,4 +448,49 @@ describe('HistoryService', () => {
             expect(result.processedLines).toBe(0);
         });
     });
+
+    describe('importAll degraded classification (0504 R2)', () => {
+        test('a source with parse/validation errors is degraded — never clean ok — and forces a non-zero exit', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-degraded-'));
+            const file = join(dir, 'history.jsonl');
+            writeFileSync(
+                file,
+                [
+                    JSON.stringify({ id: 'ok-1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello' }),
+                    '{',
+                    JSON.stringify({ id: 'bad-1', timestamp: '2026-05-30T00:00:00.000Z' }),
+                ].join('\n') + '\n',
+            );
+            const svc = new HistoryService(makeCtx());
+            try {
+                const result = await svc.importAll({ sources: ['antigravity'], file, mode: 'full' });
+                const entry = result.entries.find((e) => e.source === 'antigravity');
+                expect(entry?.status).toBe('degraded');
+                expect(entry?.parseErrors).toBe(1);
+                expect(entry?.validationErrors).toBe(1);
+                expect(result.exitCode).toBe(2);
+                expect(result.warnings.some((w) => w.code === 'source-degraded')).toBe(true);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('a fully clean source stays ok with exit code 0', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-ok-'));
+            const file = join(dir, 'history.jsonl');
+            writeFileSync(
+                file,
+                `${JSON.stringify({ id: 'ok-1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello' })}\n`,
+            );
+            const svc = new HistoryService(makeCtx());
+            try {
+                const result = await svc.importAll({ sources: ['antigravity'], file, mode: 'full' });
+                const entry = result.entries.find((e) => e.source === 'antigravity');
+                expect(entry?.status).toBe('ok');
+                expect(result.exitCode).toBe(0);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    });
 });
