@@ -10,102 +10,161 @@ feature_id: E
 parent_wbs: null
 priority: P2
 tags: ["meta"]
-dependencies: []
+dependencies: ["0506"]
 ac_numbering: task-local
 created_at: "2026-08-11T06:19:26.407Z"
-updated_at: "2026-08-11T06:22:48.127Z"
+updated_at: "2026-08-11T06:37:05.502Z"
 ---
 
 ## 0508. Fine-tune inline execution surface: subagent-first dispatch for non-interactive pipeline stages with host-session fallback
 
 ### Background
-The 0505 run (task 0505, session `2026-08-11T04-35-08-988Z_019fef1a...`) completed under `/sp:dev-run 0505 --auto --next --agent inline` with a PASS verdict, but the post-mortem showed the host session absorbed the entire model-bearing load: 27.2M tokens (23.7M host + 3.2M wrap subprocess), 156 model round-trips, 38.1 min wall (23.2 min thinking latency), all inside one context. The inline-default execution-surface contract (cross-cutting.md §inline-default) currently fixes `inline` to the host session unconditionally: "the current coding agent is already executing the command, so inline means continuing in that session." The harness already ships native subagents (`task` tool; `parallel-execution/references/dispatch-surface.md`: "use the native subagent when the host platform provides one"), but the pipeline driver never uses them — every non-interactive stage (implement, review, verify, test-fix) runs in the host context regardless of size or suitability.
+ADR-047 and the current inline-driver contract define interactive omit/`--agent inline` task pipelines as host-session execution. That preserves operator contact and avoids a Spur subprocess, but it also makes the host execute every model-bearing `agent.run` stage. Task 0506 records the resulting host-context growth and separately fixes the wrap subprocess handoff.
 
-This task refines the inline surface: when the current agent platform provides a native subagent and a capable agent exists for the stage, dispatch non-interactive model-bearing stages to that subagent (distinct provenance), keeping the host session as the fallback and as the owner of interactive/operator-confirm decision points. The `inline` value's semantics are unchanged (host session = fallback); the refinement is additive and explicit, not a silent default flip.
+The repository already defines native subagents as the default delegation surface when the host platform provides them and none of the objective subprocess triggers applies. The existing inline pipeline driver does not apply that rule to sequential task-pipeline stages. The previous 0508 draft was internally contradictory: it preserved a host-only definition of `inline`, prohibited a new selector, yet allowed subagent dispatch when an unspecified selector and a subjective handoff-cost test permitted it.
+
+This task resolves the contract explicitly. For interactive full `/sp:dev-run` and sequential `/sp:dev-runall`, omit/`--agent inline` continues to mean no Spur subprocess, but no longer guarantees that every model stage runs in the host context. Eligible `agent.run` stages dispatch once to a native subagent and join before the driver continues; the host is the deterministic fallback and retains every operator-facing pause. Direct implement-only execution, explicit/headless subprocess execution, parallel batches, and wrap remain unchanged.
+
+Task 0508 depends on task 0506 because both update execution-surface documentation and parity tests. It consumes 0506's clarified wrap contract but does not reopen wrap behavior.
 ### Requirements
-- [ ] R1. Define the subagent dispatch criteria for pipeline stages: a stage may dispatch to a native subagent only when (a) the platform exposes a subagent mechanism (task tool or equivalent), (b) the stage is non-interactive (no operator-confirm/taste/ask pause), (c) a capable agent exists for the stage (full-capability for implement/verify/test-fix, read-only acceptable for review), and (d) the expected handoff cost is smaller than the host context it saves. Document the criteria in cross-cutting.md next to the inline-default contract.
-- [ ] R2. Add distinct provenance for subagent-dispatched stages: the inline run log records `stage <id> executed via subagent <agent-id> (host session <session-id>)` — never the plain `executed inline` line — and the stage's answerFile/expectFile/requireDiff semantics are enforced on the subagent's returned artifacts exactly as for host execution.
-- [ ] R3. Implement the dispatch path: when criteria R1 pass and the operator's selector allows subagent use, the inline pipeline driver passes the pure slash command (ADR-043) + surface-resolved note + `local://` contract refs to the native subagent; the host remains the fallback when no subagent/capable agent is available or the stage is interactive.
-- [ ] R4. Keep interactive stages host-owned: operator-confirm step (operator-confirm step), taste/ask decision pauses, and todo-driven steps never dispatch; the pipeline's `pause: true` states and any step that can surface an operator prompt stay in the host session.
-- [ ] R5. Update the parity surface: flag-glossary `--agent` entry, cross-cutting value table (add the subagent note without changing `inline`'s semantics), and `validate-flag-contracts.ts` C3a/C3b fixtures stay green; document the subagent surface in execution-workflow.md and the inline-pipeline-driver.md.
+- [ ] R1. Amend the interactive-inline contract so omitted/`--agent inline` full `/sp:dev-run` and sequential `/sp:dev-runall` keep the pipeline controller in the host session while eligible model-bearing `agent.run` stages prefer a native subagent. Preserve host fallback, keep all Spur subprocess paths unchanged, and record the decision in ADR-047 plus the architecture/design projections.
+- [ ] R2. Make eligibility deterministic. Dispatch only when the current action is a pure-slash `agent.run`, the state is not interactive, the host platform exposes a native subagent, and that subagent has the shared-worktree read/write/shell capabilities required to execute the declared stage and write its artifacts. Remove the subjective handoff-cost heuristic. If any pre-dispatch condition fails, execute the stage once in the host session.
+- [ ] R3. Preserve stage semantics across the native-subagent boundary. The host snapshots the pre-stage worktree, dispatches only the YAML's pure slash command plus a surface-resolved anti-recursion envelope, waits for completion, then enforces `answerFile`, `expectFile`, `requireDiff`, task scope, guards, and error policy against the shared filesystem. Successful subagent work logs `stage <id> executed via subagent <agent-id> (host session <session-id>)`; host fallback retains the existing inline provenance. A failure after dispatch must follow the stage error policy and must not replay the stage automatically in the host.
+- [ ] R4. Keep operator interaction host-owned. Interactive confirmation actions, `pause: true`, approve/taste/ask decisions, and any blocker returned by a subagent are surfaced by the host; they are never delegated or answered by a subagent. Native subagents execute sequentially, one writer at a time, and cannot recursively dispatch the same stage.
+- [ ] R5. Update every authority and parity surface that currently says interactive inline is host-only: ADR-047, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, the cross-cutting value table, flag glossary, execution workflow, inline driver, run/runall command and operation prose, and the native-dispatch cross-reference. Extend the existing inline/parity contract tests to pin the new semantics without adding a flag value.
+
+Non-goals: a new `--agent` value or public CLI flag; changes to `spur agent run`, workflow-engine `agent.run`, task-pipeline YAML, model-tier routing, parallel execution, direct `--mode implement`, wrap/wrapall, platform-specific adapters, concurrent stage execution, automatic retry of a partially executed subagent stage, or ingestion of session/conversation data.
 ### Acceptance Criteria
-Scenario: R1 — Subagent dispatch criteria are documented and checkable
-  Given the inline pipeline driver considers a non-interactive stage
-  When the platform has a native subagent and a capable agent for the stage
-  And the handoff cost is smaller than the saved host context
-  Then the stage MAY dispatch to the subagent
-  And the criteria are stated in cross-cutting.md next to the inline-default contract
+Scenario: R1, R2 — Eligible inline pipeline stages dispatch once to a native subagent
+  Given an interactive full `/sp:dev-run` or sequential `/sp:dev-runall` uses omitted/`--agent inline`
+  And the current YAML action is a non-interactive pure-slash `agent.run`
+  And the host platform exposes a native subagent with shared-worktree read/write/shell capability
+  When the inline driver executes the action
+  Then it dispatches the exact slash command once to that native subagent
+  And waits for the subagent before evaluating the next action or guard
+  And it does not invoke `spur agent run`
 
-Scenario: R2 — Subagent stages carry distinct provenance
-  Given a stage dispatched to a native subagent
-  When the run log records the stage
-  Then it reads `stage <id> executed via subagent <agent-id> (host session <session-id>)`
-  And answerFile/expectFile/requireDiff are enforced on the subagent's returned artifacts
+Scenario: R2 — Failed eligibility uses the host without changing subprocess paths
+  Given an inline pipeline stage lacks native-subagent support or a required capability, or is not a pure-slash `agent.run`
+  When the driver selects its execution surface
+  Then it executes that stage once in the host session
+  And logs `stage <id> executed inline in session <session-id>`
+  And `--agent auto`, named, headless, and parallel paths remain subprocess-backed
 
-Scenario: R3 — Host session is the fallback
-  Given a platform with no native subagent, or no capable agent, or an interactive stage
-  When the pipeline driver executes the stage
-  Then it runs in the host session as today (no subagent, no subprocess)
-  And the run log records `stage <id> executed inline in session <session-id>`
+Scenario: R3 — The host validates shared artifacts and records distinct provenance
+  Given a native subagent completes an eligible stage
+  When control returns to the host
+  Then the host enforces the YAML's answerFile, expectFile, requireDiff, task-scope, guard, and error-policy contracts against the shared filesystem
+  And successful execution logs `stage <id> executed via subagent <agent-id> (host session <session-id>)`
+  And the log never labels that stage as executed inline
 
-Scenario: R4 — Interactive stages never dispatch
-  Given a pipeline state that pauses for operator input (approve, taste, ask)
-  When the driver reaches it
-  Then it stays in the host session and surfaces the prompt to the operator
+Scenario: R3 — A dispatched failure is not replayed in the host
+  Given a native subagent has started and returns failure or incomplete required artifacts
+  When the host evaluates the stage result
+  Then the driver follows the YAML action's existing failure policy
+  And it does not automatically execute the same slash command again in the host session
 
-Scenario: R5 — Parity contract stays green
-  Given the flag-glossary and cross-cutting value tables updated with the subagent surface
-  When `bun test plugins/sp/tests/flag-contract-parity.test.ts` runs
-  Then C3a/C3b fixtures pass and `inline` semantics are unchanged (host session fallback)
+Scenario: R4 — Operator-facing states remain host-owned
+  Given the current action requires operator confirmation, the state has `pause: true`, or a subagent returns an operator blocker
+  When the driver reaches the decision
+  Then the host surfaces the prompt or blocker to the operator
+  And no subagent answers, approves, or continues that decision
+
+Scenario: R5 — Authority and parity surfaces agree
+  Given ADR-047 and the interactive-inline documentation are updated
+  When `bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/flag-contract-parity.test.ts` runs
+  Then the tests prove omit/`inline` remains an in-session, non-subprocess surface with native-subagent-first eligible stages and host fallback
+  And the `--agent <inline|auto|name>` value set is unchanged
 ### Q&A
-**Q: Why not change `--agent inline` to mean "subagent-first"?**
+**Q: Does this change `inline` semantics?**
 
-A: `inline` is a documented, parity-tested value (`validate-flag-contracts.ts` C3a/C3b): "the current session does the work." Silently redefining it to spawn subagents would break the parity fixtures, invert the operator's explicit `--agent inline` choice (as in 0505), and mislabel provenance. The refinement is additive: `inline` keeps meaning host-session fallback; subagent dispatch becomes an explicit, criteria-gated surface the driver may use.
+A: Yes, narrowly and explicitly. Interactive `inline` still forbids a Spur subprocess and keeps the controller/operator loop in the host, but it no longer promises that every model stage uses the host context. ADR-047, the value table, and parity tests must state that change together.
 
-**Q: What exactly does the host session save by dispatching?**
+**Q: Why not add `--agent subagent` or another flag?**
 
-A: Context. The 0505 run put 23.7M tokens / 156 round-trips through one context, and the wrap hop's 3 subprocess agents cost 3.2M tokens partly re-reading what the host already knew. Dispatching a non-interactive stage to a native subagent with `'/Users/robin/.omp/agent/sessions/-xprojects-spur-new/2026-08-11T04-35-08-988Z_019fef1a-583c-7000-9c00-944ff32a0838/local'` refs (not re-reads) contains that growth in a disposable context and keeps the host transcript readable.
+A: Native subagents are an in-platform execution surface, not configured Spur executors. The existing dispatch contract already prefers them for delegation. Applying that rule inside the inline driver is smaller and avoids a fourth selector meaning that every shared command would need to define.
 
-**Q: Isn't this what `--agent auto` / subprocess already does?**
+**Q: How is dispatch eligibility decided?**
 
-A: No. Subprocess (`spur agent run`) is a separate OS process with its own agent binary, storage, and audit record — heavyweight, and it was flagged as the 0505 wrap violation. A native subagent shares the host platform's tooling and working tree, is cheaper to spawn, and is already the documented default in `dispatch-surface.md`. This task extends that existing preference from parallel fan-out to sequential pipeline stages.
+A: By observable facts only: action kind, pure-slash input, interactive-state exclusion, native-subagent availability, and required tool capabilities. The draft's subjective cost comparison is removed because it is not reproducible.
 
-**Q: What are the hard constraints?**
+**Q: Can review use a read-only subagent?**
 
-A: (1) Provenance must never claim "inline" for subagent work; (2) interactive stages (approve/taste/ask) must never leave the host; (3) requireDiff/answerFile/expectFile must be enforced on the subagent's returned artifacts exactly as for host execution; (4) no recursion — a subagent receives the pure slash command with the surface already resolved (ADR-043); (5) parity fixtures updated in the same change.
+A: Not for the pipeline stage as currently defined. Review and verify write task/run artifacts through the shared CLI, so every dispatched stage requires shared-worktree read/write/shell capability. A future split between analysis and artifact recording would be separate work.
 
-**Q: How is the host kept as the fallback?**
+**Q: What exactly is sent to the subagent?**
 
-A: The driver checks platform subagent support and per-stage capability before dispatching. Any check failing (no subagent mechanism, no capable agent, interactive stage, handoff cost too high) falls back to the current host-session path with the existing `executed inline` provenance. The fallback is the default, not the exception.
+A: The YAML's existing pure slash command, the stage ID, and a short note that the execution surface is already resolved and the same stage must not be redispatched. Do not paste the host transcript or hard-code a session-local `local://` path.
 
-**Q: What is out of scope?**
+**Q: What happens when dispatch fails?**
 
-A: Changing `inline`'s documented semantics; forcing subagent dispatch in headless/subprocess mode (`--agent auto`/named executors already have their own surfaces); adding new CLI flags or nouns; and touching the wrap-up pipeline (that is task 0506's R1).
+A: Failure before launch falls back to one host execution. Failure after launch follows the stage's existing error policy and never triggers an automatic host replay, because the shared worktree may already contain partial writes.
+
+**Q: How does this relate to task 0506?**
+
+A: 0506 lands first and owns wrap selector propagation plus its subprocess notice. 0508 changes only the interactive task-pipeline driver and its documentation/tests; wrap stays workflow-backed.
+
+No open design decisions remain.
 ### Design
-**Evidence (0505 run).** Host session: 27.2M tokens total, 156 model round-trips, 23.2 min thinking latency in one context; wrap hop's 3 subprocess agents: 3.2M tokens, 7.2 min. The inline driver executed every `agent.run` stage in the host session per the current contract, with no subagent option.
+**Authority and projection order**
 
-**Target surfaces.**
-- `plugins/sp/skills/spur-dev/references/cross-cutting.md` §inline-default execution-surface — add the subagent dispatch criteria + provenance note beside the value table (value semantics unchanged).
-- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` — extend the `agent.run` action section: subagent dispatch path, criteria checks, provenance line, enforcement of answerFile/expectFile/requireDiff on returned artifacts.
-- `plugins/sp/skills/spur-dev/references/flag-glossary.md` — `--agent` entry: note the subagent surface without changing the value table.
-- `plugins/sp/tests/flag-contract-parity.test.ts` — extend C3a/C3b fixtures for the additive note; existing fixtures stay green.
-- `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` — cross-reference: this task applies the native-subagent preference to sequential pipeline stages.
+1. Amend `docs/00_ADR.md` ADR-047: interactive omit/`inline` keeps the controller in the host process/session, but eligible sequential `agent.run` stages may use a native subagent; explicit/headless/parallel subprocess paths are unchanged.
+2. Project the amendment into `docs/03_ARCHITECTURE.md` §6.3 and the matching `docs/04_DESIGN.md` execution-surface sections in the same commit.
+3. Update the operational SSOTs: `plugins/sp/skills/spur-dev/references/cross-cutting.md`, `inline-pipeline-driver.md`, `execution-workflow.md`, `dev-operations.md`, and `flag-glossary.md`; update `plugins/sp/commands/dev-run.md` and `dev-runall.md` so operator-facing prose no longer promises host-only model stages.
+4. Add only a cross-reference in `plugins/sp/skills/parallel-execution/references/dispatch-surface.md`; it remains the authority for native-subagent versus `spur agent run` selection.
 
-**Dispatch decision (per stage, in driver):**
-1. Platform exposes subagent mechanism? (task tool / equivalent probe)
-2. Stage non-interactive? (no `pause: true`, no operator-confirm step, no ask/taste pause)
-3. Capable agent for stage? (implement/verify/test-fix: full; review: read-only acceptable)
-4. Handoff cost < saved host context? (stage contract via `local://`, not re-reads)
-→ all pass: dispatch to subagent; record `executed via subagent <agent-id> (host session <sid>)`; enforce artifacts. Any fail: host session, `executed inline`.
+**Frozen surface matrix**
 
-**Provenance format.** `stage <id> executed via subagent <agent-id> (host session <session-id>)` — never the plain inline line for subagent work. Answer-file schema contract (R2/0478) applies unchanged; the subagent writes the same answer file the host would.
+| Invocation | Controller | Model stage | Fallback |
+| --- | --- | --- | --- |
+| Interactive full `dev-run`, omit/`inline` | Host | Eligible `agent.run`: native subagent | Host stage execution |
+| Interactive sequential `dev-runall`, omit/`inline` | Host | Eligible `agent.run`: native subagent, one at a time | Host stage execution |
+| Direct `dev-run --mode implement` | Host | Host, unchanged | N/A |
+| `--agent auto` or named, headless, parallel | Existing workflow/subprocess path | Existing subprocess executor | Existing contract |
 
-**Interactive ownership.** `operator-confirm` step (operator-confirm step) and any step that can surface an operator prompt are host-owned by construction: the dispatch criteria exclude them before the subagent branch.
+No flag, config key, workflow variable, YAML action, or engine API is added.
+
+**Eligibility algorithm**
+
+Evaluate before each action, in this order:
+
+1. The invocation is one of the two interactive inline full-pipeline surfaces in the matrix.
+2. The YAML action kind is `agent.run` and its input is a pure slash command. Shell, note, file, guard, and operator-interaction actions remain host-executed.
+3. The current state/action has no operator-confirmation action, `pause: true`, approve/taste/ask decision, or other operator prompt.
+4. The platform exposes a native subagent that shares the working tree and has read, write, shell, and Spur task/run-artifact access.
+
+All four pass → dispatch. Any pre-dispatch failure → execute once in the host. Do not add a token estimate, stage-size threshold, model heuristic, or configuration switch.
+
+**Dispatch and join contract**
+
+- Before dispatch, the host captures the same pre-action git snapshot used by current `requireDiff` enforcement.
+- Send only: stage ID, the YAML's exact pure slash command, and `execution surface already resolved: native subagent; do not dispatch this stage again`. The WBS/path already carried by the slash command is the handoff; do not paste task/session transcripts or embed machine-specific session paths.
+- Dispatch exactly one native subagent and wait for it. The inline FSM must not advance actions or guards concurrently; this preserves the repository's one-writer rule.
+- After join, the host validates `answerFile`, `expectFile`, `requireDiff`, task scope, and the action's error policy from the shared filesystem. A subagent success message is not evidence.
+- On success, append exactly `stage <id> executed via subagent <agent-id> (host session <session-id>)`. Host execution retains exactly `stage <id> executed inline in session <session-id>`.
+- If launch fails before the subagent starts, log the reason and use host fallback. If a started subagent fails or leaves invalid artifacts, do not replay; follow the YAML error policy so partial mutations are not duplicated.
+
+**Interactive ownership**
+
+The host alone executes operator-confirmation actions, owns `pause: true`, and surfaces approve/taste/ask decisions. A subagent that discovers missing authority or an operator decision returns a blocker; the host pauses at the current state and presents it. The subagent cannot approve, infer consent, or recursively invoke the full pipeline.
+
+**Tests**
+
+- Extend `plugins/sp/tests/inline-execution-contract.test.ts` with structural assertions for the eligibility algorithm, exact two provenance formats, pre-launch fallback, no post-launch replay, sequential join, and host-owned operator decisions.
+- Keep `plugins/sp/tests/flag-contract-parity.test.ts` and `plugins/sp/scripts/validate-flag-contracts.ts` on the same three values. Update only fixtures/claims that encode host-only inline semantics; C3a/C3b must remain green.
+- No platform-mocking framework or new runtime test harness. The contract is prompt-runtime documentation, so the existing structural gate is the executable regression seam.
+
+**Cross-task contract:** task 0506 is the sole hard dependency. Assume its wrap selector/parity changes are present, preserve them while editing shared tests, and do not modify wrap commands, wrap workflow behavior, history import, or schema-first guidance. No downstream task is currently declared.
+
+**Traceability:** feature E is a grouping feature without feature-level scenarios; task-local R1–R5 acceptance criteria are authoritative.
+
+**Anti-patterns:** no new selector value; no host transcript in dispatch prompts; no machine-specific session path; no read-only agent for artifact-writing stages; no parallel stage writers; no subagent self-dispatch; no host replay after a started subagent; no workflow-engine/native-subagent abstraction; no copied FSM.
 ### Plan
-- [ ] P1 (R1, R5) Document the subagent dispatch criteria in cross-cutting.md §inline-default + flag-glossary `--agent` entry; extend C3a/C3b parity fixtures for the additive note; keep `inline` semantics unchanged.
-- [ ] P2 (R2, R3) Extend the inline pipeline driver: subagent dispatch path (criteria checks, pure slash command + surface-resolved note + `'/Users/robin/.omp/agent/sessions/-xprojects-spur-new/2026-08-11T04-35-08-988Z_019fef1a-583c-7000-9c00-944ff32a0838/local'` contract), distinct provenance line, and artifact enforcement (answerFile/expectFile/requireDiff) on subagent returns; host fallback on any failed check.
-- [ ] P3 (R4) Verify interactive states stay host-owned: operator-confirm operator-confirm step, taste/ask pauses — add a driver test that a `pause: true` stage never dispatches.
-- [ ] P4 (R5) Update execution-workflow.md + dispatch-surface.md cross-reference; run flag-parity and driver tests; run the project quality check.
+- [ ] P1 (R1, R5) After task 0506 is done, amend ADR-047 and update `docs/03_ARCHITECTURE.md` plus `docs/04_DESIGN.md` to define interactive inline as host-controlled, native-subagent-first for eligible stages, and non-subprocess.
+- [ ] P2 (R1, R2, R4) Update the cross-cutting value table, flag glossary, execution workflow, dev-operations, run/runall command prose, and dispatch-surface cross-reference with the frozen surface matrix and eligibility algorithm; keep `--agent <inline|auto|name>` unchanged.
+- [ ] P3 (R3, R4) Update the inline pipeline driver with the minimal dispatch envelope, sequential join, shared-filesystem artifact validation, exact provenance, pre-launch host fallback, no post-launch replay, and host-owned operator-decision/blocker handling.
+- [ ] P4 (R5) Extend `inline-execution-contract.test.ts` and adjust only the host-only claims in flag-parity fixtures/validation; run the two focused test files to green.
+- [ ] P5 (R1–R5) Run the repository completion gates required by `AGENTS.md`, task verification, and intentional `git status`; do not run a real task pipeline or inspect session/conversation logs as implementation evidence.
 ### Solution
 
 <!-- Filled during implementation: changed files/sections and concise rationale. -->
@@ -119,23 +178,34 @@ A: Changing `inline`'s documented semantics; forcing subagent dispatch in headle
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-- Inline contract SSOT: `plugins/sp/skills/spur-dev/references/cross-cutting.md` §inline-default execution-surface (value table, precedence chain, triggers)
-- Driver: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (agent.run action semantics, provenance lines)
-- Flag parity: `plugins/sp/tests/flag-contract-parity.test.ts` (C3a/C3b fixtures)
-- Native-subagent preference: `plugins/sp/skills/parallel-execution/references/dispatch-surface.md`
-- Pipeline YAML: `.spur/workflows/task-pipeline.yaml` (agent.run steps, approve pause)
-- Evidence session: `~/.omp/agent/sessions/-xprojects-spur-new/2026-08-11T04-35-08-988Z_019fef1a-583c-7000-9c00-944ff32a0838.jsonl`
-- Post-mortem: task 0506 (0505 run inefficiencies) and task 0507 (history ETL forensics) — related follow-ups
+- Dependency: task 0506 (`docs/tasks4/0506_fix-0505-run-inefficiencies-inline-wrap-hop-dry-run-probe-gu.md`)
+- Decision authority: `docs/00_ADR.md` ADR-041 and ADR-047 plus the 2026-08-10 amendment
+- Architecture projection: `docs/03_ARCHITECTURE.md` §6.3
+- Design projection: `docs/04_DESIGN.md` execution-surface and inline-driver sections
+- Execution-surface SSOT: `plugins/sp/skills/spur-dev/references/cross-cutting.md` § Inline-default execution surface
+- Inline driver: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`
+- Execution mechanics: `plugins/sp/skills/spur-dev/references/execution-workflow.md`, `dev-operations.md`, `flag-glossary.md`
+- Operator surfaces: `plugins/sp/commands/dev-run.md`, `plugins/sp/commands/dev-runall.md`
+- Native dispatch authority: `plugins/sp/skills/parallel-execution/references/dispatch-surface.md`
+- Pipeline SSOT: `.spur/workflows/task-pipeline.yaml`
+- Contract gates: `plugins/sp/tests/inline-execution-contract.test.ts`, `plugins/sp/tests/flag-contract-parity.test.ts`, `plugins/sp/scripts/validate-flag-contracts.ts`
 ### History
 ### Notes
+**Verified premises**
 
-**RC1 — host-context bloat is the motivator.** 0505: 23.7M host tokens, 156 round-trips, 23.2 min thinking — all in one context. Native subagents (already the documented default for fan-out in dispatch-surface.md) contain that growth.
+- ADR-047's 2026-08-10 amendment, `cross-cutting.md`, `inline-pipeline-driver.md`, `dev-run.md`, `dev-runall.md`, and the architecture/design projections currently promise host-session execution for interactive omit/`inline` stages.
+- `dispatch-surface.md` already prefers native subagents when the platform provides one and no objective subprocess trigger applies.
+- The inline driver is a prompt-runtime interpreter over the existing YAML, not an engine implementation; its executable regression seam is `inline-execution-contract.test.ts` plus flag parity.
+- Pipeline review and verify stages write task/run artifacts, so a read-only subagent cannot execute the current pure-slash stage contract.
+- Task 0506 edits shared execution-surface/parity files and must land first to avoid concurrent ownership.
 
-**RC2 — the 0505 wrap violation is the cautionary tale.** The wrap hop's 3 subprocess agents (7.2 min, 3.2M tokens) were flagged because `--agent inline` was silently bypassed. This task's distinct-provenance requirement exists so subagent dispatch is never mistaken for inline work and never happens without the criteria.
+**Refinement dispositions**
 
-**RC3 — interactive stages are non-negotiable.** Approve/taste/ask pauses require operator contact; a subagent cannot own them. The dispatch criteria exclude them structurally, not by convention.
+- Acknowledge and document the narrow `inline` semantic change instead of claiming host-only semantics are unchanged.
+- Reuse the existing three-value selector; add no `subagent` flag/value.
+- Replace subjective handoff-cost judgment with four observable eligibility checks.
+- Use the WBS-bearing pure slash command as the handoff; remove hard-coded session-local references.
+- Separate pre-launch fallback from post-launch failure so partial writes are never replayed.
+- Keep controller, HITL, artifact validation, and every transition guard in the host.
 
-**RC4 — parity is the guardrail.** `inline`'s documented semantics (host session) are parity-tested. The additive subagent surface must land with updated fixtures in the same change, or the build fails — which is the point.
-
-**What already works:** native subagents, dispatch-surface criteria, answerFile/expectFile/requireDiff enforcement, ADR-043 pure-slash inputs, inline run-log provenance. This task composes them for sequential stages; it invents no new engine machinery.
-
+No open design decisions remain.
