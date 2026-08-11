@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: I
+feature_id: I1
 parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
 created_at: 2026-07-01T18:42:39.267Z
-updated_at: 2026-07-01T20:51:13.221Z
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
 ## 0168. Phase 1 Foundation — cross-cutting conventions, brainstorm enhancement, gate-checklists

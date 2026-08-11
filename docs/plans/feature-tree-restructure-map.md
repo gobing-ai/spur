@@ -1,11 +1,13 @@
 # Feature tree restructure map
 
-**Status:** accepted seed from audit **0356** (2026-07-28)  
+**Status:** applied historical map from audit **0356** (2026-07-28); do not reapply
 **Consumer:** `/sp:dev-featurechange` (dry-run / apply)  
 **Hierarchy rules:** `plugins/sp/skills/spur-cli/references/features/hierarchy-mece.md`  
 **Map feature:** F31 (under F3 Feature management CLI)
 
-Do **not** re-scan the whole tree for dogfood — apply from this file.
+This map records the 2026-07-28 tree and uses letters that were later recycled. Do **not** apply it
+to the live tree. The current B/I/H ownership amendment and applied migration are recorded in
+`docs/plans/2026-08-11-sp-plugin-feature-tree-restructure-map.md`.
 
 ## Schema
 

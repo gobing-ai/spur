@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: I
+feature_id: I1
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: 2026-07-01T06:04:09.068Z
-updated_at: 2026-07-02T00:49:19.134Z
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
 ## 0167. sp plugin hands-off ready — idea-to-feature flow + post-execution wrap-up + cross-session learning

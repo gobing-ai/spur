@@ -117,15 +117,15 @@ If any check fails → **child of best parent** or **task under existing feature
 | --- | --- | --- |
 | Board module + UX slice as child | `F8` Features board → `F81` detail action group | **Good** — same product surface, finer grain |
 | Restructure tooling under Feature CLI | `F3` Feature management CLI → `F31` restructure kit | **Good** — not a new root letter (was root `S`, moved) |
-| Runner vs plugin integration | `B` Agent execution (`spur agent`) vs `H` Agent integration (`plugins/sp`) | **Keep separate** — Goals at `B_agent-execution.md:14` vs `H_agent-integration.md:14`; **reject merge on “agent” alone** |
+| Runtime vs plugin harness | `B` Agent execution (`spur agent`) vs `I` sp plugin (`plugins/sp`) | **Keep separate** — B owns runner/process/session/executor behavior; I owns skills, commands, subagents, hooks, and orchestration guidance. H is frozen history. |
 | Observability UX as sibling roots | `J` board + `K` System Events table redesign + `L` payload enrichment | **Reparent K,L under J** — not body-merge; not peer roots (audit 0356) |
-| Plugin epics as new letters | `N` dev-next UX, `O` token architecture as roots beside `H` | **Reparent under H** — same plugin plane, finer grain |
+| Plugin epics as new letters | Historical `N` dev-next UX and `O` token architecture | **Historical move under H is retained; new plugin work goes under I** — do not extend frozen H |
 | Workflow observability as board root | `P` workflow run observability as peer of `D` Workflows | **Reparent under D** — object is `spur workflow run`, not board J |
 | Planning validation as root | `Q` AC-verifiable gates as peer of `F` Planning | **Reparent under F** |
 | Status feedback as root | `R` feature status loop as peer of `F` | **Reparent under F** (corpus status is planning) |
 | CLI backbone vs board product | `G` Collaboration (message/team CLI) vs `M` Teams board | **Keep both** — different surfaces; do not merge |
 | One-off polish as root | New letter for “fix button loading” | **Bad** — task under existing feature |
-| Done historical epic as root | `I` sp plugin hands-off ready (`done`) | **Keep** as historical root OK; optional later neatness under H |
+| Done plugin epic as root | `I1` sp plugin hands-off ready (`done`) | **Good after reparent** — completed delivery under durable plugin root I |
 
 ### Audit 0356 snapshot (A–R dispositions)
 
@@ -143,6 +143,11 @@ Authoritative seed for restructure mapping lives in task 0356 Solution and
 | **merge-into** | *(none)* |
 
 **Rejected merges:** B∪H (name-only overlap); J∪K body-merge (use reparent for K/L).
+
+**Ownership amendment (2026-08-11):** audit 0356 is a historical snapshot. The current active
+boundary is B = runtime agent execution, I = `sp` plugin harness, H = frozen mixed history. The
+applied map is `docs/plans/2026-08-11-sp-plugin-feature-tree-restructure-map.md`; do not place new
+work under H.
 
 ---
 

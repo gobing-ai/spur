@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: I
+feature_id: I1
 parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
 created_at: 2026-07-01T18:42:39.272Z
-updated_at: 2026-07-01T21:17:07.920Z
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
 ## 0171. Phase 4 Auto-flag propagation + checkpoint write/read actions in all pipelines

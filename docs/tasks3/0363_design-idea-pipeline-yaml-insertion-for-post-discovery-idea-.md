@@ -6,13 +6,13 @@ description: ""
 status: done
 type: issue
 profile: standard
-feature_id: I1
+feature_id: I11
 parent_wbs: null
 priority: P1
 tags: ["bug"]
 dependencies: ["0362", "0360"]
 created_at: "2026-07-28T03:21:55.875Z"
-updated_at: "2026-07-28T04:02:30.177Z"
+updated_at: "2026-08-11T21:18:35.361Z"
 done_forced: "true"
 done_reason: "Research/design task: YAML insertion plan written to Solution with file:line evidence; no code changes to verify"
 ---

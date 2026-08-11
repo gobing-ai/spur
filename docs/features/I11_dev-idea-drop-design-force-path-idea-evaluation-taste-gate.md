@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "I1"
+id: "I11"
 name: "dev-idea: drop --design force path + idea-evaluation taste gate"
 status: done
 priority: P1
 tags: []
 created_at: "2026-07-28T03:21:17.944Z"
-updated_at: "2026-07-28T04:11:57.410Z"
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
-# I1: dev-idea: drop --design force path + idea-evaluation taste gate
+# I11: dev-idea: drop --design force path + idea-evaluation taste gate
 
 ## Goal
 Ship a working `/sp:dev-idea` path that (1) removes the `--design` force option so Design is default-on with only `--skip-design` as opt-out, and (2) inserts an idea-evaluation taste gate after discovery so operators approve or reject an enhanced idea before any feature is created.
@@ -89,3 +89,7 @@ Feature: dev-idea drop --design force path + idea-evaluation taste gate
 - 2026-07-28T03:21:45.072Z backlog → active (system)
 - 2026-07-28T03:37:32.267Z active → verifying (system)
 - 2026-07-28T04:11:57.410Z verifying → done (system)
+- 2026-08-11T21:13:52.737Z moved I1 → L11 (system)
+- 2026-08-11T21:14:02.391Z moved L11 → I11 (system)
+- 2026-08-11T21:18:34.578Z moved I11 → L1 (system)
+- 2026-08-11T21:18:35.361Z moved L1 → I11 (system)

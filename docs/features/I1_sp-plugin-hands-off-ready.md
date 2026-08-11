@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "I"
+id: "I1"
 name: "sp plugin hands-off ready"
 status: done
 priority: P2
 tags: []
 created_at: "2026-07-01T06:18:45.452Z"
-updated_at: "2026-07-02T00:54:22.436Z"
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
-# I: sp plugin hands-off ready
+# I1: sp plugin hands-off ready
 
 ## Goal
 Make the `sp` plugin hands-off ready for the normal development loop: turn an idea
@@ -86,3 +86,7 @@ Feature: sp plugin hands-off ready
 - 2026-07-02T00:21:35.857Z backlog → active (system)
 - 2026-07-02T00:49:24.394Z active → verifying (system)
 - 2026-07-02T00:54:22.436Z verifying → done (system)
+- 2026-08-11T21:13:52.737Z moved I → L1 (system)
+- 2026-08-11T21:14:02.391Z moved L1 → I1 (system)
+- 2026-08-11T21:18:34.578Z moved I1 → L (system)
+- 2026-08-11T21:18:35.361Z moved L → I1 (system)

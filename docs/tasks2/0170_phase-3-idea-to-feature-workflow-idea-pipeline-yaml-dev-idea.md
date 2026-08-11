@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: I
+feature_id: I1
 parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
 created_at: 2026-07-01T18:42:39.271Z
-updated_at: 2026-07-01T21:03:52.473Z
+updated_at: "2026-08-11T21:18:35.361Z"
 ---
 
 ## 0170. Phase 3 Idea-to-Feature workflow — idea-pipeline.yaml, dev-idea, design approval gate

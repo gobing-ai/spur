@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: I1
+feature_id: I11
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-28T04:09:48.559Z"
-updated_at: "2026-07-28T04:11:21.766Z"
+updated_at: "2026-08-11T21:18:35.361Z"
 done_forced: "true"
 done_reason: PASS verdict + Review table; workflow validate and plugin tests green
 ---
