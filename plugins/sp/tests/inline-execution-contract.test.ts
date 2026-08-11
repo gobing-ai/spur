@@ -47,10 +47,9 @@ const EXCLUDED_COMMANDS = [
     'dev-wrapall',
 ] as const;
 
-// Mode-aware commands that are workflow-driven: their model-bearing work is
-// workflow `agent.run` stages that dispatch a subprocess, so `--agent inline` is
-// accepted as a synonym for omit/default (ADR-047).
-const WORKFLOW_DRIVEN_AGENT_COMMANDS = ['dev-plan', 'dev-runall'] as const;
+// Workflow commands that have no interactive host-stage inversion. Task execution
+// wrappers are tested separately below because ADR-047 grants them the inline driver.
+const HEADLESS_ONLY_WORKFLOW_COMMANDS = ['dev-plan'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
     test('inline is the default and the single --agent selector governs the surface', () => {
@@ -119,8 +118,8 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('ADR-047 — workflow-driven commands accept inline as a synonym for default', () => {
-        for (const command of WORKFLOW_DRIVEN_AGENT_COMMANDS) {
+    test('ADR-047 — non-inverted workflow commands accept inline as a synonym for default', () => {
+        for (const command of HEADLESS_ONLY_WORKFLOW_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must be mode-aware to carry --agent`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
@@ -128,10 +127,24 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: must document the <inline|auto|name> selector`).toContain('<inline|auto|name>');
             expect(raw, `${command}: must name agent.default as the redirect`).toContain('agent.default');
         }
+    });
 
-        const devRun = readFileSync(join(COMMANDS_DIR, 'dev-run.md'), 'utf8');
-        expect(devRun).toContain('<inline|auto|name>');
-        expect(devRun).toContain('agent.default');
+    test('0503 — interactive full task execution uses the YAML-backed host driver with provenance', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
+            'utf8',
+        );
+        for (const command of ['dev-run', 'dev-runall']) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(raw, `${command}: missing host driver route`).toContain('inline pipeline driver');
+            expect(raw, `${command}: missing interactive omit/inline contract`).toContain('omit/`inline`');
+        }
+        expect(driver).toContain('`.spur/workflows/task-pipeline.yaml` remains the sole FSM definition');
+        expect(driver).toContain('spur task run-link <wbs> --source inline-full');
+        expect(driver).toContain('stage <id> executed inline in session <session-id>');
+        expect(driver).toContain("execute the action's slash command through its backing skill");
+        expect(driver).toContain('Transition guards are not advisory');
+        expect(driver).toContain('Never silently fall back');
     });
 
     test('excluded commands must not delegate model-bearing work without the contract', () => {
