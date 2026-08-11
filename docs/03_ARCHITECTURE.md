@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.8.0
+version: 1.9.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-10
@@ -273,6 +273,13 @@ per-source failure isolation (E1/0470); ad-hoc `--file <path>` imports a single 
 **Forensic ETL contract** (E1/0466, 0468): the importer normalizes records into a machine-readable
 output with `MAX_ERROR_SAMPLES` cap, `importOneIsolated` per-source isolation, `schemaVersion`
 tagging, and `assertArtifactVersion` gating — the artifact is a versioned contract, not ad-hoc JSON.
+
+**Full-mode reconciliation** (0504/0505): `--mode full` revalidates the ETL against canonical raw
+files — the importer deletes stale target/ledger/checkpoint rows and returns per-source
+`{ staleTargetRows, staleLedgerRows, staleCheckpointRows }`, which `importOneIsolated` passes
+through `CoverageEntry` to `entries[].reconciliation` in `--json` output (optional, absent on
+incremental runs). Sources that skipped malformed records are `degraded`, never clean `ok` —
+shapes in `04 §1`.
 
 **Analyze → Report** (E1/0474, 0469): `spur history analyze` aggregates the ETL tables in SQL
 (`packages/domain/src/analytics/forensic-query.ts`) and writes a versioned JSON artifact

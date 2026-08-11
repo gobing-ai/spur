@@ -498,6 +498,11 @@ if it recurs, a new rule in §6.
   same-change ADR. The premise only read as "resolved" in 04, not as a decision. Repair: new
   ADR-048 in the wrapup. A design premise in 04 that a code change reverses needs an ADR in the
   same change, not just an edited follow-up note.
+- [2026-08-10] spur-new: A real-data verification probe (task 0505) ran a full-mode write against
+  the 1.7 GB history DB without `--dry-run` first, deleting one pre-existing antigravity
+  row+ledger+checkpoint before the frozen pre-probe snapshot caught it — real-data writes need a
+  backup + `--dry-run` pass before any mutation, and `--mode full` deletes stale rows by design
+  (authoritative reconciliation, 0504).
 
 ### Lessons for `docs/05_FEATURES.md`
 
