@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Enhance spur history + dev-find-issue to replace ad-hoc session forensics (OMP tool-call extraction, subprocess session root, latency model)"
 description: ""
-status: backlog
+status: done
 type: meta
 profile: standard
 feature_id: E
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: ["0505", "0506"]
 ac_numbering: task-local
 created_at: "2026-08-11T06:04:07.701Z"
-updated_at: "2026-08-11T06:28:50.036Z"
+updated_at: "2026-08-11T07:27:27.265Z"
 ---
 
 ## 0507. Enhance spur history + dev-find-issue to replace ad-hoc session forensics (OMP tool-call extraction, subprocess session root, latency model)
@@ -125,17 +125,47 @@ A: No. `packages/domain/src/analytics/artifact.ts` explicitly reserves version b
 - [ ] P4 (R3) After task 0506 is done, preserve its schema-first rule and extend issue-finding with selected-file force-file import/analyze routing plus the ETL-vs-raw signal matrix; extend the existing R24b structure test without changing the thin command wrapper.
 - [ ] P5 (R1–R3) Run targeted tests first: ts-libs importer mapper/importer suites; Spur forensic-query, history-service, and plugin skill-structure suites. Then run both repositories' required completion gates, source-local dry-run provenance, task verification, and intentional git status. Do not run a full-mode write or backfill the real history database.
 ### Solution
-
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
-
+| File:line | Change |
+| --- | --- |
+| `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/mappers.ts` (commit `f817429`, released `@gobing-ai/ts-llm-jsonl-importer@0.4.26`) | R1: rewrote `ompSplit(raw, context?)` for the current `type: "message"` envelope — session key + seq from `TransformContext` (filename stem + `sourceLine`), role/content/model/usage/cost/duration from `raw.message`, flat `{type: "toolCall"}` blocks normalized to exactly one `history_tool_call` row (nested `block.toolCall` kept), custom/lifecycle records → meta with the filename key; `duration_ms` populated from `message.duration`. |
+| `~/xprojects/ts-libs/packages/llm-jsonl-importer/tests/mappers.test.ts` | R1: envelope regression (session/seq/role/duration/toolCall), toolResult role, custom.* meta; legacy shapes still pass. |
+| `~/xprojects/ts-libs/packages/llm-jsonl-importer/tests/importer.test.ts` | R1: force-file importer regression with a filename-derived session key (2 messages + 1 tool row). |
+| `package.json:36`, `bun.lock` | P2: catalog moved to `@gobing-ai/ts-llm-jsonl-importer@^0.4.26`; lockfile updated. Provenance: source-local dry-run reports `importer: 0.4.26` (recorded above in Testing). |
+| `packages/domain/src/analytics/forensic-query.ts` | R2: `MessageRollupRow`/`messageRollup` and `SessionRow`/`bySession` carry role-filtered `assistantDurationMs` + `assistantDurationUnmeasured` (SUM over `role='assistant'`). |
+| `packages/domain/src/analytics/artifact.ts` | R2: `ForensicTotals` now extends `TokenTotals` with the two assistant-duration fields; `SessionStat` extended; `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 (additive). |
+| `packages/app/src/services/history-service.ts` | R2: `emptyTotals`, `foldMessage`, and the `bySession` mapping propagate the assistant-duration fields; tool `durationMs` semantics unchanged. |
+| `packages/domain/tests/analytics/forensic-query.test.ts`, `render-report.test.ts`, `packages/app/tests/services/history-service.test.ts` | R2: seeded `duration_ms` values; assertions on totals + bySession sums/unmeasured; fixtures extended. |
+| `docs/04_DESIGN.md` | R2: history analyze surface documents the assistant-duration fields and the version-1 additive rule. |
+| `plugins/sp/skills/issue-finding/SKILL.md` | R3: `--use-history` Phase-2 flow — freeze files, source-local force-file import per file, analyze by filename session key, ETL-vs-raw signal split, both discovery roots. |
+| `plugins/sp/skills/issue-finding/references/session-formats.md` | R3: selected-file bridge (ambient + `.spur/run/*/agent-sessions/*` roots, per-key import/analyze) appended to the 0506 schema-first rule. |
+| `plugins/sp/tests/skill-structure.test.ts` | R3: R24b pins source-local CLI, force-file mode, both roots, and the ETL-vs-raw fallback markers. |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Correct the OMP mapper for the current `type: "message"` envelope | MET | ts-libs `mappers.ts:287` (`ompSplit(raw, context?)` — `sessionIdFromContext` + `sourceLine`, `raw.message` role/content/model/usage/cost/duration, flat toolCall → one row, custom.* → meta); regressions in ts-libs `tests/mappers.test.ts` + `tests/importer.test.ts` (136 focused pass; ts-libs monorepo check 1904 pass); released `@gobing-ai/ts-llm-jsonl-importer@0.4.26` (tag `f817429`; Publish run success; npm shows 0.4.26); Spur `package.json:36` + `bun.lock` at `^0.4.26`; source-local dry-run provenance `importer: 0.4.26` |
+| R2 — Surface OMP assistant response duration additively | MET | `forensic-query.ts:151,69` (role-filtered SQL + row types), `artifact.ts:67` (`ForensicTotals extends TokenTotals` with both fields; `SessionStat` extended), `history-service.ts:286,483` (fold + mapping); tests in `forensic-query.test.ts` + `history-service.test.ts` (totals 10000ms/1 unmeasured, session row, tool duration unchanged); `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 |
+| R3 — Make `dev-find-issue --use-history` use ETL for representable signals | MET | `SKILL.md:172` (freeze → source-local force-file per file → analyze by session key → ETL-vs-raw split), `session-formats.md:122` (both roots, per-key import/analyze), R24b `skill-structure.test.ts:317` pins the markers; thin `dev-find-issue.md` wrapper unchanged |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Current OMP message envelopes produce stable messages and tool calls | MET | test | ts-libs `mappers.test.ts` envelope test (sess-a key, seq 7, role/duration, one tool row) + `importer.test.ts` force-file test (filename key, 2 messages + 1 tool row) |
+| R1 — Legacy OMP shapes remain compatible | MET | test | existing ompSplit tests (basic/usage/toolCall/cost) still pass |
+| R2 — Assistant duration is additive and distinct from tool duration | MET | test | forensic-query + history-service tests (assistant 10000ms/1 unmeasured vs tool durationMs 550ms) |
+| R3 — Selected ambient and subprocess sessions use the history bridge | MET | command | SKILL.md + session-formats.md selected-file flow (ambient root + `.spur/run/*/agent-sessions/*`) |
+| R3 — Unsupported forensic signals remain explicit raw evidence | MET | command | SKILL.md raw-fallback list (command text, compactions, retries, tool timing/status); no duplicate tool rows |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**P1 — Functional traceability: PASS.** R1: `ompSplit` rewritten for the current envelope — filename session key + `sourceLine` seq via `TransformContext`, `raw.message` field resolution, flat toolCall normalization (exactly one row), legacy shapes retained; released as `0.4.26` through the lockstep tag path (CI + Publish runs green), Spur catalog/lockfile at `^0.4.26`, source-local dry-run provenance records `importer: 0.4.26`. R2: role-filtered `assistantDurationMs`/`assistantDurationUnmeasured` on rollup rows, session rows, `ForensicTotals`, and `SessionStat`; tool `durationMs` semantics untouched; schemaVersion stays 1; DESIGN updated. R3: selected-file force-file bridge in SKILL.md + session-formats.md with both discovery roots, per-key analyze, and the ETL-vs-raw split; R24b pins the markers.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**P2 — SECUA: PASS.** No injection surface (parameterized SQL, role literal constant). The `SUM(CASE WHEN m.role = 'assistant' …)` predicates are index-agnostic but bounded by the same grouped query shape (R2 materialization invariant preserved — still GROUP BY, never a bare SELECT). No new public CLI flag or config key. Release pushed via the established Trusted Publishing tag path (no credentials in tree).
 
+**P3 — Architecture: PASS.** Envelope normalization lives at the owning mapper (`ts-libs`), not patched around in Spur — no second parser. Session identity never falls back to unique event ids when context exists. The importer regression uses a tiny sanitized temp file (no real-session fixture copied). Cross-task contract honored: 0506's schema-first rule preserved and extended, not re-owned.
+
+**Residual risk: LOW.** Tool-call timing/status correlation remains on the raw-JSONL path by design (no `toolCallId` column); a future file-level correlation contract is the declared successor. Assistant duration only exists for sources that emit `message.duration` (OMP); other sources fold zero measured values with the count reflecting unmeasured rows.
 ### References
 - Incident baseline: task 0505 (`docs/tasks4/0505_run-real-data-full-mode-verification-pass-for-history-import.md`)
 - Overlapping predecessor: task 0506 (`docs/tasks4/0506_fix-0505-run-inefficiencies-inline-wrap-hop-dry-run-probe-gu.md`)
@@ -150,6 +180,9 @@ A: No. `packages/domain/src/analytics/artifact.ts` explicitly reserves version b
 - Plugin gate: `plugins/sp/tests/skill-structure.test.ts` R24b
 - Surface documentation: `docs/04_DESIGN.md` history analyze section
 ### History
+- 2026-08-11T07:24:54.698Z backlog → wip (system)
+- 2026-08-11T07:27:27.078Z wip → testing (system)
+- 2026-08-11T07:27:27.265Z testing → done (system)
 ### Notes
 **Verified premises**
 

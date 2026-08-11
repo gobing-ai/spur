@@ -64,14 +64,15 @@ interface Msg {
     provenance?: string;
     run_id?: string | null;
     task_wbs?: string | null;
+    duration_ms?: number | null;
 }
 
 async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
     await db.run(
         `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
              role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
-             provenance, run_id, task_wbs, imported_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             provenance, run_id, task_wbs, duration_ms, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         m.record_hash,
         'claude',
         'test.jsonl',
@@ -89,6 +90,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         m.provenance ?? 'agent',
         m.run_id ?? null,
         m.task_wbs ?? null,
+        m.duration_ms ?? null,
         '2026-06-01T00:00:00Z',
     );
 }
@@ -140,6 +142,7 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         input: 1000,
         output: 500,
         cost: 0.05,
+        duration_ms: 3000,
     });
     await insertMessage(db, {
         record_hash: 'm2',
@@ -153,6 +156,7 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         input: 500,
         output: 200,
         cost: 0.02,
+        duration_ms: 5000,
     });
     // Unknown-disposition record (no usage, no model) — feeds Q10 drift.
     await insertMessage(db, {
@@ -164,6 +168,7 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         disposition: 'unknown',
         ts: '2026-05-31T10:00:00Z',
         model: null,
+        duration_ms: null,
     });
     // Spur-run attributed record — feeds --run/--task selectors.
     await insertMessage(db, {
@@ -178,6 +183,7 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         input: 100,
         output: 0,
         cost: 0,
+        duration_ms: 2000,
         provenance: 'spur-run',
         run_id: 'run-1',
         task_wbs: '0042',
@@ -254,6 +260,9 @@ describe('forensic queries', () => {
         expect(may30?.outputTokens).toBe(700);
         expect(may30?.costUsd).toBeCloseTo(0.07);
         expect(may30?.recordsWithUsage).toBe(2);
+        // Assistant duration is role-filtered and additive (0507 R2).
+        expect(may30?.assistantDurationMs).toBe(8000); // m1 3000 + m2 5000
+        expect(may30?.assistantDurationUnmeasured).toBe(0);
         db.close();
     });
 
@@ -306,6 +315,9 @@ describe('forensic queries', () => {
         expect(rows[0]?.tokens).toBe(2300);
         expect(rows[0]?.costUsd).toBeCloseTo(0.07);
         expect(rows[0]?.topTool).toBe('Read');
+        // m3 is an assistant message with NULL duration → unmeasured count, not a zero sum.
+        expect(rows[0]?.assistantDurationMs).toBe(10000); // m1 3000 + m2 5000 + m4 2000
+        expect(rows[0]?.assistantDurationUnmeasured).toBe(1); // m3
         db.close();
     });
 

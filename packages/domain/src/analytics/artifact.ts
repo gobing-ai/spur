@@ -61,8 +61,15 @@ export interface CoverageEntry {
 /**
  * The artifact's totals bucket. `TokenTotals` extended with the forensic dimensions;
  * the artifact shape is the core the 0451 report carried, re-expressed as SQL.
+ * Additive fields only — `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 (version bumps are
+ * reserved for removed or retyped fields).
  */
-export type ForensicTotals = TokenTotals;
+export interface ForensicTotals extends TokenTotals {
+    /** Sum of `history_message.duration_ms` for role='assistant' rows. 0 when none measured. */
+    assistantDurationMs: number;
+    /** Assistant messages whose `duration_ms` was NULL — the assistant-duration unavailable count. */
+    assistantDurationUnmeasured: number;
+}
 
 /** Per-tool forensic stat — Q1 (time) + Q3/Q6 (calls/errors) combined. */
 export interface ToolStat {
@@ -86,6 +93,10 @@ export interface SessionStat {
     tokens: number;
     costUsd: number;
     topTool: string | null;
+    /** Sum of `duration_ms` across role='assistant' rows in this session. */
+    assistantDurationMs: number;
+    /** role='assistant' rows in this session whose `duration_ms` was NULL. */
+    assistantDurationUnmeasured: number;
 }
 
 /** A repeated-call loop finding — Q4 (`args_digest` repeated >= 3 times). */

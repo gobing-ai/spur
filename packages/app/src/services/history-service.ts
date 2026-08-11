@@ -282,6 +282,8 @@ export class HistoryService {
                 tokens: r.tokens ?? 0,
                 costUsd: r.costUsd ?? 0,
                 topTool: r.topTool,
+                assistantDurationMs: r.assistantDurationMs ?? 0,
+                assistantDurationUnmeasured: r.assistantDurationUnmeasured,
             })),
             loops: loopRows,
             warnings: [...buildWarnings(driftRows, coverage), ...(opts.extraWarnings ?? [])],
@@ -477,6 +479,8 @@ function emptyTotals(): ForensicTotals {
         toolCalls: 0,
         durationMs: 0,
         durationUnmeasured: 0,
+        assistantDurationMs: 0,
+        assistantDurationUnmeasured: 0,
     };
 }
 
@@ -490,6 +494,8 @@ function foldMessage(bucket: ForensicTotals, row: MessageRollupRow): void {
     bucket.cacheWriteTokens += row.cacheWriteTokens ?? 0;
     bucket.costUsd += row.costUsd ?? 0;
     bucket.recordsWithUsage += row.recordsWithUsage;
+    bucket.assistantDurationMs += row.assistantDurationMs ?? 0;
+    bucket.assistantDurationUnmeasured += row.assistantDurationUnmeasured;
 }
 
 /** Fold one tool-rollup row into a bucket. */

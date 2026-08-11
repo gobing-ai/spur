@@ -169,9 +169,27 @@ count identical commands for loop detection.
 Produce per-session metrics (duration, tools, compactions, test runs, spur calls, guard failures,
 key finding). Aggregate totals across sessions.
 
-When `--use-history` is set, optionally run `spur history import --source <mapped> …` and
-`spur history analyze` for token/cost aggregates. Do **not** treat history ETL as a substitute
-for raw tool-loop evidence.
+When `--use-history` is set, the **selected-file history bridge** supplies ETL aggregates for the
+frozen session set (task 0507 R3):
+
+1. **Freeze Phase 1's selected OMP JSONL files once** — the same inventory the raw analysis reads.
+   Discovery roots: the normal OMP session root (`~/.omp/agent/sessions/`) **and**
+   `.spur/run/<run-id>/agent-sessions/<omp-executor>/*.jsonl` for workflow subprocess sessions.
+   Never import a broad `.spur/run` scan and never run a full/source-root reconciliation here.
+2. **Import each frozen file once, through the source-local CLI**, with single-file `force-file`
+   mode:
+   `bun run apps/cli/src/index.ts history import --source omp --file <absolute-file> --mode force-file --json`.
+   The importer derives the session key from the filename; use the same stem for analysis.
+3. **Analyze scoped to that key**: `history analyze --session <filename-stem> --json`.
+4. Use the artifact for the aggregates ETL can represent — tokens, cost, messages, tool calls,
+   loops, and assistant response duration. **Continue parsing the same raw files** for command text,
+   compactions, test/guard retries, tool execution duration/status/errors, and every other signal
+   the ETL does not carry.
+
+ETL supplies normalized aggregates; it is **not** a substitute for raw tool-loop evidence. If an
+import fails or the DB is empty, continue with raw logs and note that cost data is unavailable.
+Before any ad-hoc verification SQL against `history_*` tables, follow the schema-first rule in
+[references/session-formats.md](references/session-formats.md) — inspect the live schema once.
 
 ### Phase 3: IDENTIFY — Root Cause Ranking
 

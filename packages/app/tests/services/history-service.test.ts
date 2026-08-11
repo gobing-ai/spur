@@ -41,14 +41,15 @@ interface Msg {
     disposition?: string;
     record_type?: string;
     provenance?: string;
+    duration_ms?: number | null;
 }
 
 async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
     await db.run(
         `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
              role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
-             provenance, imported_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             provenance, duration_ms, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         m.record_hash,
         'claude',
         'test.jsonl',
@@ -64,6 +65,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         m.output ?? null,
         m.cost ?? null,
         m.provenance ?? 'agent',
+        m.duration_ms ?? null,
         '2026-06-01T00:00:00Z',
     );
 }
@@ -111,6 +113,7 @@ async function seed(ctx: HistoryServiceContext): Promise<void> {
         input: 1000,
         output: 500,
         cost: 0.05,
+        duration_ms: 4000,
     });
     await insertMessage(db, {
         record_hash: 'm2',
@@ -121,6 +124,7 @@ async function seed(ctx: HistoryServiceContext): Promise<void> {
         input: 500,
         output: 200,
         cost: 0.02,
+        duration_ms: 6000,
     });
     await insertMessage(db, {
         record_hash: 'm3',
@@ -130,6 +134,7 @@ async function seed(ctx: HistoryServiceContext): Promise<void> {
         model: null,
         disposition: 'unknown',
         record_type: 'id+ts+content',
+        duration_ms: null,
     });
     await insertToolCall(db, {
         record_hash: 'tc1',
@@ -192,6 +197,10 @@ describe('HistoryService', () => {
             expect(artifact.totals.outputTokens).toBe(700);
             expect(artifact.totals.costUsd).toBeCloseTo(0.07);
             expect(artifact.totals.recordsWithUsage).toBe(2); // m1 + m2
+            // Assistant duration: role-filtered sum + unmeasured count (0507 R2).
+            expect(artifact.totals.assistantDurationMs).toBe(10000); // m1 4000 + m2 6000
+            expect(artifact.totals.assistantDurationUnmeasured).toBe(1); // m3
+            expect(artifact.totals.durationMs).toBe(550); // tool calls only — unchanged semantics
             // bySource / byModel / daily
             expect(artifact.bySource.claude?.messages).toBe(3);
             expect(artifact.byModel['claude-opus-5']?.messages).toBe(2);
@@ -203,6 +212,8 @@ describe('HistoryService', () => {
             // bySession
             expect(artifact.bySession[0]?.sessionId).toBe('sess-1');
             expect(artifact.bySession[0]?.topTool).toBe('Read');
+            expect(artifact.bySession[0]?.assistantDurationMs).toBe(10000);
+            expect(artifact.bySession[0]?.assistantDurationUnmeasured).toBe(1);
             // loops: Read/abc repeated 2 — below the >=3 threshold, so none
             expect(artifact.loops).toEqual([]);
             // drift warning
@@ -328,6 +339,8 @@ describe('HistoryService', () => {
                     toolCalls: 5,
                     durationMs: 0,
                     durationUnmeasured: 0,
+                    assistantDurationMs: 0,
+                    assistantDurationUnmeasured: 0,
                 },
                 bySource: {},
                 byModel: {},

@@ -27,6 +27,10 @@ export interface MessageRollupRow {
     cacheWriteTokens: number | null;
     costUsd: number | null;
     recordsWithUsage: number;
+    /** Sum of `duration_ms` across role='assistant' rows (measured assistant response time). */
+    assistantDurationMs: number | null;
+    /** role='assistant' rows whose `duration_ms` was NULL — the assistant-duration unavailable count. */
+    assistantDurationUnmeasured: number;
 }
 
 /** Tool-call aggregate per (source, model, day) — the duration side of the rollup. */
@@ -61,6 +65,10 @@ export interface SessionRow {
     tokens: number | null;
     costUsd: number | null;
     topTool: string | null;
+    /** Sum of `duration_ms` across role='assistant' rows in this session. */
+    assistantDurationMs: number | null;
+    /** role='assistant' rows in this session whose `duration_ms` was NULL. */
+    assistantDurationUnmeasured: number;
 }
 
 /** Repeated-call loop finding — Q4 (`args_digest` repeated >= 3 times). */
@@ -139,7 +147,9 @@ export async function messageRollup(db: DbAdapter, sel: ArtifactSelector): Promi
                 SUM(m.cache_read_tokens) AS cacheReadTokens,
                 SUM(m.cache_write_tokens) AS cacheWriteTokens,
                 SUM(m.cost_usd) AS costUsd,
-                SUM(CASE WHEN m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage
+                SUM(CASE WHEN m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m
          ${where}
          GROUP BY m.source, m.model, DATE(m.ts)`,
@@ -198,12 +208,16 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
         messages: number;
         tokens: number | null;
         costUsd: number | null;
+        assistantDurationMs: number | null;
+        assistantDurationUnmeasured: number;
     }>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 MIN(m.ts) AS startedAt,
                 COUNT(*) AS messages,
                 SUM(m.input_tokens + m.output_tokens) AS tokens,
-                SUM(m.cost_usd) AS costUsd
+                SUM(m.cost_usd) AS costUsd,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m
          ${where}
          GROUP BY m.session_id, m.source
@@ -268,6 +282,8 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
             topTool,
             tokens: msg.tokens,
             costUsd: msg.costUsd,
+            assistantDurationMs: msg.assistantDurationMs,
+            assistantDurationUnmeasured: msg.assistantDurationUnmeasured,
         };
     });
 }

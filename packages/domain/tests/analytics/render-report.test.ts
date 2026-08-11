@@ -26,6 +26,8 @@ function emptyTokens() {
         toolCalls: 0,
         durationMs: 0,
         durationUnmeasured: 0,
+        assistantDurationMs: 0,
+        assistantDurationUnmeasured: 0,
     };
 }
 
@@ -131,6 +133,8 @@ describe('renderReport forensic sections (R3)', () => {
                     tokens: 2_500_000,
                     costUsd: 3.4,
                     topTool: 'Read',
+                    assistantDurationMs: 60_000,
+                    assistantDurationUnmeasured: 2,
                 },
             ],
         });
