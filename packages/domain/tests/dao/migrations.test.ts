@@ -328,6 +328,51 @@ describe('db migrations', () => {
             expect(secondApplied).toBe(0);
             adapter.close();
         });
+
+        test('0009 provisions importer tables for databases whose journaled foundation predates them', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await adapter.exec(
+                'CREATE TABLE "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
+            );
+            for (const migration of CLI_MIGRATIONS.slice(0, 9)) {
+                await adapter.run(
+                    'INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)',
+                    migration.id,
+                    Date.now(),
+                );
+            }
+
+            expect(
+                await adapter.queryFirst("SELECT name FROM sqlite_master WHERE name = 'history_message'"),
+            ).toBeNull();
+
+            expect(await applyCliMigrations(adapter)).toBe(1);
+            const columns = await adapter.queryAll<{ name: string }>(
+                'PRAGMA index_info(idx_history_message_provenance_run)',
+            );
+            expect(columns.map((column) => column.name)).toEqual(['provenance', 'run_id']);
+            expect(await applyCliMigrations(adapter)).toBe(0);
+            adapter.close();
+        });
+
+        test('folder-loaded 0009 provisions importer tables before creating its index', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-history-index-migration-'));
+            await writeFile(
+                join(dir, '0009_spur_cli_history_message_run_idx.sql'),
+                'CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message (provenance, run_id);',
+            );
+            const migrations = await loadSqlMigrations(dir);
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+
+            expect(await applyCliMigrations(adapter, migrations)).toBe(1);
+            const columns = await adapter.queryAll<{ name: string }>(
+                'PRAGMA index_info(idx_history_message_provenance_run)',
+            );
+            expect(columns.map((column) => column.name)).toEqual(['provenance', 'run_id']);
+
+            adapter.close();
+            await rm(dir, { recursive: true, force: true });
+        });
     });
 
     describe('CLI_MIGRATION_FILE_MARKER', () => {
