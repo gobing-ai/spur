@@ -920,6 +920,76 @@ describe('TaskService', () => {
         });
     });
 
+    describe('updateSection — Solution file:line validation (0510 R1)', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function writeSource(name: string, content: string): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const path = join(tasksDir, `${name}.tmp.md`);
+            await fs.writeFile(path, content);
+            return path;
+        }
+
+        test('rejects an authored Solution without a file:line citation before any write', async () => {
+            const created = await svc.create({ title: 'R1 invalid solution' });
+            const fs = createNodeFileSystem(root());
+            const before = await fs.readFile(created.ref.filePath);
+            const beforeUpdatedAt = MarkdownDocument.parse(before, 'task').frontmatterData?.updated_at;
+
+            const src = await writeSource('r1-sol-no-cite', 'Changed everything but forgot the citation.\n');
+            await expect(svc.updateSection(created.ref.id, 'Solution', src)).rejects.toMatchObject({
+                name: 'SectionMutationError',
+                code: 'invalid-solution',
+                message: 'Solution must contain at least one `file:line` citation',
+            });
+
+            // No mutation: file content and updated_at are unchanged.
+            const after = await fs.readFile(created.ref.filePath);
+            expect(after).toBe(before);
+            const afterUpdatedAt = MarkdownDocument.parse(after, 'task').frontmatterData?.updated_at;
+            expect(afterUpdatedAt).toBe(beforeUpdatedAt);
+        });
+
+        test('accepts a Solution with a backticked path:line citation', async () => {
+            const created = await svc.create({ title: 'R1 sol backtick' });
+            const src = await writeSource(
+                'r1-sol-tick',
+                'Changed `packages/app/src/services/task-service.ts:1102` and nothing else.\n',
+            );
+            const result = await svc.updateSection(created.ref.id, 'Solution', src);
+            expect(result.ref.id).toBe(created.ref.id);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            expect(raw).toContain('packages/app/src/services/task-service.ts:1102');
+        });
+
+        test('accepts a Solution citing file/line in adjacent table cells', async () => {
+            const created = await svc.create({ title: 'R1 sol table' });
+            const src = await writeSource(
+                'r1-sol-table',
+                '| File | Line | Change |\n|------|------|--------|\n| `src/foo.ts` | 42 | added helper |\n',
+            );
+            const result = await svc.updateSection(created.ref.id, 'Solution', src);
+            expect(result.ref.id).toBe(created.ref.id);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            expect(raw).toContain('added helper');
+        });
+
+        test('leaves non-Solution section writes unvalidated', async () => {
+            const created = await svc.create({ title: 'R1 non-solution' });
+            const src = await writeSource('r1-bg', 'No citations needed here.\n');
+            const result = await svc.updateSection(created.ref.id, 'Background', src);
+            expect(result.ref.id).toBe(created.ref.id);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            expect(raw).toContain('No citations needed here.');
+        });
+    });
+
     describe('updateField — scalar frontmatter write', () => {
         test('sets feature_id on an existing task', async () => {
             const created = await svc.create({ title: 'feature link test' });

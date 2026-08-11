@@ -92,6 +92,33 @@ only burns wall clock and context budget.
 - If a targeted probe reveals a failure you cannot fix within implement scope, note it in
   `## Solution` and let the `test` hop's fixall handle it — do not pre-empt the gate.
 
+## Changed-path targeted checks (dependency-aware verification, task 0510 R3)
+
+"Run the narrow test first" needs a second half: *which* narrow tests, when a change to a shared
+surface can break a downstream consumer. The matrix below is dependency-aware — domain → app →
+CLI — so a shared change verifies its consumers without recreating the full project check inside
+implement. **It augments narrow behavior tests; it never authorizes `bun run spur-check`,
+`bun run test`, or another full project check inside implement** — the pipeline's `test` hop owns
+that single full gate.
+
+| Changed surface | Required targeted tests | Required typechecks |
+| --- | --- | --- |
+| `packages/domain/src/**` public type/query | affected domain test; affected app service test; affected CLI command test | `@gobing-ai/spur-domain`, `@gobing-ai/spur-app`, `@gobing-ai/spur` |
+| `packages/app/src/**` public service/type | affected app test; affected CLI command test | `@gobing-ai/spur-app`, `@gobing-ai/spur` |
+| `apps/cli/src/**` | affected `apps/cli/tests/**` file | `@gobing-ai/spur` |
+| shared plugin flag/command/reference | affected plugin structure/contract test; add `flag-contract-parity.test.ts` **only** when the shared flag surface changes | no package typecheck unless TypeScript also changed |
+
+- Apply **only the matching rows** for the surfaces actually changed; a multi-surface change applies
+  the union.
+- Workspace typechecks run as `bun run --filter <workspace> typecheck` for each listed workspace
+  (monorepo; installed/other projects substitute their package-manager surface).
+- The shared plugin row is deliberately conditional: a pure reference/prose change needs only the
+  affected structure test; `flag-contract-parity.test.ts` is added only when the shared flag surface
+  (a flag the plugin layer consumes) actually changes, so an unconditional parity suite does not
+  creep into every plugin edit.
+- Run the applicable rows, then stop: the single full project check belongs to the pipeline's
+  `test` hop (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
+
 ## Behavior
 
 This skill behaves as a **technique**: given a task (read its Background, AC, Design, Plan), it maps

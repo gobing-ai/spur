@@ -254,6 +254,19 @@ function hasAdjacentFileLineColumns(body: string): boolean {
     return false;
 }
 
+/**
+ * True when a Solution body carries at least one recognized `file:line` citation:
+ * a backticked `` `path:line` `` / `` `path:start-end` `` anchor, a bare
+ * `path.ext:line` citation, or a markdown table row with a file path and a line
+ * number in adjacent columns (e.g. | `src/foo.ts` | 42 | ... |). Single source of
+ * truth shared by the L3 checker and the task-write seam (task 0510 R1) so
+ * write-time and `task check` behavior cannot drift.
+ */
+export function hasSolutionFileLineCitation(body: string): boolean {
+    const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(body) || /[^\s`]\.\w+:\d+/.test(body);
+    return hasFileLine || hasAdjacentFileLineColumns(body);
+}
+
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
@@ -488,20 +501,14 @@ export class TaskCheckService extends PlanningCheckService {
         // placeholder (present at todo/wip before implementation) is skipped, so
         // a not-yet-implemented task is not forced to cite lines that don't exist.
         const solBody = doc.getSection('Solution');
-        if (solBody !== null && !isPlaceholderBody(solBody)) {
-            const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(solBody) || /[^\s`]\.\w+:\d+/.test(solBody);
-            // Also accept markdown table rows where a file path and a line number
-            // appear in adjacent columns (e.g. | `src/foo.ts` | 42 | ... |).
-            const hasTableFileLine = hasFileLine || hasAdjacentFileLineColumns(solBody);
-            if (!hasTableFileLine) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
-                    severity: 'error',
-                    section: 'Solution',
-                    message: 'Solution must contain at least one `file:line` citation',
-                });
-            }
+        if (solBody !== null && !isPlaceholderBody(solBody) && !hasSolutionFileLineCitation(solBody)) {
+            findings.push({
+                layer: 'L3',
+                code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
+                severity: 'error',
+                section: 'Solution',
+                message: 'Solution must contain at least one `file:line` citation',
+            });
         }
 
         // Review: P1–P4 findings table (hard core). Only fires when Review is

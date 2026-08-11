@@ -33,7 +33,10 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
-or `ready`), `--feature <id>` (sugar for `feature:<id>`), `--mode`
+or `ready`), `--feature <id>` (sugar for `feature:<id>`; when the effective selector is
+feature-derived, `dev-runall` runs `spur feature check <id> --strict --json` **once** before
+resolving tasks — a non-zero strict check aborts the batch with verdict `aborted` and the
+structured findings, before any task pipeline action, task 0510 R2), `--mode`
 `<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
 see `execution-batch.md` § Parallel Execution), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default

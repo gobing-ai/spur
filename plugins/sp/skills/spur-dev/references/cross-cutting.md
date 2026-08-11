@@ -436,6 +436,15 @@ iterating one task).
 2. Loop on that narrow target until green.
 3. **Then** run the single full `spur-check` (or `bun run check`) as the final gate.
 
+**Dependency-aware selection (task 0510 R3).** "Narrow" is not "whatever file I touched" — a change
+to a shared surface must also verify its downstream consumers. Pick the targeted tests and
+typechecks from the **changed-path matrix** in `code-implementation/SKILL.md` (§ Changed-path
+targeted checks): domain changes run affected domain + app/CLI consumer tests and
+domain/app/CLI typechecks; app changes run affected app + CLI tests and app/CLI typechecks; CLI
+changes run affected CLI tests and the CLI typecheck; shared plugin flag/command contract changes
+run their focused structure/parity tests. Run only the applicable rows, then stop — the full
+project check is still the pipeline's single final gate, never a per-iteration re-run.
+
 Do not re-run the full suite per iteration, and do not `spur-check` before you have a green narrow
 target. **Target:** full `spur-check` runs ≤2 per task (one during iteration, one final) instead of
 4 across a chain.

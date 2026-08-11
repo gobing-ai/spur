@@ -477,8 +477,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.setExitCode(2);
                 }
             } catch (err) {
-                context.output.error(String(err));
-                context.setExitCode(1);
+                if (err instanceof SectionMutationError) {
+                    context.output.error(`[${err.code}] ${err.message}`);
+                    context.setExitCode(err.code === 'usage' ? 2 : 3);
+                } else {
+                    context.output.error(String(err));
+                    context.setExitCode(1);
+                }
             }
         });
 

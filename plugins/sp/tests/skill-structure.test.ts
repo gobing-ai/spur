@@ -1250,3 +1250,60 @@ describe('task 0486 — conflict-finding authority-aware audit capability', () =
         expect(skill.toLowerCase()).toContain('read-only');
     });
 });
+
+// ─── (task 0510) feature-E batch-run lessons: preflight, matrix, metadata-only ──
+
+describe('task 0510 — batch-run hardening (feature preflight, changed-path matrix, metadata-only host)', () => {
+    const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
+    const codeImpl = readFileSync(join(SKILLS_DIR, 'code-implementation', 'SKILL.md'), 'utf8');
+    const crossCutting = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'cross-cutting.md'), 'utf8');
+    const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
+    const devOps = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
+
+    test('R2 — feature-derived strict preflight runs before task resolution and aborts on failure', () => {
+        // The strict check must be declared before any task-list resolution / freeze.
+        expect(executionBatch).toContain('feature check <id> --strict --json');
+        expect(executionBatch).toContain('before any task-list resolution, freeze');
+        expect(executionBatch).toContain('before `task list`');
+        // Abort shape: verdict aborted, zero attempted tasks, structured findings.
+        expect(executionBatch).toContain('verdict `aborted`, zero attempted');
+        // Non-feature exclusion: explicit/status/ready selectors add no check.
+        expect(executionBatch).toContain('Explicit WBS lists, status pseudo-lists, and `ready` selectors add no');
+        // Operator projections carry the same contract.
+        expect(devRunall).toContain('feature check <id> --strict --json');
+        expect(devRunall).toContain('aborts the batch with verdict `aborted`');
+        expect(devOps).toContain('feature check <id> --strict --json');
+    });
+
+    test('R3 — changed-path matrix pins dependency direction and the conditional parity limit', () => {
+        // Dependency direction domain → app → CLI is literal in the matrix rows.
+        expect(codeImpl).toContain('| `packages/domain/src/**` public type/query |');
+        expect(codeImpl).toContain('| `packages/app/src/**` public service/type |');
+        expect(codeImpl).toContain('| `apps/cli/src/**` |');
+        expect(codeImpl).toContain('| shared plugin flag/command/reference |');
+        // Downstream consumers named (affected app service test, affected CLI command test).
+        expect(codeImpl).toContain('affected app service test; affected CLI command test');
+        expect(codeImpl).toContain('affected app test; affected CLI command test');
+        // Typecheck surface: `bun run --filter <workspace> typecheck`.
+        expect(codeImpl).toContain('bun run --filter <workspace> typecheck');
+        // Parity suite only for shared flag surface changes — the conditional limit.
+        expect(codeImpl).toContain('flag-contract-parity.test.ts');
+        expect(codeImpl).toContain('when the shared flag surface changes');
+        // Never a full project check inside implement.
+        expect(codeImpl).toContain('never authorizes `bun run spur-check`');
+        // The matrix is linked from the targeted-test-first guidance.
+        expect(crossCutting).toContain('changed-path matrix');
+    });
+
+    test('R5 — host controller projections are metadata-only on the green path and bounded on failure', () => {
+        expect(executionBatch).toContain('Metadata-only host controller');
+        // task-show projection shape.
+        expect(executionBatch).toContain('{wbs, status, dependencies, feature_id}');
+        // trace observation projection shape.
+        expect(executionBatch).toContain('{runId, status, terminalState}');
+        // Failure reads are bounded — never re-stream a whole trace to summarize status.
+        expect(executionBatch).toContain('never streams or re-reads a full trace');
+        // task 0508 native-subagent dispatch is preserved, not replaced by a cache/parser.
+        expect(executionBatch).toContain("task 0508's dispatch contract is preserved unchanged");
+    });
+});

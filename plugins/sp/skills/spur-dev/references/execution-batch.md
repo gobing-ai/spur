@@ -64,6 +64,30 @@ function normalizeArgs(raw: Args): Args {
 - If `--feature FOO` is present and `--tasks` is absent, treat the effective selector as `feature:FOO`.
 - If both are present, `--tasks` wins (with a one-line note in the batch report).
 
+**Feature-derived strict preflight (R2, task 0510).** After normalization, if the **effective
+selector** is `feature:<id>` (whether via `--tasks feature:<id>` or the `--feature <id>` sugar),
+run a source-local strict feature check **once** before any task-list resolution, freeze,
+dependency resolution, or worktree task execution:
+
+```bash
+# monorepo source; installed projects use their resolved `spur` binary
+bun run apps/cli/src/index.ts feature check <id> --strict --json
+```
+
+- **Abort shape.** A non-zero check aborts the batch immediately: verdict `aborted`, zero attempted
+  tasks, and the structured feature findings (the `--json` finding list) reported verbatim. This is
+  the same abort vocabulary as cycle / unknown selector (Step 4/Step 5).
+- **Exactly once.** The check runs once per batch, before `task list`; it is not re-run per task.
+- **Non-feature exclusion.** Explicit WBS lists, status pseudo-lists, and `ready` selectors add no
+  feature check — only an effective `feature:<id>` selector is feature-derived. When explicit
+  `--tasks` overrides `--feature`, the effective selector is not feature-derived, so no check runs.
+- **Why.** `FeatureCheckService` emits `L3.scope-delineation` (Scope lacking an In/Out split) as a
+  **warning**; feature-scoped batches never ran a strict check before freezing, so the late feature
+  transition became the first blocking check. A selector-local strict preflight catches a known
+  strict finding before any task pipeline action without changing corpus-wide severity.
+- **Scope.** This preflight is advisory to severity policy: it does not alter `FeatureCheckService`,
+  `L3.scope-delineation` severity, `feature sync`, or batch-create.
+
 `--tasks <value>` (or the effective value after normalization) resolves to a frozen set of task WBS numbers. Resolution happens **once, at
 kickoff** — the driver never re-queries `spur task list` to recompute membership mid-batch (R2.1).
 
@@ -71,7 +95,7 @@ kickoff** — the driver never re-queries `spur task list` to recompute membersh
 |---|---|---|
 | Explicit WBS list | `^[0-9, ]+$` | Split on comma; validate each token is a 4-digit WBS; collect the explicit set. (R1.1) |
 | `feature:<id>` (via `--tasks` or `--feature <id>`) | literal `feature:` prefix or `--feature` flag | `spur task list --feature <id> --json`; collect `wbs` from each row. The `--feature` flag is sugar that becomes `--tasks feature:<id>` at the command layer. (R1.3) |
-| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json`). Report each excluded task with its unmet dependency. (R1.4) |
+| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json | jq '{wbs, status, dependencies, feature_id}'` — R5 metadata-only). Report each excluded task with its unmet dependency. (R1.4) |
 | Status pseudo-list | `todo` \| `backlog` \| `wip` \| `blocked` \| `testing` | `spur task list --status <value> --json`; collect `wbs` from each row. (R1.2) |
 | *(else)* | no match | Error: "unknown selector `<value>`" — list the valid forms and halt before running anything. |
 
@@ -113,7 +137,7 @@ edge `A → B` means "A depends on B" (B must complete before A runs). Only edge
 ### 2.3 Out-of-set dependency resolution
 
 For each dependency edge to a task **outside** the frozen set, resolve its current status via
-`spur task show <dep-wbs> --json`:
+`spur task show <dep-wbs> --json | jq '{wbs, status, dependencies, feature_id}'` (R5 metadata-only):
 
 - status `done` → edge satisfied, drop it from the graph (R2.5). The dependent is unblocked.
 - status ≠ `done` → mark the dependent **blocked**. Transitively mark its in-set descendants blocked
@@ -211,7 +235,7 @@ step.
 ```bash
 RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml \
   --vars '{"wbs":"<wbs>","profile":"auto","agent":"claude"}' --async --json | jq -r '.runId')
-spur workflow trace "$RUN" --json   # poll until status is terminal (done/failed)
+spur workflow trace "$RUN" --json | jq '{runId, status, terminalState}'   # poll until status is terminal (done/failed)
 ```
 
 ### 3.2 Flag → `--vars` passthrough (R4.2, R4.3)
@@ -262,6 +286,7 @@ in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ### 3.3c Bounded feature-sync retry suppression (task 0411)
 
+
 During a batch, the per-task `record` step and the wrap-up `feature-transition` step each invoke
 feature status sync. When a feature is L4-gate-blocked (e.g. not all linked tasks are `done`), the
 identical blocked proposal repeats on every call with no intervening input change — in the H9
@@ -294,6 +319,42 @@ pipeline's `record` step and the wrap-up's `feature-transition` step. The driver
 `FeatureSyncResult` JSON shape as `feature sync --json`, so downstream report logic is unchanged.
 The only observable difference is fewer redundant `feature sync` invocations and a one-line
 `feature-sync-bounded:` annotation on stderr when a duplicate is suppressed.
+
+### 3.4 Metadata-only host controller (R5, task 0510)
+
+The batch **orchestrator** reads status, ordering, and terminal state — never task bodies or trace
+output. Task `content`, section bodies (Solution/Testing/Review), and full workflow `output` are
+stage/subagent data and must not enter the host context on the green path; the controller that
+dispatches native subagents must not defeat that isolation by ingesting the very bodies the
+subagents are meant to hold (task 0508's dispatch contract is preserved unchanged).
+
+**Green-path projections — every controller-side read is projected to metadata:**
+
+- `task show --json` reads pipe to `{wbs, status, dependencies, feature_id}` only:
+
+  ```bash
+  spur task show <wbs> --json | jq '{wbs, status, dependencies, feature_id}'
+  ```
+
+  Use this shape for out-of-set dependency resolution (Step 2.3), the `ready` selector's
+  dep-status lookups (Step 1), and any other controller-side `task show`. A status-only lookup may
+  narrow further (`| jq '.status'`), but never widen.
+
+- Green-path trace observation projects to `{runId, status, terminalState}` only:
+
+  ```bash
+  spur workflow trace "$RUN" --json | jq '{runId, status, terminalState}'
+  ```
+
+  The controller decides continue/halt from `status`/`terminalState` (ADR-044: judge a run by
+  `status === 'done'`, never by string-matching a `finalState` name) plus the bounded verdict
+  artifact `.spur/run/<wbs>-verdict.json`. It never streams or re-reads a full trace merely to
+  summarize status.
+
+**Failure-path reads are bounded.** On a failed/blocked task, request only the terminal error and
+the minimal anchor set the batch report needs (e.g. the blocking finding line, the unmet-dep WBS,
+the verdict line) — never the entire trace. If a fuller trace is needed for diagnosis, that read
+belongs to a subagent or the operator, not to the batch controller's report loop.
 
 ## Step 4 — Failure policy (R3)
 
@@ -683,6 +744,8 @@ command doc so it does not read as a bug.
 | R5.1 (orchestrator boundary) | "Zero engine code" preamble + Step 3 |
 | R5.2 (structured batch report) | Step 5 |
 | 0411 (bounded feature-sync retry suppression) | Step 3.3c — wrapper lives in pipeline `record` + wrap-up `feature-transition`; driver unchanged |
+| 0510 R2 (feature-derived strict preflight) | Step 1 — "Feature-derived strict preflight (R2, task 0510)" |
+| 0510 R5 (metadata-only host controller) | Step 3.4 + projected `task show` / trace snippets in Step 1, 2.3, 3.1 |
 
 ## Parallel Execution
 

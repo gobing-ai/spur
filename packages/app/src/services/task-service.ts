@@ -30,6 +30,7 @@ import { GuardDeniedError } from '../errors';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import type { SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
+import { hasSolutionFileLineCitation } from './task-check';
 import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
@@ -111,9 +112,10 @@ export class DependencyMutationError extends Error {
  * - `no-matrix`      — no section-matrix entry for variant/status → exit 3
  * - `unknown-section`— section name not in `TASK_CANONICAL_SECTIONS` → exit 3
  * - `forbidden`      — section is forbidden for the task's current status → exit 3
+ * - `invalid-solution` — explicit Solution update lacks a `file:line` citation → exit 3
  */
 export class SectionMutationError extends Error {
-    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden';
+    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden' | 'invalid-solution';
     constructor(code: SectionMutationError['code'], message: string) {
         super(message);
         this.name = 'SectionMutationError';
@@ -1103,6 +1105,19 @@ export class TaskService {
         const filePath = await this.resolveTaskFile(wbs);
         const raw = await this.ctx.fs.readFile(sourceFile);
         const body = stripLeadingSectionHeader(raw, sectionName);
+        // R1 (0510): an explicit Solution update must carry a recognized `file:line`
+        // citation. Reject before any write so an invalid authored Solution never lands
+        // on disk for a later lifecycle check to reject — the same predicate the L3
+        // checker uses, so write-time and `task check` behavior cannot drift. The write
+        // service is never reached, so file content, `updated_at`, and history are
+        // unchanged. Placeholder creation via task templates / `sections init` uses the
+        // `writeService.updateSection` path directly and is unaffected.
+        if (sectionName === 'Solution' && !hasSolutionFileLineCitation(body)) {
+            throw new SectionMutationError(
+                'invalid-solution',
+                'Solution must contain at least one `file:line` citation',
+            );
+        }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         const result = await this.writeService.updateSection(ref, sectionName, body);
 

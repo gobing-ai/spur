@@ -3,111 +3,233 @@ template: meta
 schema_version: 1
 name: "Fix feature-E batch run lessons: Solution file:line first-write, feature Scope hygiene, gate-adjacent test coverage, release trigger verification, host cache-read growth"
 description: ""
-status: backlog
+status: done
 type: meta
 profile: standard
-feature_id: H1
+feature_id: H
 parent_wbs: null
 priority: P2
 tags: ["meta"]
-dependencies: []
+dependencies: ["0508"]
 ac_numbering: task-local
 created_at: "2026-08-11T15:09:56.354Z"
-updated_at: "2026-08-11T15:28:19.997Z"
+updated_at: "2026-08-11T17:00:35.989Z"
 ---
 
 ## 0510. Fix feature-E batch run lessons: Solution file:line first-write, feature Scope hygiene, gate-adjacent test coverage, release trigger verification, host cache-read growth
 
 ### Background
-The feature E batch (`/sp:dev-runall --feature E --auto --next --agent inline`, tasks 0506-0508) completed with all PASS verdicts in ~70 minutes of active work, but post-run forensic analysis of the live OMP session (`2026-08-11T06-37-01-363Z_*.jsonl`) surfaced five reusable lessons.
+The completed feature-E batch (tasks 0506–0508) exposed five reusable execution defects. Current-tree verification narrows each defect to an existing seam; no raw session or conversation log is required for implementation.
 
-The session cost $2.38 total — 95% ($2.27) from cache-read tokens (79.4M) against only 577K fresh input and 126K output tokens. Assistant (LLM) response time was 55.4 min across 285 messages; tool execution was 17.3 min, dominated by bash (138 calls, 16.9 min, one 472s blocking workflow trace). Two quality-gate re-runs and two poll loops (~5 min combined) were avoidable.
+1. The Solution checker and implementation reference already require a `file:line` change map, but `TaskService.updateSection` still writes an invalid authored Solution and leaves the later lifecycle check to reject it.
+2. `FeatureCheckService` already emits `L3.scope-delineation` when Scope lacks an In/Out split, but the finding is a warning and feature-scoped `dev-runall` does not run a strict feature check before freezing the batch. The late feature transition therefore becomes the first blocking check.
+3. The targeted-test-first rule says to run narrow tests before one full project check, but it does not tell an implementer which downstream workspaces must typecheck/test when a shared domain or app type changes.
+4. The ts-libs release script pushes the aggregate release tag and only prints a `gh run list` suggestion. Its Publish workflow already supports both aggregate-tag `push` and `workflow_dispatch`, so a missed push event can be recovered without deleting or re-pushing tags.
+5. Task 0508 now dispatches eligible stages to native subagents, but the host batch procedure does not explicitly project `task show` and workflow-trace JSON to metadata. Loading full task bodies or trace output into the controller defeats that context isolation.
 
-Root causes: the implement agent's first Solution write omitted required `file:line` citations (one `wip → testing` guard denial); a grouping feature reached its done-transition with an L3 Scope gap (two `verifying → done` guard denials); the 0507 targeted test pass missed `apps/cli` fixtures, causing a red full gate; the ts-libs tag push did not auto-trigger the Publish workflow (recovered by delete+re-push); and long host-session context drives the cache-read cost.
+Task 0510 hardens those five existing seams. It changes no task-pipeline YAML, adds no command flag, and requires no new telemetry or session parser.
 ### Requirements
-- [ ] R1. Enforce Solution `file:line` citations at first write: the implement operation's section authoring must include at least one `file:line` citation on the first `spur task update --section Solution` (L3.solution-file-line), so the `wip → testing` guard never denies a fresh Solution.
-- [ ] R2. Surface L3 Scope gaps on grouping features before the done transition: feature check / sync should flag a missing in-scope/out-of-scope delineation at `feature check` time (or batch-create), not only when the `verifying → done` guard runs.
-- [ ] R3. Make the pre-gate targeted pass gate-adjacent: the targeted test set for a task touching CLI/domain/app must include `apps/cli/tests/**`, package typechecks (`bun run --filter … typecheck`), and the flag/parity suites before the first full `spur-check` gate run.
-- [ ] R4. Verify release trigger after tag push: after `git push origin --tags` for a ts-libs lockstep release, confirm the Publish workflow run exists (`gh run list`) before any npm poll; re-push the aggregate tag if the event was missed.
-- [ ] R5. Bound host-context cache-read growth: prefer native-subagent dispatch (0508) for eligible pipeline stages and avoid re-reading large task/artifact files in the host session; target cache-read tokens per batch run.
+- [ ] R1. Reject an explicitly authored `Solution` body that lacks a recognized `file:line` citation before `TaskService.updateSection` writes the task file. Reuse the checker’s citation predicate so write-time and `task check` behavior cannot drift; preserve valid backticked citations and adjacent file/line table cells. The rejected write exits non-zero and leaves task content plus `updated_at` unchanged.
+- [ ] R2. For an effective `feature:<id>` batch selector (including `--feature <id>` sugar), run source-local `spur feature check <id> --strict --json` once before task-list resolution and freezing. Abort before any task pipeline action when it fails, reporting its findings. Explicit/status/ready selectors remain unchanged, and the existing Scope finding severity remains unchanged globally.
+- [ ] R3. Make targeted verification dependency-aware without running the full project check inside implementation. Freeze a changed-path matrix: domain changes run affected domain tests plus app/CLI consumer tests and domain/app/CLI typechecks; app changes run affected app plus CLI tests and app/CLI typechecks; CLI changes run affected CLI tests and CLI typecheck; shared plugin flag/command contract changes run their focused structure/parity tests. Run only applicable rows, then let the pipeline execute the single full project check.
+- [ ] R4. In the ts-libs `bumpVersion(..., { push: true })` path, verify that the aggregate tag created a Publish workflow run before returning. Use a bounded `gh run list --workflow publish.yml --json ...` lookup matched to the aggregate tag; if no push run appears, dispatch `publish.yml` once with `--ref <aggregate-tag>` through its existing `workflow_dispatch` trigger and confirm that run exists. Fail loudly if neither run appears. Never delete, move, or re-push an existing tag as automatic recovery.
+- [ ] R5. Keep batch-controller reads metadata-only. When execution-batch needs task status/dependencies/feature ID or workflow terminal state, project CLI JSON to those fields before it reaches the host context; do not ingest task `content`, Solution/Testing/Review bodies, or full workflow output on the green path. On failure, read only the bounded error/status evidence needed for the report. Preserve task 0508 native-subagent dispatch.
+
+Non-goals: changing feature-check finding severities corpus-wide; adding a task/feature/agent flag; editing workflow YAML; re-running a stage or full suite to collect evidence already returned; numeric token/cost targets; raw session-log analysis; automatic remote-tag deletion/re-push; waiting for npm publication inside `bumpVersion`; or changing task 0508 dispatch semantics.
 ### Acceptance Criteria
-Scenario: R1 — A fresh Solution write is never guard-denied
-  Given the implement operation authors `## Solution` for the first time
-  When it writes via `spur task update --section Solution --from-file`
-  Then the body contains at least one `file:line` citation
-  And `spur task check <wbs>` passes without L3.solution-file-line
+Scenario: R1 — Invalid authored Solution is rejected before mutation
+  Given a task file and a body-only Solution source with no recognized file:line citation
+  When `spur task update <wbs> --section Solution --from-file <path> --json` runs
+  Then it exits non-zero with `Solution must contain at least one file:line citation`
+  And the task file content and updated_at are unchanged
+  And a body with a backticked citation or adjacent file/line table cells still writes successfully
 
-Scenario: R2 — Grouping features surface Scope gaps early
-  Given a feature with no in-scope/out-of-scope delineation in its Scope section
-  When `spur feature check <id>` runs
-  Then the L3 Scope finding is reported (error or warning)
-  And the `verifying → done` sync never surprises an operator with a pre-existing Scope gap
+Scenario: R2 — Feature-scoped batches check the feature before resolving tasks
+  Given an effective `feature:<id>` selector whose feature has an L3 Scope warning
+  When `dev-runall` begins selector resolution
+  Then it runs `spur feature check <id> --strict --json` exactly once
+  And aborts with those findings before `spur task list` or any task pipeline action
+  And an explicit WBS/status/ready selector does not add a feature check
 
-Scenario: R3 — The targeted pass covers gate-adjacent surfaces
-  Given a task's changes touch apps/cli or packages/domain|app
-  When the pre-gate targeted test set runs
-  Then it includes the affected package tests, CLI tests, and per-package typechecks
-  And the first full `spur-check` gate run is green (or fails only on genuine code findings)
+Scenario: R3 — Targeted verification covers changed workspaces and consumers
+  Given a change under domain, app, CLI, or a shared plugin command contract
+  When the implement operation chooses targeted checks
+  Then it applies only the matching changed-path matrix rows
+  And includes the named downstream consumer tests and package typechecks
+  And it does not run the full project check before the pipeline test action
 
-Scenario: R4 — A missed publish trigger is detected before npm polling
-  Given a lockstep ts-libs release tag was pushed
-  When the release flow checks workflow runs
-  Then a Publish run for the aggregate tag exists (or the tag is re-pushed once)
-  And no sleep-poll loop exceeds one bounded `gh run watch`-style call
+Scenario: R4 — Release returns only after a Publish run exists
+  Given ts-libs `bumpVersion` pushes the aggregate release tag
+  When the matching push-triggered Publish run is visible
+  Then the release reports that run ID/URL and returns without dispatching another run
+  But when the bounded lookup finds no push run
+  Then it dispatches `publish.yml` once with the aggregate tag ref and confirms the dispatched run
+  And neither path deletes, moves, or re-pushes a tag
 
-Scenario: R5 — Host-context cache cost is bounded
-  Given a multi-task batch runs inline in one host session
-  When per-task pipeline stages are eligible
-  Then eligible model stages dispatch to a native subagent (0508)
-  And the batch's cache-read token volume shows no unbounded growth per additional task
+Scenario: R5 — The host batch loop consumes metadata, not task or trace bodies
+  Given a batch resolves, orders, and observes tasks on the green path
+  When it invokes task-show or workflow-trace JSON commands
+  Then host-visible output is projected to status, dependencies, feature ID, run ID, and terminal state only
+  And task content plus full workflow output are absent
+  And failure reporting reads only bounded error evidence
 ### Q&A
-**Q: Why is the Solution file:line rule a task and not a hook?**
-A: The CLI already enforces it at `spur task check` (L3.solution-file-line) and the pipeline's record step backfills from `git diff --name-only` as a safety net. The gap is the implement agent's first-write habit, so the fix is guidance in the implement operation, not a new gate.
+**Q: Why is task 0510 linked to feature H instead of H1?**
 
-**Q: Why catch Scope gaps at feature check rather than creation?**
-A: Grouping features (feature E, `tags: [group]`) are often created before scope is known and carry placeholder Scope. `feature check` already has the L3 Scope rule — the ask is to surface it as an error early enough that batch-create/planning flags it, instead of the done-transition guard being the first enforcement point.
+A: H1 has a closed feature-level acceptance contract, and 0510’s task-local scenarios are not a subset of it. H is the grouping feature for the agent-facing `plugins/sp` and `sp:dev-*` layer; task-local scenarios are valid there. The ts-libs release check is an explicit upstream handoff inside this cross-cutting hardening task.
 
-**Q: Why include CLI tests in the targeted pass?**
-A: The 0507 red gate was caused by a missed `apps/cli/tests/commands/history.test.ts` fixture after a `ForensicTotals` shape change — the targeted pass ran domain/app/plugin tests only, so the typecheck error surfaced only in the full gate, forcing a second 50s gate run plus a full re-run.
+**Q: Why reject the Solution write instead of adding more implementation prose?**
 
-**Q: How much did the two red gates cost?**
-A: ~100s of gate time plus two full 4845-test suite re-runs (~50s each) and the intervening diagnosis — roughly 5 minutes of the 70-minute batch, all avoidable with gate-adjacent targeted coverage.
+A: The prose already exists in both `code-implementation/SKILL.md` and `implementation-patterns.md`, yet an invalid first write still landed. Reusing the existing checker predicate at `TaskService.updateSection` is the smallest deterministic fix and preserves one definition of a valid citation.
 
-**Q: Is the cache-read cost avoidable?**
-A: Partially. 95% of the $2.38 session cost is cache-read, inherent to a long host session re-sending context. The 0508 native-subagent-first contract moves eligible stages off the host context, which is the structural lever; per-run discipline (not re-reading large task files, targeting reads) is the behavioral one.
+**Q: Why not make `L3.scope-delineation` an error everywhere?**
 
-**Q: Why verify the publish trigger instead of just polling npm?**
-A: The 0.4.26 tag push did not create a Publish workflow run; ~90s of npm polling passed before we inspected runs and re-pushed. Checking `gh run list` immediately after the push turns a silent event miss into a 5-second detection.
+A: Many features are intentionally drafted before their Scope is complete. The defect is execution timing: a feature-scoped batch should not start with a known strict finding. A selector-local strict preflight catches it without changing unrelated feature authoring or corpus severity.
+
+**Q: Why use a changed-path matrix instead of always running CLI tests and every typecheck?**
+
+A: Always running all consumers recreates the full project check inside implementation. The matrix covers the known dependency direction—domain → app → CLI—while limiting work to affected tests and typechecks.
+
+**Q: Why use workflow dispatch instead of deleting and re-pushing the aggregate tag?**
+
+A: `.github/workflows/publish.yml` already declares `workflow_dispatch`, and the publish job is idempotent. Dispatching the existing tag ref preserves immutable release tags and is a safer recovery for a missed push event.
+
+**Q: Does R4 wait until npm publication finishes?**
+
+A: No. It proves a Publish run exists and reports its ID/URL. Watching completion and checking npm remain operator/release-consumer steps; this task removes the silent “no workflow run” state only.
+
+**Q: What does R5 measure?**
+
+A: A checkable procedure, not a token target: the controller’s command output excludes full task and trace bodies. Token/cost comparison may be collected later, but it is not required to implement or verify this task.
+
+No open design decisions remain.
 ### Design
-| # | Evidence (session log) | Root cause | Fix target | Expected impact |
-| --- | --- | --- | --- | --- |
-| R1 | `GuardDeniedError ... denied transition from "wip" to "testing"` on 0506; `[ERR] L3 Solution: Solution must contain at least one file:line citation` | First `## Solution` write used `| File | Change |` headers without file:line anchors | Implement operation (`sp:code-implementation`) authoring guidance + check in the inline driver's implement step | Zero fresh-Solution guard denials |
-| R2 | 2x `denied transition from "verifying" to "done"` for feature E; `[ERR] L3 Scope: Scope should delineate in-scope / out-of-scope items` | Grouping feature created 2026-06-12 with one-line Scope; L3 rule enforced only at the done guard | `spur feature check` error severity for missing Scope delineation (or planning-half check at batch-create) | Scope gaps surfaced at creation/planning, not at done |
-| R3 | 0507 gate red: `apps/cli/tests/commands/history.test.ts ... missing ForensicTotals fields`; only domain/app/plugin tests ran in the targeted pass | Targeted pass omitted CLI tests + typechecks | Pre-gate targeted checklist in execution-workflow § targeted-test-first | One gate run per task (green path) |
-| R4 | `git push origin --tags` produced no Publish run; npm polled 92s; delete+re-push `@gobing-ai/ts-libs-v0.4.26` created the run | GitHub event miss on the tag push | Release checklist: `gh run list` immediately after push | 5s detection instead of 90s+ polling |
-| R5 | usage: input 577K / output 126K / cacheRead 79.4M tokens; cost $2.27 of $2.38 cache-read | Long host session re-sends context; 0508 not yet live during the batch | Native-subagent dispatch per 0508 + read-targeting discipline | Bounded cache-read per task in multi-task batches |
+**R1 — validate authored Solution at the shared task-write seam**
+
+- In `packages/app/src/services/task-check.ts`, export one `hasSolutionFileLineCitation(body)` helper that contains the current direct-citation and adjacent-table-cell logic; use it inside `TaskCheckService` so no rule is duplicated.
+- In `packages/app/src/services/task-service.ts`, after stripping a leading section heading but before `writeService.updateSection`, reject `sectionName === 'Solution'` when the helper returns false. Explicit Solution updates must be complete; placeholder creation through task templates/`sections init` remains unchanged because it uses a different path.
+- Use the existing checker message verbatim: `Solution must contain at least one file:line citation`. Do not update the file, timestamp, or history on rejection.
+- Extend `packages/app/tests/services/task-service.test.ts` for rejection/no-mutation and both accepted citation shapes; extend `apps/cli/tests/commands/task.test.ts` for text/JSON non-zero behavior. Update the `spur task update` row in `docs/04_DESIGN.md` in the same Spur commit.
+
+**R2 — strict feature preflight only for feature-derived batches**
+
+- In `plugins/sp/skills/spur-dev/references/execution-batch.md` Step 1, normalize selector precedence first. If the effective selector is `feature:<id>`, run `bun run apps/cli/src/index.ts feature check <id> --strict --json` in this monorepo (installed projects use their resolved `spur` binary) before `task list`, freeze, dependency resolution, or worktree task execution.
+- A failed check aborts the batch with verdict `aborted`, zero attempted tasks, and the structured feature findings. If explicit `--tasks` overrides `--feature`, no feature check runs because the effective selector is not feature-derived.
+- Project the rule into `plugins/sp/commands/dev-runall.md` and `plugins/sp/skills/spur-dev/references/dev-operations.md`. Do not alter `FeatureCheckService`, `L3.scope-delineation` severity, `feature sync`, or batch-create.
+- Extend `plugins/sp/tests/skill-structure.test.ts` with markers for strict check, pre-resolution ordering, abort shape, and non-feature exclusion.
+
+**R3 — changed-path targeted-check matrix**
+
+Add one table to `plugins/sp/skills/code-implementation/SKILL.md` and link it from `plugins/sp/skills/spur-dev/references/cross-cutting.md` targeted-test-first guidance:
+
+| Changed surface | Required targeted tests | Required typechecks |
+| --- | --- | --- |
+| `packages/domain/src/**` public type/query | affected domain test; affected app service test; affected CLI command test | `@gobing-ai/spur-domain`, `@gobing-ai/spur-app`, `@gobing-ai/spur` |
+| `packages/app/src/**` public service/type | affected app test; affected CLI command test | `@gobing-ai/spur-app`, `@gobing-ai/spur` |
+| `apps/cli/src/**` | affected `apps/cli/tests/**` file | `@gobing-ai/spur` |
+| shared plugin flag/command/reference | affected plugin structure/contract test; add `flag-contract-parity.test.ts` only when the shared flag surface changes | no package typecheck unless TypeScript also changed |
+
+Use `bun run --filter <workspace> typecheck` for the listed workspaces. The matrix augments narrow behavior tests; it never authorizes `bun run spur-check`, `bun run test`, or another full project check inside implement. Extend the same `skill-structure.test.ts` block so the dependency direction and the “parity only for flag changes” limit cannot drift.
+
+**R4 — bounded upstream Publish-run assurance**
+
+- Upstream owner: `/Users/robin/xprojects/ts-libs/scripts/lib/release-commands.ts`; regression tests: `scripts/tests/release-commands.test.ts`; operator documentation: `docs/PACKAGE_RELEASE.md`.
+- Add `ensurePublishWorkflowRun(aggregateTag, runner)` at the release-command seam. Production uses the existing command runner; tests inject deterministic command results. Query recent `publish.yml` runs as JSON and match `headBranch === aggregateTag` plus event `push` or `workflow_dispatch`.
+- After the aggregate tag push, perform at most three list attempts with a fixed five-second interval. If no matching push run exists, execute exactly `gh workflow run publish.yml --ref <aggregateTag>` once, then perform one final lookup for the matching dispatched run. Return its database ID and URL; throw if absent or if `gh` fails.
+- Do not edit `.github/workflows/publish.yml`: `workflow_dispatch` already exists. Do not call `dropTags`, delete remote refs, re-push tags, wait for job completion, or poll npm.
+- Tests cover immediate push-run success, bounded lookup followed by one dispatch, final absence failure, malformed gh JSON, and no tag-mutation command. Run ts-libs script tests plus its required lint/test/build gates in that repository.
+
+**R5 — metadata-only host controller**
+
+- In `execution-batch.md`, require every controller-side `task show --json` to pipe/project only `{wbs,status,dependencies,feature_id}` and every green-path trace observation to project `{runId,status,terminalState}`. Raw `content`, section bodies, and workflow `output` remain stage/subagent data.
+- On failure, request only the terminal error and a bounded tail/anchor set needed for the batch report; never stream or reread an entire trace merely to summarize status.
+- Preserve task 0508’s sequential native-subagent dispatch and host fallback. This is prompt-runtime discipline; add structural assertions to `skill-structure.test.ts`, not a new cache, telemetry field, or parser.
+
+**Cross-task contract:** task 0508 is the sole hard dependency and is already done; R5 preserves its dispatch contract. Tasks 0506/0507 supply completed batch context only and are not re-owned. R4 changes the upstream ts-libs repository and must be committed and validated there separately before the Spur-side commit is verified. No downstream WBS is declared.
+
+**Traceability:** feature H is a grouping feature without feature-level scenarios; task-local R1–R5 acceptance criteria are authoritative.
+
+**Anti-patterns:** no duplicate citation regex; no invalid-write-then-check loop; no global Scope severity change; no full project check inside implement; no unconditional parity suite; no workflow-file edit; no remote-tag mutation; no npm polling; no raw task/trace bodies in the host controller; no numeric cache-token threshold.
 ### Plan
-- [ ] P1 (R1) Add file:line-first-write guidance to the implement operation reference and a first-write self-check; extend any existing Solution section test.
-- [ ] P2 (R2) Verify `spur feature check` severity for Scope delineation on grouping features; align planning-half gates (batch-create/feature-create) to surface it early.
-- [ ] P3 (R3) Update the targeted-test-first checklist in `execution-workflow.md` and the implement operation to include CLI tests + per-package typechecks for cross-package changes.
-- [ ] P4 (R4) Document the release-trigger verification step (`gh run list` after tag push) in the ts-libs release path / relevant skill.
-- [ ] P5 (R5) Track cache-read per batch after 0508 lands; confirm native-subagent dispatch reduces host-context growth in a follow-up batch.
+- [ ] P1 (R1) Export/reuse the Solution citation predicate, reject invalid explicit Solution updates before mutation, add task-service/CLI regressions, and update `docs/04_DESIGN.md`.
+- [ ] P2 (R2, R5) Add feature-derived strict preflight plus metadata-only host projections to execution-batch, project the operator contract into dev-runall/dev-operations, and extend plugin structure tests.
+- [ ] P3 (R3) Add the changed-path targeted-check matrix to code-implementation, link it from targeted-test-first guidance, and pin the dependency direction/conditional parity rule in structure tests.
+- [ ] P4 (R4) In `~/xprojects/ts-libs`, implement bounded Publish-run lookup plus one workflow-dispatch fallback, update release documentation, and run focused release-command tests and upstream completion gates. Do not mutate workflow YAML or existing tags.
+- [ ] P5 (R1–R5) Run Spur focused tests first (`task-service`, task CLI, plugin structure), then the repository completion gates, task verification, and intentional status checks in both repositories. Do not inspect raw session/conversation logs or run a real release as test evidence.
 ### Solution
+All five seams hardened. R1–R3/R5 land in the Spur monorepo; R4 is committed separately in the
+upstream ts-libs repository (cross-task contract). No task-pipeline YAML, CLI flag, or workflow
+file changed.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `packages/app/src/services/task-check.ts:265` | New exported `hasSolutionFileLineCitation(body)` — the single citation predicate (backticked `` `path:line` `` / bare `path.ext:line` / adjacent file+line table cells) extracted from the L3 checker. |
+| `packages/app/src/services/task-check.ts:504` | L3 `solution-file-line` finding now calls the shared predicate; the direct-citation regex is no longer duplicated at check time. |
+| `packages/app/src/services/task-service.ts:33,1115` | `updateSection` rejects an explicit `Solution` body without a citation **before** any write — throws `SectionMutationError('invalid-solution', 'Solution must contain at least one ` + '`file:line` citation')` (verbatim checker message), leaving content/`updated_at`/history untouched. |
+| `packages/app/src/services/task-service.ts:115-118` | `SectionMutationError` code union extended with `invalid-solution` (stable exit-code mapping). |
+| `apps/cli/src/commands/task.ts:480` | `task update` catch maps `SectionMutationError` → `[code] message` with exit 3 (validation), matching the `sections` command; generic errors stay exit 1. |
+| `packages/app/tests/services/task-service.test.ts:933-985` | New describe: rejection (no mutation, error shape) + accepted backticked citation + accepted adjacent table cells + non-Solution writes unaffected. |
+| `apps/cli/tests/commands/task.test.ts:437-458` | New CLI tests: text and `--json` modes exit 3 with the verbatim message; byte-identical file after rejection. |
+| `apps/cli/tests/commands/task.test.ts:429,867,1920` | Existing Solution-body tests updated to carry citations; the two done-gate L3 regressions (P3 backstop + fallback gate) now plant the invalid Solution directly in the file since the CLI write seam rejects it. |
+| `docs/04_DESIGN.md:985` | `spur task update` row documents the write-time Solution citation validation (task 0510 R1). |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:67-92` | R2: feature-derived strict preflight — effective `feature:<id>` selector runs `feature check <id> --strict --json` once, before task-list resolution/freeze; non-zero aborts with verdict `aborted` + structured findings; explicit/status/`ready` selectors add no check. |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:323-352` | R5: metadata-only host controller — `task show --json` projects `{wbs,status,dependencies,feature_id}`, green-path trace projects `{runId,status,terminalState}`, failure reads stay bounded; task 0508 dispatch preserved. |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:747-748` | AC traceability rows for 0510 R2/R5. |
+| `plugins/sp/commands/dev-runall.md:37` | Operator surface projects the feature-preflight rule (strict check once, abort shape). |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:291` | `runall` operation projects the same feature-preflight contract. |
+| `plugins/sp/skills/code-implementation/SKILL.md:95-133` | R3: changed-path targeted-check matrix (domain → app → CLI dependency direction, workspace typechecks via `bun run --filter`, conditional `flag-contract-parity.test.ts`, never a full project check inside implement). |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:439` | Targeted-test-first guidance links the matrix and applies only matching rows before the single pipeline gate. |
+| `plugins/sp/tests/skill-structure.test.ts:1256-1293` | Structural invariants pin R2 (strict preflight markers, pre-resolution ordering, abort shape, non-feature exclusion), R3 (matrix rows + parity limit), R5 (metadata projections + bounded failure reads). |
+| `~/xprojects/ts-libs/scripts/lib/release-commands.ts` (commit `3642eca`) | R4: `ensurePublishWorkflowRun(aggregateTag, spawn?, sleep?)` — bounded `gh run list` lookup (3 × 5s) matching `headBranch === aggregateTag` + `push`/`workflow_dispatch`; one `workflow_dispatch` fallback at the immutable tag ref; final lookup; returns run ID/URL or throws. `bumpVersion` push path calls it; `git`/`mustGit`/`dropTags` accept an injectable spawn. |
+| `~/xprojects/ts-libs/scripts/tests/release-commands.test.ts` (commit `3642eca`) | 21 tests: immediate push-run, bounded+dispatch, final-absence, malformed JSON, gh failure, no-tag-mutation on any path, plus full `bumpVersion`/`dropTags`/`publishPackages` coverage via `mock.module` workspace/npm seams and scripted spawn. |
+| `~/xprojects/ts-libs/scripts/tests/release.test.ts` (commit `3642eca`) | Push-arg tests moved here (real module, un-mocked). |
+| `~/xprojects/ts-libs/docs/PACKAGE_RELEASE.md` (commit `3642eca`) | Verify section documents the run-assurance + dispatch-fallback behavior; troubleshooting row updated. |
 
+Deferred: none. All five requirements implemented; R4 validated and committed upstream first per
+the cross-task contract.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-service.ts:1114` rejects `Solution` bodies without a citation before `writeService.updateSection`; shared predicate `packages/app/src/services/task-check.ts:265` reused by the L3 checker at `packages/app/src/services/task-check.ts:504`; CLI exit mapping `apps/cli/src/commands/task.ts:480`. Tests: `packages/app/tests/services/task-service.test.ts:933` (rejection, no mutation, error shape), `apps/cli/tests/commands/task.test.ts:437` (text + `--json` exit 3, byte-identical file). Ran: `bun test packages/app/tests/services/task-service.test.ts --test-name-pattern "Solution file:line"` → 4 pass; `bun test apps/cli/tests/commands/task.test.ts` → 148 pass. |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:67` feature-derived strict preflight (`feature check <id> --strict --json`, once, before task-list resolution, abort verdict `aborted` + findings, non-feature exclusion); projected in `plugins/sp/commands/dev-runall.md:37` and `plugins/sp/skills/spur-dev/references/dev-operations.md:291`. Structure markers: `plugins/sp/tests/skill-structure.test.ts:1256-1280`. Ran: `bun test plugins/sp/tests/skill-structure.test.ts --test-name-pattern "0510"` → 3 pass. |
+| R3 | MET | Changed-path matrix `plugins/sp/skills/code-implementation/SKILL.md:95` (domain → app → CLI rows, workspace typechecks, conditional `flag-contract-parity.test.ts`, never a full project check); linked from targeted-test-first guidance `plugins/sp/skills/spur-dev/references/cross-cutting.md:439`; parity-limit pinned `plugins/sp/tests/skill-structure.test.ts:1282`. Ran: structure tests 3 pass (above). |
+| R4 | MET | Upstream commit `3642eca` in `~/xprojects/ts-libs`: `ensurePublishWorkflowRun` in `scripts/lib/release-commands.ts` (bounded 3×5s lookup matching `headBranch === tag` + `push`/`workflow_dispatch`, one dispatch fallback at the immutable tag ref, final lookup, throw on absence/gh failure; no tag mutation); `bumpVersion` push path wires it; `git`/`mustGit`/`dropTags` accept injectable spawn. Tests: `scripts/tests/release-commands.test.ts` → 21 pass. Gates: `bun run lint` exit 0, `bun run test` exit 0 (1925 pass; `release-commands.ts` 96.00% funcs / 97.49% lines — above the per-file 90% gate), `bun run build` exit 0. Docs: `docs/PACKAGE_RELEASE.md`. |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:323` metadata-only controller (task-show projection `{wbs,status,dependencies,feature_id}`, trace projection `{runId,status,terminalState}`, bounded failure reads, task 0508 dispatch preserved); projections applied at Step 1 / 2.3 / 3.1; AC rows `plugins/sp/skills/spur-dev/references/execution-batch.md:747-748`; structure markers `plugins/sp/tests/skill-structure.test.ts:1285`. Ran: structure tests 3 pass (above). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Invalid authored Solution rejected before mutation | MET | test | `packages/app/tests/services/task-service.test.ts:933` (rejects, content+updated_at unchanged, error shape), `apps/cli/tests/commands/task.test.ts:437,455` (text + `--json` exit 3, byte-identical); accepted citation shapes at `task-service.test.ts:953,967` (backtick + adjacent table cells). Ran this run, 4 + 148 pass. |
+| Scenario: R2 — Feature-scoped batches check the feature before resolving tasks | MET | test | `plugins/sp/tests/skill-structure.test.ts:1256-1280` pins the preflight contract (strict check once, before task list, abort shape, non-feature exclusion) in `plugins/sp/skills/spur-dev/references/execution-batch.md:67` and the operator projections. Ran this run, 3 pass. |
+| Scenario: R3 — Targeted verification covers changed workspaces and consumers | MET | test | `plugins/sp/tests/skill-structure.test.ts:1282` pins the matrix rows (dependency direction, downstream consumer tests, `bun run --filter <workspace> typecheck`, parity-only-for-flag-changes) in `plugins/sp/skills/code-implementation/SKILL.md:95`. Ran this run, 3 pass. |
+| Scenario: R4 — Release returns only after a Publish run exists | MET | test | `~/xprojects/ts-libs/scripts/tests/release-commands.test.ts` — 21 tests covering immediate push-run success, bounded lookup + exactly one dispatch, final-absence failure, malformed JSON, gh failure, and no tag-mutation on any path (incl. via `bumpVersion` push path and `dropTags`). Ran this run, 21 pass; upstream gates lint/test/build exit 0. |
+| Scenario: R5 — The host batch loop consumes metadata, not task or trace bodies | MET | test | `plugins/sp/tests/skill-structure.test.ts:1285` pins the metadata-only projections and bounded-failure rule in `plugins/sp/skills/spur-dev/references/execution-batch.md:323`; task 0508 dispatch preservation asserted. Ran this run, 3 pass. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | Architecture | `~/xprojects/ts-libs/scripts/lib/release-commands.ts:96-101` | Optional `spawn`/`sleep` params on `bumpVersion`/`dropTags`/`ensurePublishWorkflowRun` are test seams on public exports. Accepted: mirrors the existing `npmViewVersion(..., spawn?)` / `npmPublish(..., spawn?)` pattern in the same module and is backward-compatible (defaults to real `spawnSync`/`Bun.sleep`). |
+| P4 | Correctness | `~/xprojects/ts-libs/scripts/lib/release-commands.ts:228-235` | The dispatch fallback performs one immediate final `gh run list`; GH Actions API eventual consistency can miss a just-queued run and throw. Documented, fail-loud failure mode (task Q&A: "throws if absent"); operator re-checks the Actions tab. No tag mutation occurs. |
+| P4 | Efficiency | `plugins/sp/skills/spur-dev/references/execution-batch.md:323` | R5 (metadata-only controller) is prompt-runtime discipline, not machine-enforced; drift protection relies on the structure-test markers in `plugins/sp/tests/skill-structure.test.ts:1256`. Accepted per design — no new cache, telemetry field, or parser. |
+| P4 | Correctness | `apps/cli/src/commands/task.ts:480-486` | `task update` catch now maps `SectionMutationError` to exit 3 (`[code] message`) instead of the generic exit 1. Verified by the new CLI tests asserting exit 3 for text and `--json` modes; generic errors still exit 1. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+**Disposition: PASS.** Functional traceability: R1 (write-seam rejection + shared predicate + service/CLI regressions + DESIGN row), R2 (feature-derived strict preflight + operator projections + structure markers), R3 (changed-path matrix + cross-cutting link + parity-limit marker), R4 (upstream ts-libs commit `3642eca`, 21 tests, lint/test/build gates green), R5 (metadata-only projections + bounded failure reads) — all MET with test evidence. SECUA: no P1–P3 findings; four P4 advisories documented above, none blocking. Architecture: the shared citation predicate, the release-command seam, and the selector-local preflight each land on existing seams with no engine/schema change (ADR-022 preserved). Residual risk: none material — the four P4 items are accepted tradeoffs recorded here rather than deferred work.
 ### References
-- Session: `~/.omp/agent/sessions/-xprojects-spur-new/2026-08-11T06-37-01-363Z_019fef89-ec33-7000-9c2a-4188283f5631.jsonl` (951 lines, 06:38-15:06Z)
-- Batch: `/sp:dev-runall --feature E --auto --next --agent inline` (tasks 0506-0508, all PASS; wrap run `6512937e`)
-- Guard evidence: 0506 `wip → testing` denial (L3.solution-file-line); feature E `verifying → done` denials (L3 Scope)
-- Release: `@gobing-ai/ts-llm-jsonl-importer@0.4.26` (commit `f817429`, tag `@gobing-ai/ts-libs-v0.4.26`; publish run created only after re-push)
-- Pipeline: `.spur/workflows/task-pipeline.yaml` (test hop = `bun run format && bun run spur-check`)
+- Dependency: task 0508 (`docs/tasks4/0508_fine-tune-inline-execution-surface-subagent-first-dispatch-f.md`)
+- Solution checker: `packages/app/src/services/task-check.ts` (`L3.solution-file-line`)
+- Task section write seam: `packages/app/src/services/task-service.ts` (`updateSection`)
+- Task regressions: `packages/app/tests/services/task-service.test.ts`, `apps/cli/tests/commands/task.test.ts`
+- Batch driver: `plugins/sp/skills/spur-dev/references/execution-batch.md`
+- Operator projections: `plugins/sp/commands/dev-runall.md`, `plugins/sp/skills/spur-dev/references/dev-operations.md`
+- Targeted verification: `plugins/sp/skills/code-implementation/SKILL.md`, `plugins/sp/skills/spur-dev/references/cross-cutting.md` § Targeted-test-first verification loop
+- Plugin contract gate: `plugins/sp/tests/skill-structure.test.ts`
+- Spur surface documentation: `docs/04_DESIGN.md` `spur task update` section
+- Upstream release implementation: `/Users/robin/xprojects/ts-libs/scripts/lib/release-commands.ts`
+- Upstream release tests/docs: `/Users/robin/xprojects/ts-libs/scripts/tests/release-commands.test.ts`, `/Users/robin/xprojects/ts-libs/docs/PACKAGE_RELEASE.md`
+- Existing upstream trigger: `/Users/robin/xprojects/ts-libs/.github/workflows/publish.yml` (`push.tags` plus `workflow_dispatch`)
 ### History
+- 2026-08-11T16:54:12.957Z backlog → wip (system)
+- 2026-08-11T16:58:30.200Z wip → testing (system)
+- 2026-08-11T17:00:35.989Z testing → done (system)

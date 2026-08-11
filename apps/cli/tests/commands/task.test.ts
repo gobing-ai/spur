@@ -423,7 +423,10 @@ describe('spur task CLI', () => {
         await main(['task', 'create', 'Section target'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'body.md');
-        await Bun.write(bodyFile, 'Replacement solution body.\n');
+        await Bun.write(
+            bodyFile,
+            'Replacement solution body citing `packages/app/src/services/task-service.ts:1102`.\n',
+        );
 
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
@@ -432,6 +435,45 @@ describe('spur task CLI', () => {
         });
         expect(exitCode).toBe(0);
         expect(lastMessage(output)).toContain("Updated section 'Solution'");
+    });
+
+    test('update --section Solution with no file:line citation exits 3 without mutating (0510 R1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'R1 solution reject'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const taskPath = createdPath(cOut);
+        const before = await Bun.file(taskPath).text();
+
+        const bodyFile = join(cwd, 'sol-no-cite.md');
+        await Bun.write(bodyFile, 'Changed everything but forgot the citation.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(3);
+        expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
+        // Rejection happens before the write service: file content is byte-identical.
+        const after = await Bun.file(taskPath).text();
+        expect(after).toBe(before);
+    });
+
+    test('update --section Solution rejection is non-zero under --json too (0510 R1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'R1 solution reject json'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const bodyFile = join(cwd, 'sol-no-cite-json.md');
+        await Bun.write(bodyFile, 'No citation anywhere in this body.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile, '--json'],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(3);
+        expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
     });
 
     // ── list ──
@@ -857,7 +899,7 @@ describe('spur task CLI', () => {
         await main(['task', 'create', 'Section JSON'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'body-json.md');
-        await Bun.write(bodyFile, 'JSON section body.\n');
+        await Bun.write(bodyFile, 'JSON section body citing `packages/app/src/services/task-service.ts:1102`.\n');
 
         const output = createCapturedOutput();
         const exitCode = await main(
@@ -1344,16 +1386,19 @@ Only this section exists.
             const wbs = createdWbs(cOut);
 
             // Plant a Solution with no `file:line` citation → L3 hard error at testing/done.
-            const bodyFile = join(cwd, 'no-citation.md');
-            await Bun.write(bodyFile, 'A change-map with no file:line citation.\n');
+            // R1 (0510) now rejects such a body at the CLI write seam, so plant it
+            // directly in the file — the done-gate regression needs the L3 defect to
+            // actually exist in the corpus at transition time.
+            const taskPath = createdPath(cOut);
+            const rawTask = await Bun.file(taskPath).text();
+            await Bun.write(
+                taskPath,
+                `${rawTask.replace(/\s*$/, '')}\n\n### Solution\n\nA change-map with no file:line citation.\n`,
+            );
             // Walk to testing first (also gated, but the wip→testing gate is the default
             // severity; a bare Solution body passes it). Use --no-lifecycle on the walk so
             // we control the path, then test the done transition under the fallback.
             await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
-            await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
-                cwd,
-                output: createCapturedOutput(),
-            });
             // Seed done-required sections so the ONLY failure is the L3 citation.
             const testingBody = join(cwd, 'testing.md');
             await Bun.write(testingBody, 'Testing evidence present.\n');
@@ -1491,12 +1536,14 @@ Only this section exists.
             const wbs = createdWbs(cOut);
 
             // Plant Solution WITHOUT a file:line citation → L3 hard error.
-            const solutionBody = join(cwd, 'sol-no-cite.md');
-            await Bun.write(solutionBody, 'Changed everything but forgot the citation.\n');
-            await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', solutionBody], {
-                cwd,
-                output: createCapturedOutput(),
-            });
+            // R1 (0510) rejects such a body at the CLI write seam, so plant it directly
+            // in the file so the done-gate regression still sees the real L3 defect.
+            const taskPath = createdPath(cOut);
+            const rawTask = await Bun.file(taskPath).text();
+            await Bun.write(
+                taskPath,
+                `${rawTask.replace(/\s*$/, '')}\n\n### Solution\n\nChanged everything but forgot the citation.\n`,
+            );
             const testingBody = join(cwd, 'test-no-cite.md');
             await Bun.write(testingBody, 'Tests pass. N/A.\n');
             await main(['task', 'update', wbs, '--section', 'Testing', '--from-file', testingBody], {
@@ -1911,7 +1958,10 @@ Only this section exists.
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'warn-section-body.md');
         // Body contains a ### heading — same level as section headers, triggers strip warning.
-        await Bun.write(bodyFile, 'Some text.\n\n### Rogue heading\n\nMore text.\n');
+        await Bun.write(
+            bodyFile,
+            'Some text citing `apps/cli/src/commands/task.ts:645`.\n\n### Rogue heading\n\nMore text.\n',
+        );
 
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
