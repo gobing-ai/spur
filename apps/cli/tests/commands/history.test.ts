@@ -301,6 +301,52 @@ describe('history command', () => {
         expect(parsed.entries[0]?.messages).toBe(1);
     });
 
+    test('import full mode --json entries carry the reconciliation summary; incremental does not (0505 R1)', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'h.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(
+            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'full', '--json'],
+            {
+                output,
+                cwd,
+                dbUrl: ':memory:',
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.join('')) as {
+            entries: Array<{ source: string; status: string; messages: number; reconciliation?: unknown }>;
+        };
+        const entry = parsed.entries[0];
+        expect(entry?.source).toBe('antigravity');
+        expect(entry?.messages).toBe(1);
+        // Fresh in-memory DB: full mode previews zero stale rows, and the summary is additive.
+        expect(entry?.reconciliation).toEqual({
+            staleTargetRows: 0,
+            staleLedgerRows: 0,
+            staleCheckpointRows: 0,
+        });
+
+        // Incremental runs never carry the field.
+        const inc = capturingOutput();
+        const incExit = await main(
+            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'incremental', '--json'],
+            {
+                output: inc.output,
+                cwd,
+                dbUrl: ':memory:',
+            },
+        );
+        expect(incExit).toBe(0);
+        const incParsed = JSON.parse(inc.lines.join('')) as {
+            entries: Array<{ source: string; reconciliation?: unknown }>;
+        };
+        expect(incParsed.entries[0]?.reconciliation).toBeUndefined();
+    });
+
     test('import single source plain text emits fan-out formatter', async () => {
         const cwd = makeTmpCwd();
         const file = join(cwd, 'h.jsonl');
