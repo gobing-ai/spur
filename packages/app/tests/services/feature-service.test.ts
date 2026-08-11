@@ -494,7 +494,9 @@ describe('FeatureService', () => {
             // The moved file's id frontmatter is rewritten + a move History line appended.
             const b1 = await fs.readFile(join(featuresDir, 'B1_sub.md'));
             expect(b1).toContain('id: "B1"');
+            expect(b1).toContain('# B1: Sub');
             expect(b1).toContain('moved A1 → B1');
+            expect(await fs.readFile(join(featuresDir, 'B11_deep.md'))).toContain('# B11: Deep');
             cleanup();
         });
 

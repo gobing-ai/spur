@@ -756,7 +756,8 @@ export class FeatureService {
                     .replace(/\.md$/, '');
                 const newPath = `${this.ctx.featuresDir}/${newId}_${slug}.md`;
                 removed.push({ path: f.filePath, content: raw });
-                await atomicWriteAsync(newPath, doc.serialize(), newId, this.ctx.fs, this.ctx.projectName ?? 'spur');
+                const movedContent = doc.serialize().replace(/^#\s+[A-Z][1-9]*:/m, `# ${newId}:`);
+                await atomicWriteAsync(newPath, movedContent, newId, this.ctx.fs, this.ctx.projectName ?? 'spur');
                 created.push(newPath);
                 if (newPath !== f.filePath) await this.ctx.fs.deleteFile(f.filePath);
             }
