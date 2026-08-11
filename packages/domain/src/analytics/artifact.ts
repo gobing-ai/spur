@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { TokenTotals } from './types';
 
 /**
@@ -50,6 +51,11 @@ export interface CoverageEntry {
     parseErrorSamples: string[];
     /** First 20 validation-error samples for this source (full detail in the sidecar). */
     validationErrorSamples: string[];
+    /**
+     * Full-mode reconciliation outcome passed through from the importer (0505 R1) — present
+     * only on `mode: 'full'` runs of importer 0.4.25+. Additive; absent on incremental runs.
+     */
+    reconciliation?: ReconcileSummary;
 }
 
 /**

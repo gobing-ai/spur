@@ -430,6 +430,9 @@ export class HistoryService {
                 validationErrors: result.validationErrors.length,
                 parseErrorSamples: result.parseErrors.slice(0, MAX_ERROR_SAMPLES).map(formatIssue),
                 validationErrorSamples: result.validationErrors.slice(0, MAX_ERROR_SAMPLES).map(formatIssue),
+                // 0505 R1: preserve the importer's full-mode reconciliation summary so
+                // `history import --json` can report stale-row preview/applied counts.
+                ...(result.reconciliation ? { reconciliation: result.reconciliation } : {}),
             };
 
             return { coverageEntry, sourceWarnings };
@@ -576,6 +579,7 @@ function buildCoverage(
                     validationErrors: imp.validationErrors,
                     parseErrorSamples: imp.parseErrorSamples,
                     validationErrorSamples: imp.validationErrorSamples,
+                    ...(imp.reconciliation ? { reconciliation: imp.reconciliation } : {}),
                 };
             }
             return imp;

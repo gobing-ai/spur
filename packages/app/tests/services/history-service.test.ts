@@ -455,11 +455,11 @@ describe('HistoryService', () => {
             const file = join(dir, 'history.jsonl');
             writeFileSync(
                 file,
-                [
+                `${[
                     JSON.stringify({ id: 'ok-1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello' }),
                     '{',
                     JSON.stringify({ id: 'bad-1', timestamp: '2026-05-30T00:00:00.000Z' }),
-                ].join('\n') + '\n',
+                ].join('\n')}\n`,
             );
             const svc = new HistoryService(makeCtx());
             try {
@@ -488,6 +488,41 @@ describe('HistoryService', () => {
                 const entry = result.entries.find((e) => e.source === 'antigravity');
                 expect(entry?.status).toBe('ok');
                 expect(result.exitCode).toBe(0);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    });
+
+    describe('importAll reconciliation pass-through (0505 R1)', () => {
+        test('full-mode entries carry the importer reconciliation summary; stale rows surface after source shrink', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-recon-'));
+            const file = join(dir, 'history.jsonl');
+            const record = (id: string) => JSON.stringify({ id, timestamp: '2026-05-30T00:00:00.000Z', content: id });
+            writeFileSync(file, `${record('keep')}\n${record('stale')}\n`);
+            const svc = new HistoryService(makeCtx());
+            try {
+                const first = await svc.importAll({ sources: ['antigravity'], file, mode: 'full' });
+                const firstEntry = first.entries.find((e) => e.source === 'antigravity');
+                expect(firstEntry?.reconciliation).toEqual({
+                    staleTargetRows: 0,
+                    staleLedgerRows: 0,
+                    staleCheckpointRows: 0,
+                });
+
+                // The `stale` record is no longer produced by the source.
+                writeFileSync(file, `${record('keep')}\n`);
+                const second = await svc.importAll({ sources: ['antigravity'], file, mode: 'full' });
+                const secondEntry = second.entries.find((e) => e.source === 'antigravity');
+                expect(secondEntry?.reconciliation).toEqual({
+                    staleTargetRows: 1,
+                    staleLedgerRows: 1,
+                    staleCheckpointRows: 0,
+                });
+
+                // Incremental runs never carry the field.
+                const incremental = await svc.importAll({ sources: ['antigravity'], file, mode: 'incremental' });
+                expect(incremental.entries.find((e) => e.source === 'antigravity')?.reconciliation).toBeUndefined();
             } finally {
                 rmSync(dir, { recursive: true, force: true });
             }
