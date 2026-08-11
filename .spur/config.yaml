@@ -29,7 +29,7 @@ bootstrap:
 
 # ── Spur app section (validated by spurConfigSchema in @gobing-ai/spur-config) ──
 agent:
-  default: omp-zai
+  default: omp-dsv4-flash-volc
 
   # ── Executors (ADR-033 adaptive model routing) ──
   # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a
@@ -81,10 +81,10 @@ agent:
     #   agent: omp
     #   model: ollama/glm-5.2:cloud
     #   tier: standard
-    - name: omp-dsv4-flash-ollama
-      agent: omp
-      model: deepseek-v4-flash:0731-cloud
-      tier: standard
+    # - name: omp-dsv4-flash-ollama
+    #   agent: omp
+    #   model: deepseek-v4-flash:0731-cloud
+    #   tier: standard
     - name: agy-gemini
       agent: agy
       model: gemini-3.6-flash-high
@@ -110,12 +110,12 @@ agent:
       agent: omp
       model: deepseek/deepseek-v4-flash
       tier: capable-1
-    - name: grok
-      agent: grok
-      tier: capable-2
-    - name: claude
-      agent: claude
-      tier: capable-3
+    # - name: grok
+    #   agent: grok
+    #   tier: capable-2
+    # - name: claude
+    #   agent: claude
+    #   tier: capable-3
     - name: codex-sol
       agent: codex
       model: gpt-5.6-sol
