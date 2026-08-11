@@ -13,25 +13,27 @@ tags: ["parity", "drift-fix", "plugins/sp"]
 dependencies: ["0517"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.659Z"
-updated_at: "2026-08-11T22:26:28.542Z"
+updated_at: "2026-08-11T23:02:26.320Z"
 ---
 
 ## 0513. Fix spur-cli/spur-dev drift exposed by the parity harness
 
 ### Background
-Phase 1b of feature I2. Evidence-driven corrections for every finding the extended parity harness reports — facade per-noun verb/flag inventories, spine step-routing rows, Tier C exclusion reasons, the AGENTS.md noun table, and any exposed index/link staleness. Implements: R3 — Exposed drift is fixed before the pass is green; R10 — Refinement changes no runtime surface.
+Phase 1b of feature I2. This task consumes the complete sorted finding set emitted by 0517 and makes only the evidence-driven documentation corrections required to return the focused parity suite to green. It implements feature scenarios R2, R3, R4, R10, and R11.
 
-Runs after the parity-harness task and is blocked by it: fixes are driven by that harness's output, and the definition of done is the focused parity suite green with no outstanding findings. The spine/facade ownership boundary is asserted, not redesigned (ADR-054) — corrections preserve the facade-owns-CLI-semantics / spine-owns-orchestration split. The change set adds no runtime behavior, public CLI surface, dependency, schema, persistence, or transport — surfaces touched are skill markdown and AGENTS.md only. If a check exposes a stale noun whose only correct fix is a CLI change, that is out of scope; record it and defer.
+Current dependency chain is 0512 (capture) → 0516 (scope parsing) → 0517 (live assertions) → 0513 (correction). The authoritative edit list is therefore 0517's failing assertion output, not 0512. Expected targets are the owning facade references, spine routing table, Tier C reasons, and root AGENTS noun table; task 0514 separately owns README/link/catalog discoverability.
 
-Ordering: second task — blocked by the harness task; precedes the content pass so the review settles an already-green surface. Rubric: E3 D1 L2 C0 R0 = 6 → task (evidence-driven fixes spanning facade + spine + AGENTS.md doc surfaces, with a review gate distinct from the harness test code).
+The ADR-054 boundary is preserved: the facade owns CLI noun/verb/flag semantics, including status transitions; the spine owns multi-step orchestration. If a finding can only be resolved by changing runtime or the public CLI surface, record it as deferred evidence and leave the focused suite non-green rather than widening this task silently.
+
+Rubric: E3 D1 L2 C0 R0 = 6 → task; corrections span multiple documentation owners but remain finding-bounded.
 ### Requirements
-- [ ] R1. Correct every facade noun/verb/flag inventory reported by the parity harness (0517's focused suite) in either parity direction; leave no harness finding unresolved.
-- [ ] R2. Correct CLI-routed spine rows that name an absent noun or verb, or mark genuine slash-command/inline routes with an explicit reason.
-- [ ] R3. Sync the AGENTS.md public noun table with the live CLI; if it changes, keep `config/templates/AGENTS.md` aligned with the portable contract.
-- [ ] R4. Reconcile Tier C exclusion reasons and any index/link drift exposed by the focused harness without duplicating structured catalogs.
-- [ ] R5. Keep the change documentation-only: no runtime behavior, public CLI surface, dependency, schema, persistence, or transport. Record and defer any finding whose only valid fix violates this boundary.
+- [ ] R1. Correct every facade noun/verb/flag inventory named by 0517's `documented-not-on-CLI` or `on-CLI-not-documented` findings; leave no documentation-fixable finding unresolved.
+- [ ] R2. Correct every reported CLI-classified spine route or reclassify it as non-CLI with an explicit reason in the authoritative Step routing table; never add a silent test exclusion.
+- [ ] R3. Sync `AGENTS.md` § Spur CLI surface with source-local root help; update `config/templates/AGENTS.md` only if the changed contract is present in that portable template.
+- [ ] R4. Reconcile every reported Tier C reason in the facade owner without creating another noun/verb/flag catalog. README/link/catalog discovery findings remain owned by 0514.
+- [ ] R5. Keep corrections documentation-only: no runtime behavior, public CLI command/flag, dependency, schema, persistence, or transport change. Record any runtime-only finding with exact evidence and defer it.
 
-Non-goals: speculative cleanup, prose rewriting not named by a harness finding, and CLI changes.
+Non-goals: speculative prose cleanup, README/link crawling, CLI changes, or edits not named by the 0517 finding set.
 ### Acceptance Criteria
 ```gherkin
 Feature: Evidence-driven plugin drift correction
@@ -62,28 +64,30 @@ Feature: Evidence-driven plugin drift correction
     Then the finding is recorded and deferred rather than changing that surface
 ```
 ### Q&A
-- **Authority:** 0512 test output is the edit list; no finding means no edit.
-- **Portable AGENTS contract:** root and `config/templates/AGENTS.md` move together only when the shared noun-table contract changes.
-- **Runtime-only finding:** defer with evidence; do not widen this documentation task.
-- **Catalog ownership:** correct the owning surface and link dependents to it rather than copying lists.
+- **Authority:** 0517's sorted test failure arrays are the edit list; a surface absent from those findings is out of scope.
+- **Portable AGENTS contract:** root and `config/templates/AGENTS.md` move together only when both contain the affected noun-table contract.
+- **Runtime-only finding:** preserve the failing evidence and defer; do not change the CLI to make a documentation task green.
+- **Catalog ownership:** edit the facade/spine/AGENTS owner and link dependents; do not copy inventories.
+- **Handoff:** 0514 starts only after the full focused parity suite has zero outstanding findings.
 ### Design
-Consume the exact machine/test findings emitted by 0512. Changes are limited to
-`plugins/sp/skills/spur-cli/**`, `plugins/sp/skills/spur-dev/**`, `AGENTS.md`, and
-`config/templates/AGENTS.md` when a reported contract requires them. Do not preselect files inside
-those trees: the harness output is the authoritative allow-list.
+Start by running `bun test plugins/sp/tests/cli-surface-parity.test.ts` from the repository root and capture its complete sorted findings. Treat those arrays as the allow-list for edits.
 
-For a documented-but-absent item, remove or correct the stale inventory entry. For a
-live-but-undocumented item, add it to the facade owner or an explicit Tier C/long-tail exclusion
-with a reason. For a spine route, either name the real CLI noun/verb or mark the existing
-slash-command/inline route explicitly. Preserve ADR-054 ownership and the source-local provenance
-rule. Task 0514 starts only after the focused suite is green.
+Allowed owners, only when named by a finding:
+
+- `plugins/sp/skills/spur-cli/SKILL.md` for noun routing, Tier C exclusions, and facade ownership wording.
+- `plugins/sp/skills/spur-cli/references/*.md` for per-noun verb/flag maps.
+- `plugins/sp/skills/spur-dev/SKILL.md` for CLI/non-CLI Step routing and spine ownership wording.
+- `AGENTS.md`, plus `config/templates/AGENTS.md` only when the affected portable contract exists there.
+- `docs/design/plugin-surface-parity.md` only if the correction changes the documented parity shape rather than inventory data.
+
+For documented-only entries, correct/remove the stale owner row. For live-only entries, add the real verb/flag to its facade owner or a reasoned Tier C row when the noun is intentionally outside coverage. For a spine finding, either name the real CLI noun/verb or make the non-CLI reason explicit in the same Step routing row. Re-run the focused test after each owner group; finish with all parity tests green. Do not touch `apps/cli`, package manifests, schemas, persistence, transport, README, or unrelated prose.
 ### Plan
-- [ ] Run the 0512 focused parity suite and capture its complete finding set.
-- [ ] Correct facade inventories and explicit exclusions named by the findings.
-- [ ] Correct or classify reported spine routes.
-- [ ] Sync the AGENTS noun table and portable template when required.
-- [ ] Record any runtime-only finding as deferred without changing code or public surface.
-- [ ] Re-run the focused suite to zero findings, then hand off to 0514.
+- [ ] Run 0517's focused test and preserve all sorted bidirectional findings (R1–R4).
+- [ ] Correct only the named facade verb/flag and Tier C owner rows; rerun the focused test (R1/R4).
+- [ ] Correct or explicitly classify only named spine Step routing rows; rerun the focused test (R2).
+- [ ] Sync the root noun table, and the portable template only if it owns the same changed contract (R3).
+- [ ] Record any runtime-only finding as deferred and confirm the implementation diff excludes runtime/public surfaces (R5).
+- [ ] Run `bun test plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/flag-contract-parity.test.ts plugins/sp/tests/routing-table-parity.test.ts plugins/sp/tests/skill-structure.test.ts`; hand off the zero-finding surface to 0514.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -97,9 +101,10 @@ rule. Task 0514 starts only after the focused suite is green.
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-- Feature: I2
+- Feature: I2, scenarios R2–R4, R10, R11
 - Design: `docs/design/plugin-surface-parity.md` §§3–5, 8
 - Decisions: ADR-053, ADR-054
-- Dependency: 0512 (parity helper and finding set)
+- Dependency: 0517 (complete live parity finding set; transitively 0512/0516)
+- Owning surfaces: `plugins/sp/skills/spur-cli/**`; `plugins/sp/skills/spur-dev/SKILL.md`; `AGENTS.md`
 - Dependent task: 0514
 ### History
