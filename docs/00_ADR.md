@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.7.0
+version: 1.8.0
 owner: Robin Min
 updated_at: 2026-08-10
 read_before: any structural change; before diverging from a decision
@@ -339,6 +339,12 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 - **Decision:** Use one `--agent` table everywhere: interactive omit/`inline` stays in the host session; headless omit/`inline` resolves `agent.default`, `auto` uses tier routing, and names select executors. Workflow hops remain subprocesses, share run-scoped resumable sessions when supported, and stream pipe output live without TTY/stdin. Host-stage control inversion remains deferred.
 - **Why:** This removes contradictory semantics and host-session contamination while preserving auditability and timeout isolation.
 - **Detail:** feature H83; cross-cutting/flag glossary; agent runner/runtime seams; ADR-045.
+
+**Amendment (2026-08-10).** Interactive `dev-run --mode full` and sequential `dev-runall` with omit/`inline` now invert control at the command/skill layer and execute the existing task-pipeline stages in the host session; named/auto, parallel, and headless paths remain subprocesses.
+
+**Why.** Interactive omit/inline must honor the invoking session while retaining the YAML gates and auditable provenance.
+
+**Detail:** `04 §7.8`; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`; task 0503.
 
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 

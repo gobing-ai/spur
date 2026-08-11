@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.17.0
+version: 1.18.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-10
@@ -37,7 +37,7 @@ When collaborating with the design team:
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md)                                           | Team mode — agent specs, inbox, `TeamService`                                                                                                                                                         | design                          |
 | [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365)                                                               | partial                         |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                      | implemented                     |
-| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector (0125, ADR-041/047), named escalation triggers (0406), and `sp:dogfood-testing` extraction                                    | implemented                     |
+| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector, interactive task-pipeline host driver (0503), named escalation triggers, and `sp:dogfood-testing` extraction                | implemented                     |
 | [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md)                           | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment)                                                            | implemented                     |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md)               | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167)                                                      | design                          |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md)                     | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md`                                                                           | implemented                     |
@@ -157,9 +157,13 @@ skill/subagent surface inline by default; omitting `--agent` is `--agent inline`
 `--agent <name>` force this verb. The four dispatch-surface triggers override inline: a different
 model/coding agent,
 headless or unattended execution, a durable auditable run record, or workspace/credential isolation.
-The applied trigger is named. Inline has no isolated workspace, separate run record, independent
-timeout/abort boundary, or tier-selected executor. Direct `spur agent run` and workflow `agent.run`
-remain explicit subprocess surfaces.
+The applied trigger is named. Inline has no isolated workspace, per-stage subprocess action record,
+independent timeout/abort boundary, or tier-selected executor. Interactive `dev-run --mode full`
+and sequential `dev-runall` are the ADR-047 control-inversion case: the wrapper reads
+`task-pipeline.yaml` as SSOT, interprets its actions/guards in-session, records a pipeline run link,
+and appends `stage <id> executed inline in session <session-id>` provenance. Direct
+`spur agent run`, headless `spur workflow run`, explicit executor selection, and parallel batches
+remain subprocess surfaces.
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) resolves via the
 `agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
 per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
@@ -183,9 +187,10 @@ executor entry). An explicit selector never consults phase / `default-by-phase` 
 cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`,
 matched against each executor's `tier` field; 0343 split bare `capable` into quality sub-tiers) and
 escalates along the ordered `fallback` chain when an objective `--signal`
-(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`) is supplied (with
+(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`/`auth`) is supplied (with
 `--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
-the deprecation window. **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
+the deprecation window. The stage-registry schema version is 1.2 (`auth` is an additive enum value).
+**Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
 `capable-2`) as the blank-Design fallback; `implement` stays `standard`; `verify`/`dogfood` floor at
 `capable-1`. Unified `--skip-design` skips feature satellite **and** per-task Design at create.
@@ -1290,13 +1295,16 @@ The `sp:dev-*` commands back onto the orchestration spine plus competency skills
 `sp:functional-review`, `sp:code-improvement`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`) or define their procedure inline. The
 authoritative reference for all 13 operations — purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
-The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
-`sp:super-planner` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
+The `runall` operation (#13) is the batch entry — interactive sequential omit/inline keeps the
+driver loop in the host session; explicit/parallel execution delegates it to `sp:super-planner` per
+[`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
 Model-bearing operations share the single execution-surface selector `--agent <inline|auto|name>`
 (`inline` is the default when omitted; the former `--inline`/`--subprocess` flags are collapsed into
 it, ADR-041/047). `--agent auto` / `--agent <name>`, or another named dispatch-surface trigger,
-selects `spur agent run`; full workflow-backed operations retain their `agent.run` subprocess
-actions because their headless and durable-record contracts are explicit triggers. The SSOT is
+selects `spur agent run`; headless workflow operations retain their `agent.run` subprocess actions.
+Interactive full task execution uses the YAML-backed host driver defined in
+[`inline-pipeline-driver.md`](../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
+The SSOT is
 [`cross-cutting.md`](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.
 The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.

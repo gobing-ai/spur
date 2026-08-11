@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.7.0
+version: 1.8.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-08
+updated_at: 2026-08-10
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -241,6 +241,19 @@ Source of truth: `@gobing-ai/ts-dual-workflow-engine` `WorkflowService.resumeRun
 
 Guard evaluation is fail-closed: a non-zero shell exit denies the transition atomically with zero
 partial writes (see `LifecycleAdapter.requestTransition` in §12.2).
+
+### 6.3 Interactive task-pipeline control inversion (ADR-047 amendment)
+
+Interactive `dev-run --mode full` and sequential `dev-runall` omit/inline invocations execute at the
+agent-command layer, which already owns the live host session. The driver reads
+`task-pipeline.yaml` at invocation time and interprets the same ordered actions and transition
+guards; it does not add an engine inline mode or define a second FSM. Explicit executors, parallel
+batches, and headless `spur workflow run` continue through `WorkflowService` and `agent.run`.
+
+The inline path records `task_run_links` provenance before entering the FSM and appends each model
+stage's state id plus host session id to a run-scoped log. It has no independent stage timeout/abort
+boundary or subprocess action record. Invariants: YAML remains the sole state/guard authority; every
+lifecycle guard still executes; inline failure never silently redirects to `agent.default`.
 
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 

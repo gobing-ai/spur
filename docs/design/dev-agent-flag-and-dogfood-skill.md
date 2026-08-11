@@ -19,6 +19,19 @@ agent is trigger 1. Inline provides no isolated workspace, separate run record,
 independent timeout/abort boundary, or tier-selected executor. The current contract is
 `plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface`.
 
+## Task 0503 amendment — interactive full-pipeline inversion
+
+Interactive `/sp:dev-run --mode full` and sequential `/sp:dev-runall` with `--agent` omitted or
+`inline` read `task-pipeline.yaml` as the SSOT and execute its model-bearing actions through their
+backing skills in the host session. The driver preserves declaration-order shell actions, guards,
+answer/diff artifacts, HITL behavior, and the iteration bound. It records a pipeline run link plus
+`stage <id> executed inline in session <session-id>` lines in `.spur/run/<run-id>.log`.
+
+`--agent auto`, a named executor, parallel batch mode, `spur workflow run`, and `spur agent run`
+retain the subprocess surface and its timeout/trace contracts. The engine and YAML schema are
+unchanged; the command/skill wrapper owns the control inversion. Driver contract:
+`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`.
+
 ## Problem
 
 Two coupled gaps in the `/sp:dev-*` surface:
