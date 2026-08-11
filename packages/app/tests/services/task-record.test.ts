@@ -45,7 +45,9 @@ function makeVerdict(overrides?: Partial<VerifyVerdict>): VerifyVerdict {
 }
 
 async function createTask(svc: TaskService): Promise<string> {
-    const result = await svc.create({ title: 'Record test task' });
+    // Fixture creates several same-titled tasks on one shared dir; the dedup guard
+    // (task 0510) is an operator-facing create guard — fixtures opt out explicitly.
+    const result = await svc.create({ title: 'Record test task', dedupeWithinSec: null });
     // Transition to wip so Solution can be written
     await svc.updateStatus(result.ref.id, 'wip');
     return result.ref.id;

@@ -68,7 +68,9 @@ See [tasks/verbs.md](tasks/verbs.md) for the variant detail.
   exit code `3` and names the existing WBS — reuse it.
   - **`--dedupe-within <seconds>`** overrides the default window (e.g. `--dedupe-within 60`).
   - **`--allow-duplicate-name`** disables the guard entirely (explicit override).
-  - Tasks created without `--feature` are never guarded (no collision scope).
+  - The guard applies to every create: feature-scoped tasks collide within the same
+  feature; unscoped tasks (no `--feature`) collide with other unscoped tasks of the
+  same title (their own collision scope).
   - With `--json`, a duplicate emits `{ ok: false, error: { code, message, existingWbs,
     existingName, attemptedName } }` for deterministic reuse.
 

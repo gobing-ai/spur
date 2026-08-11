@@ -557,19 +557,27 @@ export class TaskService {
     }
 
     /**
-     * Find an existing task under `featureId` with a name matching `title`
-     * (case-insensitive) created within the last `withinSec` seconds.
+     * Find an existing task with a name matching `title` (case-insensitive) created
+     * within the last `withinSec` seconds, scoped to the same collision scope as the
+     * create: a feature-scoped create matches tasks under the same `featureId`; an
+     * unscoped create matches tasks with no `feature_id`.
      * Returns the matching task's WBS+name, or null if no collision.
      *
-     * Used by the dedup guard (task 0341 R4) to prevent the verify fix pass
-     * from double-creating the same follow-up task.
+     * Used by the dedup guard (task 0341 R4, extended to unscoped creates) to prevent
+     * re-creating the same task (double follow-up, or a retried create after a
+     * misread `--json` envelope).
      */
     private async findDuplicateFollowUp(
-        featureId: string,
+        featureId: string | undefined,
         title: string,
         withinSec: number,
     ): Promise<{ wbs: string; name: string } | null> {
-        const siblings = await this.list({ featureId });
+        const siblings =
+            featureId !== undefined
+                ? await this.list({ featureId })
+                : (await this.list()).filter(
+                      (t) => ((t.frontmatter?.feature_id as string | null | undefined) ?? undefined) === undefined,
+                  );
         const now = Date.now();
         const lowerTitle = title.toLowerCase();
         for (const t of siblings) {
@@ -596,11 +604,14 @@ export class TaskService {
         template?: string;
         actor?: string;
         /**
-         * Dedup window in seconds. Feature-scoped creates default to 300 seconds;
-         * pass null to disable the guard. When enabled, refuse creation if an
-         * existing task under the same feature has an identical (case-insensitive)
-         * name and was created within the last N seconds. Guards against the verify
-         * fix pass double-creating the same follow-up (task 0341 R4).
+         * Dedup window in seconds. Defaults to 300 seconds for every create —
+         * feature-scoped or unscoped. Pass null to disable the guard. When enabled,
+         * refuse creation if an existing task in the same collision scope (same
+         * `featureId`, or no `feature_id` for unscoped creates) has an identical
+         * (case-insensitive) name and was created within the last N seconds.
+         * Guards against the verify fix pass double-creating the same follow-up
+         * (task 0341 R4) and against a retried create after a misread `--json`
+         * envelope (task 0510 post-mortem).
          */
         dedupeWithinSec?: number | null;
     }): Promise<WriteResult> {
@@ -625,12 +636,14 @@ export class TaskService {
         const status = params.status ?? (params.featureId !== undefined ? 'todo' : 'backlog');
 
         return this.writeService.createAllocated(folder, async () => {
-            // Dedup guard (task 0341 R4): when a feature-scoped dedupe window is
-            // requested, refuse creation if an existing task under the same feature
-            // has an identical (case-insensitive) name and was created within the
-            // window. Guards against the verify fix pass double-creating follow-ups.
+            // Dedup guard (task 0341 R4, extended to unscoped creates): when a dedupe
+            // window is requested, refuse creation if an existing task in the same
+            // collision scope (same feature, or no feature for unscoped creates) has
+            // an identical (case-insensitive) name created within the window. Guards
+            // against double-creating follow-ups and retried creates after a misread
+            // `--json` envelope.
             const dedupeWithinSec = params.dedupeWithinSec === null ? undefined : (params.dedupeWithinSec ?? 300);
-            if (dedupeWithinSec !== undefined && params.featureId !== undefined) {
+            if (dedupeWithinSec !== undefined) {
                 const collision = await this.findDuplicateFollowUp(params.featureId, params.title, dedupeWithinSec);
                 if (collision !== null) {
                     throw new DuplicateFollowUpError(collision.wbs, collision.name, params.title);

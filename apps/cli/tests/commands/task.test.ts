@@ -121,6 +121,10 @@ describe('spur task CLI', () => {
         expect(parsed.ref.kind).toBe('task');
         expect(parsed.ref.id).toMatch(/^\d{4}$/);
         expect(parsed.eventName).toBe('task.created');
+        // Additive top-level mirrors (task 0510): a script projecting `wbs`/`filePath`
+        // must not read nulls on success.
+        expect(parsed.wbs).toBe(parsed.ref.id);
+        expect(parsed.filePath).toBe(parsed.ref.filePath);
     });
 
     test('create with --feature adds feature_id', async () => {
@@ -223,15 +227,68 @@ describe('spur task CLI', () => {
         }
     });
 
-    test('create without --feature does not dedup (unscoped)', async () => {
+    test('create without --feature dedups within the window (unscoped)', async () => {
         const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-nofeature-${Date.now()}`);
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'No scope dup'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', 'No scope dup', '--json'], { cwd: isoCwd, output: first });
+            expect(first.errors.join('')).toBe('');
+            const firstWbs = JSON.parse(lastMessage(first)).wbs;
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'No scope dup'], { cwd: isoCwd, output: second });
+            const exitCode = await main(['task', 'create', 'No scope dup', '--json'], {
+                cwd: isoCwd,
+                output: second,
+            });
+            expect(exitCode).toBe(3);
+            expect(JSON.parse(lastMessage(second))).toMatchObject({
+                ok: false,
+                error: {
+                    code: 'duplicate-follow-up',
+                    existingWbs: firstWbs,
+                    attemptedName: 'No scope dup',
+                },
+            });
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('create without --feature --allow-duplicate-name overrides dedup (exit 0)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-nofeature-allow-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'No scope allow'], { cwd: isoCwd, output: first });
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'No scope allow', '--allow-duplicate-name'], {
+                cwd: isoCwd,
+                output: second,
+            });
+            expect(exitCode).toBe(0);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('create without --feature --dedupe-within overrides the default window', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-nofeature-window-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'No scope window'], { cwd: isoCwd, output: first });
+            const taskPath = createdPath(first);
+            const content = await readFile(taskPath, 'utf8');
+            const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
+            await writeFile(taskPath, content.replaceAll(/(created_at|updated_at): .+/g, `$1: ${twoMinutesAgo}`));
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'No scope window', '--dedupe-within', '60'], {
+                cwd: isoCwd,
+                output: second,
+            });
             expect(exitCode).toBe(0);
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });

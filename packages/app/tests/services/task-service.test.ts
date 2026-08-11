@@ -1273,6 +1273,35 @@ describe('TaskService — dedup guard (task 0341 R4)', () => {
         );
     });
 
+    test('refuses a same-name unscoped task within the window (0510)', async () => {
+        await localSvc.create({ title: 'Bare Capture', dedupeWithinSec: 60 });
+        await expect(localSvc.create({ title: 'Bare Capture', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+        // Case-insensitive match holds for unscoped scope too.
+        await localSvc.create({ title: 'Bare Capture Two', dedupeWithinSec: 60 });
+        await expect(localSvc.create({ title: 'bare capture two', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+    });
+
+    test('allows same name across scopes (feature-scoped vs unscoped)', async () => {
+        await localSvc.create({ title: 'Mixed Scope', featureId: 'F', dedupeWithinSec: 60 });
+        // An unscoped create does not collide with a feature-scoped task of the same name.
+        const result = await localSvc.create({ title: 'Mixed Scope', dedupeWithinSec: 60 });
+        expect(result.ref.kind).toBe('task');
+        // A different-feature create does not collide with the unscoped one either.
+        const cross = await localSvc.create({ title: 'Mixed Scope', featureId: 'G', dedupeWithinSec: 60 });
+        expect(cross.ref.kind).toBe('task');
+        // Same-scope retries still refuse within the window (F and unscoped both taken).
+        await expect(localSvc.create({ title: 'Mixed Scope', featureId: 'F', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+        await expect(localSvc.create({ title: 'Mixed Scope', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+    });
+
     test('name match is case-insensitive', async () => {
         await localSvc.create({ title: 'Fix Y', featureId: 'B', dedupeWithinSec: 60 });
         await expect(localSvc.create({ title: 'fix y', featureId: 'B', dedupeWithinSec: 60 })).rejects.toThrow(

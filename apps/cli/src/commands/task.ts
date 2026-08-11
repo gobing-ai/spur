@@ -172,15 +172,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     featureId: options.feature,
                     parentWbs: options.parent,
                     template: options.template,
-                    // Dedup guard: default 300s window when --feature is set (guards
-                    // against the orphan-skeleton + re-create pattern). Explicit
-                    // --dedupe-within overrides the window. --allow-duplicate-name
-                    // disables the guard entirely. Unscoped tasks (no --feature) are
-                    // never guarded — a bare capture has no collision scope.
+                    // Dedup guard: default 300s window for every create (feature-scoped
+                    // or unscoped). Explicit --dedupe-within overrides the window.
+                    // --allow-duplicate-name disables the guard entirely. Unscoped
+                    // tasks have their own collision scope (no feature_id).
                     dedupeWithinSec: options.allowDuplicateName ? null : options.dedupeWithin,
                 });
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    // Additive top-level `wbs`/`filePath` mirror `ref.id`/`ref.filePath`
+                    // (task 0510 post-mortem): the envelope's WBS lives under `ref.id`,
+                    // which differs from `task list/show --json` (`wbs`), and a script
+                    // projecting `wbs` saw nulls and misread success as failure.
+                    context.output.write(toJson({ ...result, wbs: result.ref.id, filePath: result.ref.filePath }));
                 } else {
                     context.output.write(`Created task ${result.ref.id}: ${result.ref.filePath}`);
                 }
