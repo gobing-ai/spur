@@ -2135,6 +2135,38 @@ describe('AgentService automatic tier escalation (0407)', () => {
         expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
     });
 
+    test('0503 R1: classified authentication failure escalates to the next executor', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, escalationConfig);
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: "API key not found for provider 'volc'" }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['pi', 'claude']);
+        expect(errors.some((line) => line.includes('Escalating: std-exec'))).toBe(true);
+        expect(errors.some((line) => line.includes('failed with auth'))).toBe(true);
+        expect(errors.some((line) => line.includes('retrying on capable-exec'))).toBe(true);
+    });
+
     test('R7 (0482 R1): a PINNED executor still escalates on resource exhaustion', async () => {
         // The pipeline pins a concrete executor (`agent: ${vars.implementAgent}`),
         // not the literal `auto`. Before 0482 the pin resolved with no stage, so

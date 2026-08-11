@@ -40,6 +40,7 @@ import {
     configuredSecretValues,
 } from '../observability/agent-execution';
 import { bridgeEventBus } from './event-bridge';
+import { classifyDispatch } from './failure-classification';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1499,27 +1500,15 @@ function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
  * Classify a dispatch result into an objective escalation signal (0407 R1).
  *
  * Biased toward precision: the multi-pattern match avoids false positives on
- * ordinary stderr noise. Only well-known resource-exhaustion and timeout
- * signatures map to escalation triggers — everything else returns `undefined`
- * and the result stands as-is.
+ * ordinary stderr noise. Only registry-backed resource-exhaustion/auth evidence
+ * and subprocess termination signals map to escalation triggers — everything
+ * else returns `undefined` and the result stands as-is.
  *
  * Trigger vocabulary mirrors {@link ObjectiveEscalationSignal} (0405 R8):
- * `resource-exhaustion` and `timeout` are the only auto-classifiable signals;
+ * `resource-exhaustion`, `auth`, and `timeout` are auto-classifiable signals;
  * `gate-fail`, `insufficient-evidence`, and `retry-exhausted` require human or
  * upstream judgement and are never inferred from process output.
  */
 function classifyObjectiveFailure(result: AgentRunResult): ObjectiveEscalationSignal | undefined {
-    // A signal on the result means the subprocess was killed (timeout-kill).
-    if (result.signal !== undefined) return 'timeout';
-
-    if (result.exitCode === 0) return undefined;
-    const text = `${result.stderr} ${result.stdout}`.toLowerCase();
-    if (
-        /\b(rate[\s_-]?limit(?:_exceeded|_error)?|429|529|too many requests|quota|usage[\s_-]?limit|limit[\s_-]?(reached|will[\s_-]?reset|resets?)|out of tokens?|insufficient[\s_-]?(credits?|balance|quota|funds)|token[\s_-]?(limit|budget)|context[\s_-]?(length|window)|maximum context|overloaded)\b/.test(
-            text,
-        )
-    ) {
-        return 'resource-exhaustion';
-    }
-    return undefined;
+    return classifyDispatch(result);
 }

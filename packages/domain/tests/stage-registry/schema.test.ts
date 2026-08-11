@@ -79,7 +79,7 @@ describe('stage-registry vocabulary exports (R1)', () => {
     });
 
     test('exposes the current schema version', () => {
-        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 1 });
+        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 2 });
     });
 
     test('exposes the stage-id pattern', () => {
@@ -539,8 +539,9 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
 
     // ─── Task 0405: resource-exhaustion trigger (R4/R5/R6) ───────────────
 
-    test('objective escalation trigger vocabulary includes resource-exhaustion (R4)', () => {
+    test('objective escalation trigger vocabulary includes resource-exhaustion and auth (R4)', () => {
         expect(objectiveEscalationTriggerSchema.options).toContain('resource-exhaustion');
+        expect(objectiveEscalationTriggerSchema.options).toContain('auth');
         // The pre-existing four remain.
         for (const existing of ['gate-fail', 'timeout', 'insufficient-evidence', 'retry-exhausted'] as const) {
             expect(objectiveEscalationTriggerSchema.options).toContain(existing);
@@ -627,11 +628,13 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         expect(plan?.model_policy.min_tier).toBe('capable-2');
         expect(plan?.model_policy.fallback).toEqual([
             { tier: 'capable-3', trigger: 'gate-fail' },
+            { tier: 'capable-3', trigger: 'auth' },
             { tier: 'capable-3', trigger: 'resource-exhaustion' },
         ]);
         expect(refine?.model_policy.min_tier).toBe('standard');
         expect(refine?.model_policy.fallback).toEqual([
             { tier: 'capable-2', trigger: 'gate-fail' },
+            { tier: 'capable-2', trigger: 'auth' },
             { tier: 'capable-2', trigger: 'resource-exhaustion' },
         ]);
         const planTier = plan?.model_policy.min_tier;

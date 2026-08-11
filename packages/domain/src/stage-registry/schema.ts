@@ -40,7 +40,7 @@ import { z } from 'zod';
  */
 export const STAGE_REGISTRY_SCHEMA_VERSION = {
     major: 1,
-    minor: 1,
+    minor: 2,
 } as const;
 
 /** Schema version shape used by records and consumers. */
@@ -357,6 +357,8 @@ export const capabilityTierSchema = z.preprocess(normalizeCapabilityTier, z.enum
  *   quota strings, token-count overflow) but the fallback response is the
  *   same, and classifying by vendor spelling would push detection into config.
  *   The 0407 detector classifies from stderr / exit codes into this member.
+ * - `auth` — an explicit provider authentication/authorization failure. The
+ *   dispatcher classifies it centrally; policies may opt into an auth fallback.
  *
  * Additive only: a new member is a minor schema bump (see
  * {@link STAGE_REGISTRY_SCHEMA_VERSION}); existing configs keep validating.
@@ -367,6 +369,7 @@ export const objectiveEscalationTriggerSchema = z.enum([
     'insufficient-evidence',
     'retry-exhausted',
     'resource-exhaustion',
+    'auth',
 ]);
 
 /** Objective failure or risk signal triggering model policy fallback escalation. */
@@ -730,6 +733,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             min_tier: 'standard',
             fallback: [
                 { tier: 'capable-2', trigger: 'gate-fail' },
+                { tier: 'capable-2', trigger: 'auth' },
                 { tier: 'capable-2', trigger: 'resource-exhaustion' },
             ],
         },
@@ -753,6 +757,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             min_tier: 'capable-2',
             fallback: [
                 { tier: 'capable-3', trigger: 'gate-fail' },
+                { tier: 'capable-3', trigger: 'auth' },
                 { tier: 'capable-3', trigger: 'resource-exhaustion' },
             ],
         },
@@ -776,6 +781,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             fallback: [
                 { tier: 'capable-1', trigger: 'gate-fail' },
                 { tier: 'capable-1', trigger: 'timeout' },
+                { tier: 'capable-1', trigger: 'auth' },
                 { tier: 'capable-1', trigger: 'resource-exhaustion' },
             ],
         },
@@ -797,6 +803,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         model_policy: {
             fallback: [
                 { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'auth' },
                 { tier: 'capable-1', trigger: 'resource-exhaustion' },
             ],
             min_tier: 'standard',
@@ -819,6 +826,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         model_policy: {
             min_tier: 'capable-1',
             fallback: [
+                { tier: 'capable-2', trigger: 'auth' },
                 { tier: 'capable-2', trigger: 'resource-exhaustion' },
                 { tier: 'capable-2', trigger: 'gate-fail' },
             ],
@@ -842,6 +850,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             min_tier: 'standard',
             fallback: [
                 { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'auth' },
                 { tier: 'capable-1', trigger: 'resource-exhaustion' },
             ],
         },
@@ -864,6 +873,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             min_tier: 'standard',
             fallback: [
                 { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'auth' },
                 { tier: 'capable-1', trigger: 'resource-exhaustion' },
             ],
         },
@@ -885,6 +895,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         model_policy: {
             min_tier: 'capable-1',
             fallback: [
+                { tier: 'capable-2', trigger: 'auth' },
                 { tier: 'capable-2', trigger: 'resource-exhaustion' },
                 { tier: 'capable-2', trigger: 'gate-fail' },
             ],

@@ -79,6 +79,8 @@ export {
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
 } from './services/event-names';
+export type { FailureRule } from './services/failure-classification';
+export { classifyDispatch } from './services/failure-classification';
 export type {
     CheckFeatureFindings,
     CheckFeatureResult,
