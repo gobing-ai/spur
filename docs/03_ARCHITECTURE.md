@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.10.0
+version: 1.13.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-11
@@ -495,7 +495,7 @@ Invariants:
 
 Concrete shapes and rollout: `docs/design/dev-command-argument-contract.md`.
 
-## 14. Web Board Modules & Message Plane (ADR-042)
+## 14. Web Board Modules & Team-Scoped Composition (ADR-052)
 
 `apps/web` renders the Board as a set of **auto-discovered modules**: `apps/web/src/modules/discover.ts`
 eagerly globs sibling directories that export a named `module: WebModule` (`id`, `route`,
@@ -503,7 +503,7 @@ eagerly globs sibling directories that export a named `module: WebModule` (`id`,
 automatic; `order` only places it in the sidebar. Current modules: `teams`, `inbox`, `task-kanban`,
 `observability`, `features`, plus shell-level pieces (sidebar, project switcher).
 
-### 14.1 The message plane is two channels, merged client-side (ADR-042)
+### 14.1 Current shipped state: two channels merged client-side
 
 Spur has **two independent channels** between the Board and a backend coding agent. They are merged
 *for display* by the Inbox module; they are never merged in storage and delivery is unchanged.
@@ -529,7 +529,15 @@ timeline, not an error.
 `apps/web/src/lib/process-stream.ts` and are imported by both `teams/MemberTerminal` and the Inbox
 agent timeline. No duplicated frame-parsing logic.
 
-### 14.3 Module-scoped DESIGN.md palette (R10–R13)
+### 14.3 Accepted G3 boundary (ADR-052)
+
+G3 removes the display merge above. `agent.team.<teamId>` is the v1 workspace context: the team
+config already owns its work folder and roster. Teams owns roster/process lifecycle/terminal/activity;
+Inbox owns durable `inbox_messages`; Workspace is a Board composition shell that passes `teamId`
+scope into existing Team, Inbox, and Task views. It introduces no workspace persistence, service,
+HTTP route, or CLI noun. Until task 0197 lands, §14.1–14.2 describe the shipped transitional state.
+
+### 14.4 Module-scoped DESIGN.md palette (R10–R13)
 
 Each DESIGN.md-consistent Board module scopes its palette to its root rather than remapping the
 shared `@theme` `spur-*` values (consumed by 13+ files across Features/Teams/Observability — they
@@ -540,3 +548,35 @@ the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `
 variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
+
+## 15. Agent-Facing Plugin Surface Parity (accepted design — ADR-053/054, amended 2026-08-11; not yet built)
+
+The agent-facing surfaces in `plugins/sp/` are maintained under a mechanical parity contract with
+the monorepo CLI (ADR-053, extending ADR-038's `spur-cli`-reference coverage). Three surfaces are in
+contract — the `sp:spur-cli` facade inventories (noun routing table, Tier C exclusions, per-noun
+verb/flag references), the `sp:spur-dev` spine step-routing table, and the `AGENTS.md` noun table.
+The parity harness (bun:test + the monorepo CLI only; no new runtime/dependency/schema/transport)
+resolves the CLI via `bun run apps/cli/src/index.ts` and captures the surface `--help`-primary:
+`<noun> --help` is the universal capture surface; `--json` is used only where the noun actually
+exposes a machine-readable inventory. Human `--help` parsing is a narrow adapter with fixtures and
+explicit exclusions (ADR-053 amendment), never an assumed machine API. Diffs are bidirectional:
+documented-but-absent and live-but-undocumented are both findings. Exclusions are marker-driven,
+never silent — Tier C nouns the facade marks as outside its documentation scope, and spine rows
+whose target is a slash command or inline execution rather than a CLI verb, are ignored by explicit
+rule, never by absence of a match. The harness records the resolved binary's provenance;
+published-npm `spur` skew is a documented drift source the tests cannot catch on end-user installs.
+The spine/facade boundary is ownership-defined and asserted by the same tests, not redesigned
+(ADR-054): the facade owns CLI noun/verb/flag semantics — including status-transition verbs — and
+the spine owns multi-step lifecycle orchestration; the tests assert each surface documents its
+owned scope, not the absence of "lifecycle steps" in the facade. The harness extends the existing
+parity suite with at most one shared CLI-surface helper and at most one new focused parity test.
+Duplication assertions cover exact catalogs and structured inventories only, never arbitrary prose.
+Content surfaces (README index, cross-links) are pinned by the same harness.
+
+Invariant (enforceable): every CLI surface change keeps the three contract surfaces in parity —
+enforced mechanically by the parity harness (ADR-053), not by review discipline.
+
+Shapes: `docs/design/plugin-surface-parity.md`.
+
+Planning ownership follows ADR-055: B owns runtime agent execution; I owns the `sp` plugin harness
+described in this section; H is frozen mixed history, not an active destination for new work.

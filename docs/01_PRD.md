@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.2.0
+version: 1.3.0
 owner: Robin Min
-updated_at: 2026-06-12
+updated_at: 2026-08-11
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -88,6 +88,7 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 | Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
 | Team coordination                                          | `spur team assign\|status` (+ `start\|stop` stubs) | `TeamService` (packages/app)               |
+| Team-scoped Board composition                              | Spur Board Teams / Inbox / Workspace                | existing team, message, and task surfaces  |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
 | Workflow validate / run / list                             | `spur workflow ...`                                | `ts-dual-workflow-engine`                  |

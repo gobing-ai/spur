@@ -6,47 +6,65 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:38.444Z"
-updated_at: "2026-07-03T23:31:48.563Z"
+updated_at: "2026-08-11T20:05:46.211Z"
 ---
 
 # G3: Workspace module
 
 ## Goal
-A Workspace composes a git work-folder, an agent team, and per-agent inboxes into one collaborative unit for getting tasks done together — surfaced as a board module with tabbed views; designed first (ADR + design doc), implemented last as the cycle capstone.
+Deliver a team-scoped Workspace Board view that composes the existing Teams, Inbox, and Task surfaces
+without creating a second workspace domain model. Teams remains the process control plane; Inbox becomes
+the durable message plane; Workspace owns selection and composition only.
 ## Scope
-- In:
-    - Design first (decision D3): a dated ADR entry in `docs/00_ADR.md` plus `docs/design/workspace-design.md` covering the data model (workspace = name + git folder/worktree + team roster + inbox scoping), config schema, lifecycle, server API, and board-module tab set (overview, team processes, inboxes, workspace-scoped tasks).
-    - Workspace definition surface (config or CLI) binding an existing git folder, a set of agent specs, and their inboxes.
-    - Board module `workspace` with tabbed views per the approved design, composing feature G1 (inbox), G2 (supervision), and the existing task board.
-    - Inbox scoping: messages exchanged inside a workspace stay within that workspace's agent set.
-- Out:
-    - Multi-machine/remote workspaces; workspace-level permissions; non-git work folders.
-    - Concurrent multi-workspace execution scheduling (single active workspace is acceptable in v1).
-    - Any implementation before the ADR + design doc are approved (implementation task stays gated).
+**In scope:**
+
+- Treat `agent.team.<teamId>` as the v1 workspace context: `name`, `work_dir`, and `members` remain authoritative.
+- Make Inbox durable-message-only; remove its stdout/stderr stream and client-side message/frame merge.
+- Keep Teams authoritative for roster, process lifecycle, terminal I/O, and lifecycle activity.
+- Add an auto-discovered Workspace Board module with Overview, Team, Inbox, and Tasks tabs scoped to one
+  project-local `teamId`.
+- Reuse the existing team, message, and task endpoints; extend the existing team response only with the work-folder
+  facts needed to identify project-local teams.
+- Preserve the top-level global Teams and Inbox modules.
+
+**Out of scope:**
+
+- A `workspaces` config key, WorkspaceService, workspace table/DTO/API, or `spur workspace` CLI noun.
+- Multiple teams per workspace, remote/multi-project task loading, workspace CRUD, permissions, or concurrent
+  workspace scheduling.
+- Cross-workspace message authorization or changes to message send/drain delivery semantics.
 ## Acceptance Criteria
 ```gherkin
-Feature: Workspace module
+Feature: Team-scoped Workspace Board composition
 
-  Scenario: Workspace design is ratified before implementation
-    Given the workspace design task completes
-    When the ADR entry and design doc land
-    Then docs/00_ADR.md carries a dated workspace decision pointing at docs/design/workspace-design.md
-    And the design doc defines the data model, config schema, server API, and board tab set
+  @core
+  Scenario: R1 — Module ownership follows ADR-052
+    Given Teams, Inbox, and Workspace previously had overlapping ownership
+    When the G3 implementation begins
+    Then ADR-052 defines Teams as the process control plane and Inbox as the durable message plane
+    And the design introduces no separate Workspace domain entity or CLI noun
 
-  Scenario: A workspace binds a git folder and a team
-    Given a workspace is defined with an existing git folder and agent specs
-    When the board Workspace module loads
-    Then the workspace lists its work folder, team roster, and per-agent inboxes
+  @core
+  Scenario: R2 — A workspace binds a git folder and a team
+    Given a configured project-local team
+    When the Workspace module loads that team
+    Then the team id identifies the workspace context
+    And its configured work directory and materialized roster are shown without duplicate workspace state
 
-  Scenario: Workspace tabs compose the collaboration surfaces
-    Given a workspace is open on the board
-    When the operator switches tabs
-    Then team-process, inbox, and workspace-scoped task views render per the approved design
+  @core
+  Scenario: R3 — Workspace tabs compose the collaboration surfaces
+    Given a project-local team is selected
+    When the operator switches among Overview, Team, Inbox, and Tasks
+    Then Team reuses the scoped process-control view
+    And Inbox reuses the scoped durable-message view
+    And Tasks reuses the current project Task Kanban
 
-  Scenario: Workspace inboxes are isolated
-    Given two workspaces with distinct agent teams
-    When agents in the first workspace message each other
-    Then no inbox in the second workspace receives those messages
+  @core
+  Scenario: R4 — Workspace inboxes are isolated
+    Given messages exist for two different teams
+    When the operator opens the Workspace Inbox for the first team
+    Then only messages whose resolved sender or recipient belongs to that team are shown
+    And no process stdout or stderr frame is rendered by Inbox
 ```
 ## Tasks
 
@@ -54,7 +72,7 @@ Feature: Workspace module
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0196 | Workspace design: ADR + design doc (data model, config, API, board tabs) | done |
-| 0197 | Workspace module implementation (gated on approved workspace design) | blocked |
+| 0197 | Workspace module implementation (gated on approved workspace design) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.20.0
+version: 1.22.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-11
@@ -45,11 +45,12 @@ When collaborating with the design team:
 | [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md)             | Features detail action progress — F83 job-queue runner, queue.job.\* SSE correlation, floating progress layer (implements F81/0352–0354)                                                              | design                          |
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md)             | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410)                                                                                         | implemented                     |
 | [`project-switcher.md`](design/project-switcher.md)                                                     | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1)                                                                                                                       | design                          |
-| [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — unified agent message plane: All/Supervisor/per-agent tabs, two-channel timeline merge, `process-stream` lib, `.inbox` DESIGN.md scoping, resource teardown (M4 / 0422; ADR-042) | implemented                     |
+| [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — shipped unified timeline (M4/0422); accepted message-only boundary under G3 (ADR-052)                                                                                           | transition design               |
 | [`workflow-run-log.md`](design/workflow-run-log.md)                                                     | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045)                       | built                           |
 | [`brainstorm-workflow-observability-steering.md`](design/brainstorm-workflow-observability-steering.md) | Brainstorm — tiered `spur workflow run` output, richer lifecycle/execution events, `--json` machine mode, steering axes (0114/0310 foundation)                                                        | brainstorm                      |
 | [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
-| [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace module — data model, config, board surface, agent-team + inbox composition layer (ADR-025, feature G3)                                                                                      | design                          |
+| [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
+| [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | accepted design                 |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

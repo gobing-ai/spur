@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Workspace module implementation (gated on approved workspace design)
 description: ""
-status: blocked
+status: todo
 type: task
 profile: standard
 feature_id: G3
@@ -12,62 +12,148 @@ priority: P3
 tags: [approach-c,collaboration,board,gated]
 dependencies: []
 created_at: 2026-07-03T23:35:28.260Z
-updated_at: 2026-07-03T23:44:29.208Z
+updated_at: "2026-08-11T20:05:45.939Z"
 ---
 
 ## 0197. Workspace module implementation (gated on approved workspace design)
 
 ### Background
+Task 0197 implements feature G3 after the 2026-08-11 boundary review superseded the original standalone
+Workspace design. The shipped Board currently overlaps: Teams owns Supervisor, Terminal, Process, and Activity,
+while Inbox member tabs also open the process SSE stream and merge stdout/stderr with durable messages.
 
-Cycle position P7b — the capstone (decision D3, docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md). Implements the Workspace module per the ratified workspace design (ADR + docs/design/workspace-design.md from the P7a design task). A workspace binds a git work-folder, an agent team (feature G2 supervision), and per-agent inboxes (feature G1 IPC) into one collaborative unit, surfaced as a board module with tabbed views composing the team-process, inbox, and task surfaces.
+ADR-052 resolves the boundary and removes a second duplication. `agent.team.<teamId>` already owns `name`,
+`work_dir`, and `members`, so G3 uses Team as the v1 workspace context instead of adding a second roster/folder
+schema. The task is a Board composition and boundary-cleanup change over existing services.
 
-THIS TASK IS GATED: it stays in backlog until (1) the P7a design task's ADR + design doc are approved by the operator, and (2) the G1 (inbox IPC) and G2 (team supervision) tasks are done — it composes their shipped APIs. Its Design and Plan sections are intentionally deferred to be authored FROM the approved design doc at refinement time (via /sp:dev-refine), not invented here; authoring them now would guarantee drift against the ratified design. Requirements below capture the stable outer contract from feature G3's acceptance criteria; the refinement pass expands them against the approved design.
+Current-tree anchors:
 
+- `packages/config/src/index.ts` — `TeamConfigSchema` owns `name`, `work_dir`, and `members`.
+- `apps/web/src/modules/teams/tabs.ts` — Teams operational tabs.
+- `apps/web/src/modules/inbox/AgentTab.tsx` — overlapping process stream to remove.
+- `apps/server/src/modules/team/index.ts` — existing team roster/status response to extend.
+- `docs/design/workspace-design.md` and ADR-052 — target contract.
 ### Requirements
-- [ ] R1 — Workspace definition surface per the approved design (config or CLI) binding an existing git folder, agent specs, and inbox scoping.
-- [ ] R2 — Board module `workspace` (auto-discovered WebModule) listing workspaces with work folder, team roster, and per-agent inboxes.
-- [ ] R3 — Tabbed views per the approved design composing team-process (G2), inbox (G1), and workspace-scoped task views.
-- [ ] R4 — Inbox isolation enforced per the design's scoping rule (messages inside workspace A never reach workspace B inboxes) with tests proving it.
-- [ ] R5 — Server API per the design sketch; contracts in packages/contracts where contract-bound; CF entrypoint unaffected.
-- [ ] R6 — Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`; end-to-end manual pass: define a workspace, autostart its team, exchange messages, drive a task — all from the board.
+- [ ] **R1 — Separate module ownership.** Inbox renders durable `inbox_messages` only; Teams exclusively renders
+      roster, process lifecycle, terminal stdin/stdout, and team lifecycle activity. No process `EventSource` or
+      stdout/stderr row remains under `modules/inbox`.
+- [ ] **R2 — Preserve message behavior.** Inbox keeps All, Supervisor, and per-member message views, newest/live
+      refresh behavior, reply/delivery state, and defensive parsing. Message send, reply, watch, and drain semantics
+      are unchanged.
+- [ ] **R3 — Neutral shared team feed.** Move the team roster/status hook and its wire types from the Teams module
+      to `apps/web/src/lib/use-teams-data.ts`; Teams, Inbox, and Workspace import that single feed.
+- [ ] **R4 — Surface project-local workspace facts.** Extend the existing `TeamListing` and `GET /api/team/teams`
+      response with `workDir: string | null` and `isCurrentProject: boolean`. Configured teams use `work_dir`;
+      orphaned/untethered groups are not selectable Workspace contexts unless their resolved folder matches the
+      server project.
+- [ ] **R5 — Add Workspace Board composition.** Register `apps/web/src/modules/workspace/` as `id/route:
+      workspace`, `sidebarLabel: Workspace`, `order: 0`. It selects only `isCurrentProject` teams and renders
+      Overview, Team, Inbox, and Tasks tabs.
+- [ ] **R6 — Reuse scoped views.** `TeamsShell` and `InboxShell` accept optional `teamId`; omission preserves the
+      current global modules. Workspace passes the selected `teamId`. The Tasks tab embeds the current-project Task
+      Kanban; it does not retarget the server or load tasks from another folder.
+- [ ] **R7 — No new workspace backend.** Add no workspace config key, service, persistence, route, transport
+      contract, or CLI noun. Reuse `/api/team/teams`, `/api/messages`, team process routes, and existing task APIs.
+- [ ] **R8 — Verification and docs.** Update focused web/app/server tests for ownership, scope, registration, and
+      resource teardown; remove obsolete Inbox timeline tests; keep DESIGN.md accessibility/token conventions;
+      synchronize ADR-052, architecture, and surface docs; full repository gates pass.
+
+**Non-goals:** multiple teams per workspace, remote/multi-project task loading, workspace CRUD, permissions,
+cross-workspace delivery authorization, supervisor-hub routing, relay controls, and concurrent workspace scheduling.
 ### Acceptance Criteria
 ```gherkin
-Feature: Workspace module
+Feature: Team-scoped Workspace Board composition
 
-  Scenario: A workspace binds a git folder and a team
-    Given a workspace is defined with an existing git folder and agent specs
-    When the board Workspace module loads
-    Then the workspace lists its work folder, team roster, and per-agent inboxes
+  @core
+  Scenario: R1 — Module ownership follows ADR-052
+    Given Teams, Inbox, and Workspace previously had overlapping ownership
+    When the G3 implementation begins
+    Then ADR-052 defines Teams as the process control plane and Inbox as the durable message plane
+    And the design introduces no separate Workspace domain entity or CLI noun
 
-  Scenario: Workspace tabs compose the collaboration surfaces
-    Given a workspace is open on the board
-    When the operator switches tabs
-    Then team-process, inbox, and workspace-scoped task views render per the approved design
+  @core
+  Scenario: R2 — A workspace binds a git folder and a team
+    Given a configured project-local team
+    When the Workspace module loads that team
+    Then the team id identifies the workspace context
+    And its configured work directory and materialized roster are shown without duplicate workspace state
 
-  Scenario: Workspace inboxes are isolated
-    Given two workspaces with distinct agent teams
-    When agents in the first workspace message each other
-    Then no inbox in the second workspace receives those messages
+  @core
+  Scenario: R3 — Workspace tabs compose the collaboration surfaces
+    Given a project-local team is selected
+    When the operator switches among Overview, Team, Inbox, and Tasks
+    Then Team reuses the scoped process-control view
+    And Inbox reuses the scoped durable-message view
+    And Tasks reuses the current project Task Kanban
+
+  @core
+  Scenario: R4 — Workspace inboxes are isolated
+    Given messages exist for two different teams
+    When the operator opens the Workspace Inbox for the first team
+    Then only messages whose resolved sender or recipient belongs to that team are shown
+    And no process stdout or stderr frame is rendered by Inbox
 ```
 ### Q&A
 
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
-**GATED — design intentionally deferred.** This is the cycle capstone (decision D3). Its Design and Plan are NOT authored here by intent: they must be derived from the RATIFIED workspace design (task 0196's `docs/design/workspace-design.md` + ADR entry), and authoring them before ratification guarantees drift against the approved shapes. Task 0196's final plan step rewrites this task's Requirements/Design from the approved design via `spur task update 0197 --section ... --from-file`, after which this task goes through normal refinement (`/sp:dev-refine 0197`) and unblocks.
+**Decision authority.** ADR-052 and `docs/design/workspace-design.md` supersede ADR-042's unified
+message/process timeline. The decision record is
+`docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`.
 
-**Gate conditions (all three):**
-1. Task 0196 done — ADR + design doc approved by the operator.
-2. Task 0193 (Inbox IPC / feature G1) done — workspace composes its message API + events.
-3. Task 0195 (Team supervision / feature G2) done — workspace composes its supervisor registry + attach transport.
+**Ownership invariant.** Teams is the control plane; Inbox is the durable message plane; Workspace is a
+composition shell. A component may read team identity outside Teams, but process streams and lifecycle mutations
+remain under Teams. Workspace never writes message or process state itself.
 
-**Stable outer contract (what will not change regardless of design detail):** the feature G3 acceptance criteria — a workspace binds an existing git folder + agent team + per-agent inboxes; a board module surfaces it with tabs composing team-process, inbox, and workspace-scoped task views; workspace inboxes are isolated per the design's scoping rule; CF entrypoint unaffected; full verification gate green.
+**Frozen surfaces and paths.**
+
+1. Extend `packages/app/src/services/team-service.ts` `TeamListing` with `workDir: string | null` and
+   `isCurrentProject: boolean`. Resolve configured `work_dir` relative to the service cwd; compare normalized
+   absolute paths. Orphaned/untethered groups use a common spec workspace only when all member specs agree,
+   otherwise `workDir = null` and `isCurrentProject = false`.
+2. Extend the existing raw-Hono `/api/team/teams` response in `apps/server/src/modules/team/index.ts` with those
+   fields. No endpoint or oRPC contract is added.
+3. Move `apps/web/src/modules/teams/useTeamsData.ts` to `apps/web/src/lib/use-teams-data.ts`, preserving polling,
+   parsing, and reload behavior. `TeamGroup` gains the two fields above.
+4. Change `TeamsShell` and each Teams tab component to accept `{ teamId?: string }`. When set, filter the shared
+   team feed and team-scoped event/process rows; when omitted, preserve current global behavior.
+5. Change `InboxShell`, `AllTab`, and `SupervisorTab` to accept `{ teamId?: string }`. Filter a message when either
+   endpoint's resolved `teamId` equals the scope. `AgentTab` becomes a durable-message filter only. Delete
+   `apps/web/src/modules/inbox/timeline.ts` and remove Inbox imports of `process-stream`.
+6. Add `apps/web/src/modules/workspace/{index.tsx,WorkspaceShell.tsx,tabs.ts,OverviewTab.tsx}`. Module registration
+   is `id: 'workspace'`, `route: 'workspace'`, `sidebarLabel: 'Workspace'`, `order: 0`. The shell selects the first
+   `isCurrentProject` team by default and renders Overview, scoped `TeamsShell`, scoped `InboxShell`, and the
+   existing Task Kanban view. If none exists, show an actionable empty state pointing to `agent.team` config.
+
+**Task scope.** The Tasks tab is project-local: `spur serve` already binds task APIs to one cwd. It does not query
+an arbitrary `workDir`; only `isCurrentProject` teams are Workspace candidates. Global Teams/Inbox continue to
+show other configured or materialized groups.
+
+**Anti-patterns.** Do not add a `Workspace` model/service/schema/table/route/CLI noun; do not duplicate team
+polling; do not keep a hidden Inbox process stream; do not move message delivery through process stdin; do not
+generalize `WebModule` for arbitrary props or runtime nesting; do not add cross-project task loading.
+
+**Primary test targets.** `packages/app/tests/services/team-service.test.ts`, server team module tests,
+`apps/web/tests/modules/teams`, `apps/web/tests/modules/inbox`, module discovery/registry tests, and new Workspace
+component tests. Tests must prove global omission behavior and scoped `teamId` behavior separately.
 ### Plan
-- [ ] WAIT: gate conditions met (0196 approved; 0193 and 0195 done).
-- [ ] Receive refreshed Requirements/Design from 0196's closing step (authored FROM the ratified design doc).
-- [ ] Run `/sp:dev-refine 0197` to expand the ratified design into a full implementation plan; decompose into subtasks (`--parent 0197`) per the design's natural waves (definition surface, server API, board module, isolation tests).
-- [ ] Implement per the refined plan; full gate green (`bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check`).
-- [ ] End-to-end manual pass: define a workspace, autostart its team, exchange messages, drive a task — all from the board; evidence in Testing.
+- [ ] **P1 — Team context facts (R4, R7).** Add `workDir`/`isCurrentProject` to `TeamListing` and the existing
+      `/api/team/teams` response; cover configured, orphaned, mismatched, and common-workspace cases.
+- [ ] **P2 — Neutral team feed (R3).** Move `useTeamsData` and wire types to `apps/web/src/lib`; repoint consumers
+      with behavior-preserving tests.
+- [ ] **P3 — Cut Inbox from the process plane (R1, R2).** Convert member tabs to message-only, add optional
+      `teamId` filtering to message views, delete timeline/frame logic and obsolete tests, and verify no Inbox
+      process stream remains.
+- [ ] **P4 — Scope Teams without changing globals (R1, R6).** Thread optional `teamId` through TeamsShell and
+      operational tabs; preserve no-prop behavior and lifecycle/terminal resource teardown.
+- [ ] **P5 — Add Workspace module (R5, R6).** Register order 0; implement team selection, Overview, scoped Team
+      and Inbox tabs, current-project Tasks composition, and the no-project-local-team empty state.
+- [ ] **P6 — Focused verification (R8).** Run the narrow app/server/web tests first, then Biome/typecheck; fix all
+      ownership, accessibility, resource teardown, and module-registry regressions.
+- [ ] **P7 — Documentation and full gates (R8).** Keep ADR-052, `03`, `04`, Inbox/Workspace satellites, and feature
+      G3 synchronized; run `bun run autofix`, `bun run spur-check`, `bun run lint`, `bun run test`, `bun run
+      test-cf`, `bun run build`, feature/task checks, and confirm only intentional git changes.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -81,10 +167,12 @@ Feature: Workspace module
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-
-G3
-
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
-
+- Feature G3
+- ADR-052
+- `docs/design/workspace-design.md`
+- `docs/design/inbox-board-module.md`
+- `docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`
+- Tasks 0193, 0195, 0196, and 0422
 ### History
 - 2026-07-03T23:44:29.208Z todo → blocked (system)
+- 2026-08-11T20:04:01.961Z blocked → todo (system)

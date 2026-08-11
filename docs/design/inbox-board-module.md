@@ -3,14 +3,14 @@ doc: design/inbox-board-module
 feature_id: M4
 owns: SURFACE + mechanism for the Inbox Board module (message plane)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-04
+updated_at: 2026-08-11
 ---
 
-# Inbox Board module — unified agent message plane
+# Inbox Board module — durable message plane
 
-The Inbox is the single Board surface for the agent message plane (ADR-042). Fixed `All` /
-`Supervisor` tabs plus one tab per team member render a unified IN/OUT timeline that interleaves
-durable queue messages with process stdout/stderr frames. Shipped by task 0422 (M4 R1–R7, R9–R14).
+Task 0422 shipped a unified durable-message/process-frame timeline under ADR-042. ADR-052 supersedes
+that boundary for G3: Inbox retains All, Supervisor, and member message views but stops opening
+process streams or rendering stdout/stderr. Teams exclusively owns process output and controls.
 
 ## 1. Module registration
 
@@ -48,6 +48,8 @@ toId === SUPERVISOR_ENDPOINT_ID`. Read-only: no routing change, no new backend i
 
 ## 4. Timeline merge
 
+**Transitional shipped state; remove in task 0197.**
+
 `apps/web/src/modules/inbox/timeline.ts` — pure, no I/O:
 
 ```ts
@@ -67,6 +69,9 @@ mergeTimeline(messages: MsgRow[], frames: Frame[], agentId: string): TimelineEnt
 Clock skew between server and agent processes is a known limitation (M4 `## Notes`), not corrected here.
 
 ## 5. Shared stream helpers (R9)
+
+**Transitional shipped state.** After task 0197, `process-stream.ts` is consumed only by Teams;
+Inbox has no process-stream dependency.
 
 `apps/web/src/lib/process-stream.ts` holds `Frame`, `parseFrame`, `appendFrame`, `nextBackoff`, and
 `streamUrl(agentId, sinceSeq?)` — extracted from `teams/MemberTerminal.tsx`, imported by both
@@ -104,7 +109,14 @@ disabled text/footnotes.
   (behaviour-preserving).
 - `apps/web/src/modules/observability/InboxTab.tsx` (orphaned since 0254) deleted with its tests.
 
-## 9. Out of scope (ADR-042 / M4)
+## 9. G3 boundary (ADR-052)
+
+- Inbox renders durable message rows only and may filter them by `teamId` or member id.
+- Teams owns Supervisor, Terminal, Process, Activity, stdin, stdout/stderr, and process lifecycle.
+- Workspace composes scoped Inbox and Teams views; it owns neither channel.
+- M4's process-frame merge remains historical delivery evidence, not the target contract.
+
+## 10. Out of scope
 
 - Supervisor-hub routing (A→supervisor→B), a supervisor message-plane identity, and the relay hold
   toggle (M4 R8, blocked on the cross-process flag decision) — no forwarding actor, no new endpoint,
