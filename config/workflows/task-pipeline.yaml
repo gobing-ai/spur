@@ -451,7 +451,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-verify ${vars.wbs} --auto --fix all
+          input: /sp:dev-verify ${vars.wbs} --auto --fix all --focus all
           timeoutMs: ${vars.stepTimeoutMs}
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
