@@ -250,6 +250,18 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         );
         if (existing != null) continue;
 
+        // Legacy foundations were journaled before importer tables joined CLI_SCHEMA_SQL.
+        // Migration 0009 cannot create its history_message index until that idempotent
+        // package-owned schema has been provisioned.
+        if (
+            migration.id === '0009_spur_cli_history_message_run_idx' &&
+            !(await tableExists(adapter, 'history_message'))
+        ) {
+            for (const statement of splitSqlStatements(HISTORY_IMPORT_SCHEMA_SQL)) {
+                await adapter.exec(statement);
+            }
+        }
+
         const addColumnGuard = migration.addColumnIfMissing;
         const shouldApplySql =
             addColumnGuard === undefined || !(await columnExists(adapter, addColumnGuard.table, addColumnGuard.column));
@@ -290,6 +302,14 @@ export async function loadSqlMigrations(folder: string): Promise<CliMigration[]>
 async function columnExists(adapter: DbAdapter, table: string, column: string): Promise<boolean> {
     const rows = await adapter.queryAll<{ name: string }>(`PRAGMA table_info("${table}")`);
     return rows.some((row) => row.name === column);
+}
+
+async function tableExists(adapter: DbAdapter, table: string): Promise<boolean> {
+    const row = await adapter.queryFirst<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        table,
+    );
+    return row != null;
 }
 
 function splitSqlStatements(sql: string): string[] {
