@@ -89,6 +89,15 @@ non-sandboxed shell, or a workspace that owns the storage path). The upstream fi
 pi-coding-agent's storage-path resolution; it is out of scope here and recorded as motivating
 evidence only.
 
+## Composition with the inline pipeline driver (task 0508)
+
+The interactive inline driver (`cross-cutting.md` § Inline-default execution surface) applies this
+reference's default — native subagent first — to sequential `task-pipeline.yaml` `agent.run`
+stages. Eligibility there is the same observable test (pure-slash action, non-interactive state,
+native subagent with shared-worktree capability); the inline driver remains the authority for
+provenance, artifact validation, and no-replay guarantees. This reference stays the authority for
+the native-subagent versus `spur agent run` choice everywhere else.
+
 ## See also
 
 - **`parallel-execution`** SKILL.md - the dispatch disciplines this rule sits beside.

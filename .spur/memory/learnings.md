@@ -279,3 +279,12 @@ Captured to `.spur/run/wrapup-learnings.md`.
 - Dry-run exit 2 with only agy degraded; reconciliation previews per source (pi 66781/66781/757, claude 49659/49659/226, codex 10807/10807/315, omp 10095/10095/30, grok 39091/39091/25, agy 19936/19936/57, antigravity 1/1/1, gemini/opencode/openclaw 0/0/0).
 - Write parity: programmatic `all_parity=true` across 10 sources; second full dry-run: all stale counts 0. Post-write: `PRAGMA integrity_check=ok`, unknown 0, orphan 0 (1,295,980 msg / 93,386 tool / 1,389,366 ledger / 15,857 cp).
 - Raw evidence retained under `.spur/run/0505/` (`r2-baseline.txt`, `r3-dryrun.json`, `r4-write.json`, `r4-second-dryrun.json`, `r5-postwrite.txt`); dry-run 46 s / write 71 s on 1.7 GB.
+Captured to `.spur/run/wrapup-learnings.md` (appended after the existing 0505 entry; 114 lines total).
+
+Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grouped by date/WBS:
+
+**0506** — wrap `--agent` selector hop, `--file + --mode full` without `--dry-run` guard, schema-first SQL rule. Conventions: prompt-runtime surfaces pinned by structural tests; surface overrides named pre-dispatch; guard exact unsafe CLI combination before DB access; live `sqlite_schema` introspection with importer as sole authority. Errors fixed: silent subprocess wrap handoff (3 sessions, 7.2 min, $0.11, 3.2M tokens), probe that mutated the real DB, four `no such column` retries.
+
+**0507** — OMP envelope fix at the owning mapper (released `0.4.26`, tag `f817429`), additive assistant-duration fields (schemaVersion stays 1), selected-file force-file history bridge. Errors fixed: released mapper read `raw.*` instead of `raw.message` — wrong roles, event-ID-as-session-ID, dropped duration, zero tool rows. Patterns: ETL-vs-raw signal split, filename-stem session keys, sanitized regressions (structural keys only).
+
+**0508** — inline redefined as host-controlled/native-subagent-first, four-check deterministic eligibility, dual provenance, no post-launch replay. Errors fixed: contradictory prior draft with subjective handoff-cost heuristic; host-only promises across ADR-047 + 7 doc surfaces updated in lockstep.

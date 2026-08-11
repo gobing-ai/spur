@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.19.0
+version: 1.20.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-10
+updated_at: 2026-08-11
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -398,6 +398,13 @@ entry carries the importer's optional `reconciliation` summary (`{ staleTargetRo
 staleLedgerRows, staleCheckpointRows }`) — additive, absent on incremental runs — so a dry-run
 preview and its write can be compared count-for-count without manual SQL.
 
+**Single-file full-write guard (task 0506 R2):** `--file <path> --mode full` **without** `--dry-run`
+is rejected at the CLI boundary (exit 1) before any database access — full mode treats the file as
+the authoritative input for a reconciliation of the real repository DB, which is only safe for an
+all-source/source-root full write. The error names both alternatives: add `--dry-run` to preview,
+or use `--mode force-file` to import one file. `--file --mode full --dry-run`, `--file --mode
+force-file`, and all-source/source-root full writes are unchanged.
+
 **Exit-code contract (R3, amended 0504 R2) — replaced the old "exit 1 if any errors":** `0` every
 source ok/empty, `2` at least one failed **and** at least one not (or any source `degraded`), `1`
 every source failed. A source is `failed` only if it threw or hit its timeout. Before 0504, parse
@@ -441,6 +448,14 @@ full detail streamed to `analyze-<digest>.errors.jsonl` (R6). `recordsWithUsage`
 `durationUnmeasured` carry the never-fabricate invariant — a consumer renders `n/a`, never a
 fabricated `0`. No artifact flags ⇒ human stdout summary (rendered from the artifact); `--json` ⇒ the
 artifact shape.
+
+**Assistant response duration (task 0507 R2):** totals (`assistantDurationMs`,
+`assistantDurationUnmeasured`) and per-session stats (`bySession[].assistantDurationMs` /
+`assistantDurationUnmeasured`) aggregate the **measured** `history_message.duration_ms` from OMP
+assistant responses — role-filtered to `role = 'assistant'`, additive, and distinct from tool-call
+`durationMs`/`durationUnmeasured` (which remain computed only from `history_tool_call`). Missing or
+non-finite durations count as unmeasured, never as zero. `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 —
+the fields are additive.
 
 #### `spur history report [path] [--json]`
 
@@ -1323,6 +1338,12 @@ it, ADR-041/047). `--agent auto` / `--agent <name>`, or another named dispatch-s
 selects `spur agent run`; headless workflow operations retain their `agent.run` subprocess actions.
 Interactive full task execution uses the YAML-backed host driver defined in
 [`inline-pipeline-driver.md`](../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
+Interactive omit/`inline` is host-controlled and **non-subprocess** (no `spur agent run`, no
+`spur workflow run`), but eligible sequential model-bearing `agent.run` stages dispatch once to a
+native platform subagent when the host exposes one with shared-worktree read/write/shell
+capability; host fallback covers every ineligible stage, and post-dispatch failures follow the
+stage error policy without host replay (ADR-047 amendment, task 0508). Operator confirmation
+actions and approve/taste/ask decisions stay host-owned.
 The SSOT is
 [`cross-cutting.md`](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.

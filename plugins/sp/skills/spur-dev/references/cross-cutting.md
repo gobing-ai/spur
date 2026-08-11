@@ -41,7 +41,7 @@ in scripts and audit output but does not change the default.
 
 | Value | Who does the work | Derived surface |
 |---|---|---|
-| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline (host session); headless: subprocess of `agent.default` |
+| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
 | `auto` | Tier-resolved from the stage's `min_tier` + `fallback` | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
 | `<name>` (coding agent or configured executor) | That executor | Inline when it resolves to the current session's agent; subprocess otherwise |
 
@@ -105,11 +105,18 @@ meaningless.
 **Interactive task pipelines invert control into the host session (ADR-047 amendment).**
 `dev-run --mode full` and sequential `dev-runall` with omit/`inline` interpret the existing
 `task-pipeline.yaml` in the host session; they do not launch `spur workflow run` and never redirect
-silently to `agent.default`. Each inline model stage appends
-`stage <id> executed inline in session <session-id>` to its run log. `dev-plan` remains a workflow
-subprocess, as do `dev-run`/`dev-runall` with `--agent auto` or a name, parallel batches, and every
-headless `spur workflow run` / `spur agent run`. `dev-run --mode implement` continues to run its
-single competency in-session under omit/`inline`.
+silently to `agent.default`. Interactive inline is **host-controlled and non-subprocess**, but no
+longer guarantees host-context execution for every model stage (task 0508): an eligible `agent.run`
+stage — pure-slash input, non-interactive state, native subagent with shared-worktree
+read/write/shell capability — dispatches **once** to that native subagent and joins before the
+driver continues; any pre-dispatch eligibility failure falls back to one host execution, and a
+failure after dispatch follows the stage's error policy with no automatic host replay. Operator
+confirmation actions, `pause: true`, and approve/taste/ask decisions stay host-owned. Each inline
+model stage appends `stage <id> executed inline in session <session-id>` to its run log; a
+subagent-dispatched stage appends `stage <id> executed via subagent <agent-id> (host session
+<session-id>)` instead. `dev-plan` remains a workflow subprocess, as do `dev-run`/`dev-runall` with
+`--agent auto` or a name, parallel batches, and every headless `spur workflow run` / `spur agent
+run`. `dev-run --mode implement` continues to run its single competency in-session under omit/`inline`.
 
 ### Executor precedence chain (R7)
 

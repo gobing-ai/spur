@@ -309,6 +309,20 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(sessionFormats).toContain('~/.omp/agent/sessions/');
         expect(sessionFormats).toContain('~/.claude/projects/');
         expect(sessionFormats).toContain('spur history import');
+        // 0506 R3: schema-first history bridge — one introspection query, importer authority,
+        // no copied column contract.
+        expect(sessionFormats).toContain('sqlite_schema');
+        expect(sessionFormats).toContain('@gobing-ai/ts-llm-jsonl-importer');
+        expect(sessionFormats).toContain('HISTORY_IMPORT_SCHEMA_SQL');
+        // 0507 R3: selected-file bridge — source-local CLI, force-file mode, both discovery
+        // roots, and the ETL-vs-raw signal split, on the skill SSOT (not the thin wrapper).
+        expect(sessionFormats).toContain('agent-sessions');
+        expect(sessionFormats).toContain('--mode force-file');
+        expect(sessionFormats).toContain('history analyze --session');
+        expect(sessionFormats).toContain('filename stem');
+        expect(skill).toContain('Freeze Phase 1');
+        expect(skill).toContain('--mode force-file');
+        expect(skill).toContain('.spur/run/<run-id>/agent-sessions');
         // Runtime-path boundary: no build-time config/{workflows,...} literals in skill packaging.
         expect(skill).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
         expect(sessionFormats).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);

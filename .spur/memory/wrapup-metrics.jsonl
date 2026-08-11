@@ -54,4 +54,10 @@ Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0502 --jso
 
 Captured to `.spur/run/wrapup-metrics.jsonl` — file now two valid JSONL records (0502 + 0505), both parse clean. Fields sourced from the task file: wbs 0505, feature_id E, status done, verdict PASS (Testing section), timestamp = done transition (2026-08-11T05:04:37.408Z).
 
-Also repaired the pre-existing botched state: the 0502 record was stored as literal tool-output text (backtick-wrapped JSON + "Appended to…" annotation), not JSONL — rewrote the file clean rather than leaving the new line adjacent to garbage.
+Also repaired the pre-existing botched state: the 0502 record was stored as literal tool-output text (backtick-wrapped JSON + "Appended to…" annotation), not JSONL — rewrote the file clean rather than leaving the new line adjacent to garbage.Captured to `.spur/run/wrapup-metrics.jsonl` (3 lines, one per task, from `spur task show --json` — status/verdict verified against the task corpus, feature E from Traceability):
+
+```jsonl
+{"wbs":"0506","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
+{"wbs":"0507","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
+{"wbs":"0508","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
+```

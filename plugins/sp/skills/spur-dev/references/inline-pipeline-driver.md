@@ -53,21 +53,53 @@ Action semantics come from the YAML and the workflow action contract:
   actions/guards.
 - `hitl.confirm` — under `profile=auto`, follow the YAML's auto-skip transition. Otherwise pause,
   surface the prompt, and resume from the same state with the operator's answer.
-- `agent.run` — execute the action's slash command through its backing skill in the current host
-  session. Do not call `spur agent run` and do not re-enter `/sp:dev-run --mode full`. Preserve the
-  YAML options: capture `answerFile`; assert `expectFile`; enforce `requireDiff` against a
-  pre-action git snapshot, including the task-scope guard; honor declared error policy. `timeoutMs`
-  is recorded as not applicable because the host session has no independent kill boundary.
+- `agent.run` — execute the action's slash command, native-subagent-first (task 0508). Do not call
+  `spur agent run` and do not re-enter `/sp:dev-run --mode full`. Preserve the YAML options: capture
+  `answerFile`; assert `expectFile`; enforce `requireDiff` against a pre-action git snapshot,
+  including the task-scope guard; honor declared error policy. `timeoutMs` is recorded as not
+  applicable because the host session has no independent kill boundary.
 
-After every successful inline `agent.run` action append exactly:
+**Native-subagent dispatch (R2 eligibility, evaluated before each action):**
+
+1. The invocation is one of the two interactive inline full-pipeline surfaces (`dev-run --mode full`
+   or sequential `dev-runall`, omit/`inline`).
+2. The YAML action kind is `agent.run` and its input is a pure slash command. Shell, note, file,
+   guard, and operator-interaction actions remain host-executed.
+3. The current state/action has no operator-confirmation action, `pause: true`, approve/taste/ask
+   decision, or other operator prompt.
+4. The platform exposes a native subagent that shares the working tree and has read, write, shell,
+   and Spur task/run-artifact access.
+
+All four pass → dispatch. Any pre-dispatch failure → execute the stage **once** in the host session.
+No token estimate, stage-size threshold, model heuristic, or configuration switch is added.
+
+**Dispatch and join:** before dispatch, capture the same pre-action git snapshot used by
+`requireDiff` enforcement. Send only: the stage id, the YAML's exact pure slash command, and
+`execution surface already resolved: native subagent; do not dispatch this stage again`. The WBS/path
+already carried by the slash command is the handoff — do not paste task/session transcripts or embed
+machine-specific session paths. Dispatch exactly one native subagent and wait for it; the inline FSM
+must not advance actions or guards concurrently (one writer at a time). After join, validate
+`answerFile`, `expectFile`, `requireDiff`, task scope, and the action's error policy from the shared
+filesystem — a subagent success message is not evidence. On success append exactly:
 
 ```text
-stage <id> executed inline in session <session-id>
+stage <id> executed via subagent <agent-id> (host session <session-id>)
 ```
 
-to `.spur/run/<run-id>.log`, where `<id>` is the current YAML state id. Also log start/failure and
-the ignored timeout value so an inline run remains auditable without fabricating an
-`AgentRunTracedResult`.
+Host fallback retains exactly `stage <id> executed inline in session <session-id>`. If launch fails
+before the subagent starts, log the reason and use host fallback. If a started subagent fails or
+leaves invalid artifacts, do **not** replay the stage in the host — follow the YAML error policy so
+partial mutations are not duplicated.
+
+**Host-owned interaction:** the host alone executes operator-confirmation actions, owns
+`pause: true`, and surfaces approve/taste/ask decisions. A subagent that discovers missing authority
+or an operator decision returns a blocker; the host pauses at the current state and presents it. The
+subagent cannot approve, infer consent, or recursively invoke the full pipeline.
+
+After every successful inline `agent.run` action append exactly one provenance line (inline or
+subagent form above) to `.spur/run/<run-id>.log`, where `<id>` is the current YAML state id. Also
+log start/failure and the ignored timeout value so an inline run remains auditable without
+fabricating an `AgentRunTracedResult`.
 
 Transition guards are not advisory. Execute the declared guard exactly, in order, with the same
 resolved variables and artifacts. `--no-lifecycle` remains bookkeeping only; the YAML's task checks,

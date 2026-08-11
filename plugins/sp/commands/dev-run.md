@@ -14,10 +14,10 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | --- | --- | --- |
 | `<wbs>` | Task WBS to run. | required |
 | `--mode` `<full\|implement>` | Full pipeline or single implement step. | full |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. In an interactive session, omit/`inline` runs implement mode and full-mode stages in the host session. `auto` or a name keeps subprocess dispatch. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. In an interactive session, omit/`inline` keeps the controller in the host session (non-subprocess); eligible full-mode `agent.run` stages may dispatch once to a native subagent, with host fallback (task 0508). `auto` or a name keeps subprocess dispatch. | inline |
 | `--auto` | Skip objective HITL confirmations. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
-| `--wrap` | Run the wrap hop after the main step. | off |
+| `--wrap` | Run the wrap hop after the main step. The `--agent` selector is preserved into the `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. The wrap hop is workflow-backed and reports its trigger-3 subprocess override. | off |
 | `--continue` | Resume an interrupted task from its checkpoint. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
@@ -37,7 +37,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 **Flags:**
 
-- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. Interactive omit/`inline` keeps both implement-only and full-mode model stages in this session. Full mode reads `task-pipeline.yaml` as the SSOT and interprets its actions/guards through the inline driver; it records `stage <id> executed inline in session <session-id>` in the run log. `auto` or a name is merged into `vars.agent` and `vars.implementAgent` and keeps the existing subprocess workflow. Headless `spur workflow run` / `spur agent run` is unchanged. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. Interactive omit/`inline` keeps the controller and implement-only stages in this session; full mode reads `task-pipeline.yaml` as the SSOT and interprets its actions/guards through the inline driver, where eligible `agent.run` stages may dispatch once to a native subagent and otherwise run in the host (task 0508). It records `stage <id> executed inline in session <session-id>` or `stage <id> executed via subagent <agent-id> (host session <session-id>)` in the run log. `auto` or a name is merged into `vars.agent` and `vars.implementAgent` and keeps the existing subprocess workflow. Headless `spur workflow run` / `spur agent run` is unchanged. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 **Mode split (load-bearing — bug-742)**
 

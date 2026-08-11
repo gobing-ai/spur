@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Fine-tune inline execution surface: subagent-first dispatch for non-interactive pipeline stages with host-session fallback"
 description: ""
-status: backlog
+status: done
 type: meta
 profile: standard
 feature_id: E
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: ["0506"]
 ac_numbering: task-local
 created_at: "2026-08-11T06:19:26.407Z"
-updated_at: "2026-08-11T06:37:05.502Z"
+updated_at: "2026-08-11T07:38:30.348Z"
 ---
 
 ## 0508. Fine-tune inline execution surface: subagent-first dispatch for non-interactive pipeline stages with host-session fallback
@@ -166,17 +166,49 @@ The host alone executes operator-confirmation actions, owns `pause: true`, and s
 - [ ] P4 (R5) Extend `inline-execution-contract.test.ts` and adjust only the host-only claims in flag-parity fixtures/validation; run the two focused test files to green.
 - [ ] P5 (R1–R5) Run the repository completion gates required by `AGENTS.md`, task verification, and intentional `git status`; do not run a real task pipeline or inspect session/conversation logs as implementation evidence.
 ### Solution
-
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
-
+| File:line | Change |
+| --- | --- |
+| `docs/00_ADR.md` ADR-047 | R1: second 2026-08-10 amendment — interactive inline is host-controlled and non-subprocess, eligible sequential `agent.run` stages dispatch once to a native subagent with host fallback; no post-dispatch replay; HITL stays host-owned. |
+| `docs/03_ARCHITECTURE.md:245-272` (§6.3) | R1: projected the amendment — eligibility by observable facts, one-writer sequential join, two provenance formats, invariants unchanged. |
+| `docs/04_DESIGN.md` (§7.8) | R1: execution-surface section states host-controlled/non-subprocess inline with native-subagent-first eligible stages and host-owned decisions. |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md` | R2: value-table inline row + interactive-inversion paragraph updated (eligible stages may use a native subagent; no automatic host replay); SSOT anchor intact. |
+| `plugins/sp/skills/spur-dev/references/flag-glossary.md` | R5: parity value table inline row updated in lockstep with the SSOT (C3a). |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` | R3: `agent.run` semantics rewritten — four-step eligibility, dispatch/join contract (stage id + pure slash command + no-redispatch note), shared-filesystem artifact validation, exact dual provenance, pre-launch fallback, no post-launch replay, host-owned operator interaction. |
+| `plugins/sp/skills/spur-dev/references/execution-workflow.md` | R5: inline stage prose notes native-subagent dispatch with host fallback. |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md` | R5: run/runall Inputs + run Modes prose updated (host-controlled inline, subagent-first eligible stages). |
+| `plugins/sp/commands/dev-run.md`, `dev-runall.md` | R5: `--agent` rows + Implementation prose no longer promise host-only model stages. |
+| `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` | R5: cross-reference section — inline driver applies this reference's native-subagent default to pipeline stages; dispatch-surface stays authority elsewhere. |
+| `plugins/sp/tests/inline-execution-contract.test.ts` | R5: new 0508 test pins eligibility markers, dual provenance, no-replay, host-owned decisions, ADR amendment, command prose; 0503 assertion updated off the host-only wording. |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Amend the interactive-inline contract (host-controlled, native-subagent-first, host fallback) | MET | docs/00_ADR.md ADR-047 second 2026-08-10 amendment; docs/03_ARCHITECTURE.md:253 (§6.3); docs/04_DESIGN.md §7.8 — all state host-controlled/non-subprocess inline with eligible stages on a native subagent |
+| R2 — Make eligibility deterministic | MET | cross-cutting.md:44 (value row) + inline-pipeline-driver.md:62-80 (four observable checks; "No token estimate, stage-size threshold, model heuristic" — subjective cost heuristic removed); no new flag/value |
+| R3 — Preserve stage semantics across the native-subagent boundary | MET | inline-pipeline-driver.md:82-104 (pre-action snapshot, minimal dispatch envelope + no-redispatch note, sequential join, shared-filesystem answerFile/expectFile/requireDiff/scope/error-policy validation, dual provenance lines, pre-launch fallback, no post-launch replay) |
+| R4 — Keep operator interaction host-owned | MET | inline-pipeline-driver.md "Host-owned interaction" — host alone executes confirmations, owns pause:true, surfaces approve/taste/ask; subagent returns blockers, never answers |
+| R5 — Update every authority and parity surface | MET | cross-cutting.md, flag-glossary.md (C3a lockstep), execution-workflow.md, dev-operations.md, dev-run.md, dev-runall.md, dispatch-surface.md:92 (cross-ref); inline-execution-contract.test.ts:193 (0508 test) + 0503 assertion updated; value set `<inline |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1,R2 — Eligible inline pipeline stages dispatch once to a native subagent | MET | command | driver eligibility + dispatch/join (pure-slash, non-interactive, capability); no `spur agent run` |
+| R2 — Failed eligibility uses the host without changing subprocess paths | MET | command | driver pre-dispatch fallback + `stage <id> executed inline in session <session-id>`; auto/name/headless/parallel untouched |
+| R3 — Host validates shared artifacts + distinct provenance | MET | command | driver artifact validation list; `stage <id> executed via subagent <agent-id> (host session <session-id>)` |
+| R3 — A dispatched failure is not replayed in the host | MET | command | driver "do **not** replay the stage in the host" + YAML error policy |
+| R4 — Operator-facing states remain host-owned | MET | command | driver "Host-owned interaction" block |
+| R5 — Authority and parity surfaces agree | MET | test | inline-execution-contract + flag-contract-parity + command-flag-parity + command-contract green (236 tests); `--agent` value set unchanged |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**P1 — Functional traceability: PASS.** R1: ADR-047 amended (second 2026-08-10 entry) and projected into docs/03 §6.3 + docs/04 §7.8 — host-controlled, non-subprocess, native-subagent-first for eligible stages. R2: four observable eligibility checks in cross-cutting + the driver; the subjective handoff-cost heuristic is gone (no token/stage-size/model heuristic anywhere). R3: driver dispatch/join contract — pre-action snapshot, minimal envelope (stage id + pure slash command + no-redispatch note), sequential join, shared-filesystem artifact validation, dual provenance lines, pre-launch fallback vs post-launch no-replay. R4: host-owned operator interaction documented; no subagent answers/approves/continues decisions. R5: every authority surface updated (ADR, architecture, design, cross-cutting, glossary parity, execution-workflow, dev-operations, run/runall commands, dispatch-surface cross-ref); tests extended and the one host-only assertion corrected.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**P2 — SECUA: PASS.** No new flag, config key, YAML action, or engine API. Dispatch sends only the stage id + pure slash command — no host transcript, no machine-specific session path, no credentials. The no-post-launch-replay rule prevents double-mutation of the shared worktree. One-writer sequential join preserves the repo's single-writer invariant.
 
+**P3 — Architecture: PASS.** The inline driver remains a prompt-runtime interpreter over the existing YAML — no second FSM, no workflow-engine change, no platform adapter. `spur agent run` / `spur workflow run` / parallel / direct implement paths untouched. C3a/C3b/C4/C5 parity gates stay green with the value set unchanged.
+
+**Residual risk: LOW.** The dispatch is prompt-runtime prose — correct execution depends on the host agent following the eligibility algorithm; the structural tests pin the documented contract, not runtime behavior. Native-subagent capability checks (read/write/shell/shared worktree) are platform facts the host must verify at dispatch time; a platform without native subagents simply never passes check 4 and stays host-executed, which is the intended fallback.
 ### References
 - Dependency: task 0506 (`docs/tasks4/0506_fix-0505-run-inefficiencies-inline-wrap-hop-dry-run-probe-gu.md`)
 - Decision authority: `docs/00_ADR.md` ADR-041 and ADR-047 plus the 2026-08-10 amendment
@@ -190,6 +222,9 @@ The host alone executes operator-confirmation actions, owns `pause: true`, and s
 - Pipeline SSOT: `.spur/workflows/task-pipeline.yaml`
 - Contract gates: `plugins/sp/tests/inline-execution-contract.test.ts`, `plugins/sp/tests/flag-contract-parity.test.ts`, `plugins/sp/scripts/validate-flag-contracts.ts`
 ### History
+- 2026-08-11T07:36:13.255Z backlog → wip (system)
+- 2026-08-11T07:38:30.160Z wip → testing (system)
+- 2026-08-11T07:38:30.348Z testing → done (system)
 ### Notes
 **Verified premises**
 

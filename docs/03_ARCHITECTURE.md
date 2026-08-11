@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.9.0
+version: 1.10.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-10
+updated_at: 2026-08-11
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -250,8 +250,22 @@ agent-command layer, which already owns the live host session. The driver reads
 guards; it does not add an engine inline mode or define a second FSM. Explicit executors, parallel
 batches, and headless `spur workflow run` continue through `WorkflowService` and `agent.run`.
 
+**Native-subagent-first model stages (task 0508).** Interactive inline keeps the controller in the
+host session and is **non-subprocess** — it never invokes `spur agent run` or `spur workflow run` —
+but eligible model-bearing `agent.run` stages may execute on a native platform subagent. Eligibility
+is decided by observable facts only: the action is a pure-slash `agent.run`, the state is not
+interactive (no operator-confirmation action, `pause: true`, or approve/taste/ask decision), and the
+host platform exposes a native subagent with shared-worktree read/write/shell capability. Dispatch
+happens **once**, sequentially (one writer at a time), and joins before the driver evaluates the
+next action or guard; a pre-dispatch eligibility failure falls back to one host execution, while a
+failure after dispatch follows the stage's error policy and is never replayed in the host. Operator
+confirmation actions, `pause: true`, and approve/taste/ask decisions remain host-owned — no subagent
+answers or continues them. The dispatched stage cannot recursively dispatch the same stage.
+
 The inline path records `task_run_links` provenance before entering the FSM and appends each model
-stage's state id plus host session id to a run-scoped log. It has no independent stage timeout/abort
+stage's state id plus host session id to a run-scoped log — for subagent-executed stages the log
+names the subagent id (`stage <id> executed via subagent <agent-id> (host session <session-id>)`),
+distinct from the inline provenance. It has no independent stage timeout/abort
 boundary or subprocess action record. Invariants: YAML remains the sole state/guard authority; every
 lifecycle guard still executes; inline failure never silently redirects to `agent.default`.
 

@@ -541,6 +541,10 @@ if it recurs, a new rule in §6.
   pointers (which raw edits may not touch). Index existing files under their current names; apply the
   `<slug>.md` convention to **new** satellites only. Retroactive renames need a tool-driven migration,
   not raw rewrites.
+- [2026-08-11] spur-new: Three wrapup tasks (0506–0508) landed substantive doc edits — an ADR-047
+  amendment, a `03` §6.3 projection, and three `04` surface notes — all verify-PASSed, none bumping
+  the §4.3 frontmatter `version`/`updated_at`; the wrapup contract-verify caught it. Frontmatter
+  bookkeeping is part of the same edit as the body change, not a follow-up pass.
 
 ## 9. Bootstrapping a new project
 

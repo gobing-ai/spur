@@ -104,6 +104,36 @@ For issue-finding:
 Import does not invent bottleneck categories. If import fails or the DB is empty, continue with
 raw logs and note that cost data is unavailable.
 
+**Schema-first rule (task 0506 R3):** history tables are owned by
+`@gobing-ai/ts-llm-jsonl-importer` and can change between versions — never copy column lists
+into this skill. Before any ad-hoc verification SQL that references importer-owned `history_*`
+tables, run **one** schema-introspection query for every table you need and compose the data
+queries from that result:
+
+```bash
+# one introspection pass, then write data queries against what it reports
+sqlite3 <db> "SELECT name, sql FROM sqlite_schema WHERE type='table' AND name LIKE 'history_%';"
+# (or a single `.schema history_<table>` invocation per referenced table)
+```
+
+If a column you expected is absent, trust the live schema — do not guess. The importer's
+`HISTORY_IMPORT_SCHEMA_SQL` is the authority; this skill holds no duplicate column contract.
+
+**Selected-file bridge (task 0507 R3):** `--use-history` imports the frozen Phase-1 file set one
+file at a time — never a root scan, never a full reconciliation. Ambient discovery covers the
+normal OMP root (`~/.omp/agent/sessions/`) **and** workflow subprocess sessions under
+`.spur/run/<run-id>/agent-sessions/<omp-executor>/*.jsonl` (same `type: "message"` envelope). For
+each file, the session key is the JSONL filename stem (importer `sessionIdFromContext`); import and
+analyze per key:
+
+```bash
+bun run apps/cli/src/index.ts history import --source omp --file <absolute-file> --mode force-file --json
+bun run apps/cli/src/index.ts history analyze --session <filename-stem> --json
+```
+
+ETL owns token/cost/message/tool/loop/assistant-duration aggregates; raw JSONL stays authoritative
+for command text, compactions, test/guard retries, and tool execution duration/status/errors.
+
 ## Edge cases
 
 | Scenario | Handling |

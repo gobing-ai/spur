@@ -52,8 +52,10 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 
 Interactive omit/`inline` executes these model stages through the
 [inline pipeline driver](inline-pipeline-driver.md) in the host session and records stage/session
-provenance. `--agent <name|auto>`, parallel batches, and headless workflow invocation select the
-existing subprocess actions. Direct invocations of the same dev operations remain inline by
+provenance. The host is the controller; eligible `agent.run` stages may dispatch once to a native
+subagent (task 0508), with host fallback and no post-dispatch replay — see the driver reference.
+`--agent <name|auto>`, parallel batches, and headless workflow invocation select
+the existing subprocess actions. Direct invocations of the same dev operations remain inline by
 default. See the [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
 
 > **Single-run & parse discipline (suite run cost control).** Run full quality/test suites (`bun run check` / `spur-check`) at most ONCE per task iteration (task 0436 R2). Parse failure details from the single retained command output rather than re-running full suites repeatedly to inspect errors. Re-run targeted/narrow test files (e.g. `bun test <file> --test-name-pattern <pattern>`) while iterating on fixes, and re-run the full suite only when all targeted fixes pass.

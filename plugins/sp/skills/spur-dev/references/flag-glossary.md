@@ -47,7 +47,7 @@ The value table below is the C3a cross-file parity surface (kept in lockstep wit
 
 | Value                           | Who does the work                                                           | Derived surface                                                             |
 | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline (host session); headless: subprocess of `agent.default` |
+| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
 | `auto`                          | Tier-resolved from the stage's `min_tier` + `fallback`                      | Subprocess                                                                  |
 | `<name>`                        | That coding agent or configured executor                                    | Inline when it is the current session's agent; subprocess otherwise         |
 

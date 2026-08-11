@@ -43,8 +43,6 @@ const EXCLUDED_COMMANDS = [
     'dev-fixall',
     'dev-handover',
     'dev-idea',
-    'dev-wrap',
-    'dev-wrapall',
 ] as const;
 
 // Workflow commands that have no interactive host-stage inversion. Task execution
@@ -142,9 +140,88 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(driver).toContain('`.spur/workflows/task-pipeline.yaml` remains the sole FSM definition');
         expect(driver).toContain('spur task run-link <wbs> --source inline-full');
         expect(driver).toContain('stage <id> executed inline in session <session-id>');
-        expect(driver).toContain("execute the action's slash command through its backing skill");
+        expect(driver).toContain("execute the action's slash command, native-subagent-first");
         expect(driver).toContain('Transition guards are not advisory');
         expect(driver).toContain('Never silently fall back');
+    });
+
+    test('0506 R1 — wrap commands are workflow-backed, selector-preserving, and report the subprocess override', () => {
+        const WRAP_COMMANDS = ['dev-wrap', 'dev-wrapall'];
+        for (const command of WRAP_COMMANDS) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+
+            // The unified selector is declared on the wrap surface.
+            expect(raw, `${command}: missing unified --agent selector`).toContain('--agent');
+            expect(raw, `${command}: argument-hint must use the correct --agent selector`).toContain(
+                'inline|auto|name',
+            );
+            expect(raw, `${command}: must apply the inline-default contract`).toContain(
+                'cross-cutting.md#inline-default-execution-surface',
+            );
+            expect(raw, `${command}: must name agent.default as the headless resolution`).toContain('agent.default');
+
+            // Wrap remains workflow-backed — no inline driver, no Skill() substitution.
+            expect(raw, `${command}: must stay workflow-backed`).toContain(
+                'spur workflow run .spur/workflows/wrapup-pipeline.yaml',
+            );
+            expect(raw, `${command}: must not promise an inline wrap driver`).not.toContain('inline-wrapup-driver.md');
+
+            // Pre-dispatch notice fields (R1): subprocess surface, trigger 3, agent.default resolution.
+            expect(raw, `${command}: must name the subprocess surface in the notice`).toContain(
+                'execution surface: subprocess',
+            );
+            expect(raw, `${command}: must name objective trigger 3`).toContain('trigger 3');
+            expect(raw, `${command}: must merge the executor into vars.agent`).toContain('vars.agent');
+        }
+
+        // Selector preservation through run/runall wrap handoffs and next-router A8/B6 routes.
+        for (const command of ['dev-run', 'dev-runall']) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(raw, `${command}: wrap handoff must preserve --agent`).toContain('--agent');
+            expect(raw, `${command}: wrap handoff must name the wrap hop`).toMatch(/wrap/);
+        }
+        const routing = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'next-router', 'references', 'routing-table.md'),
+            'utf8',
+        );
+        expect(routing, 'A8 must preserve --agent into dev-wrap').toContain('/sp:dev-wrap <wbs>` (`--agent');
+        expect(routing, 'B6 must preserve --agent into dev-wrapall').toContain(
+            '/sp:dev-wrapall --feature <id>` (`--agent',
+        );
+    });
+
+    test('0508 — interactive inline is host-controlled, native-subagent-first with host fallback', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
+            'utf8',
+        );
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        const adr = readFileSync(ADR, 'utf8');
+
+        // Eligibility is deterministic and observable: pure-slash agent.run, non-interactive
+        // state, native subagent with shared-worktree capability. No subjective heuristic.
+        expect(driver).toContain('Native-subagent dispatch (R2 eligibility');
+        expect(driver).toContain('pure slash command');
+        expect(driver).toContain('native subagent that shares the working tree');
+        expect(driver).toContain('No token estimate, stage-size threshold, model heuristic');
+        // Distinct provenance: subagent vs inline; no post-launch replay; host-owned HITL.
+        expect(driver).toContain('stage <id> executed via subagent <agent-id> (host session <session-id>)');
+        expect(driver).toContain('stage <id> executed inline in session <session-id>');
+        expect(driver).toContain('do **not** replay the stage in the host');
+        expect(driver).toContain('the host alone executes operator-confirmation actions');
+        expect(driver).toContain('do not dispatch this stage again');
+
+        // The value table stays on three values; the inline row carries the nuance in lockstep.
+        expect(crossCutting).toContain('eligible model stages may use a native subagent (0508)');
+        // The ADR-047 amendment records the decision.
+        expect(adr).toContain('Amendment (2026-08-10, task 0508)');
+        expect(adr).toContain('native subagent');
+
+        // Operator surfaces no longer promise host-only model stages.
+        for (const command of ['dev-run', 'dev-runall']) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(raw, `${command}: must document native-subagent-first inline stages`).toContain('native subagent');
+        }
     });
 
     test('excluded commands must not delegate model-bearing work without the contract', () => {
