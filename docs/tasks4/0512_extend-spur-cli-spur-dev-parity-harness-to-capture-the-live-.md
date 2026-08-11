@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.615Z"
-updated_at: "2026-08-11T22:26:15.207Z"
+updated_at: "2026-08-11T22:59:30.398Z"
 ---
 
 ## 0512. Extend spur-cli/spur-dev parity harness to capture the live CLI surface
@@ -25,10 +25,10 @@ Implements feature I2 scenarios: R13 (surface capture proves source-local proven
 
 Rubric: E3 D1 L1 C0 R0 = 5 → split (size gate: 6 R-items > cap 5); helper slice kept here.
 ### Requirements
-- [ ] R1. Add `plugins/sp/tests/helpers/cli-surface.ts` to invoke the source-local monorepo CLI, capture noun/verb/flag sets from `--help` (`--json` only where supported), and include the resolved entry path plus `@gobing-ai/spur` version in every result.
-- [ ] R2. Document that published npm `spur` can lag the source-local CLI and is outside this deterministic parity gate.
+- [ ] R1. Add `plugins/sp/tests/helpers/cli-surface.ts` with exported `captureCliSurface(noun?)` and `parseCommanderHelp(text)` helpers. Capture must invoke the repository's `apps/cli/src/index.ts` through Bun, return stable sorted noun/verb/flag arrays, fail loudly on a non-zero command, and attach `{ entryPath, packageName, packageVersion }` provenance read from `apps/cli/package.json`.
+- [ ] R2. Document in `docs/design/plugin-surface-parity.md` and the helper contract that published npm `spur` may lag and is outside this deterministic source-local parity gate.
 
-Non-goals: no runtime CLI behavior, public command or flag, dependency, schema, transport, general-purpose help parser, or pre-allocated test-file family (assertions live in 0517; exclusions and boundary in 0516).
+Non-goals: no runtime CLI behavior, public command or flag, dependency, schema, transport, generic help parser, or bare PATH `spur` execution. Assertion wiring and fixture coverage belong to 0517; explicit exclusion and boundary parsing belong to 0516.
 ### Acceptance Criteria
 ```gherkin
 Feature: Source-local CLI parity harness
@@ -49,17 +49,19 @@ Feature: Source-local CLI parity harness
 - **Provenance:** record `apps/cli/src/index.ts` resolution and the workspace package version; never execute a bare PATH `spur`.
 - **Deferred:** validation of arbitrary published npm installations is explicitly outside this gate.
 ### Design
-Implement a narrow test-only adapter in `plugins/sp/tests/helpers/cli-surface.ts`. It runs
-`bun run apps/cli/src/index.ts [<noun>] --help` from the repository root, parses Commander-style
-Commands/Options blocks into stable sets, and returns provenance with the captured surface. Parsing
-is fixture-backed and limited to the current CLI help grammar; do not build a generic help parser.
+Create the test-only adapter at `plugins/sp/tests/helpers/cli-surface.ts`. Freeze these exports for downstream tasks:
 
-Rejected: executing a bare PATH `spur` (provenance cannot be proven — the resolved binary and
-package version must be recorded); a general-purpose help parser (overkill for a narrow
-fixture-backed adapter). No production package is changed.
+- `parseCommanderHelp(text: string): { commands: string[]; flags: string[] }` parses only the current Commander `Commands:` and `Options:` blocks, deduplicates, and sorts results.
+- `captureCliSurface(noun?: string): CliSurfaceCapture` runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...(noun ? [noun] : []), '--help']` with the repository root as `cwd`; `CliSurfaceCapture` contains the parsed arrays plus provenance `{ entryPath, packageName: '@gobing-ai/spur', packageVersion }`.
+
+Resolve the repository root from `import.meta.dir`; read version `0.3.43` dynamically from `apps/cli/package.json` rather than pinning it. Treat non-zero exit, missing help blocks required by the caller, or unreadable package metadata as test failures with the invoked argv in the message. Do not shell out to a bare `spur`, add a production abstraction, or attempt to parse arbitrary help formats.
+
+0516 extends this same helper with structured scope parsers; 0517 supplies the single focused fixture/live parity suite. No production package changes.
 ### Plan
-- [ ] Add fixture-backed source-local CLI capture helper with provenance.
-- [ ] Document npm-skew scope in the harness contract.
+- [ ] Implement `parseCommanderHelp` and `captureCliSurface` in `plugins/sp/tests/helpers/cli-surface.ts` (R1).
+- [ ] Update `docs/design/plugin-surface-parity.md` only if its existing provenance/npm-skew text needs the frozen helper names added (R2).
+- [ ] Run a source-local helper smoke import that captures root help and asserts non-empty commands plus `apps/cli/src/index.ts` / `@gobing-ai/spur@<version>` provenance; fixture/live assertions are completed by 0517.
+- [ ] Run `bun test plugins/sp/tests/command-flag-parity.test.ts` to ensure the existing parity layer remains green, then hand the frozen helper API to 0516.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -73,9 +75,10 @@ fixture-backed adapter). No production package is changed.
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-- Feature: I2
-- Design: `docs/design/plugin-surface-parity.md` §§1–5, 7–8
+- Feature: I2, scenarios R9 and R13
+- Design: `docs/design/plugin-surface-parity.md` §§2–3, 7–8
 - Decisions: ADR-053, ADR-054, ADR-055
-- Existing tests: `plugins/sp/tests/{command-flag-parity,flag-contract-parity,routing-table-parity,skill-structure}.test.ts`
-- Dependent task: 0513
+- Source-local entry/version: `apps/cli/src/index.ts`; `apps/cli/package.json`
+- Existing parity tests: `plugins/sp/tests/{command-flag-parity,flag-contract-parity,routing-table-parity,skill-structure}.test.ts`
+- Dependent task: 0516 (scope parsers), then 0517 (focused assertions)
 ### History
