@@ -1,6 +1,6 @@
 ---
 description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup
-argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]"
+argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
@@ -15,6 +15,7 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 | `--since` `<iso-date>` | Wrap tasks completed since a date. | configured |
 | `--feature` `<id>` | Wrap tasks in a feature. | omitted |
 | `--status` `<s>` | Only wrap tasks in a status. | done |
+| `--agent` `<inline\|auto\|name>` | Who runs the wrap's model-bearing steps. Wrap is workflow-backed: omit/`inline` resolves to `agent.default` (objective trigger 3 — durable auditable run record required); `auto` tier-resolves an executor; a name pins that executor into `vars.agent`. | agent.default |
 | `--auto` | Skip objective HITL gates. | off |
 | `--merge` | Merge wrap branches. | off |
 | `--dry-run` | Render wraps without writing. | off |
@@ -23,11 +24,28 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-wrapall [--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]
+/sp:dev-wrapall [--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- Wrap stays **workflow-backed** — `spur workflow run .spur/workflows/wrapup-pipeline.yaml` is the only implementation; there is no inline wrap driver.
+- Resolve the executor **before** launching the workflow:
+  - `--agent <name>` → pass the name unchanged into `vars.agent`.
+  - `--agent auto` → tier-resolve a concrete executor first, then merge it into `vars.agent`.
+  - omit/`--agent inline` → resolve to `agent.default` (the documented headless resolution of `inline`).
+- Emit a pre-dispatch notice naming the override before `spur workflow run`, exactly:
+  `execution surface: subprocess`, `reason: trigger 3 — durable auditable run record required`, `requested agent: inline|auto|<name>`, `executor: agent.default|<resolved-name>`.
+- The wrap workflow still creates its durable run record — the notice reports the override, it does not change the workflow.
+
 ```bash
-spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"<json-encoded-wbs-list>","feature":"<id|>","profile":"interactive|auto","merge":"true|false"}' [--dry-run]
+AGENT=… # resolved above: agent.default for inline/omitted, tier-resolved for auto, unchanged for <name>
+echo "execution surface: subprocess; reason: trigger 3 — durable auditable run record required; requested agent: <inline|auto|name>; executor: $AGENT"
+VARS=$(jq -nc --arg tasks "$TASKS" --arg feature "$FEATURE" --arg agent "$AGENT" --arg profile "$PROFILE" --arg merge "$MERGE" \
+  '{tasks:$tasks, feature:$feature, agent:$agent, profile:$profile, merge:$merge}')
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS" [--dry-run]
 ```
+
+The executor resolution is described in the bullets above; the snippet's `AGENT` variable carries
+the resolved name (`agent.default` for omit/`inline`).
 

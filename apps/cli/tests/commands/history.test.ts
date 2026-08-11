@@ -44,6 +44,8 @@ function emptyTokens() {
         toolCalls: 0,
         durationMs: 0,
         durationUnmeasured: 0,
+        assistantDurationMs: 0,
+        assistantDurationUnmeasured: 0,
     };
 }
 
@@ -267,6 +269,62 @@ describe('history command', () => {
         expect(parsed.message).toContain('Invalid history import mode');
     });
 
+    test('import --file --mode full without --dry-run is rejected before any import (0506 R2)', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'probe.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const importSpy = spyOn(HistoryService.prototype, 'importAll');
+        const exitCode = await main(
+            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'full'],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+
+        expect(exitCode).toBe(1);
+        const joined = lines.join('');
+        // Names both supported alternatives so a probe self-corrects.
+        expect(joined).toContain('--dry-run');
+        expect(joined).toContain('--mode force-file');
+        // The guard fires before the database-backed service is constructed or used.
+        expect(importSpy).not.toHaveBeenCalled();
+    });
+
+    test('import --file --mode full without --dry-run --json emits a structured error naming both alternatives (0506 R2)', async () => {
+        const cwd = makeTmpCwd();
+        const file = join(cwd, 'probe.jsonl');
+        writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(
+            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'full', '--json'],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { status: string; message: string };
+        expect(parsed.status).toBe('error');
+        expect(parsed.message).toContain('--dry-run');
+        expect(parsed.message).toContain('--mode force-file');
+    });
+
+    test('import --mode full without --file still reaches the import path (0506 R2)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+
+        // Source-root full write is the sanctioned reconciliation surface — must not regress.
+        const exitCode = await main(['history', 'import', '--source', 'codex', '--root', emptyRoot, '--mode', 'full'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(lines.join('')).toContain('history import (fan-out)');
+    });
+
     test('import --source missing is rejected with the source allowlist', async () => {
         const { output, lines } = capturingOutput();
 
@@ -307,8 +365,10 @@ describe('history command', () => {
         writeFileSync(file, `${JSON.stringify({ id: 'm1', timestamp: '2026-05-30T00:00:00Z', content: 'x' })}\n`);
         const { output, lines } = capturingOutput();
 
+        // 0506 R2: a single-file full WRITE is rejected pre-DB; the sanctioned preview path
+        // is `--dry-run`, which still exercises the reconciliation summary (0505 R1 contract).
         const exitCode = await main(
-            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'full', '--json'],
+            ['history', 'import', '--source', 'antigravity', '--file', file, '--mode', 'full', '--dry-run', '--json'],
             {
                 output,
                 cwd,

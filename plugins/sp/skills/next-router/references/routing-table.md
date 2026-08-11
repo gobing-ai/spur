@@ -65,7 +65,7 @@ Statuses from `TASK_STATUSES`: backlog | todo | wip | testing | blocked | done |
 | A5 | `status == wip` (no usable checkpoint) | `task.show.status` | `/sp:dev-run <wbs> --mode implement --auto --next` | yes | **yes** → verify | Completes implement step then chain |
 | A6 | `status == testing` | `task.show.status` | `/sp:dev-verify <wbs> --auto --next` | yes | **yes** — verify `--next` → done (FSM + provenance guards) | On PARTIAL/FAIL → stop review-pending (do not force done) |
 | A7 | `status == blocked` | `task.show` + Notes/History for blocker text | `/sp:dev-handover "<blocker summary from Notes or status>"` | no | no | **STOP** after handover doc; human unblocks |
-| A8 | `status == done` | `task.show.status` | `/sp:dev-wrap <wbs>` | no | **no** (wrap's `--merge` is irreversible HITL; never auto) | Operator may re-invoke with `--merge` explicitly later |
+| A8 | `status == done` | `task.show.status` | `/sp:dev-wrap <wbs>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | **no** (wrap's `--merge` is irreversible HITL; never auto) | Operator may re-invoke with `--merge` explicitly later |
 | A9 | `status == cancelled` | `task.show.status` | *(none)* | no | no | **STOP** — no-op; print "cancelled — nothing to advance" |
 
 **Priority when multiple TABLE A rows could match:** lowest row number wins (A1–A9 are mutually
@@ -83,7 +83,7 @@ When input is a feature id:
 | B3 | Feature has ≥1 frontier task | task list under feature | **Recurse TABLE A** on chosen task | per A | per A | Frontier = open (`backlog`\|`todo`\|`wip`\|`testing`\|`blocked`), unblocked (all `dependencies[]` done), prefer WBS-ascending among `todo` then `backlog` then `wip` then `testing` then `blocked` |
 | B4 | No frontier tasks AND `feature.status == backlog` AND AC placeholder/invalid | `feature check` / AC body | `/sp:dev-plan` continuation is not WBS-shaped — **STOP** with: run `/sp:dev-plan --feature <id>` or fix AC then `spur feature check <id>` | no | no | Planning-half entry needs a description; do not invent idea text |
 | B5 | No frontier tasks AND feature has valid AC but zero tasks | feature + empty task roster | **STOP** with: `/sp:dev-plan --feature <id>` (decompose/batch-create) | no | no | Avoid auto-running plan without operator description confirmation in v1 |
-| B6 | No frontier tasks AND all child tasks `done` AND feature in `active`\|`verifying` | task list all done | `/sp:dev-wrapall --feature <id>` | no | no | Advances feature via wrapall guards; `--merge` never auto |
+| B6 | No frontier tasks AND all child tasks `done` AND feature in `active`\|`verifying` | task list all done | `/sp:dev-wrapall --feature <id>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | no | Advances feature via wrapall guards; `--merge` never auto |
 | B7 | No frontier tasks AND mixed cancelled/done only | statuses | **STOP** — print summary; suggest feature status update manually | no | no | |
 | B8 | `feature.status == blocked` | feature status | **STOP** — print feature blocked; do not pick tasks | no | no | |
 

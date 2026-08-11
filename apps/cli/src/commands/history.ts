@@ -59,7 +59,6 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--source-timeout <ms>', 'Per-source timeout in milliseconds (default 600000 = 10 min)', '600000')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (options) => {
-            const svc = new HistoryService({ getDb: () => context.getDb() });
             const source = options.source ?? 'all';
 
             // --file is single-source only — reject the contradictory combo up front.
@@ -86,6 +85,24 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
                 return;
             }
+
+            // R2 (task 0506): reject the hazardous single-file full write BEFORE any DB access.
+            // `--file <path> --mode full` without `--dry-run` makes the temporary file the
+            // authoritative input for a full reconciliation of the real database. The exact
+            // unsafe combination is deterministic — no threshold, config key, or confirmation
+            // flag. Both alternatives are named so probes self-correct: add `--dry-run` to
+            // preview, or use `--mode force-file` to import one file.
+            if (options.file && mode === 'full' && options.dryRun !== true) {
+                const unsafeMsg =
+                    'spur history import: --file <path> --mode full without --dry-run is unsafe — full mode ' +
+                    'treats the file as the authoritative source for reconciliation. Preview with --dry-run, ' +
+                    'or import a single file with --mode force-file.';
+                context.output.write(options.json ? toJson({ status: 'error', message: unsafeMsg }) : unsafeMsg);
+                context.setExitCode(1);
+                return;
+            }
+
+            const svc = new HistoryService({ getDb: () => context.getDb() });
 
             const fanOut = await svc.importAll({
                 sources: source === 'all' ? undefined : [source],
