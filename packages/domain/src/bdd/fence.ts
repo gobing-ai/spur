@@ -17,3 +17,21 @@ export function stripAcFence(body: string): string {
     }
     return out.join('\n');
 }
+
+/** True when an AC body reads as Gherkin (a Feature/Scenario header anywhere). */
+export function looksLikeGherkinAc(body: string): boolean {
+    return /^\s*(?:Feature:|Scenario:|Scenario Outline:)/m.test(body);
+}
+
+/**
+ * Ensure a Gherkin AC body is wrapped in a ```gherkin fence for presentation.
+ * Checklist-tier and empty bodies pass through unchanged; already-fenced bodies
+ * pass through unchanged. Write paths call this so the corpus invariant
+ * ("Gherkin AC is always fenced") holds regardless of the author.
+ */
+export function normalizeAcFence(body: string): string {
+    const trimmed = body.trim();
+    if (trimmed === '' || /^\s*```/m.test(trimmed)) return body;
+    if (!looksLikeGherkinAc(trimmed)) return body;
+    return `\`\`\`gherkin\n${trimmed}\n\`\`\``;
+}

@@ -15,6 +15,7 @@ import {
     DEFAULT_TASK_VARIANT,
     escapeYamlValue,
     MarkdownDocument,
+    normalizeAcFence,
     parseChecklist,
     renderTaskTemplate,
     SECTION_GUIDANCE,
@@ -258,7 +259,7 @@ function renderCreatedTaskContent(params: {
         sectionPatches.Plan = (params.plan ?? '').trim();
     }
     if ((params.acceptanceCriteria ?? '').trim() !== '') {
-        sectionPatches['Acceptance Criteria'] = (params.acceptanceCriteria ?? '').trim();
+        sectionPatches['Acceptance Criteria'] = normalizeAcFence((params.acceptanceCriteria ?? '').trim());
     }
     if (Object.keys(sectionPatches).length > 0) {
         const doc = MarkdownDocument.parse(content, 'task');
@@ -1526,7 +1527,7 @@ export class TaskService {
                 taskBodies.Plan = (item.plan ?? '').trim();
             }
             if ((item.acceptance_criteria ?? '').trim() !== '') {
-                taskBodies['Acceptance Criteria'] = (item.acceptance_criteria ?? '').trim();
+                taskBodies['Acceptance Criteria'] = normalizeAcFence((item.acceptance_criteria ?? '').trim());
             }
 
             const content = buildTaskSkeleton({

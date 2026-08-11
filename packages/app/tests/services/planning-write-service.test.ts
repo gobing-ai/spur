@@ -244,6 +244,32 @@ describe('PlanningWriteService', () => {
             // Should differ from the original 2026-06-13 baseline
             expect(updated).not.toBe('2026-06-13T00:00:00.000Z');
         });
+
+        test('wraps raw Gherkin Acceptance Criteria in a gherkin fence', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Acceptance Criteria', 'Scenario: R1 — x\n  Given g\n  Then t\n');
+
+            const written = await readBack(ref);
+            const doc = MarkdownDocument.parse(written, 'task');
+            expect(doc.getSection('Acceptance Criteria')).toContain('```gherkin');
+        });
+
+        test('leaves checklist Acceptance Criteria unfenced', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Acceptance Criteria', '- [ ] AC1 works\n');
+
+            const written = await readBack(ref);
+            const doc = MarkdownDocument.parse(written, 'task');
+            expect(doc.getSection('Acceptance Criteria')).not.toContain('```');
+        });
     });
 
     describe('phantom-section guard (R3)', () => {

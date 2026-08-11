@@ -19,6 +19,7 @@ import {
     featureFrontmatterSchema,
     MarkdownDocument,
     type MarkdownDomain,
+    normalizeAcFence,
     normalizeFeatureStatus,
     normalizeTaskStatus,
     TASK_CANONICAL_SECTIONS,
@@ -515,7 +516,12 @@ function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): voi
             break;
         case 'updateSection':
             if (mutation.sectionName !== undefined && mutation.sectionBody !== undefined) {
-                doc.replaceSection(mutation.sectionName, mutation.sectionBody);
+                // Gherkin AC is always fenced in the corpus — normalize at the write boundary
+                const body =
+                    mutation.sectionName.toLowerCase() === 'acceptance criteria'
+                        ? normalizeAcFence(mutation.sectionBody)
+                        : mutation.sectionBody;
+                doc.replaceSection(mutation.sectionName, body);
             }
             break;
         case 'updateBody':

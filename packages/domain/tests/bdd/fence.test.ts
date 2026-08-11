@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { stripAcFence } from '../../src/bdd/fence';
+import { looksLikeGherkinAc, normalizeAcFence, stripAcFence } from '../../src/bdd/fence';
 
 describe('stripAcFence', () => {
     test('removes gherkin code fence lines', () => {
@@ -66,5 +66,38 @@ Feature: Example
         const input = '```gherkin\n\nFeature: Blank\n\n  Scenario: Has blanks\n\n```';
         const result = stripAcFence(input);
         expect(result).toBe('\nFeature: Blank\n\n  Scenario: Has blanks\n');
+    });
+});
+
+describe('normalizeAcFence', () => {
+    test('wraps raw Gherkin in a gherkin fence', () => {
+        const input = 'Scenario: R1 — thing works\n  Given a precondition\n  Then an outcome';
+        const fence = '```';
+        expect(normalizeAcFence(input)).toBe(`${fence}gherkin\n${input}\n${fence}`);
+    });
+
+    test('round-trips through stripAcFence to the original body', () => {
+        const input = 'Feature: F\n  Scenario: R1 — x\n    Given g\n    Then t';
+        expect(stripAcFence(normalizeAcFence(input)).trim()).toBe(input);
+    });
+
+    test('leaves already-fenced Gherkin unchanged', () => {
+        const input = '```gherkin\nScenario: R1 — x\n```';
+        expect(normalizeAcFence(input)).toBe(input);
+    });
+
+    test('leaves checklist-tier AC unfenced', () => {
+        const input = '- [ ] AC1 thing works\n- [ ] AC2 other thing';
+        expect(normalizeAcFence(input)).toBe(input);
+    });
+
+    test('leaves empty and whitespace bodies unchanged', () => {
+        expect(normalizeAcFence('')).toBe('');
+        expect(normalizeAcFence('   \n  ')).toBe('   \n  ');
+    });
+
+    test('detects Gherkin behind leading @tags', () => {
+        expect(looksLikeGherkinAc('@core\nScenario: R1 — x')).toBe(true);
+        expect(looksLikeGherkinAc('plain prose')).toBe(false);
     });
 });
