@@ -130,6 +130,7 @@ spur.js
 /packages/**/.spur/
 /docs/**/.spur/
 /.spur/run
+/.spur/backups/
 /.spur/context/.session*.json
 /.spur/context/token-ledger.jsonl
 /.spur/memory/sessions/*-checkpoint.md
