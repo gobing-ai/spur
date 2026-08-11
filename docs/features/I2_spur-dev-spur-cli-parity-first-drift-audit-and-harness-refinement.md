@@ -145,6 +145,10 @@ Feature: spur-dev/spur-cli parity-first drift audit and harness refinement
 | 0513 | Fix spur-cli/spur-dev drift exposed by the parity harness | todo |
 | 0514 | Content pass: README index, cross-links, and structured-catalog ownership | todo |
 | 0515 | Harden sp-dev-idea planning handoff from dogfood findings | todo |
+| 0516 | Parity scope data: explicit exclusions and the ADR-054 ownership boundary | todo |
+| 0517 | Wire facade/spine parity assertions against the captured surface | todo |
+| 0518 | Idea handoff finalization: task ordering, roster refresh, readiness-gated recommendation | todo |
+| 0519 | Idea-pipeline regression tests for dogfood findings with no-surface guard | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

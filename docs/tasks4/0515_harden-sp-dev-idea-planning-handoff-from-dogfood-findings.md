@@ -13,23 +13,22 @@ tags: ["dogfood", "planning-workflow", "plugins/sp"]
 dependencies: ["0514"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:43:29.598Z"
-updated_at: "2026-08-11T21:26:54.928Z"
+updated_at: "2026-08-11T22:26:28.330Z"
 ---
 
 ## 0515. Harden sp-dev-idea planning handoff from dogfood findings
 
 ### Background
-Operational hardening for feature I2 scenario R14 — Idea handoff is safe to execute. Dogfooding the feature through `config/workflows/idea-pipeline.yaml` exposed four concrete gaps: feature-create placed decomposition/checklist content in Goal and left Scope blank; design rejection had no explicit persistent feedback/reconciliation contract; the decomposed batch described ordering but created empty `dependencies[]`; and handoff recommended `/sp:dev-runall` although every created task failed `spur task check` with placeholder Acceptance Criteria and the feature task roster was stale. Fix these at the spine/workflow/skill/test layer using existing CLI verbs. Do not add task-batch schema fields or change the public CLI surface without separate operator consent. This task runs after the parity/content tasks so its edits reconcile with their final skill text.
+Operational hardening for feature I2 scenario R14 — Idea handoff is safe to execute. This task owns the guidance contract: Goal/Scope intent through `spur feature update` and the design-review feedback/reconciliation artifact. The finalization machinery (order sidecar + deps, roster refresh, readiness-gated handoff report) moved to 0518, and the regression tests + no-surface guard to 0519, by the 2026-08-11 decomposition.
+
+Dogfooding the feature through `config/workflows/idea-pipeline.yaml` exposed four concrete gaps; this task covers the first two (feature-create placed decomposition/checklist content in Goal and left Scope blank; design rejection had no explicit persistent feedback/reconciliation contract). The remaining two (ordering not encoded; handoff recommended runall while tasks were unready) live in 0518. Fix at the spine/workflow/skill/test layer using existing CLI verbs. Do not add task-batch schema fields or change the public CLI surface without separate operator consent.
+
+Rubric: E3 D1 L1 C0 R0 = 5 → split (size gate: 7 R-items > cap 5); guidance slice kept here.
 ### Requirements
 - [ ] R1. Make feature-create guidance write concise Goal and Scope intent through `spur feature update`; decomposition output and completion checklists never enter Goal.
 - [ ] R2. Persist design review and operator rejection feedback in `.spur/run/${vars.__runId}-idea-design-review.md`; the revision pass reads it and reconciles accepted design changes with feature AC through the feature CLI before decomposition.
-- [ ] R3. When decomposition declares ordering, emit a run-scoped order sidecar and apply it after batch creation through existing `spur task deps`; missing or ambiguous title-to-WBS resolution fails before handoff.
-- [ ] R4. Refresh the feature roster after successful batch creation.
-- [ ] R5. Check every created task and generate a run-scoped handoff report that recommends `/sp:dev-refineall --feature <id> --auto --depth ready` when any task is unready; recommend runall only when all task checks pass.
-- [ ] R6. Add focused workflow-definition and plugin contract tests reproducing the four dogfood findings.
-- [ ] R7. Add no public CLI command/flag, task-batch schema field, dependency, persistence schema, or transport.
 
-Non-goals: executing created tasks, changing task-batch.schema.json, introducing a new CLI finalizer, or redesigning the idea workflow.
+Non-goals: executing created tasks, changing task-batch.schema.json, introducing a new CLI finalizer, or redesigning the idea workflow (ordering/roster/handoff live in 0518; tests in 0519).
 ### Acceptance Criteria
 ```gherkin
 Feature: Safe idea-pipeline planning handoff
@@ -43,31 +42,6 @@ Feature: Safe idea-pipeline planning handoff
     Given the operator rejects a design after recording feedback in the run-scoped review artifact
     When system-design runs again
     Then it reads the feedback and reconciles invalidated feature AC through spur feature update
-
-  Scenario: R3 — Idea handoff is safe to execute
-    Given decomposition emits a non-empty task-order sidecar
-    When batch creation succeeds
-    Then each dependency is applied with spur task deps or the pipeline fails before handoff
-
-  Scenario: R4 — Idea handoff is safe to execute
-    Given task batch creation succeeds
-    When post-create finalization completes
-    Then spur feature refresh has regenerated the feature task roster
-
-  Scenario: R5 — Idea handoff is safe to execute
-    Given at least one created task fails spur task check
-    When the handoff report is generated
-    Then it recommends ready-depth refineall and does not recommend runall
-
-  Scenario: R6 — Idea handoff is safe to execute
-    Given created tasks have encoded ordering, a refreshed roster, and passing task checks
-    When the pipeline reaches handoff
-    Then the report lists the feature and WBS set and recommends runall
-
-  Scenario: R7 — Idea handoff is safe to execute
-    Given the hardening uses existing feature, task deps, refresh, and check verbs
-    When the change is reviewed
-    Then no public CLI surface or task-batch schema field has been added
 ```
 ### Q&A
 - **Design feedback transport:** reuse one run-scoped Markdown artifact. The approval prompt tells the operator to fill its `Operator feedback` section before rejecting; the next system-design pass must read it.
@@ -95,13 +69,8 @@ each created WBS, and writes `.spur/run/${vars.__runId}-idea-handoff.md`. Any fa
 the report recommend ready-depth refineall; only an all-pass set recommends runall. The terminal
 note points to this report. Task 0514 is assumed green and must not be re-owned.
 ### Plan
-- [ ] Add run-scoped Goal/Scope and design-review artifact contracts to feature-create/system-design.
-- [ ] Gate accepted design on reconciled feature AC and a passing feature check.
-- [ ] Emit the private task-order sidecar and apply it after batch creation with `spur task deps`.
-- [ ] Refresh the feature roster and check the frozen created-WBS set.
-- [ ] Generate the conditional handoff report and replace the static runall recommendation.
-- [ ] Extend idea-pipeline definition and plugin contract tests for all four findings.
-- [ ] Run workflow validation, focused tests, feature/task checks, and confirm no public surface or schema diff.
+- [ ] Add run-scoped Goal/Scope contract guidance to feature-create via `spur feature update --section --from-file`.
+- [ ] Persist design-review feedback in the run-scoped artifact; gate accepted design on reconciled feature AC and a passing feature check.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->

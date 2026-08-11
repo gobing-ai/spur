@@ -10,10 +10,10 @@ feature_id: I2
 parent_wbs: null
 priority: P2
 tags: ["parity", "drift-fix", "plugins/sp"]
-dependencies: ["0512"]
+dependencies: ["0517"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.659Z"
-updated_at: "2026-08-11T21:23:30.651Z"
+updated_at: "2026-08-11T22:26:28.542Z"
 ---
 
 ## 0513. Fix spur-cli/spur-dev drift exposed by the parity harness
@@ -25,7 +25,7 @@ Runs after the parity-harness task and is blocked by it: fixes are driven by tha
 
 Ordering: second task — blocked by the harness task; precedes the content pass so the review settles an already-green surface. Rubric: E3 D1 L2 C0 R0 = 6 → task (evidence-driven fixes spanning facade + spine + AGENTS.md doc surfaces, with a review gate distinct from the harness test code).
 ### Requirements
-- [ ] R1. Correct every facade noun/verb/flag inventory reported by 0512 in either parity direction; leave no harness finding unresolved.
+- [ ] R1. Correct every facade noun/verb/flag inventory reported by the parity harness (0517's focused suite) in either parity direction; leave no harness finding unresolved.
 - [ ] R2. Correct CLI-routed spine rows that name an absent noun or verb, or mark genuine slash-command/inline routes with an explicit reason.
 - [ ] R3. Sync the AGENTS.md public noun table with the live CLI; if it changes, keep `config/templates/AGENTS.md` aligned with the portable contract.
 - [ ] R4. Reconcile Tier C exclusion reasons and any index/link drift exposed by the focused harness without duplicating structured catalogs.
@@ -37,7 +37,7 @@ Non-goals: speculative cleanup, prose rewriting not named by a harness finding, 
 Feature: Evidence-driven plugin drift correction
 
   Scenario: R1 — Exposed drift is fixed before the pass is green
-    Given task 0512 reports facade or noun-table drift
+    Given the parity harness reports facade or noun-table drift
     When each reported documentation surface is corrected
     Then the focused parity suite passes with no outstanding finding
 
