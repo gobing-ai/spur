@@ -188,6 +188,11 @@ states:
       # a tree already dirty with another task's implementation is how 0485's diff
       # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
       # those itself.
+      # R1 (0511): task-corpus dirt gets its own advisory NOTE — docs/tasks* is
+      # excluded from the non-corpus warning, so pre-existing task-corpus edits are
+      # invisible at launch yet can be accidentally staged with the current task
+      # later. Advisory only (never a block): the pipeline legitimately updates
+      # task files, so corpus dirt is launch-time visibility, not a lifecycle guard.
       - kind: shell
         options:
           command: >-
@@ -195,6 +200,11 @@ states:
             if [ -n "$DIRTY" ]; then
               echo "precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:";
               echo "$DIRTY";
+            fi;
+            CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null);
+            if [ -n "$CORPUS_DIRTY" ]; then
+              echo "precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:";
+              echo "$CORPUS_DIRTY";
             fi;
             exit 0
       - kind: note

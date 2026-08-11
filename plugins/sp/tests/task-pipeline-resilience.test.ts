@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -39,6 +39,23 @@ function executable(dir: string, name: string, body: string): string {
     writeFileSync(path, `#!/bin/sh\n${body}\n`);
     chmodSync(path, 0o755);
     return path;
+}
+
+function initGitRepo(dir: string): void {
+    for (const args of [
+        ['git', 'init', '-q'],
+        ['git', 'config', 'user.email', 'test@spur.local'],
+        ['git', 'config', 'user.name', 'spur test'],
+    ]) {
+        Bun.spawnSync(args, { cwd: dir });
+    }
+    // Seed a tracked file under the corpus path so untracked corpus files are
+    // listed individually — git collapses a fully-untracked directory into one
+    // `?? docs/tasks4/` row, which would not name the file.
+    mkdirSync(join(dir, 'docs', 'tasks4'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'tasks4', '.gitkeep'), '');
+    Bun.spawnSync(['git', 'add', '.'], { cwd: dir });
+    Bun.spawnSync(['git', 'commit', '-qm', 'init'], { cwd: dir });
 }
 
 function runShell(command: string, cwd: string, env: Record<string, string>): { exitCode: number; output: string } {
@@ -175,5 +192,29 @@ describe('0503 task-pipeline resilience', () => {
         expect(readFileSync(join(dir, '.spur/run/0503-test-gate.log'), 'utf8')).toContain(
             'SQLiteError: database is locked',
         );
+    });
+
+    test('precheck dirty-tree action names task-corpus dirt without the non-corpus warning', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
+        initGitRepo(dir);
+        writeFileSync(join(dir, 'docs', 'tasks4', 'uncommitted.md'), 'corpus edit');
+        const command = commandFor('precheck', 1);
+        const result = runShell(command, dir, {});
+
+        expect(result.exitCode).toBe(0);
+        expect(result.output).toContain('precheck: NOTE - task corpus has uncommitted changes');
+        expect(result.output).toContain('?? docs/tasks4/uncommitted.md');
+        expect(result.output).not.toContain('precheck: WARNING');
+    });
+
+    test('precheck dirty-tree action stays quiet on a clean task corpus', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-clean-'));
+        initGitRepo(dir);
+        const command = commandFor('precheck', 1);
+        const result = runShell(command, dir, {});
+
+        expect(result.exitCode).toBe(0);
+        expect(result.output).not.toContain('precheck: NOTE');
+        expect(result.output).not.toContain('precheck: WARNING');
     });
 });
