@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.615Z"
-updated_at: "2026-08-11T22:59:30.398Z"
+updated_at: "2026-08-11T23:01:33.304Z"
 ---
 
 ## 0512. Extend spur-cli/spur-dev parity harness to capture the live CLI surface
@@ -25,7 +25,7 @@ Implements feature I2 scenarios: R13 (surface capture proves source-local proven
 
 Rubric: E3 D1 L1 C0 R0 = 5 → split (size gate: 6 R-items > cap 5); helper slice kept here.
 ### Requirements
-- [ ] R1. Add `plugins/sp/tests/helpers/cli-surface.ts` with exported `captureCliSurface(noun?)` and `parseCommanderHelp(text)` helpers. Capture must invoke the repository's `apps/cli/src/index.ts` through Bun, return stable sorted noun/verb/flag arrays, fail loudly on a non-zero command, and attach `{ entryPath, packageName, packageVersion }` provenance read from `apps/cli/package.json`.
+- [ ] R1. Add `plugins/sp/tests/helpers/cli-surface.ts` with exported `captureCliSurface(commandPath?)` and `parseCommanderHelp(text)` helpers. Capture must invoke the repository's `apps/cli/src/index.ts` through Bun for root, noun, or noun+verb help, return stable sorted command/flag arrays, fail loudly on a non-zero command, and attach `{ entryPath, packageName, packageVersion }` provenance read from `apps/cli/package.json`.
 - [ ] R2. Document in `docs/design/plugin-surface-parity.md` and the helper contract that published npm `spur` may lag and is outside this deterministic source-local parity gate.
 
 Non-goals: no runtime CLI behavior, public command or flag, dependency, schema, transport, generic help parser, or bare PATH `spur` execution. Assertion wiring and fixture coverage belong to 0517; explicit exclusion and boundary parsing belong to 0516.
@@ -52,13 +52,13 @@ Feature: Source-local CLI parity harness
 Create the test-only adapter at `plugins/sp/tests/helpers/cli-surface.ts`. Freeze these exports for downstream tasks:
 
 - `parseCommanderHelp(text: string): { commands: string[]; flags: string[] }` parses only the current Commander `Commands:` and `Options:` blocks, deduplicates, and sorts results.
-- `captureCliSurface(noun?: string): CliSurfaceCapture` runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...(noun ? [noun] : []), '--help']` with the repository root as `cwd`; `CliSurfaceCapture` contains the parsed arrays plus provenance `{ entryPath, packageName: '@gobing-ai/spur', packageVersion }`.
+- `captureCliSurface(commandPath: string[] = []): CliSurfaceCapture` runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...commandPath, '--help']` with the repository root as `cwd`; the path supports root (`[]`), noun (`['task']`), and noun+verb (`['task', 'update']`) capture. `CliSurfaceCapture` contains the parsed arrays plus provenance `{ entryPath, packageName: '@gobing-ai/spur', packageVersion }`.
 
 Resolve the repository root from `import.meta.dir`; read version `0.3.43` dynamically from `apps/cli/package.json` rather than pinning it. Treat non-zero exit, missing help blocks required by the caller, or unreadable package metadata as test failures with the invoked argv in the message. Do not shell out to a bare `spur`, add a production abstraction, or attempt to parse arbitrary help formats.
 
 0516 extends this same helper with structured scope parsers; 0517 supplies the single focused fixture/live parity suite. No production package changes.
 ### Plan
-- [ ] Implement `parseCommanderHelp` and `captureCliSurface` in `plugins/sp/tests/helpers/cli-surface.ts` (R1).
+- [ ] Implement `parseCommanderHelp` and path-array `captureCliSurface` in `plugins/sp/tests/helpers/cli-surface.ts` (R1).
 - [ ] Update `docs/design/plugin-surface-parity.md` only if its existing provenance/npm-skew text needs the frozen helper names added (R2).
 - [ ] Run a source-local helper smoke import that captures root help and asserts non-empty commands plus `apps/cli/src/index.ts` / `@gobing-ai/spur@<version>` provenance; fixture/live assertions are completed by 0517.
 - [ ] Run `bun test plugins/sp/tests/command-flag-parity.test.ts` to ensure the existing parity layer remains green, then hand the frozen helper API to 0516.
