@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: ["0505"]
 ac_numbering: task-local
 created_at: "2026-08-11T05:35:30.065Z"
-updated_at: "2026-08-11T06:57:42.383Z"
+updated_at: "2026-08-11T15:17:06.212Z"
 ---
 
 ## 0506. Fix 0505 run inefficiencies: inline wrap hop, dry-run probe guard, SQL schema discipline
@@ -29,9 +29,9 @@ Current-tree checks also invalidate two proposed fixes from the original draft: 
 
 This task depends on completed task 0505 for the incident evidence. It hardens the three reusable seams above without changing history reconciliation semantics.
 ### Requirements
-- [ ] R1. Make wrap execution-surface behavior explicit and selector-preserving. Add `--agent <inline|auto|name>` to `dev-wrap` and `dev-wrapall`; propagate the selector from `dev-run`/`dev-runall` wrap handoffs and next-router routes. Because wrap remains workflow-backed, interactive omission/`inline` must emit a pre-dispatch notice naming `subprocess`, objective trigger 3 (durable auditable wrapup run record), and `agent.default` as the executor-resolution source. `auto` tier-resolves before merge, and named executors continue on the existing workflow path.
-- [ ] R2. Reject a non-dry-run single-file full import before opening the database: `history import --file <path> --mode full` without `--dry-run` exits non-zero and directs probes to `--mode force-file` or `--dry-run`. Preserve valid `--file --mode full --dry-run`, `--file --mode force-file`, and all-source/source-root full writes. Add no threshold, configuration key, or confirmation flag.
-- [ ] R3. Add schema-first guidance to the issue-finding history bridge: before ad-hoc SQL references importer-owned history tables, inspect their live definitions in one `sqlite_schema`/`.schema` query. Keep the importer schema authoritative; do not copy column lists into Spur skill prose.
+- [x] R1. Make wrap execution-surface behavior explicit and selector-preserving. Add `--agent <inline|auto|name>` to `dev-wrap` and `dev-wrapall`; propagate the selector from `dev-run`/`dev-runall` wrap handoffs and next-router routes. Because wrap remains workflow-backed, interactive omission/`inline` must emit a pre-dispatch notice naming `subprocess`, objective trigger 3 (durable auditable wrapup run record), and `agent.default` as the executor-resolution source. `auto` tier-resolves before merge, and named executors continue on the existing workflow path.
+- [x] R2. Reject a non-dry-run single-file full import before opening the database: `history import --file <path> --mode full` without `--dry-run` exits non-zero and directs probes to `--mode force-file` or `--dry-run`. Preserve valid `--file --mode full --dry-run`, `--file --mode force-file`, and all-source/source-root full writes. Add no threshold, configuration key, or confirmation flag.
+- [x] R3. Add schema-first guidance to the issue-finding history bridge: before ad-hoc SQL references importer-owned history tables, inspect their live definitions in one `sqlite_schema`/`.schema` query. Keep the importer schema authoritative; do not copy column lists into Spur skill prose.
 
 Non-goals: a second inline FSM driver for `wrapup-pipeline.yaml`; changes to reconciliation algorithms; a new public `spur history` flag or config value; exporting `isInScope`; changing Review-table validation or `spur task record`; fixing one-off skill-path guesses that do not exist in repository content.
 ### Acceptance Criteria
@@ -106,18 +106,18 @@ A: Premise verification found no broken repository link. `isInScope` is private,
 
 **Traceability:** feature E is a grouping feature with no feature-level acceptance scenarios; task 0506 therefore keeps `ac_numbering: task-local`, and its R1–R3 scenarios above are the verification authority.
 ### Plan
-- [ ] P1 (R1) Update `dev-wrap`/`dev-wrapall`, wrap handoff routing, `dev-operations.md`, and flag/inline contract tests to accept and propagate `--agent` while reporting the trigger-3 subprocess override before workflow launch. Keep `wrapup-pipeline.yaml` as the sole implementation.
-- [ ] P2 (R2) Add the pre-database `--file + --mode full + !--dry-run` validation in `apps/cli/src/commands/history.ts`, focused CLI tests for the rejected and preserved combinations, and the matching `docs/04_DESIGN.md` surface note.
-- [ ] P3 (R3) Add one live-schema-first rule to the issue-finding history bridge and extend its existing structure test; do not duplicate importer column definitions.
-- [ ] P4 (R1–R3) Run targeted tests first: `bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/flag-contract-parity.test.ts plugins/sp/tests/skill-structure.test.ts apps/cli/tests/commands/history.test.ts`. Then run the repository completion gates required by `AGENTS.md`, including `bun run autofix`, `bun run spur-check`, lint, test, test-cf, build, corpus check, and intentional `git status`.
+- [x] P1 (R1) Update `dev-wrap`/`dev-wrapall`, wrap handoff routing, `dev-operations.md`, and flag/inline contract tests to accept and propagate `--agent` while reporting the trigger-3 subprocess override before workflow launch. Keep `wrapup-pipeline.yaml` as the sole implementation.
+- [x] P2 (R2) Add the pre-database `--file + --mode full + !--dry-run` validation in `apps/cli/src/commands/history.ts`, focused CLI tests for the rejected and preserved combinations, and the matching `docs/04_DESIGN.md` surface note.
+- [x] P3 (R3) Add one live-schema-first rule to the issue-finding history bridge and extend its existing structure test; do not duplicate importer column definitions.
+- [x] P4 (R1–R3) Run targeted tests first: `bun test plugins/sp/tests/inline-execution-contract.test.ts plugins/sp/tests/flag-contract-parity.test.ts plugins/sp/tests/skill-structure.test.ts apps/cli/tests/commands/history.test.ts`. Then run the repository completion gates required by `AGENTS.md`, including `bun run autofix`, `bun run spur-check`, lint, test, test-cf, build, corpus check, and intentional `git status`.
 ### Solution
 | File:line | Change |
 | --- | --- |
-| `plugins/sp/commands/dev-wrap.md:8-53` | R1: added `--agent <inline|auto|name>` selector (flags row + arg-hint), applied the inline-default execution-surface contract, documented the pre-dispatch subprocess notice (trigger 3, `agent.default` resolution, `vars.agent` merge); `wrapup-pipeline.yaml` remains the only implementation. |
-| `plugins/sp/commands/dev-wrapall.md:8-55` | R1: same selector/notice/vars.agent treatment as dev-wrap. |
+| `plugins/sp/commands/dev-wrap.md:8-49` | R1: added `--agent <inline|auto|name>` selector (flags row + arg-hint), applied the inline-default execution-surface contract, documented the pre-dispatch subprocess notice (trigger 3, `agent.default` resolution, `vars.agent` merge); `wrapup-pipeline.yaml` remains the only implementation. |
+| `plugins/sp/commands/dev-wrapall.md:8-52` | R1: same selector/notice/vars.agent treatment as dev-wrap. |
 | `plugins/sp/skills/spur-dev/references/dev-operations.md:80-81,300-327` | R1: op-map rows 14/15 arg-hints, wrap/wrapall Inputs/Behavior/vars (executor resolution, notice, `agent` in vars); run op Inputs note that `--wrap` preserves `--agent` into the handoff. |
 | `plugins/sp/skills/next-router/references/routing-table.md:68,86` | R1: A8/B6 wrap dispatches preserve `--agent` when the originating command supplied it; omission remains omission. |
-| `plugins/sp/commands/dev-run.md:20`, `dev-runall.md:22` | R1: `--wrap` flag prose states the selector is preserved into the wrap handoff. |
+| `plugins/sp/commands/dev-run.md:20`, `plugins/sp/commands/dev-runall.md:22` | R1: `--wrap` flag prose states the selector is preserved into the wrap handoff. |
 | `plugins/sp/tests/inline-execution-contract.test.ts:148-176` | R1: wrap commands moved out of EXCLUDED_COMMANDS (now mode-aware); 0506 R1 test pins selector, notice fields, workflow-only execution, and A8/B6 preservation. |
 | `plugins/sp/tests/command-flag-parity.test.ts:195` | R1: R5 `--agent` declarer count 21 → 23 (wrap commands now declare the selector). |
 | `apps/cli/src/commands/history.ts:92-102` | R2: pre-DB guard — `--file <path> --mode full` without `--dry-run` exits 1 before `HistoryService` construction, naming `--dry-run` and `--mode force-file`. |
@@ -126,13 +126,15 @@ A: Premise verification found no broken repository link. `isInScope` is private,
 | `plugins/sp/skills/issue-finding/references/session-formats.md:107-119` | R3: schema-first rule under the history bridge — one `sqlite_schema`/`.schema` introspection before ad-hoc SQL, importer schema as authority, no copied column lists. |
 | `plugins/sp/tests/skill-structure.test.ts:312-316` | R3: R24b extended with schema-introspection + authority markers. |
 ### Testing
+**Re-audit 2026-08-11 (/sp-dev-verifyall --feature E --force --focus all --fix all): verdict PASS.** R2 guard probed live this run: `--file --mode full` without `--dry-run` exited 1 naming `--dry-run` and `--mode force-file` (`apps/cli/src/commands/history.ts:91-98`); the valid `--file --mode full --dry-run` combination was exercised live and passed. R1 anchors re-read: `plugins/sp/commands/dev-wrap.md:16,35-41`, `plugins/sp/commands/dev-wrapall.md:18,37-43`, next-router forwarding `plugins/sp/skills/next-router/SKILL.md:50,72`. R3 schema-first re-read: `plugins/sp/skills/issue-finding/references/session-formats.md:115-116` + `plugins/sp/skills/issue-finding/SKILL.md:191`. Fix pass: requirement boxes flipped to [x]; two L4 stale Solution anchors repaired (`plugins/sp/commands/dev-wrapall.md:8-52`→`:8-52`, `plugins/sp/commands/dev-runall.md:22`→full path).
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — Make wrap execution-surface behavior explicit and selector-preserving | MET | plugins/sp/commands/dev-wrap.md:8-53 & dev-wrapall.md:8-55 (selector in arg-hint + flags + notice + vars.agent, wrapup-pipeline sole impl); dev-operations.md:80-81,300-327 (op map + wrap/wrapall behavior); routing-table.md A8/B6 (selector preserved); dev-run.md / dev-runall.md `--wrap` prose; inline-execution-contract.test.ts:148-176 (0506 R1 test pins selector, notice fields, workflow-only, A8/B6 preservation) |
+| R1 — Make wrap execution-surface behavior explicit and selector-preserving | MET | plugins/sp/commands/dev-wrap.md:8-49 & plugins/sp/commands/dev-wrapall.md:8-52 (selector in arg-hint + flags + notice + vars.agent, wrapup-pipeline sole impl); plugins/sp/skills/spur-dev/references/dev-operations.md:80-81,300-327 (op map + wrap/wrapall behavior); routing-table.md A8/B6 (selector preserved); dev-run.md / dev-runall.md `--wrap` prose; plugins/sp/tests/inline-execution-contract.test.ts:148-176 (0506 R1 test pins selector, notice fields, workflow-only, A8/B6 preservation) |
 | R2 — Reject a non-dry-run single-file full import before opening the database | MET | apps/cli/src/commands/history.ts:92-102 (guard after mode parsing, before HistoryService construction; names `--dry-run` + `--mode force-file`); history.test.ts:270-321 (exit 1 + importAll spy not called; preserved combos); docs/04_DESIGN.md history import surface (guard note) |
 | R3 — Add schema-first guidance to the issue-finding history bridge | MET | plugins/sp/skills/issue-finding/references/session-formats.md:107-119 (sqlite_schema/.schema introspection before ad-hoc SQL; importer authority, no copied columns); skill-structure.test.ts R24b:312-316 (markers) |
 

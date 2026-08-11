@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: ["0508"]
 ac_numbering: task-local
 created_at: "2026-08-11T15:09:56.354Z"
-updated_at: "2026-08-11T17:00:35.989Z"
+updated_at: "2026-08-11T17:08:11.312Z"
 ---
 
 ## 0510. Fix feature-E batch run lessons: Solution file:line first-write, feature Scope hygiene, gate-adjacent test coverage, release trigger verification, host cache-read growth
@@ -29,11 +29,11 @@ The completed feature-E batch (tasks 0506–0508) exposed five reusable executio
 
 Task 0510 hardens those five existing seams. It changes no task-pipeline YAML, adds no command flag, and requires no new telemetry or session parser.
 ### Requirements
-- [ ] R1. Reject an explicitly authored `Solution` body that lacks a recognized `file:line` citation before `TaskService.updateSection` writes the task file. Reuse the checker’s citation predicate so write-time and `task check` behavior cannot drift; preserve valid backticked citations and adjacent file/line table cells. The rejected write exits non-zero and leaves task content plus `updated_at` unchanged.
-- [ ] R2. For an effective `feature:<id>` batch selector (including `--feature <id>` sugar), run source-local `spur feature check <id> --strict --json` once before task-list resolution and freezing. Abort before any task pipeline action when it fails, reporting its findings. Explicit/status/ready selectors remain unchanged, and the existing Scope finding severity remains unchanged globally.
-- [ ] R3. Make targeted verification dependency-aware without running the full project check inside implementation. Freeze a changed-path matrix: domain changes run affected domain tests plus app/CLI consumer tests and domain/app/CLI typechecks; app changes run affected app plus CLI tests and app/CLI typechecks; CLI changes run affected CLI tests and CLI typecheck; shared plugin flag/command contract changes run their focused structure/parity tests. Run only applicable rows, then let the pipeline execute the single full project check.
-- [ ] R4. In the ts-libs `bumpVersion(..., { push: true })` path, verify that the aggregate tag created a Publish workflow run before returning. Use a bounded `gh run list --workflow publish.yml --json ...` lookup matched to the aggregate tag; if no push run appears, dispatch `publish.yml` once with `--ref <aggregate-tag>` through its existing `workflow_dispatch` trigger and confirm that run exists. Fail loudly if neither run appears. Never delete, move, or re-push an existing tag as automatic recovery.
-- [ ] R5. Keep batch-controller reads metadata-only. When execution-batch needs task status/dependencies/feature ID or workflow terminal state, project CLI JSON to those fields before it reaches the host context; do not ingest task `content`, Solution/Testing/Review bodies, or full workflow output on the green path. On failure, read only the bounded error/status evidence needed for the report. Preserve task 0508 native-subagent dispatch.
+- [x] R1. Reject an explicitly authored `Solution` body that lacks a recognized `file:line` citation before `TaskService.updateSection` writes the task file. Reuse the checker’s citation predicate so write-time and `task check` behavior cannot drift; preserve valid backticked citations and adjacent file/line table cells. The rejected write exits non-zero and leaves task content plus `updated_at` unchanged.
+- [x] R2. For an effective `feature:<id>` batch selector (including `--feature <id>` sugar), run source-local `spur feature check <id> --strict --json` once before task-list resolution and freezing. Abort before any task pipeline action when it fails, reporting its findings. Explicit/status/ready selectors remain unchanged, and the existing Scope finding severity remains unchanged globally.
+- [x] R3. Make targeted verification dependency-aware without running the full project check inside implementation. Freeze a changed-path matrix: domain changes run affected domain tests plus app/CLI consumer tests and domain/app/CLI typechecks; app changes run affected app plus CLI tests and app/CLI typechecks; CLI changes run affected CLI tests and CLI typecheck; shared plugin flag/command contract changes run their focused structure/parity tests. Run only applicable rows, then let the pipeline execute the single full project check.
+- [x] R4. In the ts-libs `bumpVersion(..., { push: true })` path, verify that the aggregate tag created a Publish workflow run before returning. Use a bounded `gh run list --workflow publish.yml --json ...` lookup matched to the aggregate tag; if no push run appears, dispatch `publish.yml` once with `--ref <aggregate-tag>` through its existing `workflow_dispatch` trigger and confirm that run exists. Fail loudly if neither run appears. Never delete, move, or re-push an existing tag as automatic recovery.
+- [x] R5. Keep batch-controller reads metadata-only. When execution-batch needs task status/dependencies/feature ID or workflow terminal state, project CLI JSON to those fields before it reaches the host context; do not ingest task `content`, Solution/Testing/Review bodies, or full workflow output on the green path. On failure, read only the bounded error/status evidence needed for the report. Preserve task 0508 native-subagent dispatch.
 
 Non-goals: changing feature-check finding severities corpus-wide; adding a task/feature/agent flag; editing workflow YAML; re-running a stage or full suite to collect evidence already returned; numeric token/cost targets; raw session-log analysis; automatic remote-tag deletion/re-push; waiting for npm publication inside `bumpVersion`; or changing task 0508 dispatch semantics.
 ### Acceptance Criteria
@@ -150,11 +150,11 @@ Use `bun run --filter <workspace> typecheck` for the listed workspaces. The matr
 
 **Anti-patterns:** no duplicate citation regex; no invalid-write-then-check loop; no global Scope severity change; no full project check inside implement; no unconditional parity suite; no workflow-file edit; no remote-tag mutation; no npm polling; no raw task/trace bodies in the host controller; no numeric cache-token threshold.
 ### Plan
-- [ ] P1 (R1) Export/reuse the Solution citation predicate, reject invalid explicit Solution updates before mutation, add task-service/CLI regressions, and update `docs/04_DESIGN.md`.
-- [ ] P2 (R2, R5) Add feature-derived strict preflight plus metadata-only host projections to execution-batch, project the operator contract into dev-runall/dev-operations, and extend plugin structure tests.
-- [ ] P3 (R3) Add the changed-path targeted-check matrix to code-implementation, link it from targeted-test-first guidance, and pin the dependency direction/conditional parity rule in structure tests.
-- [ ] P4 (R4) In `~/xprojects/ts-libs`, implement bounded Publish-run lookup plus one workflow-dispatch fallback, update release documentation, and run focused release-command tests and upstream completion gates. Do not mutate workflow YAML or existing tags.
-- [ ] P5 (R1–R5) Run Spur focused tests first (`task-service`, task CLI, plugin structure), then the repository completion gates, task verification, and intentional status checks in both repositories. Do not inspect raw session/conversation logs or run a real release as test evidence.
+- [x] P1 (R1) Export/reuse the Solution citation predicate, reject invalid explicit Solution updates before mutation, add task-service/CLI regressions, and update `docs/04_DESIGN.md`.
+- [x] P2 (R2, R5) Add feature-derived strict preflight plus metadata-only host projections to execution-batch, project the operator contract into dev-runall/dev-operations, and extend plugin structure tests.
+- [x] P3 (R3) Add the changed-path targeted-check matrix to code-implementation, link it from targeted-test-first guidance, and pin the dependency direction/conditional parity rule in structure tests.
+- [x] P4 (R4) In `~/xprojects/ts-libs`, implement bounded Publish-run lookup plus one workflow-dispatch fallback, update release documentation, and run focused release-command tests and upstream completion gates. Do not mutate workflow YAML or existing tags.
+- [x] P5 (R1–R5) Run Spur focused tests first (`task-service`, task CLI, plugin structure), then the repository completion gates, task verification, and intentional status checks in both repositories. Do not inspect raw session/conversation logs or run a real release as test evidence.
 ### Solution
 All five seams hardened. R1–R3/R5 land in the Spur monorepo; R4 is committed separately in the
 upstream ts-libs repository (cross-task contract). No task-pipeline YAML, CLI flag, or workflow
@@ -207,6 +207,8 @@ the cross-task contract.
 | Scenario: R4 — Release returns only after a Publish run exists | MET | test | `~/xprojects/ts-libs/scripts/tests/release-commands.test.ts` — 21 tests covering immediate push-run success, bounded lookup + exactly one dispatch, final-absence failure, malformed JSON, gh failure, and no tag-mutation on any path (incl. via `bumpVersion` push path and `dropTags`). Ran this run, 21 pass; upstream gates lint/test/build exit 0. |
 | Scenario: R5 — The host batch loop consumes metadata, not task or trace bodies | MET | test | `plugins/sp/tests/skill-structure.test.ts:1285` pins the metadata-only projections and bounded-failure rule in `plugins/sp/skills/spur-dev/references/execution-batch.md:323`; task 0508 dispatch preservation asserted. Ran this run, 3 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+- Re-audit 2026-08-11 (--force, --fix all): all file:line anchors re-read live; task-service 4 pass, CLI 148 pass, skill-structure 3 pass, upstream release-commands 21 pass; shippable gate `spur feature check H` pass=true, tasks 0500/0510 done. Verdict artifact `.spur/run/0510-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

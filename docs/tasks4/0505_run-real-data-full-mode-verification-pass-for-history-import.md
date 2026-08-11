@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0504"]
 ac_numbering: task-local
 created_at: "2026-08-11T03:54:32.827Z"
-updated_at: "2026-08-11T05:41:12.247Z"
+updated_at: "2026-08-11T15:11:31.423Z"
 ---
 
 ## 0505. Run real-data full-mode verification pass for history import (0504 R1 on the 1.7 GB DB)
@@ -145,6 +145,8 @@ A: Read-only SQL is required for evidence; manual SQL mutation is forbidden. Rec
 
 **Incident (implement probe):** an early full-mode CLI probe (no `--dry-run`) hit the real DB and its reconciliation deleted 1 pre-existing antigravity row+ledger+checkpoint (itself leftover temp-file junk from a prior session; `~/.antigravity` has zero real jsonl files) and inserted 2 probe rows. Frozen pre-probe snapshot (`.spur/run/0505-quarantine/`, 21:29 checkpoint, integrity ok, totals match the documented baseline) was used to surgically restore all three antigravity tables to the exact pre-probe state; the R2 backup taken afterwards is the authoritative recovery point and was never needed for a real-data restore. Pipeline writes (run-link, rule/queue rows) preserved.
 ### Testing
+**Re-audit 2026-08-11 (/sp-dev-verifyall --feature E --force --focus all --fix all): verdict PASS.** Run artifacts re-verified on disk (`.spur/run/0505/r2-baseline.txt`, `r3-dryrun.json`, `r4-write.json`, `r4-second-dryrun.json`, `r5-postwrite.txt`; backup `.spur/backups/spur.db.pre-0505-run.20260810-215454*`); R3↔R4 parity re-derived programmatically this run (`parity: all_match` across r3-dryrun vs r4-write per-source reconciliation); focused tests re-run green (`apps/cli/tests/commands/history.test.ts` 28 pass; `packages/app/tests/services/history-service.test.ts` 21 pass); live provenance now reports importer `0.4.26` (catalog `^0.4.26`, `package.json:36` — supersedes 0.4.25, still contains `b988a64`).
+
 **Re-audit 2026-08-10 (--force --focus all --fix all): verdict PASS.** All line anchors re-read this run; live DB re-checked (`PRAGMA quick_check = ok`, unknown messages 0, orphan tool calls 0); R3/R4 JSON parity re-derived programmatically (`diff` of per-source reconciliation = identical); focused tests re-run green (`apps/cli/tests/commands/history.test.ts` reconciliation test 1 pass; `packages/app/tests/services/history-service.test.ts` 21 pass); resolved importer `@gobing-ai/ts-llm-jsonl-importer@0.4.25` confirmed from `node_modules/.bun`. Fix-pass touched `.spur/run/0505/r4-write-summary.txt:9-20` (regenerated empty `applied=` cells from the authoritative `r4-write.json`; cosmetic only, parity unchanged: all_parity=true).
 
 **Pipeline verify results**

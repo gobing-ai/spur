@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T00:17:08.921Z"
-updated_at: "2026-08-11T04:04:59.475Z"
+updated_at: "2026-08-11T15:18:10.944Z"
 ---
 
 ## 0504. Harden full history backfill after real-data import forensics
@@ -96,44 +96,46 @@ Keep the implementation inside the existing importer, DAO, HistoryService, and C
 - [x] P5 Run importer gates (192 pass), Spur `spur-check` (PASS), test-cf (PASS), and build (PASS). The real-data all-source dry-run → one full write → zero-change second full write → integrity/orphan/unknown checks on the 1.7 GB database is the shared expensive backfill gate, tracked as a follow-up task (0505) rather than deferred silently.
 ### Solution
 **R1 — authoritative full-mode reconciliation (JSONL + OpenCode):**
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/jsonl-importer-dao.ts:373-434` — new `reconcileFullImport`: loads the source's ledger rows, diffs against the desired hash set, and removes stale target/ledger rows (keyed by `record_hash` PK) plus checkpoints for vanished source files (keyed by `(source, source_file)` PK) in ONE source-scoped `db.batch` — no unindexed deletes, no manual SQL. Dry-run returns the identical counts without mutation.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/importer.ts:68-69,196-205` — collects the full-mode desired hash set during processing and invokes reconciliation after the file loop (`mode === 'full'`), surfacing `reconciliation` counts in `ImportResult`.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/opencode-importer.ts:69-74,102,141-156` — tracks seen source files and sweeps ledger/target/checkpoint rows for messages deleted from the OpenCode store, merged into the same source-scoped batch as the writes.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/types.ts:71-90` — `ReconcileSummary` (`staleTargetRows` / `staleLedgerRows` / `staleCheckpointRows`) + optional `ImportResult.reconciliation`.
+- `ts-libs `packages/llm-jsonl-importer/src/jsonl-importer-dao.ts`` — new `reconcileFullImport`: loads the source's ledger rows, diffs against the desired hash set, and removes stale target/ledger rows (keyed by `record_hash` PK) plus checkpoints for vanished source files (keyed by `(source, source_file)` PK) in ONE source-scoped `db.batch` — no unindexed deletes, no manual SQL. Dry-run returns the identical counts without mutation.
+- `ts-libs `packages/llm-jsonl-importer/src/importer.ts`` — collects the full-mode desired hash set during processing and invokes reconciliation after the file loop (`mode === 'full'`), surfacing `reconciliation` counts in `ImportResult`.
+- `ts-libs `packages/llm-jsonl-importer/src/opencode-importer.ts`` — tracks seen source files and sweeps ledger/target/checkpoint rows for messages deleted from the OpenCode store, merged into the same source-scoped batch as the writes.
+- `ts-libs `packages/llm-jsonl-importer/src/types.ts`` — `ReconcileSummary` (`staleTargetRows` / `staleLedgerRows` / `staleCheckpointRows`) + optional `ImportResult.reconciliation`.
 
 **R2 — degraded fan-out signaling + atomic validation writes:**
 - `packages/app/src/services/history-service.ts:400-419` — a source with parse/validation errors is `degraded`, never clean `ok`, and emits a `source-degraded` warning with counts.
 - `packages/domain/src/analytics/artifact.ts:31-42` — `CoverageEntry.status` union gains `'degraded'`.
 - `packages/app/src/services/history-service.ts:565-569,597,628-633,832-835` — coverage merge/analyze-only paths preserve degraded status; `computeExitCode` returns 2 (non-zero) when any source is degraded.
 - `apps/cli/src/commands/history.ts:186-197` — daily-failure detail names degraded sources alongside failed ones.
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/importer.ts:119-142` — line-level atomic validation: a schema-invalid split rejects the whole line (no partially accepted rows, no orphaned tool calls with a dangling `message_hash`).
+- `ts-libs `packages/llm-jsonl-importer/src/importer.ts`` — line-level atomic validation: a schema-invalid split rejects the whole line (no partially accepted rows, no orphaned tool calls with a dangling `message_hash`).
 
 **R3 — deterministic OpenCode complexity regression:**
-- `~/xprojects/ts-libs/packages/llm-jsonl-importer/tests/opencode-importer.test.ts:126-213` — seeds 10,000 unrelated ledger rows, instruments the target `DbAdapter`, and asserts (a) executed statements < 100 (cost scales with write chunks, not existing-ledger-row count) and (b) no new-message operation deletes ledger rows by an unindexed `(source, source_file)` predicate.
+- `ts-libs `packages/llm-jsonl-importer/tests/opencode-importer.test.ts`` — seeds 10,000 unrelated ledger rows, instruments the target `DbAdapter`, and asserts (a) executed statements < 100 (cost scales with write chunks, not existing-ledger-row count) and (b) no new-message operation deletes ledger rows by an unindexed `(source, source_file)` predicate.
 
 **R4 — source-local CLI provenance:**
 - `apps/cli/src/commands/history.ts:25-46,101-107` — `resolveImportProvenance` / `formatProvenance`: every `spur history import` prints `binary:` (the actually-invoked entry path) + resolved `@gobing-ai/ts-llm-jsonl-importer@<version>` before the fan-out result; `--json` embeds the same `provenance` field.
 - `AGENTS.md:203-215` — real-data history validation must invoke a source-local CLI (`bun run apps/cli/src/index.ts` or the built `apps/cli/spur.js`), never a bare global `spur`; record the provenance header before each dry-run/write.
 
-**Scope note:** importer changes ship in `~/xprojects/ts-libs` (own repo/tests); the Spur monorepo consumes published `@gobing-ai/ts-llm-jsonl-importer@0.4.24` — the R1/R3 reconciliation surface is exercised by the ts-libs suite (191 pass) and reaches Spur consumers on the next release.
+**Scope note:** importer changes ship in `/Users/robin/xprojects/ts-libs` (own repo/tests); the Spur monorepo consumes published `@gobing-ai/ts-llm-jsonl-importer@0.4.24` — the R1/R3 reconciliation surface is exercised by the ts-libs suite (191 pass) and reaches Spur consumers on the next release.
 ### Testing
+**Re-audit 2026-08-11 (verifyall batch re-audit 2026-08-11; /sp-dev-verifyall --feature E --force --focus all --fix all): verdict PASS.** ts-libs importer + opencode suites re-run green this run (45 pass / 0 fail at `@gobing-ai/ts-llm-jsonl-importer@0.4.26`); live provenance header re-captured this run (`binary: /Users/robin/xprojects/spur-new/apps/cli/src/index.ts`, `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.26`) via a mutation-free single-file full `--dry-run`; `formatProvenance` re-read at `apps/cli/src/commands/history.ts:40-42,118-122`. Fix pass: two L4 stale Solution anchors rewritten from `~/xprojects/ts-libs/...` to absolute paths.
+
 **Pipeline verify results**
 
 - Verdict: PASS (pipeline run 52A62421)
-- Re-audit 2026-08-11 (`--force --fix all --focus all`): verdict **PASS**, all evidence re-run fresh this audit. Fix applied: stale R1 Testing anchor `types.ts:71-90` corrected to `types.ts:105-136` (line drift after ts-libs edit; content verified present and on-subject). Gitignored artifact touched by this audit: `.spur/run/0504-verdict.json` (rewritten with re-audit verdict + checks).
+- Re-audit 2026-08-11 (`--force --fix all --focus all`): verdict **PASS**, all evidence re-run fresh this audit. Fix applied: stale R1 Testing anchor ts-libs `packages/llm-jsonl-importer/src/types.ts` corrected to ts-libs `packages/llm-jsonl-importer/src/types.ts` (line drift after ts-libs edit; content verified present and on-subject). Gitignored artifact touched by this audit: `.spur/run/0504-verdict.json` (rewritten with re-audit verdict + checks).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/jsonl-importer-dao.ts:384-434` (`reconcileFullImport`: desired-hash diff, PK-keyed deletes, one source-scoped batch, dry-run identical counts); `importer.ts:196-204` (full-mode invocation); `opencode-importer.ts:65-79,115-163` (per-file drift + vanished-file sweep, both counted); `types.ts:105-136` (`ReconcileSummary` + `ImportResult.reconciliation`); tests `importer.test.ts:954`, `opencode-importer.test.ts:228,282` — fresh: `bun test tests/importer.test.ts tests/opencode-importer.test.ts` → 44 pass / 0 fail |
-| R2 | MET | `packages/app/src/services/history-service.ts:398-419` (degraded, never clean ok, `source-degraded` warning with counts); `history-service.ts:832-838` (`computeExitCode` → 2 on any degraded); `packages/domain/src/analytics/artifact.ts:31-42` (`'degraded'` union member); `~/xprojects/ts-libs/.../src/importer.ts:115-142` (line-atomic validation, no partial rows); tests `history-service.test.ts:452` (fresh: 20 pass / 0 fail), `importer.test.ts:1037` (fresh pass) |
-| R3 | MET | `~/xprojects/ts-libs/.../tests/opencode-importer.test.ts:134` (10,000 unrelated ledger rows; statements < 100; no unindexed `(source, source_file)` ledger delete) — fresh pass |
+| R1 | MET | `ts-libs `packages/llm-jsonl-importer/src/jsonl-importer-dao.ts`` (`reconcileFullImport`: desired-hash diff, PK-keyed deletes, one source-scoped batch, dry-run identical counts); ts-libs `packages/llm-jsonl-importer/src/importer.ts` (full-mode invocation); `opencode-ts-libs `packages/llm-jsonl-importer/src/importer.ts` (per-file drift + vanished-file sweep, both counted); ts-libs `packages/llm-jsonl-importer/src/types.ts` (`ReconcileSummary` + `ImportResult.reconciliation`); tests ts-libs `packages/llm-jsonl-importer/tests/importer.test.ts`, ts-libs `packages/llm-jsonl-importer/tests/opencode-importer.test.ts` — fresh: `bun test tests/importer.test.ts tests/opencode-importer.test.ts` → 44 pass / 0 fail |
+| R2 | MET | `packages/app/src/services/history-service.ts:398-419` (degraded, never clean ok, `source-degraded` warning with counts); `packages/app/src/services/history-service.ts:832-838` (`computeExitCode` → 2 on any degraded); `packages/domain/src/analytics/artifact.ts:31-42` (`'degraded'` union member); `ts-libs `packages/llm-jsonl-importer/src/importer.ts`` (line-atomic validation, no partial rows); tests `packages/app/tests/services/history-service.test.ts:452` (fresh: 20 pass / 0 fail), ts-libs `packages/llm-jsonl-importer/tests/importer.test.ts` (fresh pass) |
+| R3 | MET | `~/xprojects/ts-libs/.../tests/opencode-ts-libs `packages/llm-jsonl-importer/tests/importer.test.ts` (10,000 unrelated ledger rows; statements < 100; no unindexed `(source, source_file)` ledger delete) — fresh pass |
 | R4 | MET | `apps/cli/src/commands/history.ts:25-43,99-107` (`resolveImportProvenance`/`formatProvenance`, printed before results, embedded in `--json`); `AGENTS.md:209-219` (source-local binary contract); fresh CLI smoke: `binary: /Users/robin/xprojects/spur-new/apps/cli/src/index.ts` + `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.24` in text mode and `provenance` object in `--json` mode |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — Full mode reconciles stale derived history | MET | test | `importer.test.ts:954` (dry-run exact counts, no mutation; write deletes; second run zero), `opencode-importer.test.ts:228,282` (vanish sweep + mapper-drift counts) — 44 pass / 0 fail fresh |
-| Scenario: R2 — Degraded source input is visible and bounded | MET | test | `history-service.test.ts:452` (degraded status, bounded counts, non-zero exit) — 20 pass / 0 fail fresh; `importer.test.ts:1037` (atomic line rejection) |
-| Scenario: R3 — OpenCode persistence avoids ledger-size multiplication | MET | test | `opencode-importer.test.ts:134` — fresh pass |
+| Scenario: R1 — Full mode reconciles stale derived history | MET | test | ts-libs `packages/llm-jsonl-importer/tests/importer.test.ts` (dry-run exact counts, no mutation; write deletes; second run zero), ts-libs `packages/llm-jsonl-importer/tests/opencode-importer.test.ts` (vanish sweep + mapper-drift counts) — 44 pass / 0 fail fresh |
+| Scenario: R2 — Degraded source input is visible and bounded | MET | test | `packages/app/tests/services/history-service.test.ts:452` (degraded status, bounded counts, non-zero exit) — 20 pass / 0 fail fresh; ts-libs `packages/llm-jsonl-importer/tests/importer.test.ts` (atomic line rejection) |
+| Scenario: R3 — OpenCode persistence avoids ledger-size multiplication | MET | test | ts-libs `packages/llm-jsonl-importer/tests/opencode-importer.test.ts` — fresh pass |
 | Scenario: R4 — Real-data dogfood uses the intended build | MET | command | Fresh CLI smoke (text + `--json`): provenance header before results, source-local binary path, importer@0.4.24; `AGENTS.md:209-219` |
 - Coverage: N/A (verdict-based re-audit; targeted suites re-run fresh — ts-libs importer 44 pass, spur history-service 20 pass, CLI history 24 pass, all 0 fail)
 ### Review
