@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Fix executor routing and pipeline resilience from the 0502 post-mortem"
 description: ""
-status: backlog
+status: done
 type: meta
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T00:03:52.022Z"
-updated_at: "2026-08-11T00:40:29.211Z"
+updated_at: "2026-08-11T02:22:57.997Z"
 ---
 
 ## 0503. Fix executor routing and pipeline resilience from the 0502 post-mortem
@@ -143,17 +143,85 @@ Anti-patterns: no AiRunner/engine-level inline threading (false implementation �
 - [ ] T5 (R5) — Gate backoff: bounded lock-aware retry loop in the `test`/`test-recheck` probe. Acceptance: with a held spur.db, the probe retries and reports PASS once the lock clears; a never-clearing lock routes to test-fix/failed with the lock error named.
 - [ ] T6 (R6) — Gates: `bun run lint && bun run test && bun run build && bun run spur-check-new` exit 0; no skipped tests; `git status` intentional only.
 ### Solution
+Implemented all five post-mortem fixes without changing the headless workflow engine or operator-owned executor configuration.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+| Requirement | Change map |
+| --- | --- |
+| R1 — deterministic provider classification | Added the typed seven-provider registry and pure classifier in `packages/app/src/services/failure-classification.ts:1-95`; imported it and reduced the existing adapter to delegation in `packages/app/src/services/agent-service.ts:43` and `packages/app/src/services/agent-service.ts:1499-1514`; exported the classifier from `packages/app/src/index.ts:82-83`. Added `auth` as an additive stage signal and bumped schema 1.1 → 1.2 in `packages/domain/src/stage-registry/schema.ts:41-373`. |
+| R1 tests | Added literal-message, status-only, noise, success, and timeout cases in `packages/app/tests/services/failure-classification.test.ts:1-44`; updated the stage signal/version contract in `packages/domain/tests/stage-registry/schema.test.ts:82-544`. Existing escalation-loop tests also pass against the registry-backed adapter. |
+| R2/R3/R5 — pipeline resilience | Hardened the doctor probe, transition retries, persistent ENOENT remediation, and five-attempt SQLite-lock backoff in `config/workflows/task-pipeline.yaml:134-522`. Added executable shell fixtures covering soft omp relay auth, hard non-omp auth, transient/persistent transition failures, lock-clear PASS, and bounded persistent-lock FAIL in `plugins/sp/tests/task-pipeline-resilience.test.ts:1-179`. |
+| R4 — interactive host driver | Added the YAML-SSOT host-session interpreter and frozen provenance contract in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:1-87`. Routed interactive full single/sequential batch omit/inline through it while keeping named/auto/parallel/headless subprocess paths in `plugins/sp/commands/dev-run.md:17-46`, `plugins/sp/commands/dev-runall.md:20-81`, and `plugins/sp/skills/spur-dev/SKILL.md:83-113`. |
+| R4 — orchestration consistency | Updated the shared selector and driver mechanics in `plugins/sp/skills/spur-dev/references/cross-cutting.md:93-188`, `plugins/sp/skills/spur-dev/references/dev-operations.md:140-145`, `plugins/sp/skills/spur-dev/references/execution-workflow.md:13-259`, and `plugins/sp/skills/spur-dev/references/execution-batch.md:23-230`. Extended mechanical contract coverage in `plugins/sp/tests/inline-execution-contract.test.ts:50-148`. |
+| R4 — authority and derived docs | Appended the ADR-047 amendment in `docs/00_ADR.md:343-348`; recorded the runtime boundary in `docs/03_ARCHITECTURE.md:245-257`; updated the surface index/schema vocabulary in `docs/04_DESIGN.md:40-1308` and its detail satellite `docs/design/dev-agent-flag-and-dogfood-skill.md:22-34`; synchronized the entry contracts in `AGENTS.md:39-70` and `config/templates/AGENTS.md:39-71`. |
 
+Targeted classifier/domain/workflow/contract tests and affected-package typechecks are green. Full repository gates remain owned by the pipeline test hop and were intentionally not duplicated inside this implement-only step.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Typed seven-provider registry and pure classifier: `packages/app/src/services/failure-classification.ts:5-96`; literal/status/noise cases: `packages/app/tests/services/failure-classification.test.ts:15-43`; canonical `auth` fallback: `packages/domain/src/stage-registry/schema.ts:360-372,779-807`; end-to-end dispatch escalation (`pi` → `claude`, `Escalating: … failed with auth`): `packages/app/tests/services/agent-service.test.ts:2138-2167`. |
+| R2 | MET | Omp/pi env-probe misses degrade to soft while non-omp explicit auth remains actionable: `config/workflows/task-pipeline.yaml:134-186`; executable branches: `plugins/sp/tests/task-pipeline-resilience.test.ts:58-88`. |
+| R3 | MET | Transition shell actions retry only ENOENT/EBUSY/ENOTEMPTY/SQLite-lock failures once and preserve the dependency path plus `bun install` hint: `config/workflows/task-pipeline.yaml:263-279,461-477,507-523`; transient/persistent fixtures: `plugins/sp/tests/task-pipeline-resilience.test.ts:90-132`. |
+| R4 | MET | Interactive omit/inline routes through the YAML-backed host driver while explicit/headless routes remain subprocesses: `plugins/sp/commands/dev-run.md:31-47`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:11-88`, `docs/00_ADR.md:343-347`. Executable smoke traverses the real task-pipeline graph, resolves Codex `session_id`, records inline stage provenance, reaches `done` on PASS, and blocks on verdict/task-check failures: `plugins/sp/tests/inline-pipeline-driver.test.ts:49-230`. |
+| R5 | MET | Five-attempt lock-only backoff is present in test/recheck: `config/workflows/task-pipeline.yaml:305-341,379-407`; lock-clear and persistent-lock fixtures: `plugins/sp/tests/task-pipeline-resilience.test.ts:134-178`. |
+| R6 | MET | Fresh host runs this session: `bun run lint` exit 0; `bun run test` exit 0 (4,837 pass, 0 fail; 99.29% aggregate lines/functions); `bun run build` exit 0; `bun run test-cf` exit 0 (1 pass); `bun run spur-check-new` exit 0 (4,837 pass, corpus-check OK, 2 baselined / 0 new errors). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — provider failures classify deterministically | MET | test | `packages/app/tests/services/failure-classification.test.ts:15-43` covers claude, grok, status 529, all registry providers, noise, success, and termination; `packages/app/tests/services/agent-service.test.ts:2138-2167` proves classified auth dispatch emits escalation and switches executors. Fresh full suite: 4,837 pass. |
+| Scenario: R2 — relay-authenticated omp executors pass precheck | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:58-88` executes soft omp and hard non-omp paths, including the remediation hint. |
+| Scenario: R3 — transient transition failures retry with a remediation hint | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:90-132` executes transient success and persistent failure with the broken path and `bun install` hint. |
+| Scenario: R4 — interactive full mode runs stages in the host session | MET | test | `plugins/sp/tests/inline-pipeline-driver.test.ts:203-230` drives the real YAML graph with host-stage callbacks and real shell guards/artifacts; asserts inline session provenance, no `spur agent run`, PASS → done, non-PASS/task-check denial → failed. Explicit/headless subprocess contracts remain mechanically covered by `plugins/sp/tests/inline-execution-contract.test.ts:151-176`. |
+| Scenario: R5 — gate probe survives DB lock | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:134-178` proves lock-clear PASS and bounded persistent-lock FAIL. |
+| Scenario: R6 — gates green | MET | command | Fresh host runs this session: `bun run lint`, `bun run test`, `bun run build`, `bun run test-cf`, and `bun run spur-check-new` all exited 0. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P2 | Correctness / Architecture | `packages/app/src/services/agent-service.ts:771`; `packages/domain/src/stage-registry/schema.ts:779` | `classifyDispatch` can return `auth`, but no canonical stage declares an `auth` fallback. `AgentService` stops immediately when `matchingFallbacks` is empty, so real 401/403 failures cannot produce the promised `Escalating:` recovery after the omp doctor gate is softened. Add an `auth` fallback/availability policy and an end-to-end agent-service test proving a classified auth failure dispatches the next executor. |
+| P2 | Correctness / Testability | `plugins/sp/tests/inline-execution-contract.test.ts:132`; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:42` | R4's only automated evidence asserts that documentation contains selected phrases. It never drives the YAML FSM, proves that `agent.run` stays in-session, writes a real run-link/provenance line, or demonstrates that a denied guard blocks transition. The task's required live smoke remains absent; add an executable host-driver smoke/dogfood artifact before certifying the control inversion. |
+| P3 | Usability / Provenance | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:29` | The driver reads only `.session.json#session`; the active Codex session in this workspace exposes `session_id`, so the driver fabricates `host-session-<run-id>` and loses correlation to the real host session. Accept both canonical keys (or document a normalized accessor) before relying on the line as cross-agent audit provenance. |
+| P3 | Verification | `bun run spur-check-new` | The exact R6 aggregate gate exited 1 in this sandbox: its second full-suite pass reported 24 unrelated failures from forbidden localhost listeners, `ps`, and a `$HOME` temp write. Standalone `bun run test` passed 4,833/4,833. Re-run `spur-check-new` on a normal host; do not certify R6 from this environment. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | PARTIAL | `packages/app/src/services/failure-classification.ts:5-96` implements the typed seven-provider registry and pure classifier; `packages/app/tests/services/failure-classification.test.ts:15-43` covers literal/status/noise/timeout cases; full suite passed. Gap: `auth` has no fallback consumer, so the classified 401/403 path cannot escalate (`agent-service.ts:771-782`). |
+| R2 | MET | `config/workflows/task-pipeline.yaml:141-185` classifies omp/pi env misses as soft and retains an actionable hard failure for non-omp; `plugins/sp/tests/task-pipeline-resilience.test.ts:58-88` exercises both branches. |
+| R3 | MET | `config/workflows/task-pipeline.yaml:266-279,463-476,508-521` retries only named transient transition failures once and preserves output/remediation; `plugins/sp/tests/task-pipeline-resilience.test.ts:90-132` exercises transient and persistent ENOENT paths. |
+| R4 | PARTIAL | `plugins/sp/commands/dev-run.md:31-47`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:22-73`, and `docs/00_ADR.md:343-347` define the interactive inversion, YAML SSOT, guards, and provenance. Gap: `plugins/sp/tests/inline-execution-contract.test.ts:132-148` is string-only; no live/executable smoke proves the behavior or retained subprocess branches. |
+| R5 | MET | `config/workflows/task-pipeline.yaml:314-341,381-406` implements five-attempt lock-only backoff; `plugins/sp/tests/task-pipeline-resilience.test.ts:134-178` proves lock-clear PASS and persistent-lock FAIL. |
+| R6 | PARTIAL | Fresh commands: `bun run lint` exit 0; `bun run test` exit 0 (4,833 pass, 0 fail); `bun run build` exit 0; `bun run spur-check-new` exit 1 from 24 sandbox-only network/process/home-write failures. Targeted assertions also passed (11 classifier, 21 escalation, 15 pipeline, 78 domain), although partial-suite commands exit 1 under the repo-wide coverage threshold. |
 
+| Check | Status | Evidence |
+| --- | --- | --- |
+| design-conformance | partial | Frozen registry/module/classifier names, YAML transition retry, ADR amendment, and inline-driver contract are present; actionable auth fallback and the required R4 live smoke are missing. |
+
+**Architecture candidates**
+
+**C1 — Wrong seam between failure classification and escalation policy**
+
+- **Severity:** major
+- **Signal:** wrong seam
+- **Location:** `packages/app/src/services/agent-service.ts:771`; `packages/domain/src/stage-registry/schema.ts:779`
+- **Symptom:** the classifier publishes `auth`, while every stage policy understands only the older triggers, so the new vocabulary terminates at the consumer boundary.
+- **Evidence:** `bun -e` inspection of all registered stage fallbacks returned `[]` for trigger `auth`.
+- **Deepening proposal:** make authentication unavailability a first-class fallback policy (including same-account exclusion semantics) or deliberately map it into the existing availability signal; pin the choice with an escalation test.
+- **Affected files:** `packages/domain/src/stage-registry/schema.ts`, `packages/app/src/services/agent-service.ts`, corresponding tests.
+
+**C2 — Poor executable test surface for the inline pipeline driver**
+
+- **Severity:** major
+- **Signal:** poor test surface
+- **Location:** `plugins/sp/tests/inline-execution-contract.test.ts:132`
+- **Symptom:** the new control plane can only be checked by searching Markdown strings, so action ordering, guard behavior, answer-file capture, and provenance can regress while tests stay green.
+- **Evidence:** the test's assertions at lines 137-147 are all `toContain`; none invokes `/sp:dev-run`, interprets YAML, or inspects a run artifact.
+- **Deepening proposal:** add a bounded fixture/dogfood execution with stubbed model stages and real shell/guard/run-link artifacts, retaining YAML as the sole FSM.
+- **Affected files:** inline-driver test fixture/harness plus `plugins/sp/tests/inline-execution-contract.test.ts`.
+
+Functional Verdict: PARTIAL
 ### References
 - **Sessions analyzed (source: spur workflow run logs + agent.run subprocess captures, 2026-08-10):**
   - `9f9444f9-8067-4b18-942a-825525333f7c.log` — precheck doctor FAIL (omp-dsv4-flash-volc env-probe unauthenticated) → terminal failed, 2s
@@ -170,6 +238,9 @@ Anti-patterns: no AiRunner/engine-level inline threading (false implementation �
 - **Resolution:** 0502 completed PASS via manual continuation; no runtime bug in 0502's delivered surface. This task (0503) captures the five root causes and the operator's fundamental-fix direction.
 ### History
 - 2026-08-11T00:04:26.651Z backlog → cancelled (system)
+- 2026-08-11T01:14:26.805Z backlog → wip (system)
+- 2026-08-11T02:22:57.803Z wip → testing (system)
+- 2026-08-11T02:22:57.997Z testing → done (system)
 ### Notes
 
 **RC1 — Ad-hoc regex classifier misses the real provider messages (S1).** `classifyObjectiveFailure`'s alternation does not match claude's "weekly limit · resets <date>" nor grok's "402 Payment Required … balance exhausted"; both runs died with `agent.run exited with code 3` and zero `Escalating:` lines, despite the 0482 R1/R5 survivability contract. The mechanism — one growing regex — cannot scale to every provider's error vocabulary; R1 replaces it with a deterministic registry. Evidence: `.spur/run/c558d71c-81d3-4df7-a3a5-1fa5cf3abd3b.log`, `.spur/run/415ad467-cced-49fe-b4e1-75183bc4bb3c.log`; `agent-service.ts:1522-1537`.

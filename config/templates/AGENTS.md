@@ -36,7 +36,7 @@ All product development work goes through the harness by default.
 | ------ | ---------- | -------- |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task / no pipeline |
-| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-planner`** | Unordered multi-task thrash |
+| Batch or parallel task runs | `/sp:dev-runall` (host sequential; **`sp:super-planner`** explicit/parallel), `/sp:dev-parallel` | Unordered multi-task thrash |
 | Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |
@@ -64,8 +64,10 @@ All product development work goes through the harness by default.
 5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
    capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
 6. **Run dev skills inline by default** — direct model-bearing `/sp:dev-*` commands execute in the
-   current coding-agent session. `--subprocess` or a named dispatch-surface trigger uses
-   `spur agent run`; direct `spur agent run` and workflow `agent.run` remain subprocess surfaces.
+   current coding-agent session. Interactive `/sp:dev-run --mode full` and sequential
+   `/sp:dev-runall` with omit/`--agent inline` interpret `task-pipeline.yaml` in-session; `--agent
+   auto`, a name, parallel/headless execution, direct `spur agent run`, and engine-driven workflow
+   `agent.run` remain subprocess surfaces.
 
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
 Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,
