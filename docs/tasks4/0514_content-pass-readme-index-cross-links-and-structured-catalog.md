@@ -13,7 +13,7 @@ tags: ["parity", "content-pass", "plugins/sp"]
 dependencies: ["0513"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.667Z"
-updated_at: "2026-08-11T21:23:32.647Z"
+updated_at: "2026-08-11T23:03:19.432Z"
 ---
 
 ## 0514. Content pass: README index, cross-links, and structured-catalog ownership
@@ -25,11 +25,11 @@ Checks and fixes, bounded per the design doc (§6): every `plugins/sp/README.md`
 
 Ordering: third task — runs after the drift-fix task so the review covers a settled surface; independent of the harness internals. Rubric: E2 D1 L1 C0 R0 = 4 → task (optional band; kept separate as the goal's explicit phase 2 with its own review gate — merging into the fix task would push it past target_max_hours 8h).
 ### Requirements
-- [ ] R1. Extend the existing README index assertion so every shipped `plugins/sp` command, skill, and subagent is indexed exactly once and every indexed entry resolves.
-- [ ] R2. Extend the existing relative-link checks to the plugin surfaces and AGENTS.md doc map in scope; every checked file, heading, command, and skill reference resolves.
-- [ ] R3. Identify duplicated exact structured catalogs (noun/verb/flag inventories, routing rows, index tables), retain one owner, and replace other copies with links to that owner.
+- [ ] R1. Extend `skill-structure.test.ts` R43 so the existing README tables index every shipped `commands/*.md`, `skills/*/SKILL.md`, and `agents/*.md` entry exactly once within their owning README sections; report both missing shipped entries and indexed names without a shipped target.
+- [ ] R2. Extend the existing structural checks rather than adding a crawler: R16c validates relative Markdown file plus heading anchors across plugin Markdown; the AGENTS.md doc-map rows resolve to existing `docs/*.md`; existing R16b continues to own `sp:<skill>` references; R43 owns command/skill/agent index targets.
+- [ ] R3. Detect only exact machine-comparable structured catalogs (Markdown noun/verb/flag/routing/index tables or explicit lists). Retain the ADR-054/current-test owner and replace any reported duplicate catalog with a link; do not score arbitrary prose similarity.
 
-Non-goals: arbitrary prose-similarity detection, rewriting valid prose, new runtime behavior, dependencies, schemas, or transport.
+Non-goals: new test file, generic Markdown crawler, prose rewriting, runtime behavior, public CLI changes, dependencies, schemas, persistence, or transport.
 ### Acceptance Criteria
 ```gherkin
 Feature: Plugin content and discoverability pass
@@ -54,23 +54,19 @@ Feature: Plugin content and discoverability pass
 - **Duplication threshold:** exact tables and machine-comparable inventories only. Similar prose is reviewed manually and is not a finding by itself.
 - **Edit boundary:** only files exposed by an index, link, or exact-catalog finding are changed.
 ### Design
-Keep the checks in `plugins/sp/tests/skill-structure.test.ts`: expand R43 from commands to the three
-shipped surface directories (`commands`, `skills`, `agents`), and expand R16c only where its current
-relative-link resolver can prove file/heading targets. Reuse the same filesystem inventory; do not
-add a second crawler or a new test file.
+Keep all changes in the existing structural owner `plugins/sp/tests/skill-structure.test.ts` plus Markdown files named by failures.
 
-Compare only structured catalogs that can be parsed deterministically: Markdown tables or explicit
-lists of nouns, verbs, flags, routes, commands, skills, and agents. The owning surface remains the
-one named by ADR-054 or the existing test contract; non-owners link to it. Fix
-`plugins/sp/README.md`, plugin markdown, or AGENTS.md only when the focused assertion names the
-target. No new API or runtime code. Task 0515 may edit the same planning references, so 0514 leaves
-their final text green before that dependent task begins.
+- Expand R43's existing directory enumeration from commands to three tuples: `commands/*.md` ↔ `### Command index`; `skills/*/SKILL.md` ↔ `#### 1. Skills`; `agents/*.md` ↔ `#### 3. Agents`. Parse only the first backticked name cell in each owning table, then report missing, duplicate, and indexed-without-file entries.
+- Extend R16c's current relative-`.md` resolver to validate optional `#heading` fragments using GitHub-style lowercase/hyphen heading slugs. Add the root `AGENTS.md` doc-map paths as a bounded second input and `stat` each backticked `docs/*.md` target. Keep R16b as the skill-reference owner; do not add another skill scanner.
+- For structured-catalog ownership, compare only tables/lists explicitly named by ADR-054 or the current tests. When exact duplicates are found, keep the facade verb inventory, spine Step routing, README entity index, or AGENTS noun table as applicable and replace non-owner copies with a link. Similar prose is never a mechanical finding.
+
+Run the assertions first and edit only paths named by their diagnostics. No new test file, parser package, runtime helper, or production code. 0515 may later update planning-workflow guidance; this task leaves the structural suite green before that dependency starts.
 ### Plan
-- [ ] Extend the existing README index inventory to commands, skills, and agents.
-- [ ] Extend the existing link resolver for the agreed plugin and AGENTS doc-map scope.
-- [ ] Run both checks and capture the exact missing/duplicate targets.
-- [ ] Fix only reported indexes, links, and structured catalogs, preserving one owner each.
-- [ ] Re-run `skill-structure.test.ts` and the focused parity suite to green.
+- [ ] Extend R43 to bidirectionally cover command, skill, and agent README tables against shipped files (R1).
+- [ ] Extend R16c for relative heading anchors and the bounded AGENTS.md doc-map paths; retain R16b/R43 as skill/command target owners (R2).
+- [ ] Run `bun test plugins/sp/tests/skill-structure.test.ts` and capture exact index/link/catalog findings before editing Markdown.
+- [ ] Fix only reported README entries, links/anchors, and exact duplicate catalogs at their named owners (R1–R3).
+- [ ] Re-run `skill-structure.test.ts` plus `cli-surface-parity.test.ts`; verify the diff contains no runtime, CLI, schema, dependency, persistence, or transport files, then hand off to 0515.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
