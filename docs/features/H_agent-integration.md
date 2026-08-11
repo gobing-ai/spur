@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-11T17:02:10.322Z"
+updated_at: "2026-08-11T17:57:36.898Z"
 ---
 
 # H: Agent integration
@@ -43,3 +43,6 @@ rd3-migration batch items (design wave W3). cc-agents-side removals: tasks 0404�
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-11T17:02:10.085Z active → verifying (system)
 - 2026-08-11T17:02:10.322Z verifying → done (system)
+- 2026-08-11T17:42:51.976Z done → active (system)
+- 2026-08-11T17:57:36.710Z active → verifying (system)
+- 2026-08-11T17:57:36.898Z verifying → done (system)
