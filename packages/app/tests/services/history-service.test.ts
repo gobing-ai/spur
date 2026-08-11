@@ -420,6 +420,16 @@ describe('HistoryService', () => {
             expect(result.scannedFiles).toBe(0);
         });
 
+        test('routes opencode source to the SQLite importer (dry-run)', async () => {
+            const svc = new HistoryService({
+                ...makeCtx(),
+                openCodeSourceDatabase: join(emptyRoot(), 'opencode.db'),
+            });
+            const result = await svc.import('opencode', { mode: 'full', dryRun: true });
+            expect(result.source).toBe('opencode');
+            expect(result.mode).toBe('full');
+        });
+
         test('treats empty string file as absent, defaulting to force-file mode without a files list', async () => {
             const svc = new HistoryService(makeCtx());
             const result = await svc.import('claude', { file: '', root: emptyRoot() });

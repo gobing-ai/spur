@@ -41,6 +41,7 @@ import {
     type ImportResult,
     type LlmJsonlSource,
     runJsonlImport,
+    runOpenCodeImport,
 } from '@gobing-ai/ts-llm-jsonl-importer';
 
 // ---------------------------------------------------------------------------
@@ -140,6 +141,8 @@ export interface DailyResult {
 /** Context injected into HistoryService. */
 export interface HistoryServiceContext {
     getDb(): Promise<DbAdapter>;
+    /** Override OpenCode's SQLite path for hermetic composition/tests. */
+    openCodeSourceDatabase?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +187,15 @@ export class HistoryService {
     ): Promise<HistoryImportResult> {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
+
+        if (parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined) {
+            return runOpenCodeImport({
+                db: await this.ctx.getDb(),
+                sourceDatabase: this.ctx.openCodeSourceDatabase,
+                mode,
+                dryRun: opts.dryRun ?? false,
+            });
+        }
 
         return runJsonlImport(parsedSource, {
             db: await this.ctx.getDb(),
