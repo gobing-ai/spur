@@ -2,11 +2,11 @@
 schema_version: 1
 id: H
 name: Agent integration
-status: active
+status: done
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-08-11T17:02:10.322Z"
 ---
 
 # H: Agent integration
@@ -41,3 +41,5 @@ rd3-migration batch items (design wave W3). cc-agents-side removals: tasks 0404�
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-08-11T17:02:10.085Z active → verifying (system)
+- 2026-08-11T17:02:10.322Z verifying → done (system)

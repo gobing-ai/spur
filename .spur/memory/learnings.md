@@ -288,3 +288,32 @@ Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grou
 **0507** — OMP envelope fix at the owning mapper (released `0.4.26`, tag `f817429`), additive assistant-duration fields (schemaVersion stays 1), selected-file force-file history bridge. Errors fixed: released mapper read `raw.*` instead of `raw.message` — wrong roles, event-ID-as-session-ID, dropped duration, zero tool rows. Patterns: ETL-vs-raw signal split, filename-stem session keys, sanitized regressions (structural keys only).
 
 **0508** — inline redefined as host-controlled/native-subagent-first, four-check deterministic eligibility, dual provenance, no post-launch replay. Errors fixed: contradictory prior draft with subjective handoff-cost heuristic; host-only promises across ADR-047 + 7 doc surfaces updated in lockstep.
+## 2026-08-11 — task 0510
+
+- **Solution citation is a write-seam concern, not a check-time concern.** The L3 `solution-file-line`
+  rule must be enforced at `TaskService.updateSection` (before mutation) via the SAME exported
+  predicate the checker uses — otherwise an invalid authored Solution lands on disk and only a later
+  lifecycle check rejects it. One predicate (`hasSolutionFileLineCitation`) prevents write-time /
+  check-time drift.
+- **Bun's `coverageThreshold` is per-file, not aggregate** (oven-sh/bun#17028). Importing a
+  previously-unimported script module into a test drags it into the coverage report, and a
+  low-coverage module fails the run silently (exit 1, no message). Cover script modules fully or
+  keep them out of test imports. In ts-libs this meant full `bumpVersion`/`dropTags`/`publishPackages`
+  coverage via `mock.module` (workspace + npm seams) plus scripted spawn — the injectable
+  `spawn`/`sleep` parameters mirror the module's existing `npmViewVersion(..., spawn?)` pattern.
+- **`mock.module` in bun:test** intercepts relative module imports if registered before the import
+  statement in the same file, with `import { mock } from 'bun:test'` (not a global).
+- **Order-based fake spawn beats matcher-based.** A matcher `routes.find` spawn replays the same
+  canned output for every identical call; a consuming scripted spawn matches exact command order and
+  fails loudly on mismatch — necessary for bounded-lookup tests where `gh run list` repeats 3-5x.
+- **Markdown table cells can carry abbreviated `path:line` anchors.** After a full path is named once
+  in a sentence, an abbreviated re-reference (`execution-batch.md:67`) does NOT resolve from the
+  project root and trips L4 stale-anchor warnings. Every `file:line` citation in Testing/Review must
+  be a full repo-relative path.
+- **Precheck's dirty-tree warning excludes `docs/tasks*`** (the pipeline writes the corpus itself),
+  so pre-existing uncommitted corpus changes from another batch are invisible at precheck. They stay
+  out of the task's commit — stage only the task's own files.
+- **GH Actions run lookup needs eventual-consistency headroom**: a just-dispatched
+  `workflow_dispatch` run may not appear in `gh run list` immediately; the fail-loud path (throw,
+  no tag mutation) is the safe recovery for the release script.
+
