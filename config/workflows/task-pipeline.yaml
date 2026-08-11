@@ -131,11 +131,29 @@ states:
       # semantics are deliberately untouched; the gate lives here.
       # R4 (0487): one divergence line when the two executors differ (legitimate
       # when only implementAgent is pinned, but it must be visible in the log).
+      # R2 (0503): omp/pi env-key probe misses are soft because the CLI process
+      # cannot see relay-owned credentials; explicit non-omp auth failures remain hard.
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
             DOCTOR_FILE=".spur/run/$wbs-precheck-doctor.status" &&
+            classifyDoctorProbe() {
+              PROBE_DETAIL="$1";
+              PROBE_AGENT="$2";
+              case "$PROBE_AGENT" in
+                omp|omp-*|pi|pi-*)
+                  if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'API key not found for provider|no probe registered'; then
+                    printf 'env-miss\n';
+                    return;
+                  fi;;
+              esac;
+              if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'invalid (API )?key|unauthori[sz]ed|forbidden|authentication failed|credential(s)? rejected'; then
+                printf 'auth-fail\n';
+              else
+                printf 'unknown\n';
+              fi;
+            } &&
             STATUS=PASS;
             if [ -n "$implementAgent" ] && [ "$implementAgent" != "$agent" ]; then
               echo "precheck: agent=$agent implementAgent=$implementAgent (executors diverge)";
@@ -152,10 +170,16 @@ states:
               };
               AUTH=$(printf '%s' "$OUT" | jq -r '.agents[0].authenticated // "unknown"' 2>/dev/null || echo unknown);
               DETAIL=$(printf '%s' "$OUT" | jq -r '.agents[0].modelStatus.detail // ""' 2>/dev/null || echo "");
-              echo "precheck: $EXE auth=$AUTH $DETAIL";
+              PROBE=$(classifyDoctorProbe "$DETAIL" "$EXE");
+              echo "precheck: $EXE auth=$AUTH probe=$PROBE $DETAIL";
               if [ "$AUTH" = unauthenticated ]; then
-                echo "precheck: FAIL - executor $EXE is unauthenticated; $DETAIL";
-                STATUS=FAIL;
+                case "$EXE:$PROBE" in
+                  omp*:env-miss|pi*:env-miss|omp*:unknown|pi*:unknown)
+                    echo "precheck: SOFT - executor $EXE auth probe cannot see agent-owned credentials";;
+                  *)
+                    echo "precheck: FAIL - executor $EXE is unauthenticated; fix agent.default or pass --vars '{\"agent\":\"<authenticated-executor>\"}' ($spurBin agent doctor $EXE --json); $DETAIL";
+                    STATUS=FAIL;;
+                esac;
               fi;
             done;
             echo "$STATUS" > "$DOCTOR_FILE";
@@ -238,7 +262,21 @@ states:
           requireDiff: true
       - kind: shell
         options:
-          command: "$spurBin task update $wbs wip --no-lifecycle"
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task update "$wbs" wip --no-lifecycle
       # Post-implement cleanup: auto-format any unformatted output the agent produced.
       # The agent may leave files that don't pass `biome check`, which then fails
       # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
@@ -265,7 +303,8 @@ states:
   #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
   - id: test
     description: >
-      Soft quality-gate probe (single full gate on the green path). Runs
+      Soft quality-gate probe (single logical gate on the green path; bounded retries only
+      for SQLite lock contention). Runs
       `${vars.qualityGateCmd}`, records PASS|FAIL under
       `.spur/run/<wbs>-test-gate.status`, resets the fix attempt counter, always exit 0.
     onEnter:
@@ -277,8 +316,20 @@ states:
             LOG_FILE=".spur/run/$wbs-test-gate.log" &&
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             echo 0 > "$ATTEMPT_FILE" &&
-            set +e &&
-            ( sh -c "$qualityGateCmd" ) > "$LOG_FILE" 2>&1; gate_rc=$?; set -e &&
+            : > "$LOG_FILE" &&
+            gate_attempt=1;
+            while [ "$gate_attempt" -le 5 ]; do
+              ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
+              sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
+              gate_locked=0;
+              grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+              cat "$ATTEMPT_LOG" >> "$LOG_FILE";
+              rm -f "$ATTEMPT_LOG";
+              if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
+              printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
+              sleep 10;
+              gate_attempt=$((gate_attempt + 1));
+            done &&
             cat "$LOG_FILE" &&
             FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
             set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
@@ -319,7 +370,7 @@ states:
 
   - id: test-recheck
     description: >
-      Soft recheck after fixall. Writes PASS|FAIL (always exit 0). Transitions
+      Soft recheck after fixall with bounded SQLite-lock retry. Writes PASS|FAIL (always exit 0). Transitions
       branch to review (PASS), another test-fix (FAIL and under max attempts),
       or the pipeline `failed` state (FAIL and attempts exhausted) — never a
       raw lifecycle abort that skips the terminal `failed` state.
@@ -330,8 +381,20 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
             LOG_FILE=".spur/run/$wbs-test-gate.log" &&
-            set +e &&
-            ( sh -c "$qualityGateCmd" ) > "$LOG_FILE" 2>&1; gate_rc=$?; set -e &&
+            : > "$LOG_FILE" &&
+            gate_attempt=1;
+            while [ "$gate_attempt" -le 5 ]; do
+              ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
+              sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
+              gate_locked=0;
+              grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+              cat "$ATTEMPT_LOG" >> "$LOG_FILE";
+              rm -f "$ATTEMPT_LOG";
+              if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
+              printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
+              sleep 10;
+              gate_attempt=$((gate_attempt + 1));
+            done &&
             cat "$LOG_FILE" &&
             FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
             set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
@@ -396,7 +459,21 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "$spurBin task record $wbs --solution-from-diff --transition testing"
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task record "$wbs" --solution-from-diff --transition testing
       # Best-effort, and portable across layouts. `feature-sync-bounded.ts` is a
       # Spur-monorepo path — `spur init` never scaffolds `plugins/sp/`, so a seeded
       # project must fall back to the plain `spur feature sync` verb rather than
@@ -427,7 +504,21 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "$spurBin task update $wbs done --no-lifecycle"
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task update "$wbs" done --no-lifecycle
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
