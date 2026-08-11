@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.9.0
+version: 1.12.0
 owner: Robin Min
 updated_at: 2026-08-11
 read_before: any structural change; before diverging from a decision
@@ -302,7 +302,7 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 
 ## ADR-042: One Inbox Module with Per-Agent Timelines
 
-- **Status:** Accepted · **Date:** 2026-08-04
+- **Status:** Superseded by ADR-052 · **Date:** 2026-08-04
 - **Decision:** Consolidate Board messaging into `modules/inbox` with All, Supervisor, and member tabs; merge durable messages with process frames client-side. Remove duplicate message views; Supervisor remains a UI filter, not a routing identity.
 - **Why:** Three overlapping message surfaces fragmented one operator workflow.
 - **Detail:** `03 §14`; `docs/design/inbox-board-module.md`; feature M4.
@@ -409,3 +409,76 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 
   **Amendment (2026-08-10):** Task 0502 completed the recorded promotion: the public gate is now
   `spur task check --corpus`; the spur-dev command was removed. **Detail:** `04 §7.1`.
+
+## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
+
+- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
+- **Decision:** Use `agent.team.<teamId>` as the v1 workspace context. Teams exclusively owns roster,
+  process lifecycle, terminal I/O, and activity; Inbox owns durable messages only; the Workspace Board
+  module composes team-scoped Teams, Inbox, and Tasks views. Add no workspace schema, service, API, or
+  CLI noun in v1.
+- **Why:** Team already owns the work folder and roster; a second workspace model and a second process
+  viewer duplicate authority without a current requirement.
+- **Detail:** `docs/design/workspace-design.md`;
+  `docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`; task 0197.
+
+## ADR-053: Parity Harness Diffs Agent-Facing Surfaces Against the Live Monorepo CLI
+
+- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** I2 · **Amends:** ADR-038
+- **Decision:** Extend the plugin parity harness to mechanically diff three agent-facing surfaces
+  against the live monorepo CLI (`bun run apps/cli/src/index.ts <noun> --help` / `--json`): the
+  `sp:spur-cli` facade inventories (noun routing table, Tier C exclusions, per-noun verb/flag
+  references), the `sp:spur-dev` spine step-routing table, and the `AGENTS.md` noun table. The diff
+  is bidirectional — documented-but-absent and live-but-undocumented are both findings — and drift
+  fixes are evidence-driven from test failures.
+- **Why:** Mechanical parity fixes today's drift and prevents tomorrow's, reusing the proven in-repo
+  harness (ADR-038) instead of a new mechanism.
+- **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md`; feature I2.
+
+**Amendment (2026-08-11, feature I2 design gate).** CLI-surface capture is `--help`-primary:
+`<noun> --help` is the universal capture surface, and `--json` is used only where the noun actually
+exposes a machine-readable inventory. Human `--help` parsing is a narrow adapter with fixtures and
+explicit exclusions, not an assumed machine API. The harness extends the existing parity suite with
+at most one shared CLI-surface helper and at most one new focused parity test; the pre-allocated
+multi-file test layout is dropped.
+
+**Why.** Not every noun exposes `--json`; assuming a machine-readable surface invents a contract the
+CLI does not provide, and pre-allocating test files multiplies maintenance before any assertion is
+proven.
+
+**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §3/§7.
+
+## ADR-054: Facade/Spine Boundary Is Test-Asserted; SSOT Consolidation Rejected
+
+- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** I2
+- **Decision:** Keep the ownership split — `sp:spur-dev` (spine) owns lifecycle, `sp:spur-cli`
+  (facade) owns the verb reference, the CLI is the validator — and assert it with parity tests that
+  fail when the facade documents lifecycle steps or the spine documents verb inventories. Reject
+  consolidating skill references into `docs/04_DESIGN.md` as the sole surface SSOT.
+- **Why:** The facade exists precisely as the skill home for the CLI surface (ADR-028/038);
+  consolidation rewrites a deliberately chosen structure for no drift benefit the parity harness
+  does not already provide.
+- **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md`; feature I2.
+
+**Amendment (2026-08-11, feature I2 design gate).** The boundary is defined by ownership, not by
+absence: `sp:spur-cli` owns CLI noun/verb/flag semantics — including task and feature
+status-transition verbs — while `sp:spur-dev` owns multi-step lifecycle orchestration. Parity tests
+assert each surface documents its owned scope and fail on inversion; they do not assert the facade
+contains no "lifecycle steps". Duplication assertions are limited to exact catalogs and structured
+inventories, never arbitrary prose.
+
+**Why.** Status-transition verbs are CLI semantics the facade must own, and prose-duplication
+detection is not mechanically reliable.
+
+**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §5/§6.
+
+## ADR-055: Separate Runtime Agent Execution from the `sp` Plugin Feature Root
+
+- **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** I
+- **Decision:** Feature B owns runtime agent execution (`spur agent`, runner/doctor, processes,
+  sessions, and executor selection). Feature I is the durable `sp` plugin root for skills,
+  commands, subagents, hooks, `/sp:dev-*` orchestration, and CLI-reference parity. Feature H is
+  frozen historical structure and receives no new children or tasks.
+- **Why:** H already mixes runtime and plugin concerns. Extending it would preserve ambiguous
+  ownership; a dedicated I root makes new work deterministic without rewriting completed history.
+- **Detail:** `03 §15`; `docs/plans/2026-08-11-sp-plugin-feature-tree-restructure-map.md`.
