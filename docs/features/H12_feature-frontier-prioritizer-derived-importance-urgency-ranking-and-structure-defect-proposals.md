@@ -100,6 +100,7 @@ Feature: Feature frontier prioritizer
 | 0494 | Reuse inventory: what next-router, spur CLI --json, and conflict-finding already provide that dev-find-next must compose rather than rebuild | done |
 | 0495 | Structure-defect contract: which tree defects distort ranking, and the proposal artifact /sp:dev-featurechange consumes | done |
 | 0497 | Ship /sp:dev-find-next + sp:next-feature — prompt-first feature frontier prioritizer | done |
+| 0498 | Add --task to /sp:dev-find-next — confirm the ranked winner, then dispatch the planning half to implement-ready tasks | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

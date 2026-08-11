@@ -19,6 +19,7 @@ updated_at: "2026-08-11T17:56:13.446Z"
 ## 0511. Fix 0510-run inefficiencies: per-file coverage preflight, verify anchor hygiene, coverage-diagnosis protocol, mocking conventions, precheck corpus-dirt note
 
 ### Background
+
 Task 0510 completed successfully, but its run exposed one remaining commit-hygiene blind spot: the
 task-pipeline precheck deliberately excludes `docs/tasks*` from its existing dirty-tree warning, so
 pre-existing task-corpus edits are invisible at launch even though they can be accidentally staged
@@ -37,17 +38,21 @@ The original 0511 draft proposed four additional follow-ups. They are removed af
 
 The Spur dependency catalog and lockfile resolve all eight `@gobing-ai/ts-*` packages to published
 version `0.4.27`. This task therefore has no ts-libs implementation or release dependency.
+
 ### Requirements
+
 - [x] R1. Extend the existing non-blocking dirty-tree shell action in
-  `config/workflows/task-pipeline.yaml` to query pre-existing changes under `docs/tasks*` separately
-  from non-corpus changes. When task-corpus changes exist, print one advisory naming the exact
-  porcelain rows; always exit zero and preserve the current non-corpus warning, corpus exclusions,
-  lifecycle behavior, and task statuses.
+      `config/workflows/task-pipeline.yaml` to query pre-existing changes under `docs/tasks*` separately
+      from non-corpus changes. When task-corpus changes exist, print one advisory naming the exact
+      porcelain rows; always exit zero and preserve the current non-corpus warning, corpus exclusions,
+      lifecycle behavior, and task statuses.
 
 Non-goals: blocking a pipeline on corpus dirt; reporting `docs/features`; changing the existing
 non-corpus warning; modifying generated/bundled workflow copies; changing ts-libs code, tests,
 packages, or release automation; adding a command, flag, config key, hook, or reusable helper.
+
 ### Acceptance Criteria
+
 ```gherkin
 Scenario: R1 — precheck reports task-corpus dirt without blocking
   Given a Git worktree with an uncommitted file under `docs/tasks*`
@@ -62,7 +67,9 @@ Scenario: R1 — clean task corpus stays quiet
   Then it exits zero
   And it prints no corpus advisory
 ```
+
 ### Q&A
+
 **Q: Why is the corpus warning advisory instead of blocking?**
 A: Pipeline execution legitimately updates task files. Blocking on corpus dirt would break batch and
 resume flows; the missing behavior is launch-time visibility, not a new lifecycle guard.
@@ -74,7 +81,9 @@ task's commit. Feature reporting is deliberately out of scope until the same fai
 **Q: Does implementation need to edit ts-libs or wait for another release?**
 A: No. The relevant upstream cleanup is in published `0.4.27`, and Spur's catalog and lockfile already
 resolve all `@gobing-ai/ts-*` packages to that version.
+
 ### Design
+
 Modify only the existing precheck dirty-tree shell action in
 `config/workflows/task-pipeline.yaml`. Keep its current non-corpus query unchanged, add a second
 bounded `git status --porcelain -- ':(glob)docs/tasks*/**'` query, and emit a clearly distinct
@@ -85,19 +94,23 @@ Add one focused regression test to `plugins/sp/tests/task-pipeline-resilience.te
 second precheck shell action in a temporary Git repository and prove both paths: a task-corpus file
 is named without triggering the non-corpus warning, while a clean task corpus emits no advisory.
 Do not introduce a helper or edit the generated `apps/cli/config/` bundle.
+
 ### Plan
+
 - [x] P1 (R1) Extend the existing precheck dirty-tree shell action in
-  `config/workflows/task-pipeline.yaml` with the separate advisory task-corpus query.
+      `config/workflows/task-pipeline.yaml` with the separate advisory task-corpus query.
 - [x] P2 (R1) Add dirty and clean task-corpus cases to
-  `plugins/sp/tests/task-pipeline-resilience.test.ts` using a temporary Git repository.
+      `plugins/sp/tests/task-pipeline-resilience.test.ts` using a temporary Git repository.
 - [x] P3 Verify with the focused resilience test, source-local workflow validation, and standard plus
-  strict task checks for 0511.
+      strict task checks for 0511.
+
 ### Solution
+
 **R1 — task-corpus dirt advisory in the precheck dirty-tree action (advisory only, never a block).**
 
 - `config/workflows/task-pipeline.yaml:191-209` — extended the existing precheck dirty-tree shell
   action (R6/0487). The original non-corpus `git status --porcelain -- . ':(exclude)docs/tasks*'
-  ':(exclude)docs/features'` WARNING query is unchanged. Added a second bounded query,
+':(exclude)docs/features'` WARNING query is unchanged. Added a second bounded query,
   `git status --porcelain -- ':(glob)docs/tasks*/**'`, that prints a distinct `precheck: NOTE` with
   the exact porcelain rows only when task-corpus dirt exists. Both branches stay advisory and the
   action still ends with `exit 0`; lifecycle behavior and task statuses are untouched.
@@ -111,26 +124,32 @@ Do not introduce a helper or edit the generated `apps/cli/config/` bundle.
   emits no corpus advisory (and no WARNING).
 
 Verification (targeted probes only; the pipeline `test` hop runs the full gate):
+
 - `bun test plugins/sp/tests/task-pipeline-resilience.test.ts` — 7 pass / 0 fail (5 existing + 2 new).
 - `spur workflow validate config/workflows/task-pipeline.yaml` — `valid: true`.
 - `spur task check 0511` — PASS.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `config/workflows/task-pipeline.yaml:204-208` (bounded `git status --porcelain -- ':(glob)docs/tasks*/**'` query + `precheck: NOTE` advisory naming exact porcelain rows); `config/workflows/task-pipeline.yaml:209` (`exit 0` preserved); `config/workflows/task-pipeline.yaml:196-202` (non-corpus WARNING + exclusions byte-identical); regression tests `plugins/sp/tests/task-pipeline-resilience.test.ts:197-219` |
+| Requirement | Status | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1          | MET    | `config/workflows/task-pipeline.yaml:204-208` (bounded `git status --porcelain -- ':(glob)docs/tasks*/**'` query + `precheck: NOTE` advisory naming exact porcelain rows); `config/workflows/task-pipeline.yaml:209` (`exit 0` preserved); `config/workflows/task-pipeline.yaml:196-202` (non-corpus WARNING + exclusions byte-identical); regression tests `plugins/sp/tests/task-pipeline-resilience.test.ts:197-219` |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 — precheck reports task-corpus dirt without blocking | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:197-208` — test "precheck dirty-tree action names task-corpus dirt without the non-corpus warning"; asserts exit 0, NOTE present, exact row `?? docs/tasks4/uncommitted.md` present, WARNING absent. Passed this run: `bun test plugins/sp/tests/task-pipeline-resilience.test.ts` → 7 pass / 0 fail |
-| Scenario: R1 — clean task corpus stays quiet | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:210-219` — test "precheck dirty-tree action stays quiet on a clean task corpus"; asserts exit 0, no NOTE, no WARNING. Same run, passed |
+| Acceptance Criteria                                               | Status | Evidence Type | Evidence                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scenario: R1 — precheck reports task-corpus dirt without blocking | MET    | test          | `plugins/sp/tests/task-pipeline-resilience.test.ts:197-208` — test "precheck dirty-tree action names task-corpus dirt without the non-corpus warning"; asserts exit 0, NOTE present, exact row `?? docs/tasks4/uncommitted.md` present, WARNING absent. Passed this run: `bun test plugins/sp/tests/task-pipeline-resilience.test.ts` → 7 pass / 0 fail |
+| Scenario: R1 — clean task corpus stays quiet                      | MET    | test          | `plugins/sp/tests/task-pipeline-resilience.test.ts:210-219` — test "precheck dirty-tree action stays quiet on a clean task corpus"; asserts exit 0, no NOTE, no WARNING. Same run, passed                                                                                                                                                               |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 - Re-audit 2026-08-11 (--force, --fix all): anchors re-read live (`config/workflows/task-pipeline.yaml:188-209`, resilience tests `:44-58,197-219`); resilience suite 7 pass / 0 fail; `spur workflow validate` valid:true; 4 unchecked boxes flipped; shippable gate `spur feature check H` pass=true, tasks 0500/0510/0511 done. Verdict artifact `.spur/run/0511-verdict.json`.
+
 ### Review
+
 **Functional traceability** — R1 MET.
 
 - `config/workflows/task-pipeline.yaml:204-208` — new bounded query `git status --porcelain -- ':(glob)docs/tasks*/**'` prints a distinct `precheck: NOTE - task corpus has uncommitted changes` with the exact porcelain rows only when task-corpus dirt exists; `exit 0` preserved at `config/workflows/task-pipeline.yaml:209`; the non-corpus WARNING query (`:196-202`) and its exclusions (`:(exclude)docs/tasks*`, `:(exclude)docs/features`) are byte-identical to the pre-change action; lifecycle behavior and task statuses untouched (status transition is the separate `spur task update <wbs> wip` action).
@@ -154,7 +173,9 @@ Verification (targeted probes only; the pipeline `test` hop runs the full gate):
 - Deviation (CHANGED): added a test-local `initGitRepo` scaffolding function (`plugins/sp/tests/task-pipeline-resilience.test.ts:44-58`). The Non-goals' "reusable helper" is read as a product-surface helper (the same sentence enumerates command/flag/config-key/hook); the test file already hosts local helpers (`executable`, `runShell`), so the addition follows the file's established pattern and adds no reusable product code. A seeded tracked file is required so git lists untracked corpus files individually instead of collapsing the directory.
 
 **Disposition** — PASS. No P1–P3 findings; residual risk none beyond the advisory noted above.
+
 ### References
+
 - `config/workflows/task-pipeline.yaml` — precheck dirty-tree action; current task-corpus exclusion.
 - `plugins/sp/tests/task-pipeline-resilience.test.ts` — focused executable shell-action harness.
 - `plugins/sp/skills/code-testing/references/stacks/bun-ts.md` — existing Bun coverage guidance.
@@ -162,12 +183,15 @@ Verification (targeted probes only; the pipeline `test` hop runs the full gate):
 - `plugins/sp/skills/code-verification/SKILL.md` — existing repo-relative line-anchor contract.
 - ts-libs commits `7830436` (mock/output cleanup) and `a1fe989` (`0.4.27` release).
 - Bun coverage documentation: https://bun.com/docs/test/code-coverage
+
 ### History
 
 - 2026-08-11T17:49:40.620Z backlog → wip (system)
 - 2026-08-11T17:53:01.935Z wip → testing (system)
 - 2026-08-11T17:53:16.518Z testing → done (system)
+
 ### Notes
+
 Refinement disposition (2026-08-11): retained only the task-corpus precheck advisory. Removed the
 coverage, diagnosis, citation, and mocking follow-ups because their prevention contracts already
 exist or their concrete upstream defects shipped in ts-libs `0.4.27`.
