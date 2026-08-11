@@ -393,6 +393,11 @@ schema-invalid ones is `status: 'degraded'`, never clean `ok` — parse/validati
 no longer the only signal. The degraded entry carries a `source-degraded` warning with counts, and
 bounded file-and-line samples stay in the artifact (overflow to the `.errors.jsonl` sidecar).
 
+**Reconciliation pass-through (task 0505 R1):** on `--mode full` with importer 0.4.25+, each JSON
+entry carries the importer's optional `reconciliation` summary (`{ staleTargetRows,
+staleLedgerRows, staleCheckpointRows }`) — additive, absent on incremental runs — so a dry-run
+preview and its write can be compared count-for-count without manual SQL.
+
 **Exit-code contract (R3, amended 0504 R2) — replaced the old "exit 1 if any errors":** `0` every
 source ok/empty, `2` at least one failed **and** at least one not (or any source `degraded`), `1`
 every source failed. A source is `failed` only if it threw or hit its timeout. Before 0504, parse

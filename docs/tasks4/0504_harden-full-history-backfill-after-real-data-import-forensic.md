@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T00:17:08.921Z"
-updated_at: "2026-08-11T03:55:16.255Z"
+updated_at: "2026-08-11T04:04:59.475Z"
 ---
 
 ## 0504. Harden full history backfill after real-data import forensics
@@ -119,22 +119,23 @@ Keep the implementation inside the existing importer, DAO, HistoryService, and C
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS (pipeline run 52A62421)
+- Re-audit 2026-08-11 (`--force --fix all --focus all`): verdict **PASS**, all evidence re-run fresh this audit. Fix applied: stale R1 Testing anchor `types.ts:71-90` corrected to `types.ts:105-136` (line drift after ts-libs edit; content verified present and on-subject). Gitignored artifact touched by this audit: `.spur/run/0504-verdict.json` (rewritten with re-audit verdict + checks).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/jsonl-importer-dao.ts:384`; `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/importer.ts:196-205`; `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/opencode-importer.ts:115-162`; `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/types.ts:71-90`; tests `importer.test.ts:955`, `opencode-importer.test.ts:228,282` |
-| R2 | MET | `packages/app/src/services/history-service.ts:400-419`; `packages/domain/src/analytics/artifact.ts:31-42`; `packages/app/src/services/history-service.ts:832-835`; `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/importer.ts:119-142`; tests `history-service.test.ts:453`, `importer.test.ts:1038` |
-| R3 | MET | `~/xprojects/ts-libs/packages/llm-jsonl-importer/tests/opencode-importer.test.ts:134` (10,000 unrelated ledger rows; statements < 100; no unindexed predicate) |
-| R4 | MET | `apps/cli/src/commands/history.ts:25-46,101-107`; `AGENTS.md:209-217`; CLI smoke provenance header |
+| R1 | MET | `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/jsonl-importer-dao.ts:384-434` (`reconcileFullImport`: desired-hash diff, PK-keyed deletes, one source-scoped batch, dry-run identical counts); `importer.ts:196-204` (full-mode invocation); `opencode-importer.ts:65-79,115-163` (per-file drift + vanished-file sweep, both counted); `types.ts:105-136` (`ReconcileSummary` + `ImportResult.reconciliation`); tests `importer.test.ts:954`, `opencode-importer.test.ts:228,282` — fresh: `bun test tests/importer.test.ts tests/opencode-importer.test.ts` → 44 pass / 0 fail |
+| R2 | MET | `packages/app/src/services/history-service.ts:398-419` (degraded, never clean ok, `source-degraded` warning with counts); `history-service.ts:832-838` (`computeExitCode` → 2 on any degraded); `packages/domain/src/analytics/artifact.ts:31-42` (`'degraded'` union member); `~/xprojects/ts-libs/.../src/importer.ts:115-142` (line-atomic validation, no partial rows); tests `history-service.test.ts:452` (fresh: 20 pass / 0 fail), `importer.test.ts:1037` (fresh pass) |
+| R3 | MET | `~/xprojects/ts-libs/.../tests/opencode-importer.test.ts:134` (10,000 unrelated ledger rows; statements < 100; no unindexed `(source, source_file)` ledger delete) — fresh pass |
+| R4 | MET | `apps/cli/src/commands/history.ts:25-43,99-107` (`resolveImportProvenance`/`formatProvenance`, printed before results, embedded in `--json`); `AGENTS.md:209-219` (source-local binary contract); fresh CLI smoke: `binary: /Users/robin/xprojects/spur-new/apps/cli/src/index.ts` + `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.24` in text mode and `provenance` object in `--json` mode |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — Full mode reconciles stale derived history | MET | test | `importer.test.ts:955`; `opencode-importer.test.ts:228,282` |
-| Scenario: R2 — Degraded source input is visible and bounded | MET | test | `history-service.test.ts:453`; CLI smoke `antigravity: degraded` exit 2; `importer.test.ts:1038` |
-| Scenario: R3 — OpenCode persistence avoids ledger-size multiplication | MET | test | `opencode-importer.test.ts:134` |
-| Scenario: R4 — Real-data dogfood uses the intended build | MET | command | CLI smoke: `binary:` + `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.24` before results; `AGENTS.md:209-217` |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Scenario: R1 — Full mode reconciles stale derived history | MET | test | `importer.test.ts:954` (dry-run exact counts, no mutation; write deletes; second run zero), `opencode-importer.test.ts:228,282` (vanish sweep + mapper-drift counts) — 44 pass / 0 fail fresh |
+| Scenario: R2 — Degraded source input is visible and bounded | MET | test | `history-service.test.ts:452` (degraded status, bounded counts, non-zero exit) — 20 pass / 0 fail fresh; `importer.test.ts:1037` (atomic line rejection) |
+| Scenario: R3 — OpenCode persistence avoids ledger-size multiplication | MET | test | `opencode-importer.test.ts:134` — fresh pass |
+| Scenario: R4 — Real-data dogfood uses the intended build | MET | command | Fresh CLI smoke (text + `--json`): provenance header before results, source-local binary path, importer@0.4.24; `AGENTS.md:209-219` |
+- Coverage: N/A (verdict-based re-audit; targeted suites re-run fresh — ts-libs importer 44 pass, spur history-service 20 pass, CLI history 24 pass, all 0 fail)
 ### Review
 **Review disposition: PASS** — quality gate green (`bun run format && bun run spur-check`, full workspaces), ts-libs importer suite 192 pass, domain 109, app 20, CLI 677 pass; tsc clean in domain/app/cli/ts-libs; biome clean.
 
