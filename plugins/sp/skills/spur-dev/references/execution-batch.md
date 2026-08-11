@@ -76,7 +76,13 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
 
 - **Abort shape.** A non-zero check aborts the batch immediately: verdict `aborted`, zero attempted
   tasks, and the structured feature findings (the `--json` finding list) reported verbatim. This is
-  the same abort vocabulary as cycle / unknown selector (Step 4/Step 5).
+  the same abort vocabulary as cycle / unknown selector (Step 4/Step 5). **Scoped to structural
+  findings:** `L4.scenario-unverified` is the expected state of any not-yet-run feature (its
+  covering tasks have no PASS verdicts yet) and `--strict` elevates it to error, so it is reported
+  verbatim but does **not** abort the batch; every other error finding (L1–L3 structural,
+  `L4.malformed-verdict-artifact`, `L4.uncovered-feature-scenario`) still aborts. The terminal
+  feature-transition gate enforces scenario verification after the batch runs, so pre-run unverified
+  scenarios are transient, not defects (dogfood 2026-08-11, feature I2).
 - **Exactly once.** The check runs once per batch, before `task list`; it is not re-run per task.
 - **Non-feature exclusion.** Explicit WBS lists, status pseudo-lists, and `ready` selectors add no
   feature check — only an effective `feature:<id>` selector is feature-derived. When explicit
@@ -84,7 +90,10 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
 - **Why.** `FeatureCheckService` emits `L3.scope-delineation` (Scope lacking an In/Out split) as a
   **warning**; feature-scoped batches never ran a strict check before freezing, so the late feature
   transition became the first blocking check. A selector-local strict preflight catches a known
-  strict finding before any task pipeline action without changing corpus-wide severity.
+  strict finding before any task pipeline action without changing corpus-wide severity. A not-yet-run
+  feature always fails `L4.scenario-unverified` under `--strict`, so that class is
+  reported-not-aborting per the Abort shape above — the preflight targets defects, not the
+  expected pre-run state.
 - **Scope.** This preflight is advisory to severity policy: it does not alter `FeatureCheckService`,
   `L3.scope-delineation` severity, `feature sync`, or batch-create.
 

@@ -36,7 +36,9 @@ Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list,
 or `ready`), `--feature <id>` (sugar for `feature:<id>`; when the effective selector is
 feature-derived, `dev-runall` runs `spur feature check <id> --strict --json` **once** before
 resolving tasks — a non-zero strict check aborts the batch with verdict `aborted` and the
-structured findings, before any task pipeline action, task 0510 R2), `--mode`
+structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.scenario-unverified`
+(the expected pre-run state of any not-yet-run feature) is reported verbatim but does not abort —
+any other strict error aborts), `--mode`
 `<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
 see `execution-batch.md` § Parallel Execution), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
