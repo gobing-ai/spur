@@ -48,4 +48,10 @@ Both `status=done` (task show) and `verdict=PASS` (verdict files). `feature_id=H
 
 - `wbs` 0487; `feature_id` N (frontmatter); `status` done (`spur task show`); `verdict` PASS (`0487-verdict.json`).`{"wbs":"0502","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-10T23:30:43Z"}`
 
-Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0502 --json` (wbs, feature_id=null, status=done, updated_at) + `.spur/run/0502-verdict.json` (PASS). Also repaired the file — a prior botched append had baked the command's annotation text into the JSONL; rewrote clean.
+Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0502 --json` (wbs, feature_id=null, status=done, updated_at) + `.spur/run/0502-verdict.json` (PASS). Also repaired the file — a prior botched append had baked the command's annotation text into the JSONL; rewrote clean.```
+{"wbs":"0505","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T05:04:37Z"}
+```
+
+Captured to `.spur/run/wrapup-metrics.jsonl` — file now two valid JSONL records (0502 + 0505), both parse clean. Fields sourced from the task file: wbs 0505, feature_id E, status done, verdict PASS (Testing section), timestamp = done transition (2026-08-11T05:04:37.408Z).
+
+Also repaired the pre-existing botched state: the 0502 record was stored as literal tool-output text (backtick-wrapped JSON + "Appended to…" annotation), not JSONL — rewrote the file clean rather than leaving the new line adjacent to garbage.

@@ -249,3 +249,33 @@ Captured to `.spur/run/wrapup-learnings.md`.
 - **Selective staging for unrelated tree changes.** Unrelated concurrent work (`history-service.ts`, executor config) shared the working tree; excluded from 0502's commit via selective staging. One writer per tree / commit per task.
 
 Key evidence: real repo `spur task check --corpus` → 2 observed / 2 baselined / 0 new / 0 stale, exit 0; injected unbaselined fixture error exits 1; `bun run lint` / `test` / `build` / `spur-check-new` all exit 0. Service tests 30/30 green (new-error, stale-entry, unparseable-sweep, nested-cwd, fog decision table).
+Captured to `.spur/run/wrapup-learnings.md`.
+
+## 2026-08-10 — 0505
+
+### Conventions / patterns
+
+- **Real-data history validation must use a source-local binary.** Invoke `bun run apps/cli/src/index.ts …` (or the built `apps/cli/spur.js`) directly; a bare global `spur` silently runs stale published code. Every invocation prints a provenance header (`binary:` + resolved `@gobing-ai/ts-llm-jsonl-importer@<version>`); record it before dry-run/write, `--json` embeds `provenance`.
+- **Lockstep ts-libs release, never links.** When the reconciliation code lives in an unpublished ts-libs commit newer than the tagged package, publish via the sibling repo's operator-controlled `bun run bump-ver <version> --push`, wait for OIDC publication, then update Spur's catalog/lock. Temporary `bun link` or store overlays are not acceptable evidence.
+- **Additive projection at the existing seam.** `CoverageEntry.reconciliation?: ReconcileSummary` (`packages/domain/src/analytics/artifact.ts:58`), copied unchanged at `HistoryService.importOneIsolated`/fan-out (`packages/app/src/services/history-service.ts:433-435,582`). No noun, verb, flag, wrapper, or config switch; text output need not grow — the verification consumes `--json`.
+- **Real-data verification contract:** target is repository-root `.spur/spur.db` (1.7 GB), never `apps/cli/.spur/spur.db`; baseline counts are evidence, not frozen expectations (histories are live); idempotence means zero *stale reconciliation* on the second pass, not zero new records or unchanged global totals; read-only SQL only — reconciliation must happen through `history import --mode full`.
+- **Backup before any destructive write:** SQLite online backup API to `.spur/backups/` with a WAL-quiescence sample (3 s stable size → no active writer), then `PRAGMA integrity_check` the backup itself.
+
+### Errors fixed
+
+- **Implement probe hit the real DB without `--dry-run`** — deleted 1 pre-existing antigravity row+ledger+checkpoint (leftover temp-file junk) and inserted 2 probe rows. Recovered via the frozen pre-probe snapshot (`.spur/run/0505-quarantine/`, integrity ok, totals matched baseline) used to surgically restore all three antigravity tables count-exact; pipeline writes preserved; the later R2 backup became the authoritative recovery point. Lesson logged: any real-data write probe must use `--dry-run` or an explicit dbUrl override.
+- **Test gap closed:** P2's "focused mapping/CLI JSON tests" — the app-level mapping test already existed; added the CLI JSON assertion (`apps/cli/tests/commands/history.test.ts`) proving full-mode entries carry `entries[].reconciliation` and incremental omits it.
+
+### Gotchas
+
+- **Exit 2 is not automatically failure.** The seven documented malformed AGY source lines legitimately yield `degraded`/exit 2; only that known class is allowed — any other failed/degraded source blocks the write.
+- **Four long-running `spur serve` daemons hold the real DB open** — potential concurrent writers on future real-data runs. Mitigated by WAL-quiescence sampling before the backup; recommended: stop serve daemons or use a dedicated `DATABASE_URL` for future verification passes.
+- **Live sources insert fresh records while the verification runs.** Compare per source, not just aggregates: ledger accounting came out exact — 1,581,539 − 196,370 stale + 4,197 fresh (codex 2165, omp 1490, pi 354, agy 188) = 1,389,366 post-write.
+- **Prove dry-run is mutation-free** by snapshotting the four history-table counts before and after and requiring them identical.
+
+### Key evidence
+
+- R1–R5 all MET (verdict PASS). Importer `@gobing-ai/ts-llm-jsonl-importer@0.4.25` (contains `b988a64`), catalog `^0.4.25` (`631ceaea`); provenance `binary=apps/cli/src/index.ts importer=0.4.25`.
+- Dry-run exit 2 with only agy degraded; reconciliation previews per source (pi 66781/66781/757, claude 49659/49659/226, codex 10807/10807/315, omp 10095/10095/30, grok 39091/39091/25, agy 19936/19936/57, antigravity 1/1/1, gemini/opencode/openclaw 0/0/0).
+- Write parity: programmatic `all_parity=true` across 10 sources; second full dry-run: all stale counts 0. Post-write: `PRAGMA integrity_check=ok`, unknown 0, orphan 0 (1,295,980 msg / 93,386 tool / 1,389,366 ledger / 15,857 cp).
+- Raw evidence retained under `.spur/run/0505/` (`r2-baseline.txt`, `r3-dryrun.json`, `r4-write.json`, `r4-second-dryrun.json`, `r5-postwrite.txt`); dry-run 46 s / write 71 s on 1.7 GB.
