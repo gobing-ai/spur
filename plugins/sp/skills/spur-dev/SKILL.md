@@ -80,8 +80,9 @@ Full procedure: **[references/planning-workflow.md](references/planning-workflow
 
 ```
 pick task (spur task list --json)
-  → spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
-  → on HITL pause (interactive profile): surface to operator → spur workflow continue [run-id] [--yes]
+  → interactive omit/inline: read task-pipeline.yaml → drive actions + guards in host session
+  → explicit/headless executor: spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+  → on HITL pause: surface to operator; resume the selected driver from the paused state
 ```
 
 The pipeline (`kind: state-machine`) runs the work loop:
@@ -91,6 +92,7 @@ precheck → implement → test → review → approve(HITL) → verify → reco
 ```
 
 Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
+Host-session procedure: **[references/inline-pipeline-driver.md](references/inline-pipeline-driver.md)**.
 
 ## Step routing
 
@@ -108,7 +110,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
 | Batch refine | planning | `sp:dev-refineall` → per-task `refine` | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md) |
 | Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
-| Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
+| Pipeline run | execution | inline YAML driver or `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) · [inline-pipeline-driver.md](references/inline-pipeline-driver.md) |
 | Implement (dispatch) | execution | `sp:code-implementation` | competency skill — the spine dispatches, does not inline |
 | Test (dispatch) | execution | `sp:code-testing` | competency skill — the spine dispatches, does not inline |
 | Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline |

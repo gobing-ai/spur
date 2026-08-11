@@ -17,7 +17,7 @@ Wraps the **sp:spur-dev** skill.
 | `--mode` `<sequential\|parallel>` | Batch execution order. | sequential |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Each per-task workflow's `agent.run` stages always dispatch a subprocess; `inline` is accepted there as a synonym for omit, resolving to `agent.default` (ADR-047). `auto` tier-resolves an executor; a name pins that executor. | agent.default |
+| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver; `auto`, a name, parallel mode, and headless invocation use subprocesses. | inline |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop per task. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -39,8 +39,9 @@ see `execution-batch.md` § Parallel Execution), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
 halts on first failure), `--auto`
 (sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
-(names who runs the pipeline's stages — merged into each per-task `vars.agent`; `inline` is accepted
-there as a synonym for omit, resolving to `agent.default`, ADR-047; the orchestrator loop continues in this session), `--json` (emit the
+(names who runs the pipeline's stages — interactive sequential omit/`inline` uses the host driver;
+`auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; parallel mode
+retains isolated subprocesses, ADR-047), `--json` (emit the
 report as JSON), `--wrap` (trigger
 `wrapup-pipeline.yaml` after the batch completes), `--next`
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
@@ -74,5 +75,6 @@ full distinction.
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). The orchestrator starts inline; each full per-task workflow retains its explicit subprocess boundary.
-- `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator and each task's model stages in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
+- Interactive sequential omit/inline: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")`.
+- Explicit executor or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.

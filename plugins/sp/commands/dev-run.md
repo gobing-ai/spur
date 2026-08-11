@@ -14,7 +14,7 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | --- | --- | --- |
 | `<wbs>` | Task WBS to run. | required |
 | `--mode` `<full\|implement>` | Full pipeline or single implement step. | full |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. `--mode implement` honors `inline` (host session). `--mode full` stages always dispatch a subprocess — `inline` is accepted there as a synonym for omit, resolving to `agent.default` (ADR-047). | inline (implement) · agent.default (full) |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. In an interactive session, omit/`inline` runs implement mode and full-mode stages in the host session. `auto` or a name keeps subprocess dispatch. | inline |
 | `--auto` | Skip objective HITL confirmations. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--wrap` | Run the wrap hop after the main step. | off |
@@ -28,19 +28,22 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Full mode retains workflow `agent.run` subprocess steps; implement mode runs the competency inline unless a trigger or `--agent auto` applies.
-- Full pipeline (default `--mode full`): `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- Full pipeline (default `--mode full`): interactive omit/`--agent inline` uses the
+  [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md) via
+  `Skill(skill="sp:spur-dev", args="run-inline $ARGUMENTS")`; `--agent auto` or a named executor
+  uses `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` and the workflow subprocess path.
 - Implement step only (`--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
 
 **Flags:**
 
-- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. In `--mode implement` that is this session, so `inline` is honored literally. In `--mode full` the model-bearing work is the pipeline's `agent.run` stages, which **always dispatch a subprocess** (triggers 2 and 3) — there `inline` is accepted as a synonym for omitting `--agent` and resolves to `agent.default`, never a host-session stage (ADR-047). An explicit `--agent inline` on the `--mode full` path is therefore **not** an error; the value is merged into `vars.agent` and resolves to `agent.default`. A named executor or `auto` **is** merged into `vars.agent`; omitting `--agent` leaves the stages on the configured `agent.default`. Either way the orchestrator loop continues in this session. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. Interactive omit/`inline` keeps both implement-only and full-mode model stages in this session. Full mode reads `task-pipeline.yaml` as the SSOT and interprets its actions/guards through the inline driver; it records `stage <id> executed inline in session <session-id>` in the run log. `auto` or a name is merged into `vars.agent` and `vars.implementAgent` and keeps the existing subprocess workflow. Headless `spur workflow run` / `spur agent run` is unchanged. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 **Mode split (load-bearing — bug-742)**
 
 | Mode | What runs | Must not do |
 | --- | --- | --- |
-| `--mode full` (default) | Launches `task-pipeline.yaml` via `sp:spur-dev` | — |
+| `--mode full` (default) | Interactive omit/inline: host-session driver over `task-pipeline.yaml`; explicit/headless executor: workflow subprocess | — |
 | `--mode implement` | Single implement competency via `sp:code-implementation` | Re-launch the full pipeline, `spur workflow run …task-pipeline…`, or `/sp:dev-run` **without** `--mode implement` |
 
 The pipeline's `implement` step invokes this command **only** as:

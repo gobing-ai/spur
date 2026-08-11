@@ -10,13 +10,15 @@ see_also:
 
 ```
 pick task (spur task list --json)
-  → spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
-  → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
+  → interactive omit/inline: host driver reads task-pipeline.yaml and walks it in-session
+  → explicit/headless executor: spur workflow run task-pipeline.yaml
+  → on HITL pause: surface to operator → resume the selected driver
 ```
 
-The execution half runs a single task through the `task-pipeline.yaml` workflow. The
-pipeline drives the work; the skill interprets results, surfaces HITL gates, and decides
-next steps.
+The execution half runs a single task through the `task-pipeline.yaml` FSM. In an interactive
+omit/inline invocation, the skill's host driver interprets that YAML directly. Explicit executors
+and headless invocations use the workflow engine. Both surfaces preserve the same actions, guards,
+artifacts, HITL gates, and terminal states.
 
 > **Single-task vs batch.** This file covers the **single-task** execution half — one task through
 > `task-pipeline.yaml`. For **batch** execution (a set of tasks in dependency-correct order), see
@@ -48,11 +50,11 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | `review` | `/sp:dev-review <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
-Every workflow `agent.run` stage is an explicit subprocess surface (triggers 2 and 3: headless
-execution plus a durable run record). `--agent <name|auto>` selects that subprocess agent; omitting
-it keeps the pipeline's configured default (`omp`). Direct invocations of the same dev operations
-remain inline by default. See the
-[inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
+Interactive omit/`inline` executes these model stages through the
+[inline pipeline driver](inline-pipeline-driver.md) in the host session and records stage/session
+provenance. `--agent <name|auto>`, parallel batches, and headless workflow invocation select the
+existing subprocess actions. Direct invocations of the same dev operations remain inline by
+default. See the [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
 
 > **Single-run & parse discipline (suite run cost control).** Run full quality/test suites (`bun run check` / `spur-check`) at most ONCE per task iteration (task 0436 R2). Parse failure details from the single retained command output rather than re-running full suites repeatedly to inspect errors. Re-run targeted/narrow test files (e.g. `bun test <file> --test-name-pattern <pattern>`) while iterating on fixes, and re-run the full suite only when all targeted fixes pass.
 
@@ -90,7 +92,14 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 > - Without `--auto`: warn the operator before calling `spur workflow run` and prompt for confirmation or a plan-item override via `--vars '{"maxImplementPlanItems":"<count>"}'`.
 > - With `--auto`: automatically append `"maxImplementPlanItems": "<count>"` to `--vars` and log a single-line notice (e.g. `Notice: task <wbs> has N plan items (>8 default cap); injecting maxImplementPlanItems override`).
 
-**Launch async, observe with a single `--follow` call.** A pipeline with `agent.run` stages runs
+**Choose the surface before execution.** In an interactive `/sp:dev-run --mode full` invocation,
+omit/`--agent inline` selects the [inline pipeline driver](inline-pipeline-driver.md). Read the YAML
+at invocation time, allocate the inline run id/session provenance, record `task run-link`, and walk
+its actions/guards in declaration order. Do not call `spur workflow run` on this path. `--agent auto`,
+a named executor, an explicit `vars.agent`/`vars.implementAgent`, or a headless caller selects the
+workflow subprocess path below. Never fall back silently from inline to `agent.default`.
+
+**Subprocess path: launch async, observe with a single `--follow` call.** A pipeline with `agent.run` stages runs
 for many minutes (each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous
 invocation blocks the caller for the entire duration and risks an orphaned run if the caller is
 interrupted (sync-orphan, see task 0127). Always launch with `--async`, then wait with
@@ -118,12 +127,12 @@ background and let its exit report the terminal verdict. Use `spur workflow trac
 Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
 (< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.
 
-When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars as
+On the subprocess path, when `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars as
 **both** `agent` and `implementAgent` (task 0483 R2):
 `--vars '{"wbs":"<wbs>","agent":"<value>","implementAgent":"<value>"}'`. The pipeline YAML reads
 `${vars.agent}` for review/verify/test-fix and `${vars.implementAgent}` for implement — setting
 both keys ensures the pinned executor reaches every hop. The full value-semantics contract (one
-rule, value table, objective triggers, `inline`→`agent.default` on headless surfaces per ADR-047)
+rule, value table, objective triggers, and headless `inline`→`agent.default` resolution per ADR-047)
 lives in [cross-cutting.md](cross-cutting.md#inline-default-execution-surface) — the SSOT.
 This file documents only the **workflow-pipeline mechanics**: how the selector reaches `agent.run`
 steps. Precedence chain: `--agent` / explicit `--vars` → `agent.default` → YAML literal (see SSOT
@@ -141,12 +150,15 @@ The pipeline (`kind: state-machine`) runs the work loop:
 precheck → implement → test [→ test-fix → test-recheck] → review → approve(HITL) → verify → record → done
 ```
 
-Agentic steps use pure slash `agent.run` inputs (ADR-043). The `test` hop is primarily
+Agentic steps use the pure slash inputs declared by each YAML `agent.run` action (ADR-043). The
+workflow engine dispatches them; the interactive driver invokes their backing skills in-session.
+The `test` hop is primarily
 **deterministic shell** (quality gate); only the optional `test-fix` hop is agentic
 (`/sp:dev-fixall`). The skill monitors the run:
 
-- **On HITL pause** (`approve` state): surface the review output to the operator.
-  `spur workflow continue <run-id> --yes` to approve, or provide feedback to loop back.
+- **On HITL pause** (`approve` state): surface the review output to the operator. On the subprocess
+  path use `spur workflow continue <run-id> --yes`; on the inline path retain the current state and
+  resume the host driver with the operator's answer.
 - **On guard failure** (`precheck`): the task's check findings block progress — fix the
   task first.
 - **On completion** (`done`): the pipeline's `record` step has already written results into
@@ -224,7 +236,7 @@ not in YAML `input:` essays.
 
 ## Infrastructure failure recognition (mandatory)
 
-An `agent.run` step timeout (default 600s) or non-zero exit is an **infrastructure signal**,
+On the subprocess path, an `agent.run` step timeout (default 600s) or non-zero exit is an **infrastructure signal**,
 not a license to bypass the pipeline. The execution pipeline must not be abandoned because
 an executor failed — the executor is swappable via config, the pipeline is not.
 
@@ -240,10 +252,10 @@ an executor failed — the executor is swappable via config, the pipeline is not
 3. **Surface to the operator.** If you cannot determine the cause, ask. Do NOT silently
    fall back to direct implementation. A pipeline step failure is a recoverable event; a
    bypass is an irrecoverable provenance loss.
-4. **Never use direct implementation as a fallback.** The `task-pipeline.yaml` `record → done`
-   transition is the only mechanism that produces trustworthy task sections. Manual section
-   fills via `spur task update --section` are indistinguishable from pipeline output and
-   bypass the provenance contract silently.
+4. **Never use ad-hoc direct implementation as a fallback.** The authorized interactive host
+   driver is not a bypass: it reads the YAML, records provenance, and executes `record → done`.
+   Manual section fills outside either driver are indistinguishable from pipeline output and bypass
+   the provenance contract silently.
 
 **Known diagnostic gap:** `spur agent doctor` checks installation, version, and auth — it
 cannot detect token quota exhaustion, model deprecation, or rate limits. An executor

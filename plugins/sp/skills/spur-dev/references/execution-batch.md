@@ -20,25 +20,23 @@ everything here assumes a task runs through `.spur/workflows/task-pipeline.yaml`
 
 **Zero engine code, zero schema changes (ADR-022).** The batch is orchestration over existing seams —
 the status vocabulary (`packages/domain/src/planning/schema.ts`), the `dependencies[]` frontmatter
-field, and the per-task `spur workflow run`. Per ADR-022 ("orchestration is configuration / loops in
-the skill"), the batch driver is **a loop driven by `sp:super-planner` reading this reference**, not a
-new meta-workflow FSM. HITL surfacing, per-task verdict inspection, and continue/halt decisions need
-agent judgment between runs that a flat FSM cannot express.
+field, and the per-task task-pipeline driver. Per ADR-022 ("orchestration is configuration / loops in
+the skill"), the batch driver is a loop in the host session for interactive sequential omit/inline,
+or in `sp:super-planner` for explicit/parallel subprocess execution — never a new meta-workflow FSM.
+HITL surfacing, per-task verdict inspection, and continue/halt decisions need judgment between runs
+that a flat FSM cannot express.
 
 ```
-/sp:dev-runall  →  sp:super-planner (BATCH ORCHESTRATOR)  →  spur workflow run task-pipeline.yaml (task N)
-                                                                  │
-                                                                  └─ agent.run steps spawn vars.agent (omp/…)
-                                                                     ◄── NOT super-planner's responsibility
+/sp:dev-runall ─┬─ interactive sequential omit/inline → host batch loop → inline YAML driver (task N)
+                └─ explicit/parallel/headless → sp:super-planner → spur workflow run (task N)
+                                                                       └─ agent.run spawns vars.agent
 ```
 
-`sp:super-planner` owns the spaces **between** task runs: resolve+freeze the set, topo-sort, run each
-task's pipeline in order by default, optionally fan out a proven-independent subset, inspect terminal
-state, decide continue/halt, and emit the batch report. It does **not** decide how an individual
-`agent.run` step (implement/test/review) executes — that stays the pipeline's concern via
-`vars.agent`, which resolves from `agent.default` in `.spur/config.yaml` unless the caller pins an
-executor; the `agent: "omp"` literal in `task-pipeline.yaml` is only the fallback when nothing is
-configured.
+The active batch orchestrator owns the spaces **between** task runs: resolve+freeze the set,
+topo-sort, run each task's pipeline, inspect terminal state, decide continue/halt, and emit the
+report. It does not redefine individual steps. Interactive sequential omit/inline delegates each
+ready WBS to [inline-pipeline-driver.md](inline-pipeline-driver.md); explicit/parallel/headless paths
+delegate to the workflow engine and `vars.agent` resolution.
 
 ## Step 1 — Selector resolution (R1)
 
@@ -176,9 +174,11 @@ for wbs in plan:                                       # default sequential mode
     preflight = batch-preflight(wbs)                   # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
         report += preflight-skip(wbs, preflight); continue
-    run: spur workflow run .spur/workflows/task-pipeline.yaml \
-           --vars '{"wbs":"<wbs>","profile":"<auto|standard>","agent":"<value?>"}' --async --json
-    poll spur workflow trace <run-id> --json until terminal (done | failed)
+    run: if interactive sequential omit/inline:
+             inline-pipeline-driver(task-pipeline.yaml, wbs)
+         else:
+             spur workflow run task-pipeline.yaml --vars <vars> --async --json
+             follow trace until terminal
     inspect terminal state + .spur/run/<wbs>-verdict.json
     report += outcome(wbs)
     if terminal == failed OR stuck status:
@@ -200,10 +200,12 @@ invocation in its own subagent/worktree-safe context; synthesize outcomes; recov
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
 Each task runs through the **standard single-task pipeline** — `.spur/workflows/task-pipeline.yaml`
-— with no new FSM and no step edits. The batch driver invokes it and inspects the result; it never
-reaches into a step.
+— with no new FSM and no step edits. Interactive sequential omit/inline invokes the host
+[inline pipeline driver](inline-pipeline-driver.md), which interprets that file; explicit/parallel
+execution invokes the workflow engine. The batch loop inspects the result and never redefines a
+step.
 
-**Launch async and poll the trace** (per execution-workflow.md §"Step 2"): a pipeline with
+**Explicit/parallel path: launch async and poll the trace** (per execution-workflow.md §"Step 2"): a pipeline with
 `agent.run` stages runs for many minutes. Always use `--async` + `spur workflow trace` polling:
 
 ```bash
@@ -220,10 +222,11 @@ Only two flags cross the orchestrator→pipeline boundary; both are merged into 
 | Flag | Effect on per-task `--vars` |
 |---|---|
 | `--auto` | sets `"profile":"auto"` (skips the HITL approve gate). Omitting it forwards nothing, so the pipeline uses its default profile (standard — HITL pause surfaces to the operator). (R4.2) |
-| `--agent <value>` | sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every `agent.run` step — including the implement hop — spawns that agent. Omitting it forwards nothing, so spawned steps fall through the executor precedence chain — see [cross-cutting.md § Inline-default execution surface](cross-cutting.md#inline-default-execution-surface), the SSOT for `--agent` values and precedence. To pin ONLY implement to a different executor, pass `--vars '{"implementAgent":"..."}'` separately. (R4.3, task 0483 R2) |
+| `--agent <value>` | omit/`inline` in interactive sequential mode selects the host driver and is not forwarded. `auto` or a name sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every workflow `agent.run` step — including implement — spawns that executor. Headless omit/inline falls through the executor precedence chain. To pin ONLY implement, pass `--vars '{"implementAgent":"..."}'` separately; that explicit var selects the subprocess path. (R4.3, tasks 0483/0503) |
 
-`sp:super-planner` remains the batch orchestrator regardless of `--agent` — the flag pins the
-per-task step executor, not the orchestrator.
+The host session remains the orchestrator for interactive sequential omit/inline. `sp:super-planner`
+owns explicit-executor and parallel paths; there the flag pins the per-task step executor, not the
+orchestrator.
 
 ### 3.3 Terminal-state inspection
 
