@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.43] — 2026-08-11
+
+### Added
+
+- Native-subagent-first inline pipeline stages with host fallback (ADR-047 amendment) (0508) (d738c2e7)
+- Normalize OMP message envelope via importer 0.4.26, assistant-duration analytics, selected-file history bridge (0507) (d1f591e5)
+- Surface importer full-mode reconciliation in fan-out entries (7c61f2bb)
+- Authoritative full-mode reconciliation signals + degraded fan-out (0504) (6f32cf0e)
+
+### Fixed
+
+- Precheck notes uncommitted task-corpus dirt (0511) (2bf47397)
+- Harden five feature-E batch-run seams (0510) (95b45abe)
+- Dedup guard covers unscoped creates; create --json gains wbs/filePath mirrors (0510) (2199a29f)
+- Explicit selector-preserving wrap surface, pre-DB single-file full-import guard, schema-first history bridge (0506) (d3885624)
+
+### Other
+
+- Log H reopen and re-verify cycle from 0511 run (384020e9)
+- Record feature E verifyall re-audit PASS evidence (2b2dac31)
+- Bump `@gobing-ai/ts-*` catalog to 0.4.27 (1d8a8be1)
+- Advance H to done after 0510; append 0510 wrap learnings (0ec510c1)
+- Update task status after refinement (99aa4c46)
+- Record 0505 wrapup learnings and metrics (7e9c3d81)
+- Ignore `.spur/backups/` (large SQLite DB backups) (cdd8a294)
+- Record 0505 verify PASS and real-data reconciliation evidence (7326e299)
+- Record full-mode reconciliation surface and 0505 probe lesson (671dcc90)
+- Cover `entries[].reconciliation` in full-mode import JSON (0505 R1) (7b2e954f)
+- Add 0505 post-mortem follow-up tasks 0506–0508 (b6064820)
+- Reconciliation surface docs, 0504 re-audit evidence, 0505 R1–R5 contract (399d2bfb)
+- Bump `@gobing-ai/ts-*` catalog to 0.4.25 (631ceaea)
+- 0504 done evidence + 0505 real-data verification follow-up (97da8de0)
+
 ## [0.3.42] — 2026-08-10
 
 ### Added
