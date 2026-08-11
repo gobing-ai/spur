@@ -105,6 +105,7 @@
         "drizzle-zod": "0.8.3",
         "lefthook": "1.13.0",
         "typescript": "catalog:",
+        "yaml": "catalog:",
         "zod": "4.4.3"
     }
 }

@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.3.42] — 2026-08-10
+
+### Added
+
+- Add typed provider failure-classification registry + pure `classifyDispatch` (0503) (9e3985b5)
+- Wire `classifyDispatch` into dispatch escalation with `auth` fallback (0503) (07d1817f)
+- Document the interactive inline pipeline driver for full mode (0503) (8d845e74)
+- Route opencode history imports through the dedicated importer (a9dfb2df)
+- Promote corpus-check to `spur task check --corpus` (0502) (7ee8187b)
+- Ship the `sp` plugin + marketplace in the `@gobing-ai/spur` tarball (0dc2edd5)
+
+### Fixed
+
+- Soft precheck doctor gate, transition retry, and gate backoff in task-pipeline (0503) (9435be45)
+- Split multi-token `spurBin` before `execFileSync` in task-size-precheck (719c0761)
+
+### Changed
+
+- Switch agent default to `omp-dsv4-flash-opencode` (a0ec5626)
+- Record 0503 verify PASS and sync agent entry docs (0c6a3b5c)
+- Amend ADR-047 for interactive inline full-mode stages (0503) (72f0cde1)
+- Cover inline execution contract for the host driver (0503) (486bea93)
+- Switch agent default to `omp-dsv4-flash-volc` and retire ollama executor (0bfa84f3)
+- Rename stage-plugins to bundle-plugins for verb convention (86975fe7)
+- Bump `@gobing-ai/ts-*` catalog to 0.4.24 (45273b3e)
+- Disable unauthenticated omp-zai executor (a3a93661)
+- Add projects noun to the CLI surface table (8355311a)
+- Add 0503 executor-routing and 0504 history-backfill tasks; re-audit 0502 evidence (6a7cc97f)
+- Sync README — pi platforms, super-coder agent, hook events, scripts table (11e8480b)
+- Enhance ADR-051 noun discipline; file task 0502 for corpus-check promotion (6a511c02)
+- ADR-051 public CLI surface vs internal spur-dev — ownership + consent gate (c3c99c03)
+- Re-audit 0500 — PASS verdict with fresh evidence (31ac382f)
+- Session memory log — task 0500 entry (b9e4b730)
+- Refine 0502 to implement-ready depth (4e2b4c23)
+- Refresh 0501 Testing with `--force` re-audit evidence (044c2756)
+- Sync stale version/counts/workflow table to 0.3.41 (667c997f)
+
 ## [0.3.40] — 2026-08-09
 
 ### Added
