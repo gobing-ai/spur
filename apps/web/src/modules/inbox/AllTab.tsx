@@ -4,6 +4,8 @@ import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 /** Sender/recipient endpoint identity surfaced by `GET /api/messages`. */
 export interface MsgEndpoint {
     agentId: string;
+    /** Resolved team id for this endpoint, when tethered (task 0197 R4). */
+    teamId?: string;
     teamName?: string;
     memberLabel?: string;
     agentType?: string;
@@ -37,6 +39,7 @@ function parseEndpoint(value: unknown, fallbackId: string): MsgEndpoint {
         const agentId = typeof o.agentId === 'string' && o.agentId.length > 0 ? o.agentId : fallbackId;
         return {
             agentId,
+            ...(typeof o.teamId === 'string' && o.teamId ? { teamId: o.teamId } : {}),
             ...(typeof o.teamName === 'string' && o.teamName ? { teamName: o.teamName } : {}),
             ...(typeof o.memberLabel === 'string' && o.memberLabel ? { memberLabel: o.memberLabel } : {}),
             ...(typeof o.agentType === 'string' && o.agentType ? { agentType: o.agentType } : {}),
@@ -76,6 +79,15 @@ export function parseMessagesFeed(body: unknown): MsgRow[] | null {
         });
     }
     return out;
+}
+
+/**
+ * Narrow a message feed to one team scope: keep a row when either endpoint's
+ * resolved team id equals `teamId` (task 0197 R4). When the scope is omitted,
+ * the feed is unfiltered (global behavior).
+ */
+export function filterMessagesByTeam(messages: MsgRow[], teamId: string): MsgRow[] {
+    return messages.filter((m) => m.to.teamId === teamId || m.from?.teamId === teamId);
 }
 
 /** Result of {@link useMessageFeed}. */
@@ -215,12 +227,15 @@ export function MessageFeedList({ messages }: { messages: MsgRow[] }) {
 }
 
 /**
- * All tab — unfiltered feed of recent traffic across every member, moved from
- * the Teams module MessagesTab (0422 R2). Behaviour preserved: GET /api/messages
- * newest-first, sender/recipient/status/timestamp per row, SSE-driven refetch on
- * `message.sent|replied`, defensive parsing. Read-only (0422 scope).
+ * All tab — feed of recent traffic across every member, moved from the Teams
+ * module MessagesTab (0422 R2). Behaviour preserved: GET /api/messages
+ * newest-first, sender/recipient/status/timestamp per row, SSE-driven refetch
+ * on `message.sent|replied`, defensive parsing. Read-only (0422 scope).
+ *
+ * When `teamId` is provided (Workspace scope, task 0197 R4), rows are narrowed
+ * to that team's resolved identity; when omitted the feed stays global.
  */
-export default function AllTab() {
+export default function AllTab({ teamId }: { teamId?: string }) {
     const { messages, error } = useMessageFeed();
 
     if (error)
@@ -231,14 +246,15 @@ export default function AllTab() {
         );
     if (messages === null) return <div className="p-4 text-sm text-spur-text-muted">Loading messages…</div>;
 
+    const visible = teamId ? filterMessagesByTeam(messages, teamId) : messages;
     return (
         <div className="flex flex-col h-full overflow-hidden bg-spur-bg" data-all-tab>
             <div className="px-4 py-2 border-b border-spur-border bg-spur-surface shrink-0">
                 <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide">
-                    Message · all teams
+                    {teamId ? `Message · ${teamId}` : 'Message · all teams'}
                 </span>
             </div>
-            <MessageFeedList messages={messages} />
+            <MessageFeedList messages={visible} />
         </div>
     );
 }

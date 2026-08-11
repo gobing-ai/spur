@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { type TeamGroup, useTeamsData } from './useTeamsData';
+import { type TeamGroup, useTeamsData } from '../../lib/use-teams-data';
 
 /** One row on the Teams activity timeline (0254 R7, 0269 R9). */
 export interface ActivityRow {
@@ -138,7 +138,7 @@ export function parseHistory(value: unknown): ActivityRow[] | null {
  * the board's EventSource (`/api/events/planning`). System-wide telemetry stays
  * on the Observability board — this timeline is scoped to team activity only.
  */
-export default function ActivityTab() {
+export default function ActivityTab({ teamId }: { teamId?: string }) {
     const [rows, setRows] = useState<ActivityRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const { teams } = useTeamsData();
@@ -176,8 +176,11 @@ export default function ActivityTab() {
     }, []);
 
     const displayRows = useMemo(
-        () => (rows === null ? null : rows.map((row) => enrichRowFromRoster(row, roster))),
-        [rows, roster],
+        () =>
+            rows === null
+                ? null
+                : rows.map((row) => enrichRowFromRoster(row, roster)).filter((row) => !teamId || row.teamId === teamId),
+        [rows, roster, teamId],
     );
 
     if (error)

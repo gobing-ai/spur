@@ -8,7 +8,8 @@ import TerminalTab from './TerminalTab';
 export interface TeamsTab {
     readonly id: string;
     readonly label: string;
-    readonly component: ComponentType;
+    /** Optional `teamId` scope (task 0197 R4); omission preserves the global view. */
+    readonly component: ComponentType<{ teamId?: string }>;
 }
 
 /** v1 tabs: Supervisor (default, 0378 R1), Terminal, Processes, Activity. Messages moved to Inbox (0422 R7). */

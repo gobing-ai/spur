@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, CardBody, Modal } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { useTeamsData } from '../../lib/use-teams-data';
 import {
     type ActivityRow,
     buildRosterIndex,
@@ -11,7 +12,6 @@ import {
     sseUrl,
     toRow,
 } from './ActivityTab';
-import { useTeamsData } from './useTeamsData';
 
 // ── Control URLs (mirror TerminalTab.tsx:11-15) ──────────────────────────
 const startUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/start`;
@@ -90,7 +90,7 @@ function deriveMemberStats(rows: ActivityRow[]): Map<string, MemberStats> {
  * and inline start/stop/up/down controls. Reuses `useTeamsData` for the roster
  * (R8) and the ActivityTab fetch+SSE pattern for live events (R4).
  */
-export default function SupervisorTab() {
+export default function SupervisorTab({ teamId }: { teamId?: string }) {
     const { teams, error, reload } = useTeamsData();
     const [activityRows, setActivityRows] = useState<ActivityRow[] | null>(null);
     const [eventError, setEventError] = useState<string | null>(null);
@@ -100,7 +100,10 @@ export default function SupervisorTab() {
     const [confirmDownFor, setConfirmDownFor] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
 
-    const roster = useMemo(() => buildRosterIndex(teams), [teams]);
+    // When a team scope is provided, show only that team's card + roster and
+    // filter activity rows to that team (task 0197 R4). Omission = global view.
+    const scopedTeams = useMemo(() => (teamId ? teams.filter((t) => t.teamId === teamId) : teams), [teams, teamId]);
+    const roster = useMemo(() => buildRosterIndex(scopedTeams), [scopedTeams]);
 
     // ── Load activity history (R4) ────────────────────────────────────────
     useEffect(() => {
@@ -147,8 +150,13 @@ export default function SupervisorTab() {
 
     // ── Enrich rows with roster identity + derive per-member stats (R3) ────
     const enrichedRows = useMemo(
-        () => (activityRows === null ? null : activityRows.map((row) => enrichRowFromRoster(row, roster))),
-        [activityRows, roster],
+        () =>
+            activityRows === null
+                ? null
+                : activityRows
+                      .map((row) => enrichRowFromRoster(row, roster))
+                      .filter((row) => !teamId || row.teamId === teamId),
+        [activityRows, roster, teamId],
     );
     const memberStats = useMemo(
         () => (enrichedRows === null ? new Map<string, MemberStats>() : deriveMemberStats(enrichedRows)),
@@ -216,7 +224,7 @@ export default function SupervisorTab() {
     return (
         <div className="flex flex-col h-full overflow-y-auto" data-supervisor-tab>
             {/* Roster error banner (R7) - keep teams + activity visible */}
-            {error && teams.length === 0 ? (
+            {error && scopedTeams.length === 0 ? (
                 <div className="p-4 text-sm text-error" role="alert" data-supervisor-tab-error>
                     Failed to load teams: {error}. Event-derived activity remains available below.
                 </div>
@@ -231,7 +239,7 @@ export default function SupervisorTab() {
                     </div>
                 )
             )}
-            {teams.length === 0 && !error && (
+            {scopedTeams.length === 0 && !error && (
                 <div className="p-4 text-sm text-spur-text-muted" data-supervisor-tab-loading>
                     Loading teams…
                 </div>
@@ -249,7 +257,7 @@ export default function SupervisorTab() {
 
             {/* Team cards (R2) */}
             <div className="p-2 space-y-2">
-                {teams.map((team) => (
+                {scopedTeams.map((team) => (
                     <Card key={team.teamId} variant="compact" className="bg-base-200 border border-spur-border">
                         <CardBody className="p-3 gap-2">
                             {/* Team header + up/down controls (R5) */}

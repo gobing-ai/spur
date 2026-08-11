@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Select } from '@/ui';
-import { useTeamsData } from '../teams/useTeamsData';
+import { useTeamsData } from '../../lib/use-teams-data';
 import AgentTab from './AgentTab';
 import AllTab from './AllTab';
 import SupervisorTab from './SupervisorTab';
@@ -10,9 +10,9 @@ import { FIXED_INBOX_TABS } from './tabs';
 const AGENT_TAB_PREFIX = 'agent-';
 
 /** Resolve which panel to render for the active tab id. */
-function renderPanel(activeId: string, agentIds: string[]): ReactNode {
-    if (activeId === 'all') return <AllTab />;
-    if (activeId === 'supervisor') return <SupervisorTab />;
+function renderPanel(activeId: string, agentIds: string[], teamId?: string): ReactNode {
+    if (activeId === 'all') return <AllTab teamId={teamId} />;
+    if (activeId === 'supervisor') return <SupervisorTab teamId={teamId} />;
     if (activeId.startsWith(AGENT_TAB_PREFIX)) {
         const memberId = activeId.slice(AGENT_TAB_PREFIX.length);
         if (agentIds.includes(memberId)) return <AgentTab agentId={memberId} />;
@@ -25,22 +25,29 @@ function renderPanel(activeId: string, agentIds: string[]): ReactNode {
  *
  * Tab strip mirrors TeamsShell's aria wiring (`tablist`/`tab`/`tabpanel`,
  * `aria-selected`, `aria-controls`, `aria-labelledby`). `All` and `Supervisor`
- * are fixed; per-agent tabs are derived from the selected (default: first) team
- * roster via `useTeamsData()` and update when the team selection changes. The
- * module root carries the `inbox` scope class so every surface resolves the
- * DESIGN.md palette (R10).
+ * are fixed; per-agent tabs are derived from the selected team roster via
+ * `useTeamsData()` and update when the team selection changes. The module root
+ * carries the `inbox` scope class so every surface resolves the DESIGN.md
+ * palette (R10).
+ *
+ * When a `teamId` is provided (Workspace scope, task 0197 R4), the shell locks
+ * to that team — it hides its own team dropdown and threads the scope into the
+ * message tabs. When omitted, the global behavior is preserved.
  */
-export default function InboxShell() {
+export default function InboxShell({ teamId }: { teamId?: string }) {
     const { teams } = useTeamsData();
     const [selectedTeamId, setSelectedTeamId] = useState('');
     const [activeId, setActiveId] = useState('all');
 
     // Default the team selection to the first team once the roster loads (R4).
+    // When externally scoped via `teamId`, selection is owned by the caller.
     useEffect(() => {
+        if (teamId) return;
         if (!selectedTeamId && teams.length > 0) setSelectedTeamId(teams[0]?.teamId ?? '');
-    }, [teams, selectedTeamId]);
+    }, [teamId, teams, selectedTeamId]);
 
-    const selectedTeam = teams.find((t) => t.teamId === selectedTeamId) ?? teams[0] ?? null;
+    const effectiveTeamId = teamId ?? selectedTeamId;
+    const selectedTeam = teams.find((t) => t.teamId === effectiveTeamId) ?? teams[0] ?? null;
     const agentIds = selectedTeam ? selectedTeam.members.map((m) => m.id) : [];
 
     // If the active id points at a member of a now-different team, fall back to All.
@@ -58,7 +65,7 @@ export default function InboxShell() {
         <div className="inbox flex flex-col h-full overflow-hidden bg-spur-bg" data-inbox-shell>
             <div className="px-4 py-2 border-b border-spur-border bg-spur-surface shrink-0 flex items-center justify-between">
                 <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide">Inbox</span>
-                {teams.length > 0 && (
+                {!teamId && teams.length > 0 && (
                     <label className="flex items-center gap-1 text-xs" htmlFor="inbox-team-select">
                         <span className="text-spur-text-muted">Team</span>
                         <Select
@@ -116,7 +123,7 @@ export default function InboxShell() {
                 aria-labelledby={`inbox-tab-${resolvedActiveId}`}
                 className="flex-1 overflow-hidden"
             >
-                {renderPanel(resolvedActiveId, agentIds)}
+                {renderPanel(resolvedActiveId, agentIds, teamId)}
             </div>
         </div>
     );

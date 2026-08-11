@@ -1,14 +1,13 @@
 registerHappyDom();
 
 import { afterAll, describe, expect, test } from 'bun:test';
-import { act, render, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import { discoverModules } from '../../../src/modules/discover';
 import AgentTab from '../../../src/modules/inbox/AgentTab';
-import AllTab, { parseMessagesFeed } from '../../../src/modules/inbox/AllTab';
+import AllTab, { filterMessagesByTeam, parseMessagesFeed } from '../../../src/modules/inbox/AllTab';
 import InboxShell from '../../../src/modules/inbox/InboxShell';
 import SupervisorTab, { SUPERVISOR_ENDPOINT_ID } from '../../../src/modules/inbox/SupervisorTab';
-import { mergeTimeline } from '../../../src/modules/inbox/timeline';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 /** Cast a mock fetch fn to typeof fetch. */
@@ -20,17 +19,16 @@ function jsonResponse(body: unknown): Response {
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
+let mockSources: MockEventSource[] = [];
+let originalEventSource: unknown;
+
 interface MockEventSource {
     url: string;
     onmessage: ((event: { data: string }) => void) | null;
-    onerror: (() => void) | null;
+    _closed: boolean;
     close: () => void;
     _push: (data: unknown) => void;
-    _closed: boolean;
 }
-
-let mockSources: MockEventSource[] = [];
-let originalEventSource: unknown;
 
 function installMockEventSource(): void {
     originalEventSource = (globalThis as Record<string, unknown>).EventSource;
@@ -38,7 +36,6 @@ function installMockEventSource(): void {
         const inst: MockEventSource = {
             url,
             onmessage: null,
-            onerror: null,
             _closed: false,
             close() {
                 inst._closed = true;
@@ -74,7 +71,7 @@ function findByText(container: HTMLElement, text: string): HTMLElement | null {
     return null;
 }
 
-/** Default feed mock: two messages across agents, plus supervisor traffic. */
+/** Feed mock with messages from two teams (alpha, beta) plus supervisor traffic. */
 function installFeedMock(): void {
     setFetchForTesting(
         mockFetch(async (req: Request) => {
@@ -90,6 +87,11 @@ function installFeedMock(): void {
                                 { id: 'alpha-coder', type: 'codex', status: 'running' },
                             ],
                         },
+                        {
+                            teamId: 'beta',
+                            name: 'Beta',
+                            members: [{ id: 'beta-lead', type: 'claude', status: 'stopped' }],
+                        },
                     ],
                 });
             }
@@ -100,7 +102,8 @@ function installFeedMock(): void {
                             id: 'm1',
                             fromId: 'alpha-planner',
                             toId: 'alpha-coder',
-                            to: { agentId: 'alpha-coder' },
+                            from: { agentId: 'alpha-planner', teamId: 'alpha' },
+                            to: { agentId: 'alpha-coder', teamId: 'alpha' },
                             body: 'code it',
                             status: 'sent',
                             createdAt: '2026-01-01T00:00:01Z',
@@ -112,7 +115,7 @@ function installFeedMock(): void {
                             id: 'm2',
                             fromId: SUPERVISOR_ENDPOINT_ID,
                             toId: 'alpha-planner',
-                            to: { agentId: 'alpha-planner' },
+                            to: { agentId: 'alpha-planner', teamId: 'alpha' },
                             body: 'supervisor note',
                             status: 'sent',
                             createdAt: '2026-01-01T00:00:02Z',
@@ -120,8 +123,35 @@ function installFeedMock(): void {
                             hasReply: false,
                             replyCount: 0,
                         },
+                        {
+                            id: 'm3',
+                            fromId: 'beta-lead',
+                            toId: 'beta-lead',
+                            from: { agentId: 'beta-lead', teamId: 'beta' },
+                            to: { agentId: 'beta-lead', teamId: 'beta' },
+                            body: 'beta-only',
+                            status: 'sent',
+                            createdAt: '2026-01-01T00:00:03Z',
+                            inReplyTo: null,
+                            hasReply: false,
+                            replyCount: 0,
+                        },
+                        {
+                            // Member → supervisor: `to` has no teamId (supervisor endpoint), sender belongs to alpha.
+                            id: 'm4',
+                            fromId: 'alpha-coder',
+                            toId: SUPERVISOR_ENDPOINT_ID,
+                            from: { agentId: 'alpha-coder', teamId: 'alpha' },
+                            to: { agentId: SUPERVISOR_ENDPOINT_ID },
+                            body: 'report to supervisor',
+                            status: 'sent',
+                            createdAt: '2026-01-01T00:00:04Z',
+                            inReplyTo: null,
+                            hasReply: false,
+                            replyCount: 0,
+                        },
                     ],
-                    count: 2,
+                    count: 4,
                 });
             }
             return jsonResponse({ ok: true });
@@ -162,17 +192,15 @@ describe('Inbox module registration (R1)', () => {
 });
 
 describe('Inbox feed tabs (R2, R3)', () => {
-    test('R2: AllTab lists every message with route and status', async () => {
+    test('R2: AllTab lists every message with route and status (global omission)', async () => {
         installMockEventSource();
         resetMockSources();
         installFeedMock();
         const { container } = render(<AllTab />);
         await waitFor(() => expect(findByText(container, 'code it')).not.toBeNull());
         expect(findByText(container, 'supervisor note')).not.toBeNull();
+        expect(findByText(container, 'beta-only')).not.toBeNull();
         expect(container.querySelector('[data-all-tab]')).not.toBeNull();
-        // Sender → recipient route present.
-        const route = container.querySelector('[data-message-route]');
-        expect(route).not.toBeNull();
         resetFetchForTesting();
         restoreEventSource();
         resetMockSources();
@@ -211,25 +239,124 @@ describe('Inbox feed tabs (R2, R3)', () => {
         resetMockSources();
     });
 
-    test('R3: SupervisorTab filters the feed to supervisor traffic only', async () => {
+    test('R3: SupervisorTab filters the feed to supervisor traffic only (global)', async () => {
         installMockEventSource();
         resetMockSources();
         installFeedMock();
         const { container } = render(<SupervisorTab />);
         await waitFor(() => expect(findByText(container, 'supervisor note')).not.toBeNull());
         expect(findByText(container, 'code it')).toBeNull();
+        expect(findByText(container, 'beta-only')).toBeNull();
         resetFetchForTesting();
         restoreEventSource();
         resetMockSources();
     });
 });
 
-describe('Inbox per-agent tabs and timeline (R4, R5, R6)', () => {
+describe('Inbox team scope (task 0197 R4)', () => {
+    test("AllTab with teamId shows only that team's messages (scoped behavior)", async () => {
+        installMockEventSource();
+        resetMockSources();
+        installFeedMock();
+        const { container } = render(<AllTab teamId="alpha" />);
+        await waitFor(() => expect(findByText(container, 'code it')).not.toBeNull());
+        expect(findByText(container, 'supervisor note')).not.toBeNull();
+        // beta message is excluded when scoped to alpha.
+        expect(findByText(container, 'beta-only')).toBeNull();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('AllTab with teamId=beta excludes alpha messages (scoped behavior)', async () => {
+        installMockEventSource();
+        resetMockSources();
+        installFeedMock();
+        const { container } = render(<AllTab teamId="beta" />);
+        await waitFor(() => expect(findByText(container, 'beta-only')).not.toBeNull());
+        expect(findByText(container, 'code it')).toBeNull();
+        expect(findByText(container, 'supervisor note')).toBeNull();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test("SupervisorTab with teamId narrows to that team's supervisor traffic", async () => {
+        installMockEventSource();
+        resetMockSources();
+        installFeedMock();
+        const { container } = render(<SupervisorTab teamId="alpha" />);
+        await waitFor(() => expect(findByText(container, 'supervisor note')).not.toBeNull());
+        // P2 regression: a member → supervisor message (to has no teamId, but sender is an alpha member)
+        // must survive team scoping (R4: sender OR recipient belongs to the team).
+        expect(findByText(container, 'report to supervisor')).not.toBeNull();
+        expect(findByText(container, 'code it')).toBeNull();
+        expect(findByText(container, 'beta-only')).toBeNull();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('filterMessagesByTeam keeps rows where either endpoint resolves to the team', () => {
+        const base = {
+            fromId: 'x' as string | null,
+            toId: 'y',
+            body: 'b',
+            status: 'sent' as const,
+            createdAt: 't',
+            inReplyTo: null,
+            hasReply: false,
+            replyCount: 0,
+        };
+        const rows = [
+            {
+                ...base,
+                id: '1',
+                fromId: 'a',
+                toId: 'b',
+                from: { agentId: 'a', teamId: 'alpha' },
+                to: { agentId: 'b', teamId: 'alpha' },
+            },
+            {
+                ...base,
+                id: '2',
+                fromId: 'a',
+                toId: 'b',
+                from: { agentId: 'a', teamId: 'beta' },
+                to: { agentId: 'b', teamId: 'beta' },
+            },
+            { ...base, id: '3', fromId: 'c', toId: 'd', from: { agentId: 'c' }, to: { agentId: 'd', teamId: 'alpha' } },
+            { ...base, id: '4', fromId: 'e', toId: 'f', from: { agentId: 'e', teamId: 'alpha' }, to: { agentId: 'f' } },
+        ];
+        const ids = filterMessagesByTeam(rows as never, 'alpha').map((r) => r.id);
+        expect(ids).toEqual(['1', '3', '4']);
+    });
+
+    test('InboxShell with teamId locks scope and hides its team dropdown', async () => {
+        installMockEventSource();
+        resetMockSources();
+        installFeedMock();
+        const { container } = render(<InboxShell teamId="alpha" />);
+        // alpha has 2 members -> All, Supervisor, alpha-planner, alpha-coder.
+        await waitFor(() => expect(container.querySelectorAll('[role="tab"]').length).toBe(4));
+        // No team dropdown when externally scoped.
+        expect(container.querySelector('[data-inbox-team-select]')).toBeNull();
+        // All tab (default) is scoped to alpha.
+        await waitFor(() => expect(findByText(container, 'code it')).not.toBeNull());
+        expect(findByText(container, 'beta-only')).toBeNull();
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+});
+
+describe('Inbox per-agent tabs (R4)', () => {
     test('R4: InboxShell derives one tab per team member after the two fixed tabs', async () => {
         installMockEventSource();
         resetMockSources();
         installFeedMock();
         const { container } = render(<InboxShell />);
+        // Default team is the first (alpha) with 2 members -> 4 tabs.
         await waitFor(() => expect(container.querySelectorAll('[role="tab"]').length).toBe(4));
         const tabs = container.querySelectorAll('[role="tab"]');
         expect(tabs[0]?.textContent).toBe('All');
@@ -241,154 +368,23 @@ describe('Inbox per-agent tabs and timeline (R4, R5, R6)', () => {
         resetMockSources();
     });
 
-    test('R5: AgentTab renders a unified IN/OUT timeline of messages and frames', async () => {
-        installMockEventSource();
-        resetMockSources();
-        setFetchForTesting(
-            mockFetch(async (req: Request) => {
-                if (req.url.includes('/messages')) {
-                    return jsonResponse({
-                        messages: [
-                            {
-                                id: 'in',
-                                fromId: 'other',
-                                toId: 'alpha-planner',
-                                to: { agentId: 'alpha-planner' },
-                                body: 'inbound msg',
-                                status: 'sent',
-                                createdAt: '2026-01-01T00:00:01Z',
-                                inReplyTo: null,
-                                hasReply: false,
-                                replyCount: 0,
-                            },
-                            {
-                                id: 'out',
-                                fromId: 'alpha-planner',
-                                toId: 'other',
-                                to: { agentId: 'other' },
-                                body: 'outbound msg',
-                                status: 'sent',
-                                createdAt: '2026-01-01T00:00:03Z',
-                                inReplyTo: null,
-                                hasReply: false,
-                                replyCount: 0,
-                            },
-                        ],
-                        count: 2,
-                    });
-                }
-                return jsonResponse({ ok: true });
-            }),
-        );
-        const { container } = render(<AgentTab agentId="alpha-planner" />);
-        await waitFor(() => expect(findByText(container, 'inbound msg')).not.toBeNull());
-        expect(findByText(container, 'outbound msg')).not.toBeNull();
-
-        // Push process frames over the agent's stream.
-        const stream = mockSources.find((s) => s.url.includes('/team/processes/alpha-planner/stream'));
-        expect(stream).toBeDefined();
-        act(() => {
-            stream?._push({ stream: 'stdout', ts: '2026-01-01T00:00:02Z', line: 'hello world', seq: 1 });
-        });
-        await waitFor(() => expect(findByText(container, 'hello world')).not.toBeNull());
-
-        // Message direction badges: inbound IN, outbound OUT.
-        const dirs = Array.from(container.querySelectorAll('[data-timeline-direction]')).map((el) => el.textContent);
-        expect(dirs).toContain('IN');
-        expect(dirs).toContain('OUT');
-        // Frame is marked.
-        expect(container.querySelector('[data-timeline-frame]')).not.toBeNull();
-        resetFetchForTesting();
-        restoreEventSource();
-        resetMockSources();
-    });
-
-    test('R6: a boundary marker appears at the oldest frame; no-frames renders a message-only note', async () => {
-        installMockEventSource();
-        resetMockSources();
-        setFetchForTesting(
-            mockFetch(async (req: Request) => {
-                if (req.url.includes('/messages')) {
-                    return jsonResponse({
-                        messages: [
-                            {
-                                id: 'old',
-                                fromId: 'other',
-                                toId: 'alpha-coder',
-                                to: { agentId: 'alpha-coder' },
-                                body: 'before history',
-                                status: 'sent',
-                                createdAt: '2026-01-01T00:00:00Z',
-                                inReplyTo: null,
-                                hasReply: false,
-                                replyCount: 0,
-                            },
-                        ],
-                        count: 1,
-                    });
-                }
-                return jsonResponse({ ok: true });
-            }),
-        );
-        const { container } = render(<AgentTab agentId="alpha-coder" />);
-        await waitFor(() => expect(findByText(container, 'before history')).not.toBeNull());
-
-        // No frames yet → message-only note (R6), no boundary.
-        expect(container.querySelector('[data-timeline-boundary]')).toBeNull();
-        expect(container.querySelector('[data-agent-tab-note]')).not.toBeNull();
-
-        // Frames arrive → boundary marker appears at the oldest frame.
-        const stream = mockSources.find((s) => s.url.includes('/team/processes/alpha-coder/stream'));
-        act(() => {
-            stream?._push({ stream: 'stderr', ts: '2026-01-01T00:00:05Z', line: 'err', seq: 1 });
-        });
-        await waitFor(() => expect(container.querySelector('[data-timeline-boundary]')).not.toBeNull());
-        expect(findByText(container, 'before history')).not.toBeNull();
-        resetFetchForTesting();
-        restoreEventSource();
-        resetMockSources();
-    });
-
-    test('R14: unmounting AgentTab closes its process stream', async () => {
+    test('R5: AgentTab renders durable messages only — opens no process stream', async () => {
         installMockEventSource();
         resetMockSources();
         installFeedMock();
-        const { unmount } = render(<AgentTab agentId="alpha-coder" />);
-        await waitFor(() =>
-            expect(mockSources.some((s) => s.url.includes('/team/processes/alpha-coder/stream'))).toBe(true),
-        );
-        const stream = mockSources.find((s) => s.url.includes('/team/processes/alpha-coder/stream')) as MockEventSource;
-        expect(stream._closed).toBe(false);
-        unmount();
-        expect(stream._closed).toBe(true);
+        const { container } = render(<AgentTab agentId="alpha-planner" />);
+        await waitFor(() => expect(findByText(container, 'supervisor note')).not.toBeNull());
+        // alpha-planner is the sender of 'code it' and recipient of 'supervisor note'.
+        expect(findByText(container, 'code it')).not.toBeNull();
+        // beta traffic is excluded.
+        expect(findByText(container, 'beta-only')).toBeNull();
+        // No process EventSource is opened (no URL contains /team/processes/.../stream).
+        expect(mockSources.some((s) => s.url.includes('/team/processes/'))).toBe(false);
+        // No frame rows rendered.
+        expect(container.querySelector('[data-timeline-frame]')).toBeNull();
         resetFetchForTesting();
         restoreEventSource();
         resetMockSources();
-    });
-});
-
-describe('mergeTimeline via the shared helper (R5/R6)', () => {
-    test('orders and marks direction on the pure merge', () => {
-        const messages = [
-            {
-                id: 'a',
-                fromId: 'agent',
-                toId: 'other',
-                body: 'x',
-                status: 'sent',
-                createdAt: '2026-01-01T00:00:00Z',
-                inReplyTo: null,
-                hasReply: false,
-                replyCount: 0,
-                to: { agentId: 'other' },
-            },
-        ];
-        const entries = mergeTimeline(
-            messages,
-            [{ stream: 'stdout', ts: '2026-01-01T00:00:01Z', line: 'l', seq: 1 }],
-            'agent',
-        );
-        expect(entries.map((e) => e.kind)).toEqual(['message', 'boundary', 'frame']);
     });
 });
 

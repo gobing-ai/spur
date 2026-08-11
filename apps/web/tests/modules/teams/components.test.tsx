@@ -1106,6 +1106,8 @@ describe('teams module components', () => {
             {
                 teamId: 'alpha',
                 name: 'Alpha',
+                workDir: null,
+                isCurrentProject: false,
                 members: [{ id: 'alpha-planner', type: 'claude', status: 'running' }],
             },
         ]);

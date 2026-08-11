@@ -13,9 +13,10 @@ export function transition(wbs: string, toStatus: string): void {
     });
 }
 
-/** Board container: binds URL filters + card-click selection to the board. */
-
-function TaskKanbanView() {
+/** Board container: binds URL filters + card-click selection to the board.
+ * Exported so the Workspace module can embed the current-project Task Kanban
+ * (task 0197 R6). */
+export function TaskKanbanView() {
     const { filters, selectTask, setFilter } = useTaskParams();
     return (
         <div className="task-kanban flex flex-col h-full">

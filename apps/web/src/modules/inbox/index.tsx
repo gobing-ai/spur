@@ -2,12 +2,13 @@ import type { WebModule } from '../types';
 import InboxShell from './InboxShell';
 
 /**
- * Inbox board module (0422).
+ * Inbox board module (0422; task 0197 / ADR-052).
  *
  * Auto-discovered by `apps/web/src/modules/discover.ts` (eager glob over
  * sibling directories exporting a `WebModule`). Ships the All / Supervisor /
- * per-agent tabs over a unified message + process timeline, consolidating the
- * message surfaces formerly scattered across Teams and Observability (R7).
+ * per-agent tabs over the durable message plane only — it opens no process
+ * stream and renders no stdout/stderr (Teams owns the process plane).
+ * An optional `teamId` scope (Workspace) narrows the feed.
  */
 export const module: WebModule = {
     id: 'inbox',

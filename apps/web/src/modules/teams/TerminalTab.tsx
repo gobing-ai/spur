@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Modal, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { useTeamsData } from '../../lib/use-teams-data';
 import MemberTerminal from './MemberTerminal';
-import { useTeamsData } from './useTeamsData';
 
 // Team/member shapes and the polling fetch live in useTeamsData (0268 R1).
 // This file owns only Terminal-scoped concerns: start/stop URLs, persisted
@@ -71,7 +71,7 @@ function clearPersistedSelection(): void {
  * badges, a toggle control that confirms before stopping a running member,
  * and persists the last selection to localStorage.
  */
-export default function TerminalTab() {
+export default function TerminalTab({ teamId: scopeTeamId }: { teamId?: string }) {
     const { teams, error, reload: load } = useTeamsData();
     const [teamId, setTeamId] = useState<string>('');
     const [memberId, setMemberId] = useState<string>('');
@@ -81,14 +81,21 @@ export default function TerminalTab() {
     const [actionPending, setActionPending] = useState(false);
     const [restoredRef] = useState<{ done: boolean }>({ done: false });
 
+    // ── Cascade: when team changes, reset the member pick if it's no longer valid ──
+    const scopedTeams = useMemo(
+        () => (scopeTeamId ? teams.filter((t) => t.teamId === scopeTeamId) : teams),
+        [teams, scopeTeamId],
+    );
+    const effectiveTeamId = scopeTeamId ?? teamId;
+
     // ── Restore last persisted selection once after the first teams load (0263 R2) ──
     useEffect(() => {
         if (restoredRef.done) return;
-        if (teams.length === 0) return;
+        if (scopedTeams.length === 0) return;
         restoredRef.done = true;
         const persisted = readPersistedSelection();
         if (!persisted) return;
-        const team = teams.find((t) => t.teamId === persisted.teamId);
+        const team = scopedTeams.find((t) => t.teamId === persisted.teamId);
         const member = team?.members.find((m) => m.id === persisted.memberId);
         if (!team || !member) {
             // Stale entry (team/member gone from config) — drop it so reloads stay clean.
@@ -97,10 +104,9 @@ export default function TerminalTab() {
         }
         setTeamId(persisted.teamId);
         setMemberId(persisted.memberId);
-    }, [teams, restoredRef]);
+    }, [scopedTeams, restoredRef]);
 
-    // ── Cascade: when team changes, reset the member pick if it's no longer valid ──
-    const currentTeam = teams.find((t) => t.teamId === teamId);
+    const currentTeam = scopedTeams.find((t) => t.teamId === effectiveTeamId);
     const currentMember = currentTeam?.members.find((m) => m.id === memberId) ?? null;
 
     useEffect(() => {
@@ -111,10 +117,10 @@ export default function TerminalTab() {
 
     // Persist whenever a valid (teamId, memberId) is chosen (R6).
     useEffect(() => {
-        if (teamId && memberId) {
-            writePersistedSelection({ teamId, memberId });
+        if (effectiveTeamId && memberId) {
+            writePersistedSelection({ teamId: effectiveTeamId, memberId });
         }
-    }, [teamId, memberId]);
+    }, [effectiveTeamId, memberId]);
 
     const toggleMemberStatus = useCallback(
         async (id: string, running: boolean) => {
@@ -178,14 +184,14 @@ export default function TerminalTab() {
     }, []);
 
     // ── Empty / error states (R7) ──
-    if (error && teams.length === 0) {
+    if (error && scopedTeams.length === 0) {
         return (
             <div className="p-4 text-sm text-error" role="alert" data-terminal-tab-error>
                 Failed to load teams: {error}
             </div>
         );
     }
-    if (teams.length === 0) {
+    if (scopedTeams.length === 0) {
         return (
             <div className="p-4 text-sm text-spur-text-muted" data-terminal-tab-empty>
                 No teams defined in <code className="font-mono">.spur/config.yaml</code>. Configure{' '}
@@ -210,15 +216,16 @@ export default function TerminalTab() {
                             id="terminal-team-select"
                             variant="bordered"
                             size="sm"
-                            value={teamId}
+                            disabled={!!scopeTeamId}
+                            value={effectiveTeamId}
                             onChange={(e) => {
                                 setTeamId(e.target.value);
                                 setMemberId('');
                             }}
                             data-terminal-team-select
                         >
-                            <option value="">Select team…</option>
-                            {teams.map((t) => (
+                            {!scopeTeamId && <option value="">Select team…</option>}
+                            {scopedTeams.map((t) => (
                                 <option key={t.teamId} value={t.teamId}>
                                     {t.name}
                                 </option>

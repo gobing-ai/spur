@@ -209,7 +209,7 @@ function ProcessFilterControls({
  * Polls GET /api/team/processes every 3s. Renders supervisor-managed members
  * plus other ProcessExecutor registry runs (read-only — controls live in Terminal).
  */
-export default function ProcessesTab() {
+export default function ProcessesTab({ teamId }: { teamId?: string }) {
     const [snapshot, setSnapshot] = useState<ProcessesSnapshot | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Ephemeral filter state (spur#0267 R3) — not persisted across remounts.
@@ -261,7 +261,10 @@ export default function ProcessesTab() {
         [snapshot],
     );
 
-    const filteredRows = useMemo(() => filterWatchRows(watchRows, filters), [watchRows, filters]);
+    const filteredRows = useMemo(() => {
+        const scoped = teamId ? watchRows.filter((r) => r.teamId === teamId) : watchRows;
+        return filterWatchRows(scoped, filters);
+    }, [watchRows, filters, teamId]);
 
     // Unique teams from snapshot for the team filter dropdown (spur#0267 R2).
     const teamIds = useMemo(() => {

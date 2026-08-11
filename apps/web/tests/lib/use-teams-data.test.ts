@@ -2,9 +2,9 @@ registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
-import { type TeamGroup, useTeamsData } from '../../../src/modules/teams/useTeamsData';
-import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
+import { type TeamGroup, useTeamsData } from '../../src/lib/use-teams-data';
+import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 function jsonResponse(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), {
@@ -150,8 +150,8 @@ describe('useTeamsData', () => {
 
     test('reload() re-fetches and replaces teams with new data', async () => {
         let iteration = 0;
-        const first: TeamGroup[] = [{ teamId: 'a', name: 'A', members: [] }];
-        const second: TeamGroup[] = [{ teamId: 'b', name: 'B', members: [] }];
+        const first: TeamGroup[] = [{ teamId: 'a', name: 'A', workDir: null, isCurrentProject: false, members: [] }];
+        const second: TeamGroup[] = [{ teamId: 'b', name: 'B', workDir: null, isCurrentProject: false, members: [] }];
         setFetchForTesting((async () => {
             iteration += 1;
             return jsonResponse({ teams: iteration === 1 ? first : second });

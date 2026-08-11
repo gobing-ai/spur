@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { TEAMS_TABS, type TeamsTab } from './tabs';
 
-/** Shell for the Teams board module (0254 R1). Mirrors ObservabilityShell. */
-export default function TeamsShell() {
+/**
+ * Shell for the Teams board module (0254 R1). Mirrors ObservabilityShell.
+ *
+ * Accepts an optional `teamId` scope (task 0197 R4): when set, each tab
+ * narrows to that team; when omitted, the current global behavior is preserved.
+ */
+export default function TeamsShell({ teamId }: { teamId?: string }) {
     const [activeId, setActiveId] = useState<string>('supervisor');
     const active: TeamsTab | undefined = TEAMS_TABS.find((t) => t.id === activeId);
     const Active = active?.component;
@@ -42,7 +47,7 @@ export default function TeamsShell() {
                 aria-labelledby={`teams-tab-${activeId}`}
                 className="flex-1 overflow-hidden"
             >
-                {Active ? <Active /> : null}
+                {Active ? <Active teamId={teamId} /> : null}
             </div>
         </div>
     );

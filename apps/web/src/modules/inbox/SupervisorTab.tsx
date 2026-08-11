@@ -1,4 +1,4 @@
-import { MessageFeedList, type MsgRow, useMessageFeed } from './AllTab';
+import { filterMessagesByTeam, MessageFeedList, type MsgRow, useMessageFeed } from './AllTab';
 
 /**
  * The supervisor endpoint in the message plane (0422 R3).
@@ -20,8 +20,11 @@ function isSupervisorTraffic(row: MsgRow): boolean {
  * Read-only filtering: reuses the shared `useMessageFeed` and narrows to rows
  * whose sender or recipient is the supervisor endpoint. No routing change, no
  * new backend identity, no extra call.
+ *
+ * When `teamId` is provided (Workspace scope, task 0197 R4), rows are further
+ * narrowed to that team's resolved identity.
  */
-export default function SupervisorTab() {
+export default function SupervisorTab({ teamId }: { teamId?: string }) {
     const { messages, error } = useMessageFeed();
 
     if (error)
@@ -32,7 +35,8 @@ export default function SupervisorTab() {
         );
     if (messages === null) return <div className="p-4 text-sm text-spur-text-muted">Loading messages…</div>;
 
-    const filtered = messages.filter(isSupervisorTraffic);
+    const supervisorRows = messages.filter(isSupervisorTraffic);
+    const filtered = teamId ? filterMessagesByTeam(supervisorRows, teamId) : supervisorRows;
     return (
         <div className="flex flex-col h-full overflow-hidden bg-spur-bg" data-supervisor-tab>
             <div className="px-4 py-2 border-b border-spur-border bg-spur-surface shrink-0">

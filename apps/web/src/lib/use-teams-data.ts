@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout, resolveApiUrl } from './rpc-client';
 
 // ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
 // Shared by TerminalTab, ActivityTab, and other Teams surfaces after 0268
@@ -20,6 +20,10 @@ export interface TeamMember {
 export interface TeamGroup {
     teamId: string;
     name: string;
+    /** Resolved absolute work_dir, or null (R4). */
+    workDir: string | null;
+    /** True when the team's work_dir equals the server project cwd (R4). */
+    isCurrentProject: boolean;
     members: TeamMember[];
 }
 
@@ -48,7 +52,13 @@ function parseTeamsResponse(body: unknown): TeamGroup[] | null {
                 ...(typeof r.pid === 'number' ? { pid: r.pid } : {}),
             });
         }
-        teams.push({ teamId: e.teamId, name: e.name, members });
+        teams.push({
+            teamId: e.teamId,
+            name: e.name,
+            workDir: typeof e.workDir === 'string' ? e.workDir : null,
+            isCurrentProject: e.isCurrentProject === true,
+            members,
+        });
     }
     return teams;
 }
@@ -67,10 +77,11 @@ export interface UseTeamsDataResult {
 }
 
 /**
- * Shared teams feed for the Teams module. Polls GET /api/team/teams every 5s
- * with an AbortController-free fetchWithTimeout; exposes a `reload` for the
- * post-mutation refetch path. Callers own selection state — this hook is
- * purely the data layer (0268 R1, R3).
+ * Neutral shared teams feed (task 0197 R3). Moved out of the Teams module so
+ * Teams, Inbox, and Workspace consume the same feed. Polls GET /api/team/teams
+ * every 5s with an AbortController-free fetchWithTimeout; exposes a `reload`
+ * for the post-mutation refetch path. Callers own selection state — this hook
+ * is purely the data layer (0268 R1, R3).
  */
 export function useTeamsData(): UseTeamsDataResult {
     const [teams, setTeams] = useState<TeamGroup[]>([]);

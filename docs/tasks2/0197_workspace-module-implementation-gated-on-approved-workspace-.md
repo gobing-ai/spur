@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Workspace module implementation (gated on approved workspace design)
 description: ""
-status: todo
+status: wip
 type: task
 profile: standard
 feature_id: G3
@@ -12,7 +12,7 @@ priority: P3
 tags: [approach-c,collaboration,board,gated]
 dependencies: []
 created_at: 2026-07-03T23:35:28.260Z
-updated_at: "2026-08-11T20:05:45.939Z"
+updated_at: "2026-08-11T23:13:04.592Z"
 ---
 
 ## 0197. Workspace module implementation (gated on approved workspace design)
@@ -155,17 +155,59 @@ component tests. Tests must prove global omission behavior and scoped `teamId` b
       G3 synchronized; run `bun run autofix`, `bun run spur-check`, `bun run lint`, `bun run test`, `bun run
       test-cf`, `bun run build`, feature/task checks, and confirm only intentional git changes.
 ### Solution
+**Solution**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented the G3 Workspace Board composition as a boundary-cleanup over existing services (ADR-052). Change map (file:line):
 
+- **R4/R7 (P1) Backend.** `packages/app/src/services/team-service.ts:198` — `TeamListing` gains `workDir: string | null` and `isCurrentProject: boolean` (`:210-212`); `listTeams()` resolves configured `work_dir` relative to service cwd (normalized absolute compare, `:575`), and orphaned/untethered groups use a common spec workspace only when all member specs agree. `apps/server/src/modules/team/index.ts:222-223` surfaces both fields on the existing `GET /api/team/teams` (no new endpoint/contract/noun).
+- **R3 (P2) Neutral feed.** `apps/web/src/modules/teams/useTeamsData.ts` → `apps/web/src/lib/use-teams-data.ts:24-26` (git move, logic preserved); `TeamGroup` gains the two fields; consumers (Teams tabs, InboxShell, Workspace) repointed to the shared feed.
+- **R1/R2 (P3) Cut Inbox from process plane.** Deleted `apps/web/src/modules/inbox/timeline.ts` + its test. `AgentTab.tsx` rewritten to durable-message filter only (no process EventSource). `apps/web/src/modules/inbox/AllTab.tsx:89` `filterMessagesByTeam` checks both `to.teamId` and `from.teamId`; `SupervisorTab.tsx` and `InboxShell.tsx` accept `{ teamId? }` and thread scope; dropdown hidden when scoped.
+- **R1/R6 (P4) Scope Teams.** `apps/web/src/modules/teams/TeamsShell.tsx` + operational tabs accept `{ teamId? }`; scoped filtering preserves global omission behavior.
+- **R5/R6 (P5) Workspace module.** New `apps/web/src/modules/workspace/index.tsx:13-21` (registered `id/route: workspace`, `sidebarLabel: Workspace`, `order: 0`), `WorkspaceShell.tsx`, `tabs.ts`, `OverviewTab.tsx`. Shell selects first `isCurrentProject` team and renders Overview + scoped TeamsShell + scoped InboxShell + current-project `TaskKanbanView` (exported from `apps/web/src/modules/task-kanban/index.tsx`); actionable empty state when no project-local team.
+- **R8 (P6/P7) Tests + docs.** Added `packages/app/tests/services/team-service.test.ts` R4 cases (configured/orphaned/disagree/untethered), `apps/server/tests/modules/team/index.test.ts` response assertions, `apps/web/tests/modules/inbox/inbox.test.tsx` scoped-isolation tests (incl. member→supervisor regression), `apps/web/tests/modules/workspace/workspace.test.tsx`, `apps/web/tests/lib/use-teams-data.test.ts`; removed obsolete `inbox/timeline.test.ts` + old `useTeamsData.test.ts`. Docs (ADR-052, 03/04, feature G3) synchronized.
+- **Review fix (P2).** `apps/web/src/modules/inbox/SupervisorTab.tsx` previously filtered on `m.to.teamId === teamId` only, dropping member→supervisor rows (supervisor endpoint has no teamId). Now reuses `filterMessagesByTeam` so sender-OR-recipient team membership survives scoping.
 ### Testing
+**Testing**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Commands run and outcomes (all green):
 
+- `bun test packages/app/tests/services/team-service.test.ts apps/server/tests/modules/team/index.test.ts apps/web/tests/modules/workspace/ apps/web/tests/lib/use-teams-data.test.ts apps/web/tests/modules/inbox/inbox.test.tsx apps/web/tests/modules/teams/components.test.tsx` → 179 pass / 0 fail (focused targets; covers R4 backend cases, workspace module/shell, lib feed, inbox scoped isolation incl. member→supervisor regression, teams scoping).
+- `bun test apps/web/tests` → 650 pass / 0 fail.
+- `bun run typecheck` → all 7 workspaces exit 0.
+- `bun run lint` (biome check . --error-on-warnings + typecheck) → clean.
+- `bun run test` → 4875 pass / 0 fail across 270 files (three consecutive clean runs; a transient 2-fail on the first run self-resolved with no code change).
+- `bun run test-cf` → clean (Worker entry).
+- `bun run build` → all workspaces exit 0 (cli, server, web).
+- `bun run corpus-check` → OK, 0 new corpus errors.
+- `spur task check 0197 --folder docs/tasks2 --strict-core` → pass, no findings, no missing sections.
+
+Coverage: per-file line/function ≥ 90% gate satisfied across the changed workspaces (coverage table in `bun run test` output shows no below-threshold files in the changed paths).
+
+**Acceptance Criteria Verification** (from review + verify step):
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| [doc-only] R1 — Module ownership follows ADR-052 | MET | static-ref | ADR-052 + workspace-design.md; AgentTab durable-message-only; timeline.ts deleted; no Workspace noun |
+| R2 — A workspace binds a git folder and a team | MET | test | team-service.test.ts configured/orphaned/disagree/untethered; workDir/isCurrentProject surfaced |
+| R3 — Workspace tabs compose the collaboration surfaces | MET | test | workspace.test.tsx; WorkspaceShell renders scoped TeamsShell + InboxShell + TaskKanbanView |
+| R4 — Workspace inboxes are isolated | MET | test | inbox.test.tsx scoped AllTab + SupervisorTab regression; filterMessagesByTeam both endpoints |
+
+Verdict: **PASS** (8/8 requirements MET, 4/4 AC MET, evidence-rule pass, task check pass).
 ### Review
+**Review**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Independent review by `sp-super-reviewer` (functional traceability + SECUA + architecture) over the uncommitted diff. Disposition: **PASS** after one P2 fix.
 
+| Severity | Finding | Resolution |
+| --- | --- | --- |
+| P2 | Scoped `SupervisorTab` dropped member→supervisor messages (filter checked `m.to.teamId` only; supervisor endpoint has no teamId) — under-satisfied R4 isolation (sender OR recipient) | Fixed: reuse `filterMessagesByTeam` (checks both `to.teamId` and `from.teamId`); regression test added (`report to supervisor` m4 survives scoping). `apps/web/src/modules/inbox/SupervisorTab.tsx` |
+| P3 | Workspace + composed tab each mount independent `useTeamsData` (2× 5s polls, no shared client cache) | Accepted — no duplicate *implementation* (single shared hook); out of scope. |
+| P3 | `isCurrentProject` uses lexical `resolve()` not `realpath` (symlink edge) | Accepted — edge; documented residual. |
+| P4 | Overview "Last refresh" shows wall-clock not fetch time; empty-state flash on initial load; scoped TerminalTab no auto-select | Accepted — non-blocking usability advisories. |
+
+Traceability: R1–R8 all MET (8/8). Anti-patterns all avoided (no Workspace backend noun; single shared feed; no hidden Inbox process stream; no process-stdin delivery; no WebModule over-generalization; no cross-project task loading). Resource teardown (inbox SSE abort/close, member terminal) verified.
+
+Residual risk: none blocking. P3/P4 advisories tracked as non-blocking notes (shared client cache, realpath normalization, refresh timestamp, empty-state flash).
 ### References
 - Feature G3
 - ADR-052
@@ -176,3 +218,4 @@ component tests. Tests must prove global omission behavior and scoped `teamId` b
 ### History
 - 2026-07-03T23:44:29.208Z todo → blocked (system)
 - 2026-08-11T20:04:01.961Z blocked → todo (system)
+- 2026-08-11T23:13:04.592Z todo → wip (system)

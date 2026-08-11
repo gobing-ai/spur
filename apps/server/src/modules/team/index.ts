@@ -219,6 +219,8 @@ export const teamModule: ServerModule = {
             const enriched = teams.map((team) => ({
                 teamId: team.teamId,
                 name: team.name,
+                workDir: team.workDir,
+                isCurrentProject: team.isCurrentProject,
                 members: team.specs.map((spec) => {
                     const proc = processes.find((p) => p.agentId === spec.id);
                     // R11: surface optional `model` from the resolved spec config (omit when unset).

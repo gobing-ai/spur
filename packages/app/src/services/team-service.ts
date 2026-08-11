@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { type NormalizedTeamMember, normalizeMember, resolveExecutor, type SpurConfig } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
@@ -200,6 +200,16 @@ export interface TeamListing {
     name: string;
     members: NormalizedTeamMember[];
     specs: AgentSpec[];
+    /**
+     * Resolved absolute path of the team's configured `work_dir` (R4).
+     *
+     * Configured teams use `agent.team.<id>.work_dir` (resolved relative to the
+     * service cwd). Orphaned/untethered groups use a common spec workspace only
+     * when all member specs agree, otherwise this is `null`.
+     */
+    workDir: string | null;
+    /** True when {@link workDir} equals the service cwd — the current project (R4). */
+    isCurrentProject: boolean;
 }
 
 /** Result of materializing a team (R2). */
@@ -556,15 +566,20 @@ export class TeamService {
         const specs = await loadAgentSpecs(this.configDir);
         const config = await this.loadTeamConfig();
         const teams = new Map<string, TeamListing>();
+        const configTeamIds = new Set<string>();
 
-        // Initialize from config
+        // Initialize from config — configured teams carry their resolved work_dir.
         if (config?.agent?.team) {
             for (const [teamId, teamConfig] of Object.entries(config.agent.team)) {
+                configTeamIds.add(teamId);
+                const workDir = this.resolveWorkspaceDir(teamConfig.work_dir);
                 teams.set(teamId, {
                     teamId,
                     name: teamConfig.name,
                     members: [],
                     specs: [],
+                    workDir,
+                    isCurrentProject: this.isCurrentProject(workDir),
                 });
             }
         }
@@ -585,6 +600,8 @@ export class TeamService {
                         name: teamId,
                         members: [],
                         specs: [spec],
+                        workDir: null,
+                        isCurrentProject: false,
                     });
                 }
             } else {
@@ -599,7 +616,19 @@ export class TeamService {
                 name: 'Untethered',
                 members: [],
                 specs: untethered,
+                workDir: null,
+                isCurrentProject: false,
             });
+        }
+
+        // Orphaned/untethered groups (not config-declared): use a common spec
+        // workspace only when every member spec agrees; otherwise stay unselectable
+        // (workDir null, isCurrentProject false) — R4.
+        for (const team of Array.from(teams.values())) {
+            if (configTeamIds.has(team.teamId)) continue;
+            const common = this.commonWorkspace(team.specs);
+            team.workDir = common.workDir;
+            team.isCurrentProject = common.isCurrentProject;
         }
 
         return Array.from(teams.values());
@@ -726,6 +755,30 @@ export class TeamService {
     // -------------------------------------------------------------------------
     // Lazy dependency construction
     // -------------------------------------------------------------------------
+
+    /** Resolve a configured/derived workspace path relative to the service cwd. */
+    private resolveWorkspaceDir(p: string): string {
+        return resolve(this.ctx.cwd, p);
+    }
+
+    /** True when a resolved workspace path equals the service cwd (the current project). */
+    private isCurrentProject(workDir: string): boolean {
+        return resolve(this.ctx.cwd, workDir) === resolve(this.ctx.cwd, this.ctx.cwd);
+    }
+
+    /**
+     * Derive the workspace facts for a spec-derived group (orphaned/untethered).
+     * Returns a common workspace only when all member specs agree on the same
+     * `workspace`; otherwise `workDir = null` and `isCurrentProject = false` (R4).
+     */
+    private commonWorkspace(specs: AgentSpec[]): { workDir: string | null; isCurrentProject: boolean } {
+        if (specs.length === 0) return { workDir: null, isCurrentProject: false };
+        const first = specs[0]?.workspace;
+        if (typeof first !== 'string' || first.length === 0) return { workDir: null, isCurrentProject: false };
+        if (!specs.every((s) => s.workspace === first)) return { workDir: null, isCurrentProject: false };
+        const workDir = this.resolveWorkspaceDir(first);
+        return { workDir, isCurrentProject: this.isCurrentProject(workDir) };
+    }
 
     private async loadTeamConfig(): Promise<SpurConfig | null> {
         try {

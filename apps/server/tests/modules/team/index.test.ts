@@ -678,6 +678,8 @@ describe('team module', () => {
                 name: 'DevOps',
                 members: [],
                 specs: [spec('planner'), spec('reviewer')],
+                workDir: '/tmp',
+                isCurrentProject: false,
             };
             const teamService = teamServiceStub({ listTeams: async () => [team] });
             const list: ProcessEntry[] = [
@@ -699,11 +701,16 @@ describe('team module', () => {
             const body = (await res.json()) as {
                 teams: Array<{
                     teamId: string;
+                    workDir: string | null;
+                    isCurrentProject: boolean;
                     members: Array<{ id: string; type: string; status: string; pid?: number; autoStart: boolean }>;
                 }>;
                 count: number;
             };
             expect(body.count).toBe(1);
+            // R4: work_dir + current-project facts are surfaced on the response.
+            expect(body.teams[0]?.workDir).toBe('/tmp');
+            expect(body.teams[0]?.isCurrentProject).toBe(false);
             const members = body.teams[0]?.members ?? [];
             // Running member carries pid + status; the un-supervised one falls back to 'unknown'.
             const planner = members.find((m) => m.id === 'planner');
@@ -724,6 +731,8 @@ describe('team module', () => {
                 name: 'DevOps',
                 members: [],
                 specs: [autostartSpec('runner', true), autostartSpec('idle', false)],
+                workDir: '/tmp',
+                isCurrentProject: false,
             };
             const teamService = teamServiceStub({ listTeams: async () => [team] });
             const { ctx } = ctxWithStubs({ teamService });
@@ -921,6 +930,8 @@ describe('team module', () => {
                 name: 'DevOps',
                 members: [],
                 specs: [spec('planner'), spec('reviewer')],
+                workDir: '/tmp',
+                isCurrentProject: false,
             };
             let purgeArg: { purge?: boolean } | undefined;
             const teamService = teamServiceStub({
@@ -970,6 +981,8 @@ describe('team module', () => {
                 name: 'DevOps',
                 members: [],
                 specs: [spec('planner')],
+                workDir: '/tmp',
+                isCurrentProject: false,
             };
             let purgeArg: { purge?: boolean } | undefined;
             const teamService = teamServiceStub({

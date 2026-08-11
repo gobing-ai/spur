@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -770,6 +770,105 @@ describe('TeamService team management (0258)', () => {
             try {
                 const teams = await svc.listTeams();
                 expect(teams).toEqual([]);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        // ── 0197 R4: workDir / isCurrentProject ──
+
+        test('R4: configured team resolves work_dir relative to the service cwd', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                // work_dir '.' resolves to the service cwd -> current project.
+                await writeConfig(
+                    cwd,
+                    [
+                        'agent:',
+                        '  team:',
+                        '    proj:',
+                        '      name: Proj',
+                        '      work_dir: .',
+                        '      members:',
+                        '        - executor: claude',
+                    ].join('\n'),
+                );
+                const teams = await svc.listTeams();
+                expect(teams).toHaveLength(1);
+                const team = teams[0];
+                expect(team?.teamId).toBe('proj');
+                expect(team?.workDir).toBe(resolve(cwd, '.'));
+                expect(team?.isCurrentProject).toBe(true);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('R4: configured team with an external work_dir is not the current project', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG); // work_dir /tmp/devops
+                const teams = await svc.listTeams();
+                const devops = teams.find((t) => t.teamId === 'devops');
+                expect(devops?.workDir).toBe(resolve(cwd, '/tmp/devops'));
+                expect(devops?.isCurrentProject).toBe(false);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('R4: orphaned group uses a common spec workspace when all members agree', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                const configDir = join(cwd, '.spur', 'agents');
+                // Two specs in the same orphaned team, same workspace.
+                await seedSpec(configDir, 'ghost-a', ['team:ghost', 'spur:generated']);
+                await seedSpec(configDir, 'ghost-b', ['team:ghost', 'spur:generated'], 'codex');
+                const teams = await svc.listTeams();
+                const ghost = teams.find((t) => t.teamId === 'ghost');
+                expect(ghost?.workDir).toBe(resolve(cwd, '/tmp'));
+                expect(ghost?.isCurrentProject).toBe(false);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('R4: orphaned group with disagreeing spec workspaces is not selectable', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'ghost-a', ['team:ghost', 'spur:generated']);
+                // Second spec with a different workspace.
+                await saveAgentSpec(
+                    {
+                        id: 'ghost-b',
+                        name: 'ghost-b',
+                        type: 'codex',
+                        workspace: '/elsewhere',
+                        purpose: 'seeded',
+                        tags: ['team:ghost', 'spur:generated'],
+                        config: {},
+                    },
+                    configDir,
+                );
+                const teams = await svc.listTeams();
+                const ghost = teams.find((t) => t.teamId === 'ghost');
+                expect(ghost?.workDir).toBeNull();
+                expect(ghost?.isCurrentProject).toBe(false);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('R4: untethered group uses a common spec workspace only when specs agree', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'lonely', []);
+                const teams = await svc.listTeams();
+                const untethered = teams.find((t) => t.teamId === '__untethered__');
+                expect(untethered?.workDir).toBe(resolve(cwd, '/tmp'));
+                expect(untethered?.isCurrentProject).toBe(false);
             } finally {
                 await cleanup();
             }
