@@ -999,38 +999,63 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 const svc = await makeCheckService(context);
                 const planningFolders = await resolvePlanningFolders(context.fs);
                 const activeFolder = planningFolders.foldersConfig.active_folder;
-                const tasksDir = options.folder ?? context.fs.resolve(activeFolder);
-                const entries = await context.fs.readDir(tasksDir);
-                const wbsPattern: string[] = wbs
-                    ? [wbs]
-                    : entries
-                          .filter((n) => /^\d{4}_.+\.md$/.test(n))
-                          .map((n) => n.match(/^(\d{4})_/)?.[1])
-                          .filter((n): n is string => n !== undefined);
+                // Normalize every explicit override so relative and absolute spellings of the
+                // same folder are identical downstream (project-root derivation, line anchors) —
+                // 0522 R2.
+                const tasksDir = context.fs.resolve(options.folder ?? activeFolder);
+                const printResult = (result: Awaited<ReturnType<typeof svc.check>>) => {
+                    if (json) return;
+                    context.output.write(`\n${result.wbs} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
+                    for (const f of result.findings) {
+                        const tag = f.severity === 'error' ? 'ERR' : 'WARN';
+                        context.output.write(`  [${tag}] ${f.layer} ${f.section}: ${f.message}`);
+                    }
+                    if (result.missingSections.length > 0) {
+                        context.output.write(`  Missing: ${result.missingSections.join(', ')}`);
+                    }
+                };
 
                 const results = [];
-                for (const w of wbsPattern) {
-                    const fileName = entries.find((n) => n.startsWith(`${w}_`) && n.endsWith('.md'));
-                    if (!fileName) {
-                        context.output.error(`Task ${w} not found`);
+                if (wbs) {
+                    // WBS-targeted check: locate through the configured folder set (or the
+                    // single explicit --folder) — same resolution as task show/path/update
+                    // (0522 R1). Unscoped scans below remain active-folder-only (R3).
+                    const locator =
+                        options.folder !== undefined
+                            ? TaskLocator.forSingleDir(context.fs, tasksDir)
+                            : await makeTaskLocator(context);
+                    const hit = await locator.findByWbs(wbs);
+                    if (hit === null) {
+                        context.output.error(`Task ${wbs} not found`);
                         context.setExitCode(1);
-                        continue;
+                    } else {
+                        const result = await svc.check(hit.filePath, wbs, {
+                            strict,
+                            severityOverrides: planningFolders.severityOverrides,
+                        });
+                        results.push(result);
+                        printResult(result);
                     }
-                    const result = await svc.check(`${tasksDir}/${fileName}`, w, {
-                        strict,
-                        severityOverrides: planningFolders.severityOverrides,
-                    });
-                    results.push(result);
+                } else {
+                    const entries = await context.fs.readDir(tasksDir);
+                    const wbsPattern: string[] = entries
+                        .filter((n) => /^\d{4}_.+\.md$/.test(n))
+                        .map((n) => n.match(/^(\d{4})_/)?.[1])
+                        .filter((n): n is string => n !== undefined);
 
-                    if (!json) {
-                        context.output.write(`\n${result.wbs} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
-                        for (const f of result.findings) {
-                            const tag = f.severity === 'error' ? 'ERR' : 'WARN';
-                            context.output.write(`  [${tag}] ${f.layer} ${f.section}: ${f.message}`);
+                    for (const w of wbsPattern) {
+                        const fileName = entries.find((n) => n.startsWith(`${w}_`) && n.endsWith('.md'));
+                        if (!fileName) {
+                            context.output.error(`Task ${w} not found`);
+                            context.setExitCode(1);
+                            continue;
                         }
-                        if (result.missingSections.length > 0) {
-                            context.output.write(`  Missing: ${result.missingSections.join(', ')}`);
-                        }
+                        const result = await svc.check(`${tasksDir}/${fileName}`, w, {
+                            strict,
+                            severityOverrides: planningFolders.severityOverrides,
+                        });
+                        results.push(result);
+                        printResult(result);
                     }
                 }
 
@@ -1196,7 +1221,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
 async function makeService(context: CliContext, folderOverride?: string, noLifecycle = false): Promise<TaskService> {
     const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
-    const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
+    // Normalize the override: relative and absolute spellings are the same folder (0522 R2).
+    const tasksDir = context.fs.resolve(folderOverride ?? foldersConfig.active_folder);
     const lifecycle = noLifecycle ? undefined : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
         fs: context.fs,

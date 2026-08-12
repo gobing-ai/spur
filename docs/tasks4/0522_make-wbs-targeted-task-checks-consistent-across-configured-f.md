@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Make WBS-targeted task checks consistent across configured folders"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: F
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T23:29:09.142Z"
-updated_at: "2026-08-11T23:31:43.851Z"
+updated_at: "2026-08-12T00:45:45.773Z"
 ---
 
 ## 0522. Make WBS-targeted task checks consistent across configured folders
@@ -153,17 +153,76 @@ For `docs/tasks2`, `packages/app/src/services/task-check.ts:198-203` does not ma
 anchors. The shared service factory has the same unnormalized override at
 `apps/cli/src/commands/task.ts:1197-1200`.
 ### Solution
+**Solution**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+WBS-targeted `task check` now resolves like `task show`/`task path`, and every explicit folder override is normalized before use. Change map (file:line):
 
+- **R1 — Targeted lookup across configured folders.** `apps/cli/src/commands/task.ts:1020-1038` — the `task check` handler branches on invocation shape: WBS + no `--folder` locates via `makeTaskLocator(context).findByWbs(wbs)` (the configured-folder `TaskLocator` already used by the L4 edge checks); WBS + `--folder` locates via `TaskLocator.forSingleDir(context.fs, tasksDir)`; no WBS keeps the existing active/explicit directory enumeration untouched (R3). The per-result human print is hoisted into a shared `printResult` so both branches emit identical output.
+- **R2 — Normalize explicit overrides.** `apps/cli/src/commands/task.ts:1005` — the handler resolves `options.folder ?? activeFolder` through `context.fs.resolve()` so relative and absolute spellings are identical when `TaskCheckService.resolveProjectRootFromTasksDir()` derives the project root; `apps/cli/src/commands/task.ts:1225` — the shared `makeService` factory applies the same normalization to its `folderOverride`. No new noun/verb/flag/config key/state/fallback (R4).
+- **R5 — Regression lock.** `apps/cli/tests/commands/task.test.ts:694-845` — new `seedTwoFolderCorpus()` fixture (active `docs/tasks4`, inactive `docs/tasks2`, the 0197 layout) with three tests: R1 targeted inactive-folder check resolves (was "Task not found"), R2 relative/absolute `--folder` parity with a valid root-relative `file:line` citation and no false `L4.stale-line-anchor`, R3 unscoped check/list remain active-only. Red→green: R1/R2 failed pre-fix, R3 passed (guard).
+- **R4 — Docs.** `docs/04_DESIGN.md:993` (`spur task check` row: targeted vs unscoped vs explicit-folder resolution) and `plugins/sp/skills/spur-cli/references/tasks.md:237-244` (folder-resolution paragraph) synchronized in the same change.
+
+Live repro on the exposing case: `task check 0197 --strict-core` (task in inactive `docs/tasks2`, no `--folder`) previously exited 1 with "Task 0197 not found"; now reports `0197 (wip): PASS` with zero stale-anchor warnings.
 ### Testing
+**Testing**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+Verified 2026-08-11 via `/sp:dev-verify 0522 --auto --next --focus all` (standalone; verdict artifact
+`.spur/run/0522-verdict.json` written this run — gitignored, verdict: PASS).
 
+Commands run and outcomes:
+
+- `bun test apps/cli/tests/commands/task.test.ts --test-name-pattern 'R1: targeted|R2: relative|R3: unscoped'` → 3 pass / 0 fail. Red→green: R1 and R2 failed pre-fix ("Task not found" / relative-folder stale-anchor), R3 passed as the unscoped-semantics guard.
+- `bun test apps/cli/tests/commands/task.test.ts` → 151 pass / 0 fail (full file).
+- `bun test plugins/sp` → 667 pass / 0 fail (spur-cli reference change).
+- `bun run --filter @gobing-ai/spur typecheck` → exit 0; all 7 workspaces typecheck exit 0 (spur-check lint phase).
+- `biome check . --error-on-warnings` → clean, no fixes applied.
+- Golden path (changed CLI surface, run this session): `bun run apps/cli/src/index.ts task check 0197 --strict-core` → exit 0, `0197 (wip): PASS`, zero stale-anchor warnings. Pre-fix the same invocation exited 1 with "Task 0197 not found" — the exposing defect.
+- `bun run test` → 4860 pass / 24 fail. All 24 failures are in the seven port/serve/registry suites (createServerContext, healthModule, project-start, ProjectRegistry, rpc client, spur projects CLI, startServer) — sandbox `EPERM` listen/write denials, a documented environment artifact; zero failures on the changed surface (task/check/locator).
+- `bun run test-cf` → blocked by sandbox `EPERM` (wrangler log under `~/Library/Preferences/.wrangler`, `listen 127.0.0.1`) — environmental, not code.
+- `bun run build` → all workspaces compiled (incl. dist binary compile); the binary link step hit sandbox `EPERM` unlinking the `~/.bun/bin/spur` shim — environmental. `apps/cli/spur.js` rebuilt and carries the fix.
+- `bun run corpus-check` → 1 NEW error at the time: 0522's own Testing placeholder at status `testing` — cleared by this section write.
+
+Coverage: changed handler branch (`apps/cli/src/commands/task.ts:1020-1038`) exercised by the three new regression tests plus the 151-test file suite; no below-threshold flag on changed files in the full-suite coverage table.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/cli/src/commands/task.ts:1020-1038` — WBS + no `--folder` locates via `makeTaskLocator(context).findByWbs`; regression test `R1: targeted check resolves a WBS in a configured inactive folder` (`apps/cli/tests/commands/task.test.ts:751`) |
+| R2 | MET | `apps/cli/src/commands/task.ts:1005` handler + `apps/cli/src/commands/task.ts:1225` factory normalize via `context.fs.resolve()`; parity test `R2: relative and absolute --folder spellings return identical findings` (`apps/cli/tests/commands/task.test.ts:775`) |
+| R3 | MET | unscoped branch unchanged (active/explicit enumeration only); guard test `R3: unscoped check and list scan only the active folder` (`apps/cli/tests/commands/task.test.ts:821`) |
+| R4 | MET | no new noun/verb/flag/config key/state file/fallback — `git status --porcelain` shows only `apps/cli/src/commands/task.ts`, its test, and the two doc files; `docs/04_DESIGN.md:993` + `plugins/sp/skills/spur-cli/references/tasks.md:237` synchronized |
+| R5 | MET | three regression tests in `apps/cli/tests/commands/task.test.ts:694-845`; full gates above |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — A targeted check resolves an inactive configured task | MET | test | `task.test.ts` R1 test; live `task check 0197 --strict-core` exit 0 |
+| R2 — Relative and absolute folder overrides are equivalent | MET | test | `task.test.ts` R2 parity test (`toEqual` on findings, no stale-line-anchor) |
+| R3 — Unscoped commands retain active-folder semantics | MET | test | `task.test.ts` R3 test (check + list active-only) |
+| R4 — The fix introduces no new CLI surface | MET | command | `git status --porcelain` — only `apps/cli/src/commands/task.ts`, `apps/cli/tests/commands/task.test.ts`, `docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/tasks.md` changed |
+| R5 — Regression coverage proves both fixes | MET | test | R1/R2 red→green this session; file suite 151/151 |
+
+**Design conformance**: 3/3 design items DONE — locator branch (not re-walking filenames), `context.fs.resolve()` normalization at both call sites, docs synced; no deviations. Anti-patterns all avoided (no `task list` widening, no inactive-folder unscoped scan, no re-homing, no pipeline state, no `docs/tasks2` special-case, no Pi runtime change).
+
+Verdict: **PASS** (5/5 requirements MET, 5/5 AC MET, evidence-rule pass, design conformance pass).
 ### Review
+**Review**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+SECUA review of the 0522 diff (uncommitted): `apps/cli/src/commands/task.ts` (locator branch + two
+normalization sites), `apps/cli/tests/commands/task.test.ts` (fixture + 3 regression tests),
+`docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/tasks.md`. Disposition: **PASS** — no
+P1–P3 findings.
 
+| Severity | Finding | Resolution |
+| --- | --- | --- |
+| P4 | `makeService` folder normalization now also applies to `resolve`/`path`/`list`/`create` `--folder` handling — behavior-preserving (relative spellings resolved against the same project root the fs facade already used; absolute paths unchanged) | Advisory only — no action. |
+| P4 | `resolveProjectRootFromTasksDir` recognizes only the `/docs/tasksN` convention; arbitrary folder names still derive one level up (pre-existing limitation, surfaced by the parity fixture which intentionally uses the corpus convention) | Out of scope — documented in the fixture comment. |
+
+Dimension notes: **S** — `--folder` remains an explicit operator override; resolution via `context.fs.resolve()` adds no new traversal surface. **E** — targeted lookup scans the configured folder set sequentially (bounded by folder count); unscoped path untouched. **C** — invocation-shape branching preserves the old not-found error + exit 1 and the JSON envelope; output parity covered by the 151-test file suite. **U** — targeted check now behaves like `task show`/`task path` (the documented contract); no new flags. **A** — reuses the existing `TaskLocator` (no new abstraction, no duplicated folder walking); `printResult` hoist removes print duplication between branches.
+
+Residual risk: none blocking. The stale `dist/cli/spur` compiled binary currently linked at `~/.bun/bin/spur` predates this fix — environment concern, not a code finding (transitions were driven via the source-tree CLI so `$spurBin` carried the fix).
 ### References
 - Task 0197 — concrete configured inactive-folder reproduction
 - Task 0521 — cancelled Pi-loop diagnosis and forensic separation
@@ -173,3 +232,6 @@ anchors. The shared service factory has the same unnormalized override at
 - `docs/04_DESIGN.md:993` — authoritative `task check` surface
 - `plugins/sp/skills/spur-cli/references/tasks.md` — operator-facing task CLI reference
 ### History
+- 2026-08-12T00:38:41.256Z todo → wip (system)
+- 2026-08-12T00:38:41.930Z wip → testing (system)
+- 2026-08-12T00:45:45.773Z testing → done (system)

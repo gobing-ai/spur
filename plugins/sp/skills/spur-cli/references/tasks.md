@@ -234,6 +234,13 @@ spur task check --strict --json     # elevate ALL warnings to failures
 spur task check 0040 --strict-core  # the testing→done gate variant
 ```
 
+**Folder resolution (task 0522):** a WBS-targeted check (`<wbs>` present, no `--folder`) resolves
+the task across **all configured task folders** — the same resolution as `task show` / `task path` /
+`task update` — so a task in an inactive configured folder is checked, not reported missing. An
+explicit `--folder <path>` is normalized to an absolute path and restricts lookup to that single
+directory (relative and absolute spellings are equivalent). Unscoped checks (no WBS) and
+`task list` remain active-folder-only.
+
 `--json` emits the structured matrix — per-task findings (missing sections, broken feature edges,
 AC-coverage orphans via L4 traceability) keyed by WBS, plus a per-task `pass` verdict. **Query this,
 do not re-derive it**: parse the JSON to answer "which tasks are ready?", "what's blocking 0040?",

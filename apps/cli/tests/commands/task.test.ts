@@ -7,9 +7,9 @@
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, rmSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { main } from '../../src/index';
@@ -684,6 +684,163 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'check', '9999'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.at(-1)).toContain('not found');
+    });
+
+    // ── check configured-folder consistency (0522 R1–R3) ──
+    //
+    // Two configured folders (active docs/tasks4, inactive docs/tasks2 — the 0197
+    // layout that exposed the defect) each holding one CLI-created task; the
+    // inactive-folder task is moved there after creation so both files are well-formed.
+    async function seedTwoFolderCorpus(): Promise<{
+        root: string;
+        activeWbs: string;
+        inactiveWbs: string;
+        inactiveRel: string;
+        inactiveAbs: string;
+        inactiveFile: string;
+    }> {
+        const root = await mkdtemp(join(tmpdir(), 'spur-task-check-folders-'));
+        await mkdir(join(root, 'docs', 'tasks2'), { recursive: true });
+        await mkdir(join(root, 'docs', 'tasks4'), { recursive: true });
+        await mkdir(join(root, '.spur'), { recursive: true });
+        await Bun.write(
+            join(root, '.spur', 'config.yaml'),
+            'version: "1"\nname: test\n' +
+                'tasks:\n' +
+                '  active: docs/tasks4\n' +
+                '  folders:\n' +
+                '    docs/tasks2:\n' +
+                '      baseCounter: 0\n' +
+                '      label: Phase 2\n' +
+                '    docs/tasks4:\n' +
+                '      baseCounter: 100\n' +
+                '      label: Phase 4\n',
+        );
+
+        const c1 = createCapturedOutput();
+        expect(await main(['task', 'create', 'Active folder task'], { cwd: root, output: c1 })).toBe(0);
+        const activeWbs = createdWbs(c1);
+        const c2 = createCapturedOutput();
+        expect(await main(['task', 'create', 'Inactive folder task'], { cwd: root, output: c2 })).toBe(0);
+        const inactiveWbs = createdWbs(c2);
+
+        // Seed real Requirements + AC so the tasks pass L3 (placeholders error) — same
+        // idiom as the "freshly-created backlog task PASS" test above.
+        for (const w of [activeWbs, inactiveWbs]) {
+            const reqBody = join(root, `req-${w}.md`);
+            await writeFile(reqBody, 'R1. The folder fixture task must be structurally valid.\n');
+            expect(
+                await main(['task', 'update', w, '--section', 'Requirements', '--from-file', reqBody], {
+                    cwd: root,
+                    output: nullOutput(),
+                }),
+            ).toBe(0);
+            const acBody = join(root, `ac-${w}.md`);
+            await writeFile(acBody, '- [ ] Given a valid task / When check runs / Then exit code is 0.\n');
+            expect(
+                await main(['task', 'update', w, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+                    cwd: root,
+                    output: nullOutput(),
+                }),
+            ).toBe(0);
+        }
+
+        const srcRaw = createdPath(c2);
+        const src = srcRaw.startsWith('/') ? srcRaw : join(root, srcRaw);
+        const inactiveFile = join(root, 'docs', 'tasks2', basename(src));
+        await rename(src, inactiveFile);
+        return {
+            root,
+            activeWbs,
+            inactiveWbs,
+            inactiveRel: 'docs/tasks2',
+            inactiveAbs: join(root, 'docs', 'tasks2'),
+            inactiveFile,
+        };
+    }
+
+    test('R1: targeted check resolves a WBS in a configured inactive folder', async () => {
+        const fx = await seedTwoFolderCorpus();
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'check', fx.inactiveWbs, '--json'], { cwd: fx.root, output });
+            expect(exitCode).toBe(0);
+            const results = JSON.parse(lastMessage(output));
+            expect(results.some((r: { wbs: string }) => r.wbs === fx.inactiveWbs)).toBe(true);
+            expect(output.errors.some((e) => e.includes('not found'))).toBe(false);
+        } finally {
+            rmSync(fx.root, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: relative and absolute --folder spellings return identical findings with a valid citation', async () => {
+        const fx = await seedTwoFolderCorpus();
+        try {
+            // A root-relative file:line citation whose target exists under the project root.
+            await mkdir(join(fx.root, 'apps', 'cli', 'src'), { recursive: true });
+            await writeFile(join(fx.root, 'apps', 'cli', 'src', 'index.ts'), 'export {};\n');
+            // Anchor validation runs at wip; walk the FSM there and write Solution with the citation.
+            expect(await main(['task', 'update', fx.inactiveWbs, 'todo'], { cwd: fx.root, output: nullOutput() })).toBe(
+                0,
+            );
+            expect(await main(['task', 'update', fx.inactiveWbs, 'wip'], { cwd: fx.root, output: nullOutput() })).toBe(
+                0,
+            );
+            const solutionFile = join(fx.root, 'solution.md');
+            await writeFile(
+                solutionFile,
+                'Implemented the folder fix.\n\n- `apps/cli/src/index.ts:1` — entry point touched.\n',
+            );
+            expect(
+                await main(['task', 'update', fx.inactiveWbs, '--section', 'Solution', '--from-file', solutionFile], {
+                    cwd: fx.root,
+                    output: nullOutput(),
+                }),
+            ).toBe(0);
+
+            const rel = createCapturedOutput();
+            expect(
+                await main(['task', 'check', fx.inactiveWbs, '--folder', fx.inactiveRel, '--json'], {
+                    cwd: fx.root,
+                    output: rel,
+                }),
+            ).toBe(0);
+            const abs = createCapturedOutput();
+            expect(
+                await main(['task', 'check', fx.inactiveWbs, '--folder', fx.inactiveAbs, '--json'], {
+                    cwd: fx.root,
+                    output: abs,
+                }),
+            ).toBe(0);
+
+            const relResults = JSON.parse(lastMessage(rel));
+            const absResults = JSON.parse(lastMessage(abs));
+            expect(relResults).toEqual(absResults);
+            const blob = JSON.stringify(relResults);
+            expect(blob).not.toContain('Stale line anchor');
+            expect(blob).not.toContain('stale-line-anchor');
+        } finally {
+            rmSync(fx.root, { recursive: true, force: true });
+        }
+    });
+
+    test('R3: unscoped check and list scan only the active folder', async () => {
+        const fx = await seedTwoFolderCorpus();
+        try {
+            const chk = createCapturedOutput();
+            await main(['task', 'check', '--json'], { cwd: fx.root, output: chk });
+            const checkBlob = lastMessage(chk);
+            expect(checkBlob).toContain(fx.activeWbs);
+            expect(checkBlob).not.toContain(fx.inactiveWbs);
+
+            const lst = createCapturedOutput();
+            await main(['task', 'list', '--json'], { cwd: fx.root, output: lst });
+            const listBlob = lastMessage(lst);
+            expect(listBlob).toContain(fx.activeWbs);
+            expect(listBlob).not.toContain(fx.inactiveWbs);
+        } finally {
+            rmSync(fx.root, { recursive: true, force: true });
+        }
     });
 
     // ── refresh ──
