@@ -1,5 +1,10 @@
 /** Event payload retention policy before persistence or streaming. */
-import { redactAndBound } from '../observability/agent-execution';
+import {
+    projectSystemEventData,
+    type SystemEventProducerPackage,
+    type SystemEventRemediationKind,
+    type SystemEventSeverity,
+} from './system-event-envelope';
 
 /** Persistence/streaming policy applied to one cataloged system-event payload. */
 export type SystemEventPayloadPolicy = 'metadata-only' | 'redacted' | 'raw-safe';
@@ -21,6 +26,12 @@ export type SystemEventSource =
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
 export type SystemEventTier = 'default' | 'diagnostic';
 
+/** One catalog-owned scalar field retained for metadata-only payloads and presentation. */
+export interface SystemEventMetadataField {
+    path: string;
+    label: string;
+}
+
 /** Public catalog entry consumed by the tap, SSE stream, and Board filters. */
 export interface SystemEventCatalogEntry {
     /** Full event name emitted on the canonical server SystemEventBus. */
@@ -39,7 +50,183 @@ export interface SystemEventCatalogEntry {
     payloadPolicy: SystemEventPayloadPolicy;
     /** UI renderer key for the System Events detail registry. */
     renderer: string;
+    /** Concrete package that owns the emitted event contract. */
+    producerPackage: SystemEventProducerPackage;
+    /** Producer-local subsystem that emits the event. */
+    subsystem: string;
+    /** Default presentation severity; a valid payload severity may override it. */
+    severity: SystemEventSeverity;
+    /** Human-readable catalog explanation for Board/tooltips. */
+    description: string;
+    /** Bounded allow-list and high-value presentation fields. */
+    metadataFields: readonly SystemEventMetadataField[];
+    /** Deterministic safe action policy for the envelope presenter. */
+    remediationKind: SystemEventRemediationKind;
 }
+
+interface SourceProfile {
+    producerPackage: SystemEventProducerPackage;
+    subsystem: string;
+    metadataFields: readonly SystemEventMetadataField[];
+    remediationKind: SystemEventRemediationKind;
+}
+
+const field = (path: string, label: string): SystemEventMetadataField => ({ path, label });
+
+const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
+    planning: {
+        producerPackage: 'spur',
+        subsystem: 'planning',
+        metadataFields: [
+            field('entity.kind', 'Entity kind'),
+            field('entity.id', 'Entity'),
+            field('field', 'Field'),
+            field('from', 'From'),
+            field('to', 'To'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    queue: {
+        producerPackage: '@gobing-ai/ts-infra',
+        subsystem: 'job-queue',
+        metadataFields: [
+            field('jobId', 'Job'),
+            field('type', 'Type'),
+            field('attempt', 'Attempt'),
+            field('maxRetries', 'Max retries'),
+            field('durationMs', 'Duration (ms)'),
+            field('error', 'Error'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    scheduler: {
+        producerPackage: '@gobing-ai/ts-infra',
+        subsystem: 'scheduler',
+        metadataFields: [field('name', 'Job'), field('durationMs', 'Duration (ms)'), field('error', 'Error')],
+        remediationKind: 'prefix-filter',
+    },
+    message: {
+        producerPackage: 'spur',
+        subsystem: 'team-messaging',
+        metadataFields: [
+            field('msgId', 'Message'),
+            field('fromId', 'From'),
+            field('toId', 'To'),
+            field('threadId', 'Thread'),
+            field('createdAt', 'Created'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    process: {
+        producerPackage: '@gobing-ai/ts-runtime',
+        subsystem: 'process-executor',
+        metadataFields: [
+            field('label', 'Label'),
+            field('pid', 'PID'),
+            field('exitCode', 'Exit code'),
+            field('signal', 'Signal'),
+            field('durationMs', 'Duration (ms)'),
+            field('reason', 'Reason'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    workflow: {
+        producerPackage: '@gobing-ai/ts-dual-workflow-engine',
+        subsystem: 'workflow',
+        metadataFields: [
+            field('runId', 'Run'),
+            field('workflowName', 'Workflow'),
+            field('phase', 'Phase'),
+            field('node', 'Node'),
+            field('from', 'From'),
+            field('to', 'To'),
+            field('kind', 'Kind'),
+            field('durationMs', 'Duration (ms)'),
+            field('reason', 'Reason'),
+        ],
+        remediationKind: 'workflow-trace',
+    },
+    rule: {
+        producerPackage: '@gobing-ai/ts-rule-engine',
+        subsystem: 'rule-engine',
+        metadataFields: [
+            field('runId', 'Run'),
+            field('ruleId', 'Rule'),
+            field('severity', 'Severity'),
+            field('evaluator', 'Evaluator'),
+            field('findings', 'Findings'),
+            field('durationMs', 'Duration (ms)'),
+            field('error', 'Error'),
+        ],
+        remediationKind: 'rule-trace',
+    },
+    agent: {
+        producerPackage: '@gobing-ai/ts-ai-runner',
+        subsystem: 'agent-runner',
+        metadataFields: [
+            field('agentId', 'Agent'),
+            field('agentType', 'Agent type'),
+            field('agent', 'Agent'),
+            field('operation', 'Operation'),
+            field('label', 'Label'),
+            field('exitCode', 'Exit code'),
+            field('durationMs', 'Duration (ms)'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    team: {
+        producerPackage: 'spur',
+        subsystem: 'team',
+        metadataFields: [
+            field('teamId', 'Team'),
+            field('memberId', 'Member'),
+            field('agentType', 'Agent type'),
+            field('memberCount', 'Members'),
+            field('taskId', 'Task'),
+            field('outcome', 'Outcome'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    history: {
+        producerPackage: 'spur',
+        subsystem: 'history',
+        metadataFields: [
+            field('source', 'Source'),
+            field('sources', 'Sources'),
+            field('files', 'Files'),
+            field('messages', 'Messages'),
+            field('durationMs', 'Duration (ms)'),
+            field('exitCode', 'Exit code'),
+            field('detail', 'Detail'),
+            field('cwd', 'Project root'),
+            field('artifactPath', 'Artifact'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    bus: {
+        producerPackage: '@gobing-ai/ts-infra',
+        subsystem: 'event-bus',
+        metadataFields: [
+            field('event', 'Event'),
+            field('handlers', 'Handlers'),
+            field('durationMs', 'Duration (ms)'),
+            field('error', 'Error'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+    api: {
+        producerPackage: 'spur',
+        subsystem: 'http-api',
+        metadataFields: [
+            field('method', 'Method'),
+            field('path', 'Path'),
+            field('status', 'Status'),
+            field('code', 'Code'),
+            field('requestId', 'Request'),
+        ],
+        remediationKind: 'prefix-filter',
+    },
+};
 
 function event(
     name: string,
@@ -48,6 +235,7 @@ function event(
     payloadPolicy: SystemEventPayloadPolicy = 'metadata-only',
     tier: SystemEventTier = 'default',
 ): SystemEventCatalogEntry {
+    const profile = SOURCE_PROFILES[source];
     return {
         name,
         prefix: name.split('.')[0] ?? name,
@@ -61,7 +249,21 @@ function event(
         streamed: true,
         payloadPolicy,
         renderer,
+        ...profile,
+        severity: inferSeverity(name),
+        description: describeEvent(name),
     };
+}
+
+function inferSeverity(name: string): SystemEventSeverity {
+    if (/(?:failed|error|denied)$/.test(name)) return 'error';
+    if (/(?:retrying|paused|stopped|dropped)$/.test(name)) return 'warning';
+    return 'info';
+}
+
+function describeEvent(name: string): string {
+    const words = name.replaceAll('.', ' ').replaceAll('_', ' ');
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)} lifecycle event.`;
 }
 
 /**
@@ -231,11 +433,41 @@ export interface SystemEventCatalogMetadata {
     source: SystemEventSource;
     tier: SystemEventTier;
     renderer: string;
+    producerPackage: SystemEventProducerPackage;
+    subsystem: string;
+    severity: SystemEventSeverity;
+    description: string;
+    metadataFields: readonly SystemEventMetadataField[];
+    remediationKind: SystemEventRemediationKind;
 }
 
 /** Public-facing projection of {@link SYSTEM_EVENT_CATALOG} with payload fields stripped for API responses. */
 export const SYSTEM_EVENT_CATALOG_METADATA: SystemEventCatalogMetadata[] = SYSTEM_EVENT_CATALOG.map(
-    ({ name, prefix, source, tier, renderer }) => ({ name, prefix, source, tier, renderer }),
+    ({
+        name,
+        prefix,
+        source,
+        tier,
+        renderer,
+        producerPackage,
+        subsystem,
+        severity,
+        description,
+        metadataFields,
+        remediationKind,
+    }) => ({
+        name,
+        prefix,
+        source,
+        tier,
+        renderer,
+        producerPackage,
+        subsystem,
+        severity,
+        description,
+        metadataFields,
+        remediationKind,
+    }),
 );
 
 /** Look up the catalog entry for a given event name; returns `undefined` when the name is unregistered. */
@@ -256,41 +488,23 @@ export function normalizeSystemEventPayload(
     eventPayload: unknown,
     secretValues: readonly string[] = [],
 ): Record<string, unknown> | null {
-    if (eventPayload === null || eventPayload === undefined) return null;
-    if (typeof eventPayload !== 'object') {
-        return { value: redactSecretValue(eventPayload, secretValues) };
-    }
-    const source = eventPayload as Record<string, unknown>;
-    if (entry.payloadPolicy === 'raw-safe') return redactSecretValues({ ...source }, secretValues);
-
-    const redacted = { ...source };
-    for (const key of ['body', 'content', 'message', 'prompt', 'query', 'response', 'value']) {
-        if (key in redacted) {
-            redacted[key] = '[redacted]';
-        }
-    }
-    return redactSecretValues(redacted, secretValues);
+    return projectSystemEventData(entry, eventPayload, secretValues);
 }
 
-/** Defense-in-depth: scan every string value, including values nested in arrays,
- * for the 0365 secret pattern and configured secrets before bounding (R4). */
-const MAX_FIELD_LENGTH = 256;
-
-function redactSecretValue(value: unknown, secretValues: readonly string[]): unknown {
-    if (typeof value === 'string') return redactAndBound(value, secretValues, MAX_FIELD_LENGTH);
-    if (Array.isArray(value)) return value.map((item) => redactSecretValue(item, secretValues));
-    if (value !== null && typeof value === 'object') {
-        return redactSecretValues({ ...(value as Record<string, unknown>) }, secretValues);
-    }
-    return value;
-}
-
-function redactSecretValues(
-    payload: Record<string, unknown>,
-    secretValues: readonly string[],
-): Record<string, unknown> {
-    for (const key of Object.keys(payload)) {
-        payload[key] = redactSecretValue(payload[key], secretValues);
-    }
-    return payload;
-}
+export type {
+    SystemEventAction,
+    SystemEventActionKind,
+    SystemEventCorrelationContext,
+    SystemEventEnvelopeV2,
+    SystemEventProducerPackage,
+    SystemEventProjectContext,
+    SystemEventRemediationKind,
+    SystemEventSeverity,
+} from './system-event-envelope';
+export {
+    buildSystemEventEnvelope,
+    isSystemEventEnvelopeV2,
+    projectStoredSystemEventEnvelope,
+    SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
+    systemEventProjectContext,
+} from './system-event-envelope';

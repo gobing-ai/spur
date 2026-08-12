@@ -345,6 +345,12 @@ when the task used the pipeline.
 - Clients consume contract types via `OpenAPILink` only.
 - Domain types stay in owning `@gobing-ai/ts-*` packages, never in contracts.
 
+## System Event surface
+
+Persisted and SSE System Event payloads use the canonical v2 envelope built in `packages/app`;
+legacy rows are projected on read without rewriting storage. Shape and policy:
+`docs/design/actionable-observability-context.md` and `docs/04_DESIGN.md §7.9`.
+
 ---
 
 ## Database / migrations

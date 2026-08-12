@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Build the canonical actionable System Event envelope and context projection"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J5
@@ -13,7 +13,7 @@ tags: ["observability", "system-events", "backend"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-12T13:24:51.362Z"
-updated_at: "2026-08-12T13:28:03.156Z"
+updated_at: "2026-08-12T14:35:08.146Z"
 ---
 
 ## 0526. Build the canonical actionable System Event envelope and context projection
@@ -86,17 +86,63 @@ Invariants: redaction precedes bounds and persistence; envelope construction can
 6. Add cross-family integration/redaction/bounds tests.
 7. Update ADR/design/architecture surfaces through doc-evolve and run targeted gates.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `packages/app/src/services/system-event-envelope.ts:139` adds the failure-isolated v2 builder, bounded allow-list/redaction projection, normalized correlation, deterministic actions, and legacy read adapter.
+- `packages/app/src/services/event-names.ts:76` makes producer package/subsystem, severity, description, metadata fields, and remediation kind explicit for every catalog family.
+- `packages/app/src/services/system-event-tap.ts:51` and `packages/app/src/services/system-event-emitter.ts:43` route server and CLI persistence through the canonical builder with injected project/secret context.
+- `apps/server/src/modules/events/index.ts:215` emits the same envelope over SSE and projects legacy history rows at read time without storage rewrites; `apps/server/src/context.ts:505` owns server project/secret injection.
+- `packages/app/src/services/rule-service.ts:474` enriches upstream rule lifecycle events with Spur run/time/severity/evaluator context and strips complete finding details.
+- `packages/app/tests/services/system-event-envelope.test.ts:1`, server event integration tests, and CLI ledger/planning tests cover representative families, unsafe data, bounds, legacy rows, malformed input, and persisted/streamed parity.
+- `docs/design/actionable-observability-context.md:1`, `docs/03_ARCHITECTURE.md:589`, `docs/04_DESIGN.md:1452`, and `AGENTS.md:348` synchronize the shipped envelope boundary while leaving Board/trace consumers assigned to tasks 0527–0528.
 ### Testing
+**Verdict: PASS**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/system-event-envelope.ts:174`; tap, emitter, SSE, and history use the canonical v2 builder/projection. |
+| R2 | MET | `packages/app/src/services/event-names.ts:76`; all catalog families expose actionable metadata. |
+| R3 | MET | `packages/app/src/services/system-event-envelope.ts:231`; exact allow-list projection, redaction, and conservative action identifiers. |
+| R4 | MET | `packages/app/src/services/system-event-envelope.ts:213`; composition-root context and legacy read projection. |
+| R5 | MET | `packages/app/src/services/rule-service.ts:474`; enriched rule bridge without finding bodies. |
+| R6 | MET | `packages/app/tests/services/system-event-envelope.test.ts:18`; malformed, unknown, hostile, bounds, and integration coverage. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — Every new System Event carries one versioned actionable envelope | MET | test | Persistence and SSE suites pass. |
+| Scenario: R2 — Events identify the current project and their owning package | MET | test | Catalog and envelope suites pass. |
+| Scenario: R3 — Correlation and remediation are derived without leaking unsafe payloads | MET | test | Arbitrary-record, secrets, and unsafe-run-id regressions pass. |
+| Scenario: R4 — Legacy persisted rows remain understandable without a data migration | MET | test | History projection suites pass. |
+| Scenario: R5 — Upstream rule events carry the correlation Spur cannot infer | MET | test | RuleService-to-ledger integration passes. |
+| Scenario: R6 — Malformed or unknown event data fails safe | MET | test | Forged v2, circular, unknown, hostile getter, and malformed JSON cases pass. |
+
+**Verification evidence**
+
+- `bun run autofix && bun run spur-check`: pass; 4,960 tests, 0 failures, 16,386 assertions, 99.27% aggregate line coverage.
+- `bun run lint`: pass; Biome and all seven workspace typechecks clean.
+- `bun run test-cf`: pass; 1 Worker integration test.
+- `bun run build`: pass; CLI, server, and web.
+- `bun run corpus-check`: pass; 0 new and 0 stale findings outside the accepted baseline.
+- `bunx wrangler deploy --dry-run --config apps/server/wrangler.toml`: pass; 932.65 KiB bundle.
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | All | `packages/app/src/services/system-event-envelope.ts:140` | No unresolved P1–P3 findings after remediation. The shared builder is the correct seam; trust-boundary validation and failure isolation remain explicit. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | One v2 builder feeds persistence, SSE, and history. |
+| R2 | MET | Catalog profiles cover every registered event family. |
+| R3 | MET | Non-raw-safe events use exact paths; arbitrary aliases cannot survive; unsafe identifiers create no command action. |
+| R4 | MET | Project context is injected at server/CLI roots and legacy rows project without migration. |
+| R5 | MET | Rule bridge adds run/time/severity/evaluator and removes complete finding bodies. |
+| R6 | MET | Failure isolation and representative regressions pass. |
+
+Functional Verdict: PASS
+
+**Disposition**
+
+PASS — the prior command-injection, arbitrary-payload retention, and forged-v2 findings are fixed and covered by adversarial tests.
 ### References
 
 J5
@@ -104,3 +150,6 @@ J5
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-12T13:55:12.598Z todo → wip (system)
+- 2026-08-12T14:34:18.461Z wip → testing (system)
+- 2026-08-12T14:35:08.146Z testing → done (system)

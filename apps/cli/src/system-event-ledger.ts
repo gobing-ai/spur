@@ -19,6 +19,7 @@ import {
     registerSystemEventTap,
     type SystemEventBus,
     type SystemEventTap,
+    systemEventProjectContext,
 } from '@gobing-ai/spur-app';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from './context';
@@ -66,6 +67,7 @@ export async function attachSystemEventLedger(
         tap = registerSystemEventTap(bus, dao, logger, {
             diagnosticEnabled: options.diagnosticEnabled === true,
             secretValues: configuredSecretValues(context.env ?? {}),
+            projectContext: systemEventProjectContext(context.cwd),
         });
     } catch (error) {
         // Unmigrated workspace / locked DB / missing table: log + continue.

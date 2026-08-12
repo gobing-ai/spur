@@ -13,7 +13,13 @@
  * swallowed so the file mutation still succeeds (R5).
  */
 
-import { configuredSecretValues, type EventEmitter, type PlanningEvent, SystemEventEmitter } from '@gobing-ai/spur-app';
+import {
+    configuredSecretValues,
+    type EventEmitter,
+    type PlanningEvent,
+    SystemEventEmitter,
+    systemEventProjectContext,
+} from '@gobing-ai/spur-app';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from './context';
 
@@ -44,6 +50,7 @@ export function makePlanningEmitter(context: CliContext): EventEmitter {
                     logger,
                     {},
                     configuredSecretValues(context.env ?? {}),
+                    systemEventProjectContext(context.cwd),
                 );
                 await cached.emit(event);
             } catch (error) {

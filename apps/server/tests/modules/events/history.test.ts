@@ -12,6 +12,9 @@ import {
 /** Build a stub ServerContext whose systemEventDao returns the given rows. */
 function ctxWithRows(rows: SystemEventRow[]): ServerContext {
     return {
+        cwd: '/workspace/acme',
+        systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+        systemEventSecretValues: () => [],
         systemEventDao: async () => ({
             query: async () => rows,
         }),
@@ -23,6 +26,9 @@ function ctxCapturingQuery(
     onQuery: (spec: SystemEventQuery) => SystemEventRow[] | Promise<SystemEventRow[]>,
 ): ServerContext {
     return {
+        cwd: '/workspace/acme',
+        systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+        systemEventSecretValues: () => [],
         systemEventDao: async () => ({
             query: async (spec: SystemEventQuery) => onQuery(spec),
         }),
@@ -118,13 +124,22 @@ describe('GET /api/events/history', () => {
             actor: 'operator',
             prefix: 'task',
             renderer: 'planning',
-            payload: { field: 'status' },
+            payload: expect.objectContaining({
+                schemaVersion: 2,
+                data: { field: 'status' },
+                context: expect.objectContaining({
+                    producer: { package: 'spur', subsystem: 'planning' },
+                }),
+            }),
             runId: null,
             entityKind: 'task',
             entityId: '0369',
             sequence: null,
         });
-        expect(body.events[1]?.payload).toBeNull();
+        expect(body.events[1]?.payload).toEqual(expect.objectContaining({ schemaVersion: 2, data: null }));
+        const firstPayload = body.events[0]?.payload as Record<string, unknown>;
+        const firstContext = firstPayload.context as Record<string, unknown>;
+        expect(firstContext.project).toEqual({ name: 'acme', root: '/workspace/acme' });
         expect(body.catalog.some((entry) => entry.name === 'task.updated' && entry.prefix === 'task')).toBe(true);
     });
 
@@ -336,7 +351,7 @@ describe('GET /api/events/history', () => {
         expect(event?.eventName).toBe('workflow.phase');
         expect(event?.occurredAt).toBe('2026-07-04T10:00:02.000Z');
         expect(event?.prefix).toBe('workflow');
-        expect(event?.payload).toEqual({ phase: 'implement' });
+        expect(event?.payload).toEqual(expect.objectContaining({ schemaVersion: 2, data: { phase: 'implement' } }));
     });
 
     test('pre-migration rows project the correlation fields as null', async () => {
@@ -366,6 +381,35 @@ describe('GET /api/events/history', () => {
         expect(body.events[0]?.entityKind).toBeNull();
         expect(body.events[0]?.entityId).toBeNull();
         expect(body.events[0]?.sequence).toBeNull();
+    });
+
+    test('malformed unknown legacy payload projects a bounded generic envelope instead of failing history', async () => {
+        const rows: SystemEventRow[] = [
+            {
+                id: 'sev-malformed',
+                event_name: 'future.unknown',
+                occurred_at: '2026-07-04T09:00:00.000Z',
+                actor: null,
+                payload_json: '{not-json',
+                run_id: null,
+                entity_kind: null,
+                entity_id: null,
+                sequence: null,
+            },
+        ];
+        const app = new Hono();
+        eventsModule.mount(app, ctxWithRows(rows));
+
+        const res = await app.fetch(new Request('http://localhost/api/events/history'));
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { events: Array<{ payload: Record<string, unknown> }> };
+        expect(body.events[0]?.payload).toEqual(
+            expect.objectContaining({
+                schemaVersion: 2,
+                data: null,
+                presentation: expect.objectContaining({ summary: 'Unknown system event' }),
+            }),
+        );
     });
 
     test('empty name string is treated as undefined (no filter)', async () => {

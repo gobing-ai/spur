@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.24.0
+version: 1.25.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-12
@@ -51,7 +51,7 @@ When collaborating with the design team:
 | [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
-| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | accepted design                |
+| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | envelope foundation implemented; Board/trace pending |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -520,11 +520,11 @@ emit from `apps/cli/src/commands/history.ts` (daily verb) via the existing
 | `history.daily.failed`      | `history-daily`   | the daily command exited non-zero or threw                  |
 
 All three are `metadata-only`, `default` tier — history payloads may carry `cwd`, file paths, and error
-text quoting source content; `raw-safe` would persist that. The normalizer
-(`normalizeSystemEventPayload`) strips `body`/`content`/`message`/`prompt`/`query`/`response`/`value`
-and redacts configured secrets. `await ledger.flush()` runs in a `finally` on **both** the success and
-failure paths — without it, a run-once process exits before the async inserts land, reproducing the
-exact "0 rows" symptom this task exists to end.
+text quoting source content; `raw-safe` would persist that. The canonical envelope builder retains
+only catalog-declared history metadata, excludes content-bearing fields, and redacts configured
+secrets before bounds. `await ledger.flush()` runs in a `finally` on **both** the success and failure
+paths — without it, a run-once process exits before the async inserts land, reproducing the exact
+"0 rows" symptom this task exists to end.
 
 **Four-layer missed-run detection (R5, R6).** No single layer is the sole signal:
 
@@ -1449,18 +1449,26 @@ The `SPUR_DIAGNOSTIC_EVENTS` flag ships through `serverBootstrapConfig(env).even
 building the stream name list. Diagnostic entries remain in the catalog so the UI can
 filter them by `tier` once the toggle is enabled — no CLI restart required.
 
-**Payload normalization.** `normalizeSystemEventPayload(entry, payload, secretValues?)` applies
-the catalog payload policy before persistence/streaming. Sensitive keys are blanked for non-raw-safe
-policies; the 0365 credential pattern and supplied configured secret values are replaced recursively
-across primitive strings, objects, and arrays before each string is bounded to 256 characters.
-`registerSystemEventTap(..., { secretValues })` and `SystemEventEmitter(..., retention, secretValues)`
-carry this optional input. Server and CLI composition roots derive it with
-`configuredSecretValues(env)`; callers that omit it still receive credential-pattern redaction.
+**Envelope v2 and payload projection (task 0526).** Fresh persistence and SSE use the same
+`buildSystemEventEnvelope(entry, payload, project, secretValues?)` boundary. The payload becomes
+`{ schemaVersion: 2, data, context, presentation }`; catalog metadata supplies the concrete producer
+package/subsystem, default severity, description, retained presentation fields, and remediation kind.
+`metadata-only` is a real allow-list with recursive depth/array/object/node/string bounds. Content
+bodies, prompts, commands/environment, arbitrary business payloads, complete rule finding arrays,
+and stdout/stderr are excluded; credential patterns and configured secrets are redacted before those
+bounds. Server and CLI composition roots inject both project name/root and configured secret values.
 
-**Source families (task 0221 R2).** `SystemEventSource` is the producer family
-(`planning | queue | scheduler | message | process | workflow | rule | agent | bus | api`).
-The catalog declaration order is the canonical order; `SYSTEM_EVENT_PREFIXES` is derived
-and powers the UI prefix filter.
+`projectStoredSystemEventEnvelope` preserves canonical v2 rows and wraps legacy raw rows at the
+history response only; it never rewrites stored history. Correlation accepts direct and nested
+run/execution/action/entity/job identifiers, with indexed ledger columns remaining query authority.
+Unknown names and malformed optional payloads degrade to a bounded generic envelope without failing
+the product operation. Canonical shape, projection paths, and pending consumer contracts live in
+[`actionable-observability-context.md`](design/actionable-observability-context.md).
+
+**Source families (tasks 0221/0526).** `SystemEventSource` is the producer family
+(`planning | queue | scheduler | message | process | workflow | rule | agent | team | history | bus |
+api`). Each catalog entry additionally fixes its concrete producer package and subsystem. The catalog
+declaration order is canonical; `SYSTEM_EVENT_PREFIXES` is derived and powers the UI prefix filter.
 
 **Event-name alias policy (task 0221 R4).** Where upstream and canonical names diverge
 (e.g. engine `workflow.action.start` vs. observability adapter `workflow.action.started`),

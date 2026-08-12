@@ -98,8 +98,10 @@ describe('CLI planning events -> system_events ledger (0249)', () => {
         expect(transitioned).toBeDefined();
         const payload = parsePayload(transitioned as SystemEventRow);
         // Normalized payload carries the from→to status the planning renderer renders.
-        expect(payload?.from).toBe('backlog');
-        expect(payload?.to).toBe('todo');
+        expect(payload?.schemaVersion).toBe(2);
+        const data = payload?.data as Record<string, unknown> | undefined;
+        expect(data?.from).toBe('backlog');
+        expect(data?.to).toBe('todo');
         // Source/renderer are populated by the catalog normalization path — sink matches
         // the Board-driven shape so the tabview renders them identically (R4).
         expect(transitioned?.actor).toBeNull(); // PlanningEvent carries no actor field
@@ -123,8 +125,10 @@ describe('CLI planning events -> system_events ledger (0249)', () => {
         expect(transitioned).toBeDefined();
         const payload = parsePayload(transitioned as SystemEventRow);
         // default feature status is `backlog`; forward step `backlog -> active` yields from=backlog.
-        expect(payload?.from).toBe('backlog');
-        expect(payload?.to).toBe('active');
+        expect(payload?.schemaVersion).toBe(2);
+        const data = payload?.data as Record<string, unknown> | undefined;
+        expect(data?.from).toBe('backlog');
+        expect(data?.to).toBe('active');
     });
 
     test('read-only spur task verbs do NOT open the DB (lazy emitter) (R4)', async () => {

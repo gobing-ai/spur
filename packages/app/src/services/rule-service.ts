@@ -26,7 +26,6 @@ import {
     type RulePersistenceAdapter,
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { bridgeEventBus } from './event-bridge';
 
 /** Local project rules root, relative to the working directory. */
 const LOCAL_RULES_DIR = join('.spur', 'rules');
@@ -235,12 +234,14 @@ export class RuleService {
                 selectedRule === undefined ? { cwd: this.context.cwd } : { cwd: this.context.cwd, rule: selectedRule },
             ),
         };
+        const ruleEvents = new EventBus<RuleEngineEvents>();
+        this.forwardRuleEvents(ruleEvents, runId, filteredRules);
         const engineOptions = {
             persistence,
             runId,
             runMeta,
             fileSystem: this.context.fs,
-            ...(this.context.events !== undefined ? { events: bridgeEventBus(this.context.events) } : {}),
+            events: ruleEvents,
         };
         const engine = new RuleEngine(engineOptions);
         let result: RuleEngineResult;
@@ -251,6 +252,7 @@ export class RuleService {
                 color,
                 stopOnFirst,
                 fixMode,
+                ruleEvents,
             );
             result = engineResult;
             enabledCount = enabled;
@@ -465,6 +467,70 @@ export class RuleService {
     }
 
     /**
+     * Spur-owned enrichment bridge for upstream rule events. The engine keeps
+     * its domain-local contract; the Board bus receives the run correlation and
+     * evaluator context only Spur knows, with complete finding objects omitted.
+     */
+    private forwardRuleEvents(
+        localBus: EventBus<RuleEngineEvents>,
+        runId: string,
+        rules: readonly ConstraintRule[],
+    ): void {
+        const serverBus = this.context.events;
+        if (!serverBus) return;
+        const byId = new Map(rules.map((rule) => [rule.id, rule]));
+        const at = (): string => new Date().toISOString();
+        const evaluationContext = (ruleId: string): { severity: FailOnSeverity; evaluator: string } => {
+            const rule = byId.get(ruleId);
+            return { severity: rule?.severity ?? 'warning', evaluator: rule?.evaluator.type ?? 'unknown' };
+        };
+
+        localBus.on('rule.run.start', (detail) => {
+            void serverBus.emit('rule.run.start', {
+                ...detail,
+                runId,
+                at: at(),
+                severity: 'info',
+                evaluator: 'rule-engine',
+            });
+        });
+        localBus.on('rule.eval.start', (detail) => {
+            void serverBus.emit('rule.eval.start', {
+                ...detail,
+                ...evaluationContext(detail.ruleId),
+                runId,
+                at: at(),
+            });
+        });
+        localBus.on('rule.eval.done', ({ details: _details, ...detail }) => {
+            void serverBus.emit('rule.eval.done', {
+                ...detail,
+                ...evaluationContext(detail.ruleId),
+                runId,
+                at: at(),
+            });
+        });
+        localBus.on('rule.eval.error', (detail) => {
+            void serverBus.emit('rule.eval.error', {
+                ...detail,
+                ...evaluationContext(detail.ruleId),
+                severity: 'error',
+                runId,
+                at: at(),
+            });
+        });
+        localBus.on('rule.run.done', (detail) => {
+            void serverBus.emit('rule.run.done', {
+                ...detail,
+                runId,
+                at: at(),
+                severity: detail.findings > 0 ? highestRuleSeverity(rules) : 'info',
+                evaluator: 'rule-engine',
+            });
+        });
+    }
+
+    /**
      * Evaluate all rules in a single engine call, streaming per-rule progress via
      * the engine's EventBus. Progress goes to stderr (`output.error`) to keep
      * stdout clean for the final result. Returns the same aggregate shape as a batch run.
@@ -475,30 +541,13 @@ export class RuleService {
         color: Colorize,
         stopOnFirst?: FailOnSeverity,
         fixMode: FixMode = 'none',
+        localBus: EventBus<RuleEngineEvents> = new EventBus<RuleEngineEvents>(),
     ): Promise<[RuleEngineResult, number]> {
         const enabledRules = rules.filter((r) => r.enabled !== false);
         const disabledRules = rules.filter((r) => r.enabled === false);
         const enabledCount = enabledRules.length;
         const totalCount = rules.length;
 
-        const localBus = new EventBus<RuleEngineEvents>();
-        // When the rule service is constructed with a canonical server EventBus,
-        // forward every rule-engine emit onto it so the system_events tap (R3) and
-        // SSE stream can observe the same lifecycle events the engine produces.
-        if (this.context.events !== undefined) {
-            const serverBus = this.context.events;
-            for (const eventName of [
-                'rule.run.start',
-                'rule.eval.start',
-                'rule.eval.done',
-                'rule.eval.error',
-                'rule.run.done',
-            ] as const) {
-                localBus.on(eventName, (detail: unknown) => {
-                    void serverBus.emit(eventName, detail);
-                });
-            }
-        }
         const engine = new RuleEngine({ ...engineOptions, events: localBus, fileSystem: this.context.fs });
 
         // Header: show total rule count (enabled + disabled).
@@ -894,4 +943,11 @@ export class RuleService {
 
 function compareRuleEntries(left: RuleListEntry, right: RuleListEntry): number {
     return left.file.localeCompare(right.file) || left.id.localeCompare(right.id);
+}
+
+function highestRuleSeverity(rules: readonly ConstraintRule[]): FailOnSeverity {
+    return rules.reduce<FailOnSeverity>(
+        (highest, rule) => (SEVERITY_RANK[rule.severity] > SEVERITY_RANK[highest] ? rule.severity : highest),
+        'info',
+    );
 }

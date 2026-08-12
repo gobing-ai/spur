@@ -122,6 +122,13 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
             expect(runStart.length).toBeGreaterThanOrEqual(1);
             const runDone = await dao.query({ name: 'rule.run.done', limit: 5 });
             expect(runDone.length).toBeGreaterThanOrEqual(1);
+            const evalDone = await dao.query({ name: 'rule.eval.done', limit: 5 });
+            expect(evalDone.length).toBeGreaterThanOrEqual(1);
+
+            const startEnvelope = JSON.parse(runStart[0]?.payload_json ?? '{}');
+            const evalEnvelope = JSON.parse(evalDone[0]?.payload_json ?? '{}');
+            expect(startEnvelope.schemaVersion).toBe(2);
+            expect(evalEnvelope.data.details).toBeUndefined();
         } finally {
             tap.unsubscribe();
         }
@@ -185,7 +192,7 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
             // not leak to the ledger.
             const hitlPayloadJson = hitlRows[0]?.payload_json ?? '';
             expect(hitlPayloadJson).not.toContain('SECRET-PROMPT-MUST-NOT-LEAK');
-            expect(hitlPayloadJson).toContain('[redacted]');
+            expect(hitlPayloadJson).not.toContain('message');
         } finally {
             tap.unsubscribe();
         }
@@ -254,6 +261,18 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
             expect(runStart.length).toBeGreaterThanOrEqual(1);
             const runDone = await dao.query({ name: 'rule.run.done', limit: 5 });
             expect(runDone.length).toBeGreaterThanOrEqual(1);
+            const evalDone = await dao.query({ name: 'rule.eval.done', limit: 5 });
+            expect(evalDone.length).toBeGreaterThanOrEqual(1);
+
+            const startEnvelope = JSON.parse(runStart[0]?.payload_json ?? '{}');
+            const evalEnvelope = JSON.parse(evalDone[0]?.payload_json ?? '{}');
+            expect(startEnvelope.schemaVersion).toBe(2);
+            expect(startEnvelope.context.correlation.runId).toMatch(/^rule_/);
+            expect(startEnvelope.data.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+            expect(evalEnvelope.data.ruleId).toBe('r8-pass');
+            expect(evalEnvelope.data.severity).toBe('error');
+            expect(evalEnvelope.data.evaluator).toBe('path');
+            expect(evalEnvelope.data.details).toBeUndefined();
         } finally {
             tap.unsubscribe();
         }

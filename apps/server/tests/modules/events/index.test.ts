@@ -21,6 +21,9 @@ describe('eventsModule', () => {
 
         // Minimal ServerContext with a stub eventBus
         const ctx = {
+            cwd: '/workspace/acme',
+            systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+            systemEventSecretValues: () => ['private-value'],
             eventBus: () => ({
                 on: () => {},
                 off: () => {},
@@ -75,6 +78,9 @@ describe('eventsModule', () => {
         const offCalls: Array<{ name: string; handler: unknown }> = [];
 
         const ctx = {
+            cwd: '/workspace/acme',
+            systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+            systemEventSecretValues: () => ['private-value'],
             eventBus: () => ({
                 on: (name: string, handler: (event: unknown) => void) => {
                     if (!handlers.has(name)) handlers.set(name, []);
@@ -102,7 +108,12 @@ describe('eventsModule', () => {
         const handler = taskCreatedHandler as Array<(event: unknown) => void>;
         expect(handler.length).toBe(1);
 
-        const testEvent = { entity: { kind: 'task', id: '0001' }, event: 'task.created', at: new Date().toISOString() };
+        const testEvent = {
+            entity: { kind: 'task', id: '0001' },
+            event: 'task.created',
+            at: new Date().toISOString(),
+            metadata: { token: 'private-value' },
+        };
         handler[0]?.(testEvent);
 
         // Read the SSE output — should contain the forwarded event
@@ -112,6 +123,9 @@ describe('eventsModule', () => {
         const eventText = decoder.decode(eventValue);
         expect(eventText).toContain('task.created');
         expect(eventText).toContain('"entity"');
+        expect(eventText).toContain('"schemaVersion":2');
+        expect(eventText).toContain('"name":"acme"');
+        expect(eventText).not.toContain('private-value');
     });
 
     test('cancel cleans up bus subscriptions', async () => {

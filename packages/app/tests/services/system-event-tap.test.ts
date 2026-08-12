@@ -6,7 +6,7 @@ import type {
     SystemEventRow,
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { normalizeSystemEventPayload } from '../../src/services/event-names';
+import { normalizeSystemEventPayload, systemEventCatalogEntry } from '../../src/services/event-names';
 import { extractSystemEventCorrelation, registerSystemEventTap } from '../../src/services/system-event-tap';
 
 /** In-memory fake DAO recording every insert and pruneQuotas call. */
@@ -51,6 +51,12 @@ class CapturingLogger {
 
 function fakeDao(opts?: { failOn?: number }): SystemEventDao {
     return new FakeSystemEventDao(opts) as unknown as SystemEventDao;
+}
+
+function requireEntry(name: string) {
+    const entry = systemEventCatalogEntry(name);
+    if (!entry) throw new Error(`catalog entry missing: ${name}`);
+    return entry;
 }
 
 describe('registerSystemEventTap', () => {
@@ -101,45 +107,27 @@ describe('registerSystemEventTap', () => {
 
         const fake = dao as unknown as FakeSystemEventDao;
         const payload = JSON.parse(fake.inserted[0]?.payload_json ?? '{}') as Record<string, unknown>;
-        expect(payload.query).toBe('[redacted]');
-        expect(payload.message).toBe('[redacted]');
-        expect(payload.runId).toBe('run-1');
+        expect(payload.schemaVersion).toBe(2);
+        const data = payload.data as Record<string, unknown>;
+        expect(data.query).toBeUndefined();
+        expect(data.message).toBeUndefined();
+        expect(data.runId).toBe('run-1');
 
         tap.unsubscribe();
     });
 
     test('normalizes primitive payloads for generic persistence', () => {
-        const payload = normalizeSystemEventPayload(
-            {
-                name: 'task.updated',
-                prefix: 'task',
-                source: 'planning',
-                tier: 'default',
-                persisted: true,
-                streamed: true,
-                payloadPolicy: 'metadata-only',
-                renderer: 'planning',
-            },
-            'ok',
-        );
+        const payload = normalizeSystemEventPayload(requireEntry('task.updated'), 'ok');
         expect(payload).toEqual({ value: 'ok' });
     });
 
     test('redacts sensitive fields for the redacted payload policy', () => {
-        const payload = normalizeSystemEventPayload(
-            {
-                name: 'workflow.hitl.ask',
-                prefix: 'workflow',
-                source: 'workflow',
-                tier: 'default',
-                persisted: true,
-                streamed: true,
-                payloadPolicy: 'redacted',
-                renderer: 'workflow-hitl',
-            },
-            { runId: 'run-1', message: 'secret prompt text', node: 'review' },
-        );
-        expect(payload).toEqual({ runId: 'run-1', message: '[redacted]', node: 'review' });
+        const payload = normalizeSystemEventPayload(requireEntry('workflow.hitl.ask'), {
+            runId: 'run-1',
+            message: 'secret prompt text',
+            node: 'review',
+        });
+        expect(payload).toEqual({ runId: 'run-1', node: 'review' });
     });
 
     test('persists run correlation from the 0365 envelope into the indexed columns', async () => {
@@ -191,7 +179,7 @@ describe('registerSystemEventTap', () => {
         tap.unsubscribe();
     });
 
-    test('an event with no correlation persists nulls rather than being dropped', async () => {
+    test('normalizes direct entity identity into indexed correlation columns', async () => {
         const dao = fakeDao();
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
         const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
@@ -203,7 +191,7 @@ describe('registerSystemEventTap', () => {
         expect(fake.inserted).toHaveLength(1);
         expect(fake.inserted[0]?.run_id).toBeNull();
         expect(fake.inserted[0]?.entity_kind).toBeNull();
-        expect(fake.inserted[0]?.entity_id).toBeNull();
+        expect(fake.inserted[0]?.entity_id).toBe('0001');
         expect(fake.inserted[0]?.sequence).toBeNull();
 
         tap.unsubscribe();

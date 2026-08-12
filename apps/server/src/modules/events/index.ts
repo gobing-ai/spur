@@ -5,12 +5,14 @@ import type { ServerContext } from '../../context';
 import { sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
 import {
-    normalizeSystemEventPayload,
+    buildSystemEventEnvelope,
+    projectStoredSystemEventEnvelope,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
     SYSTEM_EVENT_PREFIXES,
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
+    systemEventProjectContext,
 } from './event-names';
 
 /**
@@ -127,6 +129,15 @@ export const eventsModule: ServerModule = {
     mount(app: Hono, ctx: ServerContext | undefined): void {
         if (!ctx) return;
 
+        const projectContext =
+            typeof (ctx as Partial<ServerContext>).systemEventProjectContext === 'function'
+                ? ctx.systemEventProjectContext()
+                : systemEventProjectContext(ctx.cwd ?? '');
+        const secretValues =
+            typeof (ctx as Partial<ServerContext>).systemEventSecretValues === 'function'
+                ? ctx.systemEventSecretValues()
+                : [];
+
         // Build the SSE stream name list once per server boot, honoring the
         // diagnostic tier toggle from bootConfig (R5). `STREAMED_NAMES` alone
         // only covers `default`; diagnostic entries are appended when enabled.
@@ -201,7 +212,7 @@ export const eventsModule: ServerModule = {
                                 actor: extractSystemEventActor(event),
                                 prefix: entry?.prefix ?? name.split('.')[0],
                                 renderer: entry?.renderer ?? 'generic',
-                                payload: entry ? normalizeSystemEventPayload(entry, event) : null,
+                                payload: buildSystemEventEnvelope(entry, event, projectContext, secretValues),
                             };
                             try {
                                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));
@@ -314,7 +325,12 @@ export const eventsModule: ServerModule = {
                 actor: row.actor,
                 prefix: systemEventCatalogEntry(row.event_name)?.prefix ?? row.event_name.split('.')[0],
                 renderer: systemEventCatalogEntry(row.event_name)?.renderer ?? 'generic',
-                payload: row.payload_json ? JSON.parse(row.payload_json) : null,
+                payload: projectStoredSystemEventEnvelope(
+                    systemEventCatalogEntry(row.event_name),
+                    parseStoredPayload(row.payload_json),
+                    projectContext,
+                    secretValues,
+                ),
                 // Indexed correlation columns (task 0369). Purely additive: every
                 // existing field keeps its name and meaning, and pre-migration
                 // rows surface these as null rather than being dropped (R6).
@@ -334,3 +350,13 @@ export const eventsModule: ServerModule = {
         });
     },
 };
+
+/** Malformed legacy JSON is observability data, never an API-failing condition. */
+function parseStoredPayload(payloadJson: string | null): unknown {
+    if (payloadJson === null) return null;
+    try {
+        return JSON.parse(payloadJson);
+    } catch {
+        return null;
+    }
+}

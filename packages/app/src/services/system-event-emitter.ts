@@ -14,8 +14,13 @@
 
 import { createId, type SystemEventDao, type SystemEventRetentionQuotas } from '@gobing-ai/spur-domain';
 import type { Logger } from '@gobing-ai/ts-infra';
-import { normalizeSystemEventPayload, systemEventCatalogEntry } from './event-names';
+import { systemEventCatalogEntry } from './event-names';
 import type { EventEmitter, PlanningEvent } from './planning-write-service';
+import {
+    buildSystemEventEnvelope,
+    type SystemEventProjectContext,
+    systemEventProjectContext,
+} from './system-event-envelope';
 import type { SystemEventRetentionConfig } from './system-event-retention';
 import { resolveRetentionQuotas } from './system-event-retention';
 import { extractSystemEventActor, extractSystemEventCorrelation, safeStringify } from './system-event-tap';
@@ -43,6 +48,7 @@ export class SystemEventEmitter implements EventEmitter {
         private readonly logger: SystemEventEmitterLogger,
         retention: SystemEventRetentionConfig = {},
         private readonly secretValues: readonly string[] = [],
+        private readonly projectContext: SystemEventProjectContext = systemEventProjectContext(''),
     ) {
         // Resolve once at construction (task 0368 R3): absent config falls back
         // to the documented per-prefix default. Insert-time prune (R5) scopes to
@@ -61,7 +67,9 @@ export class SystemEventEmitter implements EventEmitter {
                 event_name: entry.name,
                 occurred_at: event.at,
                 actor: extractSystemEventActor(event),
-                payload_json: safeStringify(normalizeSystemEventPayload(entry, event, this.secretValues)),
+                payload_json: safeStringify(
+                    buildSystemEventEnvelope(entry, event, this.projectContext, this.secretValues),
+                ),
                 // Indexed correlation columns (task 0369). Planning events carry
                 // `entity: { kind, id }`; the shared extractor keeps this path's
                 // derivation identical to the server tap's.

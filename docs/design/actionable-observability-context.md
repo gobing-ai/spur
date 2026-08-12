@@ -2,7 +2,8 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** accepted design (feature J5; tasks 0526–0528).
+**Status:** envelope foundation implemented (task 0526); Board and trace consumers remain in tasks
+0527–0528.
 **Decision:** ADR-056.
 
 ## System Event envelope
@@ -60,7 +61,16 @@ and credential patterns are redacted before the per-string and aggregate bounds.
 Envelope construction is failure-isolated. Unknown names use a bounded generic presentation;
 malformed optional values are omitted, never fabricated.
 
-## Board projection
+The implementation boundary is `packages/app/src/services/system-event-envelope.ts`:
+`buildSystemEventEnvelope` is the only fresh-write/SSE builder, while
+`projectStoredSystemEventEnvelope` preserves canonical v2 rows and adapts legacy raw rows on read.
+Server and CLI composition roots inject the current project and configured secret values. The
+catalog in `event-names.ts` supplies each producer package, subsystem, default severity,
+description, retained metadata fields, and remediation kind. `RuleService` forwards the upstream
+rule-engine events through a Spur-owned bridge that adds the Spur run id, ISO time, severity, and
+evaluator while excluding complete finding details.
+
+## Board projection (pending task 0527)
 
 Desktop columns are `Time | Severity | Event | Summary | Project / Producer | Correlation | Outcome |
 Action`. Prefix, tier, actor, sequence, and raw redacted data move to expanded detail. Compact mode
@@ -70,7 +80,7 @@ The event-name tooltip renders `description`, `fields`, project/producer, and op
 available by hover and focus, can be pinned for selection/copy, and closes with Escape or outside
 activation. Raw redacted JSON stays in expanded detail rather than dominating the tooltip.
 
-## Trace DTO additions
+## Trace DTO additions (pending task 0528)
 
 Existing keys are retained. Additions are optional so stored rows with missing metadata remain valid.
 

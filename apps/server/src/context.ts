@@ -22,12 +22,14 @@ import {
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
     hitlConfirmDefault,
+    systemEventProjectContext as makeSystemEventProjectContext,
     type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
     ProcessInventoryService as ProcessInventoryServiceImpl,
     RuleService as RuleServiceImpl,
     RunStoreService as RunStoreServiceImpl,
     SupervisorService as SupervisorServiceImpl,
+    type SystemEventProjectContext,
     TaskService as TaskServiceImpl,
     TeamService as TeamServiceImpl,
     TokenLedgerService as TokenLedgerServiceImpl,
@@ -189,6 +191,12 @@ export interface ServerContext {
     /** Lazy SystemEventDao (system_events ledger) for the history endpoint + tap. */
     systemEventDao(): Promise<SystemEventDao>;
 
+    /** Current-project identity injected into persisted, streamed, and legacy-projected envelopes. */
+    systemEventProjectContext(): SystemEventProjectContext;
+
+    /** Configured secret values applied before System Event projection bounds. */
+    systemEventSecretValues(): readonly string[];
+
     /**
      * Lazy run-store read service (task 0373) — list / detail / WBS lookup over
      * `runs` + child tables. Application layer owns query composition + redaction;
@@ -291,6 +299,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const dbUrl = options.dbUrl ?? join(cwd, DEFAULT_DATABASE_URL);
     const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<ServerEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
+    const eventProjectContext = makeSystemEventProjectContext(cwd);
+    const eventSecretValues = configuredSecretValues(options.env ?? process.env);
     // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
     // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
     const folders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
@@ -492,10 +502,18 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return systemEventDaoPromise;
         },
 
+        systemEventProjectContext(): SystemEventProjectContext {
+            return eventProjectContext;
+        },
+
+        systemEventSecretValues(): readonly string[] {
+            return eventSecretValues;
+        },
+
         runStoreService(): RunStoreService {
             runStoreSvc ??= new RunStoreServiceImpl({
                 getDb: this.getDb.bind(this),
-                secretValues: configuredSecretValues(options.env ?? process.env),
+                secretValues: eventSecretValues,
             });
             return runStoreSvc;
         },

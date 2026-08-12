@@ -5,7 +5,12 @@ import {
     type SystemEventRetentionQuotas,
 } from '@gobing-ai/spur-domain';
 import type { EventBus, Logger } from '@gobing-ai/ts-infra';
-import { normalizeSystemEventPayload, SYSTEM_EVENT_CATALOG } from './event-names';
+import { SYSTEM_EVENT_CATALOG } from './event-names';
+import {
+    buildSystemEventEnvelope,
+    type SystemEventProjectContext,
+    systemEventProjectContext,
+} from './system-event-envelope';
 import type { SystemEventRetentionConfig } from './system-event-retention';
 import { resolveRetentionQuotas } from './system-event-retention';
 
@@ -51,6 +56,7 @@ export function registerSystemEventTap(
         diagnosticEnabled?: boolean;
         retention?: SystemEventRetentionConfig;
         secretValues?: readonly string[];
+        projectContext?: SystemEventProjectContext;
     } = {},
 ): SystemEventTap {
     const handlers = new Map<string, (event: unknown) => void>();
@@ -73,7 +79,14 @@ export function registerSystemEventTap(
                     event_name: entry.name,
                     occurred_at: new Date().toISOString(),
                     actor: extractSystemEventActor(event),
-                    payload_json: safeStringify(normalizeSystemEventPayload(entry, event, options.secretValues)),
+                    payload_json: safeStringify(
+                        buildSystemEventEnvelope(
+                            entry,
+                            event,
+                            options.projectContext ?? systemEventProjectContext(''),
+                            options.secretValues,
+                        ),
+                    ),
                     // Indexed correlation columns (task 0369): derived from the
                     // same event the payload is serialized from, so a row's
                     // columns and payload can never disagree.
@@ -182,7 +195,10 @@ export function extractSystemEventCorrelation(event: unknown): SystemEventCorrel
     if (!event || typeof event !== 'object') return correlation;
     const obj = event as Record<string, unknown>;
 
-    if (typeof obj.runId === 'string' && obj.runId.length > 0) correlation.run_id = obj.runId;
+    const nested =
+        obj.correlation && typeof obj.correlation === 'object' ? (obj.correlation as Record<string, unknown>) : {};
+    const runId = obj.runId ?? obj.run_id ?? nested.runId;
+    if (typeof runId === 'string' && runId.length > 0) correlation.run_id = runId;
     // Reject non-finite sequences rather than persisting NaN into an INTEGER column.
     if (typeof obj.sequence === 'number' && Number.isFinite(obj.sequence)) correlation.sequence = obj.sequence;
 
@@ -192,6 +208,8 @@ export function extractSystemEventCorrelation(event: unknown): SystemEventCorrel
         if (typeof kind === 'string' && kind.length > 0) correlation.entity_kind = kind;
         if (typeof id === 'string' && id.length > 0) correlation.entity_id = id;
     }
+    if (typeof obj.entityKind === 'string' && obj.entityKind.length > 0) correlation.entity_kind = obj.entityKind;
+    if (typeof obj.entityId === 'string' && obj.entityId.length > 0) correlation.entity_id = obj.entityId;
     return correlation;
 }
 

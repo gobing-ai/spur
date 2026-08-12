@@ -384,6 +384,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         diagnosticEnabled: bootConfig.events.diagnostic === true,
                         retention: bootConfig.events.retention,
                         secretValues: configuredSecretValues(env),
+                        projectContext: ctx.systemEventProjectContext(),
                     });
                     appRt.logger.debug('system_events tap registered', {
                         diagnostic: bootConfig.events.diagnostic === true,

@@ -529,7 +529,8 @@ describe('history command', () => {
                 const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
                 expect(failedRow).toBeDefined();
                 const payload = JSON.parse(failedRow?.payload_json ?? '{}');
-                expect(payload.detail).toBe('forced daily exception');
+                expect(payload.schemaVersion).toBe(2);
+                expect(payload.data.detail).toBe('forced daily exception');
             } finally {
                 rmSync(cwd, { recursive: true, force: true });
             }
@@ -575,7 +576,7 @@ describe('history command', () => {
                 const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
                 expect(failedRow).toBeDefined();
                 const payload = JSON.parse(failedRow?.payload_json ?? '{}');
-                expect(payload.detail).toContain('codex: failed (3 parse/validation errors)');
+                expect(payload.data.detail).toContain('codex: failed (3 parse/validation errors)');
             } finally {
                 rmSync(cwd, { recursive: true, force: true });
             }
@@ -606,7 +607,9 @@ describe('history command', () => {
                 const failedRow = rows.find((r) => r.event_name === 'history.daily.failed');
                 expect(failedRow).toBeDefined();
                 const payload = JSON.parse(failedRow?.payload_json ?? '{}');
-                expect(payload.detail).toBe('daily fan-out reported non-zero exit with no failing or degraded source');
+                expect(payload.data.detail).toBe(
+                    'daily fan-out reported non-zero exit with no failing or degraded source',
+                );
             } finally {
                 rmSync(cwd, { recursive: true, force: true });
             }
@@ -651,10 +654,11 @@ describe('CLI history events -> system_events ledger (0471 R2)', () => {
             const importRow = rows.find((r) => r.event_name === 'history.import.completed');
             expect(importRow).toBeDefined();
             const payload = JSON.parse(importRow?.payload_json ?? '{}');
-            expect(payload.sources).toBeGreaterThan(0);
-            expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+            expect(payload.schemaVersion).toBe(2);
+            expect(payload.data.sources).toBeGreaterThan(0);
+            expect(payload.data.durationMs).toBeGreaterThanOrEqual(0);
             // No high-risk text fields survive normalization (metadata-only policy).
-            expect(payload.message ?? payload.content ?? payload.body).toBeUndefined();
+            expect(payload.data.message ?? payload.data.content ?? payload.data.body).toBeUndefined();
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

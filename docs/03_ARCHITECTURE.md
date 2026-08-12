@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.15.0
+version: 1.16.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-12
@@ -586,12 +586,15 @@ Shapes: `docs/design/plugin-surface-parity.md`.
 Planning ownership follows ADR-055: B owns runtime agent execution; I owns the `sp` plugin harness
 described in this section; H is frozen mixed history, not an active destination for new work.
 
-## 16. Actionable Observability Context (accepted design — ADR-056; not yet built)
+## 16. Actionable Observability Context (foundation current — ADR-056; task 0526)
 
 Cataloged events retain their domain-local ts-libs payloads until they cross Spur's canonical
 observability seam. `registerSystemEventTap` and the CLI `SystemEventEmitter` call one pure envelope
 builder before persistence; SSE uses the same projection. The history read path recognizes legacy
 raw payloads and projects them into the current envelope without rewriting storage.
+
+The task-0526 foundation is current. Board semantic rendering and additive workflow/rule trace
+context remain downstream consumers in tasks 0527–0528; neither creates another envelope builder.
 
 ```text
 Spur / @gobing-ai/ts-* typed event

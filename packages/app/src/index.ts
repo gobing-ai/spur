@@ -64,20 +64,26 @@ export { bridgeEventBus } from './services/event-bridge';
 export type {
     SystemEventCatalogEntry,
     SystemEventCatalogMetadata,
+    SystemEventMetadataField,
     SystemEventName,
     SystemEventPayloadPolicy,
     SystemEventSource,
 } from './services/event-names';
 export {
+    buildSystemEventEnvelope,
+    isSystemEventEnvelopeV2,
     normalizeSystemEventPayload,
     PLANNING_EVENT_NAMES,
+    projectStoredSystemEventEnvelope,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
+    SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
     SYSTEM_EVENT_NAMES,
     SYSTEM_EVENT_PERSISTED_NAMES,
     SYSTEM_EVENT_PREFIXES,
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
+    systemEventProjectContext,
 } from './services/event-names';
 export type { FailureRule } from './services/failure-classification';
 export { classifyDispatch } from './services/failure-classification';
@@ -239,6 +245,16 @@ export type {
 export { SupervisorService } from './services/supervisor-service';
 export type { SystemEventEmitterLogger } from './services/system-event-emitter';
 export { SystemEventEmitter } from './services/system-event-emitter';
+export type {
+    SystemEventAction,
+    SystemEventActionKind,
+    SystemEventCorrelationContext,
+    SystemEventEnvelopeV2,
+    SystemEventProducerPackage,
+    SystemEventProjectContext,
+    SystemEventRemediationKind,
+    SystemEventSeverity,
+} from './services/system-event-envelope';
 export type { SystemEventRetentionConfig } from './services/system-event-retention';
 export {
     DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA,

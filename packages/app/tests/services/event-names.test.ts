@@ -80,20 +80,24 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_PREFIXES).toContain('rule');
         expect(SYSTEM_EVENT_PREFIXES).toContain('agent');
         expect(SYSTEM_EVENT_PREFIXES).toContain('bus');
-        expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual({
-            name: 'workflow.action.started',
-            prefix: 'workflow',
-            source: 'workflow',
-            tier: 'default',
-            renderer: 'workflow-action',
-        });
-        expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual({
-            name: 'bus.handler.error',
-            prefix: 'bus',
-            source: 'bus',
-            tier: 'diagnostic',
-            renderer: 'bus',
-        });
+        expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual(
+            expect.objectContaining({
+                name: 'workflow.action.started',
+                prefix: 'workflow',
+                source: 'workflow',
+                tier: 'default',
+                renderer: 'workflow-action',
+            }),
+        );
+        expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual(
+            expect.objectContaining({
+                name: 'bus.handler.error',
+                prefix: 'bus',
+                source: 'bus',
+                tier: 'diagnostic',
+                renderer: 'bus',
+            }),
+        );
         for (const entry of SYSTEM_EVENT_CATALOG) {
             expect(entry.prefix.length).toBeGreaterThan(0);
             expect(entry.renderer.length).toBeGreaterThan(0);
@@ -105,6 +109,11 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             // `SPUR_DIAGNOSTIC_EVENTS` toggle fires.
             expect(entry.persisted).toBe(true);
             expect(entry.streamed).toBe(true);
+            expect(entry.producerPackage.length).toBeGreaterThan(0);
+            expect(entry.subsystem.length).toBeGreaterThan(0);
+            expect(entry.description.length).toBeGreaterThan(0);
+            expect(entry.metadataFields.length).toBeGreaterThan(0);
+            expect(entry.remediationKind.length).toBeGreaterThan(0);
         }
     });
 
@@ -256,8 +265,8 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         expect(result?.usage).toBe('unavailable');
         expect(result?.outcome).toBe('success');
         expect(result?.reason).toBe('completed');
-        // High-risk text field is redacted by fixed-key list
-        expect(result?.body).toBe('[redacted]');
+        // High-risk bodies are omitted rather than retained in the envelope.
+        expect(result?.body).toBeUndefined();
     });
 
     test('preserves 0365 envelope fields under raw-safe policy (R3)', () => {
@@ -297,11 +306,13 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
             runId: 'run-001',
             body: 'the api_key=sk-live-abc1234567890 was leaked',
             reason: 'bearer token=abc123 in stderr',
+            arbitraryCustomerRecord: { account: 'must not persist' },
         };
         const result = normalizeSystemEventPayload(entry, payload);
         expect(result).not.toBeNull();
-        // body is fixed-key redacted first, then secret scan on the marker (no-op)
-        expect(result?.body).toBe('[redacted]');
+        // body is excluded entirely.
+        expect(result?.body).toBeUndefined();
+        expect(result?.arbitraryCustomerRecord).toBeUndefined();
         // reason is not in the fixed-key list → secret scan applies
         expect(result?.reason).not.toContain('bearer');
         expect(result?.reason).not.toContain('abc123');
@@ -388,8 +399,8 @@ describe('normalizeSystemEventPayload — history.* (task 0471 R1/R2)', () => {
         expect(result?.files).toBe(42);
         expect(result?.messages).toBe(1337);
         expect(result?.durationMs).toBe(52_400);
-        expect(result?.message).toBe('[redacted]');
-        expect(result?.content).toBe('[redacted]');
+        expect(result?.message).toBeUndefined();
+        expect(result?.content).toBeUndefined();
         expect(JSON.stringify(result)).not.toContain(configuredSecret);
         expect(result?.cwd).toBe('/Users/robin/xprojects/spur-new');
     });
@@ -405,6 +416,6 @@ describe('normalizeSystemEventPayload — history.* (task 0471 R1/R2)', () => {
         expect(result).not.toBeNull();
         expect(result?.exitCode).toBe(2);
         expect(result?.detail).toBe('codex import timed out after 600000ms');
-        expect(result?.message).toBe('[redacted]');
+        expect(result?.message).toBeUndefined();
     });
 });

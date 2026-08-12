@@ -91,9 +91,11 @@ describe('SystemEventEmitter', () => {
         expect(row?.actor).toBeNull();
         // Payload is the normalized event (from/to preserved, no body-redaction keys present).
         const payload = parsePayload(row?.payload_json);
-        expect(payload?.event).toBe('task.transitioned');
-        expect(payload?.from).toBe('todo');
-        expect(payload?.to).toBe('wip');
+        expect(payload?.schemaVersion).toBe(2);
+        const data = payload?.data as Record<string, unknown> | undefined;
+        expect(data?.event).toBe('task.transitioned');
+        expect(data?.from).toBe('todo');
+        expect(data?.to).toBe('wip');
         // Insert-time per-prefix prune (R5): called once, scoped to the just-
         // written prefix so planning overflow never evicts other prefixes.
         expect(dao.pruneCalls).toHaveLength(1);
@@ -154,7 +156,8 @@ describe('SystemEventEmitter', () => {
         expect(dao.inserted).toHaveLength(1);
         expect(dao.inserted[0]?.event_name).toBe('feature.created');
         const payload = parsePayload(dao.inserted[0]?.payload_json);
-        const entity = payload?.entity as Record<string, unknown> | undefined;
+        const data = payload?.data as Record<string, unknown> | undefined;
+        const entity = data?.entity as Record<string, unknown> | undefined;
         expect(entity?.kind).toBe('feature');
     });
 
