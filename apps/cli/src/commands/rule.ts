@@ -6,6 +6,8 @@ import {
     type RuleListServiceResult,
     type RuleRunRow,
     RuleService,
+    type RuleTraceDetail,
+    type RuleTraceRun,
 } from '@gobing-ai/spur-app';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
@@ -252,16 +254,36 @@ function parseFixMode(value: string): 'none' | 'suggest' | 'auto' {
  * Format a list of rule runs as a tab-separated table for plain-text output.
  * Columns: RUN ID, PRESET, STATUS, RULES, FINDINGS, FIXES, STARTED.
  */
-export function formatTraceList(runs: RuleRunRow[]): string {
-    const header = ['RUN ID', 'PRESET', 'STATUS', 'RULES', 'FINDINGS', 'FIXES', 'STARTED'];
+export function formatTraceList(runs: Array<RuleRunRow | RuleTraceRun>): string {
+    const header = [
+        'RUN ID',
+        'PROJECT',
+        'SOURCE',
+        'STATUS',
+        'RULES',
+        'FINDINGS',
+        'FIXES/APPLIED',
+        'STARTED',
+        'COMPLETED',
+        'DURATION',
+        'OUTCOME',
+        'NEXT',
+    ];
     const rows = runs.map((r) => [
         r.id.slice(0, 12),
-        r.preset ?? '-',
+        'project' in r ? r.project.name : 'unavailable',
+        'source' in r
+            ? `${r.source.kind}:${r.source.value}`
+            : `${r.source_kind}:${r.source_value ?? r.preset ?? 'unavailable'}`,
         r.status,
         String(r.rule_count),
         String(r.finding_count),
-        String(r.fix_count),
-        r.started_at.slice(0, 19).replace('T', ' '),
+        `${r.fix_count}/${r.applied_fix_count}`,
+        r.started_at || 'unavailable',
+        r.completed_at ?? 'unavailable',
+        r.duration_ms === null ? 'unavailable' : `${r.duration_ms}ms`,
+        'outcome' in r ? r.outcome : 'unavailable',
+        'nextAction' in r && r.nextAction !== undefined ? r.nextAction.value : '-',
     ]);
     return [header.join('\t'), ...rows.map((row) => row.join('\t'))].join('\n');
 }
@@ -270,23 +292,37 @@ export function formatTraceList(runs: RuleRunRow[]): string {
  * Format a single rule run detail (run metadata + per-rule evaluation rows)
  * for plain-text output.
  */
-export function formatTraceDetail(detail: { run: RuleRunRow; evaluations: RuleEvalRunRow[] }): string {
+export function formatTraceDetail(
+    detail: RuleTraceDetail | { run: RuleRunRow; evaluations: RuleEvalRunRow[] },
+): string {
     const r = detail.run;
     const lines: string[] = [];
     lines.push(`Run: ${r.id} — ${r.preset ?? '-'} — ${r.status}`);
     lines.push(
-        `Rules: ${r.rule_count}   Findings: ${r.finding_count}   Fixes: ${r.fix_count}   Duration: ${r.duration_ms != null ? `${(r.duration_ms / 1000).toFixed(2)}s` : '-'}`,
+        `Project: ${'project' in r ? `${r.project.name} (${r.project.root})` : 'unavailable'}   Source: ${'source' in r ? `${r.source.kind}:${r.source.value}` : `${r.source_kind}:${r.source_value ?? r.preset ?? 'unavailable'}`}`,
+    );
+    lines.push(
+        `Started: ${r.started_at || 'unavailable'}   Completed: ${r.completed_at ?? 'unavailable'}   Duration: ${r.duration_ms != null ? `${(r.duration_ms / 1000).toFixed(2)}s` : 'unavailable'}`,
+    );
+    lines.push(
+        `Rules: ${r.rule_count}   Findings: ${r.finding_count}   Fixes: ${r.fix_count}   Applied: ${r.applied_fix_count}`,
     );
     const stopOn = r.stop_on_first ?? 'none';
-    lines.push(`Fail-on: ${r.fail_on ?? 'error'}   Stop-on-first: ${stopOn}   Fix-mode: ${r.fix_mode}`);
+    lines.push(
+        `Fail-on: ${r.fail_on ?? 'unavailable'}   Stop-on-first: ${stopOn}   Fix-mode: ${r.fix_mode}   Dry-run: ${r.dry_run === 1 ? 'yes' : 'no'}   Outcome: ${'outcome' in r ? r.outcome : 'unavailable'}`,
+    );
+    if ('nextAction' in r && r.nextAction !== undefined) {
+        lines.push(`Next: ${r.nextAction.label} — ${r.nextAction.value}`);
+    }
     lines.push('');
     for (const ev of detail.evaluations) {
         const icon = ev.status === 'failed' ? '✗' : ev.status === 'done' && ev.finding_count > 0 ? '!' : '✓';
-        const dur = ev.duration_ms != null ? `${ev.duration_ms}ms` : '-';
-        lines.push(`  ${icon} ${ev.rule_id.padEnd(30)} ${String(ev.finding_count).padStart(3)} findings   ${dur}`);
-        if (ev.error) {
-            lines.push(`    error: ${ev.error}`);
-        }
+        const dur = ev.duration_ms != null ? `${ev.duration_ms}ms` : 'unavailable';
+        lines.push(
+            `  ${icon} ${ev.rule_id}  severity=${ev.severity} evaluator=${ev.evaluator} status=${ev.status} findings=${ev.finding_count} fixes=${ev.fix_count} duration=${dur}`,
+        );
+        lines.push(`    started=${ev.started_at || 'unavailable'} completed=${ev.completed_at ?? 'unavailable'}`);
+        lines.push(`    error: ${ev.error ?? 'unavailable'}`);
     }
     return lines.join('\n');
 }

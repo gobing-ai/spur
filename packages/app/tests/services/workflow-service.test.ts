@@ -789,6 +789,95 @@ describe('WorkflowAppService', () => {
             }
             await rm(dir, { recursive: true, force: true });
         });
+
+        test('projects actionable context and allow-listed action metadata without raw output (0528)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-context-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+            const context = { ...makeCtx(dir), secretValues: ['top-secret'] };
+            const svc = new WorkflowAppService(context);
+            await svc.run(path, { runId: 'trace-context-1' });
+            const db = await context.getDb();
+            await db.run(
+                `UPDATE runs SET status = 'failed', started_at = ?, completed_at = ?, metadata_json = ? WHERE id = ?`,
+                '2026-08-12T10:00:00.000Z',
+                '2026-08-12T10:01:00.000Z',
+                JSON.stringify({ failureReason: 'action-failed' }),
+                'trace-context-1',
+            );
+            await db.run(
+                `INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, ok, result_json, started_at, completed_at, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                'action-1',
+                'trace-context-1',
+                'implement',
+                'agent.run',
+                'failed',
+                60000,
+                0,
+                JSON.stringify({
+                    ok: false,
+                    data: {
+                        exitCode: 1,
+                        agent: 'codex',
+                        stdoutTail: 'top-secret raw output',
+                        invocation: {
+                            agent: 'codex',
+                            command: 'codex',
+                            argv: ['top-secret prompt'],
+                            model: 'gpt-5',
+                            timeoutMs: 60000,
+                        },
+                    },
+                    error: 'provider failed with top-secret',
+                }),
+                '2026-08-12T10:00:00.000Z',
+                '2026-08-12T10:01:00.000Z',
+                99,
+            );
+            await db.run(
+                `INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, ok, result_json, started_at, completed_at, created_at)
+                 VALUES ('action-2', 'trace-context-1', 'broken', 'shell', 'failed', NULL, 0, '{bad', NULL, NULL, 100)`,
+            );
+            await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+            await writeFile(join(dir, '.spur', 'run', 'trace-context-1-implement-partial.md'), 'partial');
+            await writeFile(join(dir, '.spur', 'run', 'trace-context-1.log'), 'log');
+
+            const result = await svc.trace('trace-context-1');
+            expect(result.run).toMatchObject({
+                project: { name: dir.split('/').at(-1), root: dir },
+                durationMs: 60000,
+                outcome: 'failure',
+                nextAction: { kind: 'path', value: '.spur/run/trace-context-1.log' },
+            });
+            const action = result.events.find((event) => event.kind === 'action');
+            expect(action).toMatchObject({
+                actionId: 'action-1',
+                node: 'implement',
+                durationMs: 60000,
+                outcome: 'failure',
+                result: { agent: 'codex', exitCode: 1 },
+                invocation: { agent: 'codex', command: 'codex', model: 'gpt-5', timeoutMs: 60000 },
+                artifacts: ['.spur/run/trace-context-1-implement-partial.md'],
+                nextAction: { kind: 'path' },
+            });
+            expect(JSON.stringify(action)).not.toContain('argv');
+            expect(JSON.stringify(action)).not.toContain('raw output');
+            expect(JSON.stringify(action)).not.toContain('top-secret');
+            expect(action?.kind === 'action' ? action.error : null).toContain('[REDACTED]');
+            const malformed = result.events.find((event) => event.kind === 'action' && event.actionId === 'action-2');
+            expect(malformed).toMatchObject({
+                durationMs: null,
+                startedAt: null,
+                completedAt: null,
+                result: null,
+                invocation: null,
+                error: null,
+                artifacts: [],
+            });
+            expect(malformed).not.toHaveProperty('nextAction');
+            await rm(dir, { recursive: true, force: true });
+        });
     });
 
     describe('continue — HITL resume (0063, E3)', () => {

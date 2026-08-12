@@ -2,8 +2,7 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** envelope and Board consumers implemented (tasks 0526–0527); trace consumers remain in
-task 0528.
+**Status:** implemented (tasks 0526–0528).
 **Decision:** ADR-056.
 
 ## System Event envelope
@@ -72,11 +71,13 @@ evaluator while excluding complete finding details.
 
 ## Board projection (task 0527)
 
-Desktop columns are `Time | Severity | Event | Summary | Project / Producer | Correlation | Outcome |
-Action`. Prefix, tier, actor, sequence, and raw redacted data move to expanded detail. Compact mode
-keeps `Time | Event` and stacks summary, producer/correlation, outcome, and action below the name.
+Desktop columns are `Time | Severity | Event | Summary | Producer | Correlation | Outcome |
+Action`. Prefix, tier, actor, sequence, project name/root, and raw redacted data move to expanded
+detail. Compact mode keeps `Time | Event` and stacks summary, producer/correlation, outcome, and
+action below the name. Project is omitted from the table because it is injected current-project
+context and is constant for a Board view.
 
-The event-name tooltip renders `description`, `fields`, project/producer, and optional action. It is
+The event-name tooltip renders `description`, `fields`, producer, and optional action. It is
 available by hover and focus, can be pinned for selection/copy, and closes with Escape or outside
 activation. Raw redacted JSON stays in expanded detail rather than dominating the tooltip.
 
@@ -84,33 +85,42 @@ activation. Raw redacted JSON stays in expanded detail rather than dominating th
 semantic view feeds both table and tooltip; canonical `data` is unwrapped into the existing
 `SystemEventRow.payload` field so the Jobs and Tasks tabs keep their established input contract. The
 full envelope remains attached only for expanded System Events detail. Legacy or malformed shapes
-produce explicit `unavailable` values and no action.
+produce explicit `unavailable` sentinels and no action. The Board renders those sentinels as `-`.
 
-## Trace DTO additions (pending task 0528)
+## Trace DTO additions (task 0528)
 
-Existing keys are retained. Additions are optional so stored rows with missing metadata remain valid.
+Existing keys are retained. The read projector supplies additions for every row; missing stored
+metadata becomes `null` or `unavailable`.
 
 ```ts
 interface TraceProjectContext { name: string; root: string }
 interface TraceNextAction { label: string; kind: 'command' | 'path'; value: string }
 
 interface WorkflowTraceEntryAdditions {
-    project?: TraceProjectContext;
-    durationMs?: number;
+    project: TraceProjectContext;
+    durationMs: number | null;
+    outcome: string;
     nextAction?: TraceNextAction;
 }
 
 interface WorkflowActionTimelineAdditions {
-    startedAt?: string;
-    completedAt?: string;
-    invocation?: { agent?: string; model?: string; summary?: string };
-    error?: string;
+    durationMs: number | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    outcome: string;
+    result: Record<string, string | number | boolean> | null;
+    invocation: Record<string, string | number | boolean> | null;
+    error: string | null;
+    artifacts: string[];
     nextAction?: TraceNextAction;
 }
 
-interface RuleTraceContextAdditions {
-    project?: TraceProjectContext;
-    source?: { kind: string; value?: string };
+interface RuleTraceRunAdditions {
+    project: TraceProjectContext;
+    source: { kind: string; value: string };
+    timing: { startedAt: string; completedAt: string | null; durationMs: number | null };
+    policy: { failOn: string; stopOnFirst: string; fixMode: string; dryRun: boolean };
+    outcome: string;
     nextAction?: TraceNextAction;
 }
 ```
@@ -120,3 +130,13 @@ enters trace output. A running run may point to the existing `trace --follow` co
 failed action may point to an existing partial-work artifact. Rule trace reconstructs a command only
 when the persisted source kind/value is sufficient; otherwise it prints the source reference with no
 fabricated action.
+
+Workflow list, detail, and follow human output render the same normalized run fields. Transition
+rows retain both endpoints and their persisted timestamp; action rows expose id, node, status,
+timestamps, allow-listed invocation fields, outcome/error/cost, and existing artifacts. JSON keeps
+all pre-existing keys and adds these fields.
+
+Rule list/detail projections retain the DAO keys and add project, normalized source/timing/policy,
+outcome, and exact action when reconstructable. Evaluation rows retain severity, evaluator,
+timestamps, counts, and bounded error. Persisted finding/fix JSON keeps only structural fields;
+finding messages and replacement bodies are excluded. Malformed metadata becomes `{}` or `null`.

@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
-import type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-app';
+import type { RuleEvalRunRow, RuleRunRow, RuleTraceDetail, RuleTraceRun } from '@gobing-ai/spur-app';
 import { formatTraceDetail, formatTraceList } from '../../src/commands/rule';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -323,29 +323,35 @@ describe('rule trace end-to-end', () => {
         const listOutput = createCapturedOutput();
         const listExit = await main(['rule', 'trace', '--json'], { cwd, output: listOutput, dbUrl });
         expect(listExit).toBe(0);
-        const { runs } = JSON.parse(listOutput.messages.join('')) as { runs: RuleRunRow[] };
+        const { runs } = JSON.parse(listOutput.messages.join('')) as { runs: RuleTraceRun[] };
         expect(runs).toHaveLength(1);
         expect(runs[0]?.status).toBe('done');
         expect(runs[0]?.rule_count).toBe(1);
         expect(runs[0]?.source_kind).toBe('file');
+        expect(runs[0]?.project).toEqual({ name: cwd.slice(cwd.lastIndexOf('/') + 1), root: cwd });
+        expect(runs[0]?.source).toEqual({ kind: 'file', value: file });
+        expect(runs[0]?.timing).toHaveProperty('startedAt');
+        expect(runs[0]).toHaveProperty('duration_ms');
 
         const runId = runs[0]?.id ?? '';
         const detailOutput = createCapturedOutput();
         const detailExit = await main(['rule', 'trace', runId, '--json'], { cwd, output: detailOutput, dbUrl });
         expect(detailExit).toBe(0);
-        const detail = JSON.parse(detailOutput.messages.join('')) as {
-            run: RuleRunRow;
-            evaluations: RuleEvalRunRow[];
-        };
+        const detail = JSON.parse(detailOutput.messages.join('')) as RuleTraceDetail;
         expect(detail.run.id).toBe(runId);
         expect(detail.evaluations).toHaveLength(1);
         expect(detail.evaluations[0]?.rule_id).toBe('sample-rule');
         expect(detail.evaluations[0]?.status).toBe('done');
+        expect(detail.evaluations[0]).toHaveProperty('severity');
+        expect(detail.evaluations[0]).toHaveProperty('evaluator');
+        expect(detail.evaluations[0]).toHaveProperty('timing');
 
         const plainOutput = createCapturedOutput();
         const plainExit = await main(['rule', 'trace', runId], { cwd, output: plainOutput, dbUrl });
         expect(plainExit).toBe(0);
         expect(plainOutput.messages.at(-1)).toContain('sample-rule');
+        expect(plainOutput.messages.at(-1)).toContain('Project:');
+        expect(plainOutput.messages.at(-1)).toContain('Source: file:');
     });
 });
 
@@ -402,7 +408,7 @@ describe('formatTraceList', () => {
             },
         ];
         const output = formatTraceList(runs);
-        expect(output).toContain('\t-\t');
+        expect(output).toContain('preset:unavailable');
     });
 });
 
@@ -483,7 +489,7 @@ describe('formatTraceDetail', () => {
         expect(output).toContain('1.42s');
         expect(output).toContain('no-hardcoded-secrets');
         expect(output).toContain('no-biome-suppressions');
-        expect(output).toContain('  2 findings');
+        expect(output).toContain('findings=2');
     });
 
     test('renders error for failed eval rows', () => {

@@ -26,6 +26,12 @@ import {
     type RulePersistenceAdapter,
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { configuredSecretValues, redactAndBound } from '../observability/agent-execution';
+import {
+    type SystemEventAction,
+    type SystemEventProjectContext,
+    systemEventProjectContext,
+} from './system-event-envelope';
 
 /** Local project rules root, relative to the working directory. */
 const LOCAL_RULES_DIR = join('.spur', 'rules');
@@ -101,6 +107,29 @@ export interface RuleEvaluationServiceResult {
     /** Present when fixMode='auto' and fixes were applied (not a dry-run). */
     applied?: FixApplicationResult;
     exitCode: number;
+}
+
+/** Additive, trace-safe projection of one persisted rule run. */
+export interface RuleTraceRun extends RuleRunRow {
+    project: SystemEventProjectContext;
+    source: { kind: string; value: string };
+    timing: { startedAt: string; completedAt: string | null; durationMs: number | null };
+    policy: { failOn: string; stopOnFirst: string; fixMode: string; dryRun: boolean };
+    outcome: string;
+    nextAction?: SystemEventAction;
+}
+
+/** Additive, trace-safe projection of one persisted rule evaluation. */
+export interface RuleTraceEvaluation extends RuleEvalRunRow {
+    timing: { startedAt: string; completedAt: string | null; durationMs: number | null };
+    findings: number;
+    fixes: number;
+}
+
+/** Persisted rule trace detail returned to human and JSON formatters. */
+export interface RuleTraceDetail {
+    run: RuleTraceRun;
+    evaluations: RuleTraceEvaluation[];
 }
 
 /** Options for RuleService.validate(). */
@@ -406,16 +435,17 @@ export class RuleService {
         status?: string;
         since?: string;
         limit: number;
-    }): Promise<{ runs: RuleRunRow[] }> {
+    }): Promise<{ runs: RuleTraceRun[] }> {
         const db = await this.context.getDb?.();
         if (!db) return { runs: [] };
         const dao = new RuleRunDao(db);
         const runs = await dao.list(filter);
-        return { runs };
+        const secretValues = configuredSecretValues(this.context.env);
+        return { runs: runs.map((run) => projectRuleTraceRun(run, this.context.cwd, secretValues)) };
     }
 
     /** Show per-run detail including eval rows. */
-    async traceDetail(runId: string): Promise<{ run: RuleRunRow; evaluations: RuleEvalRunRow[] }> {
+    async traceDetail(runId: string): Promise<RuleTraceDetail> {
         const db = await this.context.getDb?.();
         if (!db) throw new Error('Run not found');
         const runDao = new RuleRunDao(db);
@@ -423,7 +453,11 @@ export class RuleService {
         const run = await runDao.byId(runId);
         if (!run) throw new Error('Run not found');
         const evaluations = await evalDao.byRunId(runId);
-        return { run, evaluations };
+        const secretValues = configuredSecretValues(this.context.env);
+        return {
+            run: projectRuleTraceRun(run, this.context.cwd, secretValues),
+            evaluations: evaluations.map((evaluation) => projectRuleTraceEvaluation(evaluation, secretValues)),
+        };
     }
 
     // ── Private helpers ────────────────────────────────────────────────
@@ -939,6 +973,121 @@ export class RuleService {
         const separatorIndex = normalized.indexOf('/');
         return separatorIndex > 0 ? normalized.slice(0, separatorIndex) : null;
     }
+}
+
+const TRACE_PRESET = /^[A-Za-z0-9._-]+$/;
+
+function projectRuleTraceRun(run: RuleRunRow, cwd: string, secretValues: readonly string[]): RuleTraceRun {
+    const sourceValue = traceSourceValue(run, secretValues);
+    const nextAction = ruleTraceNextAction(run.source_kind, sourceValue);
+    const startedAt = ruleTraceTimestamp(run.started_at);
+    const completedAt = run.completed_at === null ? null : ruleTraceTimestamp(run.completed_at);
+    return {
+        ...run,
+        started_at: startedAt,
+        completed_at: completedAt,
+        metadata_json: safeRuleMetadata(run.metadata_json, secretValues),
+        project: systemEventProjectContext(cwd),
+        source: { kind: boundedTraceText(run.source_kind, secretValues), value: sourceValue },
+        timing: { startedAt, completedAt, durationMs: run.duration_ms },
+        policy: {
+            failOn: run.fail_on ?? 'unavailable',
+            stopOnFirst: run.stop_on_first ?? 'none',
+            fixMode: run.fix_mode,
+            dryRun: run.dry_run === 1,
+        },
+        outcome: run.status === 'done' ? 'success' : run.status === 'failed' ? 'failure' : 'unavailable',
+        ...(nextAction !== undefined ? { nextAction } : {}),
+    };
+}
+
+function projectRuleTraceEvaluation(evaluation: RuleEvalRunRow, secretValues: readonly string[]): RuleTraceEvaluation {
+    const startedAt = ruleTraceTimestamp(evaluation.started_at);
+    const completedAt = evaluation.completed_at === null ? null : ruleTraceTimestamp(evaluation.completed_at);
+    return {
+        ...evaluation,
+        started_at: startedAt,
+        completed_at: completedAt,
+        error: evaluation.error === null ? null : redactAndBound(evaluation.error, secretValues, 512),
+        findings_json: safeRuleArrayJson(evaluation.findings_json, 'finding', secretValues),
+        fixes_json: safeRuleArrayJson(evaluation.fixes_json, 'fix', secretValues),
+        timing: {
+            startedAt,
+            completedAt,
+            durationMs: evaluation.duration_ms,
+        },
+        findings: evaluation.finding_count,
+        fixes: evaluation.fix_count,
+    };
+}
+
+function traceSourceValue(run: RuleRunRow, secretValues: readonly string[]): string {
+    const value = run.source_value ?? run.preset;
+    return typeof value === 'string' && value.length > 0 ? boundedTraceText(value, secretValues, 512) : 'unavailable';
+}
+
+function ruleTraceNextAction(sourceKind: string, sourceValue: string): SystemEventAction | undefined {
+    if (sourceKind === 'preset' && TRACE_PRESET.test(sourceValue)) {
+        return { label: 'Run preset', kind: 'command', value: `spur rule run --preset ${sourceValue}` };
+    }
+    if (sourceKind === 'file' && sourceValue !== 'unavailable' && !/[\0\r\n]/.test(sourceValue)) {
+        return { label: 'Inspect rule source', kind: 'path', value: sourceValue };
+    }
+    return undefined;
+}
+
+function safeRuleMetadata(metadataJson: string, secretValues: readonly string[]): string {
+    try {
+        const parsed = JSON.parse(metadataJson);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '{}';
+        const source = parsed as Record<string, unknown>;
+        const projected: Record<string, string> = {};
+        for (const field of ['cwd', 'rule']) {
+            if (typeof source[field] === 'string')
+                projected[field] = boundedTraceText(source[field], secretValues, 512);
+        }
+        return JSON.stringify(projected);
+    } catch {
+        return '{}';
+    }
+}
+
+function safeRuleArrayJson(
+    json: string | null,
+    kind: 'finding' | 'fix',
+    secretValues: readonly string[],
+): string | null {
+    if (!json) return null;
+    try {
+        const parsed = JSON.parse(json);
+        if (!Array.isArray(parsed)) return null;
+        const fields =
+            kind === 'finding'
+                ? ['ruleId', 'severity', 'filePath', 'line', 'column', 'code', 'kind']
+                : ['ruleId', 'filePath', 'start', 'end', 'mode'];
+        const projected = parsed.slice(0, 100).map((item) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) return {};
+            const source = item as Record<string, unknown>;
+            const out: Record<string, string | number | boolean | null> = {};
+            for (const field of fields) {
+                const value = source[field];
+                if (typeof value === 'string') out[field] = boundedTraceText(value, secretValues, 512);
+                else if (typeof value === 'number' || typeof value === 'boolean' || value === null) out[field] = value;
+            }
+            return out;
+        });
+        return JSON.stringify(projected);
+    } catch {
+        return null;
+    }
+}
+
+function boundedTraceText(value: string, secretValues: readonly string[], limit = 256): string {
+    return redactAndBound(value.replace(/[\r\n]+/g, ' '), secretValues, limit);
+}
+
+function ruleTraceTimestamp(value: string): string {
+    return Number.isFinite(Date.parse(value)) ? value : 'unavailable';
 }
 
 function compareRuleEntries(left: RuleListEntry, right: RuleListEntry): number {

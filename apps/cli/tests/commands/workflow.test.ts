@@ -1037,12 +1037,39 @@ failureStates:
         const exitCode = await main(['workflow', 'trace'], { output, cwd: dir, dbUrl });
         expect(exitCode).toBe(0);
         expect(output.messages.some((m) => m.includes('trace-test-run'))).toBe(true);
+        expect(output.messages.some((m) => m.includes(dir.slice(dir.lastIndexOf('/') + 1)))).toBe(true);
 
         output.messages.length = 0;
         const exitCode2 = await main(['workflow', 'trace', 'trace-test-run'], { output, cwd: dir, dbUrl });
         expect(exitCode2).toBe(0);
         expect(output.messages.some((m) => m.includes('trace-test-run'))).toBe(true);
         expect(output.messages.some((m) => m.includes('note'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('Project:'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('started=') && m.includes('outcome='))).toBe(true);
+
+        output.messages.length = 0;
+        const jsonExit = await main(['workflow', 'trace', 'trace-test-run', '--json'], {
+            output,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(jsonExit).toBe(0);
+        const trace = JSON.parse(output.messages.join('')) as WorkflowTraceTimeline;
+        expect(trace.run.runId).toBe('trace-test-run');
+        expect(trace.run.workflowName).toBe('cli-action-flow');
+        expect(trace.run.project).toEqual({ name: dir.slice(dir.lastIndexOf('/') + 1), root: dir });
+        expect(trace.run).toHaveProperty('durationMs');
+        expect(trace.run).toHaveProperty('outcome');
+        expect(trace.events.find((event) => event.kind === 'transition')).toMatchObject({
+            from: 'start',
+            to: 'done',
+        });
+        expect(trace.events.find((event) => event.kind === 'action')).toMatchObject({
+            actionKind: 'note',
+            startedAt: expect.any(String),
+            completedAt: expect.any(String),
+            outcome: 'success',
+        });
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -1641,7 +1668,15 @@ function makeActionEvent(cost?: ActionCost): TimelineEvent {
         actionKind: 'agent.run',
         status: 'done',
         duration: '120ms',
+        durationMs: 120,
+        startedAt: '2026-01-15T10:00:00.000Z',
+        completedAt: '2026-01-15T10:00:00.120Z',
         ok: true,
+        outcome: 'success',
+        result: null,
+        invocation: null,
+        error: null,
+        artifacts: [],
         label: ' ✓',
         cost,
     };
@@ -1649,7 +1684,7 @@ function makeActionEvent(cost?: ActionCost): TimelineEvent {
 
 describe('formatActionCost', () => {
     test('returns empty string for non-action events', () => {
-        const event: TimelineEvent = { kind: 'transition', from: 'a', to: 'b', trigger: null };
+        const event: TimelineEvent = { kind: 'transition', from: 'a', to: 'b', trigger: null, at: '1' };
         expect(formatActionCost(event)).toBe('');
     });
 
@@ -1689,6 +1724,9 @@ describe('formatTraceTimeline cost footer', () => {
                 startedAt: '2026-01-15T10:00:00.000Z',
                 completedAt: '2026-01-15T10:05:00.000Z',
                 isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: 300000,
+                outcome: 'success',
             },
             events,
         };
@@ -1716,6 +1754,9 @@ describe('formatTraceTimeline output artifact (task 0414)', () => {
                 startedAt: '2026-01-15T10:00:00.000Z',
                 completedAt: null,
                 isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: null,
+                outcome: 'running',
             },
             events: [],
             ...overrides,
@@ -1731,6 +1772,39 @@ describe('formatTraceTimeline output artifact (task 0414)', () => {
     test('omits the artifact line when no capture exists', () => {
         const out = formatTraceTimeline(makeTimeline());
         expect(out).not.toContain('Agent output');
+    });
+
+    test('renders allow-listed result, invocation, error, artifact, and next action (0528)', () => {
+        const action = makeActionEvent();
+        if (action.kind !== 'action') throw new Error('expected action event');
+        const out = formatTraceTimeline(
+            makeTimeline({
+                run: {
+                    ...makeTimeline().run,
+                    nextAction: { label: 'Follow run', kind: 'command', value: 'spur workflow trace r1 --follow' },
+                },
+                events: [
+                    {
+                        ...action,
+                        result: { agent: 'codex', exitCode: 1 },
+                        invocation: { command: 'codex', model: 'gpt-5' },
+                        error: 'failed safely',
+                        artifacts: ['.spur/run/r1-work-partial.md'],
+                        nextAction: {
+                            label: 'Inspect partial work',
+                            kind: 'path',
+                            value: '.spur/run/r1-work-partial.md',
+                        },
+                    },
+                ],
+            }),
+        );
+        expect(out).toContain('result=agent=codex exitCode=1');
+        expect(out).toContain('invocation=command=codex model=gpt-5');
+        expect(out).toContain('error=failed safely');
+        expect(out).toContain('artifact=.spur/run/r1-work-partial.md');
+        expect(out).toContain('Next: Inspect partial work');
+        expect(out).toContain('Next: Follow run');
     });
 });
 
@@ -1847,6 +1921,9 @@ describe('followTrace', () => {
                 startedAt: '2026-01-15T10:00:00.000Z',
                 completedAt: null,
                 isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: null,
+                outcome: 'running',
             },
             events: [
                 {
@@ -1856,13 +1933,27 @@ describe('followTrace', () => {
                     actionKind: 'agent.run',
                     status: 'running',
                     duration: '',
-                    ok: false,
+                    durationMs: null,
+                    startedAt: '2026-01-15T10:00:00.000Z',
+                    completedAt: null,
+                    ok: null,
+                    outcome: 'running',
+                    result: null,
+                    invocation: null,
+                    error: null,
+                    artifacts: [],
                     label: ' (in-flight)',
                 },
             ],
         };
         const done: WorkflowTraceTimeline = {
-            run: { ...running.run, status: 'done', completedAt: '2026-01-15T10:01:00.000Z' },
+            run: {
+                ...running.run,
+                status: 'done',
+                completedAt: '2026-01-15T10:01:00.000Z',
+                durationMs: 60000,
+                outcome: 'success',
+            },
             events: [
                 {
                     kind: 'action',
@@ -1871,7 +1962,15 @@ describe('followTrace', () => {
                     actionKind: 'agent.run',
                     status: 'done',
                     duration: '60000ms',
+                    durationMs: 60000,
+                    startedAt: '2026-01-15T10:00:00.000Z',
+                    completedAt: '2026-01-15T10:01:00.000Z',
                     ok: true,
+                    outcome: 'success',
+                    result: null,
+                    invocation: null,
+                    error: null,
+                    artifacts: [],
                     label: ' ✓',
                 },
             ],
@@ -1888,7 +1987,7 @@ describe('followTrace', () => {
 
         expect(writes[0]).toContain('agent.run');
         expect(writes.some((line) => line.includes('60000ms'))).toBe(true);
-        expect(writes.at(-1)).toBe('Run finalized: done');
+        expect(writes.at(-1)).toBe('Run finalized: done — outcome=success duration=60000ms');
     });
 });
 

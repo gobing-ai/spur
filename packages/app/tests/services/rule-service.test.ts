@@ -1011,6 +1011,85 @@ describe('RuleService trace', () => {
         expect(since.runs.map((r) => r.id)).toEqual(['run-b']);
     });
 
+    test('projects rule context, policy, safe source action, and sanitized eval metadata (0528)', async () => {
+        const cwd = await createTempProject();
+        const { context, db } = await makeDbContext(cwd, nullOutput());
+        context.env = { SPUR_TEST_TOKEN: 'top-secret' };
+        await db.run(
+            `INSERT INTO rule_runs (
+                id, preset, source_kind, source_value, status, rule_count, finding_count, fix_count,
+                applied_fix_count, fail_on, stop_on_first, fix_mode, dry_run, started_at, completed_at,
+                duration_ms, metadata_json, created_at, updated_at
+             ) VALUES (?, ?, 'preset', NULL, 'failed', 1, 1, 1, 1, 'warning', 'error', 'auto', 1, ?, ?, 42, '{bad', ?, ?)`,
+            'rule-context',
+            'recommended-pre-check',
+            '2026-08-12T10:00:00.000Z',
+            '2026-08-12T10:00:00.042Z',
+            '2026-08-12T10:00:00.000Z',
+            '2026-08-12T10:00:00.042Z',
+        );
+        await db.run(
+            `INSERT INTO rule_eval_runs (
+                id, run_id, rule_id, severity, evaluator, status, finding_count, fix_count, duration_ms,
+                error, findings_json, fixes_json, started_at, completed_at, created_at, updated_at
+             ) VALUES (?, ?, ?, 'error', 'rg', 'failed', 1, 1, 40, ?, ?, ?, ?, ?, ?, ?)`,
+            'eval-context',
+            'rule-context',
+            'no-secret',
+            'failed top-secret',
+            JSON.stringify([
+                {
+                    ruleId: 'no-secret',
+                    severity: 'error',
+                    message: 'top-secret finding body',
+                    filePath: 'src/a.ts',
+                    line: 7,
+                },
+            ]),
+            JSON.stringify([
+                {
+                    ruleId: 'no-secret',
+                    filePath: 'src/a.ts',
+                    start: 1,
+                    end: 2,
+                    replacement: 'top-secret replacement',
+                    mode: 'auto',
+                },
+            ]),
+            '2026-08-12T10:00:00.000Z',
+            '2026-08-12T10:00:00.040Z',
+            '2026-08-12T10:00:00.000Z',
+            '2026-08-12T10:00:00.040Z',
+        );
+
+        const detail = await new RuleService(context).traceDetail('rule-context');
+        expect(detail.run).toMatchObject({
+            project: { name: cwd.split('/').at(-1), root: cwd },
+            source: { kind: 'preset', value: 'recommended-pre-check' },
+            timing: { durationMs: 42 },
+            policy: { failOn: 'warning', stopOnFirst: 'error', fixMode: 'auto', dryRun: true },
+            outcome: 'failure',
+            nextAction: { kind: 'command', value: 'spur rule run --preset recommended-pre-check' },
+            metadata_json: '{}',
+        });
+        expect(detail.evaluations[0]).toMatchObject({
+            severity: 'error',
+            evaluator: 'rg',
+            findings: 1,
+            fixes: 1,
+            timing: { durationMs: 40 },
+        });
+        expect(JSON.stringify(detail)).not.toContain('finding body');
+        expect(JSON.stringify(detail)).not.toContain('replacement');
+        expect(JSON.stringify(detail)).not.toContain('top-secret');
+        expect(detail.evaluations[0]?.error).toContain('[REDACTED]');
+
+        await insertRun(db, 'rule-unsafe-source', '2026-08-12T11:00:00.000Z', 'bad; echo injected');
+        const unsafe = await new RuleService(context).traceDetail('rule-unsafe-source');
+        expect(unsafe.run.source.value).toBe('bad; echo injected');
+        expect(unsafe.run).not.toHaveProperty('nextAction');
+    });
+
     test('traceDetail throws Run not found for a missing id', async () => {
         const cwd = await createTempProject();
         const { context } = await makeDbContext(cwd, nullOutput());

@@ -778,11 +778,15 @@ function formatTraceList(result: WorkflowTraceListResult): string {
     if (result.entries.length === 0) {
         return 'No workflow runs.';
     }
-    const lines = ['RUN ID    WORKFLOW             MODE           STATUS  STARTED               COMPLETED'];
+    const lines = [
+        'RUN ID    PROJECT              WORKFLOW             MODE            STATUS   STARTED                 COMPLETED               DURATION    OUTCOME      NEXT',
+    ];
     for (const entry of result.entries) {
         const dryLabel = entry.isDryRun ? ' [dry]' : '';
+        const duration = entry.durationMs === null ? 'unavailable' : `${entry.durationMs}ms`;
+        const next = entry.nextAction?.value ?? '-';
         lines.push(
-            `${entry.runId.padEnd(10)} ${entry.workflowName.padEnd(22)} ${entry.mode.padEnd(15)} ${entry.status.padEnd(7)} ${entry.startedAt.padEnd(22)} ${(entry.completedAt ?? '-').padEnd(22)}${dryLabel}`,
+            `${entry.runId.padEnd(10)} ${entry.project.name.padEnd(20)} ${entry.workflowName.padEnd(22)} ${entry.mode.padEnd(15)} ${entry.status.padEnd(8)} ${entry.startedAt.padEnd(23)} ${(entry.completedAt ?? 'unavailable').padEnd(23)} ${duration.padEnd(11)} ${entry.outcome.padEnd(12)} ${next}${dryLabel}`,
         );
     }
     return lines.join('\n');
@@ -797,9 +801,12 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     const reasonLabel = run.failureReason ? ` — ${run.failureReason}` : '';
     const lines = [
         `Run: ${run.runId} — ${run.workflowName} (${run.mode}) — ${run.status}${dryLabel}${reasonLabel}`,
-        `Started: ${run.startedAt}   Completed: ${run.completedAt ?? '-'}   Events: ${events.length}`,
+        `Project: ${run.project.name} (${run.project.root})`,
+        `Started: ${run.startedAt}   Completed: ${run.completedAt ?? 'unavailable'}   Duration: ${run.durationMs === null ? 'unavailable' : `${run.durationMs}ms`}`,
+        `Outcome: ${run.outcome}   Events: ${events.length}`,
         '',
     ];
+    if (run.nextAction !== undefined) lines.splice(4, 0, `Next: ${run.nextAction.label} — ${run.nextAction.value}`);
     // Per-run agent-output capture (task 0414): point the operator at the live
     // artifact so a long-running agent.run step is observable mid-flight.
     if (result.outputArtifact !== undefined) {
@@ -827,10 +834,36 @@ function formatTimelineEvent(event: TimelineEvent): string {
     }
     if (event.kind === 'transition') {
         const guard = event.trigger ? `  [${event.trigger}]` : '';
-        return `    → ${event.to}${guard}`;
+        return `    → ${event.from} → ${event.to}${guard}  ${event.at}`;
     }
     const costSuffix = formatActionCost(event);
-    return `    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}${costSuffix}`;
+    const lines = [
+        `    ⚡ ${event.actionId}  ${event.node}/${event.actionKind}  ${event.status}  ${event.duration || 'unavailable'}${event.label}${costSuffix}`,
+        `      started=${event.startedAt ?? 'unavailable'} completed=${event.completedAt ?? 'unavailable'} outcome=${event.outcome}`,
+    ];
+    if (event.result !== null) {
+        lines.push(
+            `      result=${Object.entries(event.result)
+                .map(([key, value]) => `${key}=${String(value)}`)
+                .join(' ')}`,
+        );
+    } else {
+        lines.push('      result=unavailable');
+    }
+    if (event.invocation !== null) {
+        lines.push(
+            `      invocation=${Object.entries(event.invocation)
+                .map(([key, value]) => `${key}=${String(value)}`)
+                .join(' ')}`,
+        );
+    } else {
+        lines.push('      invocation=unavailable');
+    }
+    lines.push(`      error=${event.error ?? 'unavailable'}`);
+    if (event.artifacts.length === 0) lines.push('      artifact=unavailable');
+    else for (const artifact of event.artifacts) lines.push(`      artifact=${artifact}`);
+    if (event.nextAction !== undefined) lines.push(`      Next: ${event.nextAction.label} — ${event.nextAction.value}`);
+    return lines.join('\n');
 }
 
 /**
@@ -873,7 +906,11 @@ export async function followTrace(
         }
         if (isTerminalTraceStatus(next.run.status)) {
             const reason = next.run.failureReason ? ` — ${next.run.failureReason}` : '';
-            write(`Run finalized: ${next.run.status}${reason}`);
+            const duration = next.run.durationMs === null ? 'unavailable' : `${next.run.durationMs}ms`;
+            write(`Run finalized: ${next.run.status}${reason} — outcome=${next.run.outcome} duration=${duration}`);
+            if (next.run.nextAction !== undefined) {
+                write(`Next: ${next.run.nextAction.label} — ${next.run.nextAction.value}`);
+            }
             return;
         }
     }

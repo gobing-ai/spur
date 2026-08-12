@@ -51,7 +51,7 @@ When collaborating with the design team:
 | [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
-| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | envelope foundation implemented; Board/trace pending |
+| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -304,6 +304,10 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   execution order with finding counts, duration, and status. `--json` returns structured DTOs.
   Runs are persisted inline by `spur rule run` when a DB is available (direct writes from the
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
+  Human and JSON projections add project, source, timing, dry-run/fix policy, applied fixes, outcome,
+  per-evaluation severity/evaluator/timestamps, and an exact preset command or source path when safe.
+  Finding messages and fix replacement bodies are not projected; malformed optional JSON becomes
+  explicit unavailable data without failing the command. Existing JSON keys remain present.
   Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
 #### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
@@ -349,7 +353,11 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
   follow source to a raw tail of `.spur/run/<RUNID>.log` (tail -f equivalent), also a human stream
   rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
-  status instead of hanging.
+  status instead of hanging. List/detail/follow share project, run timing/duration/outcome, and exact
+  next-action fields. Detail transitions show both endpoints and their persisted time; actions show
+  id/node/status/timestamps, allow-listed invocation metadata, bounded error, cost, and existing run
+  or partial-work artifacts. Arbitrary action stdout/stderr/argv is never projected; malformed
+  `result_json` produces explicit unavailable fields. Existing JSON keys remain present.
 - `clean [--older-than <minutes>] [--force] [--logs] [--dry-run]` — housekeeping: finalize orphaned
   runs stuck in `running`/`pending` past a staleness threshold (default 30 min) as failed, and
   reclaim retained run logs older than `workflow.logRetentionDays` (`.spur/config.yaml`, default 30
@@ -1466,13 +1474,15 @@ the product operation. Canonical shape, projection paths, and pending consumer c
 [`actionable-observability-context.md`](design/actionable-observability-context.md).
 
 **Board projection (task 0527).** The web client narrows envelope v2 once in its history/SSE parser.
-Desktop renders `Time | Severity | Event | Summary | Project / Producer | Correlation | Outcome |
-Action`; below 640 px it keeps `Time | Event` and stacks the semantic fields. Severity always pairs
-icon and text. The event-name tooltip uses the server-owned description, fields, context, outcome,
+Desktop renders `Time | Severity | Event | Summary | Producer | Correlation | Outcome |
+Action`; below 640 px it keeps `Time | Event` and stacks the semantic fields. The Producer
+column title and value are package / subsystem only. Project name/root are omitted from the
+table and tooltip (constant for a Board view) and remain in expanded detail. Severity always pairs
+icon and text. The event-name tooltip uses the server-owned description, fields, producer, outcome,
 and remediation, with equivalent hover/focus/pin interactions; raw redacted envelope JSON and
 prefix/tier/actor stay in expanded detail. Canonical `data` is unwrapped for the existing Jobs/Tasks
-consumers, while malformed or legacy client input receives explicit `unavailable` semantics and no
-fabricated action.
+consumers, while malformed or legacy client input receives explicit `unavailable` sentinels and no
+fabricated action. The Board renders those sentinels as `-`.
 
 **Source families (tasks 0221/0526).** `SystemEventSource` is the producer family
 (`planning | queue | scheduler | message | process | workflow | rule | agent | team | history | bus |

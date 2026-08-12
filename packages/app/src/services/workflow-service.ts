@@ -38,6 +38,7 @@ import {
     type ProcessExecutor,
     parseYamlObject,
 } from '@gobing-ai/ts-runtime';
+import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
@@ -46,6 +47,11 @@ import type { WorkflowSteeringController } from '../workflow/steering';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus } from './event-bridge';
 import type { RuleService } from './rule-service';
+import {
+    type SystemEventAction,
+    type SystemEventProjectContext,
+    systemEventProjectContext,
+} from './system-event-envelope';
 
 /** Workflow name that triggers a pipeline run-link (matches the shipped `workflows/task-pipeline.yaml`). */
 const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
@@ -278,6 +284,10 @@ export interface WorkflowTraceEntry {
     startedAt: string;
     completedAt: string | null;
     isDryRun: boolean;
+    project: SystemEventProjectContext;
+    durationMs: number | null;
+    outcome: string;
+    nextAction?: SystemEventAction;
     /** Terminal failure reason (e.g. `no-passing-transition`) when the engine recorded one. */
     failureReason?: string;
 }
@@ -291,7 +301,7 @@ export interface WorkflowTraceListResult {
 /** A timeline event: phase entry, transition, or action execution. */
 export type TimelineEvent =
     | { kind: 'phase'; phase: string; status: string; startedAt: string | null; completedAt: string | null }
-    | { kind: 'transition'; from: string; to: string; trigger: string | null }
+    | { kind: 'transition'; from: string; to: string; trigger: string | null; at: string }
     | {
           kind: 'action';
           actionId: string;
@@ -299,7 +309,16 @@ export type TimelineEvent =
           actionKind: string;
           status: string;
           duration: string;
-          ok: boolean;
+          durationMs: number | null;
+          startedAt: string | null;
+          completedAt: string | null;
+          ok: boolean | null;
+          outcome: string;
+          result: Record<string, string | number | boolean> | null;
+          invocation: Record<string, string | number | boolean> | null;
+          error: string | null;
+          artifacts: string[];
+          nextAction?: SystemEventAction;
           label: string;
           /** Per-step cost + cache-hit computed from matched ETL records (R4). Undefined when cost hasn't been computed yet or isn't available. */
           cost?: ActionCost;
@@ -848,7 +867,7 @@ export class WorkflowAppService {
             limit: filter.last ?? 20,
         });
         return {
-            entries: rows.map(rowToTraceEntry),
+            entries: rows.map((row) => rowToTraceEntry(row, this.ctx.cwd)),
             total: rows.length,
         };
     }
@@ -857,7 +876,7 @@ export class WorkflowAppService {
         const runDao = new RunDao(db);
         const row = await runDao.traceRowById(runId);
         if (!row) throw new Error(`Run not found: ${runId}`);
-        const run = rowToTraceEntry(row);
+        const run = rowToTraceEntry(row, this.ctx.cwd);
 
         const phaseRows = await new PhaseRunDao(db).phaseRowsByRunId(runId);
         const transitionRows = await new TransitionRunDao(db).transitionRowsByRunId(runId);
@@ -905,11 +924,21 @@ export class WorkflowAppService {
                 });
             } else if (tCreated <= aCreated) {
                 const t = transitionRows[ti++] as TR;
-                events.push({ kind: 'transition', from: t.from_state, to: t.to_state, trigger: t.trigger });
+                events.push({
+                    kind: 'transition',
+                    from: t.from_state,
+                    to: t.to_state,
+                    trigger: t.trigger,
+                    at: persistedTimestamp(t.created_at),
+                });
             } else {
                 const a = actionRows[ai++] as AR;
                 const duration = a.duration_ms !== null ? `${a.duration_ms}ms` : '';
-                const label = a.status === 'running' ? ' (in-flight)' : a.ok === 1 ? ' ✓' : ' ✗';
+                const ok = a.ok === null ? null : a.ok === 1;
+                const label = a.status === 'running' ? ' (in-flight)' : ok === true ? ' ✓' : ' ✗';
+                const result = projectActionTraceResult(a.result_json, this.ctx.secretValues);
+                const partialArtifact = await partialArtifactForAction(this.ctx.cwd, runId, a.node, ok);
+                const artifacts = partialArtifact === undefined ? [] : [partialArtifact];
                 events.push({
                     kind: 'action',
                     actionId: a.id,
@@ -917,7 +946,18 @@ export class WorkflowAppService {
                     actionKind: a.kind,
                     status: a.status,
                     duration: duration,
-                    ok: a.ok === 1,
+                    durationMs: a.duration_ms,
+                    startedAt: a.started_at === null ? null : traceTimestamp(a.started_at),
+                    completedAt: a.completed_at === null ? null : traceTimestamp(a.completed_at),
+                    ok,
+                    outcome: actionOutcome(a.status, ok),
+                    result: result.result,
+                    invocation: result.invocation,
+                    error: result.error,
+                    artifacts,
+                    ...(partialArtifact !== undefined
+                        ? { nextAction: { label: 'Inspect partial work', kind: 'path', value: partialArtifact } }
+                        : {}),
                     label: label,
                     cost: costByActionId.get(a.id),
                 } as TimelineEvent);
@@ -925,6 +965,7 @@ export class WorkflowAppService {
         }
 
         const outputArtifact = await outputArtifactForRun(this.ctx.cwd, runId);
+        run.nextAction = traceNextAction(run, outputArtifact);
         return {
             run,
             events,
@@ -1257,15 +1298,18 @@ async function extractWorkflowMeta(
 // Trace helpers (not exported)
 // ---------------------------------------------------------------------------
 
-function rowToTraceEntry(row: {
-    id: string;
-    workflow_name: string;
-    mode: string;
-    status: string;
-    started_at: string;
-    completed_at: string | null;
-    metadata_json: string;
-}): WorkflowTraceEntry {
+function rowToTraceEntry(
+    row: {
+        id: string;
+        workflow_name: string;
+        mode: string;
+        status: string;
+        started_at: string;
+        completed_at: string | null;
+        metadata_json: string;
+    },
+    cwd: string,
+): WorkflowTraceEntry {
     let isDryRun = false;
     let failureReason: string | undefined;
     try {
@@ -1277,14 +1321,141 @@ function rowToTraceEntry(row: {
     } catch {
         // metadata_json unparseable — treat as not dry-run
     }
-    return {
+    const entry: WorkflowTraceEntry = {
         runId: row.id,
         workflowName: row.workflow_name,
         mode: row.mode,
         status: row.status,
-        startedAt: row.started_at,
-        completedAt: row.completed_at,
+        startedAt: traceTimestamp(row.started_at),
+        completedAt: row.completed_at === null ? null : traceTimestamp(row.completed_at),
         isDryRun,
+        project: systemEventProjectContext(cwd),
+        durationMs: durationBetween(row.started_at, row.completed_at),
+        outcome: traceOutcome(row.status),
         ...(failureReason !== undefined ? { failureReason } : {}),
     };
+    const nextAction = traceNextAction(entry);
+    if (nextAction !== undefined) entry.nextAction = nextAction;
+    return entry;
+}
+
+const TRACE_IDENTIFIER = /^[A-Za-z0-9._:-]+$/;
+const TRACE_RESULT_FIELDS = ['agent', 'exitCode'] as const;
+const TRACE_INVOCATION_FIELDS = [
+    'agent',
+    'source',
+    'command',
+    'cwd',
+    'mode',
+    'outputMode',
+    'timeoutMs',
+    'continue',
+    'stdinInteractive',
+    'model',
+    'translatedFrom',
+    'sessionId',
+] as const;
+
+function durationBetween(startedAt: string, completedAt: string | null): number | null {
+    if (completedAt === null) return null;
+    const start = Date.parse(startedAt);
+    const end = Date.parse(completedAt);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
+}
+
+function traceTimestamp(value: string): string {
+    return Number.isFinite(Date.parse(value)) ? value : 'unavailable';
+}
+
+function persistedTimestamp(value: number): string {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'unavailable' : date.toISOString();
+}
+
+function traceOutcome(status: string): string {
+    if (status === 'done') return 'success';
+    if (status === 'failed') return 'failure';
+    if (status === 'running' || status === 'pending' || status === 'paused') return status;
+    return 'unavailable';
+}
+
+function actionOutcome(status: string, ok: boolean | null): string {
+    if (status === 'running' || status === 'pending') return status;
+    if (ok === true) return 'success';
+    if (ok === false) return 'failure';
+    return 'unavailable';
+}
+
+function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string): SystemEventAction | undefined {
+    if (!TRACE_IDENTIFIER.test(run.runId)) return undefined;
+    if (run.status === 'running' || run.status === 'pending') {
+        return { label: 'Follow run', kind: 'command', value: `spur workflow trace ${run.runId} --follow` };
+    }
+    if (run.status === 'paused') {
+        return { label: 'Continue run', kind: 'command', value: `spur workflow continue ${run.runId}` };
+    }
+    if (run.status === 'failed' && outputArtifact !== undefined) {
+        return { label: 'Inspect run log', kind: 'path', value: outputArtifact };
+    }
+    return undefined;
+}
+
+function projectActionTraceResult(
+    resultJson: string | null,
+    secretValues: readonly string[] = [],
+): {
+    result: Record<string, string | number | boolean> | null;
+    invocation: Record<string, string | number | boolean> | null;
+    error: string | null;
+} {
+    if (!resultJson) return { result: null, invocation: null, error: null };
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(resultJson);
+    } catch {
+        return { result: null, invocation: null, error: null };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { result: null, invocation: null, error: null };
+    }
+    const result = parsed as Record<string, unknown>;
+    const data =
+        result.data && typeof result.data === 'object' && !Array.isArray(result.data)
+            ? (result.data as Record<string, unknown>)
+            : {};
+    const invocationSource =
+        data.invocation && typeof data.invocation === 'object' && !Array.isArray(data.invocation)
+            ? (data.invocation as Record<string, unknown>)
+            : undefined;
+    const resultFields: Record<string, string | number | boolean> = {};
+    for (const field of TRACE_RESULT_FIELDS) {
+        const value = data[field];
+        if (typeof value === 'string') resultFields[field] = redactAndBound(value, secretValues, 256);
+        else if (typeof value === 'number' || typeof value === 'boolean') resultFields[field] = value;
+    }
+    const invocation: Record<string, string | number | boolean> = {};
+    if (invocationSource !== undefined) {
+        for (const field of TRACE_INVOCATION_FIELDS) {
+            const value = invocationSource[field];
+            if (typeof value === 'string') invocation[field] = redactAndBound(value, secretValues, 256);
+            else if (typeof value === 'number' || typeof value === 'boolean') invocation[field] = value;
+        }
+    }
+    const error = typeof result.error === 'string' ? redactAndBound(result.error, secretValues, 512) : null;
+    return {
+        result: Object.keys(resultFields).length === 0 ? null : resultFields,
+        invocation: Object.keys(invocation).length === 0 ? null : invocation,
+        error,
+    };
+}
+
+async function partialArtifactForAction(
+    cwd: string,
+    runId: string,
+    node: string,
+    ok: boolean | null,
+): Promise<string | undefined> {
+    if (ok !== false || !TRACE_IDENTIFIER.test(runId) || !TRACE_IDENTIFIER.test(node)) return undefined;
+    const relativePath = join('.spur', 'run', `${runId}-${node}-partial.md`);
+    return (await fileExists(resolve(cwd, relativePath))) ? relativePath : undefined;
 }
