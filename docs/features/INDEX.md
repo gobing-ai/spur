@@ -63,7 +63,7 @@
     ├── [verifying] **J2**: System Events Payload and Wiring Enrichment ([J2_system-events-payload-and-wiring-enrichment.md](./J2_system-events-payload-and-wiring-enrichment.md))
     ├── [verifying] **J3**: Observability data plane: event ingestion, retention, correlation, and run/team read APIs ([J3_observability-data-plane-event-ingestion-retention-correlation-and-run-team-read-apis.md](./J3_observability-data-plane-event-ingestion-retention-correlation-and-run-team-read-apis.md))
     └── [done] **J4**: Board observability and Teams supervisor surfaces ([J4_board-observability-and-teams-supervisor-surfaces.md](./J4_board-observability-and-teams-supervisor-surfaces.md))
-[backlog] **K**: Features module (Spur Board) ([K_features-module-spur-board.md](./K_features-module-spur-board.md))
+[verifying] **K**: Features module (Spur Board) ([K_features-module-spur-board.md](./K_features-module-spur-board.md))
     └── [done] **K1**: Project switcher ([K1_project-switcher.md](./K1_project-switcher.md))
 [active] **M**: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones ([M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md](./M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md))
     ├── [done] **M1**: Fine-tune Teams module (Roster drop, Terminal UX, Processes watchlist, input) ([M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md](./M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md))
