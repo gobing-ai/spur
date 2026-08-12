@@ -30,7 +30,7 @@ flowchart TD
     subgraph Planning["Planning Half — vague idea → feature + AC + task batch"]
         direction TB
         Brainstorm["🧠 dev-brainstorm<br/>[sp:brainstorm]<br/>grilling interview +<br/>structured ideation"]:::plan
-        IdeaCmd["💡 dev-idea &lt;idea&gt;<br/>[idea-pipeline.yaml]<br/>discovery → feature-create →<br/>ac-generate → feature-check →<br/>system-design → design-approval →<br/>decompose → batch-create → handoff"]:::plan
+        IdeaCmd["💡 dev-idea &lt;idea&gt;<br/>[idea-pipeline.yaml]<br/>discovery → feature-create →<br/>ac-generate → feature-check →<br/>system-design → design-approval →<br/>decompose → batch-create →<br/>handoff-finalize → handoff"]:::plan
         PlanCmd["📝 dev-plan &lt;desc&gt;<br/>[planning-pipeline.yaml]<br/>phasing → feature-id →<br/>design-gen → design-approval →<br/>handoff"]:::plan
         RefineCmd["✏️ dev-refine &lt;wbs&gt;<br/>[sp:spur-dev refine]<br/>Q&A gap analysis →<br/>spur task update sections"]:::plan
     end
@@ -188,7 +188,7 @@ The diagram is the authoritative visual; the linear map is the operator-friendly
 | Wrap batch | `/sp:dev-wrapall [--feature/--since/--status]` | `wrapup-pipeline.yaml` | Batch wrap-up + optional feature transition |
 | Inline ops | `/sp:dev-changelog`, `/sp:dev-gitmsg`, `/sp:dev-fixall`, `/sp:dev-handover`, `/sp:dev-dogfood` | inline / `sp:dogfood-testing` | git/handover/dogfood utilities |
 
-### The 26 Steps — Linear Map To Workflow YAMLs
+### The 27 Steps — Linear Map To Workflow YAMLs
 
 The mermaid diagram above is the visual; this table is the linearized, fully-decomposed map.
 Every operational step in the E2E flow is listed in pipeline-execution order, mapped to the
@@ -205,44 +205,45 @@ transition a pipeline invokes, but their states are not pipeline steps themselve
 | 3  | `phasing`                    | `planning-pipeline.yaml`                            | Front-half planning         | `/sp:dev-plan "<desc>"` (interactive only — auto skips entry)            | `hitl.confirm` — decide whether to stage a 02_ROADMAP phase       | obj   |
 | 4  | `feature-id`                 | `planning-pipeline.yaml`                            | Front-half planning         | `/sp:dev-plan "<desc>"`                                                  | `agent.run` — derive child id (scans `docs/features` + `05_FEATURES`) | —     |
 | 5  | `design-gen`                 | `planning-pipeline.yaml`                            | Front-half planning         | `/sp:dev-plan --design "<desc>"`                                         | `agent.run` — author `docs/design/<slug>.md`                      | —     |
-| 6  | `feature-create`             | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `agent.run` — `spur feature create` / select existing id           | —     |
+| 6  | `feature-create`             | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `agent.run` — `spur feature create` / select existing id; writes Goal/Scope intent artifacts via `spur feature update --section` (0515) | —     |
 | 7  | `ac-generate`                | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `agent.run` + `shell spur feature update --section` (BDD AC)      | —     |
 | 8  | `feature-check`              | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `shell spur feature check <id> --strict` + `hitl.confirm`         | obj   |
-| 9  | `system-design`              | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>" --design` (or signal-driven)                      | `agent.run sp:sys-architecture` (ADR / architecture / satellites)  | —     |
-| 10 | `design-approval`            | `idea-pipeline.yaml` / `planning-pipeline.yaml`     | Ideation / Planning         | `/sp:dev-idea "<idea>"` or `/sp:dev-plan "<desc>"`                       | `hitl.confirm` — taste gate (NOT auto-clicked by `--auto`)         | taste |
-| 11 | `decompose`                  | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `agent.run sp:spec-decomposition` → `.spur/run/idea-task-batch.json` | —  |
-| 12 | `batch-create`               | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `shell spur task batch-create --file ...` + `hitl.confirm`         | obj   |
-| 13 | `plan`                       | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `agent.run /sp:dev-plan --feature <id>`                           | —     |
-| 14 | `execute-tasks`              | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `agent.run` — drive every todo task through `task-pipeline.yaml`  | —     |
-| 15 | `precheck`                   | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>` (or per-task inside `dev-runall` / `feature-dev`)    | `shell spur task check <wbs>` (block report on fail)              | obj   |
-| 16 | `implement`                  | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-run --mode implement` (writes `## Solution`)    | —     |
-| 17 | `test`                       | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-unit` + `shell bun run lint`                   | —     |
-| 18 | `review`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-review` (SECUA findings → `## Review`)         | —     |
-| 19 | `approve`                    | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>` (interactive only — auto skips entry)               | `hitl.confirm` — operator approves review                         | obj*  |
-| 20 | `verify`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-verify --auto --fix all` → `.spur/run/<wbs>-verdict.json` | obj   |
-| 21 | `record`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `shell spur task record <wbs> --solution-from-diff --transition testing` | — |
-| 22 | `feature-verify`             | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `shell spur feature check <id> --strict`                          | obj   |
-| 23 | `task-resolve`               | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap <wbs>` / `/sp:dev-wrapall ...`                             | `shell` — validate `vars.tasks` non-empty (route to `skipped` if not) | — |
-| 24 | `doc-sync`                   | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run sp:doc-evolve` (drift repair in 04/03/00, `docs/design/*`) | —  |
-| 25 | `learning-capture`           | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-learnings.md` + `shell` append to `.spur/memory/learnings.md` | — |
-| 26 | `metrics-record`             | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-metrics.jsonl` + `shell` append to `.spur/memory/wrapup-metrics.jsonl` | — |
+| 9  | `system-design`              | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>" --design` (or signal-driven)                      | `agent.run sp:sys-architecture` (ADR / architecture / satellites) + run-scoped design-review artifact; reconciles invalidated AC (0515) | —     |
+| 10 | `design-approval`            | `idea-pipeline.yaml` / `planning-pipeline.yaml`     | Ideation / Planning         | `/sp:dev-idea "<idea>"` or `/sp:dev-plan "<desc>"`                       | `hitl.confirm` — taste gate (NOT auto-clicked by `--auto`); rejection records `## Operator feedback`, capped at 1 revise (0515) | taste |
+| 11 | `decompose`                  | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `agent.run sp:spec-decomposition` → `.spur/run/idea-task-batch.json` + task-order sidecar `idea-task-order.json` (0518) | —  |
+| 12 | `batch-create`               | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `shell spur task batch-create --file ...` + `hitl.confirm`; `--json` result captured atomically to `idea-batch-create-result.json` (0518) | obj   |
+| 13 | `handoff-finalize`           | `idea-pipeline.yaml`                                | Ideation                    | `/sp:dev-idea "<idea>"`                                                  | `shell` — zip batch names → created WBS, `spur task deps` ordering, feature roster refresh, per-task `spur task check`, write `idea-handoff.md` with one next command (0518) | obj   |
+| 14 | `plan`                       | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `agent.run /sp:dev-plan --feature <id>`                           | —     |
+| 15 | `execute-tasks`              | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `agent.run` — drive every todo task through `task-pipeline.yaml`  | —     |
+| 16 | `precheck`                   | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>` (or per-task inside `dev-runall` / `feature-dev`)    | `shell spur task check <wbs>` (block report on fail)              | obj   |
+| 17 | `implement`                  | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-run --mode implement` (writes `## Solution`)    | —     |
+| 18 | `test`                       | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-unit` + `shell bun run lint`                   | —     |
+| 19 | `review`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-review` (SECUA findings → `## Review`)         | —     |
+| 20 | `approve`                    | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>` (interactive only — auto skips entry)               | `hitl.confirm` — operator approves review                         | obj*  |
+| 21 | `verify`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `agent.run /sp:dev-verify --auto --fix all` → `.spur/run/<wbs>-verdict.json` | obj   |
+| 22 | `record`                     | `task-pipeline.yaml`                                | Task execution              | `/sp:dev-run <wbs>`                                                      | `shell spur task record <wbs> --solution-from-diff --transition testing` | — |
+| 23 | `feature-verify`             | `feature-dev.yaml`                                  | Umbrella execution          | `/sp:dev-runall --feature <id>`                                          | `shell spur feature check <id> --strict`                          | obj   |
+| 24 | `task-resolve`               | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap <wbs>` / `/sp:dev-wrapall ...`                             | `shell` — validate `vars.tasks` non-empty (route to `skipped` if not) | — |
+| 25 | `doc-sync`                   | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run sp:doc-evolve` (drift repair in 04/03/00, `docs/design/*`) | —  |
+| 26 | `learning-capture`           | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-learnings.md` + `shell` append to `.spur/memory/learnings.md` | — |
+| 27 | `metrics-record`             | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-metrics.jsonl` + `shell` append to `.spur/memory/wrapup-metrics.jsonl` | — |
 | —  | `feature-transition`         | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrapall --feature <id>`                                         | `shell` — `backlog→active→verifying→done` via `spur feature update` (lifecycle FSM guards) | obj |
 | —  | `branch-cleanup`             | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrap --merge` / `/sp:dev-wrapall --merge`                        | `hitl.confirm` — irreversible (always pauses, even under `--auto`) | irrev |
 
-**Reading the table.** Steps 1–14 cover the planning half (intake → ideation → design →
-decomposition). Steps 15–22 cover the execution half (single-task pipeline + feature umbrella).
-Steps 23–26 cover wrap-up. The two trailing rows (`feature-transition`, `branch-cleanup`) are
-conditional branches of the wrapup-pipeline and are counted separately; together with the 26
-steps they form the complete operational surface.
+**Reading the table.** Steps 1–15 cover the planning half (intake → ideation → design →
+decomposition → handoff finalization). Steps 16–23 cover the execution half (single-task pipeline +
+feature umbrella). Steps 24–27 cover wrap-up. The two trailing rows (`feature-transition`,
+`branch-cleanup`) are conditional branches of the wrapup-pipeline and are counted separately;
+together with the 27 steps they form the complete operational surface.
 
 **Gate column legend.** `obj` = objective (auto-routable under `--auto`); `taste` = subjective
 (never auto-clicked); `irrev` = irreversible (always pauses); `obj*` = the task `approve` gate
 is auto-routed when `profile=auto`, otherwise pauses. See §"HITL And Auto Mode" for the full
 taxonomy.
 
-**Why 26.** The count deliberately excludes terminal states and lifecycle FSMs because they are
+**Why 27.** The count deliberately excludes terminal states and lifecycle FSMs because they are
 outcomes (not work) and guards (not steps). If you count them, the full state surface across all
-eight workflows is 56 states; the 26 above are the operator-walked operational sequence.
+ten workflows is 53 distinct states; the 27 above are the operator-walked operational sequence.
 
 ## Path Model
 

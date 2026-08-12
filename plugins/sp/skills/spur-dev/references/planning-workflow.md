@@ -217,6 +217,59 @@ fires, author the doc and **report** the chosen slug and a one-line rationale ("
 `docs/design/<slug>.md` — new `spur <noun>` command + config key"); when it does not fire, report the
 skip and why. Do not pause to ask; the operator reviews the satellite afterward.
 
+## Step 5.6: Idea pipeline (sp:dev-idea) — planning handoff contracts
+
+`/sp:dev-idea` runs the same planning half through the idea-pipeline workflow definition
+(`.spur/workflows/idea-pipeline.yaml` — symlinked to the tracked SSOT). Two
+artifacts are the contract between the workflow states and the operator:
+
+**Goal/Scope intent (feature-create).** The agent writes body-only intent files
+`.spur/run/<runId>-idea-goal.md` and `.spur/run/<runId>-idea-scope.md`, then persists both through
+the corpus CLI (a missing/empty artifact stops the state before decomposition can begin):
+
+```bash
+spur feature update <id> --section Goal  --from-file .spur/run/<runId>-idea-goal.md
+spur feature update <id> --section Scope --from-file .spur/run/<runId>-idea-scope.md
+```
+
+- **Goal is intent only** — a short statement of what the feature achieves. Task breakdowns,
+  checklists, and how-to steps **never** enter Goal.
+- **Scope carries explicit boundaries** — in-scope and out-of-scope bullets.
+
+**Design review artifact (system-design / design-approval).** One run-scoped file,
+`.spur/run/<runId>-idea-design-review.md`, with fixed headings `## Proposed design`,
+`## Operator feedback`, and `## Reconciliation`:
+
+- **First pass:** system-design writes the proposed design under `## Proposed design`.
+- **Rejection:** before answering `no` at the design-approval gate, the operator edits
+  `## Operator feedback` with the concrete issue(s).
+- **Retry:** system-design reads that feedback, revises the design/ADR artifacts, records the
+  changes under `## Reconciliation`, and — when the feedback invalidates an Acceptance Criteria
+  scenario — updates the feature AC through `spur feature update <id> --section
+  "Acceptance Criteria" --from-file <file>` (never direct feature-file edits).
+- **Exit gate:** every design exit into decomposition (auto-approved and interactive-approved)
+  re-runs `spur feature check <id>`, so stale or invalidated AC cannot proceed.
+
+**Task ordering (decompose / handoff-finalize).** Decomposition also emits the private
+run-scoped order sidecar `.spur/run/<runId>-idea-task-order.json` — a JSON array of
+`{ name, depends_on_names[] }` (one entry per batch item, names matching batch item `name`s
+exactly; `[]` when no ordering exists). It is private workflow data, not part of
+`task-batch.schema.json`. A post-decompose validation fails the run on any ambiguous or
+missing title match. After batch creation, `handoff-finalize`:
+
+1. Zips batch item names to the created WBS values from the captured
+   `.spur/run/<runId>-idea-batch-create-result.json` (`task batch-create --json` output;
+   `wbs[]` is in input order).
+2. Applies every non-empty `depends_on_names` list through
+   `spur task deps <wbs> set <dep-wbs...> --json` — a mapping or CLI error fails the run
+   before handoff.
+3. Refreshes the feature roster with `spur feature refresh --feature <id> --json`.
+4. Checks each created task (`spur task check <wbs> --json`) and writes
+   `.spur/run/<runId>-idea-handoff.md` with exactly **one** next command:
+   `/sp:dev-refineall --feature <id> --auto --depth ready` when any task is unready
+   (runall is then omitted), otherwise `/sp:dev-runall --feature <id> --auto`. The terminal
+   handoff note points at this report.
+
 ## Step 6: Refine before execute (the spec-completion gate)
 
 `batch-create` accepts optional `design` / `plan` / `acceptance_criteria` fields (plus

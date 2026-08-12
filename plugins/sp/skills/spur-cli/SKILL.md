@@ -101,6 +101,9 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
   prose checks here.
 - **Not a competency.** Design, implementation, testing, and review are competency skills, not CLI
   verbs — they are not documented here.
+- **Not the orchestration owner.** The ADR-054 boundary: this facade owns CLI noun/verb/flag
+  semantics — including task and feature status-transition verbs — while multi-step lifecycle
+  orchestration belongs to `sp:spur-dev`.
 
 ## See also
 

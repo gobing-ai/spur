@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.13.0
+version: 1.14.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-11
@@ -549,7 +549,12 @@ variants onto daisyUI's **own** `--color-primary`, which would otherwise place a
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
 
-## 15. Agent-Facing Plugin Surface Parity (accepted design — ADR-053/054, amended 2026-08-11; not yet built)
+## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
+
+Implemented 2026-08-11 (tasks 0512–0517): the frozen capture helper
+`plugins/sp/tests/helpers/cli-surface.ts` (`captureCliSurface` / `parseCommanderHelp`) and the
+focused parity suite `plugins/sp/tests/cli-surface-parity.test.ts` (plus `skill-structure.test.ts`
+extensions) enforce the contract below against the live monorepo CLI.
 
 The agent-facing surfaces in `plugins/sp/` are maintained under a mechanical parity contract with
 the monorepo CLI (ADR-053, extending ADR-038's `spur-cli`-reference coverage). Three surfaces are in

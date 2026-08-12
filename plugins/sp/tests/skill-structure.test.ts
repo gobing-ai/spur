@@ -10,16 +10,19 @@
  *   R16a — disjoint trigger surfaces: the spine and the competency skills do not share a routing
  *          keyword that would make skill selection ambiguous.
  *   R16b — every cross-skill `sp:<skill>` reference names a skill that actually exists.
- *   R16c — relative markdown links inside skill files resolve to a real file.
+ *   R16c — relative markdown links resolve to a real file and (when anchored) a heading; the
+ *          root AGENTS.md doc-map rows resolve to existing docs/*.md (task 0514 R2).
  *   R16d — no retired skill/agent name is referenced anywhere in the plugin.
  *   R20  — the plugin is self-contained: no shipped file references `vendors/` or the external rd3
  *          plugin path. Research-time evidence is never a runtime/documentation dependency.
  *   R23  — repository ignore rules do not hide plugin skill entrypoints.
+ *   R43  — README index tables list every shipped command/skill/agent exactly once (task 0514 R1).
+ *   R3   — no exact duplicate structured catalog across shipped surfaces (task 0514 R3 / ADR-054).
  */
 
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const PLUGIN_ROOT = join(import.meta.dir, '..');
 const REPO_ROOT = join(PLUGIN_ROOT, '..', '..');
@@ -45,6 +48,34 @@ const allMarkdown = walk(PLUGIN_ROOT, (p) => p.endsWith('.md'));
 const skillDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
+
+/** GitHub-style heading slug — matches validate-commands.ts anchor resolution (ADR-031/038). */
+function slugifyHeading(heading: string): string {
+    return heading
+        .toLowerCase()
+        .replace(/[^\p{Letter}\p{Number} -]/gu, '')
+        .replaceAll(' ', '-');
+}
+
+/**
+ * Valid in-file anchors: GitHub-style heading slugs plus explicit `**Anchor:** `#id`` directives
+ * (the flag-glossary.md convention that lets a shared-flag entry expose a stable `#flag-<name>`
+ * anchor independent of its heading text; honored by validate-commands.ts).
+ */
+const anchorCache = new Map<string, Set<string>>();
+function anchorSet(file: string): Set<string> {
+    let anchors = anchorCache.get(file);
+    if (anchors === undefined) {
+        const content = readFileSync(file, 'utf8');
+        anchors = new Set<string>();
+        for (const line of content.split('\n')) {
+            if (/^#{1,6}\s+/.test(line)) anchors.add(slugifyHeading(line.replace(/^#+\s*/, '').trim()));
+        }
+        for (const match of content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)) anchors.add(match[1]);
+        anchorCache.set(file, anchors);
+    }
+    return anchors;
+}
 
 describe('sp plugin structure — functional split invariants (task 0161 / ADR-028)', () => {
     test('R13 — cross-cutting.md exists exactly once across the plugin', () => {
@@ -104,9 +135,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(offenders).toEqual([]);
     });
 
-    test('R16c — relative markdown links inside plugin markdown files resolve', () => {
+    test('R16c — relative markdown links resolve to a file and (when anchored) a heading', () => {
         const broken: string[] = [];
-        const linkRe = /\]\((?!https?:|#)([^)]+\.md)(?:#[^)]*)?\)/g;
+        const linkRe = /\]\((?!https?:|#)([^)]+\.md)(?:#([^)]*))?\)/g;
         for (const file of allMarkdown) {
             const raw = readFileSync(file, 'utf8');
             // Strip fenced code blocks and inline-code spans: a link inside backticks documents a
@@ -120,11 +151,33 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
                 try {
                     statSync(target);
                 } catch {
-                    broken.push(`${relative(PLUGIN_ROOT, file)} → ${match[1]}`);
+                    broken.push(`${relative(PLUGIN_ROOT, file)} → ${match[1]} (missing file)`);
+                    continue;
+                }
+                // Task 0514 R2: `#fragment` must name a GitHub-style heading slug or an explicit
+                // `**Anchor:** `#id`` directive in the target file.
+                const anchor = match[2];
+                if (anchor && !anchorSet(target).has(anchor)) {
+                    broken.push(`${relative(PLUGIN_ROOT, file)} → ${match[1]}#${anchor} (no such heading/anchor)`);
                 }
             }
         }
         expect(broken).toEqual([]);
+    });
+
+    test('R16c — root AGENTS.md doc-map rows resolve to existing docs/*.md (task 0514 R2)', () => {
+        const agentsMd = readFileSync(join(REPO_ROOT, 'AGENTS.md'), 'utf8');
+        const docTargets = [...new Set([...agentsMd.matchAll(/`(docs\/[^`]+\.md)`/g)].map((m) => m[1]))];
+        expect(docTargets.length, 'AGENTS.md must carry a doc-map').toBeGreaterThan(0);
+        const missing = docTargets.filter((target) => {
+            try {
+                statSync(join(REPO_ROOT, target));
+                return false;
+            } catch {
+                return true;
+            }
+        });
+        expect(missing, 'AGENTS.md doc-map rows must resolve to existing files').toEqual([]);
     });
 
     test('R16d — no retired skill/agent name is referenced anywhere in the plugin', () => {
@@ -690,34 +743,138 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         ).toBeLessThanOrEqual(AGGREGATE_BUDGET);
     });
 
-    test('R43 — README command index lists every commands/*.md file exactly once (task 0187 AC6)', () => {
+    test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {
         const readmePath = join(PLUGIN_ROOT, 'README.md');
         statSync(readmePath);
         const readme = readFileSync(readmePath, 'utf8');
-        const commandFiles = readdirSync(join(PLUGIN_ROOT, 'commands'))
-            .filter((f) => f.endsWith('.md'))
-            .map((f) => f.replace(/\.md$/, ''));
-
-        // Scope the index check to the "### Command index" section only — commands are
-        // legitimately cross-referenced elsewhere (skill-dispatch table, pipeline routing),
-        // and those prose mentions must not count as index duplicates. The section runs from
-        // the "### Command index" heading to the next "## " (top-level) heading.
         const lines = readme.split('\n');
-        const startIdx = lines.findIndex((l) => l.trim() === '### Command index');
-        expect(startIdx, 'README must have a "### Command index" section').toBeGreaterThanOrEqual(0);
-        const endIdx = lines.findIndex((l, i) => i > startIdx && /^## /.test(l));
-        const indexSection = lines.slice(startIdx, endIdx === -1 ? undefined : endIdx).join('\n');
 
-        const missing: string[] = [];
-        const duplicated: string[] = [];
-        for (const name of commandFiles) {
-            const re = new RegExp(`\\b${name}\\b`, 'g');
-            const count = (indexSection.match(re) ?? []).length;
-            if (count === 0) missing.push(name);
-            if (count > 1) duplicated.push(`${name} (${count}x)`);
+        // Task 0514 R1: the three owning README index tables, each mapped to its shipped surface.
+        // Only the first backticked name cell of each table row counts as an index entry — prose
+        // mentions of a name elsewhere in the section (skill-dispatch table, pipeline routing)
+        // must not register as duplicates or as indexed-without-a-target.
+        const sections: Array<{
+            heading: string;
+            label: string;
+            shipped: string[];
+            hasTarget: (name: string) => boolean;
+        }> = [
+            {
+                heading: '### Command index',
+                label: 'commands',
+                shipped: readdirSync(join(PLUGIN_ROOT, 'commands'))
+                    .filter((f) => f.endsWith('.md'))
+                    .map((f) => f.replace(/\.md$/, '')),
+                hasTarget: (n) =>
+                    statSync(join(PLUGIN_ROOT, 'commands', `${n}.md`), { throwIfNoEntry: false }) !== undefined,
+            },
+            {
+                heading: '#### 1. Skills',
+                label: 'skills',
+                shipped: skillDirs,
+                hasTarget: (n) => statSync(join(SKILLS_DIR, n, 'SKILL.md'), { throwIfNoEntry: false }) !== undefined,
+            },
+            {
+                heading: '#### 3. Agents',
+                label: 'agents',
+                shipped: readdirSync(AGENTS_DIR)
+                    .filter((f) => f.endsWith('.md'))
+                    .map((f) => f.replace(/\.md$/, '')),
+                hasTarget: (n) => statSync(join(AGENTS_DIR, `${n}.md`), { throwIfNoEntry: false }) !== undefined,
+            },
+        ];
+
+        for (const { heading, label, shipped, hasTarget } of sections) {
+            const startIdx = lines.findIndex((l) => l.trim().startsWith(heading));
+            expect(startIdx, `README must have a "${heading}" section`).toBeGreaterThanOrEqual(0);
+            // Command section runs to the next top-level heading; skill/agent sections run to the
+            // next `#### ` subsection (they sit inside "### Entity design").
+            const endIdx = lines.findIndex(
+                (l, i) => i > startIdx && (heading.startsWith('### ') ? /^## /.test(l) : /^#### /.test(l)),
+            );
+            const sectionText = lines.slice(startIdx, endIdx === -1 ? undefined : endIdx).join('\n');
+
+            const indexed: string[] = [];
+            for (const line of sectionText.split('\n')) {
+                if (!line.trim().startsWith('|')) continue;
+                const firstCell = line.split('|')[1]?.trim() ?? '';
+                const name = firstCell.match(/^`([^`]+)`/)?.[1];
+                if (name) indexed.push(name);
+            }
+
+            const counts = new Map<string, number>();
+            for (const name of indexed) counts.set(name, (counts.get(name) ?? 0) + 1);
+            const missing = shipped.filter((n) => !counts.has(n));
+            const duplicated = [...counts].filter(([, c]) => c > 1).map(([n, c]) => `${n} (${c}x)`);
+            const noTarget = [...counts.keys()].filter((n) => !hasTarget(n));
+
+            expect(missing, `${label} missing from README index`).toEqual([]);
+            expect(duplicated, `${label} listed more than once in README index`).toEqual([]);
+            expect(noTarget, `${label} indexed in README without a shipped file`).toEqual([]);
         }
-        expect(missing, 'commands missing from README index').toEqual([]);
-        expect(duplicated, 'commands listed more than once in README index').toEqual([]);
+    });
+
+    test('R3 — no exact duplicate structured catalog across shipped surfaces (task 0514 R3 / ADR-054)', () => {
+        // Mechanical duplication detection is limited to exact machine-comparable catalogs:
+        // normalized markdown tables (>=2 data rows) and explicit lists of backticked machine
+        // tokens (>=3 items). Arbitrary prose similarity is never a finding (ADR-054 amendment).
+        // Test fixtures and eval samples are intentionally duplicated and are not shipped surfaces.
+        const shippedMd = allMarkdown.filter(
+            (p) => !p.includes(`${PLUGIN_ROOT}${sep}tests`) && !p.includes(`${PLUGIN_ROOT}${sep}evals`),
+        );
+        const seen = new Map<string, string[]>(); // normalized catalog -> relative paths
+
+        for (const file of shippedMd) {
+            const text = readFileSync(file, 'utf8').replace(/```[\s\S]*?```/g, '\n');
+            const lines = text.split('\n');
+            let i = 0;
+            while (i < lines.length) {
+                const isTable = lines[i].trim().startsWith('|');
+                const isBullet = !isTable && /^\s*[-*]\s+/.test(lines[i]);
+                if (!isTable && !isBullet) {
+                    i++;
+                    continue;
+                }
+                const block: string[] = [];
+                if (isTable) {
+                    while (i < lines.length && lines[i].trim().startsWith('|')) {
+                        block.push(lines[i].trim());
+                        i++;
+                    }
+                    const rows = block.map((l) =>
+                        l
+                            .slice(1, -1)
+                            .split('|')
+                            .map((c) => c.trim().replace(/\s+/g, ' ')),
+                    );
+                    const dataRows = rows.filter((r) => !r.every((c) => /^-+$/.test(c)));
+                    if (dataRows.length >= 2) {
+                        const key = JSON.stringify(dataRows);
+                        const rel = relative(PLUGIN_ROOT, file);
+                        if (!seen.has(key)) seen.set(key, []);
+                        const seenList = seen.get(key);
+                        if (seenList !== undefined && !seenList.includes(rel)) seenList.push(rel);
+                    }
+                } else {
+                    while (i < lines.length) {
+                        const m = lines[i].match(/^\s*[-*]\s+(.*)$/);
+                        if (!m) break;
+                        block.push(m[1].trim());
+                        i++;
+                    }
+                    if (block.length >= 3 && block.every((b) => b.startsWith('`'))) {
+                        const key = JSON.stringify(block.map((c) => c.trim().replace(/\s+/g, ' ')));
+                        const rel = relative(PLUGIN_ROOT, file);
+                        if (!seen.has(key)) seen.set(key, []);
+                        const seenList = seen.get(key);
+                        if (seenList !== undefined && !seenList.includes(rel)) seenList.push(rel);
+                    }
+                }
+            }
+        }
+
+        const duplicates = [...seen].filter(([, files]) => files.length > 1).map(([, files]) => files.join('; '));
+        expect(duplicates, 'exact duplicate structured catalog on multiple shipped surfaces').toEqual([]);
     });
 
     test('R44 — glossary.md exists exactly once and is linked from spur-dev SKILL.md (task 0187 R7/AC7)', () => {
@@ -1305,5 +1462,53 @@ describe('task 0510 — batch-run hardening (feature preflight, changed-path mat
         expect(executionBatch).toContain('never streams or re-reads a full trace');
         // task 0508 native-subagent dispatch is preserved, not replaced by a cache/parser.
         expect(executionBatch).toContain("task 0508's dispatch contract is preserved unchanged");
+    });
+});
+
+describe('task 0519 — idea-pipeline planning guidance names canonical artifacts and conditional handoff', () => {
+    const guidance = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'planning-workflow.md'), 'utf8');
+
+    test('Step 5.6 documents the run-scoped artifacts by canonical name', () => {
+        const step = guidance.slice(guidance.indexOf('## Step 5.6'));
+        // The four dogfood findings map to artifacts the guidance must name: Goal/Scope intent
+        // files, the design-review feedback file, the order sidecar, and the handoff report.
+        for (const artifact of [
+            'idea-goal.md',
+            'idea-scope.md',
+            'idea-design-review.md',
+            'idea-task-order.json',
+            'idea-batch-create-result.json',
+            'idea-handoff.md',
+        ]) {
+            expect(step, `planning-workflow Step 5.6 must name ${artifact}`).toContain(artifact);
+        }
+    });
+
+    test('guidance pins the goal/scope and design-review contracts without shell logic', () => {
+        const step = guidance.slice(guidance.indexOf('## Step 5.6'));
+        // Contract prose (not commands): Goal is intent only; Scope carries boundaries; the
+        // review artifact has fixed headings; rejected designs record operator feedback; the
+        // revision reconciles invalidated AC through the corpus CLI; design exit re-checks.
+        expect(step).toContain('Goal is intent only');
+        expect(step).toContain('in-scope and out-of-scope');
+        expect(step).toContain('## Proposed design');
+        expect(step).toContain('## Operator feedback');
+        expect(step).toContain('## Reconciliation');
+        expect(step).toContain('spur feature update <id> --section');
+        expect(step).toContain('"Acceptance Criteria" --from-file <file>');
+        expect(step).toContain('spur feature check <id>');
+    });
+
+    test('guidance names the ordering sidecar and the conditional recommendation', () => {
+        const step = guidance.slice(guidance.indexOf('## Step 5.6'));
+        // 0518: ordering is applied via `spur task deps`; the roster is refreshed; the report
+        // carries exactly ONE next command — refineall when any task is unready, runall otherwise.
+        expect(step).toContain('depends_on_names');
+        expect(step).toContain('spur task deps <wbs> set');
+        expect(step).toContain('spur feature refresh --feature <id> --json');
+        expect(step).toContain('spur task check <wbs> --json');
+        expect(step).toContain('exactly **one** next command');
+        expect(step).toContain('/sp:dev-refineall --feature <id> --auto --depth ready');
+        expect(step).toContain('otherwise `/sp:dev-runall --feature <id> --auto`');
     });
 });
