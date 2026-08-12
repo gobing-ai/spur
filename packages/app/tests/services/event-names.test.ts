@@ -209,6 +209,29 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         }
     });
 
+    test('classifies lifecycle stop as info and reserves warning for degraded names', () => {
+        for (const name of [
+            'queue.consumer.started',
+            'queue.consumer.stopped',
+            'process.started',
+            'process.stopped',
+            'process.exited',
+            'agent.started',
+            'agent.stopped',
+            'team.member.started',
+            'team.member.stopped',
+        ]) {
+            expect(requireEntry(name).severity).toBe('info');
+        }
+        expect(requireEntry('queue.job.retrying').severity).toBe('warning');
+        expect(requireEntry('workflow.run.paused').severity).toBe('warning');
+        expect(requireEntry('workflow.action.failed_continue').severity).toBe('warning');
+        expect(requireEntry('queue.job.failed').severity).toBe('error');
+        expect(requireEntry('rule.eval.error').severity).toBe('error');
+        expect(requireEntry('workflow.transition.denied').severity).toBe('error');
+        expect(requireEntry('api.request.error').severity).toBe('error');
+    });
+
     test('registers history.* catalog entries (task 0471 R1)', () => {
         const cases = [
             { name: 'history.import.completed', renderer: 'history-import' },

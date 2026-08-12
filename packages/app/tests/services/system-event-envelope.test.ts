@@ -51,6 +51,28 @@ describe('buildSystemEventEnvelope', () => {
         expect(envelope.presentation.fields).toContainEqual({ label: 'Node', value: 'verify' });
     });
 
+    test('queue.consumer.stopped is info unless the drain failed', () => {
+        const entry = requireEntry('queue.consumer.stopped');
+        expect(entry.severity).toBe('info');
+
+        const clean = buildSystemEventEnvelope(
+            entry,
+            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 0, drained: true },
+            project,
+        );
+        expect(clean.presentation.severity).toBe('info');
+
+        const incomplete = buildSystemEventEnvelope(
+            entry,
+            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 2, drained: false },
+            project,
+        );
+        expect(incomplete.presentation.severity).toBe('warning');
+
+        const overridden = buildSystemEventEnvelope(entry, { drained: false, severity: 'error' }, project);
+        expect(overridden.presentation.severity).toBe('error');
+    });
+
     test('metadata-only is a bounded allow-list and redacts before projection bounds', () => {
         const secret = 'local-secret-value';
         const envelope = buildSystemEventEnvelope(
