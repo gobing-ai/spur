@@ -13,7 +13,7 @@
  * `const <var> = '@gobing-ai/ts-db'` declaration, captures the identifier, and
  * rewrites `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
  */
-import { existsSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
@@ -76,21 +76,4 @@ export async function buildCli(): Promise<void> {
     } finally {
         restore();
     }
-    relinkGlobal();
-}
-
-/**
- * Re-point the global `/Users/robin/.bun/bin/spur` symlink to the freshly-built
- * local binary so `spur` on PATH immediately reflects the dev build.
- *
- * Running `bun add -g @gobing-ai/spur` later will overwrite the symlink back
- * to the npm-installed version — that is intentional and acceptable.
- */
-function relinkGlobal(): void {
-    const GLOBAL_LINK = '/Users/robin/.bun/bin/spur';
-    if (existsSync(GLOBAL_LINK)) {
-        unlinkSync(GLOBAL_LINK);
-    }
-    symlinkSync(OUT_FILE, GLOBAL_LINK);
-    console.log(`build-cli: symlinked ${GLOBAL_LINK} → ${OUT_FILE}`);
 }
