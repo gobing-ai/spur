@@ -13,7 +13,7 @@ tags: ["observability", "system-events", "web"]
 dependencies: ["0526"]
 ac_numbering: task-local
 created_at: "2026-08-12T13:24:51.431Z"
-updated_at: "2026-08-12T14:54:53.450Z"
+updated_at: "2026-08-12T16:54:49.699Z"
 ---
 
 ## 0527. Make the System Events table and tooltips actionable from the canonical envelope
@@ -76,13 +76,48 @@ Invariants: eight desktop columns; two-column compact fallback; keyboard-equival
 - `apps/web/tests/modules/observability/system-events-tab.test.ts:30` and `apps/web/tests/modules/observability/components.test.tsx:301` cover parsing/fallback/bounds, all renderer families, columns, semantic tooltip/action, keyboard/focus/pin, severity semantics, and responsive layout.
 - `docs/04_DESIGN.md:1467` and `docs/design/actionable-observability-context.md:67` document the shipped Board projection and sibling-tab compatibility seam.
 ### Testing
-- `bunx biome check apps/web/src/modules/observability/SystemEventsTab.tsx apps/web/src/styles/global.css apps/web/tests/modules/observability/system-events-tab.test.ts apps/web/tests/modules/observability/components.test.tsx` — PASS.
-- `bun run --filter @gobing-ai/spur-web typecheck` — PASS.
-- Focused observability tests — 78 pass, 0 fail, 408 assertions. The focused process exits nonzero only because the repository coverage threshold applies to the two-file slice.
-- `bun run autofix && bun run spur-check` — PASS: 4,919 tests, 0 failures, 16,360 assertions, 99.27% aggregate line coverage; lint, corpus, and rules pass.
-- `bun run test-cf` — PASS (1 test). `bun run build` — PASS. Wrangler Worker dry-run — PASS (932.65 KiB).
-- Live browser visual inspection was unavailable because the required in-app browser control tool is absent; runnable responsive/accessibility happy-dom tests and production build pass.
+**Re-verify (2026-08-12, `--force --focus all --fix all`)**
 
+| Check | Result |
+| --- | --- |
+| Focused observability tests | PASS — 78 pass / 0 fail / 408 assertions (`bun test apps/web/tests/modules/observability/system-events-tab.test.ts apps/web/tests/modules/observability/components.test.tsx`) |
+| `spur task check 0527 --strict-core` | Re-run after full-path Testing rewrite |
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:256` (`parseHistoryRow`) + `apps/web/src/modules/observability/SystemEventsTab.tsx:394` (`parseSystemEventView`) narrow envelopes at the boundary; `apps/web/src/modules/observability/SystemEventsTab.tsx:1129`–`:1165` render Time, Severity, Event, Summary, Project / Producer, Correlation, Outcome, Action; `apps/web/src/modules/observability/SystemEventsTab.tsx:1104`–`:1106` compact two-column fallback. Test: `apps/web/tests/modules/observability/components.test.tsx:318`. |
+| R2 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:1197`–`:1210` non-color severity (icon+text); `apps/web/src/modules/observability/SystemEventsTab.tsx:1333`–`:1451` semantic tooltip; hover/focus/pin/Esc/outside-close/ARIA at `apps/web/src/modules/observability/SystemEventsTab.tsx:1221`–`:1308`. Expanded redacted envelope at `apps/web/src/modules/observability/SystemEventsTab.tsx:1643`–`:1648`. Tests: `apps/web/tests/modules/observability/components.test.tsx:779`, `:841`, `:897`. |
+| R3 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:451` `unavailableSystemEventView`; fallback path `apps/web/src/modules/observability/SystemEventsTab.tsx:396`. Tests: `apps/web/tests/modules/observability/system-events-tab.test.ts:86`, `:52`, `:72`; compact `action: unavailable` at `apps/web/tests/modules/observability/components.test.tsx:620`. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R5 — The System Events table prioritizes diagnostic decisions | MET | test | `apps/web/tests/modules/observability/components.test.tsx:318` eight columns; `:721` row semantics; `:620` compact layout |
+| Scenario: R6 — Each event tooltip explains what happened and what to do next | MET | test | `apps/web/tests/modules/observability/components.test.tsx:779` tooltip; `:841` pin/Esc; `:897` Pin; detail redacted JSON `:360` |
+| Scenario: R10 — Malformed or unknown event data fails safe | MET | test | `apps/web/tests/modules/observability/system-events-tab.test.ts:86` unavailable fallback; `:72` bounds/malformed action |
+
+**Design conformance**
+
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| Backend `presentation` is semantic SSOT | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:394` |
+| Narrow once; table/tooltip use projection | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:256`, `:347`, `:1215` |
+| Expanded row forensic surface | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:1597`–`:1648` |
+| Eight desktop columns; two-column compact | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:1129`–`:1165`, `:1104`–`:1106` |
+| Keyboard-equivalent tooltip; selectable copy | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:1333`–`:1451` |
+| Explicit unavailable; no unredacted raw | DONE | `apps/web/src/modules/observability/SystemEventsTab.tsx:295`–`:296`, `:451` |
+
+**SECUA**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1–P3 | All | — | None |
+| P4 | Usability | `apps/web/src/modules/observability/SystemEventsTab.tsx` | Live browser visual inspection unavailable this session; happy-dom responsive/a11y coverage stands in |
+
+Fix-pass artifacts: `.spur/run/0527-verdict.json`, `.spur/run/0527-verify-answer.txt`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

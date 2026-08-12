@@ -482,7 +482,10 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 The System Events surface is a dense diagnostic table, not a marketing screenshot. It still uses
 the shared canvas/surface/hairline/type tokens above.
 
-- Desktop columns: Time, Severity, Event, Summary, Project / Producer, Correlation, Outcome, Action.
+- Desktop columns: Time, Severity, Event, Summary, Producer, Correlation, Outcome, Action.
+  The Producer header and cell show only package / subsystem. Project name/root are omitted
+  from the table and tooltip; they remain in expanded detail as forensic context.
+- Missing or unusable projected fields render as `-`, not the word `unavailable`.
 - Severity uses icon + text; color is supplemental and limited to semantic state.
 - Event names use mono type. Summary is the primary prose cell and truncates to one line with the
   complete value in the semantic tooltip.

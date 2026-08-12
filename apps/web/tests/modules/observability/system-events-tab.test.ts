@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    displayValue,
     formatDuration,
     historyUrl,
     parseHistoryResponse,
@@ -92,6 +93,16 @@ describe('parseSystemEventView', () => {
             expect(view.outcome).toBe('unavailable');
             expect(view.action).toBeNull();
         }
+    });
+});
+
+describe('displayValue', () => {
+    test('renders the Board glyph for missing and unavailable sentinels', () => {
+        expect(displayValue('unavailable')).toBe('-');
+        expect(displayValue(null)).toBe('-');
+        expect(displayValue(undefined)).toBe('-');
+        expect(displayValue('')).toBe('-');
+        expect(displayValue('spur / test')).toBe('spur / test');
     });
 });
 

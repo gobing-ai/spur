@@ -332,7 +332,7 @@ describe('observability components', () => {
             'Severity',
             'Event',
             'Summary',
-            'Project / Producer',
+            'Producer',
             'Correlation',
             'Outcome',
             'Action',
@@ -641,9 +641,11 @@ describe('observability components', () => {
             const row = getByText('task.created').closest('tr') as HTMLTableRowElement;
             expect(row.textContent).toContain('info');
             expect(row.textContent).toContain('Task created · 0199');
-            expect(row.textContent).toContain('spur-new · spur / test');
+            expect(row.textContent).toContain('spur / test');
+            expect(row.textContent).not.toContain('spur-new ·');
             expect(row.textContent).toContain('outcome: completed');
-            expect(row.textContent).toContain('action: unavailable');
+            expect(row.textContent).toContain('action: -');
+            expect(row.textContent).not.toContain('unavailable');
         } finally {
             // @ts-expect-error restore matchMedia
             globalThis.matchMedia = undefined;
@@ -766,6 +768,7 @@ describe('observability components', () => {
         expect(row.textContent).toContain('info');
         expect(row.textContent).toContain('Workflow action completed');
         expect(row.textContent).toContain('spur / test');
+        expect(row.textContent).not.toContain('spur-new');
         expect(row.textContent).toContain('run run-42');
         expect(row.textContent).toContain('success');
         expect(row.textContent).toContain('spur workflow trace run-42');
@@ -828,7 +831,9 @@ describe('observability components', () => {
         expect(tip.textContent).toContain('A queued maintenance job completed.');
         expect(tip.textContent).toContain('job-tip-1');
         expect(tip.textContent).toContain('system-events-prune');
+        expect(tip.textContent).toContain('Producer');
         expect(tip.textContent).toContain('spur / test');
+        expect(tip.textContent).not.toContain('Project');
         expect(tip.textContent).toContain('prefix=queue');
 
         fireEvent.mouseLeave(view.getByTestId('system-event-name'));

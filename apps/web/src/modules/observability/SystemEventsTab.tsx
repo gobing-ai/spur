@@ -519,6 +519,14 @@ export function formatDuration(ms: unknown): string | null {
     return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * Board glyph for a missing or unusable projected field.
+ * Parsers keep the `unavailable` sentinel; the table, tooltip, and detail render `-`.
+ */
+export function displayValue(value: string | null | undefined): string {
+    return value && value !== 'unavailable' ? value : '-';
+}
+
 /** Serialize UI filter state into the server-side query params. */
 export function serializeFilter(filter: FilterState): ActiveFilter {
     const out: ActiveFilter = {};
@@ -1082,7 +1090,7 @@ function useMediaQuery(query: string): boolean {
 /**
  * Dense table view (task 0223) replacing the previous card list.
  *
- * Layout: 8 columns (Time | Severity | Event | Summary | Project / Producer |
+ * Layout: 8 columns (Time | Severity | Event | Summary | Producer |
  * Correlation | Outcome | Action)
  * with a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
  * visible on a standard viewport (R2). Each row is a keyboard-toggleable
@@ -1103,6 +1111,8 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
 
     // Under 640px the table collapses to Time + Event. The semantic fields stack
     // inside Event so the compact surface loses no diagnostic information.
+    // Project is omitted from the table: it is composition-root context and is
+    // constant for this Board view. It remains in the tooltip and expanded detail.
     const isCompact = useMediaQuery('(max-width: 639px)');
 
     return (
@@ -1145,7 +1155,7 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                         )}
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Project / Producer
+                                Producer
                             </th>
                         )}
                         {!isCompact && (
@@ -1232,7 +1242,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
     const ignoreUnlockUntilRef = useRef(0);
     const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const actorLabel = event.actor && event.actor.length > 0 ? event.actor : 'unavailable';
+    const actorLabel = displayValue(event.actor);
     const tooltipOpen = hoveringName || pinned;
 
     const clearHoverLeaveTimer = useCallback(() => {
@@ -1410,7 +1420,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             </p>
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 max-h-80 overflow-y-auto">
                 <dt className="text-spur-text-muted">Summary</dt>
-                <dd className="break-words">{view.summary}</dd>
+                <dd className="break-words">{displayValue(view.summary)}</dd>
                 <dt className="text-spur-text-muted">Severity</dt>
                 <dd>
                     <SeverityLabel severity={view.severity} />
@@ -1418,30 +1428,26 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 {view.fields.map((field) => (
                     <div className="contents" key={field.label + field.value}>
                         <dt className="text-spur-text-muted">{field.label}</dt>
-                        <dd className="font-mono break-all">{field.value}</dd>
+                        <dd className="font-mono break-all">{displayValue(field.value)}</dd>
                     </div>
                 ))}
-                <dt className="text-spur-text-muted">Project</dt>
-                <dd className="font-mono break-all">{view.projectName}</dd>
-                <dt className="text-spur-text-muted">Project root</dt>
-                <dd className="font-mono break-all">{view.projectRoot}</dd>
                 <dt className="text-spur-text-muted">Producer</dt>
-                <dd className="font-mono break-all">{view.producer}</dd>
+                <dd className="font-mono break-all">{displayValue(view.producer)}</dd>
                 {view.correlationFields.length > 0 ? (
                     view.correlationFields.map((field) => (
                         <div className="contents" key={`correlation-${field.label}`}>
                             <dt className="text-spur-text-muted">{field.label}</dt>
-                            <dd className="font-mono break-all">{field.value}</dd>
+                            <dd className="font-mono break-all">{displayValue(field.value)}</dd>
                         </div>
                     ))
                 ) : (
                     <>
                         <dt className="text-spur-text-muted">Correlation</dt>
-                        <dd className="font-mono">unavailable</dd>
+                        <dd className="font-mono">-</dd>
                     </>
                 )}
                 <dt className="text-spur-text-muted">Outcome</dt>
-                <dd className="font-mono break-all">{view.outcome}</dd>
+                <dd className="font-mono break-all">{displayValue(view.outcome)}</dd>
             </dl>
             {view.action && (
                 <div className="mt-2 border-t border-[#30363d] pt-2" data-testid="system-event-remediation">
@@ -1533,18 +1539,18 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                         {compact && (
                             <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
                                 <SeverityLabel severity={view.severity} />
-                                <span className="truncate text-spur-text" title={view.summary}>
-                                    {view.summary}
+                                <span className="truncate text-spur-text" title={displayValue(view.summary)}>
+                                    {displayValue(view.summary)}
                                 </span>
-                                <span className="truncate" title={`${view.projectName} · ${view.producer}`}>
-                                    {view.projectName} · {view.producer}
+                                <span className="truncate" title={displayValue(view.producer)}>
+                                    {displayValue(view.producer)}
                                 </span>
-                                <span className="truncate" title={view.correlation}>
-                                    {view.correlation}
+                                <span className="truncate" title={displayValue(view.correlation)}>
+                                    {displayValue(view.correlation)}
                                 </span>
-                                <span className="truncate">outcome: {view.outcome}</span>
-                                <span className="truncate" title={view.action?.value ?? 'unavailable'}>
-                                    action: {view.action?.value ?? 'unavailable'}
+                                <span className="truncate">outcome: {displayValue(view.outcome)}</span>
+                                <span className="truncate" title={displayValue(view.action?.value)}>
+                                    action: {displayValue(view.action?.value)}
                                 </span>
                             </div>
                         )}
@@ -1553,43 +1559,41 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 text-spur-text align-middle truncate"
-                        title={view.summary}
+                        title={displayValue(view.summary)}
                     >
-                        {view.summary}
-                    </td>
-                )}
-                {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 text-[10px] align-middle min-w-0">
-                        <div className="truncate" title={view.projectName}>
-                            {view.projectName}
-                        </div>
-                        <div className="truncate font-mono text-spur-text-muted" title={view.producer}>
-                            {view.producer}
-                        </div>
+                        {displayValue(view.summary)}
                     </td>
                 )}
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={view.correlation}
+                        title={displayValue(view.producer)}
                     >
-                        {view.correlation}
+                        {displayValue(view.producer)}
                     </td>
                 )}
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={view.outcome}
+                        title={displayValue(view.correlation)}
                     >
-                        {view.outcome}
+                        {displayValue(view.correlation)}
                     </td>
                 )}
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={view.action?.value ?? 'unavailable'}
+                        title={displayValue(view.outcome)}
                     >
-                        {view.action?.value ?? 'unavailable'}
+                        {displayValue(view.outcome)}
+                    </td>
+                )}
+                {!compact && (
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={displayValue(view.action?.value)}
+                    >
+                        {displayValue(view.action?.value)}
                     </td>
                 )}
             </tr>
@@ -1606,16 +1610,19 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             {/* Context and low-value catalog metadata stay in expanded detail. */}
                             <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px]">
                                 <span>
-                                    <span className="text-spur-text-muted">project:</span> {view.projectName}
+                                    <span className="text-spur-text-muted">project:</span>{' '}
+                                    {displayValue(view.projectName)}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">root:</span> {view.projectRoot}
+                                    <span className="text-spur-text-muted">root:</span> {displayValue(view.projectRoot)}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">producer:</span> {view.producer}
+                                    <span className="text-spur-text-muted">producer:</span>{' '}
+                                    {displayValue(view.producer)}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">correlation:</span> {view.correlation}
+                                    <span className="text-spur-text-muted">correlation:</span>{' '}
+                                    {displayValue(view.correlation)}
                                 </span>
                                 <span>
                                     <span className="text-spur-text-muted">actor:</span> {actorLabel}
@@ -1627,7 +1634,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     <span className="text-spur-text-muted">tier:</span> {tier}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">outcome:</span> {view.outcome}
+                                    <span className="text-spur-text-muted">outcome:</span> {displayValue(view.outcome)}
                                 </span>
                             </div>
                             {view.fields.length > 0 && (
@@ -1635,7 +1642,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     {view.fields.map((field) => (
                                         <div key={field.label + field.value} className="flex gap-2">
                                             <dt className="text-spur-text-muted shrink-0">{field.label}:</dt>
-                                            <dd className="font-mono break-all">{field.value}</dd>
+                                            <dd className="font-mono break-all">{displayValue(field.value)}</dd>
                                         </div>
                                     ))}
                                 </dl>
@@ -1644,7 +1651,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             <div className="border-t border-spur-border/40 pt-1">
                                 <div className="text-spur-text-muted text-[10px] mb-0.5">payload (redacted):</div>
                                 <pre className="font-mono text-[10px] text-spur-text-muted overflow-x-auto whitespace-pre-wrap break-all">
-                                    {event.envelope ? JSON.stringify(event.envelope, null, 2) : 'unavailable'}
+                                    {event.envelope ? JSON.stringify(event.envelope, null, 2) : '-'}
                                 </pre>
                             </div>
                             {/* Dismiss button - Escape also works via onKeyDown above. */}
