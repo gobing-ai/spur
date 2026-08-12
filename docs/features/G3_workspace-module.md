@@ -72,7 +72,7 @@ Feature: Team-scoped Workspace Board composition
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0196 | Workspace design: ADR + design doc (data model, config, API, board tabs) | done |
-| 0197 | Workspace module implementation (gated on approved workspace design) | todo |
+| 0197 | Workspace module implementation (gated on approved workspace design) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -32,6 +32,8 @@ section matrix, templates, lifecycles, events, corpus migration, kanban/INDEX vi
 | 0124 | Add --design/--auto design-doc generation to /sp:dev-plan planning half | done |
 | 0125 | Add --agent to critical dev-* commands + extract sp:dogfood-testing backbone skill | done |
 | 0501 | Fix task-size-precheck execFileSync multi-token spurBin ENOENT | done |
+| 0521 | Codify anti-degenerate-loop guard for mid-pipeline runs after compaction | cancelled |
+| 0522 | Make WBS-targeted task checks consistent across configured folders | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
