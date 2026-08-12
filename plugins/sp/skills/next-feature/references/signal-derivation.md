@@ -19,6 +19,11 @@ status on sync). Rules:
 - Urgency signals premised on raw `status` (sunk-work decay, WIP pressure, staleness) are computed
   only against the post-sync view — 0493 rejected all three as standalone signals; post-sync they
   survive only as tie-break texture (see ranking-rubric.md).
+- The dry run is captured **exactly once per run**; the captured result is the sole source of the
+  post-sync status view for protocol steps 1–4 (gating, roster completion, and signal derivation
+  all read the same in-memory capture). This is a prompt-run capture, not a cache/state file: the
+  run never issues a second `spur feature sync --all --dry-run --json` call, and no other verb
+  reproduces it in this run.
 
 ## §1 — Actionability gate (runtime citation, never restated)
 
@@ -32,10 +37,33 @@ Inputs per candidate feature:
 spur task list --feature <id> --json
 ```
 
-Apply B3 over the feature's tasks. **Zero actionable tasks ⇒ gated, not ranked.** Record the gating
+`task list --feature` is **active-folder-only**: it enumerates tasks in the active task folder
+(`.spur/config.yaml`) and omits linked tasks archived in the other configured folders. Apply B3 over
+that list. **Zero actionable tasks ⇒ gated, not ranked.** Record the gating
 reason verbatim for the report's gated list: `all tasks terminal` / `blocked: <task wbs> — <reason>`
 / `no tasks`. A blocked task with no corpus dependency is an **external** block (approval, trigger) —
 report it as such; it is not satisfiable by ranking other work first.
+
+**Complete the roster before declaring terminal or empty.** If the active view yields no B3
+frontier candidate and the tentative reason is `all tasks terminal` or `no tasks`, the active view
+is not authoritative — a frontier task may be archived outside it. Run the fallback once:
+
+1. Consult the §0 capture (the run's single `spur feature sync --all --dry-run --json` result) for
+   the feature's row as an **anomaly hint** only: it may flag the feature without naming a WBS. The
+   sync reason is never treated as a WBS source — no WBS is ever inferred from sync prose.
+2. Scan the whole corpus for linked tasks:
+   ```bash
+   rg -l '^feature_id: "?<id>"?$' docs/tasks*/
+   ```
+   Corpus ids are `[A-Z][0-9]+`-shaped, so `<id>` is regex-safe as-is; escape metacharacters if a
+   non-conforming id ever appears.
+3. Parse the leading WBS from each matched basename; resolve every corpus-only WBS (not present in
+   the active list) with `spur task show <wbs> --json`.
+4. Union the active-list records with the resolved corpus records, deduplicate by WBS, and reapply
+   runtime B3 to the complete set.
+5. Record the gating reason from the complete roster. If the union exposes a blocked task that the
+   active view omitted, the classification is `blocked: <task wbs> — <reason>` — never `all tasks
+   terminal` — with the blocker text taken from the resolved task body, not from sync prose.
 
 ## §2 — The four surviving signals
 
@@ -44,10 +72,19 @@ commands (per candidate feature `<id>`):
 
 | Signal | Derivation | Notes |
 | --- | --- | --- |
-| **AC coverage** (readiness proxy) | `spur feature show <id> --json` → count `Scenario:` in body; `spur feature check <id> --json` for validity findings | 0 scenarios ⇒ "specify next", not "work next" (routes toward B4/B5 territory; see handoff-routing.md) |
+| **AC coverage** (readiness proxy) | `spur feature show <id> --json` → count `Scenario:` in the frozen response's `.content` (the JSON carries the full body as `.content`); `spur feature check <id> --json` for validity findings | 0 scenarios ⇒ "specify next", not "work next" (routes toward B4/B5 territory; see handoff-routing.md) |
 | **Churn exposure** (urgency proxy — WSJF cost-of-delay, numerator only) | `git rev-list --count --since="<40 days ago>" HEAD -- <dirs the feature's scope touches>` | 40d window is 0493's measured default; tune on dogfood. Scope = the paths named in the feature's Goal/Scope |
 | **Dogfood proximity** (compound leverage) | `rg -c 'plugins/sp | apps/cli | task-pipeline | sp:' docs/features/<id>_*.md` + child task bodies | Degenerate-high in this harness (everything touches itself); discriminates mainly at **zero** — a 0-hit feature is "specify, don't ship" |
 | **Authority pull** (declared intent) | `rg -n '\b<id>\b' docs/02_ROADMAP.md docs/00_ADR.md` | Presence is positive evidence; absence is not negative |
+
+**Freeze each candidate input once.** Per candidate `<id>`, capture at most one
+`spur feature show <id> --json` and at most one `spur feature check <id> --json`; reuse those
+captures wherever the four-signal pass needs feature metadata, body, or AC validity. Count
+`Scenario:` in the frozen show response's `.content` — the body is carried as `.content`, so no
+`.filePath` re-read is required (read the file only when the response does not carry the corpus text
+needed). No signal re-invokes a frozen capture. Churn, dogfood, and authority pull continue using
+their own prescribed `git`/`rg` derivations above — they do not derive from the feature show/check
+captures.
 
 **Degenerate-spread rule.** After deriving a signal across the candidate set, check its spread. One
 dominant value (as `priority` was at 76% P2) ⇒ the signal does not discriminate on this frontier:

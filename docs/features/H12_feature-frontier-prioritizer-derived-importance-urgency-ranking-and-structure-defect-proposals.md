@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-10T00:44:30.834Z"
-updated_at: "2026-08-10T05:39:52.177Z"
+updated_at: "2026-08-12T06:29:33.227Z"
 ---
 
 # H12: Feature frontier prioritizer: derived importance/urgency ranking and structure-defect proposals
@@ -101,6 +101,7 @@ Feature: Feature frontier prioritizer
 | 0495 | Structure-defect contract: which tree defects distort ranking, and the proposal artifact /sp:dev-featurechange consumes | done |
 | 0497 | Ship /sp:dev-find-next + sp:next-feature — prompt-first feature frontier prioritizer | done |
 | 0498 | Add --task to /sp:dev-find-next — confirm the ranked winner, then dispatch the planning half to implement-ready tasks | done |
+| 0523 | /sp:dev-find-next dogfood findings (2026-08-11) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -283,3 +284,6 @@ Consciously deferred:
 - 2026-08-10T05:32:38.429Z done → active (system)
 - 2026-08-10T05:39:51.684Z active → verifying (system)
 - 2026-08-10T05:39:52.177Z verifying → done (system)
+- 2026-08-12T06:07:39.250Z done → active (system)
+- 2026-08-12T06:29:32.925Z active → verifying (system)
+- 2026-08-12T06:29:33.227Z verifying → done (system)

@@ -56,7 +56,7 @@
 [active] **I**: sp plugin ([I_sp-plugin.md](./I_sp-plugin.md))
     ├── [done] **I1**: sp plugin hands-off ready ([I1_sp-plugin-hands-off-ready.md](./I1_sp-plugin-hands-off-ready.md))
         └── [done] **I11**: dev-idea: drop --design force path + idea-evaluation taste gate ([I11_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md](./I11_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md))
-    └── [backlog] **I2**: spur-dev/spur-cli parity-first drift audit and harness refinement ([I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md](./I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md))
+    └── [done] **I2**: spur-dev/spur-cli parity-first drift audit and harness refinement ([I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md](./I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md))
 [active] **J**: Observability board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
     ├── [done] **J1**: Observability System Events Table Redesign ([J1_observability-system-events-table-redesign.md](./J1_observability-system-events-table-redesign.md))
     ├── [verifying] **J2**: System Events Payload and Wiring Enrichment ([J2_system-events-payload-and-wiring-enrichment.md](./J2_system-events-payload-and-wiring-enrichment.md))
