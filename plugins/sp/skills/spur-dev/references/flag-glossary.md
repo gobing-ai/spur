@@ -203,10 +203,11 @@ behavior:
 
 - `dev-brainstorm` `[<feature-id>]` — **creates** one task from the chosen approach, landing at
   `todo` ready for refine. Optional feature id scopes it.
-- `dev-find-next` `[<feature-id>]` — after an **explicit operator confirm**, dispatches the planning
-  half on the ranked winner (`/sp:dev-plan` to decompose, then `/sp:dev-refineall --depth ready` to
-  freeze implement-ready). Creates no task itself; the confirm pauses regardless of `--auto`.
-  Optional feature id names the target instead of offering rank 1.
+- `dev-find-next` `[<feature-id>]` — after confirm, dispatches the planning half on the ranked
+  winner (`/sp:dev-plan` to decompose, then `/sp:dev-refineall --depth ready` to freeze
+  implement-ready). Creates no task itself. Interactive by default; with `--auto`, auto-accepts the
+  offered target (rank-1 or the explicit id) and forwards `--auto` to the children. Optional feature
+  id names the target instead of offering rank 1.
 - `dev-debug` `[<wbs>]` — **attaches** findings to an existing task. Optional WBS names it.
 - `dev-dogfood` (no value) — **records** run outcomes against the task under test.
 

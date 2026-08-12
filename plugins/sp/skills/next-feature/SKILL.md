@@ -40,9 +40,9 @@ in this corpus it is 76% one value (0493 measurement).
 **Propose, never apply.** This skill performs no `spur feature move` and writes nothing under
 `docs/features/**`. The only path from a structure proposal to a changed tree is
 `/sp:dev-featurechange` (dry-run → confirm → apply). Ranking runs are read-only; the sole exception is
-`--task`, which after an **explicit operator confirm** dispatches `/sp:dev-plan` and
-`/sp:dev-refineall` — commands that write `docs/tasks*/` through their own gates. This skill still
-creates no tasks itself.
+`--task`, which after an **operator confirm** (interactive, or auto-accepted under `--auto`)
+dispatches `/sp:dev-plan` and `/sp:dev-refineall` — commands that write `docs/tasks*/` through their
+own gates. This skill still creates no tasks itself.
 
 ## When to Use
 
@@ -89,13 +89,16 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
    at the ranking; advancing a chosen feature is `/sp:dev-next`'s job.
 7. **`--task` only — confirm, then dispatch the planning half.** Offer the rank-1 candidate (or the
    id passed as `--task <feature-id>` — which may name a **gated** feature, since T2/T3/T4 are tiers
-   the rubric assigns to the gated list and only T1 comes from the ranked frontier), take an
-   **explicit** operator confirmation, then route on the
-   tier step 4 already assigned: T3 with zero tasks → `/sp:dev-plan --feature <id>` then
-   `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 → refineall only; T3 with invalid AC,
-   T2, and T4 stop with their reason. **This skill creates no tasks itself** — the dispatched
-   commands own decomposition and its schema gate. The confirm pauses regardless of `--auto`. Full
-   contract: [references/handoff-routing.md](references/handoff-routing.md).
+   the rubric assigns to the gated list and only T1 comes from the ranked frontier). **Without
+   `--auto`:** take an explicit operator confirmation (accept the offer, name another candidate, or
+   decline). **With `--auto`:** auto-accept the offered target (rank-1 for bare `--task`, or the
+   explicit id) — the flag is operator pre-consent to take the ranking's recommendation — then
+   proceed without a HITL pause. Route on the tier step 4 already assigned: T3 with zero tasks →
+   `/sp:dev-plan --feature <id>` then `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 →
+   refineall only; T3 with invalid AC, T2, and T4 stop with their reason. **This skill creates no
+   tasks itself** — the dispatched commands own decomposition and its schema gate. Forward `--auto`
+   into the dispatched children. Full contract:
+   [references/handoff-routing.md](references/handoff-routing.md).
 
 ## Anti-patterns — do not do these
 
@@ -105,9 +108,10 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
 - Copying the B3 predicate into this skill. Cite it; read it at runtime.
 - Any `spur feature move`, or writing proposals anywhere `docs/features/**` — featurechange owns apply.
 - Decomposing a feature here, or calling `spur task create` / `spur task batch-create` under `--task`.
-  Dispatch `/sp:dev-plan`; it owns decomposition and the batch-create schema gate. Equally: skipping
-  the `--task` confirm because `--auto` was passed, or decomposing a T1 feature that already has a
-  live task frontier.
+  Dispatch `/sp:dev-plan`; it owns decomposition and the batch-create schema gate. Equally:
+  dispatching under `--auto` without `--task` (there is no confirm to skip), auto-accepting a target
+  other than the offer / named `--task <id>`, or decomposing a T1 feature that already has a live
+  task frontier.
 - Padding the defect list with tidiness findings that move no rank.
 - Re-proposing F31's rejected merges (B∪H, J∪K body-merge) or reading
   `## Applied mapping` as current state — letters are recycled; resolve against live features.

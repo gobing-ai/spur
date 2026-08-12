@@ -65,15 +65,20 @@ survivors would make its primary case unreachable. Offer the rank-1 ranked candi
 | **T2 — unblock first** | gated on a blocker | **Refuse.** Name the blocker and its owner. Tasks created under a blocked feature cannot run. |
 | **T4 — stale-done** | post-sync status would be `done` | **Refuse.** Route to `/sp:dev-wrapall --feature <id>` or the sync-first block; the work is finished, not startable. |
 
-### The confirmation is unconditional
+### The confirmation — interactive by default, auto-accepted under `--auto`
 
 | Rule | Detail |
 | --- | --- |
-| Default offer | The rank-1 candidate. The operator may confirm it, name another candidate from the report, or decline. |
-| `--task <feature-id>` | An explicit id skips the *default-offer* step. It does **not** skip the confirm. |
-| `--auto` | Forwarded to the dispatched children (`dev-plan --auto`, `dev-refineall --auto`). It **never** answers the confirm — choosing what to invest in is a taste decision (Auto-Decision Principle #5), and `ranking-rubric.md` already states the operator overrides the ranking. |
-| No escape | There is no `--yes` / `--force` bypass. No path exists from `--task` to a created task file without an explicit operator decision. |
-| Refusal | Declining ends the run at the report. Nothing is written. |
+| Default offer | The rank-1 candidate. Without `--auto`, the operator may confirm it, name another candidate from the report, or decline. |
+| `--task <feature-id>` | An explicit id becomes the offered target (skips the *default-offer* step). Without `--auto` it still requires confirm; with `--auto` the named id is auto-accepted. |
+| `--auto` | **Two effects:** (1) auto-accept the offered target — rank-1 for bare `--task`, or the explicit `--task <feature-id>` — without a HITL pause; (2) forward into the dispatched children (`dev-plan --auto`, `dev-refineall --auto`). Passing `--auto` is operator **pre-consent** to take the ranking's recommendation (streamline path); it does **not** invent a different target, and it does **not** bypass T2/T4 refuse or invalid-AC stop. Without `--task`, `--auto` is a no-op (ranking-only has no HITL). |
+| Report the accept | When `--auto` accepts, print a one-line note: `auto-accepted target <id> (tier <Tn>) via --auto` so the transcript records the decision. |
+| Refusal | Declining (interactive path only) ends the run at the report. Nothing is written. |
+
+**Why this is not a Principle #5 taste auto-click.** The ranking already produced the recommendation;
+`--auto` only skips the *proceed-with-offer* pause. Overriding the ranking (picking a non-offered
+candidate) still requires the interactive confirm path. Architecture / design-approval taste gates
+inside dispatched children remain governed by their own contracts (`--approve-taste` where applicable).
 
 ### What `--task` does not change
 
@@ -89,4 +94,4 @@ adds one gated path to `docs/tasks*/`, through commands that own their own gates
 | Defect proposals | stdout; optionally appended to `docs/plans/feature-tree-restructure-map.md` |
 | "Sync first" block | top of report when the dry-run proposes frontier changes |
 | Winner handoff | printed `/sp:dev-next <id>` hint — operator runs it |
-| `--task` dispatch | after an explicit confirm: `/sp:dev-plan` and/or `/sp:dev-refineall`, which write `docs/tasks*/` through their own gates |
+| `--task` dispatch | after confirm (interactive) or auto-accept (`--auto`): `/sp:dev-plan` and/or `/sp:dev-refineall`, which write `docs/tasks*/` through their own gates |

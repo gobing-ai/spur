@@ -646,6 +646,7 @@ declares out of v1 (routing-table §0 step 1c); within-target routing stays `/sp
 /sp:dev-find-next
     [--task [<feature-id>]]                             # default omitted
     [--agent <inline|auto|name>]                        # default inline
+    [--auto]                                            # default off
     [--json]                                            # default off
 ```
 
@@ -664,16 +665,17 @@ clearing the `sp:conflict-finding` evidence bar (`false_positive_check` mandator
 valid outcome. (6) Report — the command performs no `spur feature move` and writes nothing under
 `docs/features/**`; `/sp:dev-featurechange` (dry-run → confirm → apply) is the sole path from a
 structure proposal to a changed tree. (7) **`--task` only (task 0498, resolving OQ1 toward the
-planning half):** offer the rank-1 candidate (or the id passed to `--task`), take an **explicit**
-operator confirmation, then route on the tier step 4 assigned — T3 with valid AC and zero tasks →
-`/sp:dev-plan --feature <id>` then `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 →
-refineall only (a live frontier already exists; a second decomposition duplicates it); T3 with
-invalid AC → stop with next-router's B4 hop, never inventing idea text; T2 (blocked) and T4
-(stale-done) → refuse with the reason. The skill **creates no tasks itself** — decomposition and the
-`task-batch.schema.json` gate belong to `/sp:dev-plan`. The confirm pauses regardless of `--auto`
-(Auto-Decision Principle #5, taste); `--auto` is forwarded only to the dispatched children, and no
-`--yes`/`--force` bypass exists. Adds no TypeScript, schema, frontmatter field, CLI verb, or
-subagent. SSOT:
+planning half):** offer the rank-1 candidate (or the id passed to `--task`), then route on the tier
+step 4 assigned — T3 with valid AC and zero tasks → `/sp:dev-plan --feature <id>` then
+`/sp:dev-refineall --feature <id> --auto --depth ready`; T1 → refineall only (a live frontier already
+exists; a second decomposition duplicates it); T3 with invalid AC → stop with next-router's B4 hop,
+never inventing idea text; T2 (blocked) and T4 (stale-done) → refuse with the reason. The skill
+**creates no tasks itself** — decomposition and the `task-batch.schema.json` gate belong to
+`/sp:dev-plan`. Confirm is interactive by default; **`--auto` auto-accepts the offered target**
+(rank-1 or the explicit `--task <id>`) as operator pre-consent to take the ranking's recommendation
+and is forwarded to the dispatched children. T2/T4 refuse and invalid-AC stop still apply under
+`--auto`. Without `--task`, `--auto` is a no-op. Adds no TypeScript, schema, frontmatter field, CLI
+verb, or subagent. SSOT:
 `plugins/sp/skills/next-feature/SKILL.md` + its four references
 (`signal-derivation`, `ranking-rubric`, `proposal-contract`, `handoff-routing`).
 
