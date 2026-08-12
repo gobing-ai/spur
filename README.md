@@ -51,6 +51,7 @@ Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both e
 
 ```bash
 bun add -g @gobing-ai/spur   # global `spur` command
+
 # or run ad-hoc, no install:
 bunx @gobing-ai/spur --help
 ```
@@ -59,7 +60,14 @@ The npm package also ships the `sp` plugin and its marketplace manifest. Install
 your supported coding agents without cloning this repo:
 
 ```bash
+# install superskill, we will use it to install claude code style plugin
+bun add -g @gobing-ai/superskill
+
+# install plugin sp via npm tarball
 superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+
+# install plugin sp via github URL
+superskill install kk --marketplace https://github.com/gobing-ai/sour
 ```
 
 **Without Bun — standalone binary (macOS / Linux):**
