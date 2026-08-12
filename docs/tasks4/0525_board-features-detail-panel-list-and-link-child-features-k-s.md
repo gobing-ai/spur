@@ -13,7 +13,7 @@ tags: ["board-features"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-12T07:09:29.141Z"
-updated_at: "2026-08-12T07:55:31.474Z"
+updated_at: "2026-08-12T07:57:54.775Z"
 ---
 
 ## 0525. Board Features detail panel: list and link child features (K subtree)
@@ -30,11 +30,11 @@ updated_at: "2026-08-12T07:55:31.474Z"
 
   | Claim | Live evidence |
   | --- | --- |
-  | Detail filters linked tasks by `featureId` only | `FeatureDetail.tsx:83` `linkedTasks = tasks.filter(t => t.featureId === featureId)`; empty copy at `:597-598` |
+  | Detail filters linked tasks by `featureId` only | `apps/web/src/modules/features/FeatureDetail.tsx:83` `linkedTasks = tasks.filter(t => t.featureId === featureId)`; empty copy at `:597-598` |
   | No children section / props | `FeatureDetailProps` (`:24-35`) is only `featureId`, `onClose?`, `refreshKey?` — no `children` / `onSelectFeature` |
-  | Hierarchy algorithm already in tree | Private `groupByParent` in `FeatureTree.tsx:49-65`; docblock `:14-15` = `id.length === parent.length + 1 && startsWith` via `parentId = id.slice(0, -1)` + skip roots |
-  | Shell owns flat list + selection | `FeaturesShell.tsx:40-41` `features` / `selectedId`; tree uses **filtered** list `:260`; detail gets only `featureId` / `refreshKey` / `onClose` `:267-271` |
-  | No server children field | `FeatureShowData` in `feature-types.ts:18-26` has no children; list is `FeatureSummary[]` |
+  | Hierarchy algorithm already in tree | Private `groupByParent` in `apps/web/src/modules/features/FeatureTree.tsx:49-65`; docblock `:14-15` = `id.length === parent.length + 1 && startsWith` via `parentId = id.slice(0, -1)` + skip roots |
+  | Shell owns flat list + selection | `apps/web/src/modules/features/FeaturesShell.tsx:40-41` `features` / `selectedId`; tree uses **filtered** list `:260`; detail gets only `featureId` / `refreshKey` / `onClose` `:267-271` |
+  | No server children field | `FeatureShowData` in `apps/web/src/lib/feature-types.ts:18-26` has no children; list is `FeatureSummary[]` |
   | Corpus refresh is task-edge only | `feature-service` `renderTasksTable` empty → `_No linked tasks._` (`:1060-1062`); refresh populates from `feature_id` task edges (`collectTasksByFeature` ~`:622+`) — not child features |
   | K1 is direct child of K | `docs/features/K1_project-switcher.md` id K1; ID-prefix rule ⇒ parent K |
 
@@ -256,37 +256,37 @@ Design paths (+ task corpus).
 **Force re-verify (2026-08-12) — `/sp:dev-verify 0525 --auto --force --fix all --focus all`**
 
 - Verdict: PASS
-- Coverage: N/A (UI feature; component suite is the evidence surface; no new domain/runtime package path requiring coverage %)
-- Fix-pass: Design/Solution/Plan/Testing anchors rewritten to full repo-relative paths; Design prop renamed to `childFeatures` (matches shipped biome-safe API). Artifacts: `.spur/run/0525-verdict.json`, `.spur/run/0525-verify-answer.txt`.
+- Coverage: N/A (UI feature; component suite is the evidence surface)
+- Fix-pass: Design/Solution/Testing use full repo-relative anchors; prop is `childFeatures` (biome `noChildrenProp`). Artifacts: `.spur/run/0525-verdict.json`, `.spur/run/0525-verify-answer.txt`.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:606-629` — `childFeatures.length > 0` section above Linked Tasks; heading `Child features (N)`; rows with mono id, name, `FeatureStatusIcon` (`:621`). Test `apps/web/tests/modules/features/components.test.tsx:677` — two children → `Child features (2)` + Done/Active icon labels. Suite this run: 42 pass / 0 fail. |
-| R2 | MET | `FeatureDetail.tsx:613-618` — `<button type="button">`, `aria-label=Open child feature <id>: <name>`, `onClick` → `onSelectFeature?.(child.id)`. Shell `apps/web/src/modules/features/FeaturesShell.tsx:280` passes `onSelectFeature={setSelectedId}`. Test `components.test.tsx:703` — click K1 pushes id. |
-| R3 | MET | Section independent of linked tasks; empty tasks still show "No linked tasks" (`FeatureDetail.tsx:637`). Test `components.test.tsx:736` — K + empty `/tasks` → empty task copy AND navigable K1. |
-| R4 | MET | Guard `childFeatures.length > 0` (`FeatureDetail.tsx:606`); default `[]` (`:55`). Test `components.test.tsx:769` — no Child features heading / no empty-state. |
-| R5 | MET | `FeaturesShell.tsx:55` `groupFeaturesByParent(features ?? [])` on unfiltered list; `:162` selectedChildren; `:279` `childFeatures={selectedChildren}`; tree only gets `filteredFeatures`. Shared helper `FeatureTree.tsx:55`. Test `components.test.tsx:791` — filter active hides F1 in tree, detail still lists F1. No server/contract/CLI files in diff. Typecheck clean. |
+| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:606-629` — `childFeatures.length > 0` section above Linked Tasks; heading `Child features (N)`; rows with mono id, name, `FeatureStatusIcon`. Test `apps/web/tests/modules/features/components.test.tsx:677` — two children → `Child features (2)` + Done/Active icon labels. Suite this run: 42 pass / 0 fail. |
+| R2 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:613-618` — `<button type="button">`, `aria-label=Open child feature <id>: <name>`, click → `onSelectFeature?.(child.id)`. Shell `apps/web/src/modules/features/FeaturesShell.tsx:280` passes `onSelectFeature={setSelectedId}`. Test `apps/web/tests/modules/features/components.test.tsx:703` — click K1 pushes id. |
+| R3 | MET | Section independent of linked tasks; empty tasks still show "No linked tasks" (`apps/web/src/modules/features/FeatureDetail.tsx:637`). Test `apps/web/tests/modules/features/components.test.tsx:736` — K + empty `/tasks` → empty task copy AND navigable K1. |
+| R4 | MET | Guard `childFeatures.length > 0` (`apps/web/src/modules/features/FeatureDetail.tsx:606`); default `[]` (`apps/web/src/modules/features/FeatureDetail.tsx:55`). Test `apps/web/tests/modules/features/components.test.tsx:769` — no Child features heading / no empty-state. |
+| R5 | MET | `apps/web/src/modules/features/FeaturesShell.tsx:55` `groupFeaturesByParent(features ?? [])` on unfiltered list; `:162` selectedChildren; `:279` `childFeatures={selectedChildren}`; tree only gets `filteredFeatures`. Shared helper `apps/web/src/modules/features/FeatureTree.tsx:55`. Test `apps/web/tests/modules/features/components.test.tsx:791` — filter active hides F1 in tree, detail still lists F1. No server/contract/CLI files in diff. Typecheck clean. |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R1 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:677` — Child features (N) + ids/names + FeatureStatusIcon; suite 42/0 |
-| Scenario: R2 — Project switcher is a child of K | MET | test | `components.test.tsx:703` — Open child feature button + onSelectFeature; shell wires setSelectedId (`FeaturesShell.tsx:280`) |
-| Scenario: R3 — Project switcher is a child of K | MET | test | `components.test.tsx:736` — No linked tasks + navigable K1 |
-| Scenario: R4 — Project switcher is a child of K | MET | test | `components.test.tsx:769` — no section when no children |
-| Scenario: R5 — Project switcher is a child of K | MET | test | `components.test.tsx:791` — unfiltered derivation under status filter; `groupFeaturesByParent` (`FeatureTree.tsx:55`) |
+| Scenario: R1 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:677` — Child features (N) + ids/names + FeatureStatusIcon; suite 42 pass / 0 fail |
+| Scenario: R2 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:703` — Open child feature button + onSelectFeature; shell wires setSelectedId (`apps/web/src/modules/features/FeaturesShell.tsx:280`) |
+| Scenario: R3 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:736` — No linked tasks + navigable K1 |
+| Scenario: R4 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:769` — no section when no children |
+| Scenario: R5 — Project switcher is a child of K | MET | test | `apps/web/tests/modules/features/components.test.tsx:791` — unfiltered derivation under status filter; `apps/web/src/modules/features/FeatureTree.tsx:55` shared helper |
 
 **Design conformance**
 
 | Claim | Status | Evidence |
 | --- | --- | --- |
-| Export groupFeaturesByParent | DONE | `FeatureTree.tsx:55` |
-| Shell unfiltered map + props | DONE | `FeaturesShell.tsx:55,162,279-280` |
-| Detail section + FeatureStatusIcon | DONE | `FeatureDetail.tsx:603-629` |
-| Prop name `children` in early design draft | CHANGED | Shipped `childFeatures` (biome `noChildrenProp`); Design updated this fix pass |
+| Export groupFeaturesByParent | DONE | `apps/web/src/modules/features/FeatureTree.tsx:55` |
+| Shell unfiltered map + props | DONE | `apps/web/src/modules/features/FeaturesShell.tsx:55,162,279-280` |
+| Detail section + FeatureStatusIcon | DONE | `apps/web/src/modules/features/FeatureDetail.tsx:603-629` |
+| Prop name early draft `children` | CHANGED | Shipped `childFeatures` (biome `noChildrenProp`); Design updated this fix pass |
 
 **SECUA (focus=all)**
 
@@ -308,17 +308,17 @@ Evidence: `bun test apps/web/tests/modules/features/components.test.tsx` → 42 
 
 | Req | Evidence | Verdict |
 | --- | --- | --- |
-| R1 — Child section with status | `FeatureDetail.tsx:606-631` — `Child features (N)` heading inside expanded metadata, immediately above Linked Tasks; rows render mono id, name, `FeatureStatusIcon status={child.status}` (role="img", human label via `featureStatusLabel`). Test `components.test.tsx:677` — two children (done/active) → `Child features (2)`, ids/names present, icon labels `Done`/`Active`. | PASS |
-| R2 — Navigable rows | Row is `<button type="button">` (`:615`) with `aria-label={Open child feature ${id}: ${name}}` (`:618`) and `onClick={() => onSelectFeature?.(child.id)}` (`:616`); shell passes `onSelectFeature={setSelectedId}` (`FeaturesShell.tsx:280`), so activation selects the child's panel. Test `:703` asserts button type, accessible name, click → callback id. | PASS |
-| R3 — Umbrella with empty task edges | Section renders independently of `linkedTasks`. Test `:736` — K fixture with empty `/tasks` + child K1 → `No linked tasks` AND navigable K1 row present; click selects K1. | PASS |
-| R4 — No children ⇒ no section | `childFeatures.length > 0 &&` guard (`:606`) with default `[]` (`:55`); no empty-state text anywhere. Test `:769` asserts no heading and no `/No child features/i`. | PASS |
-| R5 — Client-only derivation from unfiltered list | `FeaturesShell.tsx:55` — `useMemo(() => groupFeaturesByParent(features ?? []), [features])` derives from the **unfiltered** `features` state; hook unconditional (before early returns). `filteredFeatures` is passed only to `FeatureTree` (`:264`), never to the children map. Single shared helper (`FeatureTree.tsx:55`, exported `groupFeaturesByParent`, same ID-prefix algorithm + sort) consumed by both tree and detail. No server contract, endpoint, fetch, or corpus change. Test `:791` — tree filtered to `active` (hides F1 `done`), select F → `Child features (1)` + `Open child feature F1: Child` — proves unfiltered derivation end-to-end. | PASS |
+| R1 — Child section with status | `apps/web/src/modules/features/FeatureDetail.tsx:606-631` — `Child features (N)` heading inside expanded metadata, immediately above Linked Tasks; rows render mono id, name, `FeatureStatusIcon status={child.status}` (role="img", human label via `featureStatusLabel`). Test `apps/web/tests/modules/features/components.test.tsx:677` — two children (done/active) → `Child features (2)`, ids/names present, icon labels `Done`/`Active`. | PASS |
+| R2 — Navigable rows | Row is `<button type="button">` (`:615`) with `aria-label={Open child feature ${id}: ${name}}` (`:618`) and `onClick={() => onSelectFeature?.(child.id)}` (`:616`); shell passes `onSelectFeature={setSelectedId}` (`apps/web/src/modules/features/FeaturesShell.tsx:280`), so activation selects the child's panel. Test `apps/web/tests/modules/features/components.test.tsx:703` asserts button type, accessible name, click → callback id. | PASS |
+| R3 — Umbrella with empty task edges | Section renders independently of `linkedTasks`. Test `apps/web/tests/modules/features/components.test.tsx:736` — K fixture with empty `/tasks` + child K1 → `No linked tasks` AND navigable K1 row present; click selects K1. | PASS |
+| R4 — No children ⇒ no section | `childFeatures.length > 0 &&` guard (`:606`) with default `[]` (`:55`); no empty-state text anywhere. Test `apps/web/tests/modules/features/components.test.tsx:769` asserts no heading and no `/No child features/i`. | PASS |
+| R5 — Client-only derivation from unfiltered list | `apps/web/src/modules/features/FeaturesShell.tsx:55` — `useMemo(() => groupFeaturesByParent(features ?? []), [features])` derives from the **unfiltered** `features` state; hook unconditional (before early returns). `filteredFeatures` is passed only to `FeatureTree` (`:264`), never to the children map. Single shared helper (`apps/web/src/modules/features/FeatureTree.tsx:55`, exported `groupFeaturesByParent`, same ID-prefix algorithm + sort) consumed by both tree and detail. No server contract, endpoint, fetch, or corpus change. Test `apps/web/tests/modules/features/components.test.tsx:791` — tree filtered to `active` (hides F1 `done`), select F → `Child features (1)` + `Open child feature F1: Child` — proves unfiltered derivation end-to-end. | PASS |
 
 
 | Severity | Dimension | Finding | Disposition |
 | --- | --- | --- | --- |
 | P3 | Docs | Task Design "Frozen API" (`:162`, `:184`) and Solution (`:259`, `:262`) still document the prop as `children?: FeatureSummary[]` / `children={selectedChildren}`, but shipped code renames it to `childFeatures` (biome `noChildrenProp` — React-reserved collision). Task file contradicts the shipped contract. | Accept (rename is biome-mandated and correct); update task doc Design/Solution to `childFeatures` for accuracy |
-| P4 | UI polish | Child name span is `truncate` without `flex-1 min-w-0` (`FeatureDetail.tsx:624`); flex default `min-width:auto` defeats the ellipsis, so a long child name overflows the panel instead of truncating — the sibling Linked Tasks row uses `flex-1 min-w-0` (`:648`,`:652`). | Optional; add `flex-1 min-w-0` to match the panel's own row pattern |
+| P4 | UI polish | Child name span is `truncate` without `flex-1 min-w-0` (`apps/web/src/modules/features/FeatureDetail.tsx:624`); flex default `min-width:auto` defeats the ellipsis, so a long child name overflows the panel instead of truncating — the sibling Linked Tasks row uses `flex-1 min-w-0` (`:648`,`:652`). | Optional; add `flex-1 min-w-0` to match the panel's own row pattern |
 
 - Low. No P1/P2: no functional, security, or a11y-blocking issue. Rows are native buttons (keyboard-focusable, Enter/Space activation); explicit aria-label gives a stable accessible name independent of content.
 - Note (not a finding): row icon wrapper `title={child.status}` shows the raw status code on hover — identical to the Linked Tasks rows' `title={t.status}` convention in the same panel, so it is module-consistent; ADR-034's single-source human label is only used for the accessible channel.
