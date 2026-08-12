@@ -477,6 +477,23 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 **`footer`** — Dense link grid on `{colors.canvas}` with the Linear wordmark left.
 - Background `{colors.canvas}`, text `{colors.ink-subtle}`, type `{typography.caption}`, padding 64px 32px.
 
+## Product UI — System Events
+
+The System Events surface is a dense diagnostic table, not a marketing screenshot. It still uses
+the shared canvas/surface/hairline/type tokens above.
+
+- Desktop columns: Time, Severity, Event, Summary, Project / Producer, Correlation, Outcome, Action.
+- Severity uses icon + text; color is supplemental and limited to semantic state.
+- Event names use mono type. Summary is the primary prose cell and truncates to one line with the
+  complete value in the semantic tooltip.
+- Event-name tooltip uses `surface-3`, a strong hairline, mono value rows, a 400 px minimum when
+  space permits, and a viewport-bounded maximum. Hover and keyboard focus open the same content;
+  pinning makes it selectable for copy; Escape and outside activation close it.
+- Expanded detail owns raw redacted JSON and lower-value catalog metadata. The tooltip owns what
+  happened, why it matters, and the next safe action.
+- Below 640 px, collapse to Time + Event and stack summary, producer/correlation, outcome, and action
+  under the event name. No horizontal information loss may require color interpretation.
+
 ## Do's and Don'ts
 
 ### Do

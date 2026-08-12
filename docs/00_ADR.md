@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.13.0
+version: 1.14.0
 owner: Robin Min
-updated_at: 2026-08-11
+updated_at: 2026-08-12
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -496,3 +496,14 @@ Accepted (design) → Accepted.
 - **Why:** H already mixes runtime and plugin concerns. Extending it would preserve ambiguous
   ownership; a dedicated I root makes new work deterministic without rewriting completed history.
 - **Detail:** `03 §15`; `docs/plans/2026-08-11-sp-plugin-feature-tree-restructure-map.md`.
+
+## ADR-056: Enrich System Events at the Spur Catalog and Sink Boundary
+
+- **Status:** Accepted (design) · **Date:** 2026-08-12 · **Feature:** J5
+- **Decision:** Keep upstream `@gobing-ai/ts-*` event maps domain-local; Spur wraps cataloged events
+  at its shared tap/emitter boundary in a versioned actionable envelope carrying project, producer,
+  correlation, presentation, and bounded redacted data. Existing trace JSON contracts may gain
+  optional context fields but retain every existing field and meaning.
+- **Why:** One Spur-owned projection makes every Board and CLI consumer consistent without coupling
+  the generic upstream EventBus or duplicating policy across emit sites.
+- **Detail:** `03 §16`; `docs/design/actionable-observability-context.md`; feature J5.

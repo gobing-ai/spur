@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.14.0
+version: 1.15.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-11
+updated_at: 2026-08-12
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -585,3 +585,37 @@ Shapes: `docs/design/plugin-surface-parity.md`.
 
 Planning ownership follows ADR-055: B owns runtime agent execution; I owns the `sp` plugin harness
 described in this section; H is frozen mixed history, not an active destination for new work.
+
+## 16. Actionable Observability Context (accepted design — ADR-056; not yet built)
+
+Cataloged events retain their domain-local ts-libs payloads until they cross Spur's canonical
+observability seam. `registerSystemEventTap` and the CLI `SystemEventEmitter` call one pure envelope
+builder before persistence; SSE uses the same projection. The history read path recognizes legacy
+raw payloads and projects them into the current envelope without rewriting storage.
+
+```text
+Spur / @gobing-ai/ts-* typed event
+  → SYSTEM_EVENT_CATALOG entry
+  → buildSystemEventEnvelope(event, project context)
+  → redacted + bounded system_events payload / SSE frame
+  → Board semantic table + tooltip
+
+workflow_runs / rule_runs
+  → existing trace services
+  → additive contextual DTO projection
+  → human trace + JSON
+```
+
+Invariants:
+
+- ts-libs event maps do not depend on Spur project context or presentation vocabulary.
+- Redaction precedes recursive bounds and every persistence/streaming sink.
+- `metadata-only` is an allow-list; it never retains business payloads or complete finding/output bodies.
+- Indexed `system_events` correlation columns remain query authority; envelope correlation is the
+  portable display projection.
+- Legacy rows are adapted on read; no history migration or payload rewrite is required.
+- Remediation values name only existing commands, Board filters, or local artifact paths and are
+  omitted when exact reconstruction is impossible.
+- Trace stores remain replay authority; System Events never reconstruct workflow or rule traces.
+
+Shapes: `docs/design/actionable-observability-context.md`.

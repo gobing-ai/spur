@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.3.0
+version: 1.4.0
 owner: Robin Min
-updated_at: 2026-08-11
+updated_at: 2026-08-12
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -91,6 +91,7 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 | Team-scoped Board composition                              | Spur Board Teams / Inbox / Workspace                | existing team, message, and task surfaces  |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
+| Actionable local observability context                     | Spur Board System Events + existing trace commands | system-event ledger + engine persistence   |
 | Workflow validate / run / list                             | `spur workflow ...`                                | `ts-dual-workflow-engine`                  |
 | History import (7 sources)                                 | `spur history import`                              | `ts-llm-jsonl-importer`                    |
 | History cost analytics                                     | `spur history analyze`                             | local analytics consumer                   |
