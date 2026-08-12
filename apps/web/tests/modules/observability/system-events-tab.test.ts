@@ -1,26 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    buildPayloadTooltip,
-    buildTooltipSummary,
-    extractEventRowIdentity,
-    formatAvailability,
     formatDuration,
-    formatEntityLabel,
     historyUrl,
     parseHistoryResponse,
     parseHistoryRow,
-    tokenizeJson,
+    parseSystemEventView,
 } from '../../../src/modules/observability/SystemEventsTab';
 
-/**
- * Task 0234 — tooltip enrichment. `buildTooltipSummary` projects a row payload
- * into 0–4 (label, value) pairs for the hover/focus tooltip. Each renderer
- * branch has its own priority budget so the tooltip surfaces the fields a user
- * scanning the System Events table actually cares about (entity + transition
- * for planning rows; job/duration/status for queue rows; HTTP verb + status for
- * API rows, etc.). These tests pin the per-renderer contract so a regression
- * that drops a field — or surfaces the wrong one — fails loudly.
- */
 describe('formatDuration', () => {
     test('returns null for non-numeric, NaN, Infinity, and non-finite values', () => {
         expect(formatDuration(undefined)).toBeNull();
@@ -44,511 +30,101 @@ describe('formatDuration', () => {
     });
 });
 
-describe('buildTooltipSummary', () => {
-    test('returns null for null/empty payloads (nothing to summarize)', () => {
-        expect(buildTooltipSummary('task.updated', null, 'planning')).toBeNull();
-        expect(buildTooltipSummary('task.updated', {}, 'planning')).toBeNull();
+describe('parseSystemEventView', () => {
+    const envelope = {
+        schemaVersion: 2,
+        data: { runId: 'run-42' },
+        context: {
+            project: { name: 'spur-new', root: '/workspace/spur-new' },
+            producer: { package: '@gobing-ai/ts-dual-workflow-engine', subsystem: 'workflow' },
+            correlation: { runId: 'run-42', actionId: 'action-7' },
+        },
+        presentation: {
+            severity: 'error',
+            summary: 'Workflow action failed',
+            description: 'The workflow action failed and needs inspection.',
+            fields: [{ label: 'Node', value: 'verify' }],
+            outcome: 'failed',
+            action: { label: 'Trace workflow run', kind: 'command', value: 'spur workflow trace run-42' },
+        },
+    };
+
+    test('projects canonical semantics without event-family branches', () => {
+        for (const eventName of [
+            'task.updated',
+            'queue.job.failed',
+            'workflow.action.done',
+            'rule.eval.error',
+            'agent.invoke.exit',
+            'process.exited',
+        ]) {
+            const view = parseSystemEventView(eventName, envelope);
+            expect(view.severity).toBe('error');
+            expect(view.summary).toBe('Workflow action failed');
+            expect(view.projectName).toBe('spur-new');
+            expect(view.producer).toBe('@gobing-ai/ts-dual-workflow-engine / workflow');
+            expect(view.correlation).toContain('run run-42');
+            expect(view.fields).toEqual([{ label: 'Node', value: 'verify' }]);
+            expect(view.action?.value).toBe('spur workflow trace run-42');
+        }
     });
 
-    test('surfaces all priority fields (no cap - detail panel needs full envelope)', () => {
-        const summary = buildTooltipSummary(
-            'queue.job.completed',
-            {
-                kind: 'import',
-                jobId: 'job_1',
-                durationMs: 500,
-                status: 'completed',
-                error: 'boom',
-                extra: 'dropped',
+    test('bounds display strings and rejects malformed actions', () => {
+        const view = parseSystemEventView('workflow.action.done', {
+            ...envelope,
+            presentation: {
+                ...envelope.presentation,
+                summary: 'x'.repeat(900),
+                action: { label: 'unsafe', kind: 'command', value: 42 },
             },
-            'queue',
-        );
-        expect(summary).not.toBeNull();
-        // R4 (task 0375): no 4-pair cap - all 5 priority fields surface.
-        expect(summary?.length).toBe(5);
-        const labels = (summary ?? []).map((p) => p.label);
-        expect(labels).toEqual(['Job', 'ID', 'Duration', 'Status', 'Error']);
-        // `extra` is never surfaced - it's not a known queue field.
-        expect(labels).not.toContain('Extra');
+        });
+        expect(view.summary.length).toBe(512);
+        expect(view.summary.endsWith('…')).toBe(true);
+        expect(view.action).toBeNull();
     });
 
-    test('drops pairs whose value is missing (null/undefined/empty)', () => {
-        const summary = buildTooltipSummary(
-            'queue.job.completed',
-            { kind: 'import', jobId: '', durationMs: undefined, status: null },
-            'queue',
-        );
-        expect(summary).not.toBeNull();
-        const labels = (summary ?? []).map((p) => p.label);
-        expect(labels).toEqual(['Job']);
-    });
-
-    describe('planning renderer (task.* / feature.*)', () => {
-        test('surfaces entity label and status transition', () => {
-            const summary = buildTooltipSummary(
-                'task.updated',
-                { entity: { kind: 'task', id: '0001' }, from: 'todo', to: 'wip' },
-                'planning',
-            );
-            expect(summary).toEqual([
-                { label: 'Entity', value: 'task:0001' },
-                { label: 'Transition', value: 'todo → wip' },
-            ]);
-        });
-
-        test('falls back to flat entityId when entity object absent', () => {
-            const summary = buildTooltipSummary('task.updated', { entityId: 'task-9', to: 'done' }, 'planning');
-            expect(summary).toEqual([
-                { label: 'Entity', value: 'task-9' },
-                { label: 'Transition', value: 'none → done' },
-            ]);
-        });
-    });
-
-    describe('queue renderer', () => {
-        test('surfaces job kind, id, formatted duration, status, error', () => {
-            const summary = buildTooltipSummary(
-                'queue.job.completed',
-                { kind: 'import', jobId: 'job_42', durationMs: 1500, status: 'failed', error: 'timeout' },
-                'queue',
-            );
-            expect(summary).toEqual([
-                { label: 'Job', value: 'import' },
-                { label: 'ID', value: 'job_42' },
-                { label: 'Duration', value: '1.5s' },
-                { label: 'Status', value: 'failed' },
-                { label: 'Error', value: 'timeout' },
-            ]);
-        });
-
-        // AC: Queue renderer surfaces status, duration, and error (type key, 150ms)
-        test('AC fixture: type+jobId+status+durationMs (4 pairs, no error)', () => {
-            const summary = buildTooltipSummary(
-                'queue.job.completed',
-                { jobId: 'j1', type: 'smoke', status: 'completed', durationMs: 150 },
-                'queue',
-            );
-            expect(summary).toEqual([
-                { label: 'Job', value: 'smoke' },
-                { label: 'ID', value: 'j1' },
-                { label: 'Duration', value: '150ms' },
-                { label: 'Status', value: 'completed' },
-            ]);
-            expect(summary?.length).toBe(4);
-        });
-
-        // AC: Queue renderer surfaces error on a failed job (no duration → Error fits)
-        test('AC fixture: failed job surfaces Status and Error', () => {
-            const summary = buildTooltipSummary(
-                'queue.job.failed',
-                { jobId: 'j2', type: 'smoke', status: 'failed', error: 'boom', attempt: 3 },
-                'queue',
-            );
-            expect(summary).toContainEqual({ label: 'Error', value: 'boom' });
-            expect(summary).toContainEqual({ label: 'Status', value: 'failed' });
-        });
-    });
-
-    describe('scheduler renderer', () => {
-        test('surfaces job name and duration; drops kind (task 0233 contract)', () => {
-            const summary = buildTooltipSummary(
-                'scheduler.job.executed',
-                { name: 'system-events-prune', durationMs: 250 },
-                'scheduler',
-            );
-            expect(summary).toEqual([
-                { label: 'Job', value: 'system-events-prune' },
-                { label: 'Duration', value: '250ms' },
-            ]);
-        });
-
-        test('includes error when present', () => {
-            const summary = buildTooltipSummary(
-                'scheduler.job.executed',
-                { name: 'smoke', durationMs: 10, error: 'boom' },
-                'scheduler',
-            );
-            expect(summary).toContainEqual({ label: 'Error', value: 'boom' });
-        });
-
-        // AC: Scheduler renderer surfaces duration and error, not cron
-        test('AC fixture: name + 3.2s duration + error; no cron pair', () => {
-            const summary = buildTooltipSummary(
-                'scheduler.job.executed',
-                { name: 'system-events-prune', durationMs: 3200, error: 'timeout', cron: '*/5 * * * *' },
-                'scheduler',
-            );
-            expect(summary).toEqual([
-                { label: 'Job', value: 'system-events-prune' },
-                { label: 'Duration', value: '3.2s' },
-                { label: 'Error', value: 'timeout' },
-            ]);
-            expect((summary ?? []).map((p) => p.label)).not.toContain('Cron');
-        });
-    });
-
-    describe('message renderer', () => {
-        test('surfaces route as "from → to" when both present', () => {
-            const summary = buildTooltipSummary(
-                'agent.message.sent',
-                { fromId: 'alpha', toId: 'beta', ok: true },
-                'message',
-            );
-            expect(summary).toContainEqual({ label: 'Route', value: 'alpha → beta' });
-            expect(summary).toContainEqual({ label: 'OK', value: 'true' });
-        });
-
-        test('falls back to route/direction/type when from/to absent', () => {
-            const summary = buildTooltipSummary('message.sent', { direction: 'outbound', subject: 'hello' }, 'message');
-            expect(summary).toContainEqual({ label: 'Route', value: 'outbound' });
-            expect(summary).toContainEqual({ label: 'Subject', value: 'hello' });
-        });
-
-        // AC: Message renderer surfaces route, ok flag, and subject
-        test('AC fixture: route + ok + subject', () => {
-            const summary = buildTooltipSummary(
-                'message.sent',
-                { route: 'inbox', ok: true, subject: 're: plan' },
-                'message',
-            );
-            expect(summary).toEqual([
-                { label: 'Route', value: 'inbox' },
-                { label: 'OK', value: 'true' },
-                { label: 'Subject', value: 're: plan' },
-            ]);
-        });
-    });
-
-    describe('process / agent renderer', () => {
-        test('surfaces command, exit code, formatted duration', () => {
-            const summary = buildTooltipSummary(
-                'process.exited',
-                { command: 'bun run test', exitCode: 0, durationMs: 12_000 },
-                'process',
-            );
-            expect(summary).toEqual([
-                { label: 'Command', value: 'bun run test' },
-                { label: 'Exit', value: '0' },
-                { label: 'Duration', value: '12.0s' },
-            ]);
-        });
-
-        // AC: Process/agent surfaces command, exit, duration, and pid
-        test('AC fixture: command + exit + 42.0s + pid (4 pairs)', () => {
-            const summary = buildTooltipSummary(
-                'process.exited',
-                { command: 'spur agent run', exitCode: 0, durationMs: 42_000, pid: 12_345 },
-                'process',
-            );
-            expect(summary).toEqual([
-                { label: 'Command', value: 'spur agent run' },
-                { label: 'Exit', value: '0' },
-                { label: 'Duration', value: '42.0s' },
-                { label: 'PID', value: '12345' },
-            ]);
-        });
-    });
-
-    describe('rule renderer', () => {
-        test('surfaces rule id, severity, finding count', () => {
-            const summary = buildTooltipSummary(
-                'rule.run.completed',
-                { ruleId: 'no-console', severity: 'warn', count: '3' },
-                'rule',
-            );
-            expect(summary).toEqual([
-                { label: 'Rule', value: 'no-console' },
-                { label: 'Severity', value: 'warn' },
-                { label: 'Findings', value: '3' },
-            ]);
-        });
-
-        // AC: Rule renderer surfaces severity and findings count
-        test('AC fixture: rule + severity + numeric findings count', () => {
-            const summary = buildTooltipSummary(
-                'rule.run.completed',
-                { rule: 'no-any', severity: 'error', count: 7 },
-                'rule',
-            );
-            expect(summary).toEqual([
-                { label: 'Rule', value: 'no-any' },
-                { label: 'Severity', value: 'error' },
-                { label: 'Findings', value: '7' },
-            ]);
-        });
-    });
-
-    describe('api renderer', () => {
-        test('combines method + status into a single "HTTP" pair', () => {
-            const summary = buildTooltipSummary(
-                'api.request',
-                { method: 'POST', status: '201', path: '/v1/tasks', durationMs: 42 },
-                'api',
-            );
-            expect(summary).toContainEqual({ label: 'HTTP', value: 'POST 201' });
-            expect(summary).toContainEqual({ label: 'Path', value: '/v1/tasks' });
-        });
-
-        test('falls back to separate pairs when only method or only status', () => {
-            const onlyMethod = buildTooltipSummary('api.request', { method: 'GET' }, 'api');
-            expect(onlyMethod).toContainEqual({ label: 'HTTP', value: 'GET' });
-
-            const onlyStatus = buildTooltipSummary('api.request', { status: '500' }, 'api');
-            expect(onlyStatus).toContainEqual({ label: 'HTTP', value: '500' });
-        });
-
-        // AC: Api renderer surfaces method+status, path, and error
-        test('AC fixture: combined HTTP + path + error (numeric status)', () => {
-            const summary = buildTooltipSummary(
-                'api.request.error',
-                { method: 'POST', status: 500, path: '/api/tasks', error: 'db locked' },
-                'api',
-            );
-            expect(summary).toEqual([
-                { label: 'HTTP', value: 'POST 500' },
-                { label: 'Path', value: '/api/tasks' },
-                { label: 'Error', value: 'db locked' },
-            ]);
-        });
-    });
-
-    describe('workflow renderer', () => {
-        test('surfaces workflow name, run id, and phase', () => {
-            const summary = buildTooltipSummary(
-                'workflow.phase.entered',
-                { workflow: 'deploy', runId: 'run_7', phase: 'implement' },
-                'workflow-phase',
-            );
-            expect(summary).toEqual([
-                { label: 'Workflow', value: 'deploy' },
-                { label: 'Run', value: 'run_7' },
-                { label: 'Phase', value: 'implement' },
-            ]);
-        });
-
-        test('surfaces transition for workflow-transition renderer', () => {
-            const summary = buildTooltipSummary(
-                'workflow.transition',
-                { workflow: 'deploy', runId: 'run_7', transition: 'implement→test' },
-                'workflow-transition',
-            );
-            expect(summary).toContainEqual({ label: 'Transition', value: 'implement→test' });
-        });
-
-        // AC + R10: first non-null of phase/transition/action only
-        test('AC fixture: first non-null phase wins over co-present action', () => {
-            const summary = buildTooltipSummary(
-                'workflow.phase.entered',
-                {
-                    workflow: 'idea-pipeline',
-                    runId: 'r9',
-                    phase: 'ac-generate',
-                    action: 'agent.run',
-                },
-                'workflow-phase',
-            );
-            expect(summary).toEqual([
-                { label: 'Workflow', value: 'idea-pipeline' },
-                { label: 'Run', value: 'r9' },
-                { label: 'Phase', value: 'ac-generate' },
-            ]);
-            expect((summary ?? []).map((p) => p.label)).not.toContain('Action');
-        });
-
-        test('falls through to Action when phase and transition absent', () => {
-            const summary = buildTooltipSummary(
-                'workflow.action',
-                { workflow: 'idea-pipeline', runId: 'r9', action: 'agent.run' },
-                'workflow-action',
-            );
-            expect(summary).toContainEqual({ label: 'Action', value: 'agent.run' });
-        });
-    });
-
-    describe('bus renderer', () => {
-        test('surfaces the nested bus event name', () => {
-            const summary = buildTooltipSummary('bus.subscribe', { event: 'task.updated', count: 3 }, 'bus');
-            expect(summary).toEqual([{ label: 'Bus event', value: 'task.updated' }]);
-        });
-    });
-
-    describe('default / unknown renderer', () => {
-        test('surfaces first 3 scalar fields for uncategorized events', () => {
-            const summary = buildTooltipSummary(
-                'mystery.event',
-                { alpha: 'a', beta: 2, gamma: true, delta: 'dropped' },
-                'unknown-renderer',
-            );
-            expect(summary).not.toBeNull();
-            expect(summary?.length).toBe(3);
-            const labels = (summary ?? []).map((p) => p.label);
-            expect(labels).toEqual(['alpha', 'beta', 'gamma']);
-        });
-
-        test('skips object/array field values in generic fallback', () => {
-            const summary = buildTooltipSummary(
-                'mystery.event',
-                { nested: { a: 1 }, scalar: 'ok' },
-                'unknown-renderer',
-            );
-            expect(summary).toEqual([{ label: 'scalar', value: 'ok' }]);
-        });
-    });
-
-    test('infers planning renderer for task.* events when no renderer passed', () => {
-        const summary = buildTooltipSummary('task.updated', { entityId: 't1', to: 'wip' });
-        expect(summary).toContainEqual({ label: 'Entity', value: 't1' });
-    });
-});
-
-describe('formatAvailability', () => {
-    test('returns "unavailable" for null, undefined, and empty string', () => {
-        expect(formatAvailability(null)).toBe('unavailable');
-        expect(formatAvailability(undefined)).toBe('unavailable');
-        expect(formatAvailability('')).toBe('unavailable');
-    });
-
-    test('returns "unavailable" for non-finite numbers (NaN, Infinity)', () => {
-        expect(formatAvailability(Number.NaN)).toBe('unavailable');
-        expect(formatAvailability(Number.POSITIVE_INFINITY)).toBe('unavailable');
-        expect(formatAvailability(Number.NEGATIVE_INFINITY)).toBe('unavailable');
-    });
-
-    test('returns the value as string for finite numbers', () => {
-        expect(formatAvailability(0)).toBe('0');
-        expect(formatAvailability(42)).toBe('42');
-        expect(formatAvailability(3.14)).toBe('3.14');
-    });
-
-    test('returns the value as string for booleans', () => {
-        expect(formatAvailability(true)).toBe('true');
-        expect(formatAvailability(false)).toBe('false');
-    });
-
-    test('returns non-empty strings as-is', () => {
-        expect(formatAvailability('run_42')).toBe('run_42');
-        expect(formatAvailability('completed')).toBe('completed');
-    });
-
-    test('returns "unavailable" for objects and arrays', () => {
-        expect(formatAvailability({})).toBe('unavailable');
-        expect(formatAvailability([1, 2])).toBe('unavailable');
-    });
-
-    test('never substitutes zero for absent usage (R3 invariant)', () => {
-        // The load-bearing invariant: absent must render as 'unavailable', NOT '0'.
-        expect(formatAvailability(null)).not.toBe('0');
-        expect(formatAvailability(undefined)).not.toBe('0');
-        expect(formatAvailability('')).not.toBe('0');
-    });
-});
-
-describe('tokenizeJson / buildPayloadTooltip', () => {
-    test('tokenizes keys, strings, numbers, and keywords', () => {
-        const json = JSON.stringify({ jobId: 'abc', n: 42, ok: true, missing: null }, null, 2);
-        const tokens = tokenizeJson(json);
-        const kinds = tokens.map((t) => t.kind);
-        expect(kinds).toContain('key');
-        expect(kinds).toContain('string');
-        expect(kinds).toContain('number');
-        expect(kinds).toContain('keyword');
-        expect(kinds).toContain('punct');
-        // Key tokens keep the surrounding quotes from pretty-print.
-        expect(tokens.some((t) => t.kind === 'key' && t.text.includes('jobId'))).toBe(true);
-        expect(tokens.some((t) => t.kind === 'string' && t.text.includes('abc'))).toBe(true);
-        expect(tokens.some((t) => t.kind === 'number' && t.text === '42')).toBe(true);
-        expect(tokens.some((t) => t.kind === 'keyword' && t.text === 'true')).toBe(true);
-        expect(tokens.some((t) => t.kind === 'keyword' && t.text === 'null')).toBe(true);
-    });
-
-    test('buildPayloadTooltip returns null for empty payload and tokens for objects', () => {
-        expect(buildPayloadTooltip(null)).toBeNull();
-        expect(buildPayloadTooltip({})).toBeNull();
-        const tip = buildPayloadTooltip({ type: 'smoke', durationMs: 12 });
-        expect(tip).not.toBeNull();
-        expect(tip?.text).toContain('smoke');
-        expect(tip?.tokens.length).toBeGreaterThan(0);
-        expect(tip?.tokens.map((t) => t.text).join('')).toBe(tip?.text);
-    });
-});
-
-describe('formatEntityLabel', () => {
-    test('formats kind : id from indexed columns', () => {
-        expect(formatEntityLabel({ entityKind: 'task', entityId: '0388' })).toBe('task : 0388');
-    });
-
-    test('falls back to payload.entity when columns are empty', () => {
-        expect(
-            formatEntityLabel({
-                entityKind: null,
-                entityId: null,
-                payload: { entity: { kind: 'feature', id: 'K1' } },
-            }),
-        ).toBe('feature : K1');
-    });
-
-    test('returns unavailable when entity is absent', () => {
-        expect(formatEntityLabel({ entityKind: null, entityId: null, payload: null })).toBe('unavailable');
-        expect(formatEntityLabel({ payload: { jobId: 'j1' } })).toBe('unavailable');
-    });
-});
-
-describe('extractEventRowIdentity', () => {
-    test('prefers indexed runId and payload actionId/outcome for workflow events', () => {
-        const id = extractEventRowIdentity({
-            eventName: 'workflow.action.done',
-            runId: 'run-42',
-            payload: { actionId: 'action-7', outcome: 'success', durationMs: 125 },
-        });
-        expect(id.run).toBe('run-42');
-        expect(id.action).toBe('action-7');
-        expect(id.outcome).toBe('success');
-        expect(id.duration).toBe('125ms');
-    });
-
-    test('maps queue.job.* jobId/type and derives outcome from event name', () => {
-        const enqueued = extractEventRowIdentity({
-            eventName: 'queue.job.enqueued',
-            runId: null,
-            payload: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737', type: 'system-events-prune' },
-        });
-        expect(enqueued.run).toBe('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
-        expect(enqueued.action).toBe('system-events-prune');
-        expect(enqueued.outcome).toBe('pending');
-
-        const completed = extractEventRowIdentity({
-            eventName: 'queue.job.completed',
-            runId: null,
-            payload: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737', type: 'system-events-prune' },
-        });
-        expect(completed.outcome).toBe('completed');
-    });
-
-    test('maps scheduler.job.executed name + durationMs and derives outcome', () => {
-        const id = extractEventRowIdentity({
-            eventName: 'scheduler.job.executed',
-            runId: null,
-            payload: { name: 'smoke', durationMs: 47 },
-        });
-        expect(id.run).toBe('unavailable');
-        expect(id.action).toBe('smoke');
-        expect(id.outcome).toBe('executed');
-        expect(id.duration).toBe('47ms');
-    });
-
-    test('queue.consumer lifecycle has no correlator but derives started/stopped outcome', () => {
-        const started = extractEventRowIdentity({
-            eventName: 'queue.consumer.started',
-            runId: null,
-            payload: null,
-        });
-        expect(started.run).toBe('unavailable');
-        expect(started.action).toBe('unavailable');
-        expect(started.outcome).toBe('started');
+    test('returns an explicit unavailable fallback for legacy and malformed envelopes', () => {
+        for (const payload of [null, {}, { schemaVersion: 2, context: null, presentation: {} }]) {
+            const view = parseSystemEventView('unknown.event', payload);
+            expect(view.summary).toBe('unavailable');
+            expect(view.projectName).toBe('unavailable');
+            expect(view.correlation).toBe('unavailable');
+            expect(view.outcome).toBe('unavailable');
+            expect(view.action).toBeNull();
+        }
     });
 });
 
 describe('parseHistoryRow', () => {
+    test('parses canonical semantics once and preserves the data projection for sibling tabs', () => {
+        const row = parseHistoryRow({
+            id: 'evt-v2',
+            eventName: 'queue.job.completed',
+            occurredAt: '2026-08-12T00:00:00Z',
+            actor: null,
+            payload: {
+                schemaVersion: 2,
+                data: { jobId: 'job-1', type: 'cleanup' },
+                context: {
+                    project: { name: 'spur-new', root: '/workspace/spur-new' },
+                    producer: { package: '@gobing-ai/ts-infra', subsystem: 'queue' },
+                    correlation: { jobId: 'job-1' },
+                },
+                presentation: {
+                    severity: 'info',
+                    summary: 'Queue job completed',
+                    description: 'The queue job completed.',
+                    fields: [{ label: 'Job', value: 'job-1' }],
+                    outcome: 'completed',
+                },
+            },
+        });
+        expect(row?.payload).toEqual({ jobId: 'job-1', type: 'cleanup' });
+        expect(row?.envelope?.schemaVersion).toBe(2);
+        expect(row?.view?.summary).toBe('Queue job completed');
+        expect(row?.view?.correlation).toBe('job job-1');
+    });
+
     test('parses a well-formed row with all fields', () => {
         const row = parseHistoryRow({
             id: 'evt_1',

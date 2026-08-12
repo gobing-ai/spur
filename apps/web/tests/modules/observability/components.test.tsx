@@ -34,6 +34,44 @@ function jsonResponse(body: unknown): Response {
     });
 }
 
+function eventEnvelope({
+    data = {},
+    severity = 'info',
+    summary = 'Event completed',
+    description = 'The operation completed.',
+    fields = [],
+    correlation = {},
+    outcome = 'completed',
+    action,
+}: {
+    data?: Record<string, unknown>;
+    severity?: 'info' | 'warning' | 'error';
+    summary?: string;
+    description?: string;
+    fields?: { label: string; value: string }[];
+    correlation?: Record<string, unknown>;
+    outcome?: string;
+    action?: { label: string; kind: 'command' | 'filter' | 'path'; value: string };
+} = {}): Record<string, unknown> {
+    return {
+        schemaVersion: 2,
+        data,
+        context: {
+            project: { name: 'spur-new', root: '/workspace/spur-new' },
+            producer: { package: 'spur', subsystem: 'test' },
+            correlation,
+        },
+        presentation: {
+            severity,
+            summary,
+            description,
+            fields,
+            outcome,
+            ...(action ? { action } : {}),
+        },
+    };
+}
+
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
@@ -79,7 +117,11 @@ function installObservabilityFetchMock(): string[] {
                             eventName: 'queue.job.completed',
                             occurredAt: '2026-07-04T20:04:00.000Z',
                             actor: null,
-                            payload: { jobId: 'job-1', type: 'smoke' },
+                            payload: eventEnvelope({
+                                data: { jobId: 'job-1', type: 'smoke' },
+                                fields: [{ label: 'Job', value: 'job-1' }],
+                                correlation: { jobId: 'job-1' },
+                            }),
                         },
                     ],
                     count: 1,
@@ -94,7 +136,7 @@ function installObservabilityFetchMock(): string[] {
                             eventName: 'scheduler.job.executed',
                             occurredAt: '2026-07-04T20:03:00.000Z',
                             actor: null,
-                            payload: { name: 'cleanup', durationMs: 250 },
+                            payload: eventEnvelope({ data: { name: 'cleanup', durationMs: 250 } }),
                         },
                     ],
                     count: 1,
@@ -116,14 +158,22 @@ function installObservabilityFetchMock(): string[] {
                         eventName: 'queue.job.completed',
                         occurredAt: '2026-07-04T20:04:00.000Z',
                         actor: null,
-                        payload: { jobId: 'job-1', type: 'smoke' },
+                        payload: eventEnvelope({
+                            data: { jobId: 'job-1', type: 'smoke' },
+                            fields: [{ label: 'Job', value: 'job-1' }],
+                            correlation: { jobId: 'job-1' },
+                        }),
                     },
                     {
                         id: 'event-1',
                         eventName: 'task.created',
                         occurredAt: '2026-07-04T20:00:00.000Z',
                         actor: 'operator',
-                        payload: { wbs: '0199' },
+                        payload: eventEnvelope({
+                            data: { entity: { kind: 'task', id: '0199' } },
+                            summary: 'Task created · 0199',
+                            fields: [{ label: 'Task', value: '0199' }],
+                        }),
                     },
                 ],
                 count: 2,
@@ -265,7 +315,7 @@ describe('observability components', () => {
         expect(getByText('4 of 4 shown')).toBeDefined();
     });
 
-    test('system events tab renders a table with sticky header and the 7 columns (task 0223 R1/R3 + 0375 R2)', async () => {
+    test('system events tab renders the eight actionable desktop columns', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
 
@@ -277,7 +327,16 @@ describe('observability components', () => {
         expect(thead?.className).toContain('sticky');
         const headers = table?.querySelectorAll('thead th');
         const headerLabels = Array.from(headers ?? []).map((th) => th.textContent?.trim());
-        expect(headerLabels).toEqual(['Time', 'Event', 'Actor', 'Entity', 'Prefix', 'Tier', 'Run', 'Outcome']);
+        expect(headerLabels).toEqual([
+            'Time',
+            'Severity',
+            'Event',
+            'Summary',
+            'Project / Producer',
+            'Correlation',
+            'Outcome',
+            'Action',
+        ]);
     });
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
@@ -296,11 +355,6 @@ describe('observability components', () => {
         expect(String(taskName?.className ?? '')).toContain('text-emerald-400');
         const queueName = queryAllByText('queue.job.completed').find(isNameEl);
         expect(String(queueName?.className ?? '')).toContain('text-orange-400');
-
-        // R5: the prefix label is always rendered alongside the color in the
-        // dedicated Prefix column.
-        expect(queryAllByText('task').length).toBeGreaterThan(0);
-        expect(queryAllByText('queue').length).toBeGreaterThan(0);
     });
 
     test('event-name cell has an expand button that toggles a detail panel (task 0375 R4)', async () => {
@@ -563,7 +617,7 @@ describe('observability components', () => {
         expect(getByText('2 of 2')).toBeDefined();
     });
 
-    test('table collapses to 2 columns under 640px and stacks Actor under Event (task 0225 R1)', async () => {
+    test('table collapses to two columns under 640px and stacks actionable semantics under Event', async () => {
         // @ts-expect-error install matchMedia mock that reports compact viewport
         globalThis.matchMedia = ((query: string) => ({
             matches: query === '(max-width: 639px)',
@@ -580,25 +634,29 @@ describe('observability components', () => {
 
             await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
-            // R1: under 640px only Time + Event columns render; Actor/Prefix/Tier are hidden.
+            // Under 640px only Time + Event columns render.
             const headers = container.querySelectorAll('[data-system-events-tab] thead th');
             expect(Array.from(headers).map((th) => th.textContent?.trim())).toEqual(['Time', 'Event']);
-            expect(getByText('by operator')).toBeDefined();
-
-            // Actor is stacked inside the Event cell as "by <actor>".
+            expect(container.querySelector('[data-system-events-tab] table')?.className).toContain('min-w-0');
+            const row = getByText('task.created').closest('tr') as HTMLTableRowElement;
+            expect(row.textContent).toContain('info');
+            expect(row.textContent).toContain('Task created · 0199');
+            expect(row.textContent).toContain('spur-new · spur / test');
+            expect(row.textContent).toContain('outcome: completed');
+            expect(row.textContent).toContain('action: unavailable');
         } finally {
             // @ts-expect-error restore matchMedia
             globalThis.matchMedia = undefined;
         }
     });
 
-    test('color is never the only signal: prefix has text + color, tier has text (task 0225 R2)', async () => {
+    test('severity and event family are never communicated by color alone', async () => {
         installObservabilityFetchMock();
         const { queryAllByText } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
-        // Find the row containing `task.created` then inspect its Prefix/Tier cells.
+        // The full event name communicates its family, and severity pairs icon + text.
         const taskSpans = queryAllByText('task.created').filter((n) => {
             const tag = n.tagName.toLowerCase();
             return tag === 'button' || tag === 'span';
@@ -607,14 +665,10 @@ describe('observability components', () => {
         const taskRow = taskSpans[0]?.closest('tr') as HTMLTableRowElement;
         expect(taskRow).not.toBeNull();
 
-        // Columns: Time | Event | Actor | Entity | Prefix | Tier | Run | Outcome
-        const prefixSpan = taskRow.querySelector('td:nth-child(5) span');
-        expect(prefixSpan).not.toBeNull();
-        expect(prefixSpan?.textContent).toBe('task');
-        expect(prefixSpan?.className).toContain('text-emerald-400');
-
-        const tierCell = taskRow.querySelector('td:nth-child(6)');
-        expect(tierCell?.textContent?.trim()).toMatch(/default|diagnostic/);
+        expect(taskSpans[0]?.className).toContain('text-emerald-400');
+        const severityCell = taskRow.querySelector('td:nth-child(2)');
+        expect(severityCell?.textContent).toContain('info');
+        expect(severityCell?.querySelector('[aria-hidden="true"]')).not.toBeNull();
     });
 
     test('detail panel renders typed summary and is keyboard-toggleable (task 0225 R3 + 0375 R4)', async () => {
@@ -664,7 +718,7 @@ describe('observability components', () => {
         expect(actorUrl).toContain('actor=operator');
     });
 
-    test('system event row exposes run/action/outcome and explicit unavailable usage (0375 R2/R3)', async () => {
+    test('system event row exposes canonical severity, summary, context, correlation, outcome, and action', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
@@ -676,12 +730,18 @@ describe('observability components', () => {
                             occurredAt: '2026-07-29T12:00:00.000Z',
                             actor: 'runner',
                             runId: 'run-42',
-                            payload: {
-                                actionId: 'action-7',
-                                durationMs: 125,
+                            payload: eventEnvelope({
+                                data: { actionId: 'action-7', durationMs: 125, outcome: 'success' },
+                                severity: 'info',
+                                summary: 'Workflow action completed',
+                                correlation: { runId: 'run-42', actionId: 'action-7' },
                                 outcome: 'success',
-                                usage: null,
-                            },
+                                action: {
+                                    label: 'Trace workflow run',
+                                    kind: 'command',
+                                    value: 'spur workflow trace run-42',
+                                },
+                            }),
                         },
                     ],
                     count: 1,
@@ -703,18 +763,20 @@ describe('observability components', () => {
         const view = render(<SystemEventsTab />);
         await waitFor(() => expect(view.getByText('workflow.action.done')).toBeDefined());
         const row = view.getByText('workflow.action.done').closest('tr') as HTMLTableRowElement;
-        expect(row.textContent).toContain('run-42');
-        expect(row.textContent).toContain('action-7');
+        expect(row.textContent).toContain('info');
+        expect(row.textContent).toContain('Workflow action completed');
+        expect(row.textContent).toContain('spur / test');
+        expect(row.textContent).toContain('run run-42');
         expect(row.textContent).toContain('success');
-        expect(row.textContent).toContain('125ms');
+        expect(row.textContent).toContain('spur workflow trace run-42');
 
         fireEvent.click(row.querySelector('button[aria-expanded]') as HTMLButtonElement);
         const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.done"]');
-        expect(detail?.textContent).toContain('usage: unavailable');
-        expect(detail?.textContent).not.toContain('usage: 0');
+        expect(detail?.textContent).toContain('project: spur-new');
+        expect(detail?.textContent).toContain('producer: spur / test');
     });
 
-    test('event name hover tooltip renders the original payload JSON', async () => {
+    test('event name hover tooltip renders semantic context and remediation', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
@@ -726,10 +788,17 @@ describe('observability components', () => {
                             occurredAt: '2026-07-29T17:02:26.000Z',
                             actor: null,
                             runId: null,
-                            payload: {
-                                jobId: 'job-tip-1',
-                                type: 'system-events-prune',
-                            },
+                            payload: eventEnvelope({
+                                data: { jobId: 'job-tip-1', type: 'system-events-prune' },
+                                summary: 'Queue job completed',
+                                description: 'A queued maintenance job completed.',
+                                fields: [
+                                    { label: 'Job', value: 'job-tip-1' },
+                                    { label: 'Type', value: 'system-events-prune' },
+                                ],
+                                correlation: { jobId: 'job-tip-1' },
+                                action: { label: 'Filter queue events', kind: 'filter', value: 'prefix=queue' },
+                            }),
                         },
                     ],
                     count: 1,
@@ -755,13 +824,21 @@ describe('observability components', () => {
         const tip = await waitFor(() => view.getByTestId('system-event-payload-tooltip'));
         expect(tip.getAttribute('role')).toBe('tooltip');
         expect(tip.getAttribute('data-pinned')).toBe('false');
+        expect(view.getByTestId('system-event-name').getAttribute('aria-describedby')).toBe(tip.id);
+        expect(tip.textContent).toContain('A queued maintenance job completed.');
         expect(tip.textContent).toContain('job-tip-1');
         expect(tip.textContent).toContain('system-events-prune');
-        // Pretty-printed JSON shape
-        expect(tip.textContent).toContain('jobId');
+        expect(tip.textContent).toContain('spur / test');
+        expect(tip.textContent).toContain('prefix=queue');
+
+        fireEvent.mouseLeave(view.getByTestId('system-event-name'));
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 250)));
+        expect(view.queryByTestId('system-event-payload-tooltip')).toBeNull();
+        fireEvent.focus(view.getByTestId('system-event-name'));
+        await waitFor(() => expect(view.getByTestId('system-event-payload-tooltip')).toBeDefined());
     });
 
-    test('payload tooltip pins on outside click and unlocks on Esc', async () => {
+    test('payload tooltip pins on click and unlocks on Esc', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
@@ -773,7 +850,11 @@ describe('observability components', () => {
                             occurredAt: '2026-07-29T17:02:26.000Z',
                             actor: null,
                             runId: null,
-                            payload: { jobId: 'job-pin-1', type: 'smoke' },
+                            payload: eventEnvelope({
+                                data: { jobId: 'job-pin-1', type: 'smoke' },
+                                fields: [{ label: 'Job', value: 'job-pin-1' }],
+                                correlation: { jobId: 'job-pin-1' },
+                            }),
                         },
                     ],
                     count: 1,
@@ -807,7 +888,9 @@ describe('observability components', () => {
         expect(pinnedTip.textContent).toContain('job-pin-1');
         expect(pinnedTip.textContent).toContain('select to copy');
 
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await act(async () => {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        });
         await waitFor(() => expect(document.querySelector('[data-testid="system-event-payload-tooltip"]')).toBeNull());
     });
 
@@ -823,7 +906,11 @@ describe('observability components', () => {
                             occurredAt: '2026-07-29T17:02:26.000Z',
                             actor: null,
                             runId: null,
-                            payload: { jobId: 'job-pin-btn', type: 'smoke' },
+                            payload: eventEnvelope({
+                                data: { jobId: 'job-pin-btn', type: 'smoke' },
+                                fields: [{ label: 'Job', value: 'job-pin-btn' }],
+                                correlation: { jobId: 'job-pin-btn' },
+                            }),
                         },
                     ],
                     count: 1,
@@ -856,7 +943,7 @@ describe('observability components', () => {
         );
     });
 
-    test('queue.job rows surface jobId/type and derived outcome instead of stacked unavailable (layout fix)', async () => {
+    test('queue.job rows surface canonical correlation, outcome, and action', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
@@ -868,10 +955,15 @@ describe('observability components', () => {
                             occurredAt: '2026-07-29T17:02:26.000Z',
                             actor: null,
                             runId: null,
-                            payload: {
-                                jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737',
-                                type: 'system-events-prune',
-                            },
+                            payload: eventEnvelope({
+                                data: {
+                                    jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737',
+                                    type: 'system-events-prune',
+                                },
+                                summary: 'Queue maintenance completed',
+                                correlation: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737' },
+                                action: { label: 'Filter queue events', kind: 'filter', value: 'prefix=queue' },
+                            }),
                         },
                     ],
                     count: 1,
@@ -895,11 +987,9 @@ describe('observability components', () => {
         await waitFor(() => expect(view.getByText('queue.job.completed')).toBeDefined());
         const row = view.getByText('queue.job.completed').closest('tr') as HTMLTableRowElement;
         expect(row.textContent).toContain('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
-        expect(row.textContent).toContain('system-events-prune');
+        expect(row.textContent).toContain('Queue maintenance completed');
         expect(row.textContent).toContain('completed');
-        // Must not double-stack the unavailable labels that broke the Run column layout.
-        expect(row.textContent).not.toContain('run: unavailable');
-        expect(row.textContent).not.toContain('action: unavailable');
+        expect(row.textContent).toContain('prefix=queue');
     });
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {

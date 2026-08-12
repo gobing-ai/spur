@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Make the System Events table and tooltips actionable from the canonical envelope"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J5
@@ -13,7 +13,7 @@ tags: ["observability", "system-events", "web"]
 dependencies: ["0526"]
 ac_numbering: task-local
 created_at: "2026-08-12T13:24:51.431Z"
-updated_at: "2026-08-12T13:28:03.859Z"
+updated_at: "2026-08-12T14:54:53.450Z"
 ---
 
 ## 0527. Make the System Events table and tooltips actionable from the canonical envelope
@@ -25,9 +25,9 @@ Implements: R5 — The System Events table prioritizes diagnostic decisions; R6 
 Rubric: E1 D1 L1 C1 R1 = 5 → decompose (independent UI review and accessibility risk).
 
 ### Requirements
-- [ ] R1. Parse current envelopes and legacy fallback rows at the network boundary, then render desktop columns Time, Severity, Event, Summary, Project/Producer, Correlation, Outcome, and Action with contained long values and low-value catalog fields moved to detail.
-- [ ] R2. Replace raw-JSON event-name hover with a semantic tooltip showing description, event-specific fields, project/producer context, and remediation; preserve focus, pin/copy, Escape/outside-close, ARIA, compact layout, non-color severity, and raw redacted JSON in expanded detail.
-- [ ] R3. Keep legacy, unknown, and malformed data usable with explicit unavailable values and add focused pure-function/happy-dom tests across renderer families, actions, columns, truncation, keyboard, and responsive behavior.
+- [x] R1. Parse current envelopes and legacy fallback rows at the network boundary, then render desktop columns Time, Severity, Event, Summary, Project/Producer, Correlation, Outcome, and Action with contained long values and low-value catalog fields moved to detail.
+- [x] R2. Replace raw-JSON event-name hover with a semantic tooltip showing description, event-specific fields, project/producer context, and remediation; preserve focus, pin/copy, Escape/outside-close, ARIA, compact layout, non-color severity, and raw redacted JSON in expanded detail.
+- [x] R3. Keep legacy, unknown, and malformed data usable with explicit unavailable values and add focused pure-function/happy-dom tests across renderer families, actions, columns, truncation, keyboard, and responsive behavior.
 ### Acceptance Criteria
 ```gherkin
 Feature: Actionable System Events Board
@@ -68,17 +68,32 @@ Invariants: eight desktop columns; two-column compact fallback; keyboard-equival
 5. Update expanded detail to show context plus redacted data.
 6. Add renderer-family, accessibility, and responsive tests; visually verify the Board.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:256` narrows history and SSE envelopes once, retains the full redacted envelope for detail, and unwraps `data` for existing Jobs/Tasks consumers.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:393` adds the bounded semantic view with explicit unavailable fallback and no fabricated action.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1093` renders the eight diagnostic desktop columns and a true two-column compact layout.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1201` pairs severity icon/text and rebuilds the event tooltip around server-owned description, fields, project/producer, correlation, outcome, and remediation while preserving hover, focus, pin, copy, Escape, outside-close, and ARIA behavior.
+- Expanded detail keeps prefix/tier/actor plus the full redacted envelope; obsolete renderer-specific payload guessing and JSON-tooltip highlighting were removed.
+- `apps/web/tests/modules/observability/system-events-tab.test.ts:30` and `apps/web/tests/modules/observability/components.test.tsx:301` cover parsing/fallback/bounds, all renderer families, columns, semantic tooltip/action, keyboard/focus/pin, severity semantics, and responsive layout.
+- `docs/04_DESIGN.md:1467` and `docs/design/actionable-observability-context.md:67` document the shipped Board projection and sibling-tab compatibility seam.
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bunx biome check apps/web/src/modules/observability/SystemEventsTab.tsx apps/web/src/styles/global.css apps/web/tests/modules/observability/system-events-tab.test.ts apps/web/tests/modules/observability/components.test.tsx` — PASS.
+- `bun run --filter @gobing-ai/spur-web typecheck` — PASS.
+- Focused observability tests — 78 pass, 0 fail, 408 assertions. The focused process exits nonzero only because the repository coverage threshold applies to the two-file slice.
+- `bun run autofix && bun run spur-check` — PASS: 4,919 tests, 0 failures, 16,360 assertions, 99.27% aggregate line coverage; lint, corpus, and rules pass.
+- `bun run test-cf` — PASS (1 test). `bun run build` — PASS. Wrangler Worker dry-run — PASS (932.65 KiB).
+- Live browser visual inspection was unavailable because the required in-app browser control tool is absent; runnable responsive/accessibility happy-dom tests and production build pass.
 
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | All | — | None. |
+| P2 | All | — | None. |
+| P3 | All | — | None. |
+| P4 | Usability | `apps/web/src/modules/observability/SystemEventsTab.tsx` | Live browser visual inspection unavailable in this session; responsive/accessibility behavior is covered by happy-dom tests. |
+- Security: only schema-v2 envelopes are retained for expanded raw detail; legacy/malformed raw payloads render `unavailable`, actions are validated, and display strings are bounded.
+- Architecture: backend `presentation` remains the semantic SSOT; one boundary parser feeds table, tooltip, and detail. Existing Jobs/Tasks projections reuse the canonical `data` compatibility seam.
+- Ponytail: removed renderer-specific guessing and JSON syntax-highlighting paths; net source/test deletion exceeds additions. No dependency, framework, route, or speculative abstraction added.
+- Disposition: PASS.
 ### References
 
 J5
@@ -86,3 +101,6 @@ J5
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-12T14:36:57.164Z todo → wip (system)
+- 2026-08-12T14:53:30.298Z wip → testing (system)
+- 2026-08-12T14:54:21.942Z testing → done (system)

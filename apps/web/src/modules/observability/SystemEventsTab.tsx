@@ -3,6 +3,34 @@ import { createPortal } from 'react-dom';
 import { Input, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
+type SystemEventSeverity = 'info' | 'warning' | 'error';
+
+interface SystemEventDisplayField {
+    label: string;
+    value: string;
+}
+
+interface SystemEventDisplayAction {
+    label: string;
+    kind: 'command' | 'filter' | 'path';
+    value: string;
+}
+
+/** Bounded semantic projection consumed by the table and event tooltip. */
+export interface SystemEventView {
+    severity: SystemEventSeverity;
+    summary: string;
+    description: string;
+    fields: SystemEventDisplayField[];
+    projectName: string;
+    projectRoot: string;
+    producer: string;
+    correlation: string;
+    correlationFields: SystemEventDisplayField[];
+    outcome: string;
+    action: SystemEventDisplayAction | null;
+}
+
 /** Wire shape of a single system event row from the history endpoint. */
 export interface SystemEventRow {
     id: string;
@@ -12,6 +40,10 @@ export interface SystemEventRow {
     prefix?: string;
     renderer?: string;
     payload: Record<string, unknown> | null;
+    /** Canonical envelope retained for expanded forensic detail. */
+    envelope?: Record<string, unknown>;
+    /** Parsed once at the network boundary; optional for local/test callers. */
+    view?: SystemEventView;
     /** Indexed correlation columns (task 0369). Nullable - pre-migration rows are null. */
     runId?: string | null;
     entityKind?: string | null;
@@ -47,6 +79,8 @@ interface SseEnvelope {
     prefix?: string;
     renderer?: string;
     payload: Record<string, unknown> | null;
+    envelope?: Record<string, unknown>;
+    view: SystemEventView;
     runId?: string | null;
     entityKind?: string | null;
     entityId?: string | null;
@@ -249,12 +283,21 @@ export function parseHistoryRow(value: unknown): SystemEventRow | null {
         ...(renderer ? { renderer } : {}),
     };
     if (payload === null) {
-        return { ...base, payload: null, ...optionalCorrelation(runId, entityKind, entityId, sequence) };
+        return {
+            ...base,
+            payload: null,
+            view: parseSystemEventView(obj.eventName, null),
+            ...optionalCorrelation(runId, entityKind, entityId, sequence),
+        };
     }
     if (typeof payload !== 'object') return null;
+    const rawPayload = payload as Record<string, unknown>;
+    const envelope = rawPayload.schemaVersion === 2 ? rawPayload : undefined;
     return {
         ...base,
-        payload: payload as Record<string, unknown>,
+        payload: systemEventData(rawPayload),
+        ...(envelope ? { envelope } : {}),
+        view: parseSystemEventView(obj.eventName, rawPayload),
         ...optionalCorrelation(runId, entityKind, entityId, sequence),
     };
 }
@@ -318,7 +361,9 @@ function parseSseEnvelope(value: unknown): SseEnvelope | null {
     if (actor !== null && typeof actor !== 'string') return null;
     const payload = obj.payload;
     if (payload !== null && typeof payload !== 'object') return null;
-    const payloadRecord = payload as Record<string, unknown> | null;
+    const rawPayload = payload as Record<string, unknown> | null;
+    const envelope = rawPayload?.schemaVersion === 2 ? rawPayload : undefined;
+    const payloadRecord = systemEventData(rawPayload);
     const runIdValue = obj.runId ?? payloadRecord?.runId;
     const entityKindValue = obj.entityKind ?? payloadRecord?.entityKind;
     const entityIdValue = obj.entityId ?? payloadRecord?.entityId;
@@ -340,13 +385,115 @@ function parseSseEnvelope(value: unknown): SseEnvelope | null {
         ...(prefix ? { prefix } : {}),
         ...(renderer ? { renderer } : {}),
         payload: payloadRecord,
+        ...(envelope ? { envelope } : {}),
+        view: parseSystemEventView(obj.eventName, rawPayload),
         ...optionalCorrelation(runId, entityKind, entityId, sequence),
     };
 }
 
-function formatVal(val: unknown): string {
-    if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-    return String(val);
+/** Narrow a canonical v2 envelope into bounded display semantics. */
+export function parseSystemEventView(eventName: string, payload: Record<string, unknown> | null): SystemEventView {
+    const fallback = unavailableSystemEventView(eventName);
+    if (payload?.schemaVersion !== 2) return fallback;
+    const context = asRecord(payload.context);
+    const presentation = asRecord(payload.presentation);
+    const project = asRecord(context?.project);
+    const producer = asRecord(context?.producer);
+    const correlation = asRecord(context?.correlation);
+    if (!context || !presentation || !project || !producer || !correlation) return fallback;
+
+    const severity =
+        presentation.severity === 'info' || presentation.severity === 'warning' || presentation.severity === 'error'
+            ? presentation.severity
+            : 'warning';
+    const fields = Array.isArray(presentation.fields)
+        ? presentation.fields
+              .flatMap((field) => {
+                  const record = asRecord(field);
+                  const label = boundedDisplayText(record?.label, 64);
+                  const fieldValue = boundedDisplayText(record?.value, 256);
+                  return label && fieldValue ? [{ label, value: fieldValue }] : [];
+              })
+              .slice(0, 8)
+        : [];
+    const correlationFields: SystemEventDisplayField[] = [];
+    const addCorrelation = (label: string, value: unknown): void => {
+        const text = boundedDisplayText(value, 128);
+        if (text) correlationFields.push({ label, value: text });
+    };
+    addCorrelation('Run', correlation.runId);
+    addCorrelation('Execution', correlation.executionId);
+    addCorrelation('Action', correlation.actionId);
+    addCorrelation('Entity', joinEntity(correlation.entityKind, correlation.entityId));
+    addCorrelation('Job', correlation.jobId);
+    if (typeof correlation.sequence === 'number' && Number.isFinite(correlation.sequence)) {
+        correlationFields.push({ label: 'Sequence', value: String(correlation.sequence) });
+    }
+
+    const packageName = boundedDisplayText(producer.package, 128) ?? 'unavailable';
+    const subsystem = boundedDisplayText(producer.subsystem, 128);
+    return {
+        severity,
+        summary: boundedDisplayText(presentation.summary, 512) ?? 'unavailable',
+        description: boundedDisplayText(presentation.description, 512) ?? 'Description unavailable.',
+        fields,
+        projectName: boundedDisplayText(project.name, 128) ?? 'unavailable',
+        projectRoot: boundedDisplayText(project.root, 256) ?? 'unavailable',
+        producer: subsystem ? `${packageName} / ${subsystem}` : packageName,
+        correlation:
+            correlationFields.map(({ label, value }) => `${label.toLowerCase()} ${value}`).join(' · ') || 'unavailable',
+        correlationFields,
+        outcome: boundedDisplayText(presentation.outcome, 128) ?? 'unavailable',
+        action: parseDisplayAction(presentation.action),
+    };
+}
+
+function unavailableSystemEventView(eventName: string): SystemEventView {
+    const safeName = boundedDisplayText(eventName, 128) ?? 'unknown';
+    return {
+        severity: 'warning',
+        summary: 'unavailable',
+        description: `Canonical context unavailable for ${safeName}.`,
+        fields: [],
+        projectName: 'unavailable',
+        projectRoot: 'unavailable',
+        producer: 'unavailable',
+        correlation: 'unavailable',
+        correlationFields: [],
+        outcome: 'unavailable',
+        action: null,
+    };
+}
+
+function parseDisplayAction(value: unknown): SystemEventDisplayAction | null {
+    const action = asRecord(value);
+    if (!action || (action.kind !== 'command' && action.kind !== 'filter' && action.kind !== 'path')) return null;
+    const label = boundedDisplayText(action.label, 128);
+    const actionValue = boundedDisplayText(action.value, 256);
+    return label && actionValue ? { label, kind: action.kind, value: actionValue } : null;
+}
+
+function boundedDisplayText(value: unknown, maxLength: number): string | null {
+    if (typeof value !== 'string' || value.length === 0) return null;
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
+}
+
+function joinEntity(kind: unknown, id: unknown): string | null {
+    const safeKind = boundedDisplayText(kind, 64);
+    const safeId = boundedDisplayText(id, 128);
+    if (safeKind && safeId) return `${safeKind}:${safeId}`;
+    return safeKind ?? safeId;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+}
+
+function systemEventData(payload: Record<string, unknown> | null): Record<string, unknown> | null {
+    if (payload?.schemaVersion !== 2) return payload;
+    return asRecord(payload.data);
 }
 
 /** Format ISO timestamp to local "MMM D HH:mm:ss" (no year). */
@@ -370,403 +517,6 @@ export function formatDuration(ms: unknown): string | null {
     if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
-}
-
-/**
- * R3 (task 0375): render explicitly-unavailable usage as the literal token
- * `unavailable` - never `0`, never `-`, never blank. Absent/null/undefined/''/
- * non-finite numeric inputs all yield `'unavailable'`. This is the load-bearing
- * invariant for R3.
- */
-export function formatAvailability(value: unknown): string {
-    if (value === null || value === undefined) return 'unavailable';
-    if (typeof value === 'string') {
-        if (value.length === 0) return 'unavailable';
-        return value;
-    }
-    if (typeof value === 'number') {
-        if (!Number.isFinite(value)) return 'unavailable';
-        return String(value);
-    }
-    if (typeof value === 'boolean') return String(value);
-    return 'unavailable';
-}
-
-/**
- * Identity / outcome fields for the System Events table row.
- *
- * Queue and scheduler events rarely carry `runId` / `outcome` on the envelope —
- * they use `jobId` + `type` / `name` + event-name suffix instead (JobsTab already
- * understands this shape). Without these fallbacks every queue.* row shows four
- * stacked "unavailable" cells and blows the narrow Run/Outcome columns.
- */
-export interface EventRowIdentity {
-    /** Primary correlator: workflow runId, else queue jobId. */
-    run: string;
-    /** Secondary label: actionId/node, else job type / scheduler name. */
-    action: string;
-    /** Terminal/status label: payload outcome, else derived from event suffix. */
-    outcome: string;
-    /** Compact duration or null when absent. */
-    duration: string | null;
-}
-
-/** Map lifecycle event-name suffixes to a short outcome label. */
-function deriveOutcomeFromEventName(eventName: string): string | null {
-    const suffix = eventName.split('.').pop() ?? '';
-    switch (suffix) {
-        case 'enqueued':
-            return 'pending';
-        case 'completed':
-            return 'completed';
-        case 'failed':
-            return 'failed';
-        case 'retrying':
-            return 'retrying';
-        case 'executed':
-            return 'executed';
-        case 'started':
-            return 'started';
-        case 'stopped':
-            return 'stopped';
-        case 'spawned':
-            return 'spawned';
-        case 'exited':
-            return 'exited';
-        default:
-            return null;
-    }
-}
-
-/** Token kinds produced by {@link tokenizeJson} for payload tooltips. */
-export type JsonTokenKind = 'key' | 'string' | 'number' | 'keyword' | 'punct' | 'ws' | 'plain';
-
-export interface JsonToken {
-    id: string;
-    kind: JsonTokenKind;
-    text: string;
-}
-
-/**
- * Tokenize pretty-printed JSON for lightweight syntax highlighting.
- * Zero deps — keeps the tooltip free of Prism/shiki while still coloring keys,
- * strings, numbers, and keywords against the dark prettylights palette.
- */
-export function tokenizeJson(json: string): JsonToken[] {
-    const tokens: JsonToken[] = [];
-    let i = 0;
-    while (i < json.length) {
-        const ch = json[i] ?? '';
-
-        if (ch === '"') {
-            let j = i + 1;
-            while (j < json.length) {
-                if (json[j] === '\\') {
-                    j += 2;
-                    continue;
-                }
-                if (json[j] === '"') {
-                    j += 1;
-                    break;
-                }
-                j += 1;
-            }
-            const text = json.slice(i, j);
-            let k = j;
-            while (k < json.length && /\s/.test(json[k] ?? '')) k += 1;
-            const isKey = json[k] === ':';
-            const kind = isKey ? 'key' : 'string';
-            tokens.push({ id: `tok-${tokens.length}-${kind}`, kind, text });
-            i = j;
-            continue;
-        }
-
-        if (ch === '-' || (ch >= '0' && ch <= '9')) {
-            let j = i + 1;
-            while (j < json.length && /[0-9.eE+-]/.test(json[j] ?? '')) j += 1;
-            tokens.push({ id: `tok-${tokens.length}-number`, kind: 'number', text: json.slice(i, j) });
-            i = j;
-            continue;
-        }
-
-        if (json.startsWith('true', i) || json.startsWith('null', i)) {
-            tokens.push({ id: `tok-${tokens.length}-kw`, kind: 'keyword', text: json.slice(i, i + 4) });
-            i += 4;
-            continue;
-        }
-        if (json.startsWith('false', i)) {
-            tokens.push({ id: `tok-${tokens.length}-kw`, kind: 'keyword', text: json.slice(i, i + 5) });
-            i += 5;
-            continue;
-        }
-
-        if ('{}[]:,'.includes(ch)) {
-            tokens.push({ id: `tok-${tokens.length}-punct`, kind: 'punct', text: ch });
-            i += 1;
-            continue;
-        }
-
-        if (/\s/.test(ch)) {
-            let j = i + 1;
-            while (j < json.length && /\s/.test(json[j] ?? '')) j += 1;
-            tokens.push({ id: `tok-${tokens.length}-ws`, kind: 'ws', text: json.slice(i, j) });
-            i = j;
-            continue;
-        }
-
-        tokens.push({ id: `tok-${tokens.length}-plain`, kind: 'plain', text: ch });
-        i += 1;
-    }
-    return tokens;
-}
-
-const JSON_TOKEN_CLASS: Record<JsonTokenKind, string> = {
-    key: 'json-tok-key',
-    string: 'json-tok-string',
-    number: 'json-tok-number',
-    keyword: 'json-tok-keyword',
-    punct: 'json-tok-punct',
-    ws: '',
-    plain: 'json-tok-plain',
-};
-
-/**
- * Pretty-print + tokenize a payload for the event-name hover tooltip.
- * Returns null when there is nothing useful to show.
- */
-export function buildPayloadTooltip(payload: Record<string, unknown> | null): {
-    text: string;
-    tokens: JsonToken[];
-} | null {
-    if (!payload || Object.keys(payload).length === 0) return null;
-    try {
-        const text = JSON.stringify(payload, null, 2);
-        return { text, tokens: tokenizeJson(text) };
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Combine entity kind + id for the Entity column.
- * Prefers indexed `entityKind`/`entityId` columns (task 0369), then payload.entity.
- * Format: `kind : id` when both present.
- */
-export function formatEntityLabel(event: {
-    entityKind?: string | null;
-    entityId?: string | null;
-    payload?: Record<string, unknown> | null;
-}): string {
-    let kind = typeof event.entityKind === 'string' && event.entityKind.length > 0 ? event.entityKind : null;
-    let id = typeof event.entityId === 'string' && event.entityId.length > 0 ? event.entityId : null;
-
-    if ((!kind || !id) && event.payload && typeof event.payload.entity === 'object' && event.payload.entity) {
-        const ent = event.payload.entity as Record<string, unknown>;
-        if (!kind && typeof ent.kind === 'string' && ent.kind.length > 0) kind = ent.kind;
-        if (!id && typeof ent.id === 'string' && ent.id.length > 0) id = ent.id;
-    }
-
-    if (kind && id) return `${kind} : ${id}`;
-    if (kind) return kind;
-    if (id) return id;
-    return 'unavailable';
-}
-
-/**
- * Extract display identity for a system-event row. Pure + exported for unit tests.
- */
-export function extractEventRowIdentity(event: {
-    eventName: string;
-    runId?: string | null;
-    payload: Record<string, unknown> | null;
-}): EventRowIdentity {
-    const payload = event.payload;
-    const pickString = (...keys: string[]): string | undefined => {
-        if (!payload) return undefined;
-        for (const key of keys) {
-            const value = payload[key];
-            if (typeof value === 'string' && value.length > 0) return value;
-        }
-        return undefined;
-    };
-
-    // Run: indexed runId first; queue jobs use jobId as the durable correlator.
-    const runRaw = event.runId && event.runId.length > 0 ? event.runId : pickString('jobId', 'runId');
-    const run = formatAvailability(runRaw);
-
-    // Action: workflow action identity, else job type / scheduler job name.
-    const actionRaw = pickString('actionId', 'action', 'node', 'kind', 'type', 'name');
-    const action = formatAvailability(actionRaw);
-
-    // Outcome: explicit payload fields, else derive from the event-name suffix.
-    const payloadOutcome = payload ? (payload.outcome ?? payload.status ?? payload.ok) : undefined;
-    let outcome: string;
-    if (payloadOutcome !== null && payloadOutcome !== undefined && payloadOutcome !== '') {
-        outcome = formatAvailability(payloadOutcome);
-    } else {
-        const derived = deriveOutcomeFromEventName(event.eventName);
-        outcome = derived ?? 'unavailable';
-    }
-
-    const duration = formatDuration(payload?.durationMs);
-    return { run, action, outcome, duration };
-}
-
-/** Usage may be a scalar or a structured token/cost projection; absence is explicit. */
-export function formatUsage(value: unknown): string {
-    if (value === null || value === undefined || value === '') return 'unavailable';
-    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'unavailable';
-    if (typeof value === 'string' || typeof value === 'boolean') return String(value);
-    if (typeof value === 'object') {
-        try {
-            return JSON.stringify(value);
-        } catch {
-            return 'unavailable';
-        }
-    }
-    return 'unavailable';
-}
-
-export function buildTooltipSummary(
-    eventName: string,
-    payload: Record<string, unknown> | null,
-    renderer?: string,
-): { label: string; value: string }[] | null {
-    if (!payload || Object.keys(payload).length === 0) return null;
-
-    const pickString = (...keys: string[]): string | undefined => {
-        for (const key of keys) {
-            const value = payload[key];
-            if (typeof value === 'string' && value.length > 0) return value;
-            if (typeof value === 'number') return String(value);
-        }
-        return undefined;
-    };
-    const pickNumber = (...keys: string[]): number | null => {
-        for (const key of keys) {
-            const value = payload[key];
-            if (typeof value === 'number' && Number.isFinite(value)) return value;
-        }
-        return null;
-    };
-    const pickBool = (...keys: string[]): string | undefined => {
-        for (const key of keys) {
-            const value = payload[key];
-            if (typeof value === 'boolean') return String(value);
-        }
-        return undefined;
-    };
-
-    const entity = payload.entity as Record<string, unknown> | undefined;
-    const entityLabel =
-        entity && typeof entity === 'object'
-            ? `${formatVal(entity.kind)}:${formatVal(entity.id)}`
-            : pickString('entityId', 'wbs', 'ruleId', 'msgId', 'jobId');
-    const transitionFrom = pickString('from');
-    const transitionTo = pickString('to');
-    const transition =
-        transitionFrom || transitionTo ? `${transitionFrom ?? 'none'} → ${transitionTo ?? 'none'}` : undefined;
-
-    // Push a candidate pair only when value is non-empty (null/undefined/'' dropped).
-    const summary: { label: string; value: string }[] = [];
-    const push = (label: string, value: string | null | undefined): void => {
-        if (value !== null && value !== undefined && value !== '') summary.push({ label, value });
-    };
-
-    // Renderer-aware primary fields. Falls through to the generic summary if
-    // the active renderer is unknown.
-    const fallbackRenderer = eventName.startsWith('task.') || eventName.startsWith('feature.') ? 'planning' : 'generic';
-    const activeRenderer = renderer ?? fallbackRenderer;
-
-    switch (activeRenderer) {
-        case 'planning':
-            if (entityLabel) push('Entity', entityLabel);
-            if (transition) push('Transition', transition);
-            break;
-        case 'queue':
-            push('Job', pickString('kind', 'type', 'name'));
-            push('ID', pickString('jobId', 'id'));
-            push('Duration', formatDuration(pickNumber('durationMs')));
-            push('Status', pickString('status', 'state'));
-            push('Error', pickString('error'));
-            break;
-        case 'scheduler':
-            push('Job', pickString('name', 'kind'));
-            push('Duration', formatDuration(pickNumber('durationMs')));
-            push('Error', pickString('error'));
-            break;
-        case 'message': {
-            const from = pickString('fromId', 'from', 'senderId');
-            const to = pickString('toId', 'to', 'recipientId');
-            if (from && to) push('Route', `${from} → ${to}`);
-            else push('Route', pickString('route', 'direction', 'type'));
-            push('OK', pickBool('ok', 'success'));
-            push('Subject', pickString('subject', 'topic'));
-            break;
-        }
-        case 'process':
-        case 'agent':
-            push('Command', pickString('command', 'cmd', 'agent', 'name'));
-            push('Exit', pickString('exitCode', 'code'));
-            push('Duration', formatDuration(pickNumber('durationMs')));
-            push('Op', pickString('op', 'action', 'event', 'type'));
-            push('PID', pickString('pid'));
-            break;
-        case 'rule':
-            push('Rule', pickString('rule', 'ruleId', 'name'));
-            push('Severity', pickString('severity'));
-            push('Findings', pickString('count', 'findings', 'total'));
-            break;
-        case 'bus': {
-            const evt = pickString('event', 'kind');
-            if (evt) push('Bus event', evt);
-            break;
-        }
-        case 'api': {
-            const method = pickString('method');
-            const status = pickString('status');
-            if (method && status) push('HTTP', `${method} ${status}`);
-            else {
-                push('HTTP', method);
-                push('HTTP', status);
-            }
-            push('Path', pickString('path'));
-            push('Error', pickString('error'));
-            break;
-        }
-        case 'workflow-run':
-        case 'workflow-phase':
-        case 'workflow-transition':
-        case 'workflow-action':
-        case 'workflow-hitl':
-        case 'workflow-guard':
-        case 'workflow-custom': {
-            push('Workflow', pickString('workflow', 'workflowName', 'name'));
-            push('Run', pickString('runId', 'run', 'id'));
-            // R10 / design §2.2: first non-null of phase -> transition -> action
-            // becomes a single labeled pair (not all three).
-            const phase = pickString('phase');
-            const transition = pickString('transition');
-            const action = pickString('action', 'kind');
-            if (phase) push('Phase', phase);
-            else if (transition) push('Transition', transition);
-            else if (action) push('Action', action);
-            break;
-        }
-        default:
-            // Generic: surface the first 3 non-empty scalar fields so the
-            // tooltip is still informative for events without a known renderer.
-            for (const [key, value] of Object.entries(payload)) {
-                if (summary.length >= 3) break;
-                if (value === null || value === undefined || value === '') continue;
-                if (typeof value === 'object') continue;
-                summary.push({ label: key, value: formatVal(value) });
-            }
-            break;
-    }
-
-    // R4 (task 0375): no 4-pair cap - the detail panel shows the full pair list.
-    return summary.length > 0 ? summary : null;
 }
 
 /** Serialize UI filter state into the server-side query params. */
@@ -1024,6 +774,8 @@ export default function SystemEventsTab() {
                     ...(envelope.prefix ? { prefix: envelope.prefix } : {}),
                     ...(envelope.renderer ? { renderer: envelope.renderer } : {}),
                     payload: envelope.payload,
+                    ...(envelope.envelope ? { envelope: envelope.envelope } : {}),
+                    view: envelope.view,
                     ...optionalCorrelation(envelope.runId, envelope.entityKind, envelope.entityId, envelope.sequence),
                 };
                 setPage((prev) => [row, ...prev]);
@@ -1330,7 +1082,8 @@ function useMediaQuery(query: string): boolean {
 /**
  * Dense table view (task 0223) replacing the previous card list.
  *
- * Layout: 8 columns (Time | Event | Actor | Entity | Prefix | Tier | Run | Outcome)
+ * Layout: 8 columns (Time | Severity | Event | Summary | Project / Producer |
+ * Correlation | Outcome | Action)
  * with a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
  * visible on a standard viewport (R2). Each row is a keyboard-toggleable
  * detail target (R4) that expands a panel below showing the full redacted
@@ -1348,10 +1101,8 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
         return map;
     }, [catalog]);
 
-    // R1 (task 0225): under 640px the table collapses to a 2-column stacked
-    // layout (Time | Event + Actor). The Prefix / Tier / Run / Outcome columns
-    // are hidden and the Event cell stacks the actor + identity below the event
-    // name so the row never exceeds the viewport width.
+    // Under 640px the table collapses to Time + Event. The semantic fields stack
+    // inside Event so the compact surface loses no diagnostic information.
     const isCompact = useMediaQuery('(max-width: 639px)');
 
     return (
@@ -1361,55 +1112,55 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
               jobId/runId appears. Run/Outcome are wider than the original w-28 so
               correlators truncate cleanly instead of wrapping into the next cell.
             */}
-            <table className="w-full min-w-[800px] text-xs border-separate border-spacing-0 table-fixed">
+            <table
+                className={`w-full ${isCompact ? 'min-w-0' : 'min-w-[1180px]'} text-xs border-separate border-spacing-0 table-fixed`}
+            >
                 <colgroup>
                     <col className={isCompact ? 'w-24' : 'w-36'} />
-                    {/* Event: fixed 20% so long names truncate instead of stealing Run/Outcome. */}
-                    <col className="w-[20%]" />
                     {!isCompact && <col className="w-24" />}
-                    {!isCompact && <col className="w-32" />}
-                    {!isCompact && <col className="w-20" />}
-                    {!isCompact && <col className="w-20" />}
-                    {/* Run: doubled from w-40 → w-80 so jobId/runId correlators fit. */}
-                    {!isCompact && <col className="w-80" />}
-                    {!isCompact && <col className="w-32" />}
+                    <col className="w-[17%]" />
+                    {!isCompact && <col className="w-[22%]" />}
+                    {!isCompact && <col className="w-[18%]" />}
+                    {!isCompact && <col className="w-[20%]" />}
+                    {!isCompact && <col className="w-28" />}
+                    {!isCompact && <col className="w-[18%]" />}
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-base-200">
                     <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
                         <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
                             Time
                         </th>
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Severity
+                            </th>
+                        )}
                         <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
                             Event
                         </th>
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Actor
+                                Summary
                             </th>
                         )}
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Entity
+                                Project / Producer
                             </th>
                         )}
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Prefix
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Tier
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Run
+                                Correlation
                             </th>
                         )}
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
                                 Outcome
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Action
                             </th>
                         )}
                     </tr>
@@ -1443,11 +1194,27 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
 /** Cross-row event so only one payload tooltip stays pinned at a time. */
 const PAYLOAD_TOOLTIP_PIN_EVENT = 'system-events-payload-tooltip-pin';
 
+const SEVERITY_PRESENTATION: Record<SystemEventSeverity, { icon: string; className: string }> = {
+    info: { icon: '●', className: 'text-spur-text-muted' },
+    warning: { icon: '▲', className: 'text-warning' },
+    error: { icon: '✕', className: 'text-error' },
+};
+
+function SeverityLabel({ severity }: { severity: SystemEventSeverity }) {
+    const presentation = SEVERITY_PRESENTATION[severity];
+    return (
+        <span className={`inline-flex items-center gap-1 whitespace-nowrap ${presentation.className}`}>
+            <span aria-hidden="true">{presentation.icon}</span>
+            <span>{severity}</span>
+        </span>
+    );
+}
+
 function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: string; compact: boolean }) {
     const prefix = event.prefix ?? event.eventName.split('.')[0] ?? event.eventName;
-    const summary = useMemo(
-        () => buildTooltipSummary(event.eventName, event.payload, event.renderer),
-        [event.eventName, event.payload, event.renderer],
+    const view = useMemo(
+        () => event.view ?? parseSystemEventView(event.eventName, event.payload),
+        [event.eventName, event.payload, event.view],
     );
     const colorClass = getPrefixColor(prefix);
     const [expanded, setExpanded] = useState(false);
@@ -1465,24 +1232,8 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
     const ignoreUnlockUntilRef = useRef(0);
     const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // R2/R3: identity/outcome/usage — absent => 'unavailable', never zero/blank.
-    // Queue/scheduler events use jobId/type/name; extractEventRowIdentity maps those.
-    const identity = useMemo(
-        () => extractEventRowIdentity({ eventName: event.eventName, runId: event.runId, payload: event.payload }),
-        [event.eventName, event.runId, event.payload],
-    );
-    const { run: runId, action: actionId, outcome, duration } = identity;
-    const usage = formatUsage(event.payload?.usage);
-    const entityLabel = formatEntityLabel({
-        entityKind: event.entityKind,
-        entityId: event.entityId,
-        payload: event.payload,
-    });
     const actorLabel = event.actor && event.actor.length > 0 ? event.actor : 'unavailable';
-
-    /** Pretty-printed + tokenized payload for the event-name hover tooltip. */
-    const payloadTooltip = useMemo(() => buildPayloadTooltip(event.payload), [event.payload]);
-    const tooltipOpen = Boolean(payloadTooltip && (hoveringName || pinned));
+    const tooltipOpen = hoveringName || pinned;
 
     const clearHoverLeaveTimer = useCallback(() => {
         if (hoverLeaveTimerRef.current !== null) {
@@ -1498,7 +1249,6 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
 
     const pinTooltipAt = useCallback(
         (clientX: number, clientY: number) => {
-            if (!payloadTooltip) return;
             // Guard against the pin click / subsequent bubble phase unlocking immediately.
             ignoreUnlockUntilRef.current = performance.now() + 400;
             setPinned(true);
@@ -1510,7 +1260,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             setPinPos({ x, y });
             window.dispatchEvent(new CustomEvent(PAYLOAD_TOOLTIP_PIN_EVENT, { detail: { id: event.id } }));
         },
-        [event.id, payloadTooltip, clearHoverLeaveTimer],
+        [event.id, clearHoverLeaveTimer],
     );
 
     const pinFromNameElement = useCallback(
@@ -1580,93 +1330,127 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
         [pinned, unlockTooltip],
     );
 
-    const tooltipNode =
-        payloadTooltip && tooltipOpen ? (
-            <div
-                ref={tooltipRef}
-                role="tooltip"
-                data-testid="system-event-payload-tooltip"
-                data-pinned={pinned ? 'true' : 'false'}
-                className={
-                    pinned
-                        ? 'pointer-events-auto fixed z-50 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9] select-text cursor-text'
-                        : // Hover preview: interactive enough to hit "Pin" without leaving the name first.
-                          'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
-                }
-                style={pinned && pinPos ? { top: pinPos.y, left: pinPos.x } : undefined}
-                onMouseEnter={() => {
-                    // Keep hover open while the pointer is over the tip (bridge from the name).
-                    clearHoverLeaveTimer();
-                    setHoveringName(true);
-                }}
-                onMouseLeave={() => {
-                    if (pinned) return;
-                    clearHoverLeaveTimer();
-                    hoverLeaveTimerRef.current = setTimeout(() => setHoveringName(false), 150);
-                }}
-                onPointerDown={(e) => {
-                    // Keep select/copy clicks inside the bubble from unlocking.
-                    if (pinned) e.stopPropagation();
-                }}
-            >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="text-[10px] text-[#8b949e] font-sans">
-                        payload
-                        {pinned
-                            ? ' · select to copy · Esc / outside click to close'
-                            : ' · click event name or Pin to lock for copy'}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                        {!pinned && (
-                            <button
-                                type="button"
-                                data-testid="system-event-payload-tooltip-pin"
-                                className="text-[10px] text-[#c9d1d9] hover:text-white px-1.5 py-0.5 rounded border border-[#30363d] bg-[#21262d] cursor-pointer"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    const anchor = nameBtnRef.current;
-                                    if (anchor) {
-                                        pinFromNameElement(anchor);
-                                    } else {
-                                        pinTooltipAt(e.clientX, e.clientY);
-                                    }
-                                }}
-                            >
-                                Pin
-                            </button>
-                        )}
-                        {pinned && (
-                            <button
-                                type="button"
-                                data-testid="system-event-payload-tooltip-close"
-                                className="text-[10px] text-[#8b949e] hover:text-[#c9d1d9] px-1 rounded border border-[#30363d] cursor-pointer"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    unlockTooltip();
-                                }}
-                            >
-                                close
-                            </button>
-                        )}
-                    </div>
+    const tooltipNode = tooltipOpen ? (
+        <div
+            ref={tooltipRef}
+            id={`system-event-tooltip-${event.id}`}
+            role="tooltip"
+            data-testid="system-event-payload-tooltip"
+            data-pinned={pinned ? 'true' : 'false'}
+            className={
+                pinned
+                    ? 'pointer-events-auto fixed z-50 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9] select-text cursor-text'
+                    : // Hover preview: interactive enough to hit "Pin" without leaving the name first.
+                      'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
+            }
+            style={pinned && pinPos ? { top: pinPos.y, left: pinPos.x } : undefined}
+            onMouseEnter={() => {
+                // Keep hover open while the pointer is over the tip (bridge from the name).
+                clearHoverLeaveTimer();
+                setHoveringName(true);
+            }}
+            onMouseLeave={() => {
+                if (pinned) return;
+                clearHoverLeaveTimer();
+                hoverLeaveTimerRef.current = setTimeout(() => setHoveringName(false), 150);
+            }}
+            onFocusCapture={() => setHoveringName(true)}
+            onBlurCapture={(e) => {
+                if (!pinned && !e.currentTarget.contains(e.relatedTarget as Node | null)) setHoveringName(false);
+            }}
+            onPointerDown={(e) => {
+                // Keep select/copy clicks inside the bubble from unlocking.
+                if (pinned) e.stopPropagation();
+            }}
+        >
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="text-[10px] text-[#8b949e] font-sans">
+                    event context
+                    {pinned
+                        ? ' · select to copy · Esc / outside click to close'
+                        : ' · click event name or Pin to lock for copy'}
                 </div>
-                <pre
-                    className="font-mono text-[10px] overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all m-0 leading-relaxed select-text"
-                    data-testid="system-event-payload-json"
-                >
-                    {payloadTooltip.tokens.map((tok) =>
-                        tok.kind === 'ws' ? (
-                            <span key={tok.id}>{tok.text}</span>
-                        ) : (
-                            <span key={tok.id} className={JSON_TOKEN_CLASS[tok.kind]}>
-                                {tok.text}
-                            </span>
-                        ),
+                <div className="flex items-center gap-1 shrink-0">
+                    {!pinned && (
+                        <button
+                            type="button"
+                            data-testid="system-event-payload-tooltip-pin"
+                            className="text-[10px] text-[#c9d1d9] hover:text-white px-1.5 py-0.5 rounded border border-[#30363d] bg-[#21262d] cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                const anchor = nameBtnRef.current;
+                                if (anchor) {
+                                    pinFromNameElement(anchor);
+                                } else {
+                                    pinTooltipAt(e.clientX, e.clientY);
+                                }
+                            }}
+                        >
+                            Pin
+                        </button>
                     )}
-                </pre>
+                    {pinned && (
+                        <button
+                            type="button"
+                            data-testid="system-event-payload-tooltip-close"
+                            className="text-[10px] text-[#8b949e] hover:text-[#c9d1d9] px-1 rounded border border-[#30363d] cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                unlockTooltip();
+                            }}
+                        >
+                            close
+                        </button>
+                    )}
+                </div>
             </div>
-        ) : null;
+            <p className="mb-2 text-spur-text leading-relaxed" data-testid="system-event-description">
+                {view.description}
+            </p>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 max-h-80 overflow-y-auto">
+                <dt className="text-spur-text-muted">Summary</dt>
+                <dd className="break-words">{view.summary}</dd>
+                <dt className="text-spur-text-muted">Severity</dt>
+                <dd>
+                    <SeverityLabel severity={view.severity} />
+                </dd>
+                {view.fields.map((field) => (
+                    <div className="contents" key={field.label + field.value}>
+                        <dt className="text-spur-text-muted">{field.label}</dt>
+                        <dd className="font-mono break-all">{field.value}</dd>
+                    </div>
+                ))}
+                <dt className="text-spur-text-muted">Project</dt>
+                <dd className="font-mono break-all">{view.projectName}</dd>
+                <dt className="text-spur-text-muted">Project root</dt>
+                <dd className="font-mono break-all">{view.projectRoot}</dd>
+                <dt className="text-spur-text-muted">Producer</dt>
+                <dd className="font-mono break-all">{view.producer}</dd>
+                {view.correlationFields.length > 0 ? (
+                    view.correlationFields.map((field) => (
+                        <div className="contents" key={`correlation-${field.label}`}>
+                            <dt className="text-spur-text-muted">{field.label}</dt>
+                            <dd className="font-mono break-all">{field.value}</dd>
+                        </div>
+                    ))
+                ) : (
+                    <>
+                        <dt className="text-spur-text-muted">Correlation</dt>
+                        <dd className="font-mono">unavailable</dd>
+                    </>
+                )}
+                <dt className="text-spur-text-muted">Outcome</dt>
+                <dd className="font-mono break-all">{view.outcome}</dd>
+            </dl>
+            {view.action && (
+                <div className="mt-2 border-t border-[#30363d] pt-2" data-testid="system-event-remediation">
+                    <div className="text-spur-text-muted">{view.action.label}</div>
+                    <code className="block mt-0.5 font-mono break-all select-text">{view.action.value}</code>
+                </div>
+            )}
+        </div>
+    ) : null;
 
     return (
         <>
@@ -1674,6 +1458,11 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-middle">
                     {formatLocalTime(event.occurredAt)}
                 </td>
+                {!compact && (
+                    <td className="px-3 py-1 border-b border-spur-border/40 align-middle text-[10px]">
+                        <SeverityLabel severity={view.severity} />
+                    </td>
+                )}
                 <td className="px-3 py-1 border-b border-spur-border/40 relative align-middle min-w-0">
                     <div className="flex flex-col gap-0.5 min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -1699,10 +1488,20 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     type="button"
                                     className={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
                                     data-testid="system-event-name"
-                                    aria-label={`Payload for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
+                                    aria-label={`Context for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
+                                    aria-describedby={tooltipOpen ? `system-event-tooltip-${event.id}` : undefined}
                                     onMouseEnter={() => {
                                         clearHoverLeaveTimer();
                                         setHoveringName(true);
+                                    }}
+                                    onFocus={() => {
+                                        clearHoverLeaveTimer();
+                                        setHoveringName(true);
+                                    }}
+                                    onBlur={(e) => {
+                                        if (!pinned && !tooltipRef.current?.contains(e.relatedTarget as Node | null)) {
+                                            setHoveringName(false);
+                                        }
                                     }}
                                     onMouseLeave={() => {
                                         // Delay hide so the user can move into the tip / hit Pin.
@@ -1714,14 +1513,13 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        if (!payloadTooltip) return;
                                         if (pinned) return;
                                         pinFromNameElement(e.currentTarget, e.clientX, e.clientY);
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {
                                             e.preventDefault();
-                                            if (!payloadTooltip || pinned) return;
+                                            if (pinned) return;
                                             pinFromNameElement(e.currentTarget);
                                         }
                                     }}
@@ -1734,23 +1532,19 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                         </div>
                         {compact && (
                             <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
-                                {event.actor && <span className="truncate">by {event.actor}</span>}
-                                {entityLabel !== 'unavailable' && (
-                                    <span className="truncate" title={entityLabel}>
-                                        entity: {entityLabel}
-                                    </span>
-                                )}
-                                <span className="truncate" title={`run ${runId}`}>
-                                    run: {runId}
+                                <SeverityLabel severity={view.severity} />
+                                <span className="truncate text-spur-text" title={view.summary}>
+                                    {view.summary}
                                 </span>
-                                {actionId !== 'unavailable' && (
-                                    <span className="truncate" title={`action ${actionId}`}>
-                                        action: {actionId}
-                                    </span>
-                                )}
-                                <span className="truncate">
-                                    outcome: {outcome}
-                                    {duration ? ` · ${duration}` : ''}
+                                <span className="truncate" title={`${view.projectName} · ${view.producer}`}>
+                                    {view.projectName} · {view.producer}
+                                </span>
+                                <span className="truncate" title={view.correlation}>
+                                    {view.correlation}
+                                </span>
+                                <span className="truncate">outcome: {view.outcome}</span>
+                                <span className="truncate" title={view.action?.value ?? 'unavailable'}>
+                                    action: {view.action?.value ?? 'unavailable'}
                                 </span>
                             </div>
                         )}
@@ -1758,52 +1552,44 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 </td>
                 {!compact && (
                     <td
-                        className="px-3 py-1 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-middle truncate"
-                        title={actorLabel}
+                        className="px-3 py-1 border-b border-spur-border/40 text-spur-text align-middle truncate"
+                        title={view.summary}
                     >
-                        {actorLabel}
+                        {view.summary}
+                    </td>
+                )}
+                {!compact && (
+                    <td className="px-3 py-1 border-b border-spur-border/40 text-[10px] align-middle min-w-0">
+                        <div className="truncate" title={view.projectName}>
+                            {view.projectName}
+                        </div>
+                        <div className="truncate font-mono text-spur-text-muted" title={view.producer}>
+                            {view.producer}
+                        </div>
                     </td>
                 )}
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={entityLabel}
-                        data-testid="system-event-entity"
+                        title={view.correlation}
                     >
-                        {entityLabel}
+                        {view.correlation}
                     </td>
                 )}
                 {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono align-middle">
-                        <span className={colorClass}>{prefix}</span>
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={view.outcome}
+                    >
+                        {view.outcome}
                     </td>
                 )}
                 {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 text-spur-text-muted align-middle">
-                        {tier}
-                    </td>
-                )}
-                {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle min-w-0">
-                        {/*
-                          Single truncated correlator on the row; secondary action/type
-                          only when present. Avoids the double "run: unavailable /
-                          action: unavailable" stack that overflowed w-28 columns.
-                        */}
-                        <div className="truncate" title={runId}>
-                            {runId}
-                        </div>
-                        {actionId !== 'unavailable' && (
-                            <div className="truncate text-spur-text-muted/70" title={actionId}>
-                                {actionId}
-                            </div>
-                        )}
-                    </td>
-                )}
-                {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle whitespace-nowrap">
-                        <span title={outcome}>{outcome}</span>
-                        {duration && <span className="text-spur-text-muted/60"> · {duration}</span>}
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={view.action?.value ?? 'unavailable'}
+                    >
+                        {view.action?.value ?? 'unavailable'}
                     </td>
                 )}
             </tr>
@@ -1817,40 +1603,39 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             tabIndex={-1}
                             className="flex flex-col gap-2 text-[11px] text-spur-text max-w-full"
                         >
-                            {/* Correlation columns (R2): run, entity, sequence. */}
+                            {/* Context and low-value catalog metadata stay in expanded detail. */}
                             <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px]">
                                 <span>
-                                    <span className="text-spur-text-muted">run:</span> {runId}
+                                    <span className="text-spur-text-muted">project:</span> {view.projectName}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">action:</span> {actionId}
+                                    <span className="text-spur-text-muted">root:</span> {view.projectRoot}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">entity:</span> {entityLabel}
+                                    <span className="text-spur-text-muted">producer:</span> {view.producer}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">sequence:</span>{' '}
-                                    {formatAvailability(event.sequence)}
-                                </span>
-                                {duration && (
-                                    <span>
-                                        <span className="text-spur-text-muted">duration:</span> {duration}
-                                    </span>
-                                )}
-                                <span>
-                                    <span className="text-spur-text-muted">outcome:</span> {outcome}
+                                    <span className="text-spur-text-muted">correlation:</span> {view.correlation}
                                 </span>
                                 <span>
-                                    <span className="text-spur-text-muted">usage:</span> {usage}
+                                    <span className="text-spur-text-muted">actor:</span> {actorLabel}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">prefix:</span> {prefix}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">tier:</span> {tier}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">outcome:</span> {view.outcome}
                                 </span>
                             </div>
-                            {/* Renderer-aware pair list (no 4-cap - R4). */}
-                            {summary && (
+                            {view.fields.length > 0 && (
                                 <dl className="space-y-0.5">
-                                    {summary.map((row) => (
-                                        <div key={row.label} className="flex gap-2">
-                                            <dt className="text-spur-text-muted shrink-0">{row.label}:</dt>
-                                            <dd className="font-mono break-all">{row.value}</dd>
+                                    {view.fields.map((field) => (
+                                        <div key={field.label + field.value} className="flex gap-2">
+                                            <dt className="text-spur-text-muted shrink-0">{field.label}:</dt>
+                                            <dd className="font-mono break-all">{field.value}</dd>
                                         </div>
                                     ))}
                                 </dl>
@@ -1859,7 +1644,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             <div className="border-t border-spur-border/40 pt-1">
                                 <div className="text-spur-text-muted text-[10px] mb-0.5">payload (redacted):</div>
                                 <pre className="font-mono text-[10px] text-spur-text-muted overflow-x-auto whitespace-pre-wrap break-all">
-                                    {JSON.stringify(event.payload, null, 2)}
+                                    {event.envelope ? JSON.stringify(event.envelope, null, 2) : 'unavailable'}
                                 </pre>
                             </div>
                             {/* Dismiss button - Escape also works via onKeyDown above. */}

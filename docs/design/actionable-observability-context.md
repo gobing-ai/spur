@@ -2,8 +2,8 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** envelope foundation implemented (task 0526); Board and trace consumers remain in tasks
-0527–0528.
+**Status:** envelope and Board consumers implemented (tasks 0526–0527); trace consumers remain in
+task 0528.
 **Decision:** ADR-056.
 
 ## System Event envelope
@@ -70,7 +70,7 @@ description, retained metadata fields, and remediation kind. `RuleService` forwa
 rule-engine events through a Spur-owned bridge that adds the Spur run id, ISO time, severity, and
 evaluator while excluding complete finding details.
 
-## Board projection (pending task 0527)
+## Board projection (task 0527)
 
 Desktop columns are `Time | Severity | Event | Summary | Project / Producer | Correlation | Outcome |
 Action`. Prefix, tier, actor, sequence, and raw redacted data move to expanded detail. Compact mode
@@ -79,6 +79,12 @@ keeps `Time | Event` and stacks summary, producer/correlation, outcome, and acti
 The event-name tooltip renders `description`, `fields`, project/producer, and optional action. It is
 available by hover and focus, can be pinned for selection/copy, and closes with Escape or outside
 activation. Raw redacted JSON stays in expanded detail rather than dominating the tooltip.
+
+`parseHistoryRow` and the SSE parser narrow the envelope once at the network boundary. The parsed
+semantic view feeds both table and tooltip; canonical `data` is unwrapped into the existing
+`SystemEventRow.payload` field so the Jobs and Tasks tabs keep their established input contract. The
+full envelope remains attached only for expanded System Events detail. Legacy or malformed shapes
+produce explicit `unavailable` values and no action.
 
 ## Trace DTO additions (pending task 0528)
 

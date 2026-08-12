@@ -1465,6 +1465,15 @@ Unknown names and malformed optional payloads degrade to a bounded generic envel
 the product operation. Canonical shape, projection paths, and pending consumer contracts live in
 [`actionable-observability-context.md`](design/actionable-observability-context.md).
 
+**Board projection (task 0527).** The web client narrows envelope v2 once in its history/SSE parser.
+Desktop renders `Time | Severity | Event | Summary | Project / Producer | Correlation | Outcome |
+Action`; below 640 px it keeps `Time | Event` and stacks the semantic fields. Severity always pairs
+icon and text. The event-name tooltip uses the server-owned description, fields, context, outcome,
+and remediation, with equivalent hover/focus/pin interactions; raw redacted envelope JSON and
+prefix/tier/actor stay in expanded detail. Canonical `data` is unwrapped for the existing Jobs/Tasks
+consumers, while malformed or legacy client input receives explicit `unavailable` semantics and no
+fabricated action.
+
 **Source families (tasks 0221/0526).** `SystemEventSource` is the producer family
 (`planning | queue | scheduler | message | process | workflow | rule | agent | team | history | bus |
 api`). Each catalog entry additionally fixes its concrete producer package and subsystem. The catalog
