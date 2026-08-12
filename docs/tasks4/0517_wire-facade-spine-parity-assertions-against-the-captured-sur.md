@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: ["0516"]
 ac_numbering: task-local
 created_at: "2026-08-11T22:25:19.879Z"
-updated_at: "2026-08-12T00:50:14.521Z"
+updated_at: "2026-08-12T03:59:44.175Z"
 ---
 
 ## 0517. Wire facade/spine parity assertions against the captured surface
@@ -98,6 +98,10 @@ One local `diffSets` helper (`cli-surface-parity.test.ts:74`); both labels (`doc
 
 **Drift found:** none beyond the known Commander-generated `help` delta, already covered by the parsed 0516 Tier C exclusion data — the three comparisons pass against the current live surface; the (empty today) sorted failure arrays remain 0513's authoritative edit list. No AGENTS.md correction was needed (its 13-noun table matches live root minus `help` exactly).
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0517-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

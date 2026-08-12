@@ -13,7 +13,7 @@ tags: ["idea", "workflow", "plugins/sp"]
 dependencies: ["0515"]
 ac_numbering: task-local
 created_at: "2026-08-11T22:25:19.890Z"
-updated_at: "2026-08-12T01:57:57.575Z"
+updated_at: "2026-08-12T03:59:44.492Z"
 ---
 
 ## 0518. Idea handoff finalization: task ordering, roster refresh, readiness-gated recommendation
@@ -98,6 +98,10 @@ All changes are within the 0518 scope: `config/workflows/idea-pipeline.yaml` (wo
 
 Static contract assertions only — 0519 owns the focused regression cases.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — idea-pipeline-definition 29 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0518-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

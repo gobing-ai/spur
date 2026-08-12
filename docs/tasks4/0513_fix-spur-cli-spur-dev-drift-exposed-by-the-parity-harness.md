@@ -13,7 +13,7 @@ tags: ["parity", "drift-fix", "plugins/sp"]
 dependencies: ["0517"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.659Z"
-updated_at: "2026-08-12T00:58:51.829Z"
+updated_at: "2026-08-12T03:59:42.869Z"
 ---
 
 ## 0513. Fix spur-cli/spur-dev drift exposed by the parity harness
@@ -104,6 +104,10 @@ For documented-only entries, correct/remove the stale owner row. For live-only e
 
 **Handoff:** zero-finding surface confirmed; 0514 may proceed per the task's Handoff Q&A.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0513-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

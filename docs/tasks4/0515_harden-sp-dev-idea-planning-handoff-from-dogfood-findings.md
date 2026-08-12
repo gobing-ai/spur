@@ -13,7 +13,7 @@ tags: ["dogfood", "planning-workflow", "plugins/sp"]
 dependencies: ["0514"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:43:29.598Z"
-updated_at: "2026-08-12T01:33:08.488Z"
+updated_at: "2026-08-12T03:59:43.540Z"
 ---
 
 ## 0515. Harden sp-dev-idea planning handoff from dogfood findings
@@ -72,6 +72,10 @@ Do not add states, ordering artifacts, dependency logic, roster refresh, handoff
 - `plugins/sp/skills/spur-dev/references/planning-workflow.md:220-251` — new Step 5.6 "Idea pipeline (sp:dev-idea) — planning handoff contracts" mirrors the Goal/Scope intent contract (`:225-236`) and the design-review artifact contract — first pass / rejection / retry reconciliation / exit feature-check gate (`:238-250`). `plugins/sp/commands/dev-idea.md` unchanged — the wrapper describes flags and implementation, not outputs.
 - `packages/app/tests/workflow/idea-pipeline-definition.test.ts:77-87` — auto-approve guard assertion updated to include the feature check; `:115-118` adds `idea-goal.md`, `idea-scope.md`, `idea-design-review.md` to the run-scoped stems list; `:154-193` and `:195-246` add 0515 R1 (Goal/Scope artifacts + CLI persistence) and 0515 R2 (review artifact contract, AC reconciliation, feature check on both design exits) describe blocks.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — idea-pipeline-definition 29 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0515-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

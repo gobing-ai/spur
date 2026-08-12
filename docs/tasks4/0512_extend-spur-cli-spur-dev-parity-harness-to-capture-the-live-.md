@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.615Z"
-updated_at: "2026-08-12T00:06:53.671Z"
+updated_at: "2026-08-12T03:58:36.332Z"
 ---
 
 ## 0512. Extend spur-cli/spur-dev parity harness to capture the live CLI surface
@@ -88,6 +88,10 @@ already existed in §2 (R9/R13); §3 now points the frozen API at the same scope
 
 **Not changed:** production packages, CLI surface, runtime behavior — test-only adapter + docs, per the task's non-goals and design §8 (constraint R10).
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0512-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

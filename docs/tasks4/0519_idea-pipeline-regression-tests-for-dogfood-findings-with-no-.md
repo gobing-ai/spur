@@ -13,7 +13,7 @@ tags: ["idea", "workflow", "plugins/sp"]
 dependencies: ["0518"]
 ac_numbering: task-local
 created_at: "2026-08-11T22:25:19.899Z"
-updated_at: "2026-08-12T02:12:55.846Z"
+updated_at: "2026-08-12T03:59:44.827Z"
 ---
 
 ## 0519. Idea-pipeline regression tests for dogfood findings with no-surface guard
@@ -83,6 +83,10 @@ Findings 1–2 (Goal/Scope CLI writes; run-scoped design-review artifact + AC re
 
 No new top-level test file (both owners extended in place), no new dependencies, no runtime files, no public CLI/flag, no task-batch schema change, no persistence/transport change — verified via scoped `git status`/`git diff`: zero diff under `apps/cli/src`, `apps/cli/schemas/task-batch.schema.json`, `package.json`/lockfile, `packages/domain`, `packages/contracts`.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — idea-pipeline-definition 29 pass / 0 fail; cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0519-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

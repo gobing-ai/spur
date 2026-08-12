@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: ["0512"]
 ac_numbering: task-local
 created_at: "2026-08-11T22:25:19.816Z"
-updated_at: "2026-08-12T00:18:46.847Z"
+updated_at: "2026-08-12T03:59:43.854Z"
 ---
 
 ## 0516. Parity scope data: explicit exclusions and the ADR-054 ownership boundary
@@ -117,6 +117,10 @@ The exclusion and route catalogs stay single-source in the two owning skill tabl
 0517 can compare `kind: 'cli'` rows and reasoned exclusions against the live captured CLI
 without a copied allow-list or regex silence.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0516-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)

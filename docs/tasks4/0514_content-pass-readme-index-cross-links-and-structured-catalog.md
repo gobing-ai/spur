@@ -13,7 +13,7 @@ tags: ["parity", "content-pass", "plugins/sp"]
 dependencies: ["0513"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.667Z"
-updated_at: "2026-08-12T01:13:36.526Z"
+updated_at: "2026-08-12T03:59:43.221Z"
 ---
 
 ## 0514. Content pass: README index, cross-links, and structured-catalog ownership
@@ -100,6 +100,10 @@ so no duplicate-to-link replacement was required.
 
 No runtime, CLI, schema, dependency, persistence, or transport files touched.
 ### Testing
+**Testing**
+
+Re-audited 2026-08-11 via `/sp:dev-verifyall --feature I2 --force`: evidence re-run — cli-surface-parity + skill-structure 73 pass / 0 fail. Verdict artifact regenerated at `.spur/run/0514-verdict.json` (gitignored). Prior verdict evidence below remains accurate.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
