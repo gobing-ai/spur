@@ -8,7 +8,7 @@
     ├── [backlog] **B1**: Agent run hardening ([B1_agent-run-hardening.md](./B1_agent-run-hardening.md))
     └── [backlog] **B2**: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept ([B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md](./B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md))
 [active] **C**: Rules ([C_rules.md](./C_rules.md))
-    └── [backlog] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
+    └── [done] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
 [done] **D**: Workflows ([D_workflows.md](./D_workflows.md))
     ├── [done] **D1**: workflow run observability — enriched step lines, FSM transitions, async follow ([D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
     ├── [done] **D2**: All-in-one per-run workflow run log ([D2_all-in-one-per-run-workflow-run-log.md](./D2_all-in-one-per-run-workflow-run-log.md))

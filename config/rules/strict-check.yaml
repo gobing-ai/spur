@@ -1,6 +1,8 @@
-# Strict-check preset — opt-in hygiene rules absorbed from ts-libs but kept OUT
-# of the default recommended-pre-check gate (they need project-specific tuning
-# or are redundant with engine-level validation). Run explicitly:
+# Strict-check preset — explicit single-category cherry-pick of the `strict/`
+# category only. The same category is already included in recommended-pre-check
+# (extends: typescript, structure, boundary, surface, ui, strict) since 79186391;
+# use this preset when you want ONLY strict rules, not the full pre-check set.
+# Run explicitly:
 #   spur rule run --preset strict-check
 # or cherry-pick a single rule:
 #   spur rule run --rule no-third-party-http-clients
@@ -10,6 +12,7 @@
 name: strict-check
 description: >
   Opt-in boundary hygiene: HTTP-client centralization, runtime fs/spawn seams,
-  and local rule-file structural validation. Not part of recommended-pre-check.
+  and local rule-file structural validation. Included in recommended-pre-check;
+  this preset selects the strict/ category alone.
 extends:
   - strict
