@@ -225,7 +225,6 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         }
         expect(requireEntry('queue.job.retrying').severity).toBe('warning');
         expect(requireEntry('workflow.run.paused').severity).toBe('warning');
-        expect(requireEntry('workflow.action.failed_continue').severity).toBe('warning');
         expect(requireEntry('queue.job.failed').severity).toBe('error');
         expect(requireEntry('rule.eval.error').severity).toBe('error');
         expect(requireEntry('workflow.transition.denied').severity).toBe('error');

@@ -256,15 +256,10 @@ function event(
 }
 
 /**
- * Catalog default severity from the event name.
- *
- * `stopped` is a normal lifecycle counterpart of `started` (queue consumer
- * drain, agent/process/team member halt) and must stay `info`. Warning is for
- * degraded-but-continuing names (`retrying`, HITL `paused`, `dropped`,
- * `failed_continue`). Payload `severity` or a failed drain can still raise it.
+ * Last-resort catalog default when the producer payload has no `severity`.
+ * Producers in ts-libs stamp severity at emit time; do not grow this heuristic.
  */
 function inferSeverity(name: string): SystemEventSeverity {
-    if (/failed_continue$/.test(name)) return 'warning';
     if (/(?:failed|error|denied)$/.test(name)) return 'error';
     if (/(?:retrying|paused|dropped)$/.test(name)) return 'warning';
     return 'info';

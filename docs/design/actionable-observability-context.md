@@ -64,8 +64,10 @@ The implementation boundary is `packages/app/src/services/system-event-envelope.
 `buildSystemEventEnvelope` is the only fresh-write/SSE builder, while
 `projectStoredSystemEventEnvelope` preserves canonical v2 rows and adapts legacy raw rows on read.
 Server and CLI composition roots inject the current project and configured secret values. The
-catalog in `event-names.ts` supplies each producer package, subsystem, default severity,
-description, retained metadata fields, and remediation kind. `RuleService` forwards the upstream
+catalog in `event-names.ts` supplies each producer package, subsystem, a last-resort default
+severity, description, retained metadata fields, and remediation kind. Upstream ts-libs
+producers stamp `severity` on the bus payload at emit time; the envelope prefers that field
+over the catalog heuristic. `RuleService` forwards the upstream
 rule-engine events through a Spur-owned bridge that adds the Spur run id, ISO time, severity, and
 evaluator while excluding complete finding details.
 

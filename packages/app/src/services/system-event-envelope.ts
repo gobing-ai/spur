@@ -180,7 +180,7 @@ export function buildSystemEventEnvelope(
     try {
         const data = projectSystemEventData(entry, eventPayload, secretValues);
         const correlation = extractEnvelopeCorrelation(eventPayload, secretValues);
-        const severity = resolvePresentationSeverity(entry, eventPayload);
+        const severity = extractSeverity(eventPayload) ?? entry?.severity ?? 'warning';
         const outcome = firstBoundedString(eventPayload, ['outcome', 'status', 'reason'], secretValues);
         const presentation = {
             severity,
@@ -386,19 +386,6 @@ function buildAction(
         };
     }
     return {};
-}
-
-function resolvePresentationSeverity(
-    entry: { name: string; severity: SystemEventSeverity } | undefined,
-    eventPayload: unknown,
-): SystemEventSeverity {
-    const explicit = extractSeverity(eventPayload);
-    if (explicit) return explicit;
-    // Incomplete queue drain is the only `*.stopped` case that is not routine.
-    if (entry?.name === 'queue.consumer.stopped' && isRecord(eventPayload) && eventPayload.drained === false) {
-        return 'warning';
-    }
-    return entry?.severity ?? 'warning';
 }
 
 function extractSeverity(eventPayload: unknown): SystemEventSeverity | undefined {

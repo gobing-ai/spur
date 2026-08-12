@@ -51,26 +51,25 @@ describe('buildSystemEventEnvelope', () => {
         expect(envelope.presentation.fields).toContainEqual({ label: 'Node', value: 'verify' });
     });
 
-    test('queue.consumer.stopped is info unless the drain failed', () => {
+    test('presentation severity is taken from the producer payload, not inferred from drained', () => {
         const entry = requireEntry('queue.consumer.stopped');
-        expect(entry.severity).toBe('info');
 
-        const clean = buildSystemEventEnvelope(
+        const fromProducer = buildSystemEventEnvelope(
             entry,
-            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 0, drained: true },
+            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 0, drained: true, severity: 'info' },
             project,
         );
-        expect(clean.presentation.severity).toBe('info');
+        expect(fromProducer.presentation.severity).toBe('info');
 
-        const incomplete = buildSystemEventEnvelope(
+        const incompleteDrain = buildSystemEventEnvelope(
             entry,
-            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 2, drained: false },
+            { stoppedAt: 1, drainTimeoutMs: 30_000, inFlightAtStop: 2, drained: false, severity: 'warning' },
             project,
         );
-        expect(incomplete.presentation.severity).toBe('warning');
+        expect(incompleteDrain.presentation.severity).toBe('warning');
 
-        const overridden = buildSystemEventEnvelope(entry, { drained: false, severity: 'error' }, project);
-        expect(overridden.presentation.severity).toBe('error');
+        const explicit = buildSystemEventEnvelope(entry, { drained: false, severity: 'error' }, project);
+        expect(explicit.presentation.severity).toBe('error');
     });
 
     test('metadata-only is a bounded allow-list and redacts before projection bounds', () => {
