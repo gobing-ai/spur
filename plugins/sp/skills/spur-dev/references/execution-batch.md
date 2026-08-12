@@ -681,7 +681,7 @@ Resume, merge, or discard:
   discard: git worktree remove <worktree-path> && git branch -D <branch>
 ```
 
-The report reuses the [`--next` chain contract](flag-glossary.md#-next-chain-contract) halt-report
+The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report
 shape (halt cause + where + why), not new vocabulary. Retention is the right default: these batches
 are long and already resumable via `--continue`; auto-deleting is data loss, auto-merging is a
 partial result presented as a whole. The answer to "what happens if it fails" is "nothing happens,

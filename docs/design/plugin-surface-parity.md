@@ -33,6 +33,8 @@ ADR-053/054, amended 2026-08-11). Shapes only — rationale lives in `00 ADR-053
 - `<noun> --help` is the primary, universal capture surface; `--json` is used only where the noun actually exposes a machine-readable inventory — never assumed.
 - Human `--help` parsing is a **narrow adapter** with fixtures and explicit exclusions (§4), not a general parser.
 - Parse each surface inventory into noun/verb/flag sets; bidirectional report: `documented-not-on-CLI` and `on-CLI-not-documented` are both findings (R1).
+- The capture layer is the frozen helper `captureCliSurface(commandPath?)` / `parseCommanderHelp(text)` at `plugins/sp/tests/helpers/cli-surface.ts` (task 0512); 0516 adds structured scope parsers on top, 0517 wires the focused parity suite.
+- npm-skew scope (R2): published `spur` may lag the monorepo CLI (§2); this gate validates only the source-local surface.
 - Unmarked stale rows fail; exclusions must be explicit (§4) — never suppressed by absence of a match.
 
 ## 4. Exclusions

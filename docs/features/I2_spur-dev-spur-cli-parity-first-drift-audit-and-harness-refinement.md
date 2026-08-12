@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I2"
 name: "spur-dev/spur-cli parity-first drift audit and harness refinement"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-11T20:26:51.743Z"
-updated_at: "2026-08-11T21:18:41.650Z"
+updated_at: "2026-08-12T02:20:53.642Z"
 ---
 
 # I2: spur-dev/spur-cli parity-first drift audit and harness refinement
@@ -175,3 +175,6 @@ Revise the design once before decomposition:
 - 2026-08-11T21:14:07.773Z moved L → I2 (system)
 - 2026-08-11T21:18:40.874Z moved I2 → L (system)
 - 2026-08-11T21:18:41.650Z moved L → I2 (system)
+- 2026-08-12T00:05:41.122Z backlog → active (system)
+- 2026-08-12T02:18:38.815Z active → verifying (system)
+- 2026-08-12T02:20:53.642Z verifying → done (system)

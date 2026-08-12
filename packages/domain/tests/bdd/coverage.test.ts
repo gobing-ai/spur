@@ -199,4 +199,13 @@ describe('normalizeTitle — bracket tags (task 0398 R7)', () => {
     test('a tag alone reduces to empty rather than looping forever', () => {
         expect(normalizeTitle('[doc-only]')).toBe('');
     });
+
+    test('strips a trailing tag from a verdict-style id so it matches the untagged scenario', () => {
+        // Verdict rows carry the evidence-rule annotation as a suffix
+        // (`[docs-only]` etc.); the feature-level matcher must ignore it or a
+        // docs-only row becomes unverifiable (dogfood 2026-08-11, feature I2 R9).
+        expect(normalizeTitle('Scenario: R2 — Published npm skew is documented [docs-only]')).toBe(
+            normalizeTitle('R9 — Published npm skew is documented'),
+        );
+    });
 });

@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.12.0
+version: 1.13.0
 owner: Robin Min
 updated_at: 2026-08-11
 read_before: any structural change; before diverging from a decision
@@ -424,7 +424,7 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 
 ## ADR-053: Parity Harness Diffs Agent-Facing Surfaces Against the Live Monorepo CLI
 
-- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** I2 · **Amends:** ADR-038
+- **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** I2 · **Amends:** ADR-038
 - **Decision:** Extend the plugin parity harness to mechanically diff three agent-facing surfaces
   against the live monorepo CLI (`bun run apps/cli/src/index.ts <noun> --help` / `--json`): the
   `sp:spur-cli` facade inventories (noun routing table, Tier C exclusions, per-noun verb/flag
@@ -448,9 +448,16 @@ proven.
 
 **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §3/§7.
 
+**Amendment (2026-08-11, implementation).** The harness shipped: the frozen capture helper
+`captureCliSurface` / `parseCommanderHelp` at `plugins/sp/tests/helpers/cli-surface.ts`, the focused
+parity suite `plugins/sp/tests/cli-surface-parity.test.ts`, and `skill-structure.test.ts` extensions
+(tasks 0512–0517). Status: Accepted (design) → Accepted.
+
+**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md`.
+
 ## ADR-054: Facade/Spine Boundary Is Test-Asserted; SSOT Consolidation Rejected
 
-- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** I2
+- **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** I2
 - **Decision:** Keep the ownership split — `sp:spur-dev` (spine) owns lifecycle, `sp:spur-cli`
   (facade) owns the verb reference, the CLI is the validator — and assert it with parity tests that
   fail when the facade documents lifecycle steps or the spine documents verb inventories. Reject
@@ -469,6 +476,13 @@ inventories, never arbitrary prose.
 
 **Why.** Status-transition verbs are CLI semantics the facade must own, and prose-duplication
 detection is not mechanically reliable.
+
+**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §5/§6.
+
+**Amendment (2026-08-11, implementation).** The boundary assertions shipped with the ADR-053 harness
+(plugins/sp/tests/cli-surface-parity.test.ts, tasks 0512–0517): the facade owns CLI noun/verb/flag
+semantics, the spine owns orchestration, and the tests fail on inversion. Status:
+Accepted (design) → Accepted.
 
 **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §5/§6.
 

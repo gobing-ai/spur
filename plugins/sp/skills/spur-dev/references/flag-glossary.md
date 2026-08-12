@@ -366,7 +366,7 @@ swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev
 the flag (single step; not worth the worktree cost), and `--worktree --mode parallel` is rejected
 (per-task parallel isolation stays task 0142). The full lifecycle — name resolution, dirty-tree
 precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is
-specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree).
+specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name).
 Portable `git worktree` commands only; the git mechanics are reused from
 [worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md).
 

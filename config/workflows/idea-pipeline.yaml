@@ -10,7 +10,7 @@
 # Shape: start -> discovery -> idea-eval -> feature-create -> ac-generate -> feature-check
 #          -> system-design (conditional: needs_design signal)
 #          -> design-approval (taste HITL gate; not auto-clicked by --auto)
-#          -> decompose -> batch-create -> handoff
+#          -> decompose -> batch-create -> handoff-finalize -> handoff
 #        (idea-eval rejection -> cancelled)
 #        (feature-check failure routes back to ac-generate; batch-create failure to decompose).
 #
@@ -128,20 +128,36 @@ states:
   - id: feature-create
     description: >
       Create a feature via spur feature create, or select an existing feature id.
-      The agent writes the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt for subsequent
-      states to read. Prefer the enhanced idea from .spur/run/${vars.__runId}-idea-eval-report.md as
+      The agent writes the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt and body-only
+      intent artifacts .spur/run/${vars.__runId}-idea-goal.md / -idea-scope.md. Goal carries
+      concise intent only; Scope carries explicit in/out boundaries — task breakdowns and
+      checklists never enter Goal. Shell actions then persist both sections through
+      `spur feature update --section Goal|Scope --from-file ...`; a missing/empty artifact
+      stops the state. Prefer the enhanced idea from .spur/run/${vars.__runId}-idea-eval-report.md as
       context; do not overwrite vars.idea.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
+          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets."
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
         options:
           path: .spur/run/${vars.__runId}-idea-feature-id.txt
           var: featureId
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            test -s .spur/run/$__runId-idea-goal.md &&
+            $spurBin feature update "$featureId" --section Goal --from-file .spur/run/$__runId-idea-goal.md
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            test -s .spur/run/$__runId-idea-scope.md &&
+            $spurBin feature update "$featureId" --section Scope --from-file .spur/run/$__runId-idea-scope.md
 
   - id: ac-generate
     description: >
@@ -177,7 +193,7 @@ states:
         options:
           command: >-
             if test -s .spur/run/$__runId-idea-ac-content.md; then
-              $spurBin feature update $featureId --section "Acceptance Criteria" --from-file .spur/run/$__runId-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-ac-done.txt;
+              $spurBin feature update "$featureId" --section "Acceptance Criteria" --from-file .spur/run/$__runId-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-ac-done.txt;
             else
               exit 0;
             fi
@@ -206,13 +222,33 @@ states:
       Dispatch sp:sys-architecture to produce the system design. This state runs
       only when needs_design=true (design=auto signal path). The agent creates ADR
       entries, architecture updates, and design satellites through constitution rules.
-      The design-approval state follows (taste gate).
+      A run-scoped design-review artifact (.spur/run/${vars.__runId}-idea-design-review.md)
+      with fixed headings `## Proposed design`, `## Operator feedback`, and `## Reconciliation`
+      carries operator rejection feedback back into this state: on the first pass the agent
+      fills `## Proposed design`; on retry (operator feedback present) it revises the design,
+      records the reconciliation, and updates invalidated Acceptance Criteria through
+      `spur feature update` before design can exit. The design-approval state follows (taste gate).
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            REVIEW=".spur/run/$__runId-idea-design-review.md" &&
+            test -f "$REVIEW" || printf '## Proposed design\n\n## Operator feedback\n\n## Reconciliation\n' > "$REVIEW"
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact and feature AC. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly."
+          input: "Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update \"$featureId\" --section \"Acceptance Criteria\" --from-file <file>` — never edit feature corpus files directly."
+          expectFile: .spur/run/${vars.__runId}-idea-design-review.md
           timeoutMs: ${vars.stepTimeoutMs}
+      # expectFile proves existence only, and the onEnter skeleton pre-creates the file — so an
+      # agent no-op would still pass it (0515 P3-2). Fail closed: the `## Proposed design` section
+      # must carry non-whitespace content before design can exit to approval/decompose.
+      - kind: shell
+        options:
+          command: >-
+            REVIEW=".spur/run/$__runId-idea-design-review.md" &&
+            awk '/^## Proposed design/{f=1; next} /^## Operator feedback/{f=0} f' "$REVIEW" | grep -q '[^[:space:]]'
 
   - id: design-approval
     description: >
@@ -226,6 +262,11 @@ states:
       agent passes. The onEnter shell increments a reject counter; the `no`
       edge to system-design is capped at 1 revise, after which the run
       terminates as `failed` naming this gate.
+
+      Rejection must carry operator feedback: before answering `no`, the operator
+      records the concrete issue(s) in the run-scoped design-review artifact
+      (.spur/run/${vars.__runId}-idea-design-review.md) under `## Operator feedback` —
+      the revision pass reads it to reconcile invalidated AC before re-approval.
     pause: true
     onEnter:
       - kind: shell
@@ -233,23 +274,45 @@ states:
           command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-design-reject-count'
       - kind: hitl.confirm
         options:
-          prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition?"
+          prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition? To reject, first record your feedback in .spur/run/${vars.__runId}-idea-design-review.md under the `## Operator feedback` heading, then answer no."
 
   - id: decompose
     description: >
       Dispatch sp:spec-decomposition with the brainstorm artifact, feature AC, and
       design doc as input. The agent produces a task-batch JSON file at
-      .spur/run/${vars.__runId}-idea-task-batch.json, validated against task-batch.schema.json.
+      .spur/run/${vars.__runId}-idea-task-batch.json, validated against task-batch.schema.json,
+      plus the private task-order sidecar .spur/run/${vars.__runId}-idea-task-order.json
+      (a JSON array of { name, depends_on_names[] }; `[]` when no ordering exists).
+      A post-agent shell action validates the sidecar shape before decomposition
+      can exit — missing or ambiguous title-to-WBS resolution fails before handoff.
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed'
+          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md'
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. SIZING FIRST, before any JSON: apply the skill's `Default to NOT decomposing` rubric to the whole unit of work — if it scores 0-2 the correct output is a ONE-entry batch, not many. Scenario count is not task count: merge scenarios that one task delivers (same file surface, same subsystem, or unreadable apart in review), and list every scenario a task covers in its background. Merging never costs AC coverage — one task may carry several scenarios. Do not emit one entry per scenario or per requirement by reflex. Then produce a task-batch JSON array at .spur/run/${vars.__runId}-idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting."
+          input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. SIZING FIRST, before any JSON: apply the skill's `Default to NOT decomposing` rubric to the whole unit of work — if it scores 0-2 the correct output is a ONE-entry batch, not many. Scenario count is not task count: merge scenarios that one task delivers (same file surface, same subsystem, or unreadable apart in review), and list every scenario a task covers in its background. Merging never costs AC coverage — one task may carry several scenarios. Do not emit one entry per scenario or per requirement by reflex. Then produce a task-batch JSON array at .spur/run/${vars.__runId}-idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting. Also emit the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json: a JSON array (one entry per batch item) of `{ name: <exact batch item name>, depends_on_names: [<batch item names>] }` declaring ordering/dependencies between the batch items; use `[]` when no ordering exists. Every `name` and every dependency must match exactly one batch item `name` — it is private workflow data, not part of task-batch.schema.json."
           expectFile: .spur/run/${vars.__runId}-idea-task-batch.json
           timeoutMs: ${vars.stepTimeoutMs}
+      # R1 (0518): the task-order sidecar is the ordering contract for handoff-finalize.
+      # Validate it fails closed: sidecar must be an array, batch names unique, sidecar names
+      # unique, every sidecar name/dependency must refer to exactly one batch name, and — the
+      # converse (F2, 0518 verify) — every batch name must appear in the sidecar, so a partial
+      # sidecar can never silently skip `task deps` for an unlisted item (`[]` is valid).
+      - kind: shell
+        options:
+          command: >-
+            BATCH=".spur/run/$__runId-idea-task-batch.json" &&
+            ORDER=".spur/run/$__runId-idea-task-order.json" &&
+            jq -e --slurpfile b "$BATCH" '
+              (type == "array") and
+              (($b[0] | map(.name) | length) == ($b[0] | map(.name) | unique | length)) and
+              ((map(.name) | length) == (map(.name) | unique | length)) and
+              ((map(.name) - ($b[0] | map(.name))) | length == 0) and
+              ((($b[0] | map(.name)) - map(.name)) | length == 0) and
+              (((map(.depends_on_names // []) | flatten | unique) - ($b[0] | map(.name))) | length == 0)
+            ' "$ORDER" >/dev/null
 
   - id: batch-create
     description: >
@@ -269,21 +332,116 @@ states:
     description: >
       Executes task batch creation exactly once per decomposition attempt. The
       side effect lives in onEnter and records a sentinel; transition guards only
-      inspect sentinel/retry state.
+      inspect sentinel/retry state. The `--json` result is captured atomically in
+      .spur/run/${vars.__runId}-idea-batch-create-result.json (temp file + mv); the done
+      sentinel is written only after the JSON parses and `created == (.wbs | length)`,
+      so handoff-finalize can zip batch names to the returned WBS list. Any failure
+      (CLI error or malformed result) writes the failed sentinel, preserving the
+      existing retry behavior.
     onEnter:
       - kind: shell
         options:
-          command: 'if test -f .spur/run/$__runId-idea-batch-create.done; then exit 0; fi; rm -f .spur/run/$__runId-idea-batch-create.failed; if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json; then date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.done; else date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.failed; fi'
+          command: >-
+            if test -f .spur/run/$__runId-idea-batch-create.done; then exit 0; fi;
+            rm -f .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-batch-create-result.json.tmp;
+            if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json --json > .spur/run/$__runId-idea-batch-create-result.json.tmp && jq -e ".created == (.wbs | length)" .spur/run/$__runId-idea-batch-create-result.json.tmp >/dev/null 2>&1; then
+              mv .spur/run/$__runId-idea-batch-create-result.json.tmp .spur/run/$__runId-idea-batch-create-result.json &&
+              date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.done;
+            else
+              rm -f .spur/run/$__runId-idea-batch-create-result.json.tmp;
+              date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.failed;
+            fi
+
+  - id: handoff-finalize
+    description: >
+      Post-create finalization (0518): zip batch item names to the created WBS
+      values from the captured batch-create result (equal-length/unique-name
+      checks), apply every non-empty depends_on_names list through
+      `spur task deps`, refresh the feature roster, check every created task, and
+      write the run-scoped handoff report
+      (.spur/run/${vars.__runId}-idea-handoff.md) with exactly one next command.
+      A mapping or CLI error fails the run before terminal handoff; an unready
+      task is a successful planning outcome recorded as a refineall recommendation.
+    onEnter:
+      # F1 (0518 verify): the per-task check loop fails closed. A stderr-only (non-JSON)
+      # `task check --json` exception would otherwise drop that task from the JSONL results
+      # without failing the run (the loop's exit status is its last body command), silently
+      # flipping the recommendation to runall — violating R3's any-fail=>refineall invariant.
+      # Each `jq -c … >> "$CHECKS"` appends under `|| exit 1`, and a row-count assertion
+      # (CHECKS lines == WBS count) gates the recommendation computation.
+      - kind: shell
+        options:
+          command: >-
+            BATCH=".spur/run/$__runId-idea-task-batch.json" &&
+            RESULT=".spur/run/$__runId-idea-batch-create-result.json" &&
+            ORDER=".spur/run/$__runId-idea-task-order.json" &&
+            REPORT=".spur/run/$__runId-idea-handoff.md" &&
+            DEPMAP=".spur/run/$__runId-idea-dep-map.tsv" &&
+            CHECKS=".spur/run/$__runId-idea-check-results.jsonl" &&
+            rm -f "$DEPMAP" "$CHECKS" &&
+            jq -e --slurpfile b "$BATCH" '(.wbs | length) == ($b[0] | length) and (($b[0] | map(.name) | unique | length) == ($b[0] | length))' "$RESULT" >/dev/null &&
+            jq -r --slurpfile b "$BATCH" --slurpfile r "$RESULT" --slurpfile o "$ORDER" '
+              ($b[0] | map(.name)) as $names | ($r[0].wbs) as $wbs |
+              $o[0] | .[] |
+              (.name as $n | $names | index($n)) as $i |
+              (if $i == null or $wbs[$i] == null then "MISSING" else $wbs[$i] end) as $own |
+              ((.depends_on_names // []) | map(. as $dep | $names | index($dep) as $d | if $d == null then "MISSING" else $wbs[$d] end) | join(" ")) as $deps |
+              [.name, $own, $deps] | @tsv
+            ' "$ORDER" > "$DEPMAP" &&
+            while IFS="$(printf '\t')" read -r name own deps; do
+              test "$own" != MISSING || exit 1;
+              if test -n "$deps"; then
+                for d in $deps; do test "$d" != MISSING || exit 1; done;
+                $spurBin task deps "$own" set $deps --json >/dev/null || exit 1;
+              fi;
+            done < "$DEPMAP" &&
+            $spurBin feature refresh --feature "$featureId" --json >/dev/null &&
+            WBS_LIST=$(jq -r '.wbs | join(" ")' "$RESULT") &&
+            for wbs in $WBS_LIST; do
+              TMP=".spur/run/$__runId-idea-check-$wbs.tmp";
+              if $spurBin task check "$wbs" --json > "$TMP" 2>&1; then P=true; else P=false; fi;
+              jq -c --arg w "$wbs" --argjson p "$P" 'if (type == "array" and length > 0) then {wbs: $w, pass: $p, status: (.[0].status // "unknown")} else {wbs: $w, pass: $p, status: "missing"} end' "$TMP" >> "$CHECKS" || exit 1;
+              rm -f "$TMP";
+            done &&
+            CHECK_ROWS=$(wc -l < "$CHECKS" | tr -d ' ') &&
+            WBS_COUNT=$(printf '%s\n' $WBS_LIST | wc -l | tr -d ' ') &&
+            test "$CHECK_ROWS" = "$WBS_COUNT" &&
+            NEXT=$(jq -r --arg feature "$featureId" --slurpfile c "$CHECKS" 'if ($c | any(.[]; .pass == false)) then "/sp:dev-refineall --feature \($feature) --auto --depth ready" else "/sp:dev-runall --feature \($feature) --auto" end' "$RESULT") &&
+            {
+              echo "# Idea pipeline handoff report";
+              echo;
+              echo "Feature: $featureId";
+              echo "Run ID: $__runId";
+              echo;
+              echo "## Created tasks";
+              printf '%s\n' $WBS_LIST | sed 's/^/  - /';
+              echo;
+              echo "## Per-task readiness (spur task check)";
+              echo;
+              echo "| WBS | Outcome |";
+              echo "|-----|---------|";
+              while IFS= read -r line; do
+                w=$(printf '%s' "$line" | jq -r '.wbs');
+                o=$(printf '%s' "$line" | jq -r 'if .pass then "PASS" else "FAIL" end');
+                printf '| %s | %s |\n' "$w" "$o";
+              done < "$CHECKS";
+              echo;
+              echo "## Next command";
+              echo;
+              echo "$NEXT";
+            } > "$REPORT"
 
   - id: handoff
     description: >
-      Terminal — idea pipeline complete. Output: feature id, task WBS list, and
-      the next command to run (/sp:dev-run <first-wbs> or /sp:dev-runall --feature <id> or --tasks feature:<id>).
-      No task execution — the pipeline stops here.
+      Terminal — idea pipeline complete. Ordering applied, roster refreshed, and
+      the handoff report written at .spur/run/${vars.__runId}-idea-handoff.md:
+      feature id, task WBS list, per-task readiness, and exactly one recommended
+      next command (ready-depth refineall when any task is unready, else auto
+      runall). No task execution — the pipeline stops here.
     onEnter:
       - kind: note
         options:
-          message: "Idea pipeline handoff. Feature: ${vars.featureId}. Tasks created. Next: /sp:dev-runall --feature ${vars.featureId}"
+          message: "Idea pipeline handoff. Feature: ${vars.featureId}. See .spur/run/${vars.__runId}-idea-handoff.md for the created task list and recommended next command."
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:
@@ -374,7 +532,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && $spurBin feature check $featureId && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "$profile" = auto && $spurBin feature check "$featureId" && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
   # Auto-skip 2: pass + skip-design route → decompose
   - from: ac-generate
     to: decompose
@@ -382,7 +540,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && $spurBin feature check $featureId && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "$profile" = auto && $spurBin feature check "$featureId" && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
   # Auto-skip 3: check failed, retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
@@ -390,7 +548,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && ! $spurBin feature check $featureId && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: 'test "$profile" = auto && ! $spurBin feature check "$featureId" && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   # Auto-skip 4: check failed, retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
@@ -398,7 +556,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && ! $spurBin feature check $featureId && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: 'test "$profile" = auto && ! $spurBin feature check "$featureId" && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check
@@ -414,28 +572,28 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$__hitlAnswer" = yes && $spurBin feature check $featureId && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
+        command: 'test "$__hitlAnswer" = yes && $spurBin feature check "$featureId" && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false'
   - from: feature-check
     to: decompose
     description: Feature check passed, skip-design route — go directly to decompose.
     guard:
       kind: shell
       options:
-        command: 'test "$__hitlAnswer" = yes && $spurBin feature check $featureId && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
+        command: 'test "$__hitlAnswer" = yes && $spurBin feature check "$featureId" && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
   - from: feature-check
     to: ac-generate
     description: "Feature check failed — revise AC (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check $featureId) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
+        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check "$featureId") && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: feature-check
     to: failed
     description: Feature check failed after 3 retries — escalate to failed.
     guard:
       kind: shell
       options:
-        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check $featureId) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+        command: '(test "$__hitlAnswer" = no || ! $spurBin feature check "$featureId") && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
   - from: feature-check
     to: cancelled
     description: Operator cancelled the feature-check gate.
@@ -448,25 +606,32 @@ transitions:
   # Declaration order: auto-skip guard tried FIRST (like task-pipeline's review->verify pattern).
   - from: system-design
     to: decompose
-    description: profile=auto AND design_approved=true — skip design approval gate.
+    description: profile=auto AND design_approved=true AND feature check passes — skip design approval gate.
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && test "$design_approved" = true'
+        command: 'test "$profile" = auto && test "$design_approved" = true && $spurBin feature check "$featureId"'
   - from: system-design
     to: design-approval
     description: System design done — gate on design approval.
     guard:
       kind: always
 
-  # ── design-approval -> decompose (after operator approval) ──
+  # ── design-approval -> decompose (after operator approval), AC-failure -> feature-check ──
   - from: design-approval
     to: decompose
-    description: Design approved — proceed to decomposition.
+    description: Design approved and feature check passes — proceed to decomposition.
     guard:
       kind: shell
       options:
-        command: 'test "$__hitlAnswer" = yes'
+        command: 'test "$__hitlAnswer" = yes && $spurBin feature check "$featureId"'
+  - from: design-approval
+    to: feature-check
+    description: "Design approved but feature check fails — route back through the AC gate (revise AC, retry cap: 3)."
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = yes && ! $spurBin feature check "$featureId"'
   - from: design-approval
     to: system-design
     description: "Design rejected - revise system design (cap: 1 revise)."
@@ -526,10 +691,10 @@ transitions:
       options:
         command: 'test "$__hitlAnswer" = cancel'
 
-  # ── batch-create-run: success -> handoff, failure -> decompose (retry cap: 3), failure+cap -> failed ──
+  # ── batch-create-run: success -> handoff-finalize, failure -> decompose (retry cap: 3), failure+cap -> failed ──
   - from: batch-create-run
-    to: handoff
-    description: Batch created — handoff.
+    to: handoff-finalize
+    description: Batch created and result captured — apply ordering, refresh roster, write handoff report.
     guard:
       kind: shell
       options:
@@ -548,3 +713,10 @@ transitions:
       kind: shell
       options:
         command: 'test -f .spur/run/$__runId-idea-batch-create.failed && test "$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'
+
+  # ── handoff-finalize: -> handoff (terminal) ──
+  - from: handoff-finalize
+    to: handoff
+    description: Ordering applied, roster refreshed, handoff report written — terminal handoff.
+    guard:
+      kind: always

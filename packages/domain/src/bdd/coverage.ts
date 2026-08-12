@@ -42,6 +42,7 @@ function stripScenarioPrefixes(title: string): string {
         previous = out;
         out = out
             .replace(/^\[[^\]]*\]\s*/, '')
+            .replace(/\s*\[[^\]]*\]\s*$/, '')
             .replace(/^Scenario:\s*/i, '')
             .replace(/^R\d+\s*[:\-—]?\s*/, '')
             .trim();

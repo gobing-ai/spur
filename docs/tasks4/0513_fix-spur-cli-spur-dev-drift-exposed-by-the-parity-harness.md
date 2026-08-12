@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Fix spur-cli/spur-dev drift exposed by the parity harness"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: I2
@@ -13,7 +13,7 @@ tags: ["parity", "drift-fix", "plugins/sp"]
 dependencies: ["0517"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.659Z"
-updated_at: "2026-08-11T23:02:26.320Z"
+updated_at: "2026-08-12T00:58:51.829Z"
 ---
 
 ## 0513. Fix spur-cli/spur-dev drift exposed by the parity harness
@@ -90,16 +90,70 @@ For documented-only entries, correct/remove the stale owner row. For live-only e
 - [ ] Run `bun test plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/flag-contract-parity.test.ts plugins/sp/tests/routing-table-parity.test.ts plugins/sp/tests/skill-structure.test.ts`; hand off the zero-finding surface to 0514.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Parity suite result:** `bun test plugins/sp/tests/cli-surface-parity.test.ts` → **19 pass / 0 fail** (85 expect calls, 2.80s). The 0517 focused parity suite is green with an **empty finding set** — no `documented-not-on-CLI` or `on-CLI-not-documented` findings, no spine routing findings, no Tier C reason findings. The only Commander built-in beyond the facade inventory (`help`) is already covered by the 0516 Tier C exclusion data (`plugins/sp/skills/spur-cli/SKILL.md:64`), so it produces no finding.
 
+**Per-requirement disposition (all satisfied-by-parity):**
+
+- **R1** — Satisfied by parity: zero facade noun/verb/flag inventory findings; no documentation-fixable finding exists to correct.
+- **R2** — Satisfied by parity: zero CLI-routed spine Step routing findings; every spine row already names a real CLI noun/verb or carries an explicit non-CLI reason. No silent exclusions added (none needed).
+- **R3** — Satisfied by parity: `AGENTS.md` § Spur CLI surface noun table matches the live root help (asserted by the suite's noun-table check); `config/templates/AGENTS.md` portable contract remains aligned — no change required since no noun-set drift was reported.
+- **R4** — Satisfied by parity: Tier C exclusion reasons in the facade owner are current; the suite reports no stale-reason findings.
+- **R5** — Satisfied by parity: no finding requires a runtime, public CLI surface, dependency, schema, persistence, or transport change; nothing recorded for deferral, therefore the implementation diff contains **no runtime/public-surface changes** — documentation-only by construction (zero diff).
+
+**Corrections made:** none. No doc-only gap surfaced in passing that is within 0513's finding-bounded scope (README/link/catalog discoverability remains owned by 0514 per the task's non-goals). Working tree contains no 0513-authored edits; prior modified files in the tree belong to sibling tasks 0512/0516/0517 in this batch.
+
+**Handoff:** zero-finding surface confirmed; 0514 may proceed per the task's Handoff Q&A.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Focused parity suite green with an EMPTY finding set: `bun test plugins/sp/tests/cli-surface-parity.test.ts` → 19 pass / 0 fail, 85 expect calls (verified 2026-08-12, worktree sp/runall-i2-c763; 2.54s). The suite's R1 describe blocks (`cli-surface-parity.test.ts:268-292` facade noun routing Tier A/B/C union vs root help via bidirectional `expectParity`; per-noun verb/flag inventories vs `<noun> --help` / `<noun> <verb> --help` at :294-362) report zero `documented-not-on-CLI` / `on-CLI-not-documented` findings, so no documentation-fixable facade inventory correction exists to make. |
+| R2 | MET | Suite R2 block (`cli-surface-parity.test.ts:365-415`): all six `kind:'cli'` spine Step-routing rows' noun and verb asserted live against root help and `<noun> --help` (help-filtered); all twelve non-CLI rows retained in the diagnostic with explicit non-empty gate-text reasons and the exact 12-step set pinned (:394-413). 0 findings — every CLI-routed row already names a real noun/verb and non-CLI rows carry explicit reasons; no silent test exclusion added. |
+| R3 | MET | Suite R4 block (`cli-surface-parity.test.ts:417-432`) asserts the `AGENTS.md` `## Spur CLI surface` noun table (13 nouns: init/agent/history/rule/workflow/message/team/task/feature/status/projects/migrate/serve) matches live root help (13 commands + Commander `help`) via `diffSets`, honoring only parsed Tier C exclusions → both labels empty. Independently confirmed: live `bun run apps/cli/src/index.ts --help` = agent, feature, history, init, message, migrate, projects, rule, status, serve, team, task, workflow (+ help) — exact match modulo the excluded `help`. `config/templates/AGENTS.md:139` has no noun table (prose/long-tail contract only), so the portable contract cannot drift and needs no sync. |
+| R4 | MET | Suite asserts Tier C routing-table rows ≡ parsed exclusion table (`cli-surface-parity.test.ts:269-281`) and every exclusion reason non-empty (:283-289). `plugins/sp/skills/spur-cli/SKILL.md:64` carries the current `help` reason ("Auto-generated by Commander.js; not a real noun") — the only Commander built-in beyond the facade inventory — so explicit exclusions produce no false finding. |
+| R5 | MET | 0513 commit `f66547ec` (`git show --name-status`) touches exactly one file: `docs/tasks4/0513_fix-spur-cli-spur-dev-drift-exposed-by-the-parity-harness.md` (37+/32-, scope-bounding wording only). Zero runtime behavior, public CLI command/flag, dependency, schema, persistence, or transport change → documentation-only by construction. No runtime-only finding exists to defer (the empty finding set confirms none surfaced). Working-tree SKILL.md/design edits are sibling-batch artifacts (0517's Solution documents the suite + helper + ownership-marker assertions; the ADR-054 ownership markers in `spur-cli/SKILL.md:101-104` and `spur-dev/SKILL.md:45-49` are documentation the R8 test reads, not runtime). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Exposed drift is fixed before the pass is green | MET | test | `bun test plugins/sp/tests/cli-surface-parity.test.ts` → 19 pass / 0 fail, 85 expects, 2.54s, empty finding set: no `documented-not-on-CLI` / `on-CLI-not-documented` facade or noun-table drift reported; suite passes with no outstanding finding. |
+| Scenario: R2 — CLI-routed spine rows reference real verbs | MET | test | R2 describe (`cli-surface-parity.test.ts:366-392`) asserts every `kind:'cli'` row's noun ∈ root commands and verb ∈ `<noun> --help` (minus parsed `help` exclusion); non-CLI rows carry explicit reasons with the 12-step set pinned (:394-413). Routing parity check passes; no silent exclusion added (diff contains none). |
+| Scenario: R3 — AGENTS.md noun inventory matches the CLI | MET | test | R4 test (`cli-surface-parity.test.ts:418-432`): 13-noun `## Spur CLI surface` table vs live root help via `diffSets` honoring Tier C exclusions → both labels empty. Independent check: root help nouns = AGENTS table modulo `help` exactly. Portable template (`config/templates/AGENTS.md:139`) carries no noun table → portable contract remains aligned with no change. |
+| Scenario: R4 — Explicit facade exclusions do not create false drift | MET | test | Tier C routing rows ≡ exclusion table (`cli-surface-parity.test.ts:269-281`); every reason non-empty (:283-289); `help` exclusion carries current reason (`spur-cli/SKILL.md:64`) and is the only Commander delta — suite produces no false finding from exclusions. |
+| Scenario: R5 — Refinement changes no runtime surface | MET | command | `git show f66547ec --name-status` → single docs file modified (task 0513 markdown, 37+/32-); `git diff f66547ec^ f66547ec --stat` confirms docs-only. No runtime/public surface changed; no runtime-only finding exists to record/defer (empty finding set); no silent test exclusion added. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Verdict: PASS** — zero-finding parity state independently confirmed; the Solution honestly documents the satisfied-by-parity disposition.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verification performed (2026-08-12, worktree sp/runall-i2-c763):**
 
+- `bun test plugins/sp/tests/cli-surface-parity.test.ts` → **19 pass / 0 fail, 85 expect calls** (Solution cites 2.80s; re-run 2.66s — timing variance only). Empty finding set confirmed: no `documented-not-on-CLI` / `on-CLI-not-documented`, no spine routing, no Tier C reason findings.
+- Broader Plan-step-6 set re-run: `command-flag-parity`, `flag-contract-parity`, `routing-table-parity`, `skill-structure` → **168 pass / 0 fail** (187 total parity tests green).
+- 0513 commit `f66547ec` touches **only** the task file (37+/32−): scope-bounding wording of Background / Requirements / Q&A / Design / Plan. Zero code, runtime, or public-surface change → R5 satisfied by construction.
+- Solution's factual citation checked: `plugins/sp/skills/spur-cli/SKILL.md:64` is the `help` Tier C row ("Auto-generated by Commander.js; not a real noun") — exactly as claimed.
+- Working-tree modifications (SKILL.md ×2, `docs/design/plugin-surface-parity.md`, feature doc, sibling task files, untracked parity suite + helpers) are sibling-batch artifacts (0512/0516/0517); no 0513-authored out-of-scope edits found.
+
+**Traceability (R1–R5):**
+
+| Req | Disposition | Evidence |
+|-----|-------------|----------|
+| R1 | Satisfied by parity | Suite asserts bidirectional facade noun routing vs root help + per-noun verb/flag parity for all 8 Tier A/B nouns; 0 findings |
+| R2 | Satisfied by parity | Suite asserts every `kind:"cli"` spine row's noun/verb exists live + non-CLI rows carry explicit reasons (pinned 12-step set); 0 findings |
+| R3 | Satisfied by parity | Suite asserts AGENTS.md `## Spur CLI surface` noun table vs root help honoring Tier C exclusions; portable template untouched (no noun-set drift → no required change) |
+| R4 | Satisfied by parity | Suite asserts Tier C routing table ≡ exclusion table and every reason non-empty; 0 stale-reason findings |
+| R5 | Satisfied by construction | 0513 diff = 1 docs file; no runtime-only finding exists to defer; no silent test exclusion added |
+
+**Findings (P1–P4):**
+
+| ID | Severity | Finding | Evidence | Action |
+|----|----------|---------|----------|--------|
+| F1 | P4 | Solution cites only the focused 19-test suite; Plan step 6 names 5 test files and the broader run result is uncited | 168 additional tests (command-flag / flag-contract / routing-table / skill-structure) verified green during review | None required; optionally cite the broader run in Solution for completeness |
+
+**Residual risk:** The parity gate is a documentation-vs-live-surface check (it spawns the real CLI), not a runtime behavior test; inherent to the task's documentation-only scope, does not affect this disposition. Zero-diff verification task has no security / efficiency / correctness surface in code.
+
+**Disposition:** Approve. 0514 may proceed per the task's Handoff Q&A.
 ### References
 - Feature: I2, scenarios R2–R4, R10, R11
 - Design: `docs/design/plugin-surface-parity.md` §§3–5, 8
@@ -108,3 +162,6 @@ For documented-only entries, correct/remove the stale owner row. For live-only e
 - Owning surfaces: `plugins/sp/skills/spur-cli/**`; `plugins/sp/skills/spur-dev/SKILL.md`; `AGENTS.md`
 - Dependent task: 0514
 ### History
+- 2026-08-12T00:52:15.586Z todo → wip (system)
+- 2026-08-12T00:58:50.697Z wip → testing (system)
+- 2026-08-12T00:58:51.829Z testing → done (system)

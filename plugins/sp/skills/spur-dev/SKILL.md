@@ -45,6 +45,10 @@ the lifecycle*; the competency skills know *how to do each job*; the CLI knows *
 The skill was decomposed **by function** (ADR-028): design, decomposition, implementation, testing,
 and verification each became a standalone competency skill, leaving this spine to orchestrate them.
 
+**Ownership (ADR-054).** This spine owns multi-step lifecycle orchestration — intake, gates,
+decomposition, pipeline runs, HITL pauses. CLI noun/verb/flag semantics, including
+status-transition verbs, are the facade's (`sp:spur-cli`), never this skill's.
+
 **The competencies the spine dispatches:**
 
 | Unit of work | Competency skill |
