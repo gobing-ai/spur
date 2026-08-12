@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Fix legacy database startup when history_message is absent"
 description: ""
-status: testing
+status: done
 type: issue
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T22:30:24.831Z"
-updated_at: "2026-08-11T22:40:07.838Z"
+updated_at: "2026-08-11T23:59:40.854Z"
 ---
 
 ## 0520. Fix legacy database startup when history_message is absent
@@ -68,27 +68,29 @@ foundation fixture.
 - `packages/domain/tests/dao/migrations.test.ts:332-375` — reproduce a database with `0000`–`0008` journaled
   and no forensic tables, then cover embedded and folder-loaded schema creation, index shape, and idempotency.
 ### Testing
-Verdict: PASS
+Verdict: PASS (re-verified 2026-08-11 via /sp:dev-verify --force; evidence re-run this session unless marked prior-run)
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/domain/src/migrations.ts:253-263`; regression at `packages/domain/tests/dao/migrations.test.ts:332-356` |
-| R2 | MET | Idempotency assertion at `packages/domain/tests/dao/migrations.test.ts:349-355`; `bun run spur-check` — 4,871 pass, 0 fail |
-| R3 | MET | Shared applier branch at `packages/domain/src/migrations.ts:256-263`; folder-loaded regression at `packages/domain/tests/dao/migrations.test.ts:358-375` |
+| R1 | MET | Guard at `packages/domain/src/migrations.ts:256-263`; embedded regression `packages/domain/tests/dao/migrations.test.ts:332-356`; live repro this run: disposable copy of `knowledge-kit/.spur/spur.db` (journal exactly 0000–0008, `history_message` ABSENT) → first pass applied 0009, importer schema created |
+| R2 | MET | Idempotency asserted at `packages/domain/tests/dao/migrations.test.ts:354`; live repro this run: second pass applied 0; focused suite `bun test packages/domain/tests/dao/migrations.test.ts` — 38 pass / 0 fail (this run) |
+| R3 | MET | Single guard in `applyCliMigrations` (`packages/domain/src/migrations.ts:256-263`) covers both embedded and folder-loaded migrations; folder-loaded regression `packages/domain/tests/dao/migrations.test.ts:358-375` |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: Legacy database without importer tables starts successfully | MET | command | Disposable copy of `knowledge-kit/.spur/spur.db`: source-local `spur serve` started on port 4399 and `/api/health` returned HTTP 200; index columns were `provenance`, `run_id` |
+| Scenario: Legacy database without importer tables starts successfully | MET | command | This run: `applyCliMigrations` against a disposable copy of the affected `knowledge-kit/.spur/spur.db` — precondition journal exactly 0000–0008 with `history_message` ABSENT; first pass applied 1 (0009); `history_message` + `history_tool_call` + all `history_etl_*` + ledger/checkpoint tables created; `PRAGMA index_info(idx_history_message_provenance_run)` = `provenance,run_id`; second pass applied 0. The startup failure was the 0009 migration error, so the migration-level repro exercises the exact defect surface; serve smoke (`spur serve` port 4399, `/api/health` HTTP 200) verified prior run. |
+
+**Design Conformance** — pass: 3/3 claims DONE (self-contained 0009 composing package-owned `HISTORY_IMPORT_SCHEMA_SQL`; folder-loaded 0009 reuses the same applier guard, no schema copy into `drizzle/`; no new migration id or public surface — `tableExists` is module-private). All line anchors re-read this run.
 
 **Checks**
 
-- Coverage: 100% functions and 100% lines for `packages/domain/src/migrations.ts` in the full gate.
-- `bun run spur-check` — PASS; 4,871 tests, 0 failures; `packages/domain/src/migrations.ts` 100% functions/lines.
-- `bun run test-cf` — PASS (1 test).
-- `bun run build` — PASS.
-- `spur task check --corpus --json` — PASS (`newErrors: []`, `staleEntries: []`).
+- Coverage: 100% lines for `packages/domain/src/migrations.ts` in the focused run (this run).
+- Focused: `bun test packages/domain/tests/dao/migrations.test.ts` — 38 pass, 0 fail, 106 expects (this run).
+- Importer schema idempotency confirmed at the resolved `@gobing-ai/ts-llm-jsonl-importer@0.4.27` — every CREATE is IF NOT EXISTS (`schema-sql.js:84` `history_message`), so partially-provisioned legacy importer states replay safely.
+- `spur task check 0520 --strict-core --json` — pass: true, no missing sections (this run).
+- Prior full gate (at fix commit 2ae93dea): `bun run spur-check` PASS — 4,871 tests, 0 fail; `bun run test-cf` PASS; `bun run build` PASS; `spur task check --corpus` PASS.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
@@ -103,3 +105,4 @@ Residual risk: installed Spur 0.3.43 remains affected until the fixed CLI is lin
 - 2026-08-11T22:31:39.024Z backlog → todo (system)
 - 2026-08-11T22:35:18.522Z todo → wip (system)
 - 2026-08-11T22:40:07.838Z wip → testing (system)
+- 2026-08-11T23:59:40.854Z testing → done (system)
