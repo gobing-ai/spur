@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.44] — 2026-08-12
+
+### Added
+
+- feat(I2): implement I2 batch — parity harness, content pass, idea-pipeline handoff hardening (19b5a049)
+- feat(spur-dev): relink global spur shim to the dev binary on build-cli (49d3618b)
+- feat(workspace): add workspace board composing scoped teams, inbox, tasks (7e039c18)
+- feat(domain): fence Gherkin AC at the write boundary (96009792)
+
+### Fixed
+
+- fix(cli): resolve WBS-targeted task check across configured folders (5158b562)
+- fix(db): provision history schema before index migration (2ae93dea)
+- fix(sp): scope dev-runall strict preflight abort to structural findings (c763588c)
+- fix(app): rewrite moved feature heading on cascade move (f9e9ba14)
+
+### Changed
+
+- docs(I2): record re-audit evidence; cancel 0523 as implemented (30fbb71f)
+- chore(I2): merge sp/runall-i2-c763 into main (2d66f9ec)
+- docs(0197): refresh testing evidence and mark done (a4e2ff5f)
+- test(workspace): add WORKSPACE_TABS module shape test (7c010067)
+- docs(0520): freeze re-verified PASS verdict with live legacy-db repro evidence (cdcb3325)
+- docs(tasks): add 0521 mid-pipeline loop-guard and 0522 WBS-scoped check tasks (38d85ce3)
+- docs(0519): freeze idea regression verification (99414498)
+- docs(0518): freeze idea finalization contract (9fcdf49a)
+- docs(0515): freeze idea guidance handoff contract (e532cb11)
+- docs(0514): freeze bounded content audit (b79d03cd)
+- docs(0513): bound drift fixes to live findings (f66547ec)
+- docs(0517): freeze live parity assertion design (9916724e)
+- docs(0512): support verb-level help capture (3b73ba52)
+- docs(0516): freeze parity scope parser contract (2bf92d01)
+- docs(0512): freeze CLI capture helper contract (3d5328e8)
+- chore(db): merge history-message index migration fix (5a554b8f)
+- docs(I2): decompose 0512/0515 below the 5-R-item pipeline cap (6d236978)
+- docs: record completed planning/history task updates (d3232209)
+- chore(workflow): run verify with --focus all (6d8be6a9)
+- docs: add WBS lookup fast path (1e093efe)
+- docs: restructure feature tree to B/I/H ownership (17b7ebbb)
+- docs(I2): define plugin-surface parity contract (ADR-053/054/055) (2134bac3)
+- docs(G3): approve team-scoped workspace boundary (ADR-052) (efb5f00c)
+
 ## [0.3.43] — 2026-08-11
 
 ### Added
