@@ -138,7 +138,7 @@ describe('ObservableWorkflowAdapter', () => {
         const id = await dec.saveActionStart('run-1', 'implement', 'agent.run', {
             input: 'sk-super-secret raw prompt',
         });
-        await dec.saveActionFinalize(id, 'done', 42, true, { ok: true });
+        await dec.saveActionFinalize(id, 'done', 42, true, 'agent.run', { ok: true });
 
         expect(id).toBe('action-1'); // inner id propagated unchanged
         expect(started).toEqual([{ actionId: 'action-1', sequence: 2, invocation: '[prompt 26 chars]' }]);
@@ -151,7 +151,13 @@ describe('ObservableWorkflowAdapter', () => {
         let emitted = 0;
         bus.on('workflow.action.finished', () => emitted++);
 
-        await new ObservableWorkflowAdapter(adapter, bus).saveActionFinalize('unknown', 'failed', 10, false);
+        await new ObservableWorkflowAdapter(adapter, bus).saveActionFinalize(
+            'unknown',
+            'failed',
+            10,
+            false,
+            'agent.run',
+        );
 
         expect(emitted).toBe(0);
     });
@@ -178,7 +184,7 @@ describe('ObservableWorkflowAdapter', () => {
         await dec.createRun(record);
         const actionId = await dec.saveActionStart('run-1', 'implement', 'agent.run');
         await dec.finalizeRun('run-1', 'done', '2026-06-23T01:00:00.000Z');
-        await dec.saveActionFinalize(actionId, 'done', 10, true);
+        await dec.saveActionFinalize(actionId, 'done', 10, true, 'agent.run');
 
         expect(seen).toEqual([{ runId: 'run-1', workflowName: 'task-pipeline', sequence: 4 }]);
     });

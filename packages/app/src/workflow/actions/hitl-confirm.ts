@@ -31,6 +31,7 @@ export class HitlConfirmActionRunner implements ActionRunner {
             node: context.stateOrNodeId,
             kind: 'confirm',
             message: prompt,
+            severity: 'info',
         });
         const answer = await this.responder.respond({
             kind: 'confirm',
@@ -42,6 +43,7 @@ export class HitlConfirmActionRunner implements ActionRunner {
             runId: context.runId,
             node: context.stateOrNodeId,
             ok: !(answer.cancelled || answer.value === 'cancel'),
+            severity: 'info',
         });
 
         return {

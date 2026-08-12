@@ -37,6 +37,7 @@ export class HitlSelectActionRunner implements ActionRunner {
             node: context.stateOrNodeId,
             kind: 'select',
             message: prompt,
+            severity: 'info',
         });
         const answer = await this.responder.respond({
             kind: 'select',
@@ -49,6 +50,7 @@ export class HitlSelectActionRunner implements ActionRunner {
             runId: context.runId,
             node: context.stateOrNodeId,
             ok: !answer.cancelled,
+            severity: 'info',
         });
 
         if (answer.cancelled) {

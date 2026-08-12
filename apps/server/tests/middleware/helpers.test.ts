@@ -7,7 +7,7 @@ describe('mockRuntime', () => {
         expect(rt).toBeDefined();
         rt.logger.info('test');
         rt.logger.child({}).info('test');
-        rt.events.emit('scheduler.job.executed', { name: 'test', durationMs: 1 });
+        rt.events.emit('scheduler.job.executed', { name: 'test', durationMs: 1, severity: 'info' });
         rt.stop();
     });
 });

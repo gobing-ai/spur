@@ -31,6 +31,7 @@ export class HitlInputActionRunner implements ActionRunner {
             node: context.stateOrNodeId,
             kind: 'input',
             message: prompt,
+            severity: 'info',
         });
         const answer = await this.responder.respond({
             kind: 'input',
@@ -42,6 +43,7 @@ export class HitlInputActionRunner implements ActionRunner {
             runId: context.runId,
             node: context.stateOrNodeId,
             ok: !answer.cancelled,
+            severity: 'info',
         });
 
         if (answer.cancelled) {

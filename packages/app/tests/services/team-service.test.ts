@@ -1274,6 +1274,7 @@ describe('TeamService team.* events (task 0371)', () => {
                 agentId: 'devops-coder',
                 agentType: 'codex',
                 pid: 99,
+                severity: 'info',
             });
             // Allow the async identity resolve to settle.
             await new Promise((r) => setTimeout(r, 20));
@@ -1314,6 +1315,7 @@ describe('TeamService team.* events (task 0371)', () => {
             agentBus.emit('agent.stopped', {
                 agentId: 'devops-coder',
                 exitCode: 0,
+                severity: 'info',
             });
             await new Promise((r) => setTimeout(r, 20));
 

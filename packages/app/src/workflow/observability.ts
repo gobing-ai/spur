@@ -285,10 +285,11 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         status: WorkflowStatus,
         durationMs: number,
         ok: boolean,
+        kind: string,
         result?: unknown,
         redactor?: ActionRedactor,
     ): Promise<void> {
-        await this.inner.saveActionFinalize(actionId, status, durationMs, ok, result, redactor);
+        await this.inner.saveActionFinalize(actionId, status, durationMs, ok, kind, result, redactor);
         const action = this.actions.get(actionId);
         if (action === undefined) {
             // The decorator may be attached after an action started (process resume).
