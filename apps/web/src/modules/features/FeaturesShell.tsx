@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ui';
 import { loadFeatures } from '../../lib/feature-client';
 import type { FeatureSummary } from '../../lib/feature-types';
 import { resolveApiUrl } from '../../lib/rpc-client';
 import FeatureDetail from './FeatureDetail';
-import FeatureTree from './FeatureTree';
+import FeatureTree, { groupFeaturesByParent } from './FeatureTree';
 import NewFeaturePanel from './NewFeaturePanel';
 import { isFeaturesSseEvent } from './sse-helpers';
 import { FEATURE_STATUSES, FeatureStatusIcon } from './status-icons';
@@ -46,6 +46,13 @@ export default function FeaturesShell() {
     /** Bumped to make the detail panel re-fetch the already-selected feature. */
     const [detailRefreshKey, setDetailRefreshKey] = useState(0);
     const filterMenuRef = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * ID-prefix children of every feature, derived once from the UNFILTERED list so
+     * the detail panel can navigate to real children even when the tree's status
+     * filter hides them (task 0525 R5).
+     */
+    const childrenByParent = useMemo(() => groupFeaturesByParent(features ?? []), [features]);
 
     const load = useCallback(async (signal?: AbortSignal) => {
         try {
@@ -152,6 +159,7 @@ export default function FeaturesShell() {
     };
 
     const filteredFeatures = getFilteredFeatures(features);
+    const selectedChildren = selectedId ? (childrenByParent.get(selectedId) ?? []) : [];
 
     return (
         <>
@@ -268,6 +276,8 @@ export default function FeaturesShell() {
                             featureId={selectedId}
                             refreshKey={detailRefreshKey}
                             onClose={() => setSelectedId(null)}
+                            childFeatures={selectedChildren}
+                            onSelectFeature={setSelectedId}
                         />
                     ) : (
                         <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">

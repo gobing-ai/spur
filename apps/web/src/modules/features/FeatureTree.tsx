@@ -28,7 +28,7 @@ export default function FeatureTree({ features, selectedId, onSelect }: FeatureT
         .filter((f) => f.id.length === 1)
         .slice()
         .sort(byFeatureId);
-    const childrenMap = groupByParent(features);
+    const childrenMap = groupFeaturesByParent(features);
 
     return (
         <ul className="py-1" data-feature-tree>
@@ -46,7 +46,13 @@ export default function FeatureTree({ features, selectedId, onSelect }: FeatureT
     );
 }
 
-function groupByParent(features: FeatureSummary[]): Map<string, FeatureSummary[]> {
+/**
+ * ID-prefix hierarchy grouping (DD-14): children of `X` = features whose id starts
+ * with X and is exactly one segment longer (`parentId = id.slice(0, -1)`). Shared by
+ * FeatureTree (visual tree) and FeatureDetail (child-feature listing, task 0525) so
+ * both consumers stay on one algorithm. Sibling groups sort A→Z by id.
+ */
+export function groupFeaturesByParent(features: FeatureSummary[]): Map<string, FeatureSummary[]> {
     const map = new Map<string, FeatureSummary[]>();
     for (const f of features) {
         if (f.id.length <= 1) continue;

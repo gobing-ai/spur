@@ -662,6 +662,119 @@ describe('FeatureDetail', () => {
         expect(getByTestId('status-pill').textContent).toBe('verifying');
         expect(getByLabelText('Complete')).toBeDefined();
     });
+
+    // ── Child features section (task 0525: list and link child features) ──
+
+    /** Expand the foldable metadata pane — the child section lives inside it. */
+    function openMetadata(container: HTMLElement) {
+        const toggle = Array.from(container.querySelectorAll('button')).find((b) =>
+            b.textContent?.includes('Metadata'),
+        );
+        expect(toggle).toBeDefined();
+        if (toggle) fireEvent.click(toggle);
+    }
+
+    test('R1: renders Child features (N) with each direct child id, name, and status icon', async () => {
+        installFeatureFetchMock();
+        const children: FeatureSummary[] = [
+            { id: 'F1', name: 'Project switcher', status: 'done' },
+            { id: 'F2', name: 'Status filter', status: 'active' },
+        ];
+        const { getByText, container } = render(<FeatureDetail featureId="F" childFeatures={children} />);
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        openMetadata(container);
+        expect(getByText('Child features (2)')).toBeDefined();
+        expect(getByText('F1')).toBeDefined();
+        expect(getByText('Project switcher')).toBeDefined();
+        expect(getByText('F2')).toBeDefined();
+        expect(getByText('Status filter')).toBeDefined();
+
+        // Each row leads with the child's FeatureStatusIcon (role="img", labelled).
+        const section = getByText('Child features (2)').parentElement;
+        expect(section).not.toBeNull();
+        const iconLabels = Array.from(section?.querySelectorAll('[role="img"]') ?? []).map((el) =>
+            el.getAttribute('aria-label'),
+        );
+        expect(iconLabels).toContain('Done');
+        expect(iconLabels).toContain('Active');
+    });
+
+    test('R2: child row is a button with the Open child feature accessible name; click selects the child', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/K')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'K',
+                        name: 'Umbrella',
+                        status: 'active',
+                        frontmatter: {},
+                        filePath: 'docs/features/K.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: [] });
+        }) as unknown as typeof fetch);
+        const children: FeatureSummary[] = [{ id: 'K1', name: 'Project switcher', status: 'backlog' }];
+        const selected: string[] = [];
+        const { getByText, getByRole, container } = render(
+            <FeatureDetail featureId="K" childFeatures={children} onSelectFeature={(id) => selected.push(id)} />,
+        );
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        openMetadata(container);
+        const row = getByRole('button', { name: 'Open child feature K1: Project switcher' });
+        expect(row.getAttribute('type')).toBe('button');
+        fireEvent.click(row);
+        expect(selected).toEqual(['K1']);
+    });
+
+    test('R3: umbrella with zero linked tasks still provides a navigable child row', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] }); // no linked tasks
+            if (url.includes('/features/K')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'K',
+                        name: 'Umbrella',
+                        status: 'active',
+                        frontmatter: {},
+                        filePath: 'docs/features/K.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: [] });
+        }) as unknown as typeof fetch);
+        const children: FeatureSummary[] = [{ id: 'K1', name: 'Project switcher', status: 'backlog' }];
+        const selected: string[] = [];
+        const { getByText, getByRole, container } = render(
+            <FeatureDetail featureId="K" childFeatures={children} onSelectFeature={(id) => selected.push(id)} />,
+        );
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        openMetadata(container);
+        expect(getByText('No linked tasks')).toBeDefined();
+        const row = getByRole('button', { name: 'Open child feature K1: Project switcher' });
+        fireEvent.click(row);
+        expect(selected).toEqual(['K1']);
+    });
+
+    test('R4: no children renders no Child features section and no empty-state text', async () => {
+        installFeatureFetchMock();
+        const { getByText, queryByText, container } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        openMetadata(container);
+        expect(queryByText(/Child features/)).toBeNull();
+        expect(queryByText(/No child features/i)).toBeNull();
+    });
 });
 
 describe('FeaturesShell', () => {
@@ -673,6 +786,39 @@ describe('FeaturesShell', () => {
         fireEvent.click(getByText('Root'));
         // After clicking a feature, the detail panel should render (body section)
         await waitFor(() => expect(calls.some((url) => url.includes('/features/F'))).toBe(true));
+    });
+
+    test('R5: detail child rows derive from the unfiltered list — visible even under a status filter', async () => {
+        installFeatureFetchMock(); // list: F (active), F1 (done) — F1 is a direct child of F
+        const { getByText, getByRole, getByLabelText, queryByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        // Filter the tree to 'active' — hides F1 ('done') from the sidebar.
+        fireEvent.click(getByLabelText('Filter features by status'));
+        const activeOption = Array.from(container.querySelectorAll('[data-filter-menu] button')).find((b) =>
+            b.textContent?.includes('active'),
+        );
+        expect(activeOption).toBeDefined();
+        if (activeOption) fireEvent.click(activeOption);
+        expect(queryByText('Child')).toBeNull();
+
+        // Select Root: the detail pane still lists the filtered-out child F1.
+        fireEvent.click(getByText('Root'));
+        // Detail loads async; wait for the metadata toggle before expanding.
+        await waitFor(() => {
+            const toggle = Array.from(container.querySelectorAll('button')).find((b) =>
+                b.textContent?.includes('Metadata'),
+            );
+            expect(toggle).toBeDefined();
+        });
+        const metadataToggle = Array.from(container.querySelectorAll('button')).find((b) =>
+            b.textContent?.includes('Metadata'),
+        );
+        if (metadataToggle) fireEvent.click(metadataToggle);
+
+        await waitFor(() => expect(getByText('Child features (1)')).toBeDefined());
+        expect(getByRole('button', { name: 'Open child feature F1: Child' })).toBeDefined();
     });
 
     /**

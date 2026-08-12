@@ -11,7 +11,7 @@ import {
     syncFeatureStatus,
     transitionFeature,
 } from '../../lib/feature-client';
-import type { FeatureShowData, SyncDirection } from '../../lib/feature-types';
+import type { FeatureShowData, FeatureSummary, SyncDirection } from '../../lib/feature-types';
 import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
@@ -19,6 +19,7 @@ import { useTasks } from '../task-kanban/useTasks';
 import FloatingActionProgress from './FloatingActionProgress';
 import { FEATURE_ACTION_LABELS, FEATURE_STATUS_ACTIONS, FSM_ACTIONS, FSM_TRANSITION_TARGET } from './feature-actions';
 import NewFeaturePanel from './NewFeaturePanel';
+import { FeatureStatusIcon } from './status-icons';
 import { useFeatureActionProgress } from './useFeatureActionProgress';
 
 interface FeatureDetailProps {
@@ -32,6 +33,10 @@ interface FeatureDetailProps {
      * keep rendering the copy it fetched on selection.
      */
     refreshKey?: number;
+    /** Direct children of featureId; default []. */
+    childFeatures?: FeatureSummary[];
+    /** Shell selection callback; production passes setSelectedId. */
+    onSelectFeature?: (id: string) => void;
 }
 
 type BodyMode = 'preview' | 'edit';
@@ -43,7 +48,13 @@ type BodyMode = 'preview' | 'edit';
  * metadata pane with linked tasks, and dynamic button group driven by the centralized
  * FEATURE_STATUS_ACTIONS mapping.
  */
-export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: FeatureDetailProps) {
+export default function FeatureDetail({
+    featureId,
+    onClose,
+    refreshKey = 0,
+    childFeatures = [],
+    onSelectFeature,
+}: FeatureDetailProps) {
     const [data, setData] = useState<FeatureShowData | null>(null);
     const [serverBody, setServerBody] = useState('');
     const [draftBody, setDraftBody] = useState('');
@@ -588,6 +599,34 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
                             <span className="text-spur-text-muted w-14 shrink-0">File</span>
                             <span className="text-spur-text font-mono truncate">{data.filePath}</span>
                         </div>
+
+                        {/* Child features (task 0525) — direct children of the selected feature,
+                            derived client-side from the shell's unfiltered list. Rows navigate
+                            via the shell-owned selection callback. */}
+                        {childFeatures.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">
+                                    Child features ({childFeatures.length})
+                                </span>
+                                <div className="space-y-1">
+                                    {childFeatures.map((child) => (
+                                        <button
+                                            key={child.id}
+                                            type="button"
+                                            onClick={() => onSelectFeature?.(child.id)}
+                                            className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
+                                            aria-label={`Open child feature ${child.id}: ${child.name}`}
+                                        >
+                                            <span className="shrink-0 text-[13px]" title={child.status}>
+                                                <FeatureStatusIcon status={child.status} />
+                                            </span>
+                                            <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
+                                            <span className="text-spur-text truncate flex-1 min-w-0">{child.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Linked Tasks */}
                         <div>
