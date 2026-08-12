@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Workspace module implementation (gated on approved workspace design)
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: G3
@@ -12,7 +12,7 @@ priority: P3
 tags: [approach-c,collaboration,board,gated]
 dependencies: []
 created_at: 2026-07-03T23:35:28.260Z
-updated_at: "2026-08-11T23:13:04.592Z"
+updated_at: "2026-08-12T00:46:15.390Z"
 ---
 
 ## 0197. Workspace module implementation (gated on approved workspace design)
@@ -169,17 +169,21 @@ Implemented the G3 Workspace Board composition as a boundary-cleanup over existi
 ### Testing
 **Testing**
 
+Re-verified 2026-08-11 via `/sp:dev-verify 0197 --auto --next --force --focus all --fix all` (standalone;
+verdict artifact `.spur/run/0197-verdict.json` written this run — gitignored, verdict: PASS).
+
 Commands run and outcomes (all green):
 
-- `bun test packages/app/tests/services/team-service.test.ts apps/server/tests/modules/team/index.test.ts apps/web/tests/modules/workspace/ apps/web/tests/lib/use-teams-data.test.ts apps/web/tests/modules/inbox/inbox.test.tsx apps/web/tests/modules/teams/components.test.tsx` → 179 pass / 0 fail (focused targets; covers R4 backend cases, workspace module/shell, lib feed, inbox scoped isolation incl. member→supervisor regression, teams scoping).
-- `bun test apps/web/tests` → 650 pass / 0 fail.
+- `bun test packages/app/tests/services/team-service.test.ts apps/server/tests/modules/team/index.test.ts apps/web/tests/modules/workspace/ apps/web/tests/lib/use-teams-data.test.ts apps/web/tests/modules/inbox/inbox.test.tsx apps/web/tests/modules/teams/components.test.tsx` → 179 pass / 0 fail (re-run this verify; covers R4 backend cases, workspace module/shell, lib feed, inbox scoped isolation incl. member→supervisor regression, teams scoping).
+- `bun test apps/web/tests` → 650 pass / 0 fail (implement-phase run).
 - `bun run typecheck` → all 7 workspaces exit 0.
 - `bun run lint` (biome check . --error-on-warnings + typecheck) → clean.
-- `bun run test` → 4875 pass / 0 fail across 270 files (three consecutive clean runs; a transient 2-fail on the first run self-resolved with no code change).
+- `bun run test` → 4875 pass / 0 fail across 270 files.
 - `bun run test-cf` → clean (Worker entry).
 - `bun run build` → all workspaces exit 0 (cli, server, web).
 - `bun run corpus-check` → OK, 0 new corpus errors.
-- `spur task check 0197 --folder docs/tasks2 --strict-core` → pass, no findings, no missing sections.
+- `spur task check 0197 --folder docs/tasks2 --strict-core` → PASS (re-run this verify). 5 WARN L4 anchor-lints are checker cwd false positives — every cited anchor (`packages/app/src/services/team-service.ts:198`, `apps/server/src/modules/team/index.ts:222-223`, `apps/web/src/lib/use-teams-data.ts:24-26`, `apps/web/src/modules/inbox/AllTab.tsx:89`, `apps/web/src/modules/workspace/index.tsx:13-21`) was re-read from the repo root this run and resolves to the named subject.
+- Ownership greps (re-run this verify): no process `EventSource`/`stdout`/`stderr` under `apps/web/src/modules/inbox` (remaining `EventSource` is the durable message live-tail, `apps/web/src/modules/inbox/AllTab.tsx:139-141`); `timeline.ts` deleted; no `Workspace` noun in config/contracts/server/cli/app (R7).
 
 Coverage: per-file line/function ≥ 90% gate satisfied across the changed workspaces (coverage table in `bun run test` output shows no below-threshold files in the changed paths).
 
@@ -191,6 +195,10 @@ Coverage: per-file line/function ≥ 90% gate satisfied across the changed works
 | R2 — A workspace binds a git folder and a team | MET | test | team-service.test.ts configured/orphaned/disagree/untethered; workDir/isCurrentProject surfaced |
 | R3 — Workspace tabs compose the collaboration surfaces | MET | test | workspace.test.tsx; WorkspaceShell renders scoped TeamsShell + InboxShell + TaskKanbanView |
 | R4 — Workspace inboxes are isolated | MET | test | inbox.test.tsx scoped AllTab + SupervisorTab regression; filterMessagesByTeam both endpoints |
+
+**Design conformance** (verify Step 6): 6/6 frozen-surface claims DONE against diff `7e039c18`; SupervisorTab
+`filterMessagesByTeam` change is a documented CHANGED (Solution review-fix note). All 28 changed files map to
+R1–R8 / P1–P7 — no scope creep.
 
 Verdict: **PASS** (8/8 requirements MET, 4/4 AC MET, evidence-rule pass, task check pass).
 ### Review
@@ -219,3 +227,5 @@ Residual risk: none blocking. P3/P4 advisories tracked as non-blocking notes (sh
 - 2026-07-03T23:44:29.208Z todo → blocked (system)
 - 2026-08-11T20:04:01.961Z blocked → todo (system)
 - 2026-08-11T23:13:04.592Z todo → wip (system)
+- 2026-08-12T00:46:14.625Z wip → testing (system)
+- 2026-08-12T00:46:15.390Z testing → done (system)
