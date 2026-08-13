@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.3.0
+version: 1.4.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -115,7 +115,7 @@ Turn detection into execution with a captured run model.
   `spur rule trace [run-id]` (engine-persisted run history, tasks 0038/0040); events/gates/artifact
   depth still pending the run model.
 - [ ] Redaction at the persistence boundary (secrets/PII never reach the store).
-- [ ] Occupant identity + coordination-facing run artifacts (ADR-057 wave 1 / G4). Distinct from
+- [x] Occupant identity + coordination-facing run artifacts (ADR-057 wave 1 / G4, task 0529). Distinct from
   the rich inspector bullet above.
 - [ ] Event-driven identity-pinned wait and atomic `message send --wait` (ADR-057 wave 2 / G4).
 - [ ] Snapshot-then-follow on the existing `system_events` ledger (ADR-057 wave 3 / G4).

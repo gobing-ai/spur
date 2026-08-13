@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.17.0
+version: 1.18.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -623,14 +623,16 @@ Invariants:
 
 Shapes: `docs/design/actionable-observability-context.md`.
 
-## 17. Inter-Agent Control Plane (accepted design — ADR-057; not yet built)
+## 17. Inter-Agent Control Plane (ADR-057 — wave 1 landed; waves 2–3 accepted design, not yet built)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
 drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
-`--drain` rewrites a spec id to the spec's coding-agent type before `AiRunner` dispatch
-(`apps/cli/src/commands/agent.ts`). That rewrite is the occupant-identity hole this section
-closes. The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging
-it and is not this section's work.
+Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a run is addressed by
+spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the coding-agent type)
+and injects `SPUR_SPEC_ID` / `SPUR_TEAM_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
+Waves 2–3 (identity-pinned wait, snapshot-then-follow) remain accepted design. The Board Inbox
+`mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and is not this
+section's work.
 
 ### 17.1 Target topology
 

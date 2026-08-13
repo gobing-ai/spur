@@ -6,7 +6,7 @@ status: active
 priority: P3
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-13T05:23:51.751Z"
+updated_at: "2026-08-13T06:51:54.150Z"
 ---
 
 # G: Collaboration
@@ -24,7 +24,7 @@ _No linked tasks._
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-Feature group. Supervision shipped under G2. G4 is the next leaf (occupant pin / wait).
+Feature group. Supervision shipped under G2. G4 wave 1 (occupant pin / coordination artifacts / caller env) landed 2026-08-13; wait remains 0530–0531.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)

@@ -2,10 +2,10 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.3.2
+version: 1.4.0
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]
@@ -126,7 +126,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
 | `spur team up\|down` | ✅ | Materialize/teardown roster; best-effort start/stop when serve is up |
 | `spur team start\|stop` | ✅ | Requires `spur serve`; starts/stops `agent loop`. Process-pipe stdin is operator attach, not the durable inbox |
-| Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | ⏳ | ADR-057; feature G4; no new noun; do not invoke `agent wait` / `send --wait` until Wave 2 ships |
+| Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | 🔶 | Wave 1 landed (0529: occupant pin, `coordination_runs`, caller env). Waves 2–3 (`agent wait` / `send --wait`, snapshot-then-follow) not built — do not invoke those verbs |
 | Server team process API + SSE + stdin POST | ✅ | `GET /api/team/processes`, `GET …/stream` (SSE), `POST …/stdin`, start/stop. No WebSocket |
 
 ## 8. Server / Web (read surface)

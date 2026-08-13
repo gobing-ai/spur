@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.15.0
+version: 1.16.0
 owner: Robin Min
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -510,10 +510,14 @@ Accepted (design) → Accepted.
 
 ## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
 
-**Status:** Accepted (design) · **Date:** 2026-08-12 · **Feature:** G4
+**Status:** Accepted (wave 1 shipped) · **Date:** 2026-08-12 · **Feature:** G4
 
 **Decision.** Coding agents coordinate only through Spur’s two existing channels — durable `spur message` / `inbox_messages`, and the supervised process pipe. There is no third IPC transport, no agent-to-agent socket, no terminal scrape, and no keystroke injection. The Board is a client, not a wait or command authority. New verbs stay on `agent` / `message` (ADR-051).
 
 **Why.** Copying multiplexer I/O would collapse ADR-052’s two planes and fight a harness that does not own PTYs.
 
 **Detail:** `03 §17`; `docs/design/inter-agent-control-plane.md`; feature G4. Complements ADR-052 (does not change Board composition).
+
+**Amendment (2026-08-13).** Wave 1 (occupant pin, coordination-facing run row, caller env) shipped. Waves 2–3 remain accepted design.
+
+**Detail:** task 0529; `03 §17`; `docs/design/inter-agent-control-plane.md`.

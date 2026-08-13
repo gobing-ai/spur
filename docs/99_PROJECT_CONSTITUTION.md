@@ -520,7 +520,7 @@ if it recurs, a new rule in §6.
   text went false. A ✅ row's *acceptance text* rots independently of its status; spot-check both
   (§7 audit).
 - [2026-08-08] spur-new: The entire §6 History section was stale after feature E1 shipped — 7 sources (now 10), no forensic ETL, no `--source all` fan-out, no `daily`/`analyze`/`report` pipeline, no scheduling, no versioned artifact. A ✅ status row stayed green while its acceptance text was 4 features behind. When a feature ships a capability group, audit every `05` row in that section in the same wrapup (§7 audit).
-- [2026-08-12] spur-new: `01` and `05` still called `spur team start|stop` “Phase 4 stubs” after G2 tasks 0195/0207–0210 were `done` and `04` already documented the live verbs. A 💤/`stubs` label in an index outlives the satellite. When a supervision/CLI slice ships, update `01` membership and `05` status in the same wrapup — and `feature sync` the leaf — or the next planning pass will reinvent the supervisor.
+- [2026-08-13] spur-new: `01` and `05` still called `spur team start|stop` “Phase 4 stubs” after G2 tasks 0195/0207–0210 were `done` and `04` already documented the live verbs. Recurred when G4 wave 1 (0529) shipped while `05` stayed ⏳ and `02` left the wave-1 box unchecked. A 💤/`stubs`/`⏳` label in an index outlives the satellite. When a supervision/CLI slice ships, update `01` membership and `05` status in the same wrapup — and `feature refresh`/`sync` the leaf — or the next planning pass will reinvent the supervisor.
 
 ### Lessons for `AGENTS.md`
 
