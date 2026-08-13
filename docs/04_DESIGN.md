@@ -1460,7 +1460,9 @@ filter them by `tier` once the toggle is enabled — no CLI restart required.
 **Envelope v2 and payload projection (task 0526).** Fresh persistence and SSE use the same
 `buildSystemEventEnvelope(entry, payload, project, secretValues?)` boundary. The payload becomes
 `{ schemaVersion: 2, data, context, presentation }`; catalog metadata supplies the concrete producer
-package/subsystem, default severity, description, retained presentation fields, and remediation kind.
+package/subsystem, last-resort default severity, description, retained presentation fields, and
+remediation kind. Fresh envelopes prefer a producer-stamped payload `severity` (ts-libs 0.4.30+)
+over that catalog default.
 `metadata-only` is a real allow-list with recursive depth/array/object/node/string bounds. Content
 bodies, prompts, commands/environment, arbitrary business payloads, complete rule finding arrays,
 and stdout/stderr are excluded; credential patterns and configured secrets are redacted before those
