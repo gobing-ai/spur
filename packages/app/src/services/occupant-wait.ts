@@ -2,10 +2,12 @@
  * Occupant wait + lifecycle projection (G4/ADR-057 wave 2, task 0530 R4–R6).
  *
  * Identity-pinned wait: snapshots an occupant's {@link OccupantPin} (specId +
- * runId + generation) and polls until a {@link WaitUntil} condition is met, or
- * the pinned identity breaks (replaced / generation bump / gone), or a stall or
- * caller timeout fires. Wave 2 polls every {@link POLL_INTERVAL_MS}; 0531 will
- * replace the poll body with a `followSystemEventsAfter` helper.
+ * runId + generation) and follows the shared `system_events` ledger until a
+ * {@link WaitUntil} condition is met, or the pinned identity breaks (replaced /
+ * generation bump / gone), or a stall or caller timeout fires (G4 R8, task
+ * 0531). Events are consumed snapshot-then-follow via the `follow` hook
+ * (`followSystemEventsAfter` over the ledger) — no separate event ring; the
+ * identity/stall/timeout contract from wave 2 is unchanged.
  *
  * Lifecycle (R6) is derived purely from cataloged first-class events:
  * - `agent.invoke.start` (latest) → `working`
@@ -14,7 +16,7 @@
  * - no events / other      → `unknown`
  * `blocked` requires a first-class blocked signal (none in this task) → never.
  */
-import type { OccupantRef } from '@gobing-ai/spur-domain';
+import type { OccupantRef, SystemEventRow } from '@gobing-ai/spur-domain';
 
 /** Identity subset of an occupant — what a wait pins and re-validates each tick. */
 export interface OccupantPin {
@@ -52,8 +54,11 @@ export class WaitError extends Error {
     }
 }
 
-/** Poll cadence for wave 2 (ms). 0531 swaps the poll body, not this interval. */
+/** Identity/deadline heartbeat cadence for the wait loop (ms). */
 export const POLL_INTERVAL_MS = 100;
+
+/** Sentinel distinguishing the heartbeat branch from a followed event row. */
+const HEARTBEAT = 'heartbeat' as const;
 
 /** Default stall budget when the occupant starts non-working (ms). */
 export const DEFAULT_STALL_MS = 5000;
@@ -97,8 +102,13 @@ export interface OccupantWaitDeps {
     getOccupant(specId: string): Promise<OccupantRef | null>;
     /** Count of queued messages for a specId. */
     countPending(specId: string): Promise<number>;
-    /** Latest cataloged invoke event for a runId (null = none recorded). */
+    /** Latest cataloged invoke event for a runId (null = none recorded). Used for the start snapshot. */
     latestInvokeEvent(runId: string): Promise<InvokeEventSnapshot | null>;
+    /**
+     * Snapshot-then-follow event feed (G4 R8): rows with `sequence > afterSequence`
+     * as they arrive. Wired to `followSystemEventsAfter` over the shared ledger.
+     */
+    follow(afterSequence: number): AsyncIterable<SystemEventRow>;
     /** Wall clock in ms. */
     now(): number;
     /** Cancellable sleep. */
@@ -122,7 +132,8 @@ export interface WaitStartSnapshot {
     pin: OccupantPin;
     lifecycle: OccupantLifecycle;
     startClock: number;
-    lastInvokeSequence: number | null;
+    /** Latest invoke event at snapshot — seeds the follow cursor + lifecycle re-projection. */
+    latestInvoke: InvokeEventSnapshot | null;
 }
 
 /**
@@ -151,19 +162,26 @@ export async function snapshotOccupant(
         pin,
         lifecycle: projectLifecycle({ latestInvokeEvent: latest, pendingCount }),
         startClock: deps.now(),
-        lastInvokeSequence: latest?.sequence ?? null,
+        latestInvoke: latest,
     };
 }
 
 /**
- * Identity-pinned wait loop (R4). Polls every {@link POLL_INTERVAL_MS} until:
- * - the `until` target is satisfied (resolve), or
- * - identity breaks: `run_replaced` (generation bump) / `occupant_gone`, or
- * - no progress inside the stall budget → `wait_stalled`, or
- * - caller `--timeout` elapses → `timeout`.
+ * Identity-pinned wait loop (R4, G4 R8). Snapshot-then-follow:
+ * - snapshot the occupant + ledger sequence once, then follow `sequence > snapshot`
+ *   from the shared `system_events` ledger via `deps.follow` (no event ring), and
+ * - re-probe occupant identity + lifecycle on each followed event and on a
+ *   {@link POLL_INTERVAL_MS} heartbeat (so a sparse event stream cannot starve
+ *   the identity/stall/timeout checks — the wave-2 pin-break contract).
  *
- * `invoke-exit` is satisfied when an `agent.invoke.exit` for the pinned runId
- * arrives AFTER the snapshot (sequence advanced, or latest event is exit).
+ * Stops when: the `until` target is satisfied (resolve); identity breaks
+ * (`run_replaced` / `occupant_gone`); no progress inside the stall budget
+ * (`wait_stalled`); or the caller `--timeout` elapses (`timeout`).
+ *
+ * `invoke-exit` is satisfied when the pinned run's latest invoke event is an
+ * `agent.invoke.exit` at/after the snapshot (wave-2 `>=` semantics, kept: an
+ * exit already recorded at snapshot time satisfies — the 0530 CLI tests pin
+ * this). A followed exit naturally qualifies; a followed start does not.
  */
 export async function waitForOccupant(
     deps: OccupantWaitDeps,
@@ -174,11 +192,9 @@ export async function waitForOccupant(
     const start = deps.now();
     const deadline = opts.timeoutMs === undefined ? Number.POSITIVE_INFINITY : start + opts.timeoutMs;
 
-    // Track whether the occupant was working at wait start — drives the stall
-    // budget. `invoke-exit` always targets a future exit, so it is never
-    // "already working" for stall purposes.
     const initialSnapshot = await snapshotOccupant(deps, pin.specId, { runId: pin.runId });
-    let lastSequence = initialSnapshot.lastInvokeSequence;
+    let latestInvoke = initialSnapshot.latestInvoke;
+    let lastSequence = latestInvoke?.sequence ?? 0;
     let wasWorking = initialSnapshot.lifecycle === 'working';
 
     // Already satisfied at snapshot (e.g. --until idle and already idle)?
@@ -186,8 +202,14 @@ export async function waitForOccupant(
         return { pin: initialSnapshot.pin, satisfied: until };
     }
 
-    // Send-wait default `invoke-exit`: if the snapshot's latest event is already
-    // an exit, we still wait for the NEXT exit (the one this send triggers).
+    // Follow `sequence > snapshot`. One in-flight read is kept alive and raced
+    // against the heartbeat, so a resolved read is never dropped (no event loss
+    // on heartbeat wins) and a sparse stream cannot starve deadline/stall/identity.
+    const events = deps.follow(lastSequence)[Symbol.asyncIterator]();
+    let pending = events.next();
+
+    const stallBudget = opts.timeoutMs === undefined ? stallMs : Math.min(opts.timeoutMs, stallMs);
+    let lastStallSequence = lastSequence;
 
     for (;;) {
         if (signal?.aborted === true) {
@@ -198,7 +220,25 @@ export async function waitForOccupant(
             throw new WaitError('timeout', `wait timed out after ${opts.timeoutMs}ms`);
         }
 
-        // Identity check: occupant replaced / generation bump / gone.
+        const next = await Promise.race([
+            pending,
+            deps.sleep(Math.min(POLL_INTERVAL_MS, Math.max(0, deadline - clock))).then(() => HEARTBEAT),
+        ]);
+
+        if (next === HEARTBEAT) {
+            // Periodic tick with no new event: identity + lifecycle re-probe only.
+        } else {
+            // A followed event arrived — advance the cursor and re-probe.
+            if (next.done === true) {
+                // Follow terminated (abort) — surface as an aborted wait.
+                throw new WaitError('timeout', 'wait aborted');
+            }
+            pending = events.next();
+            latestInvoke = { eventName: next.value.event_name, sequence: next.value.sequence };
+            lastSequence = Math.max(lastSequence, next.value.sequence ?? 0);
+        }
+
+        // Identity: occupant replaced / generation bump / gone.
         const occupant = await deps.getOccupant(pin.specId);
         if (occupant === null) {
             throw new WaitError('occupant_gone', `occupant for specId "${pin.specId}" is gone`);
@@ -210,34 +250,27 @@ export async function waitForOccupant(
             throw new WaitError('run_replaced', `generation ${pin.generation} → ${occupant.generation}`);
         }
 
-        const latest = await deps.latestInvokeEvent(pin.runId);
         const pendingCount = await deps.countPending(pin.specId);
-        const lifecycle = projectLifecycle({ latestInvokeEvent: latest, pendingCount });
-
-        const progressed = latest !== null && (latest.sequence ?? 0) > (lastSequence ?? -1);
+        const lifecycle = projectLifecycle({ latestInvokeEvent: latestInvoke, pendingCount });
 
         if (until === 'invoke-exit') {
-            // Satisfied by an agent.invoke.exit at/after snapshot.
-            if (
-                latest !== null &&
-                latest.eventName === 'agent.invoke.exit' &&
-                (latest.sequence ?? 0) >= (lastSequence ?? 0)
-            ) {
+            // Satisfied by an agent.invoke.exit at/after the snapshot (wave-2
+            // `>=`): the snapshot's own exit qualifies, as does any followed exit.
+            if (latestInvoke !== null && latestInvoke.eventName === 'agent.invoke.exit') {
                 return { pin, satisfied: until };
             }
         } else if (satisfies(lifecycle, until)) {
             return { pin, satisfied: until };
         }
 
-        // Stall detection: non-working at start, and no matching event + no
-        // status change inside min(timeout, stallMs).
-        const stallBudget = opts.timeoutMs === undefined ? stallMs : Math.min(opts.timeoutMs, stallMs);
+        if (lifecycle === 'working') wasWorking = true;
+
+        // Stall detection: non-working at start, and no sequence progress inside
+        // min(timeout, stallMs). Progress must be fresh per window, mirroring wave 2.
+        const progressed = lastSequence > lastStallSequence;
+        lastStallSequence = lastSequence;
         if (!wasWorking && !progressed && clock - start >= stallBudget) {
             throw new WaitError('wait_stalled', `no progress within ${stallBudget}ms from a non-working occupant`);
         }
-        if (lifecycle === 'working') wasWorking = true;
-
-        lastSequence = latest?.sequence ?? lastSequence;
-        await deps.sleep(POLL_INTERVAL_MS);
     }
 }

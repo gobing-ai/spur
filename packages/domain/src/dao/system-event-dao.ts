@@ -13,7 +13,10 @@ export interface SystemEventRow {
     entity_kind: string | null;
     /** Entity id for planning events. Null for workflow/agent events. */
     entity_id: string | null;
-    /** Monotonic sequence within one run. Null for planning events. */
+    /**
+     * Global monotonic ledger cursor assigned at persist time (task 0531).
+     * Null only for legacy pre-0369 rows that predate the column.
+     */
     sequence: number | null;
 }
 
@@ -32,7 +35,10 @@ export interface CreateSystemEventInput {
     entity_kind?: string | null;
     /** Correlation: the planning entity id. */
     entity_id?: string | null;
-    /** Correlation: monotonic sequence within one run. */
+    /**
+     * Optional explicit sequence. Omitted (or null) → a global monotonic
+     * ledger cursor is auto-assigned on insert (task 0531).
+     */
     sequence?: number | null;
 }
 
@@ -112,11 +118,20 @@ export class SystemEventDao {
      * Insert a single system event. Correlation columns default to null so a
      * caller with no run or entity identity (and any pre-0369 caller) writes a
      * row that reads back cleanly (R4).
+     *
+     * `sequence` is auto-assigned as a global monotonic ledger cursor when the
+     * caller omits it (task 0531): the follow helper keys off `sequence >
+     * cursor`, so every persisted row must carry one. The assignment is one
+     * atomic `INSERT ... SELECT` — the `MAX(sequence)` subquery runs under the
+     * same statement's write lock, so concurrent inserts cannot both read the
+     * same max. An explicit sequence (tests, backfills) is honored verbatim.
      */
     async insert(input: CreateSystemEventInput): Promise<void> {
         await this.db.run(
             `INSERT INTO system_events (${SYSTEM_EVENT_COLUMNS})
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                    CASE WHEN ?9 IS NULL THEN COALESCE(MAX(sequence), 0) + 1 ELSE ?9 END
+             FROM system_events`,
             input.id,
             input.event_name,
             input.occurred_at,
@@ -248,6 +263,33 @@ export class SystemEventDao {
                  ORDER BY occurred_at DESC, id DESC
                  LIMIT ?${params.length}`,
                 ...params,
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return [];
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Keyset-follow over the append-only ledger (G4 R8 / task 0531): rows with
+     * `sequence > afterSequence` in ascending `(sequence, id)` order, capped at
+     * `limit`. The sequence column is a monotonically increasing row marker, so
+     * this is the follow source for wait/reconnect consumers — the app-side
+     * `followSystemEventsAfter` helper owns the cursor/poll loop over this.
+     * Mirrors {@link query}'s safety pattern: a missing table returns `[]`.
+     */
+    async follow(afterSequence: number, limit = 100): Promise<SystemEventRow[]> {
+        try {
+            return await this.db.queryAll<SystemEventRow>(
+                `SELECT ${SYSTEM_EVENT_COLUMNS}
+                 FROM system_events
+                 WHERE sequence > ?1
+                 ORDER BY sequence ASC, id ASC
+                 LIMIT ?2`,
+                afterSequence,
+                limit,
             );
         } catch (error) {
             if (error instanceof Error && error.message.includes('no such table: system_events')) {

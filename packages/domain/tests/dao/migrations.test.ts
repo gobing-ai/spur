@@ -58,8 +58,8 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, runs-external-key, system-events-correlation, history-message-run-idx, and coordination-runs migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(11);
+        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, runs-external-key, system-events-correlation, history-message-run-idx, coordination-runs, and system-events-sequence-idx migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(12);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -71,6 +71,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[8]?.id).toBe('0008_spur_cli_system_events_correlation');
             expect(CLI_MIGRATIONS[9]?.id).toBe('0009_spur_cli_history_message_run_idx');
             expect(CLI_MIGRATIONS[10]?.id).toBe('0010_spur_cli_coordination_runs');
+            expect(CLI_MIGRATIONS[11]?.id).toBe('0011_spur_cli_system_events_sequence_idx');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -136,9 +137,9 @@ describe('db migrations', () => {
             // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid
             // + 0006 system-events + 0007 runs-external-key
             // + 0008 system-events-correlation + 0009 history-message-run-idx
-            // + 0010 coordination-runs applied on top.
+            // + 0010 coordination-runs + 0011 system-events-sequence-idx applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(9);
+            expect(applied).toBe(10);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -173,8 +174,8 @@ describe('db migrations', () => {
             const applied = await applyCliMigrations(adapter);
             // renamed inbox + rule + planning + queue-jobs + run-pid + system-events
             // + runs-external-key + system-events-correlation + history-message-run-idx
-            // + coordination-runs
-            expect(applied).toBe(10);
+            // + coordination-runs + system-events-sequence-idx
+            expect(applied).toBe(11);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -348,8 +349,9 @@ describe('db migrations', () => {
                 await adapter.queryFirst("SELECT name FROM sqlite_master WHERE name = 'history_message'"),
             ).toBeNull();
 
-            // 0009 (history index, provisions importer tables first) + 0010 coordination-runs.
-            expect(await applyCliMigrations(adapter)).toBe(2);
+            // 0009 (history index, provisions importer tables first) + 0010 coordination-runs
+            // + 0011 system-events-sequence-idx.
+            expect(await applyCliMigrations(adapter)).toBe(3);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -483,6 +485,13 @@ describe('db migrations', () => {
             expect(migrations[0]?.id).toBe('0001_spur_cli_test');
             expect(migrations[0]?.sql).toContain('test_t');
             await rm(dir, { recursive: true });
+        });
+
+        test('repo drizzle folder includes 0011 sequence index (0531 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const seqIdx = migrations.find((m) => m.id === '0011_spur_cli_system_events_sequence_idx');
+            expect(seqIdx).toBeDefined();
+            expect(seqIdx?.sql).toContain('idx_system_events_sequence');
         });
     });
 });

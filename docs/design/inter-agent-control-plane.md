@@ -1,13 +1,14 @@
 # Inter-agent control plane
 
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.
-**Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3 remains accepted design, not built.
+**Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3's snapshot-then-follow
+helper **landed** (task 0531); first-class `blocked` / `agent report-state` remain accepted design.
 **Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
 
 Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. Wave-2 verbs
-(`agent wait`, `send --wait`) **shipped** in task 0530 — invoke them. Wave 3
-(snapshot-then-follow, first-class `blocked`) remains accepted design.
+(`agent wait`, `send --wait`) **shipped** in task 0530; Wave-3 follow helper (`followSystemEventsAfter`)
+**shipped** in task 0531. First-class `blocked` remains accepted design.
 
 ## 1. Existing surfaces this design extends
 
@@ -145,9 +146,10 @@ spur message send <body> --to <specId> [--from <id>] --wait --until injected|inv
 6. No relevant event and no status change within `timeout_ms` → `wait_stalled` when the wait started from a non-working occupant and `--until` is not already true; otherwise `timeout`.
 7. Client disconnect / SIGINT ends the wait; it does not roll back an already-enqueued message.
 
-> **Wave 2 poll (0530):** the follow loop polls `getOccupant` + `system_events` (`agent.invoke.*`
-> for the pinned `runId`) every 100 ms. Task 0531 will replace only the poll body with a
-> `followSystemEventsAfter` helper; the identity + stall/timeout contract above is unchanged.
+> **Wave 2 poll (0530):** the follow loop polled `getOccupant` + `system_events`
+> (`agent.invoke.*` for the pinned `runId`) every 100 ms. **Replaced in task 0531** by the
+> `followSystemEventsAfter` helper (see §8); the identity + stall/timeout contract above is
+> unchanged (0530's wait tests still pass verbatim).
 
 Long waits stay on the CLI/connection side. `TeamService` / `AgentService` methods remain short.
 
@@ -169,6 +171,14 @@ Exit mapping: `timeout` / `wait_stalled` → 1; usage → 2; execution failure �
 
 ## 8. Snapshot + subscribe
 
+**Landed (task 0531).** `followSystemEventsAfter(getDb, { afterSequence, match, signal? })` in
+`packages/app/src/services/system-event-follow.ts` streams rows with `sequence > snapshot` from
+the shared `system_events` ledger in ascending order, advancing a cursor — no in-memory event
+ring. `waitForOccupant` (0530) now consumes it: the wait loop keeps one in-flight follow read
+raced against its identity/stall/timeout heartbeat, so a sparse stream cannot starve those checks
+and a resolved read is never dropped. Re-snapshotting is the caller's job — a fresh
+`afterSequence` resumes after a gap.
+
 Wait and any future Board live tail:
 
 1. Read a snapshot (`CoordinationRun` and/or inbox + occupant).
@@ -184,7 +194,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 | --- | --- | --- |
 | 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read — **LANDED (task 0529)** | wait verb, lifecycle enum as a public wait target, new noun |
 | 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) — **LANDED (task 0530)** | Board SSE, `blocked` without a first-class signal, protocol ping |
-| 3 | Snapshot/seq helper reused by wait, contract/schema notes, optional `agent report-state` only if `blocked` cannot be derived | G3 Board un-merge (feature G3 / ADR-052), live handoff, screen detection |
+| 3 | Snapshot/seq helper reused by wait — `followSystemEventsAfter` **LANDED (task 0531)**; first-class `blocked` (and optional `agent report-state` only if it cannot be derived) **deferred — 0530 Testing contains no `BLOCKED_UNREACHABLE` signal** | G3 Board un-merge (feature G3 / ADR-052), live handoff, screen detection, `blocked` |
 
 ## 10. Files likely to change (implementers)
 

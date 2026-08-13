@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-13T04:47:58.316Z"
-updated_at: "2026-08-13T06:51:53.948Z"
+updated_at: "2026-08-13T18:02:58.328Z"
 ---
 
 # G4: Inter-agent control plane
@@ -105,18 +105,16 @@ Feature: Inter-agent control plane
 | --- | ---- | ------ |
 | 0529 | Occupant identity, caller env, and coordination-facing run artifacts | done |
 | 0530 | Identity-pinned wait, atomic send-wait, and harness lifecycle | done |
-| 0531 | Snapshot-then-follow wait on the existing event ledger | todo |
+| 0531 | Snapshot-then-follow wait on the existing event ledger | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-
 Authority: ADR-057 (complements ADR-052; does not change Board composition).
 Mechanism: `docs/03_ARCHITECTURE.md` §17.
 Shapes: `docs/design/inter-agent-control-plane.md`. Implementation: tasks 0529–0531.
-Waves 1–2 (0529/0530) landed 2026-08-13. Wave 3 (snapshot-then-follow) remains.
+Waves 1–2 (0529/0530) landed 2026-08-13. Wave 3 follow helper (`followSystemEventsAfter`, 0531) landed 2026-08-13. First-class `blocked` / optional `agent report-state` remain accepted design.
 Wave 2 verbs landed under ADR-051 consent granted by ADR-057 / G4 (0529-0530).
 G3 (Board un-merge) is a sibling feature, not this one.
-
 ## History
 
 - 2026-08-13T06:51:42.173Z backlog → active (system)

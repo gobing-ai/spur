@@ -127,7 +127,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
 | `spur team up\|down` | ✅ | Materialize/teardown roster; best-effort start/stop when serve is up |
 | `spur team start\|stop` | ✅ | Requires `spur serve`; starts/stops `agent loop`. Process-pipe stdin is operator attach, not the durable inbox |
-| Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | 🔶 | Waves 1–2 landed (0529: occupant pin, `coordination_runs`, caller env; 0530: `agent wait` + `send --wait`). Wave 3 (snapshot-then-follow, first-class `blocked`) not built |
+| Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | 🔶 | Waves 1–2 landed (0529/0530). Wave 3 follow helper landed (0531: `followSystemEventsAfter`). First-class `blocked` not built |
 | Server team process API + SSE + stdin POST | ✅ | `GET /api/team/processes`, `GET …/stream` (SSE), `POST …/stdin`, start/stop. No WebSocket |
 
 ## 8. Server / Web (read surface)

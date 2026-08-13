@@ -118,7 +118,7 @@ Turn detection into execution with a captured run model.
 - [x] Occupant identity + coordination-facing run artifacts (ADR-057 wave 1 / G4, task 0529). Distinct from
   the rich inspector bullet above.
 - [x] Event-driven identity-pinned wait and atomic `message send --wait` (ADR-057 wave 2 / G4, task 0530).
-- [ ] Snapshot-then-follow on the existing `system_events` ledger (ADR-057 wave 3 / G4).
+- [x] Snapshot-then-follow on the existing `system_events` ledger (ADR-057 wave 3 / G4, task 0531). First-class `blocked` remains deferred.
 
 **Exit:** an agent run is executed, captured, and inspectable locally. A sibling agent can address
 that run by occupant pin without scraping a terminal.

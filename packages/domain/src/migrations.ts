@@ -94,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_system_events_occurred_at ON system_events (occur
 CREATE INDEX IF NOT EXISTS idx_system_events_event_name ON system_events (event_name);
 CREATE INDEX IF NOT EXISTS idx_system_events_run_id ON system_events (run_id);
 CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kind, entity_id);
+CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence);
 `;
 
 /**
@@ -211,6 +212,17 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
 `;
 
 /**
+ * Index the `system_events.sequence` ledger cursor (task 0531). The follow
+ * helper keysets `sequence > ?` every poll and the DAO's auto-assign reads
+ * `MAX(sequence)` per insert — both want an index, not a table scan. Fresh
+ * databases get the index from `SYSTEM_EVENTS_SCHEMA_SQL` (0000); this
+ * migration covers ledgers created before it (idempotent, `0009` precedent).
+ */
+export const SYSTEM_EVENTS_SEQUENCE_INDEX_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence);
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -227,6 +239,8 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * `0009` adds the `(provenance, run_id)` index to `history_message` for the
  * analyze `--run`/`--task` selectors (task 0474).
  * `0010` adds the `coordination_runs` occupant/artifact table (ADR-057 wave 1).
+ * `0011` indexes `system_events.sequence` for the follow cursor and
+ * auto-assign (task 0531).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -257,6 +271,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     },
     { id: '0009_spur_cli_history_message_run_idx', sql: HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL },
     { id: '0010_spur_cli_coordination_runs', sql: COORDINATION_RUNS_SCHEMA_SQL },
+    { id: '0011_spur_cli_system_events_sequence_idx', sql: SYSTEM_EVENTS_SEQUENCE_INDEX_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -292,7 +307,18 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const shouldApplySql =
             addColumnGuard === undefined || !(await columnExists(adapter, addColumnGuard.table, addColumnGuard.column));
 
-        if (shouldApplySql) {
+        // Migration 0011 indexes system_events.sequence — it needs the ledger to
+        // exist. A DB whose journal claims 0000–0008 but has no system_events
+        // table (the 0009 simulation shape: foreign/legacy foundation) journals
+        // 0011 without executing; the index lands on any DB where the ledger
+        // exists (fresh DBs get it from SYSTEM_EVENTS_SCHEMA_SQL, and 0006
+        // restores the table for genuinely older ledgers). Never block later
+        // migrations on a dropped/missing ledger — the follow tolerates it.
+        const sequenceIndexSkip =
+            migration.id === '0011_spur_cli_system_events_sequence_idx' &&
+            !(await tableExists(adapter, 'system_events'));
+
+        if (shouldApplySql && !sequenceIndexSkip) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }

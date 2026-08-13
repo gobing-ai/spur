@@ -2,6 +2,7 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     type AgentService,
     DEFAULT_STALL_MS,
+    followSystemEventsAfter,
     type InboxEntry,
     type SendWaitUntil,
     TeamService,
@@ -180,6 +181,17 @@ async function runMessageSend(
                             getOccupant: (id) => agentService.getOccupant({ specId: id }),
                             countPending: (id) => svc.countPending(id),
                             latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
+                            // Snapshot-then-follow over the shared ledger (G4 R8):
+                            // only the pinned run's invoke events are followed.
+                            follow: (afterSequence) =>
+                                followSystemEventsAfter(context.getDb, {
+                                    afterSequence,
+                                    match: (row) =>
+                                        row.run_id === pin.runId &&
+                                        (row.event_name === 'agent.invoke.start' ||
+                                            row.event_name === 'agent.invoke.exit'),
+                                    signal: controller.signal,
+                                }),
                             now: () => Date.now(),
                             sleep: (ms) => sendSleep(ms, controller.signal),
                         },

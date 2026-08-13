@@ -3,6 +3,7 @@ import {
     type AgentRunDeps,
     AgentService,
     type AgentSpecInput,
+    followSystemEventsAfter,
     type SystemEventBus,
     TeamService,
     WaitError,
@@ -548,6 +549,16 @@ async function runAgentWait(
                         getOccupant: (id) => agentService.getOccupant({ specId: id }),
                         countPending: (id) => teamService.countPending(id),
                         latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
+                        // Snapshot-then-follow over the shared ledger (G4 R8):
+                        // only the pinned run's invoke events are followed.
+                        follow: (afterSequence) =>
+                            followSystemEventsAfter(context.getDb, {
+                                afterSequence,
+                                match: (row) =>
+                                    row.run_id === runId &&
+                                    (row.event_name === 'agent.invoke.start' || row.event_name === 'agent.invoke.exit'),
+                                signal: controller.signal,
+                            }),
                         now: () => Date.now(),
                         sleep: (ms) => loopSleep(ms, controller.signal),
                     },

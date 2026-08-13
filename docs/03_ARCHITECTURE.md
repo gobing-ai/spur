@@ -628,7 +628,7 @@ Invariants:
 
 Shapes: `docs/design/actionable-observability-context.md`.
 
-## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 accepted design)
+## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
 drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
@@ -636,12 +636,14 @@ Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a ru
 spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the coding-agent type)
 and injects `SPUR_SPEC_ID` / `SPUR_TEAM_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
 Wave 2 (task 0530) ships the identity-pinned wait surface: `spur agent wait <specId>` (pins
-`specId+runId+generation`, polls `getOccupant` + `system_events` every 100 ms, typed errors
-`occupant_gone|run_replaced|wait_stalled|timeout`) and atomic `spur message send --wait`
-(snapshots the occupant before enqueue, waits on that pin in the same process). Lifecycle is
-derived by a pure projector (`working` = latest `agent.invoke.start`; `idle` = latest
-`agent.invoke.exit` + empty queued inbox; `blocked` requires a first-class signal, none yet).
-Wave 3 (snapshot-then-follow on the event ledger, first-class `blocked`) remains accepted design.
+`specId+runId+generation`, typed errors `occupant_gone|run_replaced|wait_stalled|timeout`)
+and atomic `spur message send --wait` (snapshots the occupant before enqueue, waits on that
+pin in the same process). Wave 3 (task 0531) replaced the 100 ms `system_events` poll with
+`followSystemEventsAfter` (snapshot sequence, then follow `sequence > snapshot`; identity /
+stall / timeout still heartbeat at 100 ms). Lifecycle is derived by a pure projector
+(`working` = latest `agent.invoke.start`; `idle` = latest `agent.invoke.exit` + empty queued
+inbox; `blocked` requires a first-class signal, none yet). First-class `blocked` remains
+accepted design.
 The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and
 is not this section's work.
 

@@ -521,3 +521,7 @@ Accepted (design) → Accepted.
 **Amendment (2026-08-13).** Wave 1 (occupant pin, coordination-facing run row, caller env) shipped. Wave 2 (identity-pinned `agent wait`, atomic `message send --wait`, lifecycle projector) shipped with 0530. Wave 3 (snapshot-then-follow, first-class `blocked`) remains accepted design.
 
 **Detail:** tasks 0529/0530; `03 §17`; `docs/design/inter-agent-control-plane.md`.
+
+**Amendment (2026-08-13, 0531).** Wave 3 snapshot-then-follow shipped: `followSystemEventsAfter` over the existing `system_events` ledger (global monotonic `sequence` auto-assigned at persist; `idx_system_events_sequence`). First-class `blocked` / optional `agent report-state` remain accepted design.
+
+**Detail:** task 0531; `03 §17`; `docs/design/inter-agent-control-plane.md` §8.

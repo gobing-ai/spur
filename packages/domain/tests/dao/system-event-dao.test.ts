@@ -273,6 +273,89 @@ describe('SystemEventDao', () => {
         adapter.close();
     });
 
+    test('follow yields rows with sequence > cursor in ascending order', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        for (let sequence = 1; sequence <= 5; sequence += 1) {
+            await dao.insert({
+                id: createId('sev'),
+                event_name: 'task.created',
+                occurred_at: `2026-07-04T00:0${sequence}:00.000Z`,
+                sequence,
+            });
+        }
+
+        const rows = await dao.follow(2);
+        expect(rows.map((r) => r.sequence)).toEqual([3, 4, 5]);
+        // Cursor is exclusive and the limit caps the page.
+        expect((await dao.follow(4, 1)).map((r) => r.sequence)).toEqual([5]);
+
+        adapter.close();
+    });
+
+    test('follow returns [] when the table is absent', async () => {
+        // A bare :memory: DB without migrations — system_events does not exist.
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const dao = new SystemEventDao(adapter);
+
+        await expect(dao.follow(0)).resolves.toEqual([]);
+
+        adapter.close();
+    });
+
+    test('insert auto-assigns a global monotonic sequence when omitted (0531 follow cursor)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'agent.invoke.start',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            run_id: 'run_abc',
+        });
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'agent.invoke.exit',
+            occurred_at: '2026-07-04T01:01:00.000Z',
+            run_id: 'run_abc',
+        });
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'agent.invoke.start',
+            occurred_at: '2026-07-04T01:02:00.000Z',
+            run_id: 'run_other',
+        });
+
+        // Global cursor, not per-run: run_other's row advances past run_abc's.
+        const rows = await dao.query();
+        expect(rows.map((r) => r.sequence).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([1, 2, 3]);
+
+        adapter.close();
+    });
+
+    test('auto-assigned sequences stay monotonic alongside explicit ones', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'a',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            sequence: 10,
+        });
+        await dao.insert({ id: createId('sev'), event_name: 'b', occurred_at: '2026-07-04T01:01:00.000Z' });
+        await dao.insert({ id: createId('sev'), event_name: 'c', occurred_at: '2026-07-04T01:02:00.000Z' });
+
+        const rows = await dao.query();
+        expect(rows.map((r) => r.sequence).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([10, 11, 12]);
+
+        adapter.close();
+    });
+
     test('deleteAll clears all rows', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);
@@ -331,7 +414,8 @@ describe('SystemEventDao', () => {
         expect(rows[0]?.entity_kind).toBe('task');
         expect(rows[0]?.entity_id).toBe('0369');
         expect(rows[0]?.run_id).toBeNull();
-        expect(rows[0]?.sequence).toBeNull();
+        // Ledger cursor auto-assigned at persist (0531), independent of correlation.
+        expect(rows[0]?.sequence).toBe(1);
 
         adapter.close();
     });
@@ -353,7 +437,8 @@ describe('SystemEventDao', () => {
         expect(rows[0]?.run_id).toBeNull();
         expect(rows[0]?.entity_kind).toBeNull();
         expect(rows[0]?.entity_id).toBeNull();
-        expect(rows[0]?.sequence).toBeNull();
+        // Ledger cursor auto-assigned at persist (0531), independent of correlation.
+        expect(rows[0]?.sequence).toBe(1);
 
         adapter.close();
     });

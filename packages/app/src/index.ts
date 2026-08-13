@@ -278,6 +278,11 @@ export type {
     SystemEventRemediationKind,
     SystemEventSeverity,
 } from './services/system-event-envelope';
+export {
+    FOLLOW_POLL_INTERVAL_MS,
+    type FollowSystemEventsOptions,
+    followSystemEventsAfter,
+} from './services/system-event-follow';
 export type { SystemEventRetentionConfig } from './services/system-event-retention';
 export {
     DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA,

@@ -84,10 +84,12 @@ function buildFakeDeps(opts: {
     pending: { n: number };
     /** Per-tick occupant; `null` means "gone". `undefined` falls back to start. */
     occupantOverrides?: (OccupantRef | null)[];
+    /** When `true`, the fake follow terminates (mirrors the real helper's abort). */
+    followAborted?: () => boolean;
     sleepCalls?: number[];
 }): OccupantWaitDeps {
     let tick = 0;
-    return {
+    const deps: OccupantWaitDeps = {
         async getOccupant() {
             const override = opts.occupantOverrides?.[tick];
             tick++;
@@ -100,6 +102,29 @@ function buildFakeDeps(opts: {
             const latest = opts.events.length > 0 ? opts.events[opts.events.length - 1] : (opts.startLatest ?? null);
             return latest ?? null;
         },
+        // Snapshot-then-follow fake: yields events with sequence > afterSequence,
+        // polling on the same injected sleep so tests advance time/state.
+        async *follow(afterSequence: number) {
+            for (;;) {
+                if (opts.followAborted?.() === true) return;
+                for (const e of opts.events) {
+                    if ((e.sequence ?? 0) <= afterSequence) continue;
+                    afterSequence = e.sequence ?? 0;
+                    yield {
+                        id: `evt-${e.sequence}`,
+                        event_name: e.eventName,
+                        occurred_at: '',
+                        actor: null,
+                        payload_json: null,
+                        run_id: opts.startOccupant.runId,
+                        entity_kind: null,
+                        entity_id: null,
+                        sequence: e.sequence,
+                    };
+                }
+                await deps.sleep(100);
+            }
+        },
         now() {
             return opts.clock.ms;
         },
@@ -107,8 +132,13 @@ function buildFakeDeps(opts: {
             opts.sleepCalls?.push(ms);
             // advance the fake clock so stall/timeout budgets elapse
             opts.clock.ms += ms;
+            // Real macrotask pacing: the follow-driven loop waits on the follow
+            // generator's poll timer, which a synchronously-resolving sleep would
+            // starve (the loop's own microtask chain would never yield to timers).
+            await new Promise((resolve) => setTimeout(resolve, ms));
         },
     };
+    return deps;
 }
 
 function pin(over: Partial<OccupantPin> = {}): OccupantPin {
@@ -243,6 +273,10 @@ describe('snapshotOccupant', () => {
             },
             async latestInvokeEvent() {
                 return null;
+            },
+            // Unused by snapshotOccupant — required by the deps contract.
+            follow() {
+                return { async *[Symbol.asyncIterator]() {} };
             },
             now: () => 0,
             async sleep() {},

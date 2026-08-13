@@ -52,7 +52,7 @@ When collaborating with the design team:
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
-| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 not built |
+| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); first-class `blocked` remains |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -263,8 +263,10 @@ Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5). `agent wa
 (`specId`+`runId`+`generation`) and resolves when the first `--until` (OR) is satisfied; default
 `idle`. `--run` pins an explicit run (default: latest). Replacement / generation bump / disappearance
 fails fast. `message send --wait` snapshots the occupant **before** enqueue, then waits on that pin
-in the same process (default `invoke-exit`); enqueue is not rolled back on wait failure. Wave 2 polls
-`getOccupant` + `system_events` every 100 ms (0531 replaces the poll body with a follow helper).
+in the same process (default `invoke-exit`); enqueue is not rolled back on wait failure. Wave 3 (0531)
+replaced the 100 ms poll with `followSystemEventsAfter` over the shared ledger — snapshot
+`sequence`, then follow `sequence > snapshot` (global monotonic cursor auto-assigned at persist
+in `SystemEventDao.insert`).
 
 `--json` errors: `{ error: { code, message } }` with codes `occupant_gone | run_replaced |
 wait_stalled | timeout` (exit 1). `--until blocked` has no first-class signal in wave 2 → exit 2.
