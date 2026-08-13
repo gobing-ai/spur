@@ -510,7 +510,7 @@ Accepted (design) → Accepted.
 
 ## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
 
-**Status:** Accepted (wave 1 shipped) · **Date:** 2026-08-12 · **Feature:** G4
+**Status:** Accepted (waves 1–2 shipped) · **Date:** 2026-08-12 · **Feature:** G4
 
 **Decision.** Coding agents coordinate only through Spur’s two existing channels — durable `spur message` / `inbox_messages`, and the supervised process pipe. There is no third IPC transport, no agent-to-agent socket, no terminal scrape, and no keystroke injection. The Board is a client, not a wait or command authority. New verbs stay on `agent` / `message` (ADR-051).
 
@@ -518,6 +518,6 @@ Accepted (design) → Accepted.
 
 **Detail:** `03 §17`; `docs/design/inter-agent-control-plane.md`; feature G4. Complements ADR-052 (does not change Board composition).
 
-**Amendment (2026-08-13).** Wave 1 (occupant pin, coordination-facing run row, caller env) shipped. Waves 2–3 remain accepted design.
+**Amendment (2026-08-13).** Wave 1 (occupant pin, coordination-facing run row, caller env) shipped. Wave 2 (identity-pinned `agent wait`, atomic `message send --wait`, lifecycle projector) shipped with 0530. Wave 3 (snapshot-then-follow, first-class `blocked`) remains accepted design.
 
-**Detail:** task 0529; `03 §17`; `docs/design/inter-agent-control-plane.md`.
+**Detail:** tasks 0529/0530; `03 §17`; `docs/design/inter-agent-control-plane.md`.

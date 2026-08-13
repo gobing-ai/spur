@@ -106,11 +106,12 @@ authority first, then derived docs, then this file.
 **Routing:** decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`;
 feature status → `05`. Working layers §4.2; audits §7; satellites §4.5.
 
-**Inter-agent coordination (ADR-057 — wave 1 landed; waves 2–3 accepted design):** Agents talk
+**Inter-agent coordination (ADR-057 — waves 1–2 landed; wave 3 accepted design):** Agents talk
 only through Spur (`spur message`, `spur agent`). Occupant pin + `coordination_runs` + caller env
-(`SPUR_SPEC_ID` / `SPUR_RUN_ID` / `SPUR_TEAM_ID` / `SPUR_SERVE_URL`) are shipped. Do not scrape
-terminals, inject keystrokes, or add a third IPC socket. `agent wait` and `message send --wait`
-are planned — do not invoke them. Shapes: `docs/design/inter-agent-control-plane.md`.
+(`SPUR_SPEC_ID` / `SPUR_RUN_ID` / `SPUR_TEAM_ID` / `SPUR_SERVE_URL`) are shipped, as are
+identity-pinned `agent wait` and atomic `message send --wait` (0530). Do not scrape
+terminals, inject keystrokes, or add a third IPC socket. Wave 3 (snapshot-then-follow, first-class
+`blocked`) remains accepted design. Shapes: `docs/design/inter-agent-control-plane.md`.
 
 ---
 

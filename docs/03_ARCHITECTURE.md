@@ -34,7 +34,7 @@ spur/
 ├── plugins/sp/      Agent-facing layer: Fat Skills + thin command/subagent wrappers (ADR-016/023)
 ├── config/          Spur-owned default config SSOT — rules/, workflows/, plugins/ (ADR-015)
 ├── tooling/typescript/   Shared tsconfig presets (base/server/react)
-└── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations + _legacy_reference/ (inert)
+└── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations +_legacy_reference/ (inert)
 
 ### 1.1 External dependency boundary (ADR-004/006/021)
 
@@ -52,7 +52,7 @@ packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 ```
 
 | Layer | Owns |
-|-------|------|
+| ------- | ------ |
 | `ts-utils` | output, errors, api-response, cursor, date, access |
 | `ts-infra` | logger, EventBus, telemetry, scheduler, job-queue interfaces |
 | `ts-runtime` | runtime context, FileSystem, ProcessExecutor, config loader |
@@ -125,6 +125,7 @@ The server/web tier is a local-first planning and operations board. Its bootstra
 `src/server-config.ts` is shared and runtime-agnostic. `src/bootstrap.ts` is the Bun composition
 root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must not import
 `node:*`, `bun:*`, local filesystem, SQLite, scheduler, queue, or process-control implementations.
+
 ## 3. CLI Architecture (`apps/cli`)
 
 No file inventory here — that rots (99 §6.4 lesson); boundaries only:
@@ -159,6 +160,7 @@ CLI owns exit-code policy. Presets compose via `loadPresetRules`; ad-hoc files v
 formatters are host-registered. Runs persist through the engine's `RulePersistenceAdapter`
 (Spur's `DbRulePersistenceAdapter` over ts-db), powering `spur rule trace`. Rules are
 configuration — adding one edits YAML, not code. Flags and surface: `04 §1.1`.
+
 ## 6. Workflows (`ts-dual-workflow-engine`, `spur workflow`)
 
 Two execution models behind one host (ADR-009):
@@ -229,7 +231,7 @@ Source of truth: `@gobing-ai/ts-dual-workflow-engine` `WorkflowService.resumeRun
 **Shell-guard vars resolution (two layers).** A guard command may reference workflow vars either way:
 
 1. **Template resolution (engine).** `${vars.*}` templates in guard options (e.g.
-   `spur task check ${vars.wbs}`) are resolved against `workflow.vars` *before* the guard runs
+   `spur task check ${vars.wbs}`) are resolved against `workflow.vars` _before_ the guard runs
    (`resolveTemplates`), the same interpolation the driver's `firstPassingTransition` uses.
 2. **Subprocess env export (spur).** Spur's `EnvShellGuardRunner` replaces the engine's default shell
    guard and spawns `/bin/sh -c <command>` with `context.vars` merged over `process.env` as the child
@@ -312,7 +314,7 @@ model, and aggregates by source/model/day — a domain consumer, not part of the
 ## 8. Data & Storage (ADR-007/008)
 
 | Location | Purpose |
-|----------|---------|
+| ---------- | --------- |
 | `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, team agent specs (`agents/`) |
 | `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015) |
 | SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
@@ -352,7 +354,7 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 ## 10. Risks & Mitigations
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | Contract/handler drift | `implement(contract)` makes it a compile error |
 | Schema drift across engines | Each package owns its schema SQL; CLI composes (ADR-007) |
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
@@ -506,7 +508,7 @@ automatic; `order` only places it in the sidebar. Current modules: `teams`, `inb
 ### 14.1 Current shipped state: two channels merged client-side
 
 Spur has **two independent channels** between the Board and a backend coding agent. They are merged
-*for display* by the Inbox module; they are never merged in storage and delivery is unchanged.
+_for display_ by the Inbox module; they are never merged in storage and delivery is unchanged.
 
 | | Durable message queue | Process pipe |
 | --- | --- | --- |
@@ -623,16 +625,22 @@ Invariants:
 
 Shapes: `docs/design/actionable-observability-context.md`.
 
-## 17. Inter-Agent Control Plane (ADR-057 — wave 1 landed; waves 2–3 accepted design, not yet built)
+## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 accepted design)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
 drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
 Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a run is addressed by
 spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the coding-agent type)
 and injects `SPUR_SPEC_ID` / `SPUR_TEAM_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
-Waves 2–3 (identity-pinned wait, snapshot-then-follow) remain accepted design. The Board Inbox
-`mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and is not this
-section's work.
+Wave 2 (task 0530) ships the identity-pinned wait surface: `spur agent wait <specId>` (pins
+`specId+runId+generation`, polls `getOccupant` + `system_events` every 100 ms, typed errors
+`occupant_gone|run_replaced|wait_stalled|timeout`) and atomic `spur message send --wait`
+(snapshots the occupant before enqueue, waits on that pin in the same process). Lifecycle is
+derived by a pure projector (`working` = latest `agent.invoke.start`; `idle` = latest
+`agent.invoke.exit` + empty queued inbox; `blocked` requires a first-class signal, none yet).
+Wave 3 (snapshot-then-follow on the event ledger, first-class `blocked`) remains accepted design.
+The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and
+is not this section's work.
 
 ### 17.1 Target topology
 

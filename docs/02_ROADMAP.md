@@ -86,16 +86,16 @@ criteria, and wave sequencing are authoritative in
   Cloudflare path runs health + OpenAPI only; local Bun path carries full functionality).
 - [x] **S0 wave — Server foundation**: S0 (`spur serve` launcher), S1 (middleware pipeline, graceful
   shutdown, `ServerContext` + DB/FS/EventBus/JobQueue/Scheduler wiring), S2 (module system + health
-  reference module). *Gate: server boots, pipeline + module system proven.* Shipped 2026-06.
+  reference module). _Gate: server boots, pipeline + module system proven._ Shipped 2026-06.
 - [x] **W0 wave — Web foundation**: W1 (stack migration), W2 (3-column layout + `WebModule` system +
-  React Router 7 + extended `rpc-client`), W5 (unified Vite dev server). *Gate: static SPA shell,
-  layout, module system proven; one-port dev. Can overlap S0 (needs only the health endpoint).* Shipped 2026-06.
+  React Router 7 + extended `rpc-client`), W5 (unified Vite dev server). _Gate: static SPA shell,
+  layout, module system proven; one-port dev. Can overlap S0 (needs only the health endpoint)._ Shipped 2026-06.
 - [x] **S1 wave — Server domain**: S3 (task + feature modules), S4 (contracts + output envelope +
-  error mapping + `planningEventContract`), S5 (static asset serving). *Gate: task/feature API live,
-  contracts shipped, board served on one port.* Shipped 2026-07 (events/jobs/messages modules added).
+  error mapping + `planningEventContract`), S5 (static asset serving). _Gate: task/feature API live,
+  contracts shipped, board served on one port._ Shipped 2026-07 (events/jobs/messages modules added).
 - [x] **W1 wave — Web module**: W3 (Task Kanban — proves the design end-to-end), W4 (theming /
-  dark mode / responsive, P2). *Gate: Task Kanban functional end-to-end → satisfies Wave 3 board +
-  A17 cutover.* Shipped 2026-07 (observability module added).
+  dark mode / responsive, P2). _Gate: Task Kanban functional end-to-end → satisfies Wave 3 board +
+  A17 cutover._ Shipped 2026-07 (observability module added).
 - [ ] **Deferred — SSE live stream**: S6 (server SSE handler) + W6 (client subscription). Designed
   now (design §2.9), implementation gated on module-system stability and D1; board uses polling
   until then. `planningEventContract` ships with S4.
@@ -117,7 +117,7 @@ Turn detection into execution with a captured run model.
 - [ ] Redaction at the persistence boundary (secrets/PII never reach the store).
 - [x] Occupant identity + coordination-facing run artifacts (ADR-057 wave 1 / G4, task 0529). Distinct from
   the rich inspector bullet above.
-- [ ] Event-driven identity-pinned wait and atomic `message send --wait` (ADR-057 wave 2 / G4).
+- [x] Event-driven identity-pinned wait and atomic `message send --wait` (ADR-057 wave 2 / G4, task 0530).
 - [ ] Snapshot-then-follow on the existing `system_events` ledger (ADR-057 wave 3 / G4).
 
 **Exit:** an agent run is executed, captured, and inspectable locally. A sibling agent can address
@@ -154,18 +154,18 @@ slices; each passes the gate alone and preserves R10 backward-compat. 5a–5c ar
 path; 5d is deferred (ADR-012 addendum 2026-06-03); 5e is out of scope; 5f is unscheduled.
 
 - [x] **5a — Plugin SDK** (`@gobing-ai/spur-plugin-sdk`): registries + `PluginConfig` merge + trust
-  *policy* (registration-time gating, no runtime sandbox). *(task 0012)*
+  _policy_ (registration-time gating, no runtime sandbox). _(task 0012)_
 - [x] **5b — Discovery + CLI**: superseded by the 2026-06-09 ADR-012 amendment; `PluginLoader` and
-  `spur plugin list|info` are removed until a real plugin consumer exists. *(task 0013, reversed)*
+  `spur plugin list|info` are removed until a real plugin consumer exists. _(task 0013, reversed)_
 - [x] **5c — Server seam**: superseded by the 2026-06-09 ADR-012 amendment; `/api/plugins/<prefix>`
-  route mounting and server plugin hooks are removed until plugins return. *(task 0014, reversed)*
-- [ ] **5d — Harness registry** *(deferred — ADR-012 addendum 2026-06-03)*: Spur-side `AgentShim`
+  route mounting and server plugin hooks are removed until plugins return. _(task 0014, reversed)_
+- [ ] **5d — Harness registry** _(deferred — ADR-012 addendum 2026-06-03)_: Spur-side `AgentShim`
   overlay. Resolution needs no upstream change, but **execution does** (`AiRunner` accepts only the
   closed `AgentName` union). No committed PRD surface consumes plugin-defined agent types; its only
-  consumer is the unscheduled 5f migration. Reactivated when 5f is scheduled. *(task 0015 — Blocked)*
-- [ ] **5e — Runtime sandboxing** *(out of scope — PRD §5.4 + ADR-010)*: fs/net/shell isolation;
+  consumer is the unscheduled 5f migration. Reactivated when 5f is scheduled. _(task 0015 — Blocked)_
+- [ ] **5e — Runtime sandboxing** _(out of scope — PRD §5.4 + ADR-010)_: fs/net/shell isolation;
   revisited only if non-operator-authored plugins are onboarded.
-- [ ] **5f — First primitive migration** *(unscheduled)*: move the seven built-in harnesses (then
+- [ ] **5f — First primitive migration** _(unscheduled)_: move the seven built-in harnesses (then
   rule evaluators / providers / history sources) onto bundled plugins. Sequenced after 5a–5d.
 
 Cooperation / remote transport considered only if a concrete need surfaces.
