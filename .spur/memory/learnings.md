@@ -328,3 +328,41 @@ Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grou
 
 - **Gotcha:** Plan step 1 (catalog bump to `@gobing-ai/ts-dual-workflow-engine` 0.4.31) was excluded from commit `2bf0fdb5` as "concurrent dirt" while D4 notes claimed it shipped. HEAD `bun.lock` still pins 0.4.30. C1 APIs (`collectWorkflowExtensions`) need the bump in the same leftover commit as the consumer.
 - **Pattern:** A done-task re-run must not reopen status; leftover catalog + T4/T3 docs are the wrap-up, not a new implement.
+Captured to `.spur/run/wrapup-learnings.md` (appended under existing 0510 entry).
+
+## 2026-08-13 — task 0532
+
+- **Historical `<wbs>-verdict.json` artifacts unblock `verifying→done` on archive tasks.** Tasks that
+  predate the verdict-artifact feature carry no `.spur/run/<wbs>-verdict.json`, so
+  `feature check --strict --as done` fails L4 (`readVerdictArtifact`,
+  `packages/app/src/services/feature-check.ts:699`) and `feature sync` stalls at
+  `verifying→done`. The fix is artifacts only: write PASS verdicts from existing test/code evidence
+  — no new CLI verb, no `team attach`, no `--force` done, no edits to `docs/tasks2/` bodies.
+- **L4 reads verdict artifacts only for *done* covering tasks** (`feature-check.ts:615`), so a
+  wrap-up task's own scenario stays `L4.scenario-unverified` while the task is `wip`. The final
+  scenario of a verdict-artifact task cannot go green until the pipeline's verify→record→done
+  certifies the wrapping task itself — expected, not a defect; do not force it.
+- **AC `id` must match the feature scenario title exactly** (R-prefix stripped) — matched by
+  `rowMatchesScenario` (`feature-check.ts:923`). The verify step's answer-file AC row id must equal
+  the scenario title verbatim or the gate re-opens after the task is done.
+- **L4 is OR across covering tasks**: a parent task (0195) may carry all 7 G2 scenario rows while
+  children 0207–0210 carry subsets. Redundant but correct — no need to split coverage.
+- **Frozen `VerifyVerdict` shape** (`packages/app/src/services/task-record.ts`):
+  `{wbs, verdict, requirements[], acceptanceCriteria[], checks[], source}`; runDir is repo
+  `.spur/run` (`defaultVerdictRunDir`). `checks[]` rows like `{name: targeted-test, status: pass,
+  evidence: "exit 0"}` satisfy the record gate.
+- **Verdict evidence = freshly-run targeted tests with pass counts, not full-suite runs.** Each AC
+  row cites `bun test <file> --test-name-pattern "<pat>"` actually executed this session with
+  counts (`startAutostart` 2 pass, `GET /api/team/processes` 11, `stream` 12, `stdin` 4, `list` 2,
+  `start/stop` 12). No fabricated PASS: every row maps to a green run; missing web UI test → cite
+  component paths as evidence, don't invent coverage.
+- **Wrapup-pipeline `agent.run` steps default to `agent.default`, which is not a registered
+  executor.** First wrapup run failed in 0s: `Unknown agent: 'agent.default'` (available: minimax,
+  omp, omp-deepseek, codex-*, agy-*…). Re-dispatch must name an explicit executor (e.g. `omp`).
+- **Even an artifact-only task trips doc-sync T3 and surfaces pre-existing drift.** 04_DESIGN (the
+  surface SSOT) was missing six verbs that exist in code — `task deps` (`task.ts:491`), `task
+  sections` (`:538`), `task path` (`:1121`), `task verifyall-aggregate` (`:853`), `task run-link`
+  (`:1147`), `workflow cancel` (`workflow.ts:616`). Repaired with signatures + exit codes, version
+  1.27.0 → 1.28.0.
+- **`docs/features/INDEX.md` lags the synced satellite** (G2 still `[active]`): `spur feature
+  refresh` owns that at the G2→done transition — flagged, not hand-repaired, per tool ownership.

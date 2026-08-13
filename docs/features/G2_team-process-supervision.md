@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G2"
 name: "Team process supervision"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:35.958Z"
-updated_at: "2026-08-13T05:25:46.650Z"
+updated_at: "2026-08-13T18:30:35.420Z"
 ---
 
 # G2: Team process supervision
@@ -88,7 +88,7 @@ Feature: Team process supervision
 | 0208 | Team server module: process list API, SSE attach stream, stdin endpoint (0195 wave B) | done |
 | 0209 | CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C) | done |
 | 0210 | Process List tab in observability module (0195 wave D) | done |
-| 0532 | Record G2 supervision AC verdicts so verifying can go done | todo |
+| 0532 | Record G2 supervision AC verdicts so verifying can go done | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -103,3 +103,5 @@ is the attach surface. Complements ADR-052/057 (process pipe ≠ inbox).
   then returned to `verifying` pending a verdict-close task.
 - 2026-08-13T05:25:06.049Z active → verifying (system)
 - 2026-08-13T05:25:46.650Z verifying → active (system)
+- 2026-08-13T18:30:35.227Z active → verifying (system)
+- 2026-08-13T18:30:35.420Z verifying → done (system)

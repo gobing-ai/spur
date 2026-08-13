@@ -61,3 +61,10 @@ Also repaired the pre-existing botched state: the 0502 record was stored as lite
 {"wbs":"0507","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
 {"wbs":"0508","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
 ```{"wbs":"0510","feature_id":"H","status":"done","verdict":"PASS","timestamp":"2026-08-11T17:00:00Z"}
+Appended to `.spur/run/wrapup-metrics.jsonl`:
+
+```jsonl
+{"wbs":"0532","feature_id":"G2","status":"done","verdict":"PASS","timestamp":"2026-08-13T18:36:49Z"}
+```
+
+Source: `spur task show 0532 --json` (status `done`, feature_id `G2`) + `.spur/run/0532-verdict.json` (verdict PASS).

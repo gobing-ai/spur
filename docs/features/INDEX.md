@@ -36,7 +36,7 @@
     └── [done] **F9**: AC-verifiable execution: BDD test scaffolds and tunable validation gates ([F9_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md](./F9_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md))
 [active] **G**: Collaboration ([G_collaboration.md](./G_collaboration.md))
     ├── [backlog] **G1**: Inbox IPC ([G1_inbox-ipc.md](./G1_inbox-ipc.md))
-    ├── [active] **G2**: Team process supervision ([G2_team-process-supervision.md](./G2_team-process-supervision.md))
+    ├── [done] **G2**: Team process supervision ([G2_team-process-supervision.md](./G2_team-process-supervision.md))
     ├── [backlog] **G3**: Workspace module ([G3_workspace-module.md](./G3_workspace-module.md))
     └── [active] **G4**: Inter-agent control plane ([G4_inter-agent-control-plane.md](./G4_inter-agent-control-plane.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
