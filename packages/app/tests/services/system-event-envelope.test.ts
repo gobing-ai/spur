@@ -70,6 +70,7 @@ describe('buildSystemEventEnvelope', () => {
 
         const explicit = buildSystemEventEnvelope(entry, { drained: false, severity: 'error' }, project);
         expect(explicit.presentation.severity).toBe('error');
+        expect(fromProducer.data?.severity).toBe('info');
     });
 
     test('metadata-only is a bounded allow-list and redacts before projection bounds', () => {

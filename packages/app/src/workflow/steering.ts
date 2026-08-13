@@ -35,6 +35,7 @@ export interface SteeringAck {
     readonly reason?: string;
     readonly note?: string;
     readonly at: string;
+    readonly severity?: 'info' | 'warning' | 'error';
 }
 
 /** Explicit declaration required before a failed action may be retried. */
@@ -293,7 +294,7 @@ export class WorkflowSteeringController {
     }
 
     private publish(ack: SteeringAck): SteeringAck {
-        this.onAck?.(ack);
+        this.onAck?.({ ...ack, severity: ack.accepted ? 'info' : 'warning' });
         return ack;
     }
 

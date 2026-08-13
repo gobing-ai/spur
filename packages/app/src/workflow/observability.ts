@@ -39,6 +39,8 @@ interface WorkflowEventBase {
     workflowName?: string;
     /** ISO timestamp the event was emitted. */
     at: string;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /** Bounded, trace-safe projection of resolved action options. */
@@ -220,7 +222,11 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
 
     async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
         await this.inner.finalizeRun(runId, status, completedAt);
-        await this.bus.emit('workflow.run.finalized', { ...this.envelope(runId, completedAt), status });
+        await this.bus.emit('workflow.run.finalized', {
+            ...this.envelope(runId, completedAt),
+            status,
+            severity: status === 'failed' ? 'error' : status === 'paused' ? 'warning' : 'info',
+        });
         // Do not clear correlation state here: the upstream engine deliberately
         // finalizes action rows fire-and-forget, so a late action-finished projection
         // may arrive after the run-finalized projection on the same adapter instance.
@@ -307,6 +313,7 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
             node: action.node,
             kind: action.kind,
             ...(projected !== undefined ? { result: projected } : {}),
+            severity: ok ? 'info' : 'error',
         });
     }
 
@@ -321,6 +328,7 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
             runId,
             ...(workflowName !== undefined ? { workflowName } : {}),
             at,
+            severity: 'info',
         };
     }
 

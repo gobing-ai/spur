@@ -47,6 +47,6 @@ export class BusPlanningEventEmitter implements EventEmitter {
         });
 
         // Then publish to subscribers.
-        this.bus.emit(event.event, event);
+        this.bus.emit(event.event, { ...event, severity: 'info' });
     }
 }

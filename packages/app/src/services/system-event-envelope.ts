@@ -1,3 +1,4 @@
+import type { EventSeverity } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
 import type { SystemEventCatalogEntry } from './event-names';
 
@@ -13,8 +14,8 @@ export type SystemEventProducerPackage =
     | '@gobing-ai/ts-rule-engine'
     | '@gobing-ai/ts-dual-workflow-engine';
 
-/** Presentation severity exposed to System Event consumers. */
-export type SystemEventSeverity = 'info' | 'warning' | 'error';
+/** Presentation severity exposed to System Event consumers. Same union as ts-libs producers. */
+export type SystemEventSeverity = EventSeverity;
 /** Supported action targets attached to a System Event presentation. */
 export type SystemEventActionKind = 'command' | 'filter' | 'path';
 /** Catalog strategies for deriving remediation actions from event context. */
@@ -102,6 +103,7 @@ const CORE_METADATA_PATHS = [
     'kind',
     'status',
     'outcome',
+    'severity',
     'reason',
     'durationMs',
     'usage',

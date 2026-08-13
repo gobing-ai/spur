@@ -16,6 +16,8 @@ export interface AgentExecutionBase {
     readonly at: string;
     /** OS subprocess pid when known (may be absent for buffered/pipe runs). */
     readonly pid?: number;
+    /** Producer-owned observability severity. */
+    readonly severity?: 'info' | 'warning' | 'error';
 }
 
 /** Emitted after agent/model/invocation resolution and before process dispatch. */
@@ -65,6 +67,18 @@ export type AgentExecutionEvent =
     | AgentExecutionHeartbeatEvent
     | AgentExecutionDroppedEvent
     | AgentExecutionFinishedEvent;
+
+function executionSeverity(detail: {
+    kind: AgentExecutionEvent['kind'];
+    outcome?: string;
+}): 'info' | 'warning' | 'error' {
+    if (detail.kind === 'dropped') return 'warning';
+    if (detail.kind === 'finished') {
+        if (detail.outcome === 'failed') return 'error';
+        if (detail.outcome === 'cancelled') return 'warning';
+    }
+    return 'info';
+}
 
 /** Best-effort synchronous observer invoked by the asynchronous lifecycle relay. */
 export type AgentExecutionObserver = (event: AgentExecutionEvent) => void;
@@ -242,6 +256,7 @@ export class AgentExecutionLifecycle {
             sequence: this.sequence,
             runId: this.correlation.runId,
             executionId: this.correlation.executionId,
+            severity: executionSeverity(detail),
             ...(this.correlation.actionId !== undefined ? { actionId: this.correlation.actionId } : {}),
             ...(this.pid !== undefined ? { pid: this.pid } : {}),
             at: new Date().toISOString(),

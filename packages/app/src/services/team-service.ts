@@ -73,6 +73,8 @@ export interface MessageEventPayload {
     /** Thread root id (`in_reply_to`) when this message is a reply, else null. */
     threadId: string | null;
     createdAt: string;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /**
@@ -86,6 +88,8 @@ export interface TeamLifecycleEventPayload {
     memberCount: number;
     /** Operation outcome label (`ok`, `check`, `purged`, …). */
     outcome: string;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /**
@@ -101,6 +105,8 @@ export interface TeamMemberEventPayload {
     outcome: string;
     /** Optional task id for assignment events. */
     taskId?: string | null;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /** Bus shape for message lifecycle events (legacy alias of {@link TeamServiceEventBus}). */
@@ -802,7 +808,7 @@ export class TeamService {
         const bus = this.ctx.eventBus;
         if (!bus) return;
         try {
-            bus.emit(name, payload);
+            bus.emit(name, { ...payload, severity: 'info' });
         } catch {
             // Swallow — see method doc.
         }
@@ -816,7 +822,7 @@ export class TeamService {
         const bus = this.ctx.eventBus;
         if (!bus) return;
         try {
-            bus.emit(name, payload);
+            bus.emit(name, { ...payload, severity: 'info' });
         } catch {
             // Swallow — event is observable metadata only.
         }
@@ -833,7 +839,7 @@ export class TeamService {
         const bus = this.ctx.eventBus;
         if (!bus) return;
         try {
-            bus.emit(name, payload);
+            bus.emit(name, { ...payload, severity: 'info' });
         } catch {
             // Swallow — event is observable metadata only.
         }

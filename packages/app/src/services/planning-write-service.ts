@@ -113,6 +113,7 @@ export interface PlanningEvent {
     readonly from?: string;
     readonly to?: string;
     readonly data?: Readonly<Record<string, unknown>>;
+    readonly severity?: 'info' | 'warning' | 'error';
 }
 
 /**

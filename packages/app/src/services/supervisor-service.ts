@@ -41,6 +41,8 @@ export interface ProcessEventPayload {
     teamId?: string | null;
     /** Coding-agent type from the agent spec when known. */
     agentType?: string;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /**
@@ -53,6 +55,8 @@ export interface SupervisorTeamMemberEventPayload {
     memberId: string | null;
     agentType: string | null;
     outcome: string;
+    /** Producer-owned observability severity. */
+    severity?: 'info' | 'warning' | 'error';
 }
 
 /** Bus shape for process + team.member lifecycle events from SupervisorService. */
@@ -440,7 +444,12 @@ export class SupervisorService {
 
     private emit(name: 'process.spawned' | 'process.exited' | 'process.stopped', payload: ProcessEventPayload): void {
         try {
-            this.eventBus.emit(name, payload);
+            const exitCode = payload.exitCode;
+            const severity =
+                name === 'process.exited' && exitCode !== undefined && exitCode !== null && exitCode !== 0
+                    ? 'warning'
+                    : 'info';
+            this.eventBus.emit(name, { ...payload, severity });
         } catch {
             // Bus failure must not break process management.
         }
@@ -451,7 +460,7 @@ export class SupervisorService {
         payload: SupervisorTeamMemberEventPayload,
     ): void {
         try {
-            this.eventBus.emit(name, payload);
+            this.eventBus.emit(name, { ...payload, severity: 'info' });
         } catch {
             // Bus failure must not break process management.
         }

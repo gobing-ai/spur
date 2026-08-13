@@ -92,6 +92,7 @@ export class StreamingShellActionRunner implements ActionRunner {
                                 node: context.stateOrNodeId,
                                 stream,
                                 chunk: bounded(chunk),
+                                severity: 'info',
                             };
                             // Sequence is a per-run monotonic counter; the CLI
                             // reporter only reads stream/chunk, so a fresh counter
@@ -115,6 +116,7 @@ export class StreamingShellActionRunner implements ActionRunner {
                                 node: context.stateOrNodeId,
                                 stream,
                                 chunk: bounded(tail),
+                                severity: 'info',
                             });
                         }
                     }
