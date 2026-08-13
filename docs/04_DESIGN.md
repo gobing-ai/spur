@@ -270,12 +270,13 @@ in the same process (default `invoke-exit`); enqueue is not rolled back on wait 
 wait_stalled | timeout` (exit 1). `--until blocked` has no first-class signal in wave 2 → exit 2.
 No oRPC wait path in this wave.
 
-#### `spur message send --to <id> <body> [--from <id>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
+#### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
 Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `TeamService` →
 `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
 
 - `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
+  `--wait` / `--until` / `--timeout` are documented with `agent wait` above.
 - `inbox` — list messages addressed to `--agent` (`<id> <status> <from> <body> <createdAt>`); reports
   "No messages" when empty.
 - `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
@@ -349,6 +350,13 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
 > [`design/workflow-run-log.md`](design/workflow-run-log.md).
 
 - `validate <file>` — load + Zod-validate a workflow definition.
+- **YAML extensions (0533/D4):** a workflow may declare `extensions.actions: [./module.ts]` /
+  `extensions.guards: [...]` — relative module paths resolved against the workflow file's own
+  directory. `validate`, `run` (incl. `--dry-run`), and `continue` all load them onto the engine
+  host before any step (same path for all three). The YAML declaration is the `allowExtensions`
+  gate; a missing module, a module without the declared capability, an absolute path, or `..`
+  traversal fails the command before any workflow step. Schema: both workflow JSON schemas carry
+  `extensions` (0431 parity).
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.

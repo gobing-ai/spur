@@ -76,7 +76,22 @@ Once registered, any definition can use `kind: send-email` (in `onEnter`/`onExit
 
 ## Extension loading (trust-gated)
 
-For modules that bundle multiple actions/guards, use `loadWorkflowExtensionsIntoHost`. The trust gate
+A workflow YAML can declare extension modules next to the workflow file itself:
+
+```yaml
+name: ext-flow
+kind: state-machine
+extensions:
+  actions: ["./exts/audit.ts"]   # default-exports { name, actions: [...] }
+  guards:  ["./exts/flag.ts"]    # default-exports { name, guards: [...] }
+```
+
+`spur workflow validate`, `run` (incl. `--dry-run`), and `continue` load YAML-declared extensions
+onto the engine host before any step — the declaration itself is the `allowExtensions` gate (0533/D4).
+Paths are relative to the workflow file; absolute paths and `..` traversal are rejected with no
+import, and a missing or mis-shaped module fails the command before any step.
+
+For library callers, use `loadWorkflowExtensionsIntoHost`. The trust gate
 is **fail-closed**: `allowExtensions` defaults to `false`, and a declared-but-not-allowed extension
 **throws before any import** — never silently dropped.
 
@@ -117,8 +132,8 @@ reach for the library (`@gobing-ai/ts-dual-workflow-engine`) directly when you n
 | ---------- | --- | ------- |
 | Validate / run / list definitions | ✅ | ✅ |
 | Trace run history / continue HITL / cancel / clean orphans | ✅ | ✅ |
-| Custom action/guard runners | ✅ (built-ins only) | ✅ (`registerAction`/`registerGuard`) |
-| Extension modules | — | ✅ (`loadWorkflowExtensionsIntoHost`) |
+| Custom action/guard runners | ✅ (built-ins + YAML extensions, 0533/D4) | ✅ (`registerAction`/`registerGuard`) |
+| Extension modules | ✅ (YAML `extensions.actions`/`extensions.guards`, 0533/D4) | ✅ (`loadWorkflowExtensionsIntoHost`) |
 | DB persistence + programmatic `listRuns()` | (via configured adapter + `trace`) | ✅ (`DbWorkflowPersistenceAdapter`) |
 | Event-bus observability (progress bars, dashboards) | partial (CLI step reporter on sync human runs) | ✅ (`WorkflowEngineEvents` via `WorkflowRunOptions.events`) |
 | OTel traces / structured logs | (emitted) | ✅ (`RunLifecycle`) |

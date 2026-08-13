@@ -2144,3 +2144,251 @@ describe('workflow.logRetentionDays config flows to clean (task 0429)', () => {
         await rm(dir, { recursive: true, force: true });
     });
 });
+
+// ── 0533 / D4: workflow YAML extensions (actions/guards) ─────────────────────
+
+/** Write a workflow YAML + an extension module into a temp project dir. */
+async function seedExtensionProject(opts: {
+    name: string;
+    extensions?: { actions?: string[]; guards?: string[] };
+    extModules?: Record<string, string>;
+}): Promise<{ dir: string; wfPath: string }> {
+    const dir = await mkdtemp(join(tmpdir(), 'spur-wf-ext-'));
+    const extsDir = join(dir, 'exts');
+    await mkdir(extsDir, { recursive: true });
+    const lines = [`name: ${opts.name}`, 'kind: state-machine', 'initialState: start'];
+    if (opts.extensions !== undefined) {
+        lines.push('extensions:');
+        if (opts.extensions.actions !== undefined) {
+            lines.push('  actions:');
+            for (const p of opts.extensions.actions) lines.push(`    - ${p}`);
+        }
+        if (opts.extensions.guards !== undefined) {
+            lines.push('  guards:');
+            for (const p of opts.extensions.guards) lines.push(`    - ${p}`);
+        }
+    }
+    lines.push('states:', '  - id: start');
+    // Only reference the extension action when the workflow declares one; a
+    // guard-only workflow must not require the action module (R2).
+    if (opts.extensions?.actions !== undefined) {
+        lines.push('    onEnter:', '      - kind: audit-log', '        options:', '          marker: marker.txt');
+    }
+    lines.push(
+        '  - id: done',
+        'transitions:',
+        '  - from: start',
+        '    to: done',
+        // Only reference the extension guard when the workflow declares one; a
+        // action-only workflow must not require the guard module (R1).
+        ...(opts.extensions?.guards !== undefined ? ['    guard: { kind: feature-flag }'] : []),
+        'terminalStates:',
+        '  - done',
+    );
+    const wfPath = join(dir, 'flow.yaml');
+    await writeFile(wfPath, lines.join('\n'));
+    for (const [rel, source] of Object.entries(opts.extModules ?? {})) {
+        await writeFile(join(extsDir, rel), source);
+    }
+    return { dir, wfPath };
+}
+
+const AUDIT_EXT = `
+export default {
+    name: 'audit-ext',
+    actions: [
+        {
+            kind: 'audit-log',
+            async execute(options, context) {
+                const { writeFileSync, mkdirSync } = await import('node:fs');
+                const { join } = await import('node:path');
+                const base = context.workdir ?? process.cwd();
+                mkdirSync(base, { recursive: true });
+                writeFileSync(join(base, String(options.marker ?? 'marker.txt')), 'ran', 'utf8');
+                return { ok: true };
+            },
+        },
+    ],
+};
+`;
+
+const FLAG_EXT = `
+export default {
+    name: 'flag-ext',
+    guards: [
+        {
+            kind: 'feature-flag',
+            async evaluate() {
+                return true;
+            },
+        },
+    ],
+};
+`;
+
+describe('WorkflowAppService — workflow YAML extensions (0533 / D4)', () => {
+    test('R1: a listed action module is registered for the same file', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-action',
+            extensions: { actions: ['./exts/audit.ts'] },
+            extModules: { 'audit.ts': AUDIT_EXT },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(wfPath, { runId: 'ext-a1' });
+            expect(result.status).toBe('done');
+            const marker = await readFile(join(dir, 'marker.txt'), 'utf8').catch(() => '');
+            expect(marker).toBe('ran');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: a listed guard module is registered and evaluated', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-guard',
+            extensions: { guards: ['./exts/flag.ts'] },
+            extModules: { 'flag.ts': FLAG_EXT },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(wfPath, { runId: 'ext-g1' });
+            // Guard feature-flag evaluates true → transition taken → done.
+            expect(result.status).toBe('done');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R3: validate fails closed on a missing extension module', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-missing',
+            extensions: { actions: ['./exts/nope.ts'] },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(wfPath);
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.errors.join('\n')).toMatch(/nope\.ts/);
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R3: run fails closed on a module without the declared capability', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-misshape',
+            extensions: { actions: ['./exts/bad.ts'] },
+            extModules: { 'bad.ts': 'export default { name: "bad-ext" };\n' },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await expect(svc.run(wfPath, { runId: 'ext-b1' })).rejects.toThrow(/actions\[\]/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: dry-run uses the same loaded host (guard registered + evaluated)', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-dry',
+            extensions: { guards: ['./exts/flag.ts'] },
+            extModules: { 'flag.ts': FLAG_EXT },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(wfPath, { runId: 'ext-d1', dryRun: true });
+            // Guards evaluate even under dry-run; a missing guard would fail here.
+            expect(result.status).toBe('done');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: absolute paths are rejected with no import', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-abs',
+            extensions: { actions: ['/etc/passwd'] },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const validated = await svc.validate(wfPath);
+            expect(validated.valid).toBe(false);
+            if (!validated.valid) {
+                expect(validated.errors.join('\n')).toMatch(/relative|absolute/i);
+            }
+            await expect(svc.run(wfPath, { runId: 'ext-ab1' })).rejects.toThrow(/relative|absolute/i);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: ".." traversal is rejected with no import', async () => {
+        const { dir, wfPath } = await seedExtensionProject({
+            name: 'ext-dotdot',
+            extensions: { actions: ['./../escape.ts'] },
+        });
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const validated = await svc.validate(wfPath);
+            expect(validated.valid).toBe(false);
+            if (!validated.valid) {
+                expect(validated.errors.join('\n')).toMatch(/traversal|\.\./);
+            }
+            await expect(svc.run(wfPath, { runId: 'ext-d1' })).rejects.toThrow(/traversal|\.\./);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('WorkflowAppService — continue loads workflow YAML extensions (0533 / D4)', () => {
+    test('R4: continue re-registers extension guards from the workflow file', async () => {
+        // A pausing workflow whose resume transition is gated by an extension
+        // guard. If continue did not load extensions, the resume would fail with
+        // an unknown-guard error instead of taking the transition.
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-ext-cont-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        const extsDir = join(wfDir, 'exts');
+        await mkdir(extsDir, { recursive: true });
+        const wfPath = join(wfDir, 'ext-pauser.yaml');
+        await writeFile(
+            wfPath,
+            [
+                'name: ext-pauser',
+                'kind: state-machine',
+                'initialState: start',
+                'extensions:',
+                '  guards:',
+                '    - ./exts/flag.ts',
+                'states:',
+                '  - id: start',
+                '  - id: gate',
+                '    pause: true',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: gate',
+                '    guard: { kind: always }',
+                '  - from: gate',
+                '    to: done',
+                '    guard: { kind: feature-flag }',
+                'terminalStates:',
+                '  - done',
+            ].join('\n'),
+        );
+        await writeFile(join(extsDir, 'flag.ts'), FLAG_EXT);
+        try {
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const paused = await svc.run(wfPath, { runId: 'ext-p1' });
+            expect(paused.status).toBe('paused');
+
+            const resumed = await svc.continuePaused('ext-p1');
+            expect(resumed.status).toBe('done');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});

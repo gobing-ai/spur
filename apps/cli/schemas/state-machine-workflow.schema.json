@@ -6,29 +6,83 @@
     "additionalProperties": false,
     "required": ["name", "initialState", "states", "transitions"],
     "properties": {
-        "$schema": { "type": "string" },
-        "kind": { "const": "state-machine" },
-        "name": { "type": "string", "minLength": 1 },
-        "version": { "type": "string" },
-        "description": { "type": "string" },
-        "initialState": { "type": "string", "minLength": 1 },
-        "terminalStates": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "$schema": {
+            "type": "string"
+        },
+        "kind": {
+            "const": "state-machine"
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1
+        },
+        "version": {
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "initialState": {
+            "type": "string",
+            "minLength": 1
+        },
+        "terminalStates": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "minLength": 1
+            }
+        },
         "failureStates": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
-            "description": "Subset of terminalStates whose reach finalizes the run as failed. Absent ⇒ every terminal is a success."
+            "items": {
+                "type": "string",
+                "minLength": 1
+            },
+            "description": "Subset of terminalStates whose reach finalizes the run as failed. Absent \u21d2 every terminal is a success."
         },
-        "iterationBound": { "type": "integer", "exclusiveMinimum": 0 },
+        "iterationBound": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+        },
         "vars": {
             "type": "object",
-            "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-            "additionalProperties": { "type": "string" }
+            "propertyNames": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+                "type": "string"
+            }
         },
         "env": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-                "allow": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } }
+                "allow": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    }
+                }
+            }
+        },
+        "extensions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/relativeExtensionPath"
+                    }
+                },
+                "guards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/relativeExtensionPath"
+                    }
+                }
             }
         },
         "states": {
@@ -38,14 +92,29 @@
                 "additionalProperties": false,
                 "required": ["id"],
                 "properties": {
-                    "id": { "type": "string", "minLength": 1 },
-                    "description": { "type": "string" },
+                    "id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "description": {
+                        "type": "string"
+                    },
                     "pause": {
                         "type": "boolean",
                         "description": "When true, the engine pauses the run at this state for HITL (E3); resume with `spur workflow continue`."
                     },
-                    "onEnter": { "type": "array", "items": { "$ref": "#/$defs/action" } },
-                    "onExit": { "type": "array", "items": { "$ref": "#/$defs/action" } }
+                    "onEnter": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/action"
+                        }
+                    },
+                    "onExit": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/action"
+                        }
+                    }
                 }
             }
         },
@@ -56,11 +125,23 @@
                 "additionalProperties": false,
                 "required": ["from", "to"],
                 "properties": {
-                    "from": { "type": "string", "minLength": 1 },
-                    "to": { "type": "string", "minLength": 1 },
-                    "description": { "type": "string" },
-                    "trigger": { "type": "string" },
-                    "guard": { "$ref": "#/$defs/guard" }
+                    "from": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "to": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "trigger": {
+                        "type": "string"
+                    },
+                    "guard": {
+                        "$ref": "#/$defs/guard"
+                    }
                 }
             }
         }
@@ -71,8 +152,14 @@
             "additionalProperties": false,
             "required": ["kind"],
             "properties": {
-                "kind": { "type": "string", "minLength": 1 },
-                "options": { "type": "object", "additionalProperties": true }
+                "kind": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "options": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
             }
         },
         "guard": {
@@ -80,8 +167,32 @@
             "additionalProperties": false,
             "required": ["kind"],
             "properties": {
-                "kind": { "type": "string", "minLength": 1 },
-                "options": { "type": "object", "additionalProperties": true }
+                "kind": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "options": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "relativeExtensionPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative module path; absolute paths and '..' traversal are forbidden.",
+            "not": {
+                "anyOf": [
+                    {
+                        "pattern": "^[/\\\\]"
+                    },
+                    {
+                        "pattern": "^[A-Za-z]:[/\\\\]"
+                    },
+                    {
+                        "pattern": "(^|[/\\\\])\\.\\.([/\\\\]|$)"
+                    }
+                ]
             }
         }
     }

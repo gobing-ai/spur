@@ -281,6 +281,7 @@ redirecting `agent.run` stages (ADR-047).
   both scopes (lists what would be removed, writes nothing). `--json` returns
   `{ olderThanMinutes, dryRun, cleaned, logs: { retentionDays, dryRun, reclaimed, failures } }` (with
   `--logs`, the reclamation object alone).
+
 ## Behavior
 
 This skill behaves as an **author** (choose mode → write a correct definition → prove it runs) feeding
@@ -302,8 +303,11 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
    `.spur/workflows/basic.yaml` and `task-pipeline.yaml` quality-gate hop).
 4. **`env.allow` is an allowlist.** `${env.X}` resolves only if `X` is listed under `env.allow`;
    otherwise it resolves empty. A workflow that "loses" an environment value usually forgot to allow it.
-5. **Extensions are fail-closed.** Custom action/guard *modules* require `allowExtensions: true`; a
-   declared-but-not-allowed extension throws **before any import** — never silently dropped. Inline
+5. **Extensions are fail-closed.** The CLI loads YAML-declared extension modules itself
+   (`extensions.actions` / `extensions.guards`, resolved relative to the workflow file) — the
+   declaration is the gate (0533/D4). A declared-but-missing or mis-shaped module, an absolute
+   path, or `..` traversal throws **before any import** — never silently dropped. Library callers
+   using `loadWorkflowExtensionsIntoHost` must pass `allowExtensions: true` explicitly. Inline
    `host.registerAction`/`registerGuard` need no flag; only the module loader is gated.
 6. **A failed run does not throw.** Action/guard failures come back as `WorkflowRunResult` with
    `status: 'failed'`, preserving the run record. Read the trace; don't expect an exception. (Definition
@@ -341,11 +345,13 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
 ## Platform Notes
 
 ### Claude Code
+
 Run `spur workflow` via the Bash tool. During development the CLI entry is a `.ts` file that runs only
 under Bun: `bun run apps/cli/src/index.ts workflow validate <file> --json`. The installed `spur` binary
 works once built.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
+
 Run `spur workflow ...` via the Bash tool; parse `--json` output programmatically. Arguments are passed
 directly on the command line.
 

@@ -18,6 +18,7 @@ pathIgnorePatterns = ["vendors/**", "drizzle/**"]
 coveragePathIgnorePatterns = [
     "**/*.tsx",
     "**/tests/**/fixtures/**",
+    "**/spur-wf-ext-*/**",
     "apps/server/src/index.ts",
     "../ts-libs/**",
     "packages/domain/src/schema/**",

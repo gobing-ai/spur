@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
@@ -19,6 +19,7 @@ import { resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
     type ActionDef,
+    collectWorkflowExtensions,
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     type WorkflowRunResult as EngineWorkflowRunResult,
@@ -26,9 +27,11 @@ import {
     type GuardDef,
     type HitlResponder,
     loadWorkflowDef,
+    loadWorkflowExtensionsIntoHost,
     type StateMachineWorkflowDef,
     type TransitionFlowWorkflowDef,
     type WorkflowDef,
+    type WorkflowEngineHost,
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
@@ -463,6 +466,12 @@ export class WorkflowAppService {
                 return { ok: false, valid: false, file, errors: shellErrors };
             }
 
+            // 0533 R3: validate fails closed on a bad extension — a missing module,
+            // an absolute/`..` path, or a mis-shaped export surfaces as a validation
+            // error before any step. Same load path as run/continue (R2); a bare
+            // default host is enough for the import + shape check (no builtins/DB).
+            await this.loadWorkflowExtensions(createDefaultWorkflowEngineHost(), workflow, absolute);
+
             return { ok: true, valid: true, workflow };
         } catch (error) {
             return {
@@ -487,10 +496,23 @@ export class WorkflowAppService {
      */
     async run(file: string, opts: WorkflowRunOptions = {}): Promise<WorkflowRunResult> {
         const eventsBus = this.ctx.events?.();
+        // Pre-load with embedded-schema options so `run` resolves `$schema` through
+        // the same map as `validate` (task 0431 R1/R4). `svc.runFile` would call
+        // `loadWorkflowDef(path)` with no options, falling back to node resolution.
+        // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
+        // diverge on whether schema validation is on (task 0431 R4/R5). Loaded first
+        // so YAML-declared extensions can be registered on the host (0533 R1).
+        const absolute = resolve(this.ctx.cwd, file);
+        const embedded = this.embeddedSchemaOptions();
+        const workflow = await loadWorkflowDef(absolute, {
+            validateSchema: true,
+            ...(embedded !== undefined ? embedded : {}),
+        });
         const svc = await this.createEngineService({
             recordSelfPid: opts.recordSelfPid === true,
             events: eventsBus,
             steeringController: opts.steeringController,
+            extensions: { workflow, file: absolute },
         });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
@@ -518,12 +540,6 @@ export class WorkflowAppService {
         // `loadWorkflowDef(path)` with no options, falling back to node resolution.
         // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
         // diverge on whether schema validation is on (task 0431 R4/R5).
-        const absolute = resolve(this.ctx.cwd, file);
-        const embedded = this.embeddedSchemaOptions();
-        const workflow = await loadWorkflowDef(absolute, {
-            validateSchema: true,
-            ...(embedded !== undefined ? embedded : {}),
-        });
         const result = await svc.run(workflow, {
             workdir: this.ctx.cwd,
             runId,
@@ -742,18 +758,23 @@ export class WorkflowAppService {
         // observabilityBus inside createEngineService, engine-native names via the
         // resume options `events` field. CLI attaches a SystemEventDao tap to both.
         const eventsBus = this.ctx.events?.();
-        const svc = await this.createEngineService({ events: eventsBus });
-        const run = await svc.listPausedRuns();
-        const target = run.find((r) => r.id === runId);
-        if (target === undefined) {
+        // Locate the paused run via RunDao (no engine service needed yet) so the
+        // workflow def is available for extension loading (0533 R1/R4).
+        const row = await new RunDao(await this.ctx.getDb()).traceRowById(runId);
+        if (row?.status !== 'paused') {
             throw new Error(`Run "${runId}" is not paused (or does not exist) - nothing to continue.`);
         }
-        const workflow = await this.resolveWorkflowDefByName(target.workflow_name);
-        if (workflow === null) {
+        const resolved = await this.resolveWorkflowDefByName(row.workflow_name);
+        if (resolved === null) {
             throw new Error(
-                `Cannot resume run "${runId}": workflow definition "${target.workflow_name}" not found in the workflow search paths.`,
+                `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
             );
         }
+        const svc = await this.createEngineService({
+            events: eventsBus,
+            extensions: { workflow: resolved.workflow, file: resolved.path },
+        });
+        const workflow = resolved.workflow;
         // R1 of 0433: inject the operator's HITL answer into resume vars so guard
         // re-evaluation sees the override, not the stale headless default. The
         // engine's resumeRun merges options.vars over the persisted snapshot
@@ -783,8 +804,8 @@ export class WorkflowAppService {
         await new RunDao(db).stampFailureReason(runId, result.reason);
     }
 
-    /** Resolve a workflow definition by its `name` field, scanning the search paths. */
-    private async resolveWorkflowDefByName(name: string): Promise<WorkflowDef | null> {
+    /** Resolve a workflow definition + its source file by `name`, scanning the search paths. */
+    private async resolveWorkflowDefByName(name: string): Promise<{ workflow: WorkflowDef; path: string } | null> {
         const listing = await this.list();
         const entry = listing.entries.find((e) => e.name === name && e.valid);
         if (entry === undefined) return null;
@@ -793,7 +814,7 @@ export class WorkflowAppService {
             const abs = resolve(layer.path, entry.path);
             if (await fileExists(abs)) {
                 try {
-                    return await loadWorkflowDef(abs, { validateSchema: false });
+                    return { workflow: await loadWorkflowDef(abs, { validateSchema: false }), path: abs };
                 } catch {
                     // try the next layer
                 }
@@ -978,6 +999,8 @@ export class WorkflowAppService {
             recordSelfPid?: boolean;
             events?: EventBus<Record<string, (event: unknown) => void>>;
             steeringController?: WorkflowSteeringController;
+            /** Workflow def + source file to load YAML extensions from (0533 R1). */
+            extensions?: { workflow: WorkflowDef; file: string };
         } = {},
     ): Promise<EngineWorkflowService> {
         const processExec = this.ctx.processExecutor?.();
@@ -1027,6 +1050,13 @@ export class WorkflowAppService {
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
             agentConfig: agentSlice,
         });
+        // 0533 R1/R4: register YAML-declared extensions (actions/guards) on the
+        // same host run/continue use, before the service is constructed. The
+        // shared loader validates relative paths (abs/`..` rejected) and fails
+        // closed on a missing or mis-shaped module — before any workflow step.
+        if (opts.extensions !== undefined) {
+            await this.loadWorkflowExtensions(host, opts.extensions.workflow, opts.extensions.file);
+        }
         const db = await this.ctx.getDb();
         let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
         // Async worker: stamp this process's pid onto the run row at creation so
@@ -1036,6 +1066,25 @@ export class WorkflowAppService {
         }
         const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
         return new EngineWorkflowService(host, adapter);
+    }
+
+    /**
+     * Load YAML-declared `extensions.actions` / `extensions.guards` modules onto a
+     * workflow host (0533 R1). Paths are resolved against the workflow file's own
+     * directory; the shared loader rejects absolute paths and `..` traversal and
+     * fails closed when a module is missing or lacks the declared capability.
+     * The YAML declaration itself is the allowExtensions signal (R3) — a listed
+     * extension is always loaded, never silently dropped.
+     */
+    private async loadWorkflowExtensions(host: WorkflowEngineHost, workflow: WorkflowDef, file: string): Promise<void> {
+        const refs = collectWorkflowExtensions(workflow.name, dirname(file), workflow.extensions);
+        if (refs.length === 0) return;
+        const nodeFs = createNodeFileSystem();
+        await loadWorkflowExtensionsIntoHost(host, refs, {
+            allowExtensions: true,
+            moduleLoader: async (absPath) => (await import(absPath)) as Record<string, unknown>,
+            realPath: (absPath) => (nodeFs.realPath ? nodeFs.realPath(absPath) : absPath),
+        });
     }
 }
 
