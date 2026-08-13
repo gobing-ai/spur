@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T21:18:31.608Z"
-updated_at: "2026-08-13T22:01:34.325Z"
+updated_at: "2026-08-13T22:19:16.497Z"
 ---
 
 ## 0534. Fix harness discoverability defects found by feature A session forensics
@@ -263,26 +263,93 @@ Four independent fixes from the feature A forensics; no product behavior change 
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS (re-verified 2026-08-13, `/sp:dev-verify 0534 --force --focus all --fix all`)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `.alias('get')` on `task.command('show')` (`apps/cli/src/commands/task.ts:239`) and `feature show` (`apps/cli/src/commands/feature.ts:47`); live `spur task get 0119 --json` exit 0 (wbs 0119), `spur feature get ZZZZZ` matches show error contract; suggester untouched. Tests: `apps/cli/tests/commands/task.test.ts:394-404`, `apps/cli/tests/commands/feature.test.ts:102-108`. |
-| R2 | MET | `task update --help` and `feature update --help` both name `spur task sections <wbs> list` (live grep this session); `packages/app/src/services/feature-service.ts:233-234` rejection keeps `Available sections:` and appends the pointer; `sp:spur-cli` references `plugins/sp/skills/spur-cli/references/tasks.md:151`, `plugins/sp/skills/spur-cli/references/features.md:102`. Tests: `apps/cli/tests/commands/task.test.ts:406-414`, `apps/cli/tests/commands/feature.test.ts:110-118`, `packages/app/tests/services/feature-service.test.ts:161` regex `.*spur task sections <wbs> list`. |
-| R3 | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:50` OMP row corrected `input.command` → `arguments.command`; `:56-60` Fail-loud rule added (zero tool-command count across non-empty set = field-map error, never idle); `:59,:72` note the verified live key shape `['arguments','id','intent','name','partialArgs','streamIndex','type']`. Extraction paths exercised over the bundled example fixture: `jq -r '.. |
-| R4 | MET | `plugins/sp/skills/issue-finding/SKILL.md:205` `section-write` signal now `> 1.5× the canonical section count for the task's variant/status matrix entry (feature-impl ≈ 9 sections ⇒ flag > ~13 writes/task)`. One write per canonical section (9 ≤ 13.5) does not trip; a rewrite loop (>1.5× slots) does — both by the stated formula. |
+| R1 | MET | `.alias('get')` on `task.command('show')` (`apps/cli/src/commands/task.ts:239`) and on `feature show` (`apps/cli/src/commands/feature.ts:47`); no second top-level command registered (Design invariant). Live this run: `spur task get 0119 --json` → exit 0, wbs `0119`; `spur feature get ZZZZZ` → `Feature ZZZZZ not found` (same contract as `show`). Suggester untouched: `spur task shwo 0119` → `error: unknown command 'shwo'` + `(Did you mean show?)`. Tests: `apps/cli/tests/commands/task.test.ts:394-397` (alias), `:399-408` (suggester non-regression), `apps/cli/tests/commands/feature.test.ts:102-111`. |
+| R2 | MET | `apps/cli/src/commands/task.ts:277` appends `Valid section names (no failed write): \`spur task sections <wbs> list\`` to the existing `addHelpText('after')` block; `apps/cli/src/commands/feature.ts:79-86` carries the mirrored block. Live this run: both `task update --help` and `feature update --help` match the pointer (1 hit each). `packages/app/src/services/feature-service.ts:233-234` keeps `Available sections: …` and appends the pointer clause. References: `plugins/sp/skills/spur-cli/references/tasks.md:152-153`, `plugins/sp/skills/spur-cli/references/features.md:102`. Tests: `apps/cli/tests/commands/task.test.ts:410-415`, `apps/cli/tests/commands/feature.test.ts:113-118`, `packages/app/tests/services/feature-service.test.ts:160-162`. |
+| R3 | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:50` OMP row reads `arguments.command`; `:56-60` carries the Fail-loud rule; `:72-73` deep-dive bullet matches. Re-measured live this run against the exact References session set — corrected map extracts 7325 commands, old map 0 (command + counts below). Live toolCall key shape confirmed identical to the documented one. |
+| R4 | MET | `plugins/sp/skills/issue-finding/SKILL.md:205` `section-write` signal derives from the variant/status matrix entry: `> 1.5× the canonical section count`, not task count. Threshold arithmetic re-run this run (below): 9 writes → no flag; 14 and 36 writes → flag. |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| The guessed verb resolves instead of failing bare | MET | command | `spur task get 0119 --json` exit 0 (resolves like show, no fallback chain needed); `spur feature get ZZZZZ` exit 1 `Feature ZZZZZ not found` (same contract as show). |
-| The existing near-miss suggester is not regressed | MET | command | `spur task shwo 0119` → `error: unknown command 'shwo'` + `(Did you mean show?)`; pinned by test `apps/cli/tests/commands/task.test.ts:396-404`. |
-| Section names are reachable from the command that rejects them | MET | command | `spur task update --help` contains `Valid section names (no failed write): \`spur task sections <wbs> list\``; `spur feature update --help` contains `\`spur task sections <wbs> list\``; both live greps this session. |
-| A rejected section names the discovery command | MET | test | `packages/app/tests/services/feature-service.test.ts:161` asserts rejection matches `/Available sections: Goal, Scope, Acceptance Criteria, Tasks, Notes, History.*spur task sections <wbs> list/`; service code `packages/app/src/services/feature-service.ts:233-234` appends the pointer. |
-| The OMP field map extracts real commands | MET | command | Corrected row at `plugins/sp/skills/issue-finding/references/session-formats.md:50` (`arguments.command`); extraction paths verified over bundled `examples/session-test-loop.jsonl`: `jq -r '.. |
-| A zero command count is reported as a broken field map | MET | command | Fail-loud rule present at `plugins/sp/skills/issue-finding/references/session-formats.md:56-60`: "a zero tool-command count across a non-empty session set means the field map is wrong, not that the sessions were idle. Report a probable field-map error instead of an idle-session / no-waste finding" (verified by `rg -n "Fail-loud" plugins/sp/skills/issue-finding/references/session-formats.md`). |
-| One write per section does not trip the heuristic | MET | command | `node -e` threshold computation over the `plugins/sp/skills/issue-finding/SKILL.md:205` formula: canonical sections ≈ 9, threshold = 1.5 × 9 = 13.5; 9 writes → flag=false (no section-write finding). |
-| A genuine rewrite loop still trips the heuristic | MET | command | Same computation: 36 writes (> 13.5) → flag=true (section-write finding). |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| The guessed verb resolves instead of failing bare | MET | command | `spur task get 0119 --json` → exit 0, resolves like `show`, no fallback chain; `spur feature get ZZZZZ` → exit 1 `Feature ZZZZZ not found`, matching the `show` error contract. |
+| The existing near-miss suggester is not regressed | MET | command | `spur task shwo 0119` → `error: unknown command 'shwo'` + `(Did you mean show?)`; pinned by `apps/cli/tests/commands/task.test.ts:399-408`. |
+| Section names are reachable from the command that rejects them | MET | command | `spur task update --help` and `spur feature update --help` each contain `spur task sections <wbs> list` (live grep this run, 1 hit each). |
+| A rejected section names the discovery command | MET | test | `packages/app/tests/services/feature-service.test.ts:160-162` asserts the rejection matches `/Available sections: Goal, Scope, Acceptance Criteria, Tasks, Notes, History.*spur task sections <wbs> list/`; source at `packages/app/src/services/feature-service.ts:233-234`. |
+| The OMP field map extracts real commands | MET | command | Re-measured over the References session set (`~/.omp/agent/sessions/-xprojects-superskill`, 40 JSONL): corrected `arguments.command` map yields **7325** tool commands — **327** `spur` calls and **651** test runs, both > 0. Command and comparison below. |
+| A zero command count is reported as a broken field map | MET | command | Fail-loud rule present at `plugins/sp/skills/issue-finding/references/session-formats.md:56-60`: a zero tool-command count across a non-empty session set "means the field map is wrong, not that the sessions were idle… a parser that matches nothing must never produce a clean verdict". Verified by re-read at those lines this run. |
+| One write per section does not trip the heuristic | MET | command | Threshold computation over the formula at `plugins/sp/skills/issue-finding/SKILL.md:205`: slots = 9, threshold = 1.5 × 9 = 13.5; writes = 9 → `flag=false`; writes = 13 → `flag=false`. |
+| A genuine rewrite loop still trips the heuristic | MET | command | Same computation: writes = 14 → `flag=true`; writes = 36 → `flag=true`. |
+
+**R3 re-measurement (executable evidence, this run)**
+
+The original Solution recorded R3 as "not runnable on this box (sessions not present)" and verified it
+by inspection. That is superseded: the References session set is present and the extraction was run.
+
+```bash
+D=~/.omp/agent/sessions/-xprojects-superskill
+find "$D" -name '*.jsonl' | head -40 | xargs -I{} \
+  jq -r '..|objects|select(.type=="toolCall")|.arguments.command // empty' {}
+# corrected map → 7325 commands; spur=327; test=651
+find "$D" -name '*.jsonl' | head -40 | xargs -I{} \
+  jq -r '..|objects|select(.type=="toolCall")|.input.command // empty' {}
+# old (pre-fix) map → 0 commands
+```
+
+Live toolCall block keys: `arguments,id,intent,name,partialArgs,streamIndex,type` — identical to the
+shape documented at `plugins/sp/skills/issue-finding/references/session-formats.md:59-60` and
+`plugins/sp/skills/issue-finding/references/session-formats.md:72-73`.
+
+**R4 threshold computation (this run)**
+
+```bash
+node -e 'const slots=9, thr=1.5*slots; for (const w of [9,13,14,36]) console.log(`writes=${w} threshold=${thr} flag=${w>thr}`)'
+# writes=9  threshold=13.5 flag=false
+# writes=13 threshold=13.5 flag=false
+# writes=14 threshold=13.5 flag=true
+# writes=36 threshold=13.5 flag=true
+```
+
+**Gates re-run this run**
+
+- `bun test apps/cli/tests/commands/task.test.ts apps/cli/tests/commands/feature.test.ts packages/app/tests/services/feature-service.test.ts` → **245 pass, 0 fail** (1018 assertions, 3 files).
+- `bun test plugins/sp` → **708 pass, 0 fail** (2985 assertions, 23 files).
+- `spur task check 0534 --strict-core --json` → `pass: true`; sole finding `L4.missing-feature-id` (warning; task is `meta`/orphan by design, acknowledged in Review).
+- Design conformance: 8/8 frozen-name and anti-pattern claims DONE — alias not a second command, help text interpolates rather than hardcoding a section list, suggester config untouched, no analyzer capability added under R3/R4.
+
+**Confidence calibration**
+
+Not every MET row rests on evidence of equal strength. Recorded so a re-audit can tell measurement
+from arithmetic-over-prose without re-deriving it.
+
+| Claim | Confidence | Basis / limit |
+|-------|-----------|---------------|
+| R1 alias + suggester non-regression | **HIGH** | Executed this run; exit codes and stderr observed directly; pinned by tests re-run this run. |
+| R2 help pointers + rejection clause | **HIGH** | Live `--help` greps (1 hit each) + source re-read at cited lines + test re-run. |
+| R3 field map is correct | **HIGH** | Direct measurement over the References session set: corrected map 7325 commands vs pre-fix map 0. Live key shape matches the documented one. |
+| Gates (245 + 708 tests, strict-core) | **HIGH** | Commands run this session; counts pasted from their output. |
+| AC5 as literally worded | **MEDIUM** | The *field-map extraction* is verified live, but `sp:issue-finding` was not run end-to-end — the whole-skill path is inferred from its documented reliance on this map. Counts are also a 40-file sample (`head -40`) of the set, so 7325 / 327 / 651 are lower bounds, not full-set totals. |
+| AC6 fail-loud rule | **MEDIUM** | Rule *presence* verified by re-read at the cited lines. Whether an analyzing agent obeys it is not mechanically verifiable — no code enforces it. |
+| R4 / AC7 / AC8 heuristic | **MEDIUM** | Weakest leg. The threshold is prose in a skill doc with no executable implementation; the flag/no-flag results are arithmetic over the formula *as written*, not an analyzer run. Verifies the formula is self-consistent, not that any analyzer applies it. |
+| Design conformance 8/8 | **MEDIUM** | Judgment: prose design claims read against the diff. Mechanical for the frozen names (alias, no hardcoded list), interpretive for the anti-pattern clauses. |
+
+Aggregate: the PASS rests on HIGH-confidence evidence for R1, R2, and R3's field-map correction.
+R4 is MEDIUM by construction — a doc-only threshold cannot be verified harder than this without an
+analyzer to run it against. That ceiling is inherent to the requirement, not a gap in this run.
+
+**Fix-pass disclosure (gitignored writes)**
+
+- `.spur/run/0534-verdict.json` — rewritten in full this run: the R2 spur-cli tasks-reference anchor
+  was off by one (it pointed at the section-name list rather than the pointer bullet) and now reads
+  `plugins/sp/skills/spur-cli/references/tasks.md:152-153`; the R3 and "OMP field map" AC evidence
+  strings were truncated mid-`jq` filter by unescaped pipes inside table cells, and are repaired and
+  upgraded to the executable re-measurement above.
+
+- Coverage: N/A (verdict-based; the verify pipeline does not measure code coverage. R1/R2 code paths are covered by the 245-test CLI/app set above; R3/R4 are skill-doc changes with no runtime path.)
 ### Review
 **SECUA + traceability review (2026-08-13). Verdict: PASS — ship.**
 
