@@ -99,6 +99,7 @@ export function registerSchedulerEntries(scheduler: ServerScheduler, ctx: Server
                     name,
                     durationMs: Date.now() - startedAt,
                     ...(error !== undefined && { error: String(error) }),
+                    severity: error !== undefined ? 'error' : 'info',
                 });
             }
         });

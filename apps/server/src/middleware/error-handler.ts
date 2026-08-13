@@ -198,10 +198,13 @@ export const globalErrorHandler: ErrorHandler = (err, c) => {
         ctx.eventBus()?.emit('api.request.error', {
             method: c.req.method,
             path: c.req.path,
+            url: c.req.path,
             status: resolved.status,
             route: c.req.routePath,
             code: resolved.apiCode,
             requestId: requestId ?? null,
+            error: resolved.message,
+            severity: 'error',
         });
     }
 
