@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { applyCliMigrations } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
     type AgentConfig,
@@ -2396,5 +2398,110 @@ describe('AgentService automatic tier escalation (0407)', () => {
         // attempted executors (std-a, std-b) are never re-dispatched.
         expect(dispatchedAgents).toEqual(['pi', 'claude', 'codex']);
         expect(errors.some((e) => e.includes('Failover:'))).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService coordination (ADR-057 wave 1 / G4)
+// ---------------------------------------------------------------------------
+
+async function makeDbService(
+    env: Record<string, string | undefined> = {},
+    output: AgentServiceOutput = nullOutput(),
+    agentConfig?: AgentConfig,
+) {
+    const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+    await applyCliMigrations(adapter);
+    const svc = new AgentService({ cwd: process.cwd(), env, output, agentConfig, getDb: async () => adapter });
+    return { svc, adapter, output };
+}
+
+/** Minimal deps that dispatch `pi` and return exitCode 0. */
+function piDeps(result: AgentRunResult = makeRunResult()): AgentRunDeps {
+    const runner = { runPromptCommand: mock(() => Promise.resolve(result)) } as unknown as AgentRunDeps['runner'];
+    const detector = {
+        detectOne: mock(() =>
+            Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+        ),
+    } as unknown as AgentRunDeps['detector'];
+    const doctorRunner = {
+        runOne: mock(() => Promise.resolve(mockDoctorResult())),
+    } as unknown as AgentRunDeps['doctorRunner'];
+    return { runner, detector, doctorRunner };
+}
+
+describe('AgentService coordination (G4 / ADR-057 wave 1)', () => {
+    test('R1 — spec-id run persists occupant with specId + agentKind + generation', async () => {
+        const { svc, adapter } = await makeDbService();
+
+        const exitCode = await svc.run('hello', { agent: 'pi', 'spec-id': 'reviewer' }, piDeps());
+        expect(exitCode).toBe(0);
+
+        const occupant = await svc.getOccupant({ specId: 'reviewer' });
+        expect(occupant).not.toBeNull();
+        expect(occupant?.specId).toBe('reviewer');
+        expect(occupant?.agentKind).toBe('pi');
+        expect(occupant?.generation).toBeGreaterThanOrEqual(1);
+        expect(occupant?.runId).toBeTruthy();
+
+        const run = await svc.getCoordinationRun(occupant?.runId ?? '');
+        expect(run).not.toBeNull();
+        expect(run?.occupant.specId).toBe('reviewer');
+        expect(run?.status).toBe('exited');
+        expect(Array.isArray(run?.artifactRefs)).toBe(true);
+
+        adapter.close();
+    });
+
+    test('R1 — getOccupant by agentKind alone is rejected', async () => {
+        const { svc, adapter } = await makeDbService();
+        await expect(svc.getOccupant({ agentKind: 'codex' })).rejects.toThrow('occupant_lookup_kind_rejected');
+        adapter.close();
+    });
+
+    test('R1 — bare agent run (no spec-id) creates no occupant', async () => {
+        const { svc, adapter } = await makeDbService();
+
+        const exitCode = await svc.run('hello', { agent: 'pi' }, piDeps());
+        expect(exitCode).toBe(0);
+
+        // No spec-id → no coordination row. A spec-id lookup for 'pi' (never used
+        // as a spec here) finds nothing.
+        expect(await svc.getOccupant({ specId: 'pi' })).toBeNull();
+        adapter.close();
+    });
+
+    test('R2 — --json adds occupant + run keys, keeps existing keys', async () => {
+        const captured = captureOutput();
+        const { svc, adapter } = await makeDbService({}, captured.output);
+
+        const exitCode = await svc.run('hello', { agent: 'pi', 'spec-id': 'reviewer', json: true }, piDeps());
+        expect(exitCode).toBe(0);
+
+        const jsonLine = captured.lines.find((l) => l.includes('"occupant"'));
+        expect(jsonLine).toBeDefined();
+        const parsed = JSON.parse(jsonLine ?? '');
+        expect(parsed.exitCode).toBe(0); // existing key retained
+        expect(parsed.stdout).toBe('hello from agent');
+        expect(parsed.occupant.specId).toBe('reviewer');
+        expect(parsed.occupant.agentKind).toBe('pi');
+        expect(parsed.run.status).toBe('exited');
+        expect(Array.isArray(parsed.run.artifactRefs)).toBe(true);
+
+        adapter.close();
+    });
+
+    test('R2 — failed run records errored status', async () => {
+        const { svc, adapter } = await makeDbService();
+        const failed = makeRunResult({ exitCode: 1, stdout: '', stderr: 'boom' });
+
+        const exitCode = await svc.run('hello', { agent: 'pi', 'spec-id': 'reviewer' }, piDeps(failed));
+        expect(exitCode).toBe(3);
+
+        const occupant = await svc.getOccupant({ specId: 'reviewer' });
+        const run = await svc.getCoordinationRun(occupant?.runId ?? '');
+        expect(run?.status).toBe('errored');
+
+        adapter.close();
     });
 });

@@ -96,6 +96,28 @@ CREATE INDEX IF NOT EXISTS idx_system_events_run_id ON system_events (run_id);
 CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kind, entity_id);
 `;
 
+/**
+ * DDL for the `coordination_runs` table (ADR-057 wave 1 / feature G4). Stores
+ * occupant pins + path-only artifact refs so a sibling agent can address a run
+ * by runId. Never stdout/stderr bodies (design §4). `run_id` is the primary
+ * key (one row per invoke); `generation` is monotonic per specId.
+ */
+export const COORDINATION_RUNS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS coordination_runs (
+    spec_id TEXT NOT NULL,
+    agent_kind TEXT NOT NULL,
+    process_id TEXT,
+    run_id TEXT PRIMARY KEY,
+    generation INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    artifact_refs_json TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec_id, generation DESC);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
@@ -113,6 +135,8 @@ ${INBOX_MESSAGES_SCHEMA_SQL}
 ${QUEUE_JOBS_SCHEMA_SQL}
 
 ${SYSTEM_EVENTS_SCHEMA_SQL}
+
+${COORDINATION_RUNS_SCHEMA_SQL}
 `;
 
 /**
@@ -202,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * (`run_id`, `entity_kind`, `entity_id`, `sequence`) for pre-0369 ledgers.
  * `0009` adds the `(provenance, run_id)` index to `history_message` for the
  * analyze `--run`/`--task` selectors (task 0474).
+ * `0010` adds the `coordination_runs` occupant/artifact table (ADR-057 wave 1).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -231,6 +256,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         addColumnIfMissing: { table: 'system_events', column: 'sequence' },
     },
     { id: '0009_spur_cli_history_message_run_idx', sql: HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL },
+    { id: '0010_spur_cli_coordination_runs', sql: COORDINATION_RUNS_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

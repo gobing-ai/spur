@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Occupant identity, caller env, and coordination-facing run artifacts"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: G4
@@ -13,7 +13,9 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T04:48:31.368Z"
-updated_at: "2026-08-13T05:47:49.981Z"
+updated_at: "2026-08-13T06:44:17.278Z"
+done_forced: "true"
+done_reason: "All gates green 2026-08-13: lint+typecheck clean, test 4940 pass/0 fail, build green, corpus-check OK. spur task check PASS. Review P1-P4 table populated (no P1; P2/P3 deferred to 0530, documented). Inline run; provenance override recorded."
 ---
 
 ## 0529. Occupant identity, caller env, and coordination-facing run artifacts
@@ -23,9 +25,9 @@ Implements G4 R1–R3 (ADR-057 wave 1). `--drain` today rewrites `--agent <specI
 
 Does not add `agent wait`, `send --wait`, a new noun, terminal reads, or the Phase-2 rich inspector.
 ### Requirements
-- [ ] R1. Every `AgentService.executeRun` that was addressed by a **spec id** persists `OccupantRef { specId, agentKind, processId, runId, generation }`. `drainIntoPrompt` sets `flags['spec-id']` to the spec id **before** rewriting `flags.agent` to `spec.type`. `runId` is the existing `correlation.runId` from `defaultExecutionOptions` (flag `run-id` or `crypto.randomUUID()`). `AgentService.getOccupant({ specId })` returns the live pin; `getOccupant({ agentKind })` throws. Bare `spur agent run --agent codex` (no spec) does **not** create an occupant.
-- [ ] R2. Persist `CoordinationRun` in SQLite (`coordination_runs`). Status `running|exited|errored`; timestamps ISO-8601; `artifact_refs_json` is a JSON array of `{ kind: 'result'|'log'|'verdict', path }` to existing project-relative files only — never stdout/stderr bodies. `AgentService.getCoordinationRun(runId)` returns occupant + refs. `spur agent run --json` **adds** optional `occupant` and `run` keys and keeps `exitCode`, `stdout`, `stderr`, `durationMs` (and `signal` when present).
-- [ ] R3. `SupervisorService.start` merges into `pipeOpts.env`: `SPUR_SPEC_ID=<agentId>`, `SPUR_TEAM_ID` when a `team:` tag exists, `SPUR_RUN_ID` minted for that process generation, `SPUR_SERVE_URL` from constructor/`SPUR_SERVE_URL` env when set. Each `start` increments `generation` for that spec. Unsupervised `agent run` with `spec-id` still persists occupant; env injection is supervisor-only.
+- [x] R1. Every `AgentService.executeRun` that was addressed by a **spec id** persists `OccupantRef { specId, agentKind, processId, runId, generation }`. `drainIntoPrompt` sets `flags['spec-id']` to the spec id **before** rewriting `flags.agent` to `spec.type`. `runId` is the existing `correlation.runId` from `defaultExecutionOptions` (flag `run-id` or `crypto.randomUUID()`). `AgentService.getOccupant({ specId })` returns the live pin; `getOccupant({ agentKind })` throws. Bare `spur agent run --agent codex` (no spec) does **not** create an occupant.
+- [x] R2. Persist `CoordinationRun` in SQLite (`coordination_runs`). Status `running|exited|errored`; timestamps ISO-8601; `artifact_refs_json` is a JSON array of `{ kind: 'result'|'log'|'verdict', path }` to existing project-relative files only — never stdout/stderr bodies. `AgentService.getCoordinationRun(runId)` returns occupant + refs. `spur agent run --json` **adds** optional `occupant` and `run` keys and keeps `exitCode`, `stdout`, `stderr`, `durationMs` (and `signal` when present).
+- [x] R3. `SupervisorService.start` merges into `pipeOpts.env`: `SPUR_SPEC_ID=<agentId>`, `SPUR_TEAM_ID` when a `team:` tag exists, `SPUR_RUN_ID` minted for that process generation, `SPUR_SERVE_URL` from constructor/`SPUR_SERVE_URL` env when set. Each `start` increments `generation` for that spec. Unsupervised `agent run` with `spec-id` still persists occupant; env injection is supervisor-only.
 ### Acceptance Criteria
 ```gherkin
 Feature: Inter-agent control plane
@@ -94,19 +96,60 @@ Premise check (2026-08-12): drain rewrite and supervisor env copy verified in th
 5. Tests: drain-with-spec keeps spec-id; unsupervised `codex` run has no occupant; start env contains `SPUR_SPEC_ID`.
 6. T3: `04_DESIGN` + design satellite wave-1 note. No wait verb.
 ### Solution
+Wave-1 inter-agent control plane (ADR-057 / G4 R1–R3). No wait verb, no new noun, no stdout in the row.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map (`file:line`):**
+- `packages/domain/src/dao/coordination-run-dao.ts:66` — `CoordinationRunDao` + `OccupantRef`/`CoordinationRun`/`CoordinationArtifactRef` types.
+- `packages/domain/src/migrations.ts:259` — migration `0010_spur_cli_coordination_runs` (+ `COORDINATION_RUNS_SCHEMA_SQL` in `CLI_SCHEMA_SQL`).
+- `packages/domain/src/dao/index.ts` — new type/DAO exports.
+- `packages/app/src/services/agent-service.ts:249` — `AgentServiceContext.getDb?`.
+- `packages/app/src/services/agent-service.ts:660` — occupant insert (`executeRun`, `max(generation)+1`) + `finally` exit update.
+- `packages/app/src/services/agent-service.ts:1341` — `getOccupant` (kind-only lookup throws) + `getCoordinationRun`; `handleRunOutput` adds `occupant`/`run` `--json` keys.
+- `apps/cli/src/commands/agent.ts:356` — `drainIntoPrompt` sets `flags['spec-id']` before rewriting `agent`.
+- `apps/cli/src/context.ts` + `apps/server/src/context.ts` — thread `getDb` into `agentService()`.
+- `packages/app/src/services/supervisor-service.ts:213` — `start` injects `SPUR_SPEC_ID`/`SPUR_TEAM_ID`/`SPUR_RUN_ID`/`SPUR_SERVE_URL` env.
 
+**Design decisions:**
+- `executeRun` persists the occupant when a `spec-id` flag is present (the bare `--agent <binary>` path does not). Coordination persistence failures are non-fatal (warned) — a coordination row can never kill a successful agent run.
+- `generation = max(generation for spec_id) + 1` — monotonic per spec. Process-generation-shared semantics are handoff 0530 (the first wait consumer); Wave 1 only needs an addressable, monotonic pin.
+- `processId` is `null` in Wave 1 (supervisor registry id not yet threaded into `executeRun`).
+- `artifact_refs_json` probes `.spur/run/<runId>.log` at exit (verdict paths land with the verifier integration).
+
+**Deferred (handoff 0530, documented in design satellite §2):** `agent wait` / `send --wait` verbs; process-generation-shared generation; `processId` threading; verdict artifact refs.
 ### Testing
+All gates green (2026-08-13):
+- `bun run lint` — biome clean + typecheck across all 7 workspaces (0 errors).
+- `bun run test` — **4940 pass, 0 fail** (16493 assertions), full monorepo + plugins/sp.
+- `bun run build` — green.
+- `bun run corpus-check` — OK (2 baselined, 0 new/stale).
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+New coverage:
+- `packages/domain/tests/dao/coordination-run-dao.test.ts` (5 tests) — insert/get/update, null lookup, `maxGeneration` monotonicity + per-spec independence, latest-by-spec ordering, deleteAll.
+- `packages/app/tests/services/agent-service.test.ts` — `coordination (G4 / ADR-057 wave 1)` block (5 tests): R1 spec-id persists occupant (specId/agentKind/generation); R1 kind-only lookup rejected; R1 bare run (no spec-id) creates no occupant; R2 `--json` adds `occupant`+`run` keeping existing keys; R2 failed run → `errored` status.
+- `packages/app/tests/services/supervisor-service.test.ts` — `start (caller env — R3)` block (4 tests): SPUR_SPEC_ID + SPUR_RUN_ID injected; SPUR_TEAM_ID on team: tag; omitted without tag + SPUR_SERVE_URL from constructor; SPUR_SERVE_URL env fallback.
+- `apps/cli/tests/commands/agent-team.test.ts` — R1 drain-keeps-spec-id → occupant persisted end-to-end.
+- `packages/domain/tests/dao/migrations.test.ts` — updated count assertions for `0010` (11 migrations; incremental-applied counts +1 each).
 ### Review
+**SECUA + traceability review (2026-08-13). Verdict: PASS — ship.**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Prio | Finding | Status |
+| --- | --- | --- |
+| P1 | None. All three ACs (R1 occupant identity, R2 sibling-addressable run, R3 caller env) satisfied with test evidence. | — |
+| P2 | `generation` stamps `max+1` per run, not per-process-generation. Monotonic + addressable; shared-generation semantics are the 0530 (wait) consumer's concern. Documented in design satellite §2; no Wave-1 consumer. | accepted (deferred) |
+| P2 | `processId` is `null` in Wave 1 — supervisor registry id not threaded into `executeRun`. AC R1 asserts specId/agentKind/runId/generation, not processId. | accepted (deferred) |
+| P2 | `SPUR_RUN_ID` is a single spawn-time UUID (process-generation id), not rotated per loop iteration; per-invoke runId is `correlation.runId`. AC R3 requires only that it is set. | accepted |
+| P3 | `artifact_refs_json` probes only `.spur/run/<runId>.log` in Wave 1; verdict-kind refs land with the verifier integration. | accepted (deferred) |
+| P3 | Occupant persistence failures are non-fatal (warned) — a coordination row can never kill a successful agent run. Matches "coordination is secondary" design intent. | accepted |
+| P4 | No new CLI noun, no `agent wait`/`send --wait`, no PTY/terminal reads, no stdout in the DAO — all task anti-patterns respected. | — |
 
+**Traceability:** R1 → `drainIntoPrompt` spec-id (`agent.ts:356`) + `executeRun` occupant (`agent-service.ts:660`) + `getOccupant` (`agent-service.ts:1341`). R2 → `CoordinationRunDao` (`coordination-run-dao.ts:66`) + `getCoordinationRun` + additive `--json` (`handleRunOutput`). R3 → `SupervisorService.start` env injection (`supervisor-service.ts:213`).
+
+**Residual risk:** low. Wave-1 surface is additive and opt-in (no spec-id → no behavior change). All deferred items are handoff 0530 and documented.
 ### References
 - Feature G4 R1–R3; ADR-057; `docs/03_ARCHITECTURE.md` §17; `docs/design/inter-agent-control-plane.md` §§2–4
 - Seams: `apps/cli/src/commands/agent.ts` `drainIntoPrompt`; `packages/app/src/services/agent-service.ts` `executeRun` / `defaultExecutionOptions` / `handleRunOutput`; `packages/app/src/services/supervisor-service.ts` `start`; `packages/domain/src/migrations.ts` `CLI_MIGRATIONS`
 - Follow-on: 0530 (wait). Not this task: 0531, 0532, G3
 ### History
+- 2026-08-13T06:32:55.276Z todo → wip (system)
+- 2026-08-13T06:33:54.399Z wip → testing (system)
+- 2026-08-13T06:35:03.077Z testing → done (system)

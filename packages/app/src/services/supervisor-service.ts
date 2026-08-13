@@ -78,6 +78,11 @@ export interface SupervisorOptions {
     ringBufferSize?: number;
     /** Pre-loaded specs — omit to load from configDir at first start. */
     agentSpecs?: AgentSpec[];
+    /**
+     * `spur serve` API base, injected as `SPUR_SERVE_URL` into supervised
+     * processes (ADR-057 wave 1 R3). Omit when not launched by `spur serve`.
+     */
+    serveUrl?: string;
 }
 
 // ── Constants ──
@@ -118,6 +123,8 @@ export class SupervisorService {
     private readonly processExecutor: ProcessExecutor;
     private readonly eventBus: ProcessEventBus;
     private readonly configDir: string;
+    /** `spur serve` API base for `SPUR_SERVE_URL` injection (R3). */
+    private readonly serveUrl?: string;
     /** Agent ids that already emitted `team.member.stopped` via explicit stop(). */
     private readonly teamMemberStopEmitted = new Set<string>();
     private readonly ringBufferSize: number;
@@ -133,6 +140,7 @@ export class SupervisorService {
         this.eventBus = options.eventBus;
         this.configDir = options.configDir;
         this.ringBufferSize = options.ringBufferSize ?? DEFAULT_RING_BUFFER_SIZE;
+        this.serveUrl = options.serveUrl;
         if (options.agentSpecs) {
             this.specsPromise = Promise.resolve(options.agentSpecs);
         }
@@ -195,10 +203,20 @@ export class SupervisorService {
             agentId,
             // Thread teamId into ProcessRegistry execution row (spur#0267 R1).
             ...(teamId ? { teamId } : {}),
-            env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) as Record<
-                string,
-                string
-            >,
+            env: {
+                ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)),
+                // Caller identity env (ADR-057 wave 1 R3): inject the spec id so the
+                // supervised loop (and its `executeRun` calls) know their occupant.
+                // SPUR_RUN_ID is the process-generation id; per-invoke runId is minted
+                // separately by AgentService. SPUR_SERVE_URL is passed through only
+                // when the supervisor itself was launched with it.
+                SPUR_SPEC_ID: agentId,
+                ...(teamId !== null ? { SPUR_TEAM_ID: teamId } : {}),
+                SPUR_RUN_ID: crypto.randomUUID(),
+                ...((this.serveUrl ?? process.env.SPUR_SERVE_URL) !== undefined
+                    ? { SPUR_SERVE_URL: (this.serveUrl ?? process.env.SPUR_SERVE_URL) as string }
+                    : {}),
+            } as Record<string, string>,
         };
 
         const handle = this.processExecutor.runStreaming(pipeOpts);

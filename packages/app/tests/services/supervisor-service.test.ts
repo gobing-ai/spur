@@ -731,4 +731,80 @@ describe('SupervisorService', () => {
             vi.useRealTimers();
         });
     });
+
+    describe('start (caller env — ADR-057 wave 1 R3)', () => {
+        test('injects SPUR_SPEC_ID and SPUR_RUN_ID into the spawned process env', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'] })],
+            });
+
+            await svc.start('reviewer');
+
+            const env = calls[0]?.env as Record<string, string> | undefined;
+            expect(env).toBeDefined();
+            expect(env?.SPUR_SPEC_ID).toBe('reviewer');
+            expect(env?.SPUR_RUN_ID).toBeTruthy();
+            // UUID v4 shape
+            expect(env?.SPUR_RUN_ID).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        });
+
+        test('injects SPUR_TEAM_ID when a team: tag is present', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'], tags: ['team:red-squad'] })],
+            });
+
+            await svc.start('reviewer');
+            const env = calls[0]?.env as Record<string, string>;
+            expect(env.SPUR_TEAM_ID).toBe('red-squad');
+        });
+
+        test('omits SPUR_TEAM_ID when no team: tag and passes SPUR_SERVE_URL from constructor', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'] })],
+                serveUrl: 'http://localhost:8787',
+            });
+
+            await svc.start('reviewer');
+            const env = calls[0]?.env as Record<string, string>;
+            expect(env.SPUR_TEAM_ID).toBeUndefined();
+            expect(env.SPUR_SERVE_URL).toBe('http://localhost:8787');
+        });
+
+        test('falls back to SPUR_SERVE_URL env when constructor omits it', async () => {
+            const prev = process.env.SPUR_SERVE_URL;
+            process.env.SPUR_SERVE_URL = 'http://from-env:9999';
+            try {
+                const { executor, calls } = createMockExecutor();
+                const { bus } = createMockBus();
+                const svc = new SupervisorService({
+                    processExecutor: executor,
+                    eventBus: bus,
+                    configDir: '/tmp',
+                    agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'] })],
+                });
+
+                await svc.start('reviewer');
+                const env = calls[0]?.env as Record<string, string>;
+                expect(env.SPUR_SERVE_URL).toBe('http://from-env:9999');
+            } finally {
+                if (prev === undefined) delete process.env.SPUR_SERVE_URL;
+                else process.env.SPUR_SERVE_URL = prev;
+            }
+        });
+    });
 });

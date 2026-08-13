@@ -349,8 +349,11 @@ async function drainIntoPrompt(
 
     const team = new TeamService(context);
     const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
-    // Map spec id → coding-agent type so AgentService can resolve the runner.
-    const flagsOut = spec === undefined ? flags : { ...flags, agent: spec.type };
+    // Map spec id → coding-agent type so AgentService can resolve the runner, AND
+    // retain the spec id on `flags['spec-id']` (set BEFORE rewriting `agent`) so
+    // AgentService.executeRun can persist an occupant pin (ADR-057 wave 1 R1).
+    // The flag survives even when the inbox is empty — runAgentLoop relies on it.
+    const flagsOut = spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: spec.type };
 
     const inbox = await team.drainPending(recipient);
     if (inbox.count === 0) return { prompt, flags: flagsOut };

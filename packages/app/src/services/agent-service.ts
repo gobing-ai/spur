@@ -1,10 +1,15 @@
 import { isatty } from 'node:tty';
 import {
     type CapabilityTier,
+    type CoordinationArtifactRef,
+    type CoordinationRun,
+    CoordinationRunDao,
+    type DbAdapter,
     getCanonicalStage,
     getNextFallback,
     isTierEligible,
     type ObjectiveEscalationSignal,
+    type OccupantRef,
     type StageModelPolicy,
     type StageRecord,
     TIER_RANK,
@@ -235,6 +240,13 @@ export interface AgentServiceContext {
      * supervisor loops. CLI callers leave this unset.
      */
     processRegistry?: ProcessRegistry;
+    /**
+     * Optional DB accessor for coordination-facing run persistence (ADR-057 wave 1).
+     * When set, a spec-id-addressed run persists an occupant pin + path-only
+     * artifact refs to `coordination_runs`. Absent (tests without a DB) → no
+     * occupant, run still succeeds.
+     */
+    getDb?: () => Promise<DbAdapter>;
 }
 
 /**
@@ -386,7 +398,13 @@ export class AgentService {
         }
         const result = outcome.result;
         const jsonOutput = booleanFlag(flags, 'json');
-        this.handleRunOutput(result, jsonOutput);
+        // Read back the terminal coordination row (if this was a spec-id run) so the
+        // additive --json keys match getCoordinationRun's shape exactly.
+        const coordination =
+            outcome.coordination !== undefined
+                ? ((await this.getCoordinationRun(outcome.coordination.occupant.runId)) ?? undefined)
+                : undefined;
+        this.handleRunOutput(result, jsonOutput, coordination);
         if (result.exitCode === 0) return 0;
         if (result.signal !== undefined) {
             this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
@@ -502,7 +520,7 @@ export class AgentService {
         deps: AgentRunDeps | undefined,
         options: { silent: boolean; nonInteractive?: boolean; execution?: AgentExecutionOptions },
     ): Promise<
-        | { ok: true; result: AgentRunResult; invocation: AgentRunInvocation }
+        | { ok: true; result: AgentRunResult; invocation: AgentRunInvocation; coordination?: { occupant: OccupantRef } }
         | { ok: false; exitCode: number; message: string }
     > {
         const silent = options.silent;
@@ -628,6 +646,46 @@ export class AgentService {
         process.on('SIGINT', onTerminate);
         options.execution?.signal?.addEventListener('abort', onExternalAbort, { once: true });
         if (options.execution?.signal?.aborted === true) controller.abort();
+
+        // Occupant pin (ADR-057 wave 1 R1): when addressed by a spec id, persist a
+        // coordination-facing run row so a sibling agent can address it by runId.
+        // generation = max(generation for spec_id) + 1 — monotonic per spec. The
+        // supervisor-process-shared-generation refinement is handoff 0530; Wave 1
+        // only needs an addressable, monotonic pin (ponytail: one source of truth).
+        const specId = stringFlag(flags, 'spec-id', '');
+        const coordinationRunId =
+            specId !== '' && options.execution?.correlation !== undefined
+                ? options.execution.correlation.runId
+                : undefined;
+        let occupantRef: OccupantRef | undefined;
+        if (specId !== '' && coordinationRunId !== undefined && this.ctx.getDb !== undefined) {
+            try {
+                const dao = new CoordinationRunDao(await this.ctx.getDb());
+                const generation = ((await dao.maxGeneration(specId)) ?? 0) + 1;
+                occupantRef = {
+                    specId,
+                    agentKind: currentAgent,
+                    processId: null,
+                    runId: coordinationRunId,
+                    generation,
+                };
+                await dao.insertStart({
+                    specId,
+                    agentKind: currentAgent,
+                    processId: null,
+                    runId: coordinationRunId,
+                    generation,
+                    startedAt: new Date().toISOString(),
+                });
+            } catch (error) {
+                // Non-fatal: the agent run is primary; coordination persistence is secondary.
+                if (!jsonOutput) {
+                    this.ctx.output.error(
+                        `Warning: occupant persist failed: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                }
+            }
+        }
 
         let result: AgentRunResult | undefined;
         let invocation: AgentRunInvocation | undefined;
@@ -819,6 +877,22 @@ export class AgentService {
             process.off('SIGTERM', onTerminate);
             process.off('SIGINT', onTerminate);
             options.execution?.signal?.removeEventListener('abort', onExternalAbort);
+
+            // Finalize the coordination run row (terminal status + artifact paths).
+            if (occupantRef !== undefined && coordinationRunId !== undefined && this.ctx.getDb !== undefined) {
+                try {
+                    const dao = new CoordinationRunDao(await this.ctx.getDb());
+                    const status: 'exited' | 'errored' = result?.exitCode === 0 ? 'exited' : 'errored';
+                    const refs = await this.resolveArtifactRefs(coordinationRunId);
+                    await dao.updateExit(coordinationRunId, status, new Date().toISOString(), JSON.stringify(refs));
+                } catch (error) {
+                    if (!jsonOutput) {
+                        this.ctx.output.error(
+                            `Warning: occupant exit persist failed: ${error instanceof Error ? error.message : String(error)}`,
+                        );
+                    }
+                }
+            }
         }
 
         // Impossible-state guard: the loop always dispatches at least once.
@@ -838,7 +912,12 @@ export class AgentService {
             ...(controller.signal.aborted && result.signal === undefined ? { reason: 'cancelled' } : {}),
         });
 
-        return { ok: true, result, invocation };
+        return {
+            ok: true,
+            result,
+            invocation,
+            ...(occupantRef !== undefined ? { coordination: { occupant: occupantRef } } : {}),
+        };
     }
 
     private defaultExecutionOptions(flags: Record<string, string | boolean>): AgentExecutionOptions {
@@ -1249,7 +1328,79 @@ export class AgentService {
     // Private: output handling
     // -------------------------------------------------------------------------
 
-    private handleRunOutput(result: AgentRunResult, jsonOutput: boolean): void {
+    // -----------------------------------------------------------------------
+    // Public: coordination (ADR-057 wave 1)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Resolve the live occupant for a spec id. A kind-only lookup is rejected
+     * (R1): an occupant must be addressed by specId since multiple specs can
+     * share the same coding-agent type. Returns null when no DB is wired or no
+     * run exists for the spec.
+     */
+    async getOccupant(by: { specId: string } | { agentKind: string }): Promise<OccupantRef | null> {
+        if ('agentKind' in by) {
+            throw new Error('occupant_lookup_kind_rejected: address the occupant by specId, not agentKind');
+        }
+        if (this.ctx.getDb === undefined) return null;
+        const dao = new CoordinationRunDao(await this.ctx.getDb());
+        const row = await dao.getLatestBySpecId(by.specId);
+        if (row === null) return null;
+        return {
+            specId: row.spec_id,
+            agentKind: row.agent_kind,
+            processId: row.process_id,
+            runId: row.run_id,
+            generation: row.generation,
+        };
+    }
+
+    /**
+     * Read a coordination-facing run by runId — the shape a sibling agent receives
+     * (R2). Returns occupant pin + path-only artifact refs; never stdout/stderr
+     * bodies. Null when no DB or no such run.
+     */
+    async getCoordinationRun(runId: string): Promise<CoordinationRun | null> {
+        if (this.ctx.getDb === undefined) return null;
+        const dao = new CoordinationRunDao(await this.ctx.getDb());
+        const row = await dao.getByRunId(runId);
+        if (row === null) return null;
+        return {
+            occupant: {
+                specId: row.spec_id,
+                agentKind: row.agent_kind,
+                processId: row.process_id,
+                runId: row.run_id,
+                generation: row.generation,
+            },
+            status: row.status as CoordinationRun['status'],
+            startedAt: row.started_at,
+            completedAt: row.completed_at,
+            artifactRefs: parseArtifactRefs(row.artifact_refs_json),
+        };
+    }
+
+    /**
+     * Collect path-only artifact refs for a finished run (design §4). Probes
+     * project-relative paths that exist on disk; never embeds file bodies.
+     */
+    private async resolveArtifactRefs(runId: string): Promise<CoordinationArtifactRef[]> {
+        const refs: CoordinationArtifactRef[] = [];
+        const logPath = `.spur/run/${runId}.log`;
+        try {
+            await createNodeFileSystem(this.ctx.cwd).stat(logPath);
+            refs.push({ kind: 'log', path: logPath });
+        } catch {
+            // missing file → no ref
+        }
+        return refs;
+    }
+
+    // -----------------------------------------------------------------------
+    // Private: output handling
+    // -----------------------------------------------------------------------
+
+    private handleRunOutput(result: AgentRunResult, jsonOutput: boolean, coordination?: CoordinationRun): void {
         if (jsonOutput) {
             this.ctx.output.write(
                 toJson({
@@ -1258,6 +1409,17 @@ export class AgentService {
                     stderr: result.stderr,
                     ...(result.signal !== undefined ? { signal: result.signal } : {}),
                     durationMs: result.durationMs,
+                    ...(coordination?.occupant !== undefined ? { occupant: coordination.occupant } : {}),
+                    ...(coordination !== undefined
+                        ? {
+                              run: {
+                                  status: coordination.status,
+                                  startedAt: coordination.startedAt,
+                                  completedAt: coordination.completedAt,
+                                  artifactRefs: coordination.artifactRefs,
+                              },
+                          }
+                        : {}),
                 }),
             );
             return;
@@ -1298,6 +1460,16 @@ function traceSafePrompt(prompt: string): string {
     const [command = '', ...tokens] = trimmed.split(/\s+/);
     const safeTokens = tokens.map((token) => (TRACE_SAFE_SLASH_TOKEN.test(token) ? token : '[redacted]'));
     return [command, ...safeTokens].join(' ');
+}
+
+/** Parse a coordination_runs `artifact_refs_json` column defensively. */
+function parseArtifactRefs(json: string): CoordinationArtifactRef[] {
+    try {
+        const parsed: unknown = JSON.parse(json);
+        return Array.isArray(parsed) ? (parsed as CoordinationArtifactRef[]) : [];
+    } catch {
+        return [];
+    }
 }
 
 /** Redact prompt-bearing and secret-bearing argv entries before trace persistence. */

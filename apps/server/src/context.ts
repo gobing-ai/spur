@@ -449,6 +449,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 output: NOOP_OUTPUT,
                 events: bridgeEventBus(eventsBus),
                 processRegistry: this.processRegistry(),
+                getDb: this.getDb.bind(this),
             });
             return agentSvc;
         },

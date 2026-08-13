@@ -2,6 +2,14 @@ export { type InboxMessage, InboxMessageDao } from '@gobing-ai/ts-db';
 export { ActionRunDao, type ActionRunRow } from './action-run-dao';
 export { ArtifactDao, type ArtifactRecord, type CreateArtifactInput } from './artifact-dao';
 export { createId } from './base';
+export {
+    type CoordinationArtifactRef,
+    type CoordinationRun,
+    CoordinationRunDao,
+    type CoordinationRunRow,
+    type OccupantRef,
+    type StartCoordinationRunInput,
+} from './coordination-run-dao';
 export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
 export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow } from './planning-event-dao';

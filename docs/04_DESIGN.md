@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.26.1
+version: 1.27.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -52,7 +52,7 @@ When collaborating with the design team:
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
-| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | accepted design; not built |
+| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | wave 1 landed (0529); waves 2–3 not built |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -202,14 +202,24 @@ the deprecation window. The stage-registry schema version is 1.2 (`auth` is an a
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope
-(`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). Slash commands like
+(`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). When the run is
+addressed by a **spec id** (the `--drain` path, or `--agent <specId>` matching an agent
+spec), the envelope **adds** two optional keys (ADR-057 wave 1 / G4): `occupant`
+(`{ specId, agentKind, processId|null, runId, generation }`) — the live occupant pin
+retained even after `--drain` rewrites `--agent` to the coding-agent type — and `run`
+(`{ status: 'running'|'exited'|'errored', startedAt, completedAt, artifactRefs }`), where
+`artifactRefs` is a path-only array (`{ kind: 'result'|'log'|'verdict', path }`) to
+project-relative files, never stdout/stderr bodies. A bare `spur agent run --agent codex`
+(no spec) creates no occupant and emits neither key. Slash commands like
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi/omp `/skill:…`,
 others including grok/hermes/opencode → `/plugin-command`).
 Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
 flags below), not from `run` flags. `--drain` resolves the addressed `--agent <id>` as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
 messages into the prompt, and rewrites `--agent` to the spec's underlying type before dispatch
-(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent).
+(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). It also
+sets a `spec-id` flag (the spec id, **before** rewriting `agent`) so a spec-addressed run
+persists an occupant pin + coordination-facing run row in `coordination_runs` (ADR-057 wave 1).
 Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent execution failure.
 
 #### `spur agent list [--json] [--specs]`
@@ -271,7 +281,7 @@ Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve
 - `up` / `down` — materialize or tear down the roster for `<team>`. `up --check` is a dry-run.
   `down --purge` deletes `spur:generated` specs only. When serve is reachable, `up` best-effort
   starts autostart members and `down` stops members.
-- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
+- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), `SPUR_TEAM_ID` when the spec has a `team:` tag, and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 
@@ -884,6 +894,7 @@ dependency graph stays Workers-safe:
 | `history_import_checkpoint`                                | importer                  | Incremental position, composite PK `(source, source_file)`                                                                                                                      |
 | `history_etl_<source>`                                     | importer                  | Validated per-source ETL rows (`payload_json`, `imported_at`)                                                                                                                   |
 | `inbox_messages`                                           | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
+| `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)

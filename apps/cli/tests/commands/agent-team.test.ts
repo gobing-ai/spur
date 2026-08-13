@@ -339,6 +339,33 @@ describe('spur agent run --drain', () => {
         }
     });
 
+    test('R1 (0529) — drain keeps spec-id, persisting an occupant pin', async () => {
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'reviewer', type: 'claude' });
+
+            const fakeRunner = {
+                runPromptCommand: async () => ({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+            };
+            const code = await runAgentRun('do work', ctx, { agent: 'reviewer', drain: true, json: true }, {
+                runner: fakeRunner as MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as MockDetector,
+                doctorRunner: fakeDoctor() as MockDoctor,
+            } as unknown as AgentRunDeps);
+            expect(code).toBe(0);
+
+            // drainIntoPrompt set flags['spec-id'] before rewriting agent → executeRun
+            // persisted an occupant addressable by specId, with the coding-agent kind.
+            const occupant = await ctx.agentService().getOccupant({ specId: 'reviewer' });
+            expect(occupant).not.toBeNull();
+            expect(occupant?.specId).toBe('reviewer');
+            expect(occupant?.agentKind).toBe('claude');
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('errors when --drain has no explicit --agent but still runs', async () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {

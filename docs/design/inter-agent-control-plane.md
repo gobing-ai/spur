@@ -1,11 +1,12 @@
 # Inter-agent control plane
 
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.
-**Status:** accepted design — ADR-057; not yet built.
-**Decision:** ADR-057 (amends ADR-052).
+**Status:** Wave 1 **landed** (task 0529, 2026-08-13). Waves 2–3 remain accepted design, not built.
+**Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
 
-Shapes only. Rationale: `00` ADR-057 and `03` §17. Do not invoke the planned verbs below as if they exist.
+Shapes + Wave-1 implementation notes. Rationale: `00` ADR-057 and `03` §17. The Wave-2 verbs
+(`agent wait`, `send --wait`) below are **not shipped** — do not invoke them as if they exist.
 
 ## 1. Existing surfaces this design extends
 
@@ -39,6 +40,14 @@ interface OccupantRef {
 
 **Pin match:** two refs match when `specId`, `runId`, and `generation` are equal. `agentKind` mismatch or a higher `generation` is `run_replaced` / `occupant_gone`.
 
+**Wave-1 implementation (task 0529):** `drainIntoPrompt` sets `flags['spec-id']` **before**
+rewriting `flags.agent` to `spec.type`. `AgentService.executeRun` persists the occupant when a
+`spec-id` flag is present (the bare `--agent <binary>` path does not). `generation` is
+`max(generation for spec_id) + 1` per run row — monotonic per spec; the process-generation-shared
+semantics (one generation per supervised process, reused across iterations) are deferred to
+0530 (wait), which is the first consumer of cross-restart pin stability. `processId` is `null`
+in Wave 1 (the supervisor registry id is not yet threaded into `executeRun`).
+
 ## 3. Caller environment (supervised spawn)
 
 Every `spur agent loop` / supervised `agent run` process receives, in addition to existing host hints:
@@ -51,6 +60,12 @@ Every `spur agent loop` / supervised `agent run` process receives, in addition t
 | `SPUR_SERVE_URL` | Supervisor API base when `spur serve` launched the process |
 
 `SPUR_AGENT` remains the **host** coding-agent hint (`04` §1.1). It is not a spec id.
+
+**Wave-1 implementation (task 0529):** `SupervisorService.start` merges the four env vars into
+`pipeOpts.env`. `SPUR_RUN_ID` is a UUID minted at spawn (the process-generation id); the
+per-invoke `runId` (correlation.runId in `executeRun`) is minted separately by `AgentService`.
+`SPUR_SERVE_URL` is passed from the constructor `serveUrl` option, falling back to the
+`SPUR_SERVE_URL` env var. Generation increment is realized via `executeRun`'s `max+1` (see §2).
 
 `--current` on a future wait/send means `SPUR_SPEC_ID` of the caller. Omitting a target must not fall back to another client's focused Board pane.
 
@@ -75,6 +90,14 @@ interface CoordinationArtifactRef {
 ```
 
 Persistence: domain DAO + CLI schema increment under `packages/domain` (same composition as `inbox_messages`). Do not store stdout/stderr bodies in the row; store paths. Redact before persist (Phase 2 redaction bullet still applies).
+
+**Wave-1 implementation (task 0529):** the table is `coordination_runs` (migration
+`0010_spur_cli_coordination_runs`), DAO `CoordinationRunDao`, with `run_id` primary key and a
+`(spec_id, generation DESC)` index. `AgentService.getCoordinationRun(runId)` returns occupant +
+refs; `getOccupant({ specId })` returns the live pin and `getOccupant({ agentKind })` throws
+`occupant_lookup_kind_rejected`. `artifact_refs_json` is probed from `.spur/run/<runId>.log` at
+exit (Wave 1; verdict paths land with the verifier integration). The read path is the additive
+`agent run --json` keys (`occupant` + `run`) — no new CLI noun.
 
 Read path (planned; ADR-051 consent before landing a new verb):
 
@@ -149,7 +172,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 
 | Wave | Lands | Does not land |
 | --- | --- | --- |
-| 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read | wait verb, lifecycle enum as a public wait target, new noun |
+| 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read — **LANDED (task 0529)** | wait verb, lifecycle enum as a public wait target, new noun |
 | 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) | Board SSE, `blocked` without a first-class signal, protocol ping |
 | 3 | Snapshot/seq helper reused by wait, contract/schema notes, optional `agent report-state` only if `blocked` cannot be derived | G3 Board un-merge (feature G3 / ADR-052), live handoff, screen detection |
 

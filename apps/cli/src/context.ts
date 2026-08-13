@@ -86,6 +86,7 @@ export function createCliContext(options: {
                 env,
                 output: options.output,
                 agentConfig: options.agentConfig,
+                getDb,
                 ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),
                 ...(serviceOptions?.processRegistry !== undefined
                     ? { processRegistry: serviceOptions.processRegistry }
