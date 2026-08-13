@@ -317,3 +317,14 @@ Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grou
   `workflow_dispatch` run may not appear in `gh run list` immediately; the fail-loud path (throw,
   no tag mutation) is the safe recovery for the release script.
 
+
+## 2026-08-13 — 0530
+
+- **Convention:** `every-export-has-tsdoc` fires on exported classes even when the sibling `type` has a doc comment. `WaitError` shipped in f9af0dc5 without one and failed `spur-check` only at `test-post-check`.
+- **Gotcha:** Design satellite **Status** can say "landed" while the intro paragraph still says "do not invoke" — grep both, not just the status line.
+- **Pattern:** Re-running `/sp:dev-run` on a `done` task must not `task update wip` / `record --transition testing`. Leftover fixes stay in the working tree; status stays `done`.
+
+## 2026-08-13 — 0533
+
+- **Gotcha:** Plan step 1 (catalog bump to `@gobing-ai/ts-dual-workflow-engine` 0.4.31) was excluded from commit `2bf0fdb5` as "concurrent dirt" while D4 notes claimed it shipped. HEAD `bun.lock` still pins 0.4.30. C1 APIs (`collectWorkflowExtensions`) need the bump in the same leftover commit as the consumer.
+- **Pattern:** A done-task re-run must not reopen status; leftover catalog + T4/T3 docs are the wrap-up, not a new implement.

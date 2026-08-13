@@ -5,8 +5,9 @@
 **Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
 
-Shapes + Wave-1 implementation notes. Rationale: `00` ADR-057 and `03` §17. The Wave-2 verbs
-(`agent wait`, `send --wait`) below are **not shipped** — do not invoke them as if they exist.
+Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. Wave-2 verbs
+(`agent wait`, `send --wait`) **shipped** in task 0530 — invoke them. Wave 3
+(snapshot-then-follow, first-class `blocked`) remains accepted design.
 
 ## 1. Existing surfaces this design extends
 
@@ -22,7 +23,7 @@ No new CLI noun. No Unix-socket JSON API beside oRPC. No terminal snapshot read.
 
 ## 2. Occupant identity
 
-A live occupant is this record (app/domain type; not a transport DTO until Wave 1 ships):
+A live occupant is this record (app/domain type; Wave 1 shipped — not a transport DTO):
 
 ```ts
 interface OccupantRef {

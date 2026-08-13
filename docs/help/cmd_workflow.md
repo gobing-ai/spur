@@ -37,6 +37,11 @@ Loads the definition with the same **embedded schema map** the CLI injects for p
 `@gobing-ai/spur/schemas/...` refs, so `validate` does not depend on a resolvable
 `node_modules/@gobing-ai/spur` (CI cwd / compiled binary safe).
 
+A workflow may declare YAML `extensions.actions` / `extensions.guards` (relative module paths
+next to the workflow file). `validate`, `run` (incl. `--dry-run`), and `continue` load those
+modules onto the engine host before any step (0533/D4). The declaration is the trust gate;
+a missing or mis-shaped module, an absolute path, or `..` fails the command before any step.
+
 ### Example
 
 ```bash
@@ -73,6 +78,7 @@ spur workflow run [options] <file>
 `run` pre-loads the workflow with the **same embedded-schema options as `validate`**, then
 hands the loaded def to the engine — so validate/run share one `$schema` resolution contract
 and do not fall through to a stale published package path under ancestor `node_modules`.
+YAML `extensions.*` use that same load path (see `validate` above).
 
 When no `agent` is set in `--vars`, `agent.default` from `.spur/config.yaml` is injected so
 pipeline `agent.run` stages pick up the project default. The `--agent` value-semantics contract
@@ -162,7 +168,8 @@ spur workflow continue [options] [run-id]
 Resume a paused (HITL) run. Omit `run-id` to discover the most-recent paused run and confirm
 (skipped with `--yes`). Headless `hitl.confirm` often persists a default `no` before pause —
 use `--answer yes|no|cancel` to override that value on resume. `--yes` and `--answer` are
-distinct concerns.
+distinct concerns. Continue re-resolves the workflow file and loads the same YAML `extensions.*`
+onto the host before guards re-evaluate (0533/D4).
 
 ### Example
 

@@ -12,6 +12,7 @@
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
 | `list` | List detected coding agents; with `--specs`, list team agent specs |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
+| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) |
 | `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` |
 | `edit <id>` | Open an agent spec in `$EDITOR` (or print its path) |
@@ -150,6 +151,45 @@ Auth is informational (its own column, not a state label — liveness-only gate,
     { "agent": "claude", "installed": true, "authenticated": true, "usable": true, "tier": 1, "version": "...", "error": null }
   ]
 }
+```
+
+## spur agent wait
+
+```
+spur agent wait [options] <specId>
+```
+
+| Argument | Description |
+|---|---|
+| `specId` | Agent spec id whose occupant to wait on |
+
+| Flag | Description |
+|---|---|
+| `--run <runId>` | Pin a specific run id (default: the spec's latest run) |
+| `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle` |
+| `--timeout <ms>` | Caller deadline in milliseconds. Omit = no deadline (stall budget still applies) |
+| `--json` | `{ satisfied, pin }` on success; `{ error: { code, message } }` on failure |
+
+Pins `specId` + `runId` + `generation` from the snapshot at wait start, then polls until the
+first satisfied `--until` (OR). Replacement, generation bump, or disappearance fails fast
+(`run_replaced` / `occupant_gone`). A non-working occupant that makes no progress inside
+`min(timeout, 5000)ms` fails `wait_stalled`. Sole `--until blocked` is usage (exit 2) — no
+first-class blocked signal in wave 2.
+
+### Exit codes
+
+| Code | Exit | Meaning |
+|---|---|---|
+| `occupant_gone` | 1 | No occupant for the specId, or it disappeared mid-wait |
+| `run_replaced` | 1 | The pinned run was replaced or its generation bumped |
+| `wait_stalled` | 1 | Non-working occupant, no progress within the stall budget |
+| `timeout` | 1 | Caller `--timeout` elapsed (or aborted via SIGINT) |
+| usage | 2 | Invalid flags, or `--until blocked` as the sole target |
+
+```bash
+spur agent wait reviewer
+spur agent wait reviewer --run R3 --until invoke-exit
+spur agent wait reviewer --until working --until invoke-exit --timeout 30000 --json
 ```
 
 ## spur agent loop

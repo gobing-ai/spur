@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.18.0
+version: 1.19.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-13
@@ -175,8 +175,11 @@ Two execution models behind one host (ADR-009):
 Definitions are YAML (Zod-validated, variable interpolation). Persistence is via a SQLite adapter
 (`DbWorkflowPersistenceAdapter`) over ts-db; in-memory for tests. `WorkflowService` (packages/app)
 wires the host + persistence and exposes validate/run/list; persisted runs power
-`spur workflow trace`. The planning layer's task/feature lifecycles run as workflow definitions
-on this engine (§12.2) — its first long-lived, externally-triggered consumer (ADR-022).
+`spur workflow trace`. After load, `validate` / `run` (incl. `--dry-run`) / `continue` register
+YAML-declared `extensions.actions` / `extensions.guards` onto that host (0533/D4) — relative to
+the workflow file, fail-closed, no absolute or `..` paths. The planning layer's task/feature
+lifecycles run as workflow definitions on this engine (§12.2) — its first long-lived,
+externally-triggered consumer (ADR-022).
 
 ### 6.1 Consolidated per-run run log (built — ADR-045 / feature D2)
 

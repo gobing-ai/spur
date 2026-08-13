@@ -27,13 +27,22 @@ spur message send [options] <body>
 |---|---|---|
 | `--to <id>` | — | Recipient agent id (required) |
 | `--from <id>` | `operator` | Sender id |
+| `--wait` | — | Block until the recipient occupant reaches `--until` (snapshots occupant **before** enqueue) |
+| `--until <state>` | `invoke-exit` | Wait target when `--wait` is set: `injected` \| `invoke-exit` (repeatable OR) |
+| `--timeout <ms>` | — | Caller deadline for `--wait` |
 | `--json` | — | Output machine-readable JSON |
+
+`--wait` snapshots the occupant **before** `send`, then waits on that pin in the same process
+(G4 wave 2). A later occupant cannot satisfy the wait; enqueue is **not** rolled back if the
+wait later fails. Failures use the same `{ error: { code, message } }` envelope as
+`spur agent wait` (`occupant_gone` / `run_replaced` / `wait_stalled` / `timeout`, exit 1).
 
 ### Example
 
 ```bash
 spur message send "Please review the auth endpoint" --to reviewer
 spur message send "Urgent: tests failing" --to reviewer --from operator
+spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
 ```
 
 ### JSON shape

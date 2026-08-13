@@ -2,7 +2,7 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.4.0
+version: 1.5.0
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
 updated_at: 2026-08-13
@@ -95,6 +95,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | Built-in actions (shell, note, check, http.request, find-changed-files, find-unit-gaps) | 🔶 | core present (`http.request` rides ts-infra `APIClient`); no `agent`/`slash` action kind yet — LLM steps delegate to `spur agent run` via shell |
 | `agent.run` `capture: true` option + `response.validate` action | ✅ | `runCapture` returns `{ exitCode, answer }`; `agent.run` surfaces `data.answer` when `capture: true`; `response.validate` injects guard engine via DI; spike workflow validates retry/deny pattern (ADR-024) |
 | `agent.run` `timeoutMs` option + `stepTimeoutMs` pipeline var | ✅ | timeout forwarded via `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`; kills subprocess on elapse (never orphans); step fails → `failed`; per-run override via `--vars '{"stepTimeoutMs":"120000"}'`; default 600000ms (10 min) |
+| YAML `extensions.actions` / `extensions.guards` on validate/run/continue | ✅ | 0533/D4; relative modules next to the workflow file; fail-closed on missing/mis-shaped modules; abs/`..` rejected; catalog `@gobing-ai/ts-dual-workflow-engine` ≥0.4.31 |
 
 ## 6. History (`ts-llm-jsonl-importer` + analytics consumer)
 

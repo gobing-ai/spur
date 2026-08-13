@@ -141,6 +141,7 @@ spur serve          [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--j
 
 # Agent execution surface
 spur agent          run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]
+spur agent          wait <specId> [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]
 spur agent          list [--specs] [--json]
 spur agent          doctor [agent] [--json]
 spur agent          create <id> --type <agent-type> [--name] [--workspace] [--purpose] [--tags <a,b>] [--model] [--autonomy] [--system-prompt] [--no-identity-preamble] [--auto-start] [--json]
@@ -197,7 +198,7 @@ spur history        analyze [--since <iso-date>] [--json]
 spur history        report  [--json]   # reserved — currently prints a TODO marker
 
 # Team coordination
-spur message        send    <body> --to <id> [--from <id>] [--json]
+spur message        send    <body> --to <id> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]
 spur message        inbox   --agent <id> [--json]
 spur message        reply   <msg-id> <body> [--json]
 spur team           assign  <task-id> <agent-id>
@@ -553,6 +554,7 @@ spur team status
 # Send a message to an agent
 spur message send "Please review the auth endpoint" --to reviewer
 spur message send "Urgent: tests failing" --to reviewer --from operator
+spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
 
 # Check an agent's inbox
 spur message inbox --agent reviewer

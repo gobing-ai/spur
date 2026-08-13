@@ -125,5 +125,5 @@ spur team stop worker-1 --json
 ## See Also
 
 - [spur message](./cmd_message.md) — durable inter-agent messaging and the drain mechanism
-- [spur agent](./cmd_agent.md) — agent specs (`create`/`edit`/`delete`), `loop`, and `--drain`
+- [spur agent](./cmd_agent.md) — agent specs (`create`/`edit`/`delete`), `loop`, `wait`, and `--drain`
 - [spur serve](./cmd_serve.md) — local web server + supervisor API
