@@ -249,6 +249,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                         detail: failure.detail,
                         exitCode: failure.exitCode,
                         durationMs,
+                        severity: 'error',
                     });
                     context.setExitCode(1);
                 } else if (result !== null) {
@@ -279,12 +280,14 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                             messages,
                             durationMs,
                             artifactPath,
+                            severity: 'info',
                         });
                         await bus.emit('history.analyze.completed', {
                             source: 'history',
                             renderer: 'history-analyze',
                             artifactPath,
                             totals: result.artifact.totals,
+                            severity: 'info',
                         });
                     } else {
                         const failing = entries.filter((e) => e.status === 'failed');
@@ -309,6 +312,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                                     : 'daily fan-out reported non-zero exit with no failing or degraded source',
                             durationMs,
                             artifactPath,
+                            severity: 'error',
                         });
                     }
                     context.setExitCode(exitCode);
