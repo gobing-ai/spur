@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D4"
 name: "Workflow YAML rule-style extensions"
-status: backlog
+status: done
 priority: P1
 tags: []
 created_at: "2026-08-13T06:17:43.744Z"
-updated_at: "2026-08-13T06:20:48.875Z"
+updated_at: "2026-08-13T16:12:58.516Z"
 ---
 
 # D4: Workflow YAML rule-style extensions
@@ -101,3 +101,6 @@ extensions:
 Paths are relative to the workflow file. No absolute, no `..`. Product-plugin discovery stays in knowledge-kit (B7).
 
 ## History
+- 2026-08-13T15:51:38.650Z backlog → active (system)
+- 2026-08-13T15:51:38.873Z active → verifying (system)
+- 2026-08-13T16:12:58.516Z verifying → done (system)
