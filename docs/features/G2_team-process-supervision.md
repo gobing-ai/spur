@@ -2,36 +2,43 @@
 schema_version: 1
 id: "G2"
 name: "Team process supervision"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:35.958Z"
-updated_at: "2026-07-03T23:31:41.105Z"
+updated_at: "2026-08-13T05:25:46.650Z"
 ---
 
 # G2: Team process supervision
 
 ## Goal
-`spur serve` launches and supervises a team of headless agent processes at startup, with attach/detach access to each process's stdin/stdout/stderr from the CLI and the board — server-mediated streams, no PTY.
+`spur serve` supervises headless team-agent processes (`agent loop` by default). The CLI
+starts and stops them; the Board and HTTP/SSE attach to their stdio. No PTY. No `spur team attach`
+verb.
 ## Scope
 - In:
-    - Supervisor service in `packages/app`: spawns headless agent processes from `.spur/agents/<id>.yaml` specs, tracks pid/status/uptime in a process registry; no auto-restart in v1 (exit is recorded, not retried).
-    - Config: a `team.autostart` list naming agent specs to launch at `spur serve` startup.
-    - Process lifecycle events on the EventBus (spawned, exited, stopped).
-    - Attach transport: per-process SSE stream replaying a bounded ring buffer of recent stdout/stderr frames then tailing live; `POST` endpoint forwarding a line to the child's stdin.
-    - `spur team start|stop|attach <agent-id>` CLI verbs replacing the Phase-4 stubs (attach = SSE consume + stdin forward from the terminal).
-    - `GET /api/team/processes` status API; Process List tab added to the board Observability module (feature J owns the shell).
+    - `SupervisorService` in `packages/app`: spawn from `.spur/agents/<id>.yaml`, registry
+      (pid/status/uptime), bounded crash-restart with backoff, then `errored`.
+    - Default wrapper is `spur agent loop --agent <id>`; spec `command` wins when set.
+    - Autostart via spec `autoStart` / `team up` best-effort start when serve is reachable.
+    - Process lifecycle events: `process.spawned|exited|stopped`.
+    - Attach transport: `GET /api/team/processes/:id/stream` (SSE ring-buffer replay + live tail);
+      `POST /api/team/processes/:id/stdin` forwards a line. Board Teams/Observability consume this.
+    - CLI: `spur team start|stop|up|down|status|assign` (no `attach` verb).
+    - `GET /api/team/processes`; Teams Processes tab and Observability Process List.
 - Out:
-    - PTY/TUI fidelity — supervised agents run headless (single-shot or drain-loop), interactive full-screen agents are out (decision D7).
-    - Auto-restart/backoff policies, resource limits, cross-machine agents.
+    - `spur team attach` CLI (attach is HTTP/SSE + Board only).
+    - PTY/TUI fidelity; interactive full-screen agents.
+    - Unbounded restart, resource limits, cross-machine agents.
+    - Using process-pipe stdin as the durable agent-to-agent command bus (`spur message` owns that).
     - Task-assignment orchestration changes (`spur team assign` semantics unchanged).
 ## Acceptance Criteria
 ```gherkin
 Feature: Team process supervision
 
   Scenario: Autostart agents launch with the server
-    Given team.autostart lists an existing agent spec
-    When spur serve boots
+    Given a spec with autoStart (or team.autostart) names an existing agent spec
+    When spur serve boots or spur team up starts that member
     Then the agent process spawns and the process registry reports it running
 
   Scenario: Supervised processes are listable over the API
@@ -41,18 +48,18 @@ Feature: Team process supervision
 
   Scenario: Attaching replays the buffer then tails live output
     Given a running supervised agent with prior output
-    When a client attaches to the process output stream
+    When a client opens GET /api/team/processes/:id/stream
     Then recent buffered frames replay and new stdout and stderr frames arrive live
 
   Scenario: Stdin lines reach the child process
-    Given a client is attached to a running supervised agent
-    When a line is posted to the process stdin endpoint
+    Given a client can reach a running supervised agent
+    When a line is posted to POST /api/team/processes/:id/stdin
     Then the child process receives that line on stdin
 
   Scenario: Detaching leaves the process running
-    Given a client is attached to a supervised agent
+    Given a client is attached to a supervised agent SSE stream
     When the client disconnects from the stream
-    Then the process keeps running and remains attachable
+    Then the process keeps running and remains attachable over HTTP/SSE
 
   Scenario: Team stop terminates processes gracefully
     Given supervised processes are running
@@ -60,10 +67,17 @@ Feature: Team process supervision
     Then the processes terminate gracefully and the registry reports them stopped
 
   Scenario: Process List tab shows live supervision state
-    Given the board Observability module is open
-    When the operator opens the Process List tab
+    Given the board Teams or Observability module is open
+    When the operator opens the process list
     Then supervised processes render with live status
+
+  Scenario: Historical covering tasks have PASS verdict artifacts
+    Given tasks 0195 and 0207-0210 are done
+    When `spur feature check G2 --strict --as done` runs
+    Then each prior G2 scenario has a covering task with verdict PASS and a MET requirement
+    And `spur feature sync G2` can reach done
 ```
+
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
@@ -74,8 +88,18 @@ Feature: Team process supervision
 | 0208 | Team server module: process list API, SSE attach stream, stdin endpoint (0195 wave B) | done |
 | 0209 | CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C) | done |
 | 0210 | Process List tab in observability module (0195 wave D) | done |
+| 0532 | Record G2 supervision AC verdicts so verifying can go done | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-
+Shipped (tasks 0195, 0207–0210). `01`/`05` previously called start/stop Phase-4 stubs;
+repaired 2026-08-12. CLI attach was in the original 0209 title but never landed — HTTP/SSE
+is the attach surface. Complements ADR-052/057 (process pipe ≠ inbox).
 ## History
+- 2026-07-03 — created; implementation 0195 / 0207–0210 later marked done.
+- 2026-08-12 — Scope/AC aligned to shipped supervisor (no CLI attach; SSE/HTTP attach;
+  bounded restart). `01`/`05` stub wording repaired. `feature sync` reached `verifying`;
+  `verifying→done` blocked on missing historical verdict artifacts. Rework `verifying→active`
+  then returned to `verifying` pending a verdict-close task.
+- 2026-08-13T05:25:06.049Z active → verifying (system)
+- 2026-08-13T05:25:46.650Z verifying → active (system)

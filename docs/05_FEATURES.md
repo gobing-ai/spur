@@ -2,10 +2,10 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.3.1
+version: 1.3.2
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-08-08
+updated_at: 2026-08-12
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]
@@ -122,10 +122,12 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
 | `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard |
 | `spur agent run --drain` + spec-sourced identity | ✅ | identity (purpose/tags/system-prompt) comes from the `.spur/agents/<id>.yaml` spec via `agent create` flags; `--drain` folds inbox into prompt. Run-level identity flags were folded into specs — corrected 2026-06-12 after code verification |
-| `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs (stopped in Phase 1-3) |
+| `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs and enriches from the supervisor when `spur serve` is reachable |
 | `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
-| `spur team start\|stop` daemon | 💤 | Phase 4 stubs ship; persistent orchestrator + live stdin deferred |
-| Server team HTTP API + SSE/WebSocket streaming | ⏳ | Phase 4 |
+| `spur team up\|down` | ✅ | Materialize/teardown roster; best-effort start/stop when serve is up |
+| `spur team start\|stop` | ✅ | Requires `spur serve`; starts/stops `agent loop`. Process-pipe stdin is operator attach, not the durable inbox |
+| Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | ⏳ | ADR-057; feature G4; no new noun; do not invoke `agent wait` / `send --wait` until Wave 2 ships |
+| Server team process API + SSE + stdin POST | ✅ | `GET /api/team/processes`, `GET …/stream` (SSE), `POST …/stdin`, start/stop. No WebSocket |
 
 ## 8. Server / Web (read surface)
 

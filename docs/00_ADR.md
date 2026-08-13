@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.14.0
+version: 1.15.0
 owner: Robin Min
 updated_at: 2026-08-12
 read_before: any structural change; before diverging from a decision
@@ -507,3 +507,13 @@ Accepted (design) → Accepted.
 - **Why:** One Spur-owned projection makes every Board and CLI consumer consistent without coupling
   the generic upstream EventBus or duplicating policy across emit sites.
 - **Detail:** `03 §16`; `docs/design/actionable-observability-context.md`; feature J5.
+
+## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
+
+**Status:** Accepted (design) · **Date:** 2026-08-12 · **Feature:** G4
+
+**Decision.** Coding agents coordinate only through Spur’s two existing channels — durable `spur message` / `inbox_messages`, and the supervised process pipe. There is no third IPC transport, no agent-to-agent socket, no terminal scrape, and no keystroke injection. The Board is a client, not a wait or command authority. New verbs stay on `agent` / `message` (ADR-051).
+
+**Why.** Copying multiplexer I/O would collapse ADR-052’s two planes and fight a harness that does not own PTYs.
+
+**Detail:** `03 §17`; `docs/design/inter-agent-control-plane.md`; feature G4. Complements ADR-052 (does not change Board composition).

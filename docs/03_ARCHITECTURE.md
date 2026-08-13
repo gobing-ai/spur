@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.16.0
+version: 1.17.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-12
@@ -622,3 +622,51 @@ Invariants:
 - Trace stores remain replay authority; System Events never reconstruct workflow or rule traces.
 
 Shapes: `docs/design/actionable-observability-context.md`.
+
+## 17. Inter-Agent Control Plane (accepted design — ADR-057; not yet built)
+
+Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
+drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
+`--drain` rewrites a spec id to the spec's coding-agent type before `AiRunner` dispatch
+(`apps/cli/src/commands/agent.ts`). That rewrite is the occupant-identity hole this section
+closes. The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging
+it and is not this section's work.
+
+### 17.1 Target topology
+
+```text
+Agent A (spec reviewer)
+  → spur message send --to implementer
+  → inbox_messages (queued)
+  → implementer agent loop drain
+  → OccupantRef { specId, agentKind, processId, runId, generation }
+  → CoordinationRun + artifact paths
+Agent A
+  → spur agent wait implementer --run <runId> --until invoke-exit
+  → snapshot system_events seq → follow cataloged events → re-probe occupant
+  → read artifactRefs (files), never a PTY
+```
+
+The process pipe stays the operator attach path. It is not the agent-to-agent command bus.
+
+### 17.2 Invariants (enforceable)
+
+1. No production module may open a socket to another coding-agent process for coordination.
+2. No production module may read another pane's terminal buffer, screen manifest, or OSC title
+   to decide agent lifecycle or to return “the other agent's output.”
+3. No production module may write synthetic keystrokes to another agent's stdin as a substitute
+   for `spur message send`.
+4. `POST /api/team/processes/:id/stdin` remains operator/process-pipe only; `agent loop` delivery
+   stays `drainPending` → prepend until a later accepted design replaces it.
+5. Wait and send-wait pin `specId` + `runId` + `generation`. A replacement occupant cannot
+   satisfy an in-flight wait.
+6. `TeamService` / `AgentService` mutation methods return without blocking on wait. Waits live
+   on the CLI or connection side and follow `system_events` / EventBus after a snapshot sequence.
+7. New coordination verbs land on `agent` or `message` only (ADR-051). A new noun is a new ADR.
+8. Semantic wait targets (`idle`, `working`, `blocked`) are derived only from cataloged events
+   or an explicit report API. Presentation fields (titles, tokens, Board timeline rows) never
+   satisfy a wait.
+9. Coordination-run rows store artifact **paths**, not stdout/stderr bodies. Redaction runs
+   before persist.
+
+Shapes: `docs/design/inter-agent-control-plane.md`.

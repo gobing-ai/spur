@@ -106,6 +106,11 @@ authority first, then derived docs, then this file.
 **Routing:** decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`;
 feature status → `05`. Working layers §4.2; audits §7; satellites §4.5.
 
+**Inter-agent coordination (ADR-057, accepted design — not built):** Agents talk only through
+Spur (`spur message`, `spur agent`). Do not scrape terminals, inject keystrokes, or add a third
+IPC socket. `agent wait` and `message send --wait` are planned — do not invoke them. Shapes:
+`docs/design/inter-agent-control-plane.md`.
+
 ---
 
 ## Design system

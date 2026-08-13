@@ -2,7 +2,7 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.4.0
+version: 1.5.1
 owner: Robin Min
 updated_at: 2026-08-12
 read_before: adding a command or feature
@@ -87,7 +87,8 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
 | Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
-| Team coordination                                          | `spur team assign\|status` (+ `start\|stop` stubs) | `TeamService` (packages/app)               |
+| Team coordination                                          | `spur team assign\|status\|up\|down\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |
+| Inter-agent control plane (occupant identity, coordination artifacts, pinned wait) | existing `spur agent` / `spur message` (no new noun) | ADR-057; feature G4 |
 | Team-scoped Board composition                              | Spur Board Teams / Inbox / Workspace                | existing team, message, and task surfaces  |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
@@ -111,7 +112,8 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 - **Local board + launcher** (kanban UI, task API, SSE) — settled by the server/web design task
   (ADR-021 consequence b); until then the legacy board remains the operator surface.
 - **Rich run inspection** (events, gates, artifacts beyond the trace verbs) — depends on the
-  Phase-2 run model.
+  Phase-2 run model. Distinct from ADR-057 coordination-facing run records (a path list another
+  agent can address, not the inspector).
 - **`spur inspect <verb>`** — adapter-based project-state interrogation (coverage/lint/typecheck/deps).
 - **Meta-tooling, research, and context layers** — stay live in cc-agents until the core stabilizes.
 - **`spur plugin convert`** + per-platform adapter generation — per-platform install scripts suffice.
@@ -122,9 +124,14 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 
 Full rd3-migration dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`.
 
-### 5.4 Out of scope (Phase 1)
+### 5.4 Out of scope
 
-BYOK, key storage, sandboxing, multi-tenant cloud, desktop/mobile apps.
+- BYOK, key storage, sandboxing, multi-tenant cloud, desktop/mobile apps.
+- Peer-to-peer sockets between coding agents.
+- Reading another agent's terminal (PTY snapshot, screen manifests, OSC/spinner matching) as IPC.
+- Injecting keystrokes or synthetic Enter into another agent's UI as a command.
+- A third local IPC transport beside CLI `--json` and oRPC (Unix-socket JSON API, binary TUI protocol, named-pipe control plane).
+- Using the Board Inbox timeline as wait or send authority.
 
 ## 6. Non-Functional Requirements
 

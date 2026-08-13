@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.25.0
+version: 1.26.1
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-12
@@ -52,6 +52,7 @@ When collaborating with the design team:
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
+| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | accepted design; not built |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -257,14 +258,20 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 - `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
   `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
 
-#### `spur team assign <task-id> <agent-id>` · `spur team status [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
+#### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
 
-Team coordination (backed by `TeamService`).
+Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve`). There is no
+`spur team attach` verb: attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
 - `assign` — set `assignee: <agent-id>` in the YAML frontmatter of `docs/tasks/<task-id>_*.md`
   (replacing any existing assignee). Errors if no matching task file is found.
-- `status` — list every spec under `.spur/agents/` with its run status; `--json` emits `{ agents: [...] }`.
-- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error.
+- `status` — list every spec under `.spur/agents/` with its run status; `--by-team` groups by
+  `agent.team.<id>`; `--json` emits `{ agents: [...] }`. When `--server` is reachable, rows enrich
+  from the supervisor; otherwise they fall back to local spec metadata.
+- `up` / `down` — materialize or tear down the roster for `<team>`. `up --check` is a dry-run.
+  `down --purge` deletes `spur:generated` specs only. When serve is reachable, `up` best-effort
+  starts autostart members and `down` stops members.
+- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 

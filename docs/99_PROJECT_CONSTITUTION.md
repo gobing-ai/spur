@@ -422,9 +422,11 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/00_ADR.md`
 
-- [2026-06-11] spur-new: Draft ADRs that bundled a principle + a deferred design + a mechanism
+- [2026-08-12] spur-new: Draft ADRs that bundled a principle + a deferred design + a mechanism
   choice + implementation tips had to be unbundled on operator review. Split before proposing,
-  not after (now §6.1 rules 1–2).
+  not after (now §6.1 rules 1–2). Recurred on ADR-057 first draft (occupant/run/wait stuffed into
+  Decision; false Amends of ADR-052). Slim Decision to the law; mechanism stays in `03`/`04`;
+  Amends only when the prior decision actually changes.
 - [2026-06-11] spur-new: Shipped commands drifted past the ADR's committed-surface list for
   weeks with no entry — repaired by dated amendment. The §5 trigger table exists because of
   this.
@@ -443,6 +445,9 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: A whole capability group (team mode) shipped with zero scope rows —
   discovered only during an unrelated review. "Every shipped surface has a scope row" (§6.2
   rule 2) exists because of this.
+- [2026-08-12] spur-new: The team-coordination membership row still said `start|stop` stubs after
+  the supervisor shipped. Scope rows must name the live verb set (`up|down|start|stop`), not the
+  Phase-N nickname from the intake ticket.
 - [2026-06-11] spur-new: The "deferred until need re-confirmed" clause earned its keep — a large
   surface expansion was admitted only after an evidence-based usage review, which made the scope
   decision defensible item-by-item.
@@ -515,6 +520,7 @@ if it recurs, a new rule in §6.
   text went false. A ✅ row's *acceptance text* rots independently of its status; spot-check both
   (§7 audit).
 - [2026-08-08] spur-new: The entire §6 History section was stale after feature E1 shipped — 7 sources (now 10), no forensic ETL, no `--source all` fan-out, no `daily`/`analyze`/`report` pipeline, no scheduling, no versioned artifact. A ✅ status row stayed green while its acceptance text was 4 features behind. When a feature ships a capability group, audit every `05` row in that section in the same wrapup (§7 audit).
+- [2026-08-12] spur-new: `01` and `05` still called `spur team start|stop` “Phase 4 stubs” after G2 tasks 0195/0207–0210 were `done` and `04` already documented the live verbs. A 💤/`stubs` label in an index outlives the satellite. When a supervision/CLI slice ships, update `01` membership and `05` status in the same wrapup — and `feature sync` the leaf — or the next planning pass will reinvent the supervisor.
 
 ### Lessons for `AGENTS.md`
 
