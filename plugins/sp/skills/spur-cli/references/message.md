@@ -19,7 +19,7 @@ use it well*.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `send <body>` | Enqueue a message for an agent | `--to <id>` `--from <id>` `--json` |
+| `send <body>` | Enqueue a message for an agent | `--to <id>` `--from <id>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
 | `inbox` | List messages addressed to an agent | `--agent <id>` `--json` |
 | `reply <msg-id> <body>` | Thread a reply to a message | `--json` |
 | `watch` | Follow an agent inbox - surface new messages as they arrive | `--agent <id>` `--interval <ms>` `--json` |
@@ -33,18 +33,29 @@ invalid usage.
 spur message send "Please review PR 42" --to reviewer
 spur message send "Task 0040 is blocked" --to worker-1 --from operator
 spur message send "Done" --to planner --json
+spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
 ```
 
 Enqueues a durable message addressed to `--to <id>`. The recipient drains it on its next `agent run
 --drain` or `agent loop` iteration. `--from` defaults to `operator`.
 
+`--wait` snapshots the recipient occupant **before** enqueue, then waits on that pin in the same CLI
+process (G4 wave 2 / ADR-057). Default `--until invoke-exit`. A later occupant cannot satisfy the
+wait; enqueue is **not** rolled back if the wait later fails.
+
 ### Flags
 
 | Flag | Purpose |
-|------|---------|
+| ------ | --------- |
 | `--to <id>` | **Required.** Recipient agent id. |
 | `--from <id>` | Sender id (default: `operator`). |
-| `--json` | Output machine-readable JSON. |
+| `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
+| `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |
+| `--timeout <ms>` | Caller deadline in milliseconds. |
+| `--json` | Output machine-readable JSON (`{ msgId, toId, status, wait: { satisfied } }`). |
+
+`--wait` failures use the same error codes as `agent wait`: `occupant_gone`, `run_replaced`,
+`wait_stalled`, `timeout` (exit 1).
 
 ## `inbox` - list addressed messages
 
@@ -79,7 +90,7 @@ lines.
 ### Flags
 
 | Flag | Purpose |
-|------|---------|
+| ------ | --------- |
 | `--agent <id>` | **Required.** Agent id to watch. |
 | `--interval <ms>` | Poll interval in milliseconds (default: `2000`). Must be a positive integer; exit `2` otherwise. |
 | `--json` | Output one JSON object per new message. |

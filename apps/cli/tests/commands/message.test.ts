@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { defaultSleep, parseInterval, runMessageWatch } from '../../src/commands/message';
 import { main } from '../../src/index';
@@ -486,5 +486,149 @@ describe('defaultSleep', () => {
         await defaultSleep(5000, controller.signal);
         const elapsed = Date.now() - start;
         expect(elapsed).toBeLessThan(200);
+    });
+});
+
+describe('spur message send --wait (G4 wave 2, R5)', () => {
+    test('--wait with no recipient occupant → exit 1 occupant_gone (--json envelope)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(
+                ['message', 'send', '--to', 'reviewer', '--wait', '--timeout', '50', '--json', 'hello'],
+                { cwd, output: out, dbUrl },
+            );
+            expect(code).toBe(1);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.error.code).toBe('occupant_gone');
+            expect(parsed.error.message).toMatch(/no occupant for specId "reviewer"/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--wait with no occupant → plain-text error, exit 1', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--to', 'reviewer', '--wait', '--timeout', '50', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/occupant_gone/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('send without --wait still works (no occupant required)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--to', 'reviewer', '--json', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(0);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.toId).toBe('reviewer');
+            expect(parsed.status).toBe('queued');
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+/** Seed an occupant (+ optional invoke events) into a file DB, then close it. */
+async function seedSendOccupant(opts: {
+    dbUrl: string;
+    specId: string;
+    runId: string;
+    events?: { eventName: 'agent.invoke.start' | 'agent.invoke.exit'; sequence: number }[];
+}): Promise<void> {
+    const db = await createMigratedDb({ url: opts.dbUrl });
+    const runDao = new CoordinationRunDao(db);
+    await runDao.insertStart({
+        specId: opts.specId,
+        agentKind: 'claude-code',
+        processId: null,
+        runId: opts.runId,
+        generation: 1,
+        startedAt: new Date().toISOString(),
+    });
+    const eventDao = new SystemEventDao(db);
+    for (const ev of opts.events ?? []) {
+        await eventDao.insert({
+            id: `${opts.runId}-${ev.sequence}`,
+            event_name: ev.eventName,
+            occurred_at: new Date().toISOString(),
+            run_id: opts.runId,
+            sequence: ev.sequence,
+        });
+    }
+    db.close();
+}
+
+describe('spur message send --wait — seeded occupant resolves (G4 wave 2, R5)', () => {
+    test('--wait --until invoke-exit resolves when the pinned run already exited', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        await seedSendOccupant({
+            dbUrl,
+            specId: 'reviewer',
+            runId: 'R1',
+            events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
+        });
+        try {
+            const code = await main(
+                [
+                    'message',
+                    'send',
+                    '--to',
+                    'reviewer',
+                    '--wait',
+                    '--until',
+                    'invoke-exit',
+                    '--timeout',
+                    '2000',
+                    '--json',
+                    'hello',
+                ],
+                { cwd, output: out, dbUrl },
+            );
+            expect(code).toBe(0);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.msgId).toBeDefined();
+            expect(parsed.wait.satisfied).toBe('invoke-exit');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--wait --until injected blocks when nothing drains, then times out (exit 1)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        await seedSendOccupant({ dbUrl, specId: 'reviewer', runId: 'R1' });
+        try {
+            const code = await main(
+                [
+                    'message',
+                    'send',
+                    '--to',
+                    'reviewer',
+                    '--wait',
+                    '--until',
+                    'injected',
+                    '--timeout',
+                    '1200',
+                    '--json',
+                    'hello',
+                ],
+                { cwd, output: out, dbUrl },
+            );
+            expect(code).toBe(1);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.error.code).toBe('timeout');
+        } finally {
+            await cleanup();
+        }
     });
 });

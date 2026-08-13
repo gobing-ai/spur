@@ -55,7 +55,7 @@ const CRITICAL_TASK_VERBS = ['deps', 'sections', 'run-link'];
 
 // Expected Tier B verb sets documented in sp:spur-cli references (task 0395)
 const EXPECTED_TIER_B_VERBS = {
-    agent: ['run', 'loop', 'list', 'doctor', 'create', 'edit', 'delete'],
+    agent: ['run', 'loop', 'wait', 'list', 'doctor', 'create', 'edit', 'delete'],
     message: ['send', 'inbox', 'reply', 'watch'],
     team: ['assign', 'status', 'up', 'down', 'start', 'stop'],
     init: ['init'],

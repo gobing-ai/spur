@@ -1,7 +1,7 @@
 # Inter-agent control plane
 
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.
-**Status:** Wave 1 **landed** (task 0529, 2026-08-13). Waves 2–3 remain accepted design, not built.
+**Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3 remains accepted design, not built.
 **Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
 
@@ -111,19 +111,24 @@ Another agent “reads output” by reading `artifactRefs[].path` (or a bounded 
 
 | State | Source (first-class only) |
 | --- | --- |
-| `working` | `agent.invoke.start` for this `runId` |
-| `idle` | `agent.invoke.exit` for this `runId` **and** no `queued` inbox for `specId` |
+| `working` | latest `agent.invoke.start` for this `runId` |
+| `idle` | latest `agent.invoke.exit` for this `runId` **and** `countPending(specId)===0` |
 | `blocked` | First-class blocked signal only (HITL / future `agent report-state`). Absent signal ⇒ state is not `blocked` |
 | `done` | Out of v1. Herdr `done` is unseen-idle UI; do not invent an unseen bit here |
 
 No screen-manifest detector. No OSC/spinner matching.
 
-## 6. Planned wait / send-wait surface
+> **Wave 2 (0530):** `projectLifecycle` in `packages/app/src/services/occupant-wait.ts` implements
+> this table as a pure function. `exit` + a non-empty queued inbox is `unknown` (will re-invoke), not
+> `idle`; `idle` requires exit **and** `countPending===0`.
 
-Accepted design. **Not shipped.** Do not document these as committed command signatures in `04` §1.1 until code exists (T3 + ADR-051 consent).
+## 6. Wait / send-wait surface
+
+**Shipped (task 0530).** Command signatures are documented in `04_DESIGN.md` §1.x and
+`sp:spur-cli` (`agent.md` / `message.md`).
 
 ```text
-spur agent wait <specId> [--run <runId>] --until invoke-exit|idle|blocked [--timeout <ms>] [--json]
+spur agent wait <specId> [--run <runId>] --until idle|working|invoke-exit|blocked [--timeout <ms>] [--json]
 spur message send <body> --to <specId> [--from <id>] --wait --until injected|invoke-exit [--timeout <ms>] [--json]
 ```
 
@@ -138,6 +143,10 @@ spur message send <body> --to <specId> [--from <id>] --wait --until injected|inv
 5. Identity mismatch → `occupant_gone` or `run_replaced`.
 6. No relevant event and no status change within `timeout_ms` → `wait_stalled` when the wait started from a non-working occupant and `--until` is not already true; otherwise `timeout`.
 7. Client disconnect / SIGINT ends the wait; it does not roll back an already-enqueued message.
+
+> **Wave 2 poll (0530):** the follow loop polls `getOccupant` + `system_events` (`agent.invoke.*`
+> for the pinned `runId`) every 100 ms. Task 0531 will replace only the poll body with a
+> `followSystemEventsAfter` helper; the identity + stall/timeout contract above is unchanged.
 
 Long waits stay on the CLI/connection side. `TeamService` / `AgentService` methods remain short.
 
@@ -173,7 +182,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 | Wave | Lands | Does not land |
 | --- | --- | --- |
 | 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read — **LANDED (task 0529)** | wait verb, lifecycle enum as a public wait target, new noun |
-| 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) | Board SSE, `blocked` without a first-class signal, protocol ping |
+| 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) — **LANDED (task 0530)** | Board SSE, `blocked` without a first-class signal, protocol ping |
 | 3 | Snapshot/seq helper reused by wait, contract/schema notes, optional `agent report-state` only if `blocked` cannot be derived | G3 Board un-merge (feature G3 / ADR-052), live handoff, screen detection |
 
 ## 10. Files likely to change (implementers)

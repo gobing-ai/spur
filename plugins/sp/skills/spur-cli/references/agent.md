@@ -23,6 +23,7 @@ that before using `run` for fan-out dispatch.
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--agent <id>` `--poll <ms>` |
+| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) | `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or team agent specs with `--specs` | `--specs` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` | `--type` `--tags` `--model` `--autonomy` `--system-prompt` `--name` `--workspace` `--purpose` `--auto-start` `--no-identity-preamble` `--json` |
@@ -46,7 +47,7 @@ through a coding agent as an external process, producing a persisted run record 
 ### Flags
 
 | Flag | Purpose |
-|------|---------|
+| ------ | --------- |
 | `--agent <name>` | Agent name or `auto`. Selects which installed coding agent executes the prompt. |
 | `--model <name>` | Agent model argument (e.g. `o3`, `sonnet`). Passed through to the agent's model flag. |
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
@@ -96,6 +97,38 @@ under supervision.
 The loop runs until `SIGINT` / `SIGTERM`. Each iteration: check inbox -> if messages, drain each
 into `run` with `--drain` -> else sleep for `--poll` ms.
 
+## `wait` - identity-pinned occupant wait (G4 wave 2)
+
+```bash
+spur agent wait reviewer                          # default --until idle
+spur agent wait reviewer --run R3 --until invoke-exit
+spur agent wait reviewer --until working --until invoke-exit --timeout 30000 --json
+```
+
+`wait` pins an occupant's identity (`specId` + `runId` + `generation`) from the snapshot at wait
+start, then polls until the first satisfied `--until` (OR). `--run` pins an explicit run; default
+is the spec's latest run. Replacement, generation bump, or disappearance fails fast; a non-working
+occupant that makes no progress inside the stall budget fails `wait_stalled`.
+
+### Flags
+
+| Flag | Purpose |
+| ------ | --------- |
+| `--run <runId>` | Pin a specific run id (default: the spec's latest run). |
+| `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle`. |
+| `--timeout <ms>` | Caller deadline. Undefined = no deadline (stall budget still applies). |
+| `--json` | `{ satisfied, pin }` on success; `{ error: { code, message } }` on failure. |
+
+### Exit codes + error envelope
+
+| Code | Exit | Meaning |
+| ------ | ------ | --------- |
+| `occupant_gone` | 1 | No occupant for the specId, or it disappeared mid-wait. |
+| `run_replaced` | 1 | The pinned run was replaced or its generation bumped. |
+| `wait_stalled` | 1 | Non-working occupant, no progress within `min(timeout, 5000)ms`. |
+| `timeout` | 1 | Caller `--timeout` elapsed (or aborted via SIGINT). |
+| `usage` | 2 | Invalid flags, or `--until blocked` as the sole target (no first-class signal in wave 2). |
+
 ## `list` - detected agents and team specs
 
 ```bash
@@ -132,7 +165,7 @@ agent loop` can self-drain its inbox.
 ### Flags
 
 | Flag | Purpose |
-|------|---------|
+| ------ | --------- |
 | `--type <agent-type>` | Agent spec type (e.g. `claude`, `codex`, `omp`). |
 | `--tags <a,b>` | Comma-separated team identity tags (e.g. `team:alpha,role:worker`). |
 | `--model <name>` | Agent model argument. |

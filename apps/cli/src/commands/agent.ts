@@ -5,7 +5,11 @@ import {
     type AgentSpecInput,
     type SystemEventBus,
     TeamService,
+    WaitError,
+    type WaitUntil,
+    waitForOccupant,
 } from '@gobing-ai/spur-app';
+import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
@@ -75,6 +79,19 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 process.off('SIGINT', onSignal);
                 process.off('SIGTERM', onSignal);
             }
+        });
+
+    agent
+        .command('wait')
+        .description('Wait for a pinned occupant run to reach a lifecycle state (G4 wave 2).')
+        .argument('<specId>', 'Agent spec id whose occupant to wait on')
+        .option('--run <runId>', 'Pin a specific run id (default: spec latest run)')
+        .option('--until <state>', 'Lifecycle state to wait for (repeatable OR)', collectUntil, [])
+        .option('--timeout <ms>', 'Caller deadline in milliseconds', parseTimeout)
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (specId, options) => {
+            const code = await runAgentWait(context, specId, options);
+            context.setExitCode(code);
         });
 
     agent
@@ -384,6 +401,27 @@ function parseLoopPoll(raw: string | boolean | undefined): number {
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_LOOP_POLL_MS;
 }
 
+/** Valid `agent wait --until` states. */
+const WAIT_UNTIL_STATES = new Set<WaitUntil>(['idle', 'working', 'invoke-exit', 'blocked']);
+
+/** Commander reducer: accumulate repeatable `--until` values into an array. */
+function collectUntil(value: string, acc: WaitUntil[]): WaitUntil[] {
+    if (!WAIT_UNTIL_STATES.has(value as WaitUntil)) {
+        throw new Error(`invalid --until "${value}" (expected one of: ${[...WAIT_UNTIL_STATES].join(', ')})`);
+    }
+    return [...acc, value as WaitUntil];
+}
+
+/** Parse the `--timeout` flag as a positive-integer ms value, or undefined. */
+function parseTimeout(raw: string | boolean | undefined): number | undefined {
+    if (raw === undefined || typeof raw === 'boolean') return undefined;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+        throw new Error(`invalid --timeout "${raw}" (expected a positive integer ms)`);
+    }
+    return n;
+}
+
 /** Cancellable sleep; resolves immediately if the signal is already aborted. */
 function loopSleep(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
@@ -439,4 +477,133 @@ export async function runAgentLoop(
         iteration++;
     }
     return 0;
+}
+
+/** Read the latest cataloged invoke event for a runId from the system_events ledger. */
+async function readLatestInvokeEvent(
+    dao: SystemEventDao,
+    runId: string,
+): Promise<{ eventName: string; sequence: number | null } | null> {
+    const rows: SystemEventRow[] = await dao.query({
+        run_id: runId,
+        names: ['agent.invoke.start', 'agent.invoke.exit'],
+        limit: 1,
+    });
+    const row = rows[0];
+    if (row === undefined) return null;
+    return { eventName: row.event_name, sequence: row.sequence };
+}
+
+/**
+ * `spur agent wait <specId> [--run <runId>] [--until ...] [--timeout <ms>] [--json]`.
+ * Identity-pinned wait on an occupant run (G4 wave 2, task 0530 R4). Pins the
+ * occupant's specId+runId+generation and waits for the first satisfied
+ * `--until` (OR), failing with a typed error on replacement / stall / timeout.
+ */
+async function runAgentWait(
+    context: CliContext,
+    specId: string,
+    options: { run?: string; until: WaitUntil[]; timeout?: number; json?: boolean },
+): Promise<number> {
+    const untilList = options.until;
+    if (untilList.length === 0) untilList.push('idle');
+    // `blocked` has no first-class signal in wave 2 → reject at usage time.
+    if (untilList.length === 1 && untilList[0] === 'blocked') {
+        return waitUsageError(
+            context,
+            options,
+            '--until blocked has no first-class signal in this wave; use idle|working|invoke-exit',
+        );
+    }
+
+    const agentService = context.agentService();
+    const teamService = new TeamService(context);
+    const eventDao = new SystemEventDao(await context.getDb());
+
+    const controller = new AbortController();
+    const onSignal = () => controller.abort();
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+
+    try {
+        // Snapshot once to resolve the default runId + initial pin before waiting.
+        const occupant = await agentService.getOccupant({ specId });
+        if (occupant === null) {
+            return waitFail(context, options, 'occupant_gone', `no occupant for specId "${specId}"`);
+        }
+        const runId = options.run ?? occupant.runId;
+        if (options.run !== undefined && options.run !== occupant.runId) {
+            // Pin an explicit (possibly completed) run; read its own events.
+        }
+        const pin = { specId, runId, generation: occupant.generation };
+
+        // First satisfied `--until` wins (OR semantics). Errors from the first
+        // failing target surface as the wait result.
+        let result: { pin: typeof pin; satisfied: WaitUntil } | null = null;
+        let firstError: WaitError | null = null;
+        for (const until of untilList) {
+            try {
+                result = await waitForOccupant(
+                    {
+                        getOccupant: (id) => agentService.getOccupant({ specId: id }),
+                        countPending: (id) => teamService.countPending(id),
+                        latestInvokeEvent: (r) => readLatestInvokeEvent(eventDao, r),
+                        now: () => Date.now(),
+                        sleep: (ms) => loopSleep(ms, controller.signal),
+                    },
+                    {
+                        pin,
+                        until,
+                        timeoutMs: options.timeout,
+                        signal: controller.signal,
+                    },
+                );
+                break;
+            } catch (error) {
+                if (error instanceof WaitError) {
+                    firstError = error;
+                    // `timeout`/`occupant_gone`/`run_replaced` are terminal — no point
+                    // trying the next `--until`; only `wait_stalled` might differ.
+                    if (error.code !== 'wait_stalled') break;
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        if (result !== null) {
+            const payload = { satisfied: result.satisfied, pin: result.pin };
+            if (options.json) {
+                context.output.write(toJson(payload));
+            } else {
+                context.output.write(`${pin.specId}/${pin.runId} reached ${result.satisfied}`);
+            }
+            return 0;
+        }
+        const err = firstError ?? new WaitError('wait_stalled', 'no --until target satisfied');
+        return waitFail(context, options, err.code, err.message);
+    } finally {
+        process.off('SIGINT', onSignal);
+        process.off('SIGTERM', onSignal);
+    }
+}
+
+/** Emit a usage error (exit 2) for `agent wait`. */
+function waitUsageError(context: CliContext, options: { json?: boolean }, message: string): number {
+    if (options.json) {
+        context.output.write(toJson({ error: { code: 'usage', message } }));
+    } else {
+        context.output.error(message);
+    }
+    return 2;
+}
+
+/** Emit a typed wait failure (exit 1) with the `--json` error envelope. */
+function waitFail(context: CliContext, options: { json?: boolean }, code: string, message: string): number {
+    if (options.json) {
+        context.output.write(toJson({ error: { code, message } }));
+    } else {
+        context.output.error(`${code}: ${message}`);
+    }
+    return 1;
 }

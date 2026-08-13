@@ -142,6 +142,26 @@ export {
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {
+    InvokeEventSnapshot,
+    OccupantLifecycle,
+    OccupantPin,
+    OccupantWaitDeps,
+    SendWaitUntil,
+    WaitErrorCode,
+    WaitForOccupantOptions,
+    WaitStartSnapshot,
+    WaitUntil,
+} from './services/occupant-wait';
+export {
+    DEFAULT_STALL_MS,
+    POLL_INTERVAL_MS,
+    projectLifecycle,
+    satisfies,
+    snapshotOccupant,
+    WaitError,
+    waitForOccupant,
+} from './services/occupant-wait';
+export type {
     EnsurePipelineRunLinkOptions,
     EnsurePipelineRunLinkResult,
 } from './services/pipeline-run-link';
