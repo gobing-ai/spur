@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.47] — 2026-08-13
+
+### Added
+
+- feat(0534): fix harness discoverability defects (c77755ce)
+
+### Changed
+
+- docs(proect): enhance docs/99_PROJECT_CONSTITUTION.md (e7e10b53)
+
 ## [0.3.46] — 2026-08-13
 
 ### Added
