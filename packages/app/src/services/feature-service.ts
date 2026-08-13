@@ -230,7 +230,8 @@ export class FeatureService {
         const doc = MarkdownDocument.parse(current, 'feature');
         if (!doc.sectionNames.includes(sectionName)) {
             throw new Error(
-                `Feature ${id} does not contain section "${sectionName}". Available sections: ${doc.sectionNames.join(', ')}`,
+                `Feature ${id} does not contain section "${sectionName}". Available sections: ${doc.sectionNames.join(', ')}. ` +
+                    'To list valid section names without a failed write: `spur task sections <wbs> list`.',
             );
         }
         const raw = await this.ctx.fs.readFile(sourceFile);

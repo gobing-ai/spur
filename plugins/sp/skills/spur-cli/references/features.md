@@ -99,6 +99,9 @@ spur feature update H2 --section "Acceptance Criteria" --from-file /tmp/ac.md
 `--section` **requires** `--from-file` (exit `2` otherwise). Replaces the whole named section body.
 The `## Tasks` block is still rebuilt by `refresh` (files win for that region).
 
+Valid section names without a failed write: `spur task sections <wbs> list` (the same pointer
+`spur task update --help` carries).
+
 **Advance** (multi-hop forward walk):
 
 ```bash

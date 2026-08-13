@@ -233,6 +233,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
     // ── show ──
     task.command('show')
+        // `get` alias (0534 R1): agents reach for `get` (6 live invocations in feature A
+        // forensics); Commander's lexical suggester cannot bridge get→show (edit distance),
+        // so an alias is the only close. One help entry, one code path.
+        .alias('get')
         .summary('Show a task by WBS.')
         .argument('<wbs>', 'Task WBS number')
         .option('--folder <path>', 'Custom tasks folder')
@@ -270,6 +274,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 'task: run `/sp:dev-verify <wbs> --next` to PASS it, or record the audited bypass with',
                 '`SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done --reason "…"`.',
                 'See the gate checklist (spur-dev/references/gate-checklists.md).',
+                'Valid section names (no failed write): `spur task sections <wbs> list`.',
             ].join('\n'),
         )
         .option('--section <name>', 'Section name to replace')

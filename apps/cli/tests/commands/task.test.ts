@@ -384,6 +384,36 @@ describe('spur task CLI', () => {
         expect(output.errors.at(-1)).toContain('not found');
     });
 
+    // ── show alias (0534 R1) ──
+    test('show alias `get` resolves like show', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Alias me'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'get', wbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('Alias me');
+    });
+
+    test('near-miss suggester still fires on a typo (0534 AC2 non-regression)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Suggester'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'shwo', wbs], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('Did you mean show?');
+    });
+
+    test('update --help names the section-discovery command (0534 R2)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', '--help'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('spur task sections <wbs> list');
+    });
+
     // ── update ──
     test('update --section without --from-file exits 2 (usage error)', async () => {
         const cOut = createCapturedOutput();

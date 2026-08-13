@@ -24,6 +24,7 @@ Start from the WBS, not the corpus layout:
 
 ```bash
 spur task show <wbs> --json  # metadata + full content + filePath
+spur task get  <wbs> --json  # alias of `show` — same output, no separate code path
 spur task path <wbs> --json  # absolute path only
 ```
 
@@ -148,6 +149,8 @@ spur task update 0040 --section Review --from-file /tmp/review.md
   read from a file (this is what makes edits crash-safe and reviewable). Exit `2` otherwise.
 - Section names match the DD-08 task headings: `Background`, `Acceptance Criteria`, `Plan`,
   `Solution`, `Testing`, `Review`, `References`, `History`.
+- Valid section names without a failed write: `spur task sections <wbs> list` (the same
+  pointer `task update --help` carries).
 - The write replaces the **whole** named section body; assemble the full section in the temp file
   first, then point `--from-file` at it.
 

@@ -64,9 +64,11 @@ export function parseCommanderHelp(text: string): { commands: string[]; flags: s
     // A command entry starts at the 2-space indent with its token; continuation lines
     // (description wraps, aligned to the description column) are indented deeper and must
     // NOT inject phantom commands — the first word of a wrapped description is not a verb.
+    // Commander renders aliased commands as `verb|alias`; the base verb is the identity the
+    // references document, so the alias suffix is normalized away (0534 R1 `get` alias).
     const commands =
         commanderBlock(text, 'Commands:')
-            ?.map((line) => line.match(/^ {2}(\S+)/)?.[1] ?? '')
+            ?.map((line) => (line.match(/^ {2}(\S+)/)?.[1] ?? '').split('|')[0] ?? '')
             .filter(Boolean) ?? [];
     const flags =
         commanderBlock(text, 'Options:')?.flatMap((line) =>

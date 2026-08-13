@@ -47,11 +47,17 @@ When parsing a line of JSONL, look for tool/function invocations under common sh
 
 | Source family | Typical tool block type / path | Bash/command field |
 |---------------|--------------------------------|--------------------|
-| OMP / omp-agent | `message.content[]` entries with `type: "toolCall"` | `input.command` |
+| OMP / omp-agent | `message.content[]` entries with `type: "toolCall"` | `arguments.command` |
 | Claude Code | `type: "tool_use"` (or nested message content) | `input.command` / `input` |
 | Codex / others | Importer-normalized or vendor-specific; search for `command`, `tool_name`, `name` | best-effort |
 
 Always record **what field path you used** in the inventory Notes so evidence is auditable.
+
+**Fail-loud rule:** a zero tool-command count across a **non-empty** session set means the field map
+is wrong, not that the sessions were idle. Report a probable field-map error instead of an
+idle-session / no-waste finding — a parser that matches nothing must never produce a clean verdict
+(0534 R3; the OMP shape is `arguments.command`, verified: a toolCall block's keys are
+`['arguments','id','intent','name','partialArgs','streamIndex','type']`).
 
 **Loop detection (all sources):** normalize the shell command string and count consecutive or
 near-consecutive identical invocations (≥3) without an intervening source-file edit tool call.
@@ -63,7 +69,8 @@ OMP/agent session logs are JSONL under `~/.omp/agent/sessions/-<project>/`:
 - Each line is a JSON object with a `type` field
 - Key event types: `session`, `message`, `compaction`, `title`, `title_change`, `custom`
 - Tool calls live in `message.content` as blocks with `type: "toolCall"` (**not** `tool_use`)
-- Bash tool calls expose `input.command`
+- Bash tool calls expose `arguments.command` (verified live against OMP JSONL: a toolCall block's
+  keys are `['arguments','id','intent','name','partialArgs','streamIndex','type']`)
 - Subagent sessions live in subdirectories (e.g. `Run0376/`, `Refine0378/`)
 - Subagents may have `*.log` beside the JSONL session file
 - Session start: `session.timestamp`

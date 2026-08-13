@@ -67,4 +67,10 @@ Appended to `.spur/run/wrapup-metrics.jsonl`:
 {"wbs":"0532","feature_id":"G2","status":"done","verdict":"PASS","timestamp":"2026-08-13T18:36:49Z"}
 ```
 
-Source: `spur task show 0532 --json` (status `done`, feature_id `G2`) + `.spur/run/0532-verdict.json` (verdict PASS).
+Source: `spur task show 0532 --json` (status `done`, feature_id `G2`) + `.spur/run/0532-verdict.json` (verdict PASS).Line appended to `.spur/run/wrapup-metrics.jsonl`:
+
+```jsonl
+{"wbs":"0534","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-13T22:03:06Z"}
+```
+
+Source: `spur task show 0534 --json` (status `done`, `feature_id: null`) + task file line 266 (`Verdict: PASS`).

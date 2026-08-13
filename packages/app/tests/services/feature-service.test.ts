@@ -158,7 +158,7 @@ describe('FeatureService', () => {
             writeFileSync(source, 'body\n');
 
             await expect(svc.updateSection(created.ref.id, 'Background', source)).rejects.toThrow(
-                /Available sections: Goal, Scope, Acceptance Criteria, Tasks, Notes, History/,
+                /Available sections: Goal, Scope, Acceptance Criteria, Tasks, Notes, History.*spur task sections <wbs> list/,
             );
         });
     });

@@ -202,7 +202,7 @@ Before any ad-hoc verification SQL against `history_*` tables, follow the schema
 | `test-loop`       | Same test command run 3+ times with no source edit between runs           | (identical runs − 1) × ~2 min |
 | `guard`           | 3+ `spur task check` calls for the same task before pass                  | (extra checks) × ~3 min       |
 | `compaction`      | Compactions > 5 per session                                               | count × ~2.5 min              |
-| `section-write`   | `spur task update --section` calls > 2× task count                        | (extra writes) × ~2 min       |
+| `section-write`   | `spur task update --section` calls per task > 1.5× the canonical section count for the task's variant/status matrix entry (feature-impl ≈ 9 sections ⇒ flag > ~13 writes/task; one write per canonical section is correct behavior, not waste) | (extra writes) × ~2 min       |
 | `git-red-herring` | `git stash` / `git branch` / `git diff` between test failures             | ~5–20 min per incident        |
 | `verbose-output`  | Unfiltered test output flooding (e.g. bare `tail` without failure filter) | per-run × ~1500 tokens        |
 

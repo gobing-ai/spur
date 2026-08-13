@@ -42,6 +42,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
     // ── show ──
     feature
         .command('show')
+        // `get` alias (0534 R1): mirrors `task show` — the noun is symmetric (show by id),
+        // so the same discovery gap applies.
+        .alias('get')
         .summary('Show a feature by ID.')
         .argument('<id>', 'Feature ID')
         .option('--folder <path>', 'Custom features folder')
@@ -73,6 +76,14 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .summary('Update a feature status, scalar frontmatter field, or section body.')
         .argument('<id>', 'Feature ID')
         .argument('[status]', 'New lifecycle status')
+        .addHelpText(
+            'after',
+            [
+                'Section names are validated against the closed-world canonical set; a rejected',
+                '`--section` costs a failed write. List valid names first:',
+                '`spur task sections <wbs> list`.',
+            ].join('\n'),
+        )
         .option('--field <key>', 'Frontmatter field to set (e.g. priority)')
         .option('--value <value>', 'New value for --field')
         .option('--section <name>', 'Section name to replace')

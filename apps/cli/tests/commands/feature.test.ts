@@ -99,6 +99,24 @@ describe('spur feature CLI', () => {
         expect(exitCode).toBe(1);
     });
 
+    test('show alias `get` routes to the show handler (0534 R1)', async () => {
+        // No create here: the suite runs at the A-Z top-level letter ceiling, so an
+        // extra feature would exhaust allocation and break later move tests. Routing
+        // is proven by the error contract matching `feature show` (the alias cannot
+        // have its own handler).
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'get', 'ZZZZZ'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('not found');
+    });
+
+    test('update --help names the section-discovery command (0534 R2)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'update', '--help'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('spur task sections <wbs> list');
+    });
+
     test('update --field sets a frontmatter value', async () => {
         const cOut = createCapturedOutput();
         await main(['feature', 'create', 'Prioritize Me'], { cwd, output: cOut });
