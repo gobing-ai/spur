@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.46] — 2026-08-13
+
+### Added
+
+- feat(agent): add occupant identity, caller env, and coordination runs (G4/ADR-057 wave 1) (c6eb4e10)
+- feat(agent): identity-pinned wait and atomic send-wait (G4/ADR-057 wave 2) (f9af0dc5)
+- feat(app): snapshot-then-follow wait over the system_events ledger (daeb5ba8)
+- feat(workflow): load YAML extensions on validate and run (D4, task 0533) (2bf0fdb5)
+
+### Fixed
+
+- fix(agent): add WaitError tsdoc per every-export-has-tsdoc (5e77f492)
+
+### Changed
+
+- chore(0532): record G2 supervision verdict artifacts, close feature G2 (3b64da1e)
+- chore(0532): refresh verdict evidence from re-verify pass (81c1a7da)
+- chore(deps): bump @gobing-ai/ts-* catalog 0.4.30 → 0.4.31 (85e8be34)
+- docs: plan inter-agent control plane and G2 supervision tasks (bbe47ece)
+- docs(d4): sync derived docs for workflow YAML extension loading (0533) (1230754e)
+- docs(d4): dogfood report + feature D4 done (0533) (b47e6eeb)
+- docs(g4): sync derived docs for wave-1 control-plane landing (0529) (2f901ceb)
+- docs(g4): sync derived docs for wave-2 control-plane landing (0530) (7ba0f424)
+- docs(spur): sync help + derived docs for wave-2 wait and D4 extensions (1304caa9)
+- docs(workflow): add feature D4 + task 0533 (workflow YAML rule-style extensions) (3bf2178d)
+
 ## [0.3.45] — 2026-08-12
 
 ### Added
