@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.45] — 2026-08-12
+
+### Added
+
+- feat(app): enrich rule/workflow trace outputs with execution context (7a1b9353)
+- feat(web): make system events actionable (fe794b50)
+- feat(observability): add actionable system event envelopes (5230c7a7)
+- feat(web): list child features in feature detail panel (918155d7)
+
+### Fixed
+
+- fix(app): prefer producer-stamped severity over catalog heuristic (67b015a5)
+- fix(app): adapt workflow events to ts-infra 0.4.30 contracts (bb9d62e8)
+- fix(app): refine system event severity inference (d0faeaf5)
+- fix(web): render unusable board fields as dash, producer-only column (40a5303c)
+
+### Changed
+
+- chore(deps): bump gobing-ai ts workspace catalog to 0.4.30 (ccbbb000)
+- chore(deps): bump gobing-ai ts workspace catalog to 0.4.28 (b88954d9)
+- docs: add superskill install examples to README (c3541587)
+- docs(features): refresh generated task tables (5300ffb3)
+- docs(observability): plan actionable event context (532bc7da)
+- docs(tasks): update task status after implementation (5875506d)
+- docs(features): mark K as verifying in feature index (46068d45)
+- docs(rules): align catalog docs with shipped preset composition (eacd6e02)
+- docs(K): link child features in board detail panel; dev-find-next --auto (9942357c)
+- docs(rules): align catalog docs with shipped composition (C1/0524) (3489ae7e)
+- docs(next-feature): full B3 roster before terminal; freeze inputs (0523) (d7f98aa8)
+- docs(tasks): remove task 0523 (6f9dde02)
+
 ## [0.3.44] — 2026-08-12
 
 ### Added
