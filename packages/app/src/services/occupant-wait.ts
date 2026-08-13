@@ -41,6 +41,7 @@ export interface InvokeEventSnapshot {
 /** Typed error code → exit-1 failure for a wait. */
 export type WaitErrorCode = 'occupant_gone' | 'run_replaced' | 'wait_stalled' | 'timeout';
 
+/** Typed wait failure (`occupant_gone` / `run_replaced` / `wait_stalled` / `timeout`). */
 export class WaitError extends Error {
     constructor(
         readonly code: WaitErrorCode,
