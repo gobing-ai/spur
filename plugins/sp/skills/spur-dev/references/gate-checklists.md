@@ -153,6 +153,8 @@ transition to `done`.
 > an answer file or debugging an UNKNOWN verdict.
 
 > **Corpus baseline discipline (`corpus-check`).** `corpus-check` sweeps every task/feature and fails on any structural finding outside `config/corpus-baseline.json`. The baseline is two-sided: an unlisted finding fails, **and** a listed entry that no longer reproduces fails. When introducing or tightening finding rules, reconcile the fallout in the same commit (constitution **T10**).
+>
+> **Transition-shim discipline (`transition-shim-check`, task 0541 / ADR-058).** Wired as the last step of `spur-check` / `spur-check-new`. Two-sided against `config/transition-shims.json`: an `@transition-shim(<id>)` marker with no manifest entry fails as a **new unregistered shim**, **and** a listed entry whose marker is gone from source fails as a **stale entry**. Emptying the manifest is the definition of the agent-role transition being complete. A removal condition must be objectively checkable against the repository. Shapes: `docs/04_DESIGN.md` §2.5.
 
 > **Sandbox test baseline (`bun run test` / `spur-check`).** In the restricted Bash sandbox
 > `bun run spur-check` exits **1 regardless of code health**: ~24 tests bind real ports and the

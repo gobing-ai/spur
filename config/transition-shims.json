@@ -1,0 +1,4 @@
+{
+    "note": "Transition-shim manifest (task 0541, feature B2). Each entry records one compatibility path marked @transition-shim(<id>) in source. Every field is required. The gate (bun run transition-shim-check, inside `spur-check`) is two-sided: an unregistered marker fails, and a stale entry whose marker is gone fails. Emptying this file is the definition of the transition being complete (docs/04_DESIGN.md §2.5). Removal conditions must be objectively checkable against the repository, not 'when convenient'. Shims are registered by the tasks that create them (0536/0537/0538/0542).",
+    "entries": []
+}

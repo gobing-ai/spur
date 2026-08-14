@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.16.0
+version: 1.17.0
 owner: Robin Min
-updated_at: 2026-08-13
+updated_at: 2026-08-14
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -525,3 +525,20 @@ Accepted (design) → Accepted.
 **Amendment (2026-08-13, 0531).** Wave 3 snapshot-then-follow shipped: `followSystemEventsAfter` over the existing `system_events` ledger (global monotonic `sequence` auto-assigned at persist; `idx_system_events_sequence`). First-class `blocked` / optional `agent report-state` remain accepted design.
 
 **Detail:** task 0531; `03 §17`; `docs/design/inter-agent-control-plane.md` §8.
+
+## ADR-058: Tracked Transition Shims — Two-Sided Manifest Gate
+
+- **Status:** Accepted · **Date:** 2026-08-13 · **Amends:** ADR-041, ADR-047 · **Feature:** B2
+- **Decision:** Compatibility with the pre-role agent surface is accepted for the agent-role
+  transition period — but only as a tracked shim. Every compatibility path carries a source
+  comment marker `@transition-shim(<id>)` registered in `config/transition-shims.json` (required
+  fields: id, owning WBS, file, what it keeps working, removal condition). The two-sided gate
+  `bun run transition-shim-check`, wired inside `spur-check`, fails on any marker with no
+  manifest entry **and** on any manifest entry whose marker is gone from source — the two
+  reported distinctly. Emptying the manifest is the definition of the transition being complete;
+  a removal condition must be objectively checkable against the repository.
+- **Why:** Untracked shims become permanent compatibility debt, and a one-sided list rots into a
+  silent suppression file — the same failure `corpus-check`'s two-sided baseline exists to end
+  (ADR-050).
+- **Detail:** `03 §18`; `04 §2.5`; `plugins/sp/scripts/transition-shim-check.ts`; task 0541;
+  shims registered by 0536/0537/0538/0542.

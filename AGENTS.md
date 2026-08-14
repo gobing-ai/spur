@@ -319,6 +319,12 @@ that no longer reproduces fails, so it cannot rot into a silent suppression list
 tightening a finding code obliges you to reconcile the fallout in the same commit (constitution
 **T10**).
 
+**`bun run transition-shim-check` — tracked compatibility shims.** Last step of `spur-check` /
+`spur-check-new` (task 0541, ADR-058). Two-sided against `config/transition-shims.json`: an
+`@transition-shim(<id>)` marker with no entry fails, **and** a listed entry whose marker is gone
+from source fails. Emptying the manifest is the definition of the agent-role transition being
+complete. Shapes: `docs/04_DESIGN.md` §2.5.
+
 **`--no-lifecycle` is bookkeeping, never a guard bypass.** It suppresses lifecycle *run record*
 creation (the pipeline is already a run; a nested one would orphan). The structural gate
 (`spur task check`) runs on `→ testing` and `→ done` regardless. `--force-done` waives the verify

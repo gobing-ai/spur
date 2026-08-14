@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.19.0
+version: 1.20.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-13
+updated_at: 2026-08-14
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -685,3 +685,32 @@ The process pipe stays the operator attach path. It is not the agent-to-agent co
    before persist.
 
 Shapes: `docs/design/inter-agent-control-plane.md`.
+
+## 18. Transition-Shim Gate (ADR-058 — task 0541, feature B2)
+
+The agent-role transition ships tracked compatibility: a compatibility path carries a source
+comment marker `@transition-shim(<id>)`, registered in `config/transition-shims.json` with id /
+owning WBS / file / what it keeps working / removal condition. The gate
+`plugins/sp/scripts/transition-shim-check.ts` reconciles markers against the manifest
+**two-sided**, mirroring `packages/app/src/services/corpus-check.ts` semantics: a marker with no
+manifest entry fails as a **new unregistered shim** (id + file named); a manifest entry whose
+marker no longer appears fails as a **stale entry**; an incomplete entry fails naming the missing
+field. It scans the source roots `apps, packages, plugins, config, scripts, tooling`, skipping
+build output, `vendors`, and `tests`/`test` directories (a fixture mentioning a marker id is test
+data, not a shim) and `docs/` (prose examples do not trip the gate). Node-builtin only so it ships
+to arbitrary projects; `--manifest` / `--roots` overridable. Wired into the `spur-check` chain in
+root `package.json` alongside `corpus-check` (R3) — no opt-in step. Exit 0 when every entry is
+present and every marker registered; 1 on any violation.
+
+**Invariants (enforceable)**
+
+1. Every `@transition-shim(<id>)` marker in a production source root has a manifest entry, and
+   every manifest entry has a live marker — both directions fail the gate.
+2. A manifest entry's `removalCondition` is checkable against the repository; a condition
+   resolvable only by human judgement is rejected in review.
+3. Emptying `config/transition-shims.json` is the definition of the agent-role transition being
+   complete; a shim is removed by its owning task when its condition holds.
+4. The gate runs inside the existing quality gate (`spur-check`), never as a separate opt-in
+   step.
+
+Shapes: `04 §2.5`; `config/transition-shims.json`.

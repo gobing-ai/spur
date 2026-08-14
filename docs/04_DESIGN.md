@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.29.0
+version: 1.30.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-13
+updated_at: 2026-08-14
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -843,6 +843,7 @@ config/
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
   corpus-baseline.json              # accepted errors for `spur task check --corpus` / `bun run corpus-check` (ADR-050)
+  transition-shims.json            # transition-shim manifest — removal worklist for the agent-role transition (task 0541, §2.5)
   templates/                        # task/feature/bdd/docs body templates (§8); CLI never hardcodes body content (DD-11)
     task/{standard,feature-impl,issue,review,brainstorm,meta}.md   # one per TASK_VARIANTS entry (§7.3.1); SSOT alignment invariant enforced by init.test.ts
     feature/default.md
@@ -904,6 +905,42 @@ dependency graph stays Workers-safe:
   re-export, never redefine, so the loader↔service seam shares one identity.
 - **Guardrail.** `config/rules/boundary/config-loading-ownership.yaml` blocks `loadStructuredConfig`
   outside `packages/config` and any reference to the retired `docs/.tasks/config.jsonc`.
+
+### 2.5 Transition-shim manifest & gate (task 0541, feature B2)
+
+**Marker.** A compatibility path that must survive the agent-role transition carries a source comment
+marker `@transition-shim(<id>)` where `<id>` is lowercase kebab (`^[a-z0-9][a-z0-9-]*$`). The marker is
+a grep target and a review signal — it never changes runtime behavior.
+
+**Manifest.** `config/transition-shims.json` records one entry per marker:
+
+```json
+{
+  "id": "agent-bare-binary",
+  "wbs": "0536",
+  "file": "apps/cli/src/commands/agent.ts",
+  "keepsWorking": "the legacy --agent <binary-name> form still resolves",
+  "removalCondition": "config/workflows/ and apps/cli/src contain no bare-binary --agent value"
+}
+```
+
+Every field is required (R1): `id`, `wbs` (owning task), `file` (where the marker lives),
+`keepsWorking` (what the shim keeps working), `removalCondition` (when it can be deleted).
+
+**Gate.** `bun run transition-shim-check` (wired inside `spur-check` and `spur-check-new`) is
+two-sided, mirroring `config/corpus-baseline.json` semantics (`packages/app/src/services/corpus-check.ts`):
+a marker with no manifest entry fails as a **new unregistered shim** naming the id and the file; a
+manifest entry whose marker no longer appears in source fails as a **stale entry** — the two are
+reported distinctly. Markers are scanned in the source roots `apps, packages, plugins, config,
+scripts, tooling` (excluding build output and `tests`/`test` directories — a fixture mentioning a
+marker id is test data, not a shim); `docs/` is not scanned, so prose examples do not trip the gate.
+
+**The manifest is the removal worklist (R4).** Emptying `config/transition-shims.json` is the
+definition of the agent-role transition being complete. A removal condition must be objectively
+checkable against the repository — "remove when `config/workflows/` and `apps/cli/src` contain no
+bare-binary `--agent` value" qualifies; "remove when the binary-name form is unused" does not. A
+condition resolvable only by human judgement is rejected in review. Shims are registered by the
+tasks that create them (0536/0537/0538/0542); this task ships the mechanism seeded empty.
 
 ## 3. Data Shapes
 
