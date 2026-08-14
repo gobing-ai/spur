@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { featuresConfigSchema, tasksConfigSchema } from '../src/index';
+import {
+    featuresConfigSchema,
+    HistoryConfigSchema,
+    HistoryRefreshConfigSchema,
+    resolveHistoryRefreshTrigger,
+    tasksConfigSchema,
+} from '../src/index';
 
 describe('tasksConfigSchema', () => {
     test('parses valid tasks config with a folders map (design §9)', () => {
@@ -48,5 +54,31 @@ describe('featuresConfigSchema', () => {
         if (result.success) {
             expect(result.data.dir).toBe('docs/features');
         }
+    });
+});
+
+describe('historyConfigSchema / resolveHistoryRefreshTrigger (task 0549)', () => {
+    test('defaults are opt-out: on_completion false, debounce_ms 600000 (0548 figures)', () => {
+        const result = HistoryRefreshConfigSchema.parse({});
+        expect(result.on_completion).toBe(false);
+        expect(result.debounce_ms).toBe(600_000);
+    });
+
+    test('explicit opt-in values parse', () => {
+        const result = HistoryConfigSchema.safeParse({
+            refresh: { on_completion: true, debounce_ms: 300_000 },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.refresh).toEqual({ on_completion: true, debounce_ms: 300_000 });
+        }
+    });
+
+    test('debounce_ms below the 1000 ms floor is rejected', () => {
+        expect(HistoryRefreshConfigSchema.safeParse({ debounce_ms: 10 }).success).toBe(false);
+    });
+
+    test('resolveHistoryRefreshTrigger tolerates null config (trigger disabled by default)', () => {
+        expect(resolveHistoryRefreshTrigger(null)).toEqual({ onCompletion: false, debounceMs: 600_000 });
     });
 });

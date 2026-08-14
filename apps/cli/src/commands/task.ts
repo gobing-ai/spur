@@ -38,6 +38,7 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
+import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toJson } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
@@ -434,6 +435,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                     }
                     const result = await svc.updateStatus(wbs, status);
+                    // Completion trigger (task 0549 R1): task → done enqueues a coalesced
+                    // history refresh — off the critical path, opt-in via
+                    // `history.refresh.on_completion`. Best-effort; never changes the
+                    // transition's exit code.
+                    if (status === 'done') {
+                        await maybeTriggerHistoryRefresh(context, 'task-done', wbs);
+                    }
                     // R3 override audit-trail: persist done_forced + done_reason so a later
                     // `spur task show` surfaces that this `done` was an operator override of a
                     // non-PASS verdict. Best-effort — a write failure here leaves the task at

@@ -3,6 +3,8 @@ import {
     AgentService,
     configuredSecretValues,
     type FeatureActionJob,
+    HISTORY_REFRESH_JOB,
+    handleHistoryRefreshJob,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
@@ -21,7 +23,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
-import { registerSystemEventTap } from './modules/events/system-event-tap';
+import { registerSystemEventTap, type SystemEventBus } from './modules/events/system-event-tap';
 import { openUrl } from './open-url';
 
 /** Built-in queue job kind for scheduled system_events retention pruning. */
@@ -410,6 +412,18 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 registry.register(SMOKE_JOB, async () => {});
                 registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
                 registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
+                // Completion-triggered history refresh (task 0549): enqueued (coalesced)
+                // by CLI trigger points; consumed here.
+                registry.register(HISTORY_REFRESH_JOB, (payload) =>
+                    handleHistoryRefreshJob(
+                        {
+                            getDb: () => ctx.getDb(),
+                            cwd: ctx.cwd,
+                            bus: ctx.eventBus() as unknown as SystemEventBus,
+                        },
+                        payload,
+                    ),
+                );
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
                     registry,

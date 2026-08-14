@@ -124,6 +124,19 @@ export {
     isFindingCode,
 } from './services/finding-codes';
 export type {
+    HistoryRefreshEnqueueOptions,
+    HistoryRefreshEnqueueResult,
+    HistoryRefreshJobDeps,
+    HistoryRefreshPayload,
+    HistoryRefreshTriggerConfig,
+    HistoryRefreshTriggerPoint,
+} from './services/history-refresh-service';
+export {
+    enqueueHistoryRefresh,
+    HISTORY_REFRESH_JOB,
+    handleHistoryRefreshJob,
+} from './services/history-refresh-service';
+export type {
     AnalyzeOptions,
     ArtifactResolution,
     DailyOptions,

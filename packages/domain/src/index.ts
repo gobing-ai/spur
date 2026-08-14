@@ -2,6 +2,8 @@ export * from './analytics';
 export * from './bdd';
 export * from './dao';
 export {
+    type CoalescedEnqueueResult,
+    type CoalescedEnqueueSpec,
     type CreateDomainDbOptions,
     createJobQueue,
     createMigratedDb,
@@ -10,6 +12,7 @@ export {
     type DatabaseConfig,
     type DbAdapter,
     dbHealthCheck,
+    enqueueCoalesced,
     type JobQueue,
     type QueueConsumer,
     type QueueConsumerConfig,

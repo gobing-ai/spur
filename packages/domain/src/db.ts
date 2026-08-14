@@ -112,3 +112,105 @@ export async function createQueueConsumer<T = unknown>(
 }
 
 export type { JobQueue, QueueConsumer, QueueConsumerConfig } from '@gobing-ai/ts-infra';
+
+/** Options for {@link enqueueCoalesced}. */
+export interface CoalescedEnqueueSpec {
+    /** Job type (queue_jobs.type). */
+    type: string;
+    /** Payload for a fresh enqueue (any JSON-serializable value). */
+    payload: unknown;
+    /** Debounce window in ms — the job becomes ready this long after the LAST join. */
+    debounceMs: number;
+    /** Merge an incoming payload into a pending job's payload (coalescing). */
+    mergePayload?: (existing: unknown, incoming: unknown) => unknown;
+    /** Clock seam for deterministic tests (default `Date.now`). */
+    now?: () => number;
+}
+
+/** Outcome of {@link enqueueCoalesced}. */
+export type CoalescedEnqueueResult =
+    | { status: 'enqueued'; jobId: string; payload: unknown }
+    | { status: 'coalesced'; jobId: string; payload: unknown };
+
+/**
+ * Enqueue with debounce-style coalescing (task 0549 R2): if a **pending** job of the
+ * same type exists, join it — the merged payload replaces the row's payload and
+ * `next_retry_at` is pushed to `now + debounceMs` — so a burst of operations yields
+ * exactly one job whose covered window spans all of them. Otherwise enqueue a fresh
+ * job delayed by `debounceMs`. Jobs already claimed (`processing`) or finished are
+ * invisible to the join: a completion after the job started running enqueues a new one.
+ *
+ * Atomicity (P2 review fix): the fresh-enqueue is an `INSERT … ON CONFLICT DO NOTHING`
+ * against the `queue_jobs_history_refresh_pending_unique` partial unique index
+ * (`migrations.ts`), which enforces at most one pending row per coalesced type at the
+ * DB level — two completions from different processes (parallel agents in runall,
+ * sharing `.spur/spur.db`) serialize on the index instead of both enqueuing. The
+ * returned `payload` is the POST-merge payload (P3 review fix) so an enqueue-time
+ * observable carries the merged burst window, not just the incoming completion.
+ *
+ * The ts-db `QueueJobDao` + the `queue_jobs` drizzle schema are imported lazily for the
+ * same Workers-bundle reason as {@link createJobQueue}.
+ */
+export async function enqueueCoalesced(db: DbAdapter, spec: CoalescedEnqueueSpec): Promise<CoalescedEnqueueResult> {
+    const now = spec.now?.() ?? Date.now();
+    const nextRetryAt = now + spec.debounceMs;
+
+    // Atomic fresh-enqueue (no merge semantics in SQL — the merge payload is computed
+    // in JS below). `ON CONFLICT DO NOTHING` without a target resolves against every
+    // unique index; the scoped partial index only conflicts for pending rows of the
+    // coalesced type, so other job types are unaffected. The adapter's `queryFirst`
+    // returns `null` (not just `undefined`) for no-row, so normalize with `?? undefined`.
+    const insertFresh = () =>
+        db
+            .queryFirst<{ id: string }>(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES (?, ?, ?, 'pending', 0, 3, ?, ?, ?)
+                 ON CONFLICT DO NOTHING
+                 RETURNING id`,
+                crypto.randomUUID(),
+                spec.type,
+                JSON.stringify(spec.payload),
+                now,
+                now,
+                nextRetryAt,
+            )
+            .then((row) => row ?? undefined);
+
+    // Bounded retry: each pass enqueues fresh, or coalesces into the pending row. The
+    // loop covers a worker claiming the pending job between our read and our guarded
+    // update — in that case a fresh insert (which now must win) retries.
+    for (let pass = 0; pass < 3; pass++) {
+        const inserted = await insertFresh();
+        if (inserted !== undefined) return { status: 'enqueued', jobId: inserted.id, payload: spec.payload };
+
+        const pending = await db
+            .queryFirst<{ id: string; payload: string }>(
+                `SELECT id, payload FROM queue_jobs WHERE type = ? AND status = 'pending' ORDER BY created_at DESC, id ASC LIMIT 1`,
+                spec.type,
+            )
+            .then((row) => row ?? undefined);
+        if (pending === undefined) continue; // claimed between insert and read — retry
+
+        const merged = spec.mergePayload ? spec.mergePayload(pending.payload, spec.payload) : spec.payload;
+        const updated = await db
+            .queryFirst<{ id: string }>(
+                `UPDATE queue_jobs SET payload = ?, next_retry_at = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id`,
+                JSON.stringify(merged),
+                nextRetryAt,
+                now,
+                pending.id,
+            )
+            .then((row) => row ?? undefined);
+        if (updated !== undefined) return { status: 'coalesced', jobId: pending.id, payload: merged };
+        // pending was claimed between read and update — retry with a fresh insert
+    }
+
+    // Unreachable in practice: a pending row would have to be claimed mid-merge on
+    // every pass. Guard loudly rather than loop forever (deterministic over hidden
+    // automation) — the queue may already hold a duplicate in a pre-index DB.
+    const fallback = await insertFresh();
+    if (fallback === undefined) {
+        throw new Error(`enqueueCoalesced: could not enqueue ${spec.type} after 3 attempts`);
+    }
+    return { status: 'enqueued', jobId: fallback.id, payload: spec.payload };
+}

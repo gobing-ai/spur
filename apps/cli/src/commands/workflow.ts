@@ -31,6 +31,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
+import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
@@ -301,6 +302,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         );
                     }
                     context.setExitCode(result.status === 'done' ? 0 : 1);
+                    // Pipeline-run completion trigger (task 0549) — the async-spawn
+                    // fallback completed a run synchronously, so it counts.
+                    await maybeTriggerHistoryRefresh(context, 'pipeline-run', runId);
                     return;
                 }
                 // Confirm the run actually registered before reporting 'started'. The nohup + `&`
@@ -482,6 +486,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 );
             }
             context.setExitCode(result.status === 'done' ? 0 : 1);
+            // Pipeline-run completion trigger (task 0549 R1): a run reaching terminal
+            // status enqueues a coalesced history refresh. The `--async` launcher does
+            // NOT reach here — its detached worker runs the sync path above, so the
+            // trigger fires exactly once, in the worker.
+            await maybeTriggerHistoryRefresh(context, 'pipeline-run', runId);
         });
 
     workflow
@@ -546,6 +555,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     json ? toJson(result) : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
                 );
                 context.setExitCode(result.status === 'done' ? 0 : 1);
+                // Pipeline-run completion trigger (task 0549): resuming a paused run to a
+                // terminal state is a pipeline-run completion.
+                await maybeTriggerHistoryRefresh(context, 'pipeline-run', targetId);
             } catch (err) {
                 context.output.error(String(err));
                 context.setExitCode(1);

@@ -1,15 +1,18 @@
 # Spur project configuration example
-# Seeded by `spur init` as ~/.config/spur/config.yaml on first run (never overwritten).
+# Seeded by `spur init` as ~/.config/spur/config.yaml on first run
+# (never overwritten).
 # Copy / adapt into a project as `.spur/config.yaml`.
 
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
 # Config schema version (string). Current recommended: "1.1".
-# "1" remains accepted; there is no hard migrator yet. Prefer "1.1" for new projects
-# so editors and operators know the file targets the ADR-033 + planning shape.
+# "1" remains accepted; there is no hard migrator yet. Prefer "1.1" for
+# new projects so editors and operators know the file targets the ADR-033
+# + planning shape.
 version: "1.1"
 name: my-project
 
-# ── Portable bootstrap (consumed by @gobing-ai/ts-infra runNodeApplication) ──
+# ── Portable bootstrap (consumed by @gobing-ai/ts-infra
+# runNodeApplication) ──
 # Shared across spur and (future) spur-server. Keys map 1:1 to ts-infra's
 # LoggingOptions / TelemetryOptions / database / SchedulerOptions.
 # Not validated by spurConfigSchema (bootstrap is owned by runNodeApplication).
@@ -33,7 +36,8 @@ bootstrap:
   scheduler:
     enabled: false # CLI is run-once; no scheduler
 
-# ── Spur app section (validated by spurConfigSchema in @gobing-ai/spur-config) ──
+# ── Spur app section (validated by spurConfigSchema in
+# @gobing-ai/spur-config) ──
 # Server runtime (port/host/openBrowser) is env-backed via PORT/HOST — not a
 # project-config key. See design §2.2.
 agent:
@@ -46,8 +50,10 @@ agent:
   default: coder
 
   # Canonical coding-agent ids (ts-ai-runner DISPLAY_ORDER, 0.4.8+):
-  #   claude, codex, gemini, pi, omp, opencode, antigravity-cli, openclaw, hermes, grok
-  # Grok auth: non-empty XAI_API_KEY and/or ~/.grok/auth.json (no CLI auth-status verb).
+  #   claude, codex, gemini, pi, omp, opencode, antigravity-cli,
+  #   openclaw, hermes, grok
+  # Grok auth: non-empty XAI_API_KEY and/or ~/.grok/auth.json (no CLI
+  # auth-status verb).
 
   # Named executor profiles (ADR-033 / 0343). Each pairs a canonical agent with
   # an optional opaque model override and an explicit capability tier.
@@ -119,3 +125,18 @@ tasks:
 
 features:
   dir: docs/features
+
+# ── History (task 0549 — completion-triggered refresh) ──
+# Opt-in: when work completes (task → done, pipeline run reaching
+# terminal status), enqueue ONE coalesced `history.refresh` job on the
+# embedded job queue (never inline). Bursts inside debounce_ms join the
+# pending job; the covered window spans all completions. The job reuses
+# `spur history daily` semantics (import-all fan-out with per-source
+# isolation + analyze + artifact write) and is consumed by `spur serve`'s
+# job worker. Debounce default 600000 ms (10 min) follows
+# docs/tasks4/0548-import-cost-measurement.md (steady-state all-fanout
+# import ≈ 20.6 s; 10 min comfortably bounds burst coalescing).
+# history:
+#   refresh:
+#     on_completion: false # set true to enable; disable with no code edits
+#     debounce_ms: 600000  # coalescing window; floor 1000 ms

@@ -723,6 +723,60 @@ the `.spur/reports/history/latest.json` pointer and emits a `## History Report` 
 newest artifact path — so a completed nightly run reaches the operator through the summary they already
 open, with no new notification channel.
 
+#### History completion-triggered refresh — coalesced enqueue on work completion (task 0549)
+
+`spur history daily` is bound to a clock; this trigger binds a refresh to **work completing** so the
+history DB reflects the burst of session activity a task pipeline just produced, without waiting for
+the 02:00 nightly loop.
+
+**Trigger points (exhaustive).** Exactly two, both terminal — never "every CLI invocation":
+
+1. `spur task update <wbs> --status done` (task completion) — `apps/cli/src/commands/task.ts`.
+2. `spur workflow run` / `continue` reaching a terminal status (pipeline-run completion) —
+   `apps/cli/src/commands/workflow.ts`, at the sync completion path, the main sync run path, and the
+   `continue` path. The `--async` launcher itself does **not** trigger — its worker does when the run
+   completes.
+
+**Config (`config/config.example.yaml`, `packages/config/src/index.ts`)** — explicit/opt-in, disable-able
+with no code edits:
+
+```yaml
+history:
+  refresh:
+    on_completion: false   # default; set true to enable
+    debounce_ms: 600000    # coalescing window, floor 1000 ms
+```
+
+The debounce default (600 000 ms = 10 min) follows task 0548's measured figures
+(`docs/tasks4/0548-import-cost-measurement.md`: steady-state all-fanout import ≈ 20.6 s, recommended
+coalescing window 10 min, floor 5 min) — the window must dwarf the import cost so a burst pays one
+import, not N.
+
+**Coalescing semantics (R2).** `enqueueCoalesced` (`packages/domain/src/db.ts`) joins the newest
+**pending** job of the type instead of inserting a second: merged payload keeps the earliest
+`windowStart` and extends `windowEnd` to the latest completion, and `nextRetryAt` slides to
+`now + debounce_ms`. A burst of N completions inside the window therefore yields **exactly one**
+refresh whose covered window spans all N. Once a job is claimed (`processing`), the next completion
+starts a fresh job — a refresh already in flight is never starved by further joining.
+
+**Never inline (R1).** The trigger (`apps/cli/src/history-refresh.ts`, `packages/app/src/services/history-refresh-service.ts`)
+is two queue-table statements — one lookup, one insert/update — and returns; the firing operation's
+elapsed time is unaffected. The refresh itself runs as queue job kind `history.refresh` inside
+`spur serve`'s job worker (`apps/server/src/serve.ts`), reusing `HistoryService.daily` — the same
+import-all fan-out with **per-source isolation** (R5: one source failing never aborts the others),
+analyze, and artifact write the nightly loop uses.
+
+**Failure policy.** A degraded fan-out (per-source failures) emits `history.daily.failed` and does
+**not** rethrow — the refresh is idempotent (checkpoint resume) and the next completion re-triggers
+it. An exception from `daily` itself emits and rethrows so the queue records the job failed.
+
+**Observability (R3).** Enqueue is observable through the ledger: the trigger emits
+`history.refresh.enqueued` (renderer `history-refresh`, `default` tier) carrying
+`trigger`/`jobId`/`windowStart`/`windowEnd`; the job body emits the existing
+`history.import.completed` / `history.analyze.completed` (with the coalesced window fields) /
+`history.daily.failed` catalog events. Enqueue failures degrade to a stderr warning and never change
+the firing operation's exit code.
+
 #### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
 
 Sync feature status with linked task states via conservative forward-only derivation rules (ADR-0322).
