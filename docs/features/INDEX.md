@@ -72,7 +72,7 @@
     ├── [verifying] **J3**: Observability data plane: event ingestion, retention, correlation, and run/team read APIs ([J3_observability-data-plane-event-ingestion-retention-correlation-and-run-team-read-apis.md](./J3_observability-data-plane-event-ingestion-retention-correlation-and-run-team-read-apis.md))
     ├── [done] **J4**: Board observability and Teams supervisor surfaces ([J4_board-observability-and-teams-supervisor-surfaces.md](./J4_board-observability-and-teams-supervisor-surfaces.md))
     ├── [verifying] **J5**: Actionable observability context across System Events and traces ([J5_actionable-observability-context-across-system-events-and-traces.md](./J5_actionable-observability-context-across-system-events-and-traces.md))
-    ├── [backlog] **J6**: Role routing attribution: record and query which executor served which role ([J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md](./J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md))
+    ├── [active] **J6**: Role routing attribution: record and query which executor served which role ([J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md](./J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md))
     └── [backlog] **J7**: Board surfaces for role routing and token consumption ([J7_board-surfaces-for-role-routing-and-token-consumption.md](./J7_board-surfaces-for-role-routing-and-token-consumption.md))
 [verifying] **K**: Features module (Spur Board) ([K_features-module-spur-board.md](./K_features-module-spur-board.md))
     └── [done] **K1**: Project switcher ([K1_project-switcher.md](./K1_project-switcher.md))
