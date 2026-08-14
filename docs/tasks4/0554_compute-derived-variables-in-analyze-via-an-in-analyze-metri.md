@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Compute derived variables in analyze via an in-analyze metric registry"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: E5
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0553"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.385Z"
-updated_at: "2026-08-14T16:17:52.587Z"
+updated_at: "2026-08-14T16:22:46.951Z"
 ---
 
 ## 0554. Compute derived variables in analyze via an in-analyze metric registry
@@ -283,3 +283,5 @@ No P1/P2 findings. All four accepted as-is with rationale; none block done.
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`
 ### History
 - 2026-08-14T07:17:58.213Z todo → wip (system)
+- 2026-08-14T16:22:46.440Z wip → testing (system)
+- 2026-08-14T16:22:46.951Z testing → done (system)
