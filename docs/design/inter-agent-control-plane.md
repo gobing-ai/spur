@@ -2,7 +2,9 @@
 
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.
 **Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3's snapshot-then-follow
-helper **landed** (task 0531); first-class `blocked` / `agent report-state` remain accepted design.
+helper **landed** (task 0531). Spec addressing extended 0537/0542: `--spec <id>` is the canonical
+carrier; drain rewrites to the spec's executor binding (feature B2). First-class `blocked` /
+`agent report-state` remain accepted design.
 **Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
 
@@ -38,12 +40,20 @@ interface OccupantRef {
 
 `specId` keeps the existing agent-spec alphabet (`[a-z][a-z0-9_-]{1,63}`). `runId` is a UUID minted at invoke start (`agent.invoke.start` already carries correlation `runId` in some paths; Wave 1 makes it the pin).
 
-**Rewrite rule:** `agent run --drain` may still map `--agent <specId>` → `spec.type` for `AiRunner` dispatch. The occupant record **retains** `specId`. A wait or send that names only `agentKind` is invalid.
+**Rewrite rule (0537 / 0542):** a spec-addressed run — `--spec <id>` (canonical since 0542 R1), or
+the legacy `--agent <specId>` (warned once, shim `agent-flag-spec-id`) — rewrites `--agent` to the
+spec's **executor name** when the spec records one (task 0537: restores the operator's
+`{ agent, model }` + tier through `resolveExecutor`), falling back to the spec's coding-agent type
+only via the `spec-without-executor-field` shim. A spec whose executor is absent from
+`agent.executors` fails loudly at drain, spawning nothing (0537 R5). The occupant record **retains**
+`specId`. A wait or send that names only `agentKind` is invalid.
 
 **Pin match:** two refs match when `specId`, `runId`, and `generation` are equal. `agentKind` mismatch or a higher `generation` is `run_replaced` / `occupant_gone`.
 
-**Wave-1 implementation (task 0529):** `drainIntoPrompt` sets `flags['spec-id']` **before**
-rewriting `flags.agent` to `spec.type`. `AgentService.executeRun` persists the occupant when a
+**Wave-1 implementation (task 0529, amended 0537):** `drainIntoPrompt` sets `flags['spec-id']` **before**
+rewriting `flags.agent` — originally to `spec.type`; since 0537, to the spec's **executor name**
+when the spec records one (fallback to `type` via the `spec-without-executor-field` shim).
+`AgentService.executeRun` persists the occupant when a
 `spec-id` flag is present (the bare `--agent <binary>` path does not). `generation` is
 `max(generation for spec_id) + 1` per run row — monotonic per spec; the process-generation-shared
 semantics (one generation per supervised process, reused across iterations) are deferred to

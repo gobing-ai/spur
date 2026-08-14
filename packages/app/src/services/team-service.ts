@@ -676,11 +676,21 @@ export class TeamService {
                 id: composedId,
                 name: member.purpose ?? composedId,
                 type: resolved.agent,
+                // Executor binding (0537 R1): carry the configured executor name
+                // beside the coding-agent kind so drain can resolve back through
+                // `resolveExecutor`'s executor-first lookup — restoring the
+                // operator's model + tier instead of a bare binary on the default
+                // model. `type` stays: AiRunner resolves the runner from it, and
+                // pre-existing specs carry only `type` (drain falls back to it).
+                executor: member.executor,
                 workspace: member.workspace ?? teamConfig.work_dir,
                 purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
                 tags: [`team:${teamId}`, 'spur:generated'],
                 config: {
                     ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+                    // Layer-1 role (0538 R3): carried beside the executor binding so
+                    // routing reads it off the spec (0543 promotes it further).
+                    ...(member.role !== undefined ? { role: member.role } : {}),
                     ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
                     ...(member.command !== undefined ? { command: member.command } : {}),
                     ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),

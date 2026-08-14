@@ -378,7 +378,8 @@ describe('spur agent run --drain', () => {
             } as unknown as AgentRunDeps);
             // Drain warns + no-ops; run proceeds via auto resolution, so exit is 0.
             expect(code).toBe(0);
-            expect(out.errors.join('\n')).toMatch(/--drain requires an explicit --agent/);
+            // 0542 R1: the drain recipient is addressed via --spec <id>.
+            expect(out.errors.join('\n')).toMatch(/--drain requires an explicit --spec/);
         } finally {
             await cleanup();
         }

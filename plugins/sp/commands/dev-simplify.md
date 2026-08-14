@@ -1,5 +1,6 @@
 ---
 description: Simplify code for clarity without changing behavior — reduce complexity in recent changes (or a given scope), preserving behavior exactly
+role: coder
 argument-hint: "[<path-or-scope>] [--scope <recent|all|path>] [--check <cmd>] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Edit", "Skill"]
 ---

@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.30.0
+version: 1.31.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-14
@@ -52,7 +52,7 @@ When collaborating with the design team:
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
-| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); first-class `blocked` remains |
+| [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); `--spec` carrier + executor-binding rewrite landed (0537/0542); first-class `blocked` remains |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -167,29 +167,58 @@ and sequential `dev-runall` are the ADR-047 control-inversion case: the wrapper 
 and appends `stage <id> executed inline in session <session-id>` provenance. Direct
 `spur agent run`, headless `spur workflow run`, explicit executor selection, and parallel batches
 remain subprocess surfaces.
-Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) resolves via the
-`agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
-per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
-claude, `/sp-dev-run` opencode/gemini/hermes/grok (default dialect), `/skill:sp-dev-run` pi/omp,
-`$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`). Routing is stage-registry-first
-(ADR-033 / 0452): stage `model_policy` selects a named `agent.executors` profile. With no stage
-match, `agent.default` is resolved as an executor selector (then a legacy agent name); on miss,
-Tier-1 priority applies. The legacy `current`/`inherit` tokens were removed (ADR-047): they resolve
-as unknown executor names (exit 2) — `inline` is the surviving value for "the agent running this
-session". Host-agent detection reads `SPUR_AGENT`/`CLAUDE_CODE_ENTRYPOINT`/`TERM_PROGRAM` via
-`resolveAgentHint`, not `--agent current`. (`default-by-phase` removed 0452.)
-**Explicit `--agent` is executor-aware (0346).** An explicit `--agent <name>` reuses the same
-executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`, source `explicit`):
+Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) takes a **role**
+from the Layer-1 role table `plugins/sp/references/roles.md` (task 0535: `scribe`·cheap,
+`coder`·standard, `reviewer`·capable-1, `planner`·capable-2, parsed at the CLI boundary — 0536 R1),
+a configured executor name, a coding-agent binary name, or `auto`. A **role** selects the _starting
+tier_ and resolution begins at that tier's cheapest eligible executor (R1); the resolved role, tier,
+and executor ride the `--json` envelope. An **executor name** is a permanent pin that beats role
+routing (R2 — load-bearing for `config/workflows/task-pipeline.yaml`'s deliberate pins; no
+deprecation warning). A **bare binary name** (e.g. `codex`, `omp` with no matching executor entry)
+keeps working during the transition under a registered shim, with a one-time warning
+(`config/transition-shims.json`: `agent-bare-binary-name`). A value that is none of these is
+rejected at the flag boundary **before any agent process spawns**, with a message naming both
+accepted sets (R3). With no stage and no declaration, `agent.default` is resolved as the **default
+role** (0542 R2 — the value domain moved from executor names to roles; recommended value `coder`):
+a role uses the new semantics; a configured executor name still resolves during the transition with
+a one-time warning (shim `agent-default-executor`); a value that is neither fails naming both
+accepted sets. On miss, Tier-1 priority applies. The legacy
+`current`/`inherit` tokens were removed (ADR-047): they resolve as unknown executor names (exit 2) —
+`inline` is the surviving value for "the agent running this session". Host-agent detection reads
+`SPUR_AGENT`/`CLAUDE_CODE_ENTRYPOINT`/`TERM_PROGRAM` via `resolveAgentHint`, not `--agent current`.
+(`default-by-phase` removed 0452; prompt-regex phase detection `extractPhase` removed 0536 R4 — the
+prompt text never derives a stage or role.)
+**Declaration sites (0538 R1/R3).** The role travels with the caller, never the prompt: every file
+under `plugins/sp/commands/` declares `role:` in its YAML frontmatter (from its row in the Layer-1
+table; enforced by `plugins/sp/tests/roles.test.ts`, which fails on a command with no `role:`),
+and the command dispatcher threads it into `--agent` so subprocess dispatch routes by the declared
+role; workflow `agent.run` steps declare `role:` beside their `agent:` pin; and
+`agent.team[].members[]` entries may declare an optional `role` carried onto the materialized spec.
+An explicit `--agent` value always wins over a declaration.
+**Explicit `--agent` is role-first, then executor-aware (0346 / 0536).** An explicit `--agent <name>`
+matches roles first (the vocabulary is closed and pairwise-disjoint from executor names, 0537 R4),
+then reuses the executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`):
 if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
 (the profile's `model` becomes the run model unless the user also passed `--model`); otherwise the
 name is resolved as a legacy coding-agent binary. Collision precedence: when an executor and an
 agent binary share a name, **the executor wins** (to reach the bare binary, remove or rename the
 executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
-**Stage-registry routing (ADR-033).** `auto` now resolves primarily on the canonical `stage_id`
-(from an explicit `--stage <id>`, else the derived phase): the stage's `model_policy` starts on the
-cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`,
-matched against each executor's `tier` field; 0343 split bare `capable` into quality sub-tiers) and
-escalates along the ordered `fallback` chain when an objective `--signal`
+**Spec-id addressing (feature G4 / 0537 / 0542).** Under `--drain`, `--spec <id>` (canonical since
+0542 R1) is matched against agent spec ids (`.spur/agents/<id>.yaml`); a match rewrites the
+selector to the spec's executor name before the executor-first lookup above runs, and the occupant
+pin `spec-id` is set before the rewrite so the ADR-057 wave 1 record persists. The legacy
+`--agent <spec-id>` still addresses the spec during the transition with a one-time warning (shim
+`agent-flag-spec-id`). The three selector
+namespaces — role names (`scribe`/`coder`/`reviewer`/`planner`, task 0535), executor names, and
+spec ids — are proven pairwise disjoint at config load (0537 R4), so one `--agent` value can never
+mean two things; a config that collides them (executor named `coder`, member id shadowing an
+executor, composed spec id equal to an executor name) fails to load naming both colliding names.
+**Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` (from the
+explicit `--stage <id>` flag only — the prompt text no longer derives one, 0536 R4): the stage's
+`model_policy` starts on the cheapest eligible executor at its `min_tier`
+(`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`, matched against each executor's `tier`
+field; 0343 split bare `capable` into quality sub-tiers) and escalates along the ordered `fallback`
+chain when an objective `--signal`
 (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`/`auth`) is supplied (with
 `--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
 the deprecation window. The stage-registry schema version is 1.2 (`auth` is an additive enum value).
@@ -202,11 +231,15 @@ the deprecation window. The stage-registry schema version is 1.2 (`auth` is an a
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope
-(`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). When the run is
-addressed by a **spec id** (the `--drain` path, or `--agent <specId>` matching an agent
+(`{ exitCode: number|null, stdout, stderr, signal?, durationMs, resolved }`), where `resolved`
+(`{ role?, tier?, executor?, agent, source }`, task 0536 R1/R2) reports the resolution decision:
+the role selector and its `roles.md` tier and the executor entry that won for role routing, the
+executor pin for an explicit executor, the canonical agent, and the resolution source
+(`role`/`explicit`/`default`/`stage`/`priority`). When the run is
+addressed by a **spec id** (`--spec <id>`, or the legacy `--agent <specId>` matching an agent
 spec), the envelope **adds** two optional keys (ADR-057 wave 1 / G4): `occupant`
 (`{ specId, agentKind, processId|null, runId, generation }`) — the live occupant pin
-retained even after `--drain` rewrites `--agent` to the coding-agent type — and `run`
+retained even after `--drain` rewrites `--agent` to the spec's **executor name** (0537) — and `run`
 (`{ status: 'running'|'exited'|'errored', startedAt, completedAt, artifactRefs }`), where
 `artifactRefs` is a path-only array (`{ kind: 'result'|'log'|'verdict', path }`) to
 project-relative files, never stdout/stderr bodies. A bare `spur agent run --agent codex`
@@ -214,10 +247,20 @@ project-relative files, never stdout/stderr bodies. A bare `spur agent run --age
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi/omp `/skill:…`,
 others including grok/hermes/opencode → `/plugin-command`).
 Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
-flags below), not from `run` flags. `--drain` resolves the addressed `--agent <id>` as an **agent
+flags below), not from `run` flags. `--drain` resolves the addressed `--spec <id>` (or the legacy
+`--agent <spec-id>`, warned once) as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
-messages into the prompt, and rewrites `--agent` to the spec's underlying type before dispatch
-(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). It also
+messages into the prompt, and rewrites `--agent` to the spec's **executor name** before dispatch
+(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). A
+team-materialized spec records the executor name beside the coding-agent kind (task 0537):
+`.spur/agents/<teamId>-<localId>.yaml` carries `type: <kind>` **and** `executor: <name>`, so the
+rewrite resolves back through `resolveExecutor`'s executor-first lookup and restores the
+operator's `{ agent, model }` with the executor's declared tier — a spec bound to `codex-sol`
+runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. Pre-existing specs
+with no executor field fall back to the coding-agent type (`@transition-shim(spec-without-executor-field)`).
+A spec whose executor is absent from `agent.executors` (renamed or removed) **fails loudly** at
+drain, naming the spec and the missing executor, and no process spawns — it never silently
+downgrades to a bare binary. It also
 sets a `spec-id` flag (the spec id, **before** rewriting `agent`) so a spec-addressed run
 persists an occupant pin + coordination-facing run row in `coordination_runs` (ADR-057 wave 1).
 Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent execution failure.
@@ -254,6 +297,15 @@ and the app-layer `TeamService`).
   `--model`, `--autonomy`, `--system-prompt`, `--no-identity-preamble`, `--auto-start`. The id is
   validated (`[a-z][a-z0-9_-]{1,63}`); a duplicate id is refused. An empty `--purpose` falls back to
   `"<type> agent"` so the written YAML round-trips. `--json` emits `{ ok, spec }`.
+- **Team-materialized specs record the executor binding (0537).** `spur team up <teamId>` writes
+  `.spur/agents/<teamId>-<localId>.yaml` with the coding-agent kind (`type`, required for the
+  runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
+  so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
+  optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
+  (`@transition-shim(spec-without-executor-field)`). A member may also declare
+  `role: <scribe|coder|reviewer|planner>` (0538 R3) — the typed routing field from the Layer-1
+  table; `purpose` stays human annotation. `spur team up` records it on the materialized spec
+  (`config.role`), beside the executor binding, so routing reads the role off the spec.
 - `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
 - `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
 
@@ -916,11 +968,11 @@ a grep target and a review signal — it never changes runtime behavior.
 
 ```json
 {
-  "id": "agent-bare-binary",
+  "id": "agent-bare-binary-name",
   "wbs": "0536",
-  "file": "apps/cli/src/commands/agent.ts",
-  "keepsWorking": "the legacy --agent <binary-name> form still resolves",
-  "removalCondition": "config/workflows/ and apps/cli/src contain no bare-binary --agent value"
+  "file": "packages/app/src/services/agent-service.ts",
+  "keepsWorking": "a bare coding-agent binary name (codex, omp, claude with no matching agent.executors entry) remains a valid --agent value, warned once",
+  "removalCondition": "no bare-binary --agent value remains in docs/, config/workflows/, or plugins/sp/"
 }
 ```
 
@@ -940,7 +992,9 @@ definition of the agent-role transition being complete. A removal condition must
 checkable against the repository — "remove when `config/workflows/` and `apps/cli/src` contain no
 bare-binary `--agent` value" qualifies; "remove when the binary-name form is unused" does not. A
 condition resolvable only by human judgement is rejected in review. Shims are registered by the
-tasks that create them (0536/0537/0538/0542); this task ships the mechanism seeded empty.
+tasks that create them: the mechanism shipped seeded empty with 0541; 0536/0537/0538/0542
+registered the four agent-role entries now in the manifest (`agent-bare-binary-name`,
+`spec-without-executor-field`, `agent-flag-spec-id`, `agent-default-executor`).
 
 ## 3. Data Shapes
 
@@ -1353,6 +1407,19 @@ agent's transcript instead of re-deriving it (task 0482 R4). Overridable per run
 `--vars '{"stepTimeoutMs":"120000"}'`. The `agent.run` action surface accepts `timeoutMs`
 (number parsed from the workflow option or CLI string flag `--timeout`), forwarded through
 `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`.
+
+**Declared step role (0538 R2).** Every `agent.run` step declares `role: <scribe|coder|reviewer|planner>`
+beside its `agent:` pin — the Layer-1 vocabulary of `plugins/sp/references/roles.md` (task 0535).
+`spur workflow validate` fails a step with no or an unknown role via the post-schema walk
+(`collectAgentRunRoleViolations` — `packages/app/src/services/workflow-service.ts`; the JSON schema
+validator is a keyword subset, so the walk is the enforcement surface). `spur workflow run` rejects
+the same step at dispatch time via `AgentRunActionRunner`'s runtime guard — which is also the
+fallback for any dispatch path that bypassed validate — so neither verb ever spawns a role-less
+step. The runner threads
+the role onto the underlying `spur agent run` — the `--json` envelope and the run trace record it —
+and the step-reporter renders it on the action line (`role=<id>`). An `agent:` pin still beats role
+routing permanently (0536 R2): the role declares the *reason*, so removing the pin later routes
+correctly instead of falling to the default role.
 
 **Run status (ADR-044):** terminal states partition into success and failure via an optional
 `failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing

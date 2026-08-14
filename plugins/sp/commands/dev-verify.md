@@ -1,5 +1,6 @@
 ---
 description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
+role: reviewer
 argument-hint: "<wbs> [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---

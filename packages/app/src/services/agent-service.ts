@@ -89,7 +89,7 @@ export interface AgentConfig {
 }
 
 /** How an `auto` resolution chose its agent — carried for diagnostics/tests. */
-export type AgentResolveSource = 'stage' | 'phase' | 'default' | 'priority' | 'explicit';
+export type AgentResolveSource = 'stage' | 'phase' | 'default' | 'priority' | 'explicit' | 'role';
 
 /**
  * Stage context carried on a stage-sourced resolution so {@link executeRun} can
@@ -112,7 +112,19 @@ export interface StageEscalationContext {
  * context {@link executeRun} uses to retry on objective failure (0407).
  */
 export type AgentResolveResult =
-    | { ok: true; agent: AgentName; model?: string; source: AgentResolveSource; stage?: StageEscalationContext }
+    | {
+          ok: true;
+          agent: AgentName;
+          model?: string;
+          source: AgentResolveSource;
+          stage?: StageEscalationContext;
+          /** Role selector that produced this resolution (source `role`, 0536 R1). */
+          role?: string;
+          /** Tier the role's row declares in `roles.md` (source `role`). */
+          tier?: CapabilityTier;
+          /** Executor entry name that won — role resolution or an executor pin. */
+          executor?: string;
+      }
     | { ok: false; exitCode: number; message: string };
 /**
  * Result from {@link AgentService.runCapture} — exit code + captured answer text,
@@ -146,8 +158,14 @@ export interface AgentRunCaptureResult {
 export interface AgentRunInvocation {
     /** Canonical agent name (post-resolution). */
     agent: AgentName;
-    /** Resolution source — phase/default/priority/explicit. */
+    /** Resolution source — stage/default/priority/explicit/role. */
     source: AgentResolveSource;
+    /** Role selector that produced this resolution (source `role`, 0536 R1). */
+    role?: string;
+    /** Tier the role's row declares in `roles.md` (source `role`). */
+    tier?: CapabilityTier;
+    /** Executor entry name that won — role resolution or an executor pin. */
+    executor?: string;
     /** Shim executable (e.g. `claude`, `codex`). */
     command: string;
     /** Resolved argv (post slash-command translation). */
@@ -228,6 +246,12 @@ export interface AgentServiceContext {
      */
     agentConfig?: AgentConfig;
     /**
+     * Layer-1 role → tier map parsed from `plugins/sp/references/roles.md`
+     * (task 0535) at the CLI boundary (0536 R1). Absent → role selectors are
+     * not recognized and fall through to the executor / binary lookup.
+     */
+    roles?: ReadonlyMap<string, CapabilityTier>;
+    /**
      * Optional canonical server EventBus. When provided, every `agent.invoke.*`
      * and `agent.*` event emitted by the underlying AiRunner/TeamOrchestrator
      * is also forwarded onto the bus so the system_events tap (R3) and SSE
@@ -304,9 +328,9 @@ export class AgentService {
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
-        // Public resolve() has no prompt → no phase (R12): auto resolution derives
-        // no phase and falls through default → priority, never throwing.
-        return this.resolveAgent(undefined, flags, doctorRunner);
+        // Public resolve() has no prompt → no stage (0536 R4: prompt text never
+        // derives a stage): auto resolution falls through default → priority.
+        return this.resolveAgent(flags, doctorRunner);
     }
 
     // -------------------------------------------------------------------------
@@ -404,7 +428,7 @@ export class AgentService {
             outcome.coordination !== undefined
                 ? ((await this.getCoordinationRun(outcome.coordination.occupant.runId)) ?? undefined)
                 : undefined;
-        this.handleRunOutput(result, jsonOutput, coordination);
+        this.handleRunOutput(result, jsonOutput, coordination, outcome.invocation);
         if (result.exitCode === 0) return 0;
         if (result.signal !== undefined) {
             this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
@@ -602,8 +626,8 @@ export class AgentService {
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
 
-        // resolve agent — thread the prompt so `auto` can derive the phase
-        const resolved = await this.resolveAgent(prompt, flags, doctorRunner);
+        // resolve agent — prompt text never derives a stage (0536 R4)
+        const resolved = await this.resolveAgent(flags, doctorRunner);
         if (!resolved.ok) {
             return { ok: false, exitCode: resolved.exitCode, message: resolved.message };
         }
@@ -615,6 +639,11 @@ export class AgentService {
         let currentModel = resolved.model;
         let currentSource = resolved.source;
         let currentStage = resolved.stage;
+        // Role attribution (0536 R1/R2): stable per run — role resolution never
+        // escalates (no stage context) and pins carry no role in this task.
+        let currentRole = resolved.role;
+        let currentTier = resolved.tier;
+        let currentExecutor = resolved.executor;
         const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
 
         // Tier-2 warning (suppressed in json/silent mode) — first agent only.
@@ -757,6 +786,9 @@ export class AgentService {
                 const attemptInvocation: AgentRunInvocation = {
                     agent,
                     source: currentSource,
+                    ...(currentRole !== undefined ? { role: currentRole } : {}),
+                    ...(currentTier !== undefined ? { tier: currentTier } : {}),
+                    ...(currentExecutor !== undefined ? { executor: currentExecutor } : {}),
                     command: shimCommand.command,
                     argv: sanitizeInvocationArgv(shimCommand.args, input, traceInput),
                     ...(cwd !== '' ? { cwd } : {}),
@@ -846,7 +878,7 @@ export class AgentService {
                 // same dead executor and breaking on attemptedExecutors.has(...).
                 runFlags.signal = escalationSignal;
                 runFlags['from-executor'] = currentStage.executorName;
-                const nextResolved = await this.resolveAgent(prompt, runFlags, doctorRunner, attemptedExecutors);
+                const nextResolved = await this.resolveAgent(runFlags, doctorRunner, attemptedExecutors);
                 if (
                     !nextResolved.ok ||
                     nextResolved.stage === undefined ||
@@ -871,6 +903,9 @@ export class AgentService {
                 currentModel = nextResolved.model;
                 currentSource = nextResolved.source;
                 currentStage = nextResolved.stage;
+                currentRole = nextResolved.role;
+                currentTier = nextResolved.tier;
+                currentExecutor = nextResolved.executor;
                 attemptedExecutors.add(nextResolved.stage.executorName);
             }
         } finally {
@@ -939,25 +974,26 @@ export class AgentService {
     // -------------------------------------------------------------------------
 
     private async resolveAgent(
-        prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
         exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
-        if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner, exclude);
+        if (raw === 'auto') return this.resolveAgentAuto(flags, doctorRunner, exclude);
         // ADR-047: omit and `inline` are identical. On a headless dispatch surface
         // (`spur agent run` / workflow agent.run) both resolve to `agent.default` —
         // a subprocess of the configured default executor — never a host-session
         // stage. The ADR-046-era sentinel reject is withdrawn; unknown executor
         // names still fail clearly below via resolveExecutorSelector.
-        if (raw === 'inline') return this.resolveAgentAuto(prompt, flags, doctorRunner, exclude);
+        if (raw === 'inline') return this.resolveAgentAuto(flags, doctorRunner, exclude);
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
-        // executor-first lookup as `agent.default`. No phase map is consulted
+        // executor-first lookup as `agent.default`; a role (0536 R1) is matched
+        // first inside resolveExecutorSelector. No phase map is consulted
         // for the *starting* pick (R8: --agent wins; default-by-phase removed
-        // 0452). The pin chooses where a run starts; it must not disable the
-        // escalation ladder (0482 R1) — see resolvePinned.
-        return this.resolvePinned(raw, prompt, flags, doctorRunner, exclude);
+        // 0452; prompt-regex phase removed 0536 R4). The pin chooses where a run
+        // starts; it must not disable the escalation ladder (0482 R1) — see
+        // resolvePinned.
+        return this.resolvePinned(raw, flags, doctorRunner, exclude);
     }
 
     /**
@@ -975,13 +1011,12 @@ export class AgentService {
      */
     private async resolvePinned(
         selector: string,
-        prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
         exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         if (stringFlag(flags, 'signal', '') !== '') {
-            const stageRecord = this.resolveCanonicalStage(prompt, flags);
+            const stageRecord = this.resolveCanonicalStage(flags);
             if (stageRecord !== undefined) {
                 const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
                 if (stageRes !== undefined) return stageRes;
@@ -989,13 +1024,21 @@ export class AgentService {
         }
         const base = await this.resolveExecutorSelector(selector, doctorRunner, 'explicit');
         if (!base.ok) return base;
-        const stageRecord = this.resolveCanonicalStage(prompt, flags);
-        if (stageRecord !== undefined) {
+        // Declared role attribution (0538 R2): the pin beats role routing, but the
+        // declared role is still recorded on the resolution so the --json envelope
+        // carries both values (0536 R2) — the reason survives removing the pin later.
+        const declaredRole = stringFlag(flags, 'role', '');
+        const attributed = base.ok && declaredRole !== '' ? { ...base, role: declaredRole } : base;
+        const stageRecord = this.resolveCanonicalStage(flags);
+        // Role-resolved selectors carry the winning executor in `base.executor`;
+        // the pin-attach below assumes the selector IS the executor name, so it
+        // applies only to executor/binary pins (0536 R1).
+        if (stageRecord !== undefined && base.source !== 'role') {
             const executors = this.ctx.agentConfig?.executors;
             const pinned = executors?.find((e) => e.name === selector);
             const tier = pinned !== undefined ? getExecutorTier(pinned) : stageRecord.model_policy.min_tier;
             return {
-                ...base,
+                ...attributed,
                 stage: {
                     stageId: stageRecord.id,
                     policy: stageRecord.model_policy,
@@ -1004,42 +1047,57 @@ export class AgentService {
                 },
             };
         }
-        return base;
+        return attributed;
     }
 
     /**
-     * Resolve the canonical stage from the explicit `--stage` flag or the prompt
-     * phase/alias, if any.
+     * Resolve the canonical stage from the explicit `--stage` flag. Prompt-text
+     * phase derivation was removed in task 0536 (R4) — `extractPhase` is gone, so
+     * a stage is never inferred from the prompt; undeclared callers land on the
+     * default role visibly.
      */
-    private resolveCanonicalStage(
-        prompt: string | undefined,
-        flags: Record<string, string | boolean>,
-    ): StageRecord | undefined {
-        const phase = extractPhase(prompt);
+    private resolveCanonicalStage(flags: Record<string, string | boolean>): StageRecord | undefined {
         const stageFlag = stringFlag(flags, 'stage', '');
-        const targetStageId = stageFlag !== '' ? stageFlag : phase !== undefined ? phase : undefined;
-        if (targetStageId === undefined) return undefined;
-        return getCanonicalStage(targetStageId);
+        if (stageFlag === '') return undefined;
+        return getCanonicalStage(stageFlag);
     }
 
     /**
      * Resolve `--agent auto` using stage-registry model routing (R1/R2/R3):
-     *  1. Resolve canonical `stage_id` from explicit `--stage` flag or prompt phase/alias.
+     *  1. Resolve canonical `stage_id` from the explicit `--stage` flag.
      *  2. If stage found, consume `model_policy` and start on the cheapest eligible executor.
      *     Objective escalation signals (`--signal`) trigger fallback entries.
-     *  3. No stage match falls through to `agent.default` selector, then Tier-1 priority.
-     * (`default-by-phase` removed in task 0452 — stage model_policy is the only adaptive path.)
+     *  3. No stage falls through to `agent.default` selector, then Tier-1 priority.
+     * (`default-by-phase` removed in task 0452; prompt-regex phase removed in 0536 R4 —
+     * stage model_policy is the only adaptive path, gated on the explicit flag.)
      */
     private async resolveAgentAuto(
-        prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
         exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
 
+        // Declared role (0538 R1/R2): `--agent auto` means "use the role the caller
+        // declared" (command frontmatter or workflow step). The declared role picks
+        // the starting tier; with nothing declared it falls to `agent.default`
+        // (0542) then priority. Unknown declared role fails loudly — a stale
+        // declaration must not silently route as a bare binary name.
+        const declaredRole = stringFlag(flags, 'role', '');
+        if (declaredRole !== '') {
+            const roleTier = this.ctx.roles?.get(declaredRole);
+            if (roleTier === undefined) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `Unknown declared role: '${declaredRole}'. Accepted: ${this.roleVocabulary()}.`,
+                };
+            }
+            return this.resolveRole(declaredRole, roleTier, doctorRunner);
+        }
+
         // Stage-registry adaptive model routing (R1/R2/R3)
-        const stageRecord = this.resolveCanonicalStage(prompt, flags);
+        const stageRecord = this.resolveCanonicalStage(flags);
         if (stageRecord !== undefined) {
             const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
             if (stageRes !== undefined) {
@@ -1051,6 +1109,10 @@ export class AgentService {
         if (config?.default !== undefined) {
             const viaDefault = await this.resolveExecutorSelector(config.default, doctorRunner, 'default');
             if (viaDefault.ok) return viaDefault;
+            // R2 (0542): agent.default's value domain is roles — an unknown value
+            // must fail loudly naming both accepted sets, never silently fall to
+            // Tier-1 priority (the old legacy-agent fallthrough is retired).
+            if (viaDefault.exitCode === 2) return viaDefault;
         }
 
         return this.resolveAgentPriority(doctorRunner);
@@ -1238,10 +1300,23 @@ export class AgentService {
         source: 'phase' | 'default' | 'explicit',
         phase?: string,
     ): Promise<AgentResolveResult> {
+        // Role branch (0536 R1): a role selects the *starting* tier and resolution
+        // starts from that tier's cheapest eligible executor. Role-first match —
+        // 0537's collision guard proves roles and executor names pairwise disjoint.
+        const roleTier = this.ctx.roles?.get(selector);
+        if (roleTier !== undefined) {
+            return this.resolveRole(selector, roleTier, doctorRunner);
+        }
+
         const executor = this.ctx.agentConfig?.executors?.find((e) => e.name === selector);
         const phaseSuffix = phase !== undefined ? ` for phase '${phase}'` : '';
 
         if (executor !== undefined) {
+            // R2 (0542): agent.default's value domain is now role ids; a configured
+            // executor name is the legacy value — warn once under the registered shim.
+            if (source === 'default') {
+                warnAgentDefaultExecutorOnce(selector, this.ctx.output);
+            }
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
                 return {
@@ -1262,7 +1337,9 @@ export class AgentService {
                 }
                 return usable.result;
             }
-            return { ok: true, agent: canonical, model: executor.model, source };
+            // R2 (0536): an explicit executor name is a permanent pin, not a shim —
+            // no deprecation warning. The name is carried for the --json envelope.
+            return { ok: true, agent: canonical, model: executor.model, source, executor: executor.name };
         }
 
         // No configured executor by this name.
@@ -1275,24 +1352,114 @@ export class AgentService {
             };
         }
 
-        // Default path: treat the selector as a legacy direct agent name.
-        const canonical = resolveAgentName(selector);
-        if (canonical === undefined) {
-            // Task 0413 (R8): surface the available executors so a typo does not
-            // look like an opaque failure. The agent-name space is open, so list
-            // configured executors only — those are the load-bearing targets.
+        // R2 (0542): agent.default is a role now; a value that is neither a role
+        // nor a configured executor fails naming both accepted sets — it must not
+        // silently resolve as a legacy direct agent name (the value domain moved).
+        if (source === 'default') {
+            const roleNames = this.ctx.roles !== undefined ? [...this.ctx.roles.keys()].join(', ') : '';
             const names = this.ctx.agentConfig?.executors?.map((e) => e.name) ?? [];
-            const available =
-                names.length > 0 ? names.join(', ') : '(no executors configured; use a canonical agent name)';
+            const roleList = roleNames !== '' ? `role (${roleNames})` : 'a role';
+            const executorList =
+                names.length > 0 ? `configured executor (${names.join(', ')})` : 'a configured executor';
             return {
                 ok: false,
                 exitCode: 2,
-                message: `Unknown agent: '${selector}'. Available executors: ${available}.`,
+                message: `Unknown agent.default value: '${selector}'. Accepted: ${roleList} or ${executorList}.`,
             };
+        }
+
+        // Default/explicit path: treat the selector as a legacy direct agent name.
+        const canonical = resolveAgentName(selector);
+        if (canonical === undefined) {
+            // Task 0413 (R8) / 0536 (R3): surface the accepted sets so a typo does
+            // not look like an opaque failure. The agent-name space is open, so
+            // name the closed role vocabulary and the configured executors.
+            const roleNames = this.ctx.roles !== undefined ? [...this.ctx.roles.keys()].join(', ') : '';
+            const names = this.ctx.agentConfig?.executors?.map((e) => e.name) ?? [];
+            const roleList = roleNames !== '' ? `role (${roleNames})` : 'a role';
+            const executorList =
+                names.length > 0 ? `configured executor (${names.join(', ')})` : 'a configured executor';
+            return {
+                ok: false,
+                exitCode: 2,
+                message: `Unknown agent: '${selector}'. Accepted: ${roleList}, ${executorList}, or 'auto'.`,
+            };
+        }
+        // R3 (0536): a bare coding-agent binary name (no matching executor entry)
+        // keeps working during the transition, under a registered shim — warn once.
+        // Only the explicit `--agent` surface warns: the `agent.default` value
+        // domain migration is task 0542's own three-way branch and shim.
+        if (source === 'explicit') {
+            warnBareBinaryOnce(selector, this.ctx.output);
         }
         const usable = await this.checkUsable(canonical, doctorRunner);
         if (!usable.ok) return usable.result;
         return { ok: true, agent: canonical, source };
+    }
+
+    /**
+     * Resolve a role selector (0536 R1): role → tier → cheapest eligible executor.
+     * Mirrors the stage-policy walk — eligible executors (tier at or above the
+     * role's tier) sorted by tier ascending, first usable wins. No stage context
+     * is attached: a role picks the *starting* tier; escalation stays
+     * stage-policy-driven (0348). `role`/`tier`/`executor` ride the result for
+     * the `--json` envelope (R1).
+     */
+    private async resolveRole(
+        role: string,
+        roleTier: CapabilityTier,
+        doctorRunner: DoctorRunner,
+    ): Promise<AgentResolveResult> {
+        const executors = this.ctx.agentConfig?.executors;
+        if (executors === undefined || executors.length === 0) {
+            return {
+                ok: false,
+                exitCode: 1,
+                message: `No executors configured to serve role '${role}' (tier ${roleTier}) — define executors under agent.executors`,
+            };
+        }
+        const eligible = executors
+            .filter((e) => isTierEligible(getExecutorTier(e), roleTier))
+            .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
+        for (const executor of eligible) {
+            const canonical = resolveAgentName(executor.agent);
+            if (canonical === undefined) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `Executor '${executor.name}' for role '${role}' maps to unknown agent '${executor.agent}'`,
+                };
+            }
+            const usable = await this.checkUsable(canonical, doctorRunner);
+            if (usable.ok) {
+                return {
+                    ok: true,
+                    agent: canonical,
+                    model: executor.model,
+                    source: 'role',
+                    role,
+                    tier: roleTier,
+                    executor: executor.name,
+                };
+            }
+        }
+        const tried = eligible.length > 0 ? eligible.map((e) => e.name).join(', ') : 'none eligible';
+        return {
+            ok: false,
+            exitCode: 1,
+            message: `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried} (spur agent doctor)`,
+        };
+    }
+
+    /**
+     * Comma-joined Layer-1 role vocabulary for error messages. Falls back to the
+     * frozen four ids when `roles.md` is unreachable (0536 R3 fallback list).
+     */
+    private roleVocabulary(): string {
+        if (this.ctx.roles !== undefined && this.ctx.roles.size > 0) {
+            return [...this.ctx.roles.keys()].join(', ');
+        }
+        return 'scribe, coder, reviewer, planner';
     }
 
     /**
@@ -1400,7 +1567,12 @@ export class AgentService {
     // Private: output handling
     // -----------------------------------------------------------------------
 
-    private handleRunOutput(result: AgentRunResult, jsonOutput: boolean, coordination?: CoordinationRun): void {
+    private handleRunOutput(
+        result: AgentRunResult,
+        jsonOutput: boolean,
+        coordination?: CoordinationRun,
+        invocation?: AgentRunInvocation,
+    ): void {
         if (jsonOutput) {
             this.ctx.output.write(
                 toJson({
@@ -1409,6 +1581,20 @@ export class AgentService {
                     stderr: result.stderr,
                     ...(result.signal !== undefined ? { signal: result.signal } : {}),
                     durationMs: result.durationMs,
+                    // Resolution attribution (0536 R1/R2): the resolved agent,
+                    // source, and — when role-resolved or executor-pinned — the
+                    // role, its tier, and the executor entry that won.
+                    ...(invocation !== undefined
+                        ? {
+                              resolved: {
+                                  ...(invocation.role !== undefined ? { role: invocation.role } : {}),
+                                  ...(invocation.tier !== undefined ? { tier: invocation.tier } : {}),
+                                  ...(invocation.executor !== undefined ? { executor: invocation.executor } : {}),
+                                  agent: invocation.agent,
+                                  source: invocation.source,
+                              },
+                          }
+                        : {}),
                     ...(coordination?.occupant !== undefined ? { occupant: coordination.occupant } : {}),
                     ...(coordination !== undefined
                         ? {
@@ -1498,29 +1684,43 @@ function sanitizeInvocationArgv(
     });
 }
 
+/** `--agent` values already warned as bare binary names (warn once per process — 0536 R3). */
+const warnedBareBinary = new Set<string>();
+
 /**
- * Derive a dev phase from a raw slash-command prompt, BEFORE per-agent slash
- * translation. Recognizes the `sp`/`rd3` command namespaces in their three
- * surface forms and maps the command to its bare phase name:
- *   `/sp:dev-run 0126 …` → `dev-run`
- *   `/sp-dev-run 0126 …` → `dev-run`
- *   `/rd3:dev-run 0126 …` → `dev-run`
- * Any other prompt (or none) yields `undefined` — the resolver then uses the
- * configured default / Tier-1 priority path, never a phase mapping.
+ * One-time transition warning for a bare coding-agent binary name passed to
+ * `--agent` (no matching executor entry). Reuses a module-level set so a retry
+ * / escalation loop cannot spam the operator. Only the explicit `--agent`
+ * surface warns — `agent.default` migration is owned by task 0542.
  */
-function extractPhase(prompt: string | undefined): string | undefined {
-    if (prompt === undefined) return undefined;
-    const trimmed = prompt.trimStart();
-    // Match the `sp`/`rd3` command in EVERY per-agent surface form, since
-    // `spur agent run` may receive a prompt already translated for the target
-    // agent (translateSlashCommand runs AFTER resolution). The captured token is
-    // the bare phase (`dev-run`). Forms (see translateSlashCommand):
-    //   claude          /sp:dev-run      /rd3:dev-run
-    //   opencode/gemini /sp-dev-run      /rd3-dev-run
-    //   pi/omp          /skill:sp-dev-run  /skill:rd3-dev-run
-    //   codex           $sp-dev-run      $rd3-dev-run
-    const match = trimmed.match(/^(?:\/skill:|\/|\$)(?:sp[:-]|rd3[:-])([a-z0-9-]+)/);
-    return match?.[1];
+// @transition-shim(agent-bare-binary-name) — a bare coding-agent binary name (`codex`, `omp`, `claude`
+// with no matching executor entry) remains a valid --agent value during the role transition, warned
+// once; removal: no bare-binary --agent value remains in docs/, .spur/workflows/, or plugins/sp/
+function warnBareBinaryOnce(selector: string, output: AgentServiceOutput): void {
+    if (warnedBareBinary.has(selector)) return;
+    warnedBareBinary.add(selector);
+    output.error(
+        `Warning: --agent "${selector}" is a bare coding-agent binary name, not a role or a configured executor. It keeps working during the transition; prefer a role (scribe, coder, reviewer, planner) or an executor name (config/transition-shims.json: agent-bare-binary-name).`,
+    );
+}
+
+/** `agent.default` values already warned as legacy executor names (warn once per process — 0542 R2). */
+const warnedAgentDefaultExecutor = new Set<string>();
+
+/**
+ * One-time transition warning when `agent.default` holds a configured executor
+ * name instead of the new default-role value (0542 R2). The executor keeps
+ * working during the transition; the value domain moved to roles.
+ */
+// @transition-shim(agent-default-executor) — a configured executor name in agent.default still resolves
+// during the transition, warned once; removal: no agent.default value names an agent.executors entry
+// (scan .spur/config.yaml and config/config.example.yaml against the agent.executors names)
+function warnAgentDefaultExecutorOnce(selector: string, output: AgentServiceOutput): void {
+    if (warnedAgentDefaultExecutor.has(selector)) return;
+    warnedAgentDefaultExecutor.add(selector);
+    output.error(
+        `Warning: agent.default "${selector}" is a configured executor name, not a role. It keeps working during the transition; prefer a role (scribe, coder, reviewer, planner) (config/transition-shims.json: agent-default-executor).`,
+    );
 }
 
 /** Compact tri-state auth label for the doctor text table (display-only). */

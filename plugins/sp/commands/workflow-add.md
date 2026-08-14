@@ -1,5 +1,6 @@
 ---
 description: Author a validated, dry-run-verified workflow in the right execution mode
+role: scribe
 argument-hint: "\"<description>\" [--kind <state-machine|transition-flow>] [--file <path>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---

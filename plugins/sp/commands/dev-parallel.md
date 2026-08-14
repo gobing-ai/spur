@@ -1,5 +1,6 @@
 ---
 description: Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results
+role: planner
 argument-hint: "--tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---

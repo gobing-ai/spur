@@ -1,5 +1,6 @@
 ---
 description: Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit
+role: scribe
 argument-hint: "[--commit] [--squash] [--scope <path>]"
 allowed-tools: ["Bash", "Read"]
 ---

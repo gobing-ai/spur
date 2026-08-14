@@ -142,6 +142,18 @@ export const executorCapabilityTierSchema = z.preprocess((value) => {
 }, z.enum(EXECUTOR_CAPABILITY_TIERS).optional());
 
 /**
+ * Layer-1 role ids from `plugins/sp/references/roles.md` (task 0535) — the
+ * closed `--agent` role vocabulary (0536). Kept here as a CF-safe literal so
+ * the config-load collision guard (0537 R4) can prove the role / executor /
+ * spec-id selector namespaces pairwise disjoint; `plugins/sp/tests/roles.test.ts`
+ * asserts parity with the reference file so the two cannot drift.
+ */
+export const AGENT_ROLE_NAMES = ['scribe', 'coder', 'reviewer', 'planner'] as const;
+
+/** A Layer-1 role id (`--agent` role selector vocabulary). */
+export type AgentRoleName = (typeof AGENT_ROLE_NAMES)[number];
+
+/**
  * Schema for a single named executor profile under `agent.executors`.
  *
  * An executor pairs a canonical coding-agent (`agent`) with an optional opaque
@@ -184,6 +196,8 @@ export const TeamMemberConfigSchema = z.union([
     z.object({
         executor: z.string().min(1),
         id: z.string().min(1).optional(),
+        // Layer-1 role id (0538 R3): typed routing field; `purpose` stays prose.
+        role: z.enum(AGENT_ROLE_NAMES).optional(),
         purpose: z.string().optional(),
         workspace: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
@@ -219,6 +233,8 @@ export type TeamConfig = z.infer<typeof TeamConfigSchema>;
 export interface NormalizedTeamMember {
     executor: string;
     id?: string;
+    /** Layer-1 role id (scribe | coder | reviewer | planner); typed routing field (0538 R3). */
+    role?: AgentRoleName;
     purpose?: string;
     workspace?: string;
     model?: string;
@@ -322,6 +338,7 @@ export const AgentConfigSchema = z
     })
     .superRefine((value, ctx) => {
         const executors = value.executors;
+        const executorNames = new Set<string>();
         if (executors !== undefined) {
             const seen = new Set<string>();
             for (const [index, executor] of executors.entries()) {
@@ -345,7 +362,20 @@ export const AgentConfigSchema = z
                         path: ['executors', index, 'name'],
                     });
                 }
+                // Selector namespace disjointness (0537 R4): `--agent` accepts
+                // role names, executor names, and spec ids in one flag. An
+                // executor claiming a role id (scribe/coder/reviewer/planner)
+                // shadows the role branch (0536) — reject at config-load naming
+                // both the role and the offending entry.
+                if ((AGENT_ROLE_NAMES as readonly string[]).includes(executor.name)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Executor name "${executor.name}" collides with the role selector namespace ("${executor.name}"); rename executor at index ${index}.`,
+                        path: ['executors', index, 'name'],
+                    });
+                }
                 seen.add(executor.name);
+                executorNames.add(executor.name);
             }
         }
 
@@ -391,6 +421,42 @@ export const AgentConfigSchema = z
                     });
                 }
                 seenComposed.add(composedId);
+
+                // Selector namespace disjointness (0537 R4), continued: spec ids
+                // must be disjoint from role names and executor names so one
+                // `--agent` value cannot mean two things. The composed id is what
+                // drain/occupant addressing matches; an explicit member id is
+                // checked too so an operator cannot shadow a role or an executor
+                // with a member name (the AC scenario "member id equal to a name
+                // in agent.executors").
+                if (ref.id !== undefined && (AGENT_ROLE_NAMES as readonly string[]).includes(ref.id)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Team member id "${ref.id}" collides with the role selector namespace ("${ref.id}") in team "${teamId}"; rename the member id.`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+                if (ref.id !== undefined && executorNames.has(ref.id)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Team member id "${ref.id}" collides with executor name "${ref.id}" in team "${teamId}"; the --agent selector namespace must be pairwise disjoint.`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+                if (executorNames.has(composedId)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Composed agent id "${composedId}" collides with executor name "${composedId}"; the --agent selector namespace must be pairwise disjoint.`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+                if ((AGENT_ROLE_NAMES as readonly string[]).includes(composedId)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Composed agent id "${composedId}" collides with the role selector namespace ("${composedId}"); the --agent selector namespace must be pairwise disjoint.`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
             });
         }
     });

@@ -10,6 +10,12 @@
  * Self-contained: no @gobing-ai/spur-domain dependency (plugins/sp is outside
  * the workspace). Types are defined inline, mirroring the domain schema.
  *
+ * Stage floor tiers read from Layer 1 (`references/roles.md`, 0538 R4 /
+ * 0348 Follow-up C): the stage → role → tier table is the single pointer for
+ * floor tiers; this file no longer hardcodes a floor value. Regex-parsed
+ * (no `yaml` dependency — the plugin installs into foreign repos; same
+ * discipline as the parity tests).
+ *
  * CLI usage:
  *   bun plugins/sp/scripts/stage-registry-adapter.ts --wbs 0307 [--dry-run]
  *   bun plugins/sp/scripts/stage-registry-adapter.ts --wbs 0307 --auto
@@ -17,6 +23,9 @@
  *   bun plugins/sp/scripts/stage-registry-adapter.ts --list-stages
  *   bun plugins/sp/scripts/stage-registry-adapter.ts --help
  */
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // ─── Inline type definitions (mirrors packages/domain/src/stage-registry/) ─
 
@@ -235,24 +244,50 @@ const inlineHitl = (timing: 'pre' | 'post' | 'both'): ExecutionVariantHitl => ({
     gate_timing: timing,
 });
 const defaultRetry: StageRetryPolicy = { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 300 };
-const standardModel: StageModelPolicy = {
-    min_tier: 'standard',
-    fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
-};
-const capableModel: StageModelPolicy = {
-    min_tier: 'capable-1',
-    fallback: [],
-};
-/** Plan/create: capable-first (Design authored into tasks by default). */
-const planModel: StageModelPolicy = {
-    min_tier: 'capable-2',
-    fallback: [{ tier: 'capable-3', trigger: 'gate-fail' }],
-};
-/** Refine: cheap fallback when Design/AC/Plan still blank after create. */
-const refineModel: StageModelPolicy = {
-    min_tier: 'standard',
-    fallback: [{ tier: 'capable-2', trigger: 'gate-fail' }],
-};
+
+export const TIER_ORDER: AdapterCapabilityTier[] = ['cheap', 'standard', 'capable-1', 'capable-2', 'capable-3'];
+
+/**
+ * Layer-1 stage → floor tier map (0538 R4 / 0348 Follow-up C): derived from
+ * `references/roles.md` (role → tier → stages). This is the single pointer for
+ * floor tiers; a stage's `model_policy.min_tier` never hardcodes a value here.
+ * Stages Layer 1 does not fold keep the local `standard` floor. A missing or
+ * unreadable roles.md degrades every floor to `standard` (the pre-reconcile
+ * default) rather than failing the routing adapter.
+ */
+export const STAGE_FLOOR_TIER: ReadonlyMap<string, AdapterCapabilityTier> = (() => {
+    const map = new Map<string, AdapterCapabilityTier>();
+    try {
+        const source = readFileSync(join(import.meta.dir, '..', 'references', 'roles.md'), 'utf8');
+        const roleRe = /id: ([a-z-]+)[\s\S]*?tier: ([a-z0-9-]+)[\s\S]*?stages: \[([^\]]*)\]/g;
+        for (const m of source.matchAll(roleRe)) {
+            const tier = m[2] as AdapterCapabilityTier;
+            for (const stage of (m[3] ?? '').split(',')) {
+                const id = stage.trim();
+                if (id !== '') map.set(id, tier);
+            }
+        }
+    } catch {
+        // roles.md unreachable — every floor falls back to `standard` below.
+    }
+    return map;
+})();
+
+/**
+ * Build a stage model policy whose floor reads from Layer 1. A declared fallback
+ * at or below the floor (review/refine/brainstorm floors rose with roles.md)
+ * escalates to the next tier above the floor instead of degrading.
+ */
+function policy(stage: string, fallback: AdapterCapabilityTier[] = []): StageModelPolicy {
+    const floor = STAGE_FLOOR_TIER.get(stage) ?? 'standard';
+    const kept = fallback.filter((t) => TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf(floor));
+    if (kept.length > 0) return { min_tier: floor, fallback: kept.map((tier) => ({ tier, trigger: 'gate-fail' })) };
+    if (fallback.length === 0) return { min_tier: floor, fallback: [] };
+    // Escalate one tier above the floor; a floor already at the top of the
+    // vocabulary keeps itself as the bound (no higher tier exists to escalate to).
+    const next = TIER_ORDER[TIER_ORDER.indexOf(floor) + 1] ?? floor;
+    return { min_tier: floor, fallback: [{ tier: next, trigger: 'gate-fail' }] };
+}
 
 const layer = (name: ContextLayerName): StageContextLayer => ({ layer: name, required: true });
 const event = (name: string, description?: string): StageEvent => ({ name, description });
@@ -279,7 +314,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'corpus',
         retry: defaultRetry,
-        model_policy: refineModel,
+        model_policy: policy('refine', ['capable-2']),
         context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
         observability: [event('stage-started'), event('feature-created'), event('batch-created')],
         execution: inlineInline(true),
@@ -300,7 +335,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'corpus',
         retry: defaultRetry,
-        model_policy: planModel,
+        model_policy: policy('plan', ['capable-3']),
         context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
         observability: [event('stage-started'), event('feature-created'), event('batch-created')],
         execution: inlineInline(true),
@@ -317,7 +352,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [],
         mutation_class: 'code',
         retry: defaultRetry,
-        model_policy: standardModel,
+        model_policy: policy('implement', ['capable-1']),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('code-modified')],
         execution: inlineInline(),
@@ -338,7 +373,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [{ name: 'coverage-floor', timing: 'post', min_verdict: 'pass', description: '≥90% function coverage' }],
         mutation_class: 'tests',
         retry: defaultRetry,
-        model_policy: standardModel,
+        model_policy: policy('test', ['capable-1']),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('gate-passed'), event('coverage-measured')],
         execution: inlineInline(),
@@ -357,7 +392,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'code',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 600 },
-        model_policy: standardModel,
+        model_policy: policy('quality-gate', ['capable-1']),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('gate-passed')],
         execution: inlineInline(),
@@ -378,7 +413,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'escalate', timeout_seconds: 600 },
-        model_policy: capableModel,
+        model_policy: policy('verify'),
         context_layers: [layer('task-state'), layer('run-state'), layer('indexed-evidence')],
         observability: [event('stage-started'), event('verdict-emitted'), event('gate-passed')],
         execution: inlineInline(),
@@ -403,7 +438,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'learnings',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 180 },
-        model_policy: standardModel,
+        model_policy: policy('wrap', ['capable-1']),
         context_layers: [layer('task-state'), layer('indexed-evidence')],
         observability: [event('stage-started'), event('learnings-written'), event('doc-synced')],
         execution: inlineHitl('both'),
@@ -417,7 +452,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [{ name: 'review-guard', timing: 'post', min_verdict: 'pass', description: 'No P1 findings blocking' }],
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
-        model_policy: standardModel,
+        model_policy: policy('review', ['capable-1']),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('findings-produced')],
         execution: inlineInline(),
@@ -443,7 +478,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'driver',
         retry: { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 600 },
-        model_policy: capableModel,
+        model_policy: policy('dogfood'),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('gate-passed'), event('report-emitted')],
         execution: inlineInline(),
@@ -457,7 +492,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [],
         mutation_class: 'corpus',
         retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
-        model_policy: standardModel,
+        model_policy: policy('handover', ['capable-1']),
         context_layers: [layer('task-state')],
         observability: [event('stage-started')],
         execution: inlineDeterministic('cli'),
@@ -474,7 +509,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [],
         mutation_class: 'code',
         retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
-        model_policy: standardModel,
+        model_policy: policy('fixall', ['capable-1']),
         context_layers: [layer('task-state')],
         observability: [event('stage-started')],
         execution: inlineDeterministic('script'),
@@ -488,7 +523,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [],
         mutation_class: 'corpus',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
-        model_policy: standardModel,
+        model_policy: policy('brainstorm'),
         context_layers: [layer('project-authority'), layer('task-state')],
         observability: [event('stage-started')],
         execution: inlineInline(),
@@ -502,7 +537,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         gates: [],
         mutation_class: 'none',
         retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 60 },
-        model_policy: { min_tier: 'cheap', fallback: [] },
+        model_policy: policy('changelog'),
         context_layers: [],
         observability: [event('stage-started')],
         execution: inlineDeterministic('cli'),

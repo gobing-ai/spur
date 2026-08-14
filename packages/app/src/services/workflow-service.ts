@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
@@ -464,6 +465,16 @@ export class WorkflowAppService {
 
             if (shellErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: shellErrors };
+            }
+
+            // Declared step role (0538 R2): every agent.run step must declare a
+            // Layer-1 role beside its agent: pin. The JSON-schema validator is a
+            // keyword subset (no if/then — ts-runtime schema-validation), so this
+            // post-schema walk is the enforcement surface, same pattern as the
+            // shell-syntax check above. Both `validate` and `run` share it.
+            const roleErrors = collectAgentRunRoleViolations(workflow);
+            if (roleErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: roleErrors };
             }
 
             // 0533 R3: validate fails closed on a bad extension — a missing module,
@@ -1158,6 +1169,50 @@ function collectShellCommands(def: WorkflowDef): ShellCommandEntry[] {
     }
 
     return entries;
+}
+
+/**
+ * Walk a workflow def and collect validation violations for `agent.run` steps
+ * that declare no `role:` or an unknown one (0538 R2). Supports both
+ * state-machine and transition-flow workflow kinds; mirrors
+ * {@link collectShellCommands}'s walk so the two post-schema gates stay
+ * consistent. The role vocabulary is the four-id `AGENT_ROLE_NAMES` literal.
+ */
+function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
+    const roleOf = (options: Record<string, unknown> | undefined): string | undefined => {
+        const role = options?.role;
+        return typeof role === 'string' && role.trim() !== '' ? role.trim() : undefined;
+    };
+
+    const violations: string[] = [];
+    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
+        if (action.kind !== 'agent.run') return;
+        const role = roleOf(action.options);
+        const location = `${stateId}/agent.run[${idx}]`;
+        if (role === undefined) {
+            violations.push(
+                `agent.run step at ${location} declares no role: — add \`role:\` (scribe | coder | reviewer | planner) beside \`agent:\` (0538 R2)`,
+            );
+        } else if (!(AGENT_ROLE_NAMES as readonly string[]).includes(role)) {
+            violations.push(
+                `agent.run step at ${location} declares unknown role: '${role}' (accepted: ${AGENT_ROLE_NAMES.join(', ')}; 0538 R2)`,
+            );
+        }
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            if (node.action) visitAction(node.id, node.action, 0);
+        }
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        for (const state of smDef.states ?? []) {
+            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
+            for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i);
+        }
+    }
+    return violations;
 }
 
 async function fileExists(path: string): Promise<boolean> {

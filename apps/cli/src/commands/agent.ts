@@ -10,7 +10,9 @@ import {
     type WaitUntil,
     waitForOccupant,
 } from '@gobing-ai/spur-app';
+import { resolveExecutor } from '@gobing-ai/spur-config';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
+import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
@@ -48,13 +50,14 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('run')
         .description('Execute a prompt or slash command via a coding agent.')
-        .option('--agent <name>', 'Agent name or auto')
+        .option('--agent <name>', 'Role, executor, agent binary, or auto')
+        .option('--spec <id>', 'Team agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')
         .option('--model <name>', 'Agent model argument')
         .option('--mode <mode>', 'Agent output mode: text|json')
         .option('--cwd <path>', 'Working directory for agent execution')
         .option('--json', 'Output machine-readable JSON where supported')
-        .option('--drain', 'Prepend pending inbox messages for --agent <id>')
+        .option('--drain', 'Prepend pending inbox messages for --spec <id>')
         .argument('<prompt>', 'The prompt or slash command to execute')
         .action(async (prompt, options) => {
             const flags = commanderOptionsToFlags(options);
@@ -65,7 +68,8 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('loop')
         .description('Run the persistent self-draining loop for a team member (used by the supervisor).')
-        .requiredOption('--agent <id>', 'Agent spec id / message recipient')
+        .option('--spec <id>', 'Agent spec id / message recipient')
+        .option('--agent <id>', 'Agent spec id / message recipient (legacy — prefer --spec)')
         .option('--poll <ms>', 'Idle poll interval in milliseconds', String(DEFAULT_LOOP_POLL_MS))
         .action(async (options) => {
             const controller = new AbortController();
@@ -149,6 +153,28 @@ function commanderOptionsToFlags(options: Record<string, unknown>): Record<strin
         else flags[key] = v as string | boolean;
     }
     return flags;
+}
+
+/**
+ * Reject an `--agent` value that is neither a role, a configured executor, nor
+ * `auto`/`inline` at the flag boundary, before any agent process spawns (0536 R3).
+ * The message names both accepted sets. Bare coding-agent binary names are
+ * accepted for the transition — the service warns once under the registered
+ * shim (`agent-bare-binary-name`). Returns an error message, or null to proceed.
+ */
+function validateAgentSelector(flags: Record<string, string | boolean>, context: CliContext): string | null {
+    const raw = typeof flags.agent === 'string' ? flags.agent : undefined;
+    if (raw === undefined || raw === 'auto' || raw === 'inline') return null;
+    if (context.agentRoles?.has(raw) === true) return null;
+    if ((context.agentConfig?.executors ?? []).some((e) => e.name === raw)) return null;
+    if (isAgentName(raw)) return null;
+    const roleList =
+        context.agentRoles !== undefined
+            ? [...context.agentRoles.keys()].join(', ')
+            : 'scribe, coder, reviewer, planner';
+    const executors = (context.agentConfig?.executors ?? []).map((e) => e.name);
+    const executorList = executors.length > 0 ? executors.join(', ') : '(none configured)';
+    return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), or 'auto'.`;
 }
 
 /** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */
@@ -331,16 +357,35 @@ export async function runAgentRun(
     const ledger = await attachSystemEventLedger(bus, context);
     const svc = context.agentService({ events: bus });
     try {
-        // `--drain` is DB-backed, so it is resolved in the command layer (where getDb
-        // lives) rather than in the app service. The addressed `--agent <id>` names a
-        // message recipient (an agent spec id), which is a different namespace from the
-        // coding-agent type the runner resolves. When a matching spec exists we drain
-        // its inbox into the prompt and rewrite `--agent` to the spec's underlying type
-        // so resolution still works; in Phase 1-3 there is no live stdin, so prepending
-        // is how deferred messages reach the agent.
-        if (flags.drain === true) {
+        // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
+        // names the occupant address; `--drain` is DB-backed, so it is resolved in
+        // the command layer (where getDb lives) rather than in the app service.
+        // The addressed id names a message recipient (an agent spec id), which is
+        // a different namespace from the coding-agent type the runner resolves.
+        // When a matching spec exists we rewrite `--agent` to the spec's underlying
+        // executor/type so resolution still works; in Phase 1-3 there is no live
+        // stdin, so prepending is how deferred messages reach the agent.
+        if (flags.drain === true || typeof flags.spec === 'string') {
             const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
+            // R1 (0542): an explicit --spec must resolve to a real team spec — a
+            // typo'd id must not silently fall through to auto resolution.
+            if (typeof flags.spec === 'string' && flags.spec !== '' && rewritten['spec-id'] !== flags.spec) {
+                context.output.error(`--spec "${flags.spec}" does not match a team agent spec`);
+                return 2;
+            }
+            const invalid = validateAgentSelector(rewritten, context);
+            if (invalid !== null) {
+                context.output.error(invalid);
+                return 2;
+            }
             return await svc.run(drained, rewritten, deps);
+        }
+        // R3 (0536): reject a value that is neither a role, a configured executor,
+        // nor auto/inline at the flag boundary — before any agent process spawns.
+        const invalid = validateAgentSelector(flags, context);
+        if (invalid !== null) {
+            context.output.error(invalid);
+            return 2;
         }
         return await svc.run(prompt, flags, deps);
     } finally {
@@ -351,27 +396,42 @@ export async function runAgentRun(
 
 /**
  * Drain pending inbox messages for the addressed agent spec and prepend them to
- * the prompt. Returns possibly-rewritten flags (with `--agent` mapped from spec id
- * to the spec's coding-agent type when a spec is found).
+ * the prompt — or, with `--spec` alone, just address the occupant without
+ * touching the inbox. Returns possibly-rewritten flags (with `--agent` mapped
+ * from spec id to the spec's executor name — or coding-agent type when the spec
+ * carries no executor field — when a spec is found).
+ *
+ * R1 (0542): the spec id is read from `--spec <id>` (canonical). A spec id
+ * passed to the legacy `--agent <spec-id>` still works during the transition,
+ * warned once under the registered shim (`agent-flag-spec-id`). `spec-id` is
+ * set BEFORE the rewrite so AgentService.executeRun can persist an occupant pin
+ * (ADR-057 wave 1 R1) — the flag survives even when the inbox is empty, because
+ * runAgentLoop relies on it.
  */
 async function drainIntoPrompt(
     prompt: string | undefined,
     context: CliContext,
     flags: Record<string, string | boolean>,
 ): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean> }> {
-    const recipient = typeof flags.agent === 'string' ? flags.agent : '';
+    const specFlag = typeof flags.spec === 'string' ? flags.spec : '';
+    const agentFlag = typeof flags.agent === 'string' ? flags.agent : '';
+    const recipient = specFlag !== '' ? specFlag : agentFlag;
     if (recipient === '' || recipient === 'auto') {
-        context.output.error('--drain requires an explicit --agent <id> matching a message recipient');
+        context.output.error('--drain requires an explicit --spec <id> matching a message recipient');
         return { prompt, flags };
     }
 
     const team = new TeamService(context);
     const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
-    // Map spec id → coding-agent type so AgentService can resolve the runner, AND
-    // retain the spec id on `flags['spec-id']` (set BEFORE rewriting `agent`) so
-    // AgentService.executeRun can persist an occupant pin (ADR-057 wave 1 R1).
-    // The flag survives even when the inbox is empty — runAgentLoop relies on it.
-    const flagsOut = spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: spec.type };
+    // Legacy `--agent <spec-id>` addressing: warn once per process (agent-flag-spec-id).
+    if (specFlag === '' && spec !== undefined) {
+        warnAgentSpecIdOnce(context);
+    }
+    const flagsOut =
+        spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
+
+    // `--spec` without `--drain`: address the occupant, leave the inbox alone.
+    if (flags.drain !== true) return { prompt, flags: flagsOut };
 
     const inbox = await team.drainPending(recipient);
     if (inbox.count === 0) return { prompt, flags: flagsOut };
@@ -380,6 +440,49 @@ async function drainIntoPrompt(
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
     return { prompt: merged, flags: flagsOut };
+}
+
+/**
+ * Resolve the `--agent` selector for a drained spec (0537, feature B2).
+ *
+ * A spec materialized with an `executor` name routes through that executor so the
+ * operator's model + tier binding survives drain (R2). A dangling executor —
+ * renamed or removed from `agent.executors` — fails loudly instead of silently
+ * falling back to a bare binary on the default model (R5): the error names the
+ * spec and the missing executor, and no process spawns. Pre-existing specs with
+ * no executor field keep today's `spec.type` behavior.
+ */
+function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
+    // @transition-shim(spec-without-executor-field) — legacy specs carry only `type`, no executor binding
+    if (spec.executor === undefined) return spec.type;
+    try {
+        resolveExecutor(spec.executor, context.agentConfig, { isCanonicalAgent: isAgentName });
+    } catch (error) {
+        throw new Error(
+            `Spec "${spec.id}" references unknown executor "${spec.executor}" — define it under agent.executors or remove the reference (${error instanceof Error ? error.message : String(error)})`,
+        );
+    }
+    return spec.executor;
+}
+
+/** Spec ids already warned via the legacy `--agent <spec-id>` path (warn once per process — 0542 R1). */
+const warnedAgentSpecId = new Set<string>();
+
+/**
+ * One-time transition warning for addressing a team spec via the legacy
+ * `--agent <spec-id>` flag; `--spec <id>` is the canonical carrier (0542 R1).
+ * Warns once per process, so the supervised loop cannot spam stderr on every
+ * drain iteration.
+ */
+// @transition-shim(agent-flag-spec-id) — a team spec id passed to --agent still addresses the spec
+// during the transition, warned once; removal: no --agent <spec-id> usage remains in
+// .spur/workflows/, plugins/sp/, or docs/
+function warnAgentSpecIdOnce(context: CliContext): void {
+    if (warnedAgentSpecId.size > 0) return;
+    warnedAgentSpecId.add('*');
+    context.output.error(
+        'Warning: addressing a team spec via --agent <spec-id> is deprecated; use --spec <id> (config/transition-shims.json: agent-flag-spec-id).',
+    );
 }
 
 /** Default idle poll interval for `spur agent loop` (ms). */
@@ -443,12 +546,13 @@ function loopSleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * `spur agent loop --agent <id> [--poll <ms>]` — the persistent self-draining wrapper
+ * `spur agent loop --spec <id> [--poll <ms>]` — the persistent self-draining wrapper
  * the supervisor spawns (0258 R6). Each iteration consumes the inbox via `drainPending`;
  * if messages were drained it runs the agent with them prepended, otherwise it
  * idle-sleeps `--poll` ms. This is the long-lived, attachable process — the member no
  * longer dies after one successful drain. Exits cleanly on abort (SIGINT/SIGTERM);
- * crash-restart is the supervisor's job.
+ * crash-restart is the supervisor's job. Legacy `--agent <id>` still works for the
+ * transition, warned once (agent-flag-spec-id).
  */
 export async function runAgentLoop(
     context: CliContext,
@@ -456,9 +560,14 @@ export async function runAgentLoop(
     runtime: AgentLoopRuntime = {},
     deps?: AgentRunDeps,
 ): Promise<number> {
-    const recipient = typeof flags.agent === 'string' ? flags.agent : '';
+    const recipient =
+        typeof flags.spec === 'string' && flags.spec !== ''
+            ? flags.spec
+            : typeof flags.agent === 'string'
+              ? flags.agent
+              : '';
     if (recipient === '' || recipient === 'auto') {
-        context.output.error('agent loop requires an explicit --agent <id>');
+        context.output.error('agent loop requires an explicit --spec <id> matching a team agent spec');
         return 2;
     }
     const pollMs = parseLoopPoll(flags.poll);

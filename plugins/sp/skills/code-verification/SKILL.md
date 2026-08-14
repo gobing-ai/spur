@@ -507,6 +507,8 @@ Do **not** use this skill for:
   and the per-requirement aggregation rule.
 - [references/secu-review.md](references/secu-review.md) — the SECUA dimensions and finding-severity
   rubric.
+- `plugins/sp/references/roles.md` — the Layer-1 role→tier table; this skill's verify/review modes
+  run under the `reviewer` role (0538 R4: this file points at roles.md, it does not restate tiers).
 - `.spur/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens

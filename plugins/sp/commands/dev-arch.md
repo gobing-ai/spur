@@ -1,5 +1,6 @@
 ---
 description: Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors
+role: planner
 argument-hint: "[<module-path>] [--scope <all|path>] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
 ---

@@ -211,6 +211,8 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 
 **Config & companions (no single pipeline step owns these):**
 
+- `plugins/sp/references/roles.md` — the Layer-1 role→tier table (`scribe` / `coder` / `reviewer` /
+  `planner`, one per tier); the role vocabulary this spine's operations route under.
 - `.spur/workflows/task-pipeline.yaml` — the execution pipeline definition.
 - `.spur/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `.spur/templates/bdd/gherkin.md` — the BDD scenario template.

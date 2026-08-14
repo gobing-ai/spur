@@ -1,5 +1,6 @@
 ---
 description: Discover recurring anti-patterns worth codifying as rules
+role: reviewer
 argument-hint: "[<path-or-glob>]"
 allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
 ---

@@ -81,6 +81,8 @@ states:
         options:
           agent: ${vars.agent}
           input: "Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus."
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: learning-capture
@@ -93,6 +95,8 @@ states:
         options:
           agent: ${vars.agent}
           input: "Extract working learnings from tasks ${vars.tasks}. Output raw markdown (no fences) grouped by date and task WBS: conventions, errors fixed, patterns, gotchas. Captured to .spur/run/wrapup-learnings.md."
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           answerFile: .spur/run/wrapup-learnings.md
           expectFile: .spur/run/wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
@@ -115,6 +119,8 @@ states:
         options:
           agent: ${vars.agent}
           input: "For each task in ${vars.tasks}, output one JSONL line (no fences) with fields: wbs, feature_id, status, verdict, timestamp. Captured to .spur/run/wrapup-metrics.jsonl."
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: scribe
           answerFile: .spur/run/wrapup-metrics.jsonl
           expectFile: .spur/run/wrapup-metrics.jsonl
           timeoutMs: ${vars.stepTimeoutMs}

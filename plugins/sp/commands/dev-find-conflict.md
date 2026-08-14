@@ -1,5 +1,6 @@
 ---
 description: "Authority-aware semantic audit across source, task files, feature files, and project authority files — discover conflicts, resolve claim-specific authority, collect reproducible evidence, and route confirmed repairs through owner surfaces. Triggers: find conflict, conflict audit, semantic conflict, authority mismatch, stale projection."
+role: reviewer
 argument-hint: "[<scope>] [--pillar <source|tasks|features|authority|all>] [--mode <adaptive|full>] [--resolve] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---

@@ -1,5 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
+role: planner
 argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>] [--skip-design] [--auto] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---

@@ -398,7 +398,7 @@ describe('spur team up/down/status --by-team (0258 R4)', () => {
         '      members:',
         '        - claude',
         '        - executor: codex',
-        '          id: reviewer',
+        '          id: codex-reviewer',
         '',
     ].join('\n');
 
@@ -419,7 +419,7 @@ describe('spur team up/down/status --by-team (0258 R4)', () => {
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages.join('')) as { upserted: string[]; written: boolean };
             expect(payload.written).toBe(false);
-            expect(payload.upserted.sort()).toEqual(['alpha-claude', 'alpha-reviewer']);
+            expect(payload.upserted.sort()).toEqual(['alpha-claude', 'alpha-codex-reviewer']);
             expect(
                 await readFile(join(cwd, '.spur', 'agents', 'alpha-claude.yaml'), 'utf8').catch(() => null),
             ).toBeNull();
@@ -456,7 +456,7 @@ describe('spur team up/down/status --by-team (0258 R4)', () => {
             };
             const alpha = payload.teams.find((t) => t.teamId === 'alpha');
             expect(alpha).toBeDefined();
-            expect(alpha?.specs.map((s) => s.id).sort()).toEqual(['alpha-claude', 'alpha-reviewer']);
+            expect(alpha?.specs.map((s) => s.id).sort()).toEqual(['alpha-claude', 'alpha-codex-reviewer']);
         } finally {
             await cleanup();
         }
@@ -541,7 +541,7 @@ describe('spur team up/down/status --by-team (0258 R4)', () => {
             // Header carries the configured name; rows list the materialized specs.
             expect(text).toContain('# alpha (Alpha)');
             expect(text).toContain('alpha-claude');
-            expect(text).toContain('alpha-reviewer');
+            expect(text).toContain('alpha-codex-reviewer');
         } finally {
             await cleanup();
         }

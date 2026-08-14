@@ -932,6 +932,75 @@ describe('TeamService team management (0258)', () => {
             }
         });
 
+        test('records the executor name beside the kind (0537 R1)', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  executors:
+    - name: codex-sol
+      agent: codex
+      model: gpt-5.6-sol
+      tier: capable-3
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - executor: codex-sol
+          purpose: verifier
+`,
+                );
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('demo');
+                const specs = await loadAgentSpecs(configDir);
+                const spec = specs.find((s) => s.id === 'demo-codex-sol');
+                // The kind stays (AiRunner resolves the runner from it)...
+                expect(spec?.type).toBe('codex');
+                // ...and the executor name now survives the round trip (R1).
+                expect(spec?.executor).toBe('codex-sol');
+                expect(spec?.config?.model).toBe('gpt-5.6-sol');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('0538 R3: a member declaring role records it on the materialized spec', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - executor: claude
+          purpose: verdict writer
+          role: reviewer
+        - executor: codex
+`,
+                );
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('demo');
+                const specs = await loadAgentSpecs(configDir);
+                const byId = new Map(specs.map((s) => [s.id, s]));
+                // The declared role rides the spec's config bag beside the executor binding.
+                expect(byId.get('demo-claude')?.config?.role).toBe('reviewer');
+                // A member declaring none still materializes, without the key.
+                expect(byId.get('demo-codex')).toBeDefined();
+                expect(byId.get('demo-codex')?.config?.role).toBeUndefined();
+                // purpose stays as documentation.
+                expect(byId.get('demo-claude')?.purpose).toBe('verdict writer');
+            } finally {
+                await cleanup();
+            }
+        });
+
         test('prunes orphaned generated specs that are no longer desired', async () => {
             const { svc, cwd, cleanup } = await makeService();
             try {

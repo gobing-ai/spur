@@ -120,6 +120,9 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
   post-scaffold init validation (Phase 1.5/1.6 probes).
 - **`sp:spur-dev`** - the spine that dispatches these verbs into the planning +
   execution lifecycle. Use it to *drive* work; use this facade to *look up or operate a verb*.
+- **`plugins/sp/references/roles.md`** — the Layer-1 role→tier table (`scribe` / `coder` /
+  `reviewer` / `planner`, one per tier). The facade's nouns/verbs serve those roles; the table is
+  the role vocabulary, the operator config maps tiers to executors.
 - **`sp:expert-spur`** — the subagent that loads this facade for multi-step, multi-noun corpus work
   in its own context window.
 

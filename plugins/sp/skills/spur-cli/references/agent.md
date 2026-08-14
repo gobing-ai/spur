@@ -36,8 +36,8 @@ invalid usage.
 ## `run` - execute a prompt via a coding agent
 
 ```bash
-spur agent run "Fix the login bug in src/auth/" --agent claude
-spur agent run "verify on o3" --agent codex --model o3
+spur agent run "Fix the login bug in src/auth/" --agent coder
+spur agent run "verify on o3" --agent reviewer --model o3
 spur agent run "/sp:dev-verify 0040" --agent omp --drain
 ```
 
@@ -48,13 +48,18 @@ through a coding agent as an external process, producing a persisted run record 
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--agent <name>` | Agent name or `auto`. Selects which installed coding agent executes the prompt. |
+| `--agent <name>` | Role, executor, agent binary, or `auto`. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. |
 | `--model <name>` | Agent model argument (e.g. `o3`, `sonnet`). Passed through to the agent's model flag. |
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
 | `--continue` | Resume the previous agent session instead of starting fresh. |
 | `--cwd <path>` | Working directory for agent execution (default: current directory). |
-| `--drain` | Prepend pending inbox messages addressed to `--agent <id>` before the prompt. |
+| `--spec <id>` | Team agent spec id (occupant addressing, 0542 R1). Pairs with `--drain`; with `--spec` alone the run is addressed to the occupant without touching the inbox. A legacy `--agent <spec-id>` still works during the transition with a one-time warning (shim `agent-flag-spec-id`). |
+| `--drain` | Prepend pending inbox messages addressed to `--spec <id>` before the prompt. |
 | `--json` | Output machine-readable JSON where supported. |
+
+`--json` adds a `resolved` block (`{ role?, tier?, executor?, agent, source }`) reporting the
+resolution decision — the role, its tier, and the executor that won for role routing; the pin for
+an explicit executor; the canonical agent; and the resolution source.
 
 ### Dispatch-surface cross-reference
 
@@ -91,7 +96,7 @@ under supervision.
 
 | Flag | Purpose |
 |------|---------|
-| `--agent <id>` | **Required.** Agent spec id / message recipient. |
+| `--spec <id>` | **Required.** Team agent spec id / message recipient (0542 R1; legacy `--agent <spec-id>` still read with a one-time warning). |
 | `--poll <ms>` | Idle poll interval in milliseconds (default: `2000`). |
 
 The loop runs until `SIGINT` / `SIGTERM`. Each iteration: check inbox -> if messages, drain each

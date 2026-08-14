@@ -70,7 +70,7 @@ describe('registerSpurBuiltins', () => {
 
         const result = await host.runAction(
             'agent.run',
-            { input: 'hello' },
+            { input: 'hello', role: 'coder' },
             {
                 runId: 'r1',
                 stateOrNodeId: 's1',
@@ -111,8 +111,8 @@ describe('registerSpurBuiltins', () => {
                 initialState: 'first',
                 terminalStates: ['done'],
                 states: [
-                    { id: 'first', onEnter: [{ kind: 'agent.run', options: { input: '/step-one' } }] },
-                    { id: 'second', onEnter: [{ kind: 'agent.run', options: { input: '/step-two' } }] },
+                    { id: 'first', onEnter: [{ kind: 'agent.run', options: { role: 'coder', input: '/step-one' } }] },
+                    { id: 'second', onEnter: [{ kind: 'agent.run', options: { role: 'coder', input: '/step-two' } }] },
                     { id: 'done' },
                 ],
                 transitions: [
@@ -164,7 +164,12 @@ describe('registerSpurBuiltins', () => {
                 states: [
                     {
                         id: 'invoke',
-                        onEnter: [{ kind: 'agent.run', options: { input: `/sp:dev-run 0295 --auto ${rawSecret}` } }],
+                        onEnter: [
+                            {
+                                kind: 'agent.run',
+                                options: { role: 'coder', input: `/sp:dev-run 0295 --auto ${rawSecret}` },
+                            },
+                        ],
                     },
                     { id: 'done' },
                 ],
@@ -207,7 +212,11 @@ describe('registerSpurBuiltins', () => {
                     {
                         id: 'invoke',
                         onEnter: [
-                            { kind: 'agent.run', options: { input: 'hello', capture: true }, onError: 'continue' },
+                            {
+                                kind: 'agent.run',
+                                options: { role: 'coder', input: 'hello', capture: true },
+                                onError: 'continue',
+                            },
                         ],
                     },
                     { id: 'done' },

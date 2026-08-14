@@ -1,5 +1,6 @@
 ---
 description: Generate changelog from git commits
+role: scribe
 argument-hint: "[--since <tag|commit>] [--until <tag|commit>] [--version <version>]"
 allowed-tools: ["Bash", "Read"]
 ---

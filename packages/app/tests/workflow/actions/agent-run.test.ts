@@ -81,7 +81,7 @@ describe('AgentRunActionRunner', () => {
     test('returns ok:true and exitCode:0 on success', async () => {
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(result.ok).toBe(true);
         expect(result.data).toMatchObject({ exitCode: 0, agent: '<default>' });
     });
@@ -89,7 +89,7 @@ describe('AgentRunActionRunner', () => {
     test('returns ok:false with error on non-zero exit', async () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: 'boom', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited with code 2');
     });
@@ -103,7 +103,7 @@ describe('AgentRunActionRunner', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(result.ok).toBe(false);
         const data = result.data as Record<string, unknown>;
         expect(typeof data.stdoutTail).toBe('string');
@@ -124,7 +124,7 @@ describe('AgentRunActionRunner', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc, undefined, undefined, { secretValues: [secret] });
-        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         const data = result.data as Record<string, unknown>;
         const serialized = JSON.stringify(result.data);
 
@@ -146,7 +146,7 @@ describe('AgentRunActionRunner', () => {
     test('allows missing input when continue:true', async () => {
         const svc = svcWithRunTraced({});
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ continue: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', continue: true }, makeCtx());
         expect(result.ok).toBe(true);
     });
 
@@ -156,11 +156,32 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'test', agent: 'claude', model: 'sonnet', mode: 'json', cwd: '/app' }, makeCtx());
+        await runner.execute(
+            { role: 'coder', input: 'test', agent: 'claude', model: 'sonnet', mode: 'json', cwd: '/app' },
+            makeCtx(),
+        );
         expect(capturedFlags.agent).toBe('claude');
         expect(capturedFlags.model).toBe('sonnet');
         expect(capturedFlags.mode).toBe('json');
         expect(capturedFlags.cwd).toBe('/app');
+    });
+
+    test('0538 R2: threads the declared step role onto the underlying agent run', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'test', agent: 'claude', role: 'reviewer' }, makeCtx());
+        expect(capturedFlags.role).toBe('reviewer');
+    });
+
+    test('0538 R2: fails fast on an unknown step role before dispatch', async () => {
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '' });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'test', role: 'sorcerer' }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain("unknown role 'sorcerer'");
     });
 
     test('session latch: no latch, no explicit continue → continue not set', async () => {
@@ -169,7 +190,7 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hi' }, makeCtx({ vars: {} }));
+        await runner.execute({ role: 'coder', input: 'hi' }, makeCtx({ vars: {} }));
         expect(capturedFlags.continue).toBeUndefined();
     });
 
@@ -179,7 +200,7 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hi' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        await runner.execute({ role: 'coder', input: 'hi' }, makeCtx({ vars: { __agentSession: 'open' } }));
         // R3 (0451): affinity-on (default) → resume via sessionDir only, not bare continue
         expect(capturedFlags.continue).toBeUndefined();
     });
@@ -190,7 +211,10 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hi' }, makeCtx({ vars: { __agentSession: 'open', sessionAffinity: 'false' } }));
+        await runner.execute(
+            { role: 'coder', input: 'hi' },
+            makeCtx({ vars: { __agentSession: 'open', sessionAffinity: 'false' } }),
+        );
         // R3 (0451): affinity off → latch open sets continue:true (restored Q8)
         expect(capturedFlags.continue).toBe(true);
     });
@@ -201,7 +225,10 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hi', continue: false }, makeCtx({ vars: { __agentSession: 'open' } }));
+        await runner.execute(
+            { role: 'coder', input: 'hi', continue: false },
+            makeCtx({ vars: { __agentSession: 'open' } }),
+        );
         expect(capturedFlags.continue).toBe(false);
     });
 
@@ -211,7 +238,7 @@ describe('AgentRunActionRunner', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hi' }, makeCtx({ workdir: '/fallback' }));
+        await runner.execute({ role: 'coder', input: 'hi' }, makeCtx({ workdir: '/fallback' }));
         expect(capturedFlags.cwd).toBe('/fallback');
     });
 });
@@ -243,7 +270,7 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
         // R3 (0451): force affinity off so latch sets continue (restored Q8).
         // The 0406 fallback retries when continue is set but the agent rejects it.
         const result = await runner.execute(
-            { input: 'verify' },
+            { role: 'coder', input: 'verify' },
             makeCtx({ vars: { __agentSession: 'open', sessionAffinity: 'false' } }),
         );
         expect(result.ok).toBe(true);
@@ -258,7 +285,10 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
         const calls: { flags: Record<string, string | boolean> }[] = [];
         const svc = svcFailingThenSucceeding(calls);
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        const result = await runner.execute(
+            { role: 'coder', input: 'verify' },
+            makeCtx({ vars: { __agentSession: 'open' } }),
+        );
         expect(result.ok).toBe(true);
         expect(result.setVars).toMatchObject({ __agentSession: 'no-resume' });
     });
@@ -269,7 +299,7 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'no-resume' } }));
+        await runner.execute({ role: 'coder', input: 'verify' }, makeCtx({ vars: { __agentSession: 'no-resume' } }));
         expect(capturedFlags.continue).toBeUndefined();
     });
 
@@ -278,7 +308,7 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
         const svc = svcFailingThenSucceeding(calls);
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'verify', continue: true },
+            { role: 'coder', input: 'verify', continue: true },
             makeCtx({ vars: { __agentSession: 'open' } }),
         );
         expect(result.ok).toBe(false);
@@ -288,7 +318,7 @@ describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
     test('exitCode 2 without latch → no retry (fresh dispatch already failed)', async () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', message: 'binary not found' });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'verify' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'verify' }, makeCtx());
         expect(result.ok).toBe(false);
     });
 });
@@ -346,6 +376,7 @@ describe('AgentRunActionRunner steering', () => {
         const runner = new AgentRunActionRunner(service, undefined, controller);
         const pending = runner.execute(
             {
+                role: 'coder',
                 input: 'retry me',
                 steeringBoundary: true,
                 retryPolicy: { idempotent: true, maxAttempts: 2 },
@@ -368,7 +399,7 @@ describe('AgentRunActionRunner steering', () => {
         const controller = new WorkflowSteeringController(undefined, ['note-secret']);
         const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0 }), undefined, controller);
         const pending = runner.execute(
-            { input: 'note me', steeringBoundary: true },
+            { role: 'coder', input: 'note me', steeringBoundary: true },
             makeCtx({ actionId: 'persisted-action-2' }),
         );
 
@@ -398,7 +429,7 @@ describe('AgentRunActionRunner steering', () => {
         } as unknown as AgentService;
         const runner = new AgentRunActionRunner(service, undefined, controller);
         const pending = runner.execute(
-            { input: 'abort me', steeringBoundary: true },
+            { role: 'coder', input: 'abort me', steeringBoundary: true },
             makeCtx({ actionId: 'persisted-action-3' }),
         );
         await Bun.sleep(1);
@@ -418,7 +449,7 @@ describe('AgentRunActionRunner capture mode', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         expect(result.ok).toBe(true);
         expect(result.data).toMatchObject({
             exitCode: 0,
@@ -434,7 +465,7 @@ describe('AgentRunActionRunner capture mode', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited with code 3');
         expect(result.data).toMatchObject({
@@ -447,21 +478,21 @@ describe('AgentRunActionRunner capture mode', () => {
     test('capture:false (default) does not surface answer in data', async () => {
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'ran', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(result.data).not.toHaveProperty('answer');
     });
 
     test('capture:true sets session latch on success', async () => {
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'ok', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         expect(result.setVars).toMatchObject({ __agentSession: 'open' });
     });
 
     test('capture:true does not set session latch on failure', async () => {
         const svc = svcWithRunTraced({ exitCode: 3, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         expect(result.setVars).toBeUndefined();
     });
 });
@@ -480,7 +511,7 @@ describe('AgentRunActionRunner answerFile', () => {
         const file = join(dir, 'answer.txt');
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'Verdict: PASS', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'verify', answerFile: file }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'verify', answerFile: file }, makeCtx());
         expect(result.ok).toBe(true);
         expect(readFileSync(file, 'utf8')).toBe('Verdict: PASS');
     });
@@ -489,7 +520,7 @@ describe('AgentRunActionRunner answerFile', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'FAIL', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'verify', answerFile: 'nested/out.txt', cwd: dir }, makeCtx());
+        await runner.execute({ role: 'coder', input: 'verify', answerFile: 'nested/out.txt', cwd: dir }, makeCtx());
         expect(readFileSync(join(dir, 'nested', 'out.txt'), 'utf8')).toBe('FAIL');
     });
 });
@@ -513,7 +544,7 @@ describe('AgentRunActionRunner expectFile', () => {
         writeFileSync(file, 'done');
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'build', expectFile: file }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'build', expectFile: file }, makeCtx());
         expect(result.ok).toBe(true);
     });
 
@@ -521,7 +552,10 @@ describe('AgentRunActionRunner expectFile', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'build', expectFile: 'missing.txt', cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'build', expectFile: 'missing.txt', cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited 0 but expected file is absent');
         expect(result.error).toContain('missing.txt');
@@ -537,7 +571,10 @@ describe('AgentRunActionRunner expectFile', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'verify', capture: true, expectFile: file }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'verify', capture: true, expectFile: file },
+            makeCtx(),
+        );
         expect(result.ok).toBe(true);
         expect(result.data).toMatchObject({
             exitCode: 0,
@@ -555,7 +592,7 @@ describe('AgentRunActionRunner expectFile', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'verify', capture: true, expectFile: 'nope.json', cwd: dir },
+            { role: 'coder', input: 'verify', capture: true, expectFile: 'nope.json', cwd: dir },
             makeCtx(),
         );
         expect(result.ok).toBe(false);
@@ -572,7 +609,10 @@ describe('AgentRunActionRunner expectFile', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'build', expectFile: 'artifact.txt', cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'build', expectFile: 'artifact.txt', cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('artifact.txt');
     });
@@ -581,7 +621,10 @@ describe('AgentRunActionRunner expectFile', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'build', expectFile: 'missing.txt', cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'build', expectFile: 'missing.txt', cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited with code 2');
         expect(result.error).not.toContain('expected file is absent');
@@ -596,7 +639,7 @@ describe('AgentRunActionRunner expectFile', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'build', capture: true, expectFile: 'missing.txt', cwd: dir },
+            { role: 'coder', input: 'build', capture: true, expectFile: 'missing.txt', cwd: dir },
             makeCtx(),
         );
         expect(result.ok).toBe(false);
@@ -616,7 +659,7 @@ describe('AgentRunActionRunner expectFile', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'build', answerFile: answerPath, expectFile: artifactPath },
+            { role: 'coder', input: 'build', answerFile: answerPath, expectFile: artifactPath },
             makeCtx(),
         );
         expect(result.ok).toBe(true);
@@ -651,7 +694,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         // Not a git repo — `git status --porcelain` reports nothing → gate fires.
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('empty implement');
         expect(result.error).toContain('zero non-corpus file changes');
@@ -667,7 +713,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         writeFileSync(taskFile, 'changed');
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('empty implement');
     });
@@ -685,7 +734,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         const runner = new AgentRunActionRunner(svc, undefined, undefined, {
             excludeGlobs: ['docs/tasks2/*', 'docs/features/*', 'docs/tasks3/*'],
         });
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('empty implement');
     });
@@ -700,7 +752,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         const svc = svcWithEffect(() => writeFileSync(taskFile, 'changed'));
         // No excludeGlobs → defaults only exclude docs/tasks3/*, docs/features/*
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(true);
     });
 
@@ -713,7 +768,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         gitCommitAll(dir, 'base');
         const svc = svcWithEffect(() => writeFileSync(srcFile, 'changed'));
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(true);
     });
 
@@ -728,7 +786,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
             writeFileSync(newModule, 'new');
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
         expect(result.ok).toBe(true);
     });
 
@@ -744,7 +805,10 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         const runner = new AgentRunActionRunner(
             svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() }),
         );
-        const result = await runner.execute({ input: 'implement', requireDiff: true, cwd: dir }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
 
         expect(result.ok).toBe(false);
         expect(result.error).toContain('empty implement');
@@ -754,7 +818,7 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         dir = mkdtempSync(join(tmpdir(), 'agent-run-optout-'));
         const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', cwd: dir }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'implement', cwd: dir }, makeCtx());
         expect(result.ok).toBe(true);
     });
 
@@ -765,7 +829,7 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         gitCommitAll(dir, 'base');
         const svc = svcWithRunTraced({ exitCode: 3, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'implement', cwd: dir }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'implement', cwd: dir }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited with code 3');
         expect(result.error).toContain('.spur/run/test-1-s1-partial.md');
@@ -849,7 +913,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -869,7 +933,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -889,7 +953,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
             }),
         );
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -906,7 +970,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486', implementScopeGuard: 'off' } }),
         );
 
@@ -922,7 +986,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -948,7 +1012,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -965,7 +1029,7 @@ describe('AgentRunActionRunner diff-scope guard (R1, task 0487)', () => {
             svcWithEffect(() => writeFileSync(join(dir, 'plugins/sp/commands/dev-find-conflict.md'), 'implemented')),
         );
         const result = await runner.execute(
-            { input: 'implement', requireDiff: true, cwd: dir },
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
             makeCtx({ vars: { wbs: '0486' } }),
         );
 
@@ -984,7 +1048,7 @@ describe('AgentRunActionRunner timeoutMs', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'test', timeoutMs: 30000 }, makeCtx());
+        await runner.execute({ role: 'coder', input: 'test', timeoutMs: 30000 }, makeCtx());
         expect(capturedFlags.timeout).toBe('30000');
     });
 
@@ -994,7 +1058,7 @@ describe('AgentRunActionRunner timeoutMs', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'test' }, makeCtx());
+        await runner.execute({ role: 'coder', input: 'test' }, makeCtx());
         expect(capturedFlags.timeout).toBeUndefined();
     });
 
@@ -1006,7 +1070,10 @@ describe('AgentRunActionRunner timeoutMs', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'test', capture: true, timeoutMs: 30000 }, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'test', capture: true, timeoutMs: 30000 },
+            makeCtx(),
+        );
         expect(result.ok).toBe(false);
         expect(result.error).toContain('terminated by signal SIGKILL');
         expect(result.error).toContain('configured timeout: 30000ms');
@@ -1015,21 +1082,21 @@ describe('AgentRunActionRunner timeoutMs', () => {
     test('timeoutMs + non-zero plain run exit → ok:false with timeout error', async () => {
         const svc = svcWithRunTraced({ exitCode: 1, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'test', timeoutMs: 30000 }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'test', timeoutMs: 30000 }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('exited with code 1');
     });
 
     test('timeoutMs: 0 returns ok:false with validation error', async () => {
         const runner = new AgentRunActionRunner({} as unknown as AgentService);
-        const result = await runner.execute({ input: 'test', timeoutMs: 0 }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'test', timeoutMs: 0 }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('timeoutMs must be > 0');
     });
 
     test('timeoutMs: negative returns ok:false with validation error', async () => {
         const runner = new AgentRunActionRunner({} as unknown as AgentService);
-        const result = await runner.execute({ input: 'test', timeoutMs: -100 }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'test', timeoutMs: -100 }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('timeoutMs must be > 0');
     });
@@ -1040,7 +1107,10 @@ describe('AgentRunActionRunner timeoutMs', () => {
             capturedFlags = f;
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'test', timeoutMs: 'abc' } as Record<string, unknown>, makeCtx());
+        const result = await runner.execute(
+            { role: 'coder', input: 'test', timeoutMs: 'abc' } as Record<string, unknown>,
+            makeCtx(),
+        );
         expect(result.ok).toBe(true);
         expect(capturedFlags.timeout).toBeUndefined();
     });
@@ -1072,7 +1142,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'test', capture: true, timeoutMs: 1_800_000 },
+            { role: 'coder', input: 'test', capture: true, timeoutMs: 1_800_000 },
             makeCtx({ runId: 'run-abc', stateOrNodeId: 'implement', workdir: dir }),
         );
         expect(result.ok).toBe(false);
@@ -1096,7 +1166,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true, agent: 'pi' },
+            { role: 'coder', input: 'test', capture: true, agent: 'pi' },
             makeCtx({ runId: 'run-resume', stateOrNodeId: 'implement', workdir: dir }),
         );
 
@@ -1121,7 +1191,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true },
+            { role: 'coder', input: 'test', capture: true },
             makeCtx({ runId: 'run-xyz', stateOrNodeId: 'test', workdir: dir }),
         );
 
@@ -1141,7 +1211,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true },
+            { role: 'coder', input: 'test', capture: true },
             makeCtx({ runId: 'run-ok', stateOrNodeId: 'implement', workdir: dir }),
         );
 
@@ -1162,7 +1232,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test' },
+            { role: 'coder', input: 'test' },
             makeCtx({ runId: 'run-plain', stateOrNodeId: 'implement', workdir: dir }),
         );
 
@@ -1185,7 +1255,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true, agent: 'omp', model: 'zai/glm-5.2' },
+            { role: 'coder', input: 'test', capture: true, agent: 'omp', model: 'zai/glm-5.2' },
             makeCtx({ runId: 'run-model', stateOrNodeId: 'implement', workdir: dir }),
         );
 
@@ -1206,7 +1276,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true, agent: 'omp' },
+            { role: 'coder', input: 'test', capture: true, agent: 'omp' },
             makeCtx({ runId: 'run-nomodel', stateOrNodeId: 'implement', workdir: dir }),
         );
 
@@ -1243,7 +1313,7 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         await runner.execute(
-            { input: 'test', capture: true, agent: 'omp' },
+            { role: 'coder', input: 'test', capture: true, agent: 'omp' },
             makeCtx({
                 runId: 'run-r4',
                 stateOrNodeId: 'implement',
@@ -1282,7 +1352,7 @@ describe('AgentRunActionRunner invocation capture (R1 / task 0295)', () => {
         });
         const svc = svcWithRunTraced({ exitCode: 0, stdout: 'done', invocation: inv });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: '/sp:dev-run 0042 --auto' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: '/sp:dev-run 0042 --auto' }, makeCtx());
         expect(result.ok).toBe(true);
         expect(result.data).toMatchObject({ invocation: inv });
     });
@@ -1291,7 +1361,7 @@ describe('AgentRunActionRunner invocation capture (R1 / task 0295)', () => {
         const inv = invocation({ agent: 'omp' });
         const svc = svcWithRunTraced({ exitCode: 2, stdout: 'err', invocation: inv });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'go' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'go' }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.data).toMatchObject({ invocation: inv });
     });
@@ -1299,7 +1369,7 @@ describe('AgentRunActionRunner invocation capture (R1 / task 0295)', () => {
     test('omits data.invocation when AgentService returns no invocation (pre-validation failure)', async () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', message: 'bad mode' });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'x' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'x' }, makeCtx());
         expect(result.data).not.toHaveProperty('invocation');
     });
 
@@ -1325,7 +1395,10 @@ describe('AgentRunActionRunner invocation capture (R1 / task 0295)', () => {
                 invocation: inv,
             });
             const runner = new AgentRunActionRunner(svc);
-            await runner.execute({ input: 'test' }, makeCtx({ runId: 'r1', stateOrNodeId: 'implement', workdir: dir }));
+            await runner.execute(
+                { role: 'coder', input: 'test' },
+                makeCtx({ runId: 'r1', stateOrNodeId: 'implement', workdir: dir }),
+            );
 
             const artifact = readFileSync(join(dir, '.spur', 'run', 'r1-implement-partial.md'), 'utf8');
             expect(artifact).toContain('## resolved invocation');
@@ -1369,7 +1442,7 @@ describe('AgentRunActionRunner non-interactive contract (R3 / task 0295)', () =>
             },
         } as unknown as AgentService;
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hello' }, makeCtx());
+        await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(runTracedCalled).toBe(true);
         expect(runCalled).toBe(false);
         expect(runCaptureCalled).toBe(false);
@@ -1389,7 +1462,7 @@ describe('AgentRunActionRunner non-interactive contract (R3 / task 0295)', () =>
             },
         } as unknown as AgentService;
         const runner = new AgentRunActionRunner(svc);
-        await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        await runner.execute({ role: 'coder', input: 'hello', capture: true }, makeCtx());
         expect(runTracedCalled).toBe(true);
         expect(runCaptureCalled).toBe(false);
     });
@@ -1403,7 +1476,7 @@ describe('AgentRunActionRunner non-interactive contract (R3 / task 0295)', () =>
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'hello' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
         expect(result.ok).toBe(true);
         expect(result.data).not.toHaveProperty('answer');
     });
@@ -1422,7 +1495,7 @@ describe('AgentRunActionRunner non-interactive contract (R3 / task 0295)', () =>
             }),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: '/sp:dev-run 0042 --auto' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: '/sp:dev-run 0042 --auto' }, makeCtx());
         expect(result.ok).toBe(true);
         // Narrow result.data.invocation with `in` guards; no casts (data is
         // Record<string, unknown> → invocation is unknown).
@@ -1459,7 +1532,7 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
             invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'go', timeoutMs: 30_000 }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'go', timeoutMs: 30_000 }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain("agent.run 's1'");
         expect(result.error).toContain('terminated by signal SIGTERM');
@@ -1469,7 +1542,7 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
     test('dispatch error (validation message) produces a dispatch-specific error message', async () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', message: 'agent spec missing' });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'go' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'go' }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain('dispatch failed');
         expect(result.error).toContain('agent spec missing');
@@ -1478,7 +1551,7 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
     test('plain non-zero exit (no signal, no message) produces exit-code error message', async () => {
         const svc = svcWithRunTraced({ exitCode: 5, stdout: '', invocation: invocation() });
         const runner = new AgentRunActionRunner(svc);
-        const result = await runner.execute({ input: 'go' }, makeCtx());
+        const result = await runner.execute({ role: 'coder', input: 'go' }, makeCtx());
         expect(result.ok).toBe(false);
         expect(result.error).toContain("agent.run 's1' (<default>) exited with code 5");
         // R2 (task 0424): subprocess failures name the partial-work artifact
@@ -1501,7 +1574,7 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'go', timeoutMs: 30_000 },
+            { role: 'coder', input: 'go', timeoutMs: 30_000 },
             makeCtx({ runId: 'sig-run', stateOrNodeId: 'implement', workdir: dir }),
         );
         expect(result.ok).toBe(false);
@@ -1519,7 +1592,7 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', message: 'invalid mode' });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
-            { input: 'go' },
+            { role: 'coder', input: 'go' },
             makeCtx({ runId: 'disp-run', stateOrNodeId: 'implement', workdir: dir }),
         );
         expect(result.ok).toBe(false);
@@ -1618,7 +1691,7 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
         });
         const { bus, events } = recordingBus();
         const runner = new AgentRunActionRunner(svc, bus);
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
         expect(events.map((e) => e.kind)).toEqual(['started', 'output', 'finished']);
         expect(events[0]).toMatchObject({ agent: 'claude', invocation: 'claude -p hi' });
@@ -1632,7 +1705,7 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
         });
         const { bus, events } = recordingBus();
         const runner = new AgentRunActionRunner(svc, bus);
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
         expect(events).toHaveLength(1);
         expect(events[0]).toMatchObject({ kind: 'output', chunk: 'mid-run progress' });
@@ -1640,7 +1713,7 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
 
     test('runs without a bus — the observer is omitted and no-op', async () => {
         const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: '' }));
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
     });
 
@@ -1648,7 +1721,7 @@ describe('AgentRunActionRunner child-agent lifecycle fan-out (task 0426)', () =>
         const dir = mkdtempSync(join(tmpdir(), 'agent-run-0426-'));
         const { bus } = recordingBus();
         const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: '' }), bus);
-        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
         expect(existsSync(join(dir, '.spur', 'run', 'test-1-output.log'))).toBe(false);
         expect(existsSync(join(dir, '.spur', 'run', 'test-1.log'))).toBe(false);
         rmSync(dir, { recursive: true, force: true });
@@ -1684,7 +1757,7 @@ describe('R3 — progress heartbeats (task 0454)', () => {
         });
         const { bus, events } = recordingBus();
         const runner = new AgentRunActionRunner(svc, bus);
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
         const heartbeatEvents = events.filter((e) => e.kind === 'heartbeat');
         expect(heartbeatEvents.length).toBe(1);
@@ -1698,7 +1771,7 @@ describe('R3 — progress heartbeats (task 0454)', () => {
         });
         const { bus, events } = recordingBus();
         const runner = new AgentRunActionRunner(svc, bus);
-        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         const hb = events.find((e) => e.kind === 'heartbeat') as
             | Extract<AgentExecutionEvent, { kind: 'heartbeat' }>
             | undefined;
@@ -1712,7 +1785,7 @@ describe('R3 — progress heartbeats (task 0454)', () => {
             observer(heartbeatEvent());
         });
         const runner = new AgentRunActionRunner(svc); // no bus
-        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1' }));
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx({ runId: 'test-1' }));
         expect(result.ok).toBe(true);
         // No bus → no observer connected → no events captured, but test passes
     });
@@ -1829,7 +1902,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         });
         const runner = new AgentRunActionRunner(svc);
         const ctx = makeCtx({ runId: 'run-123', workdir: '/tmp/w1' });
-        const result = await runner.execute({ input: 'hello', agent: 'omp' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'omp' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toContain('.spur/run/run-123/agent-sessions/omp');
@@ -1849,7 +1922,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
         });
         const runner = new AgentRunActionRunner(svc);
         const ctx = makeCtx({ runId: 'run-123', vars: { sessionAffinity: 'false', __agentSession: 'open' } });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         // Isolation under .spur/run still applied; cross-hop affinity vars not persisted.
@@ -1875,7 +1948,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
                 __agentSessionAgent: 'omp',
             },
         });
-        const result = await runner.execute({ input: 'hello', agent: 'omp' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'omp' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toBe('/tmp/sdir');
@@ -1898,7 +1971,7 @@ describe('R1 — config injection (task 0451)', () => {
             default: 'claude',
         });
         const ctx = makeCtx({ runId: 'run-123', workdir: '/tmp/w1' });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         // Affinity-off still isolates session files under .spur/run/<runId>/agent-sessions/
@@ -1920,7 +1993,7 @@ describe('R1 — config injection (task 0451)', () => {
             default: 'my-agent',
         });
         const ctx = makeCtx({ runId: 'run-456', workdir: '/tmp/w2' });
-        const result = await runner.execute({ input: 'hello', agent: 'inline' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'inline' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.agent).toBe('my-agent');
@@ -1938,7 +2011,7 @@ describe('R1 — config injection (task 0451)', () => {
             default: 'claude',
         });
         const ctx = makeCtx({ runId: 'run-789', workdir: '/tmp/w3' });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toContain('agent-sessions/claude');
@@ -1962,7 +2035,7 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
             default: 'default-agent',
         });
         const ctx = makeCtx({ runId: 'run-321', workdir: '/tmp/w4' });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('codex');
@@ -1989,7 +2062,7 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
             sessionAffinity: true,
         });
         // Second hop explicitly selects the same agent so targetAgentDir matches prevAgent
-        const result = await runner.execute({ input: 'continue', agent: 'codex' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'continue', agent: 'codex' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionDir).toBe('/tmp/w4/.spur/run/run-321/agent-sessions/codex');
@@ -2017,7 +2090,7 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
                 __agentSessionId: 'sess-abc',
             },
         });
-        const result = await runner.execute({ input: 'test', agent: 'claude' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'test', agent: 'claude' }, ctx);
 
         expect(result.ok).toBe(true);
         // The step explicitly selected 'claude', so the session is under claude, not codex
@@ -2042,7 +2115,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
             runId: 'run-555',
             vars: { __agentSession: 'open' },
         });
-        const result = await runner.execute({ input: 'continue' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'continue' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBeUndefined();
@@ -2059,7 +2132,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
             runId: 'run-666',
             vars: { __agentSession: 'open', sessionAffinity: 'false', __agentSessionId: 'must-not-forward' },
         });
-        const result = await runner.execute({ input: 'resume' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'resume' }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(true);
@@ -2079,7 +2152,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
             runId: 'run-777',
             vars: { __agentSession: 'open', sessionAffinity: 'true' },
         });
-        const result = await runner.execute({ input: 'fresh', continue: false }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'fresh', continue: false }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(false);
@@ -2095,7 +2168,7 @@ describe('R3 — latch vs affinity matrix (task 0451)', () => {
             runId: 'run-888',
             vars: { __agentSession: 'open' },
         });
-        const result = await runner.execute({ input: 'resume', continue: true }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'resume', continue: true }, ctx);
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(true);
@@ -2136,7 +2209,7 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
             runId: 'run-r5',
             workdir: dir,
         });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         // session-abc.json → discovered id = 'session-abc'
@@ -2162,7 +2235,7 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
             runId: 'run-r5b',
             workdir: dir,
         });
-        const result = await runner.execute({ input: 'hello' }, ctx);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
         expect(result.ok).toBe(true);
         // No json files → no session id discovered

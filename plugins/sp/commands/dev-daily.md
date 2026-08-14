@@ -1,5 +1,6 @@
 ---
 description: "Generate a daily summary report from agent usage data, git history, and notes"
+role: scribe
 argument-hint: "[--date <YYYY-MM-DD>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]"
 allowed-tools: ["Bash", "Read"]
 ---

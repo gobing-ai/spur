@@ -1,5 +1,6 @@
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
+import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
@@ -121,6 +122,9 @@ export class AgentRunActionRunner implements ActionRunner {
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
+        // Declared step role (0538 R2): threaded onto the underlying `spur agent run`
+        // so the resolution records the reason even when the `agent:` pin beats it.
+        const role = asOptionalString(options.role);
         // R1 (0451): config is injected at composition root, not read from a fake cast.
         // Affinity config via this.agentConfig below.
         // ADR-047 (0449 R2): `inline` on a headless dispatch surface ≡ omit → agent.default.
@@ -183,8 +187,19 @@ export class AgentRunActionRunner implements ActionRunner {
             };
         }
 
+        // Run-time enforcement (0538 R2): the validate verb rejects a role-less or
+        // unknown-role step at the schema gate; this is the guard for any dispatch
+        // that bypassed validate — fail before a subprocess spawns.
+        if (role === undefined || !(AGENT_ROLE_NAMES as readonly string[]).includes(role)) {
+            return {
+                ok: false,
+                error: `agent.run: step must declare a Layer-1 role: (scribe | coder | reviewer | planner) beside agent: (0538 R2)${role === undefined ? '' : ` — unknown role '${role}'`}`,
+            };
+        }
+
         const flags: Record<string, string | boolean> = {};
         if (dispatchAgent !== undefined) flags.agent = dispatchAgent;
+        if (role !== undefined) flags.role = role;
         if (model !== undefined) flags.model = model;
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;

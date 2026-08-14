@@ -24,6 +24,7 @@ nodes:
       kind: agent.run
       options:
         input: "Answer the user's question with verified sources."
+        role: coder
         capture: true
   - id: validate
     action:

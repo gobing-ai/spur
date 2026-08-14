@@ -1,5 +1,6 @@
 ---
 description: Initialize a new Spur project — scaffold config + docs, then customize for this project's stack and scope
+role: scribe
 argument-hint: "[--name <name>] [--minimal] [--force]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---

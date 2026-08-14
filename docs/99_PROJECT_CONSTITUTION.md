@@ -422,6 +422,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/00_ADR.md`
 
+- [2026-08-13] spur-new: The B2 role-selector delta (0536) amended ADR-033 (stage routing) but left ADR-047 — the ADR that owns the `--agent` table — untouched until the wrapup added a cross-amendment. A decision delta that changes a value domain owned by *another* ADR must cross-amend the owner in the same change; grep the ADRs that own the surface, not just the ADR you are extending.
 - [2026-08-12] spur-new: Draft ADRs that bundled a principle + a deferred design + a mechanism
   choice + implementation tips had to be unbundled on operator review. Split before proposing,
   not after (now §6.1 rules 1–2). Recurred on ADR-057 first draft (occupant/run/wait stuffed into
@@ -460,6 +461,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/03_ARCHITECTURE.md`
 
+- [2026-08-13] spur-new: The B2 role→tier→executor two-layer contract (0535–0542) shipped with the mechanism documented only in `04 §2.1` (surface) — 03 had no executor-selection section at all until the wrapup added §19. A surface rewrite that changes *how resolution works* is a §6.4 rule 4 mechanism replacement, not just a T3 flag list: schedule the 03 mechanism block in the same change.
 - [2026-06-11] spur-new: The module list still described a hand-rolled parser two ADRs after it
   was replaced — stale module descriptions survive migrations silently (§6.4 rule 4).
 - [2026-06-12] spur-new: A wildcard dependency edge (`apps/* ──► packages/{…}`) hid three real
@@ -480,6 +482,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/04_DESIGN.md`
 
+- [2026-08-13] spur-new: The 0538 R2 wrapup text claimed the JSON workflow schemas reject a role-less `agent.run` step — the schemas contain no `role` key; the gate is `WorkflowService.validate`'s post-schema walk plus `AgentRunActionRunner`'s dispatch guard. A 04 edit that names an enforcement surface must be checked against the actual file (the JSON schema) before writing — "the schema fails" is a factual claim about a specific artifact, not a summary of the code comment.
 - [2026-06-11] spur-new: The same-commit sync rule was honored only when "doc sync" was made an
   explicit scheduled item in the batch plan. Discipline-by-memory fails; schedule it (§5 last
   row).

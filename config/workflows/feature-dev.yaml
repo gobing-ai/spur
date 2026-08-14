@@ -84,6 +84,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-brainstorm --feature ${vars.featureId}
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: plan
@@ -95,6 +97,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-plan --feature ${vars.featureId}
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   # Two pure-slash execute hops so vars.profile actually controls --auto (ADR-043).
@@ -109,6 +113,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-runall --feature ${vars.featureId} --auto
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: execute-tasks
@@ -120,6 +126,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-runall --feature ${vars.featureId}
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: feature-verify

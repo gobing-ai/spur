@@ -1,5 +1,6 @@
 ---
 description: Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report
+role: reviewer
 argument-hint: "<testee> [--agent <inline|auto|name>] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill"]
 ---

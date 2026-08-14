@@ -1,5 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
+role: coder
 argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---

@@ -80,6 +80,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-fixall "${vars.qualityGateCmd}"
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: done

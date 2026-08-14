@@ -1,5 +1,6 @@
 ---
 description: Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync
+role: scribe
 argument-hint: "[<feature-id|wbs>] [--all] [--auto] [--agent <inline|auto|name>]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---

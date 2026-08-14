@@ -37,10 +37,13 @@ bootstrap:
 # Server runtime (port/host/openBrowser) is env-backed via PORT/HOST — not a
 # project-config key. See design §2.2.
 agent:
-  # `default` is the executor selector for `--agent auto` when stage-registry
-  # routing does not apply (or as a fallback). Resolved as an executor name
-  # first, then a legacy agent name.
-  default: omp
+  # `default` is the role used for `--agent auto` when the caller declares
+  # nothing (task 0542 R2 — the value domain moved from executor names to
+  # roles). A role id selects its tier's cheapest eligible executor; a
+  # configured executor name still resolves during the transition with a
+  # one-time warning (shim agent-default-executor); any other value fails
+  # naming both accepted sets.
+  default: coder
 
   # Canonical coding-agent ids (ts-ai-runner DISPLAY_ORDER, 0.4.8+):
   #   claude, codex, gemini, pi, omp, opencode, antigravity-cli, openclaw, hermes, grok

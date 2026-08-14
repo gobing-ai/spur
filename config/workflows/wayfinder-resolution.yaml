@@ -82,6 +82,8 @@ states:
         options:
           agent: ${vars.agent}
           capture: true
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: planner
           mode: text
           input: >-
             Resolve task ${vars.wbs} in resolution mode ${vars.resolutionMode} using the prepared
@@ -115,6 +117,8 @@ states:
         options:
           agent: ${vars.agent}
           capture: true
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: reviewer
           mode: text
           input: >-
             Verify resolved task ${vars.wbs} using only local reads and `spur` CLI. Check its

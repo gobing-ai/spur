@@ -51,7 +51,7 @@ describe('renderStepLine', () => {
             actionId: 'a1',
             node: 'implement',
             kind: 'agent.run',
-            metadata: { agent: 'omp', model: 'zai', invocation: '/sp:dev-run', timeoutMs: 600_000 },
+            metadata: { agent: 'omp', model: 'zai', role: 'coder', invocation: '/sp:dev-run', timeoutMs: 600_000 },
         };
         const finished: StepEvent = {
             ...envelope,
@@ -64,8 +64,9 @@ describe('renderStepLine', () => {
             ok: true,
             result: { usage: 'unavailable' },
         };
+        // 0538 R2: the declared step role renders on the composed action line.
         expect(renderStepLine(started)).toBe(
-            '[run r1] → implement/agent.run · agent=omp · model=zai => /sp:dev-run · timeout=10m 0s',
+            '[run r1] → implement/agent.run · agent=omp · model=zai · role=coder => /sp:dev-run · timeout=10m 0s',
         );
         expect(renderStepLine(finished)).toBe('[run r1] ✓ implement/agent.run (4s)');
     });

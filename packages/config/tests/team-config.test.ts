@@ -188,7 +188,9 @@ describe('AgentConfigSchema team validation', () => {
                 'devops-01': {
                     name: 'Dev Ops 01',
                     work_dir: '~/x',
-                    members: ['claude', { executor: 'codex', id: 'reviewer' }],
+                    // `reviewer` is a role id — rejected since 0537 R4, so use a
+                    // member id outside the role vocabulary.
+                    members: ['claude', { executor: 'codex', id: 'auditor' }],
                 },
             },
         });
@@ -249,6 +251,95 @@ describe('resolveExecutor', () => {
 
     test('handles an undefined agent config (raw fallback)', () => {
         expect(resolveExecutor('claude', undefined)).toEqual({ agent: 'claude' });
+    });
+});
+
+// ---- Selector namespace collision guard (0537 R4) ----
+// `--agent` accepts role names, executor names, and spec ids in one flag; the
+// guard proves the three namespaces pairwise disjoint at config load.
+
+describe('AgentConfigSchema selector namespace collision guard (0537 R4)', () => {
+    test('rejects an executor named after a role, naming both', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'coder', agent: 'codex' }],
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('collides with the role selector'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('coder');
+            expect(issue?.path).toContain('executors');
+        }
+    });
+
+    test('rejects a team member id equal to a role name, naming both', () => {
+        const result = AgentConfigSchema.safeParse({
+            team: {
+                alpha: {
+                    name: 'Alpha',
+                    work_dir: '~/x',
+                    members: [{ executor: 'claude', id: 'planner' }],
+                },
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('collides with the role selector'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('planner');
+        }
+    });
+
+    test('rejects a team member id equal to an executor name, naming both', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'codex-sol', agent: 'codex' }],
+            team: {
+                alpha: {
+                    name: 'Alpha',
+                    work_dir: '~/x',
+                    members: [{ executor: 'claude', id: 'codex-sol' }],
+                },
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('collides with executor name'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('codex-sol');
+        }
+    });
+
+    test('rejects a composed spec id equal to an executor name, naming both', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'codex-sol', agent: 'codex' }],
+            team: {
+                codex: {
+                    name: 'Codex',
+                    work_dir: '~/x',
+                    members: [{ executor: 'claude', id: 'sol' }],
+                },
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('collides with executor name'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('codex-sol');
+        }
+    });
+
+    test('accepts a disjoint config: roles, executors, and spec ids all distinct', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'codex-sol', agent: 'codex', model: 'gpt-5.6-sol', tier: 'capable-3' }],
+            team: {
+                alpha: {
+                    name: 'Alpha',
+                    work_dir: '~/x',
+                    members: [{ executor: 'codex-sol' }, { executor: 'claude', id: 'lead' }],
+                },
+            },
+        });
+        expect(result.success).toBe(true);
     });
 });
 

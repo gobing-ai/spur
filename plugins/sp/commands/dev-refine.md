@@ -1,5 +1,6 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; optional implement-ready depth
+role: planner
 argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
@@ -34,8 +35,9 @@ Under `--auto` with **`--depth standard`** (default), SKIP only when target sect
 findings: Background, Requirements, Acceptance Criteria, Design, Plan. Solution is not a refine
 target. Under **`--depth ready`**, do **not** SKIP on L3-clean alone — run the implement-ready
 checklist (dev-operations § refine) and rewrite Design/Requirements/Plan until another agent can
-implement without inventing design. Stage floor: `standard` (fallback `capable-2`); ready synthesis
-may use a higher tier when the task spans packages/seams.
+implement without inventing design. Stage floor: the `planner` role per
+[`roles.md`](../references/roles.md) — this command names roles, never tiers (0538 R4);
+ready synthesis may use a higher tier when the task spans packages/seams.
 
 ## Implementation
 

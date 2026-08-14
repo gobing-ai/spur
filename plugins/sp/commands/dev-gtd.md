@@ -1,5 +1,6 @@
 ---
 description: Get things done — quality gate → fix → act CI simulation → commit → push → gh verify in one flow
+role: coder
 argument-hint: "[<quality-gate-command>] [--dry-run] [--skip-act] [--no-push] [--no-verify] [--scope <path>] [--max-retry <n>]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---

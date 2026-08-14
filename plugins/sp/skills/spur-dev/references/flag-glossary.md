@@ -48,8 +48,15 @@ The value table below is the C3a cross-file parity surface (kept in lockstep wit
 | Value                           | Who does the work                                                           | Derived surface                                                             |
 | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
-| `auto`                          | Tier-resolved from the stage's `min_tier` + `fallback`                      | Subprocess                                                                  |
+| `auto`                          | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess                                                                  |
 | `<name>`                        | That coding agent or configured executor                                    | Inline when it is the current session's agent; subprocess otherwise         |
+
+**Declared-role threading (0538 R1).** Every command file declares `role: <scribe|coder|reviewer|planner>`
+in its YAML frontmatter, taken from its row in `plugins/sp/references/roles.md`; the dispatcher
+threads it into `--agent` so subprocess dispatch routes by the declared role. An explicit `--agent`
+value always wins; the declared role is the default when the flag is `auto`/omitted at a subprocess
+boundary. The same declaration exists on workflow `agent.run` steps (`role:` beside `agent:`) and is
+threaded by `AgentRunActionRunner`; a pin still beats role routing permanently (0536 R2).
 
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
 selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no

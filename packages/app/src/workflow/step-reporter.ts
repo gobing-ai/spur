@@ -123,6 +123,8 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
             event.metadata?.agent && event.metadata.agent !== 'unavailable' ? ` · agent=${event.metadata.agent}` : '';
         const modelPart =
             event.metadata?.model && event.metadata.model !== 'unavailable' ? ` · model=${event.metadata.model}` : '';
+        const rolePart =
+            event.metadata?.role && event.metadata.role !== 'unavailable' ? ` · role=${event.metadata.role}` : '';
         const invocationPart =
             event.metadata?.invocation && event.metadata.invocation !== 'unavailable'
                 ? ` => ${event.metadata.invocation}`
@@ -130,7 +132,7 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
         const timeout =
             event.metadata?.timeoutMs === undefined ? 'unbounded' : formatDuration(event.metadata.timeoutMs);
         const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
-        return `${pfx}→ ${event.node}/${event.kind}${agentPart}${modelPart}${invocationPart} · timeout=${timeout}${full}`;
+        return `${pfx}→ ${event.node}/${event.kind}${agentPart}${modelPart}${rolePart}${invocationPart} · timeout=${timeout}${full}`;
     }
     if (isPhase(event)) {
         return detail === 'minimal' ? `▶ ${event.phase} [${event.status}]` : `${pfx}▶ ${event.phase} [${event.status}]`;

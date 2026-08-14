@@ -57,8 +57,8 @@ wrong choice visible in the transcript.
 `model_policy` (`min_tier` + ordered `fallback` chain, keyed on the canonical `stage_id`). This
 reference owns **execution-surface selection**. The two axes are orthogonal and vary independently:
 
-- A `cheap`-tier step can run in-session on a native subagent.
-- A `capable-3`-tier step can run headless through `spur agent run`.
+- A `cheap`-floor step (e.g. the `scribe` role) can run in-session on a native subagent.
+- A capable-band step (a role at or above `reviewer`, per [`roles.md`](../../../references/roles.md)) can run headless through `spur agent run`.
 
 Do not fold surface choice into `model_policy` - that would couple two axes that vary independently
 and put prompt-layer routing policy into a domain-layer registry. This reference decides *which

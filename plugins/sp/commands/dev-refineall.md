@@ -1,5 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report; optional implement-ready depth
+role: planner
 argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---

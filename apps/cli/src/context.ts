@@ -1,13 +1,82 @@
 import { dirname, join, resolve } from 'node:path';
 import { isatty } from 'node:tty';
 import { type AgentConfig, AgentService, type AgentServiceContext, RuleService } from '@gobing-ai/spur-app';
-import { buildConfigFromEnv, DEFAULT_DATABASE_URL, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
+import {
+    buildConfigFromEnv,
+    DEFAULT_DATABASE_URL,
+    type ExecutorCapabilityTier,
+    IN_MEMORY_DATABASE_URL,
+} from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import type { CommandOutput } from './output';
 import { ClackHitlResponder } from './workflow/hitl/clack-responder';
 import { DefaultHitlResponder } from './workflow/hitl/default-responder';
+
+/** Sync node FS seam for the bundled-roles bootstrap (no-direct-fs-io). */
+const fs = createNodeFileSystem();
+
+// ---------------------------------------------------------------------------
+// Layer-1 role table (0536 R1) — parsed at the CLI boundary
+// ---------------------------------------------------------------------------
+
+/** Memoized roles-file path (0536 R1). */
+let cachedRolesFile: string | null | undefined;
+
+/**
+ * Resolve the Layer-1 role table `plugins/sp/references/roles.md` (task 0535).
+ * Walks up from this module like `bundledConfigRoot` (packages/config): repo-root
+ * `plugins/` in the dev tree, package-root `plugins/` in the npm layout produced
+ * by `bundle-plugins`. Returns `null` when unreachable (e.g. a `--compile` single
+ * binary with no sibling filesystem).
+ */
+export function bundledRolesFile(): string | null {
+    if (cachedRolesFile !== undefined) return cachedRolesFile;
+    let dir = import.meta.dir;
+    while (true) {
+        const candidate = join(dir, 'plugins', 'sp', 'references', 'roles.md');
+        if (fs.exists(candidate)) {
+            cachedRolesFile = candidate;
+            return cachedRolesFile;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    cachedRolesFile = null;
+    return cachedRolesFile;
+}
+
+/**
+ * Parse the Layer-1 role → tier map from `roles.md`'s fenced YAML block (0536 R1).
+ * The block shape (`version: 1`, `roles[].id` / `roles[].tier`) is frozen by
+ * `plugins/sp/tests/roles.test.ts`; a shape change is a 0535 regression, not
+ * handled here. Regex parse keeps the CLI dependency-free — the vocabulary is
+ * closed (four roles, five tiers).
+ */
+export function parseAgentRoles(source: string): Map<string, ExecutorCapabilityTier> {
+    const block = source.match(/```yaml\n([\s\S]*?)\n```/)?.[1] ?? source;
+    const roles = new Map<string, ExecutorCapabilityTier>();
+    for (const m of block.matchAll(/- id: (\w+)\s*\n\s*tier: ([\w-]+)/g)) {
+        const id = m[1];
+        const tier = m[2];
+        if (id !== undefined && tier !== undefined) roles.set(id, tier as ExecutorCapabilityTier);
+    }
+    return roles;
+}
+
+/** Load the bundled role → tier map, or undefined when the file is unreachable or unparseable. */
+export function loadAgentRoles(): Map<string, ExecutorCapabilityTier> | undefined {
+    const file = bundledRolesFile();
+    if (file === null) return undefined;
+    try {
+        // node FS seam is synchronous (readFileSync); cast narrows the portable union.
+        return parseAgentRoles(fs.readFile(file) as string);
+    } catch {
+        return undefined;
+    }
+}
 
 /** Optional overrides when constructing an {@link AgentService} from the CLI context. */
 export type AgentServiceOptions = Pick<AgentServiceContext, 'events' | 'processRegistry'>;
@@ -27,6 +96,13 @@ export interface CliContext {
      * so phase-aware `--agent auto` works (task 0126 / 0370).
      */
     agentConfig?: AgentConfig;
+    /**
+     * Layer-1 role → tier map parsed from `plugins/sp/references/roles.md`
+     * (task 0535) at the CLI boundary (0536 R1). Threaded into every
+     * {@link agentService} construction so `--agent <role>` resolves; absent
+     * when the file is unreachable (role selectors then fall through).
+     */
+    agentRoles?: ReadonlyMap<string, ExecutorCapabilityTier>;
     /**
      * Build an {@link AgentService}. Optional overrides let the direct
      * `spur agent run` path attach a CLI EventBus for the system_events ledger
@@ -56,10 +132,16 @@ export function createCliContext(options: {
     db?: DbAdapter;
     /** Validated `agent` config block, threaded into AgentService for phase-aware resolution. */
     agentConfig?: AgentConfig;
+    /**
+     * Layer-1 role → tier map (0536 R1). Defaults to parsing
+     * `plugins/sp/references/roles.md` from the bundled plugin tree.
+     */
+    agentRoles?: ReadonlyMap<string, ExecutorCapabilityTier>;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
     const fs = createNodeFileSystem(cwd);
+    const agentRoles = options.agentRoles ?? loadAgentRoles();
 
     // When runNodeApplication injects an eager DB adapter, use it directly (R4).
     // Otherwise fall back to lazy creation for tests and the pre-bootstrap path.
@@ -80,12 +162,14 @@ export function createCliContext(options: {
         output: options.output,
         getDb,
         ...(options.agentConfig !== undefined ? { agentConfig: options.agentConfig } : {}),
+        ...(agentRoles !== undefined ? { agentRoles } : {}),
         agentService: (serviceOptions?: AgentServiceOptions) =>
             new AgentService({
                 cwd,
                 env,
                 output: options.output,
                 agentConfig: options.agentConfig,
+                ...(agentRoles !== undefined ? { roles: agentRoles } : {}),
                 getDb,
                 ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),
                 ...(serviceOptions?.processRegistry !== undefined

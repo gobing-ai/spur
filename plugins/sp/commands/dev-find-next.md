@@ -1,5 +1,6 @@
 ---
 description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' with a ranked, evidence-carrying frontier, and emits rank-distorting tree defects as proposals /sp:dev-featurechange consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
+role: planner
 argument-hint: "[--task [<feature-id>]] [--agent <inline|auto|name>] [--auto] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---

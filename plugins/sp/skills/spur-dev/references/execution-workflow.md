@@ -299,17 +299,18 @@ the partial work still in the working tree. The failure output names the partial
    (honest `done_reason`, verdict regeneration).
 
 **3. Match the executor to the size (task 0487 R3).** Size and executor capability are one
-decision, not two. **≥ 6 requirements or ≥ 9 Plan items → a `capable-1`+ executor, or split the
+decision, not two. **≥ 6 requirements or ≥ 9 Plan items → a `reviewer`-role executor (the
+`reviewer` row of [`roles.md`](../../../references/roles.md) declares the floor), or split the
 task.** A `cheap`/`standard`-tier model handed a task that big does not fail fast: it consumes the
 entire `implementTimeoutMs` and exits 3 with a partial tree (run `ca130182` — 7 reqs / 9 plan
 items / 12+ files → 30 minutes, 6 of 12 files, no tests, no docs, no `## Solution`).
 
 The precheck size gate enforces this: it resolves `$implementAgent`'s capability tier
-(`spur agent doctor <exec> --json` → `capabilityTier`) and writes FAIL for a large task on a
-sub-`capable-1` executor, naming the executor and its tier. An unknown or undeclared tier reads as
-`standard`, so the block is the default. Clear it deliberately — `--agent <capable>` /
-`--vars '{"implementAgent":"<capable>"}'`, or split — never by raising `maxImplementReqs`: the caps
-accept a big task, they do not make a flash model able to finish one.
+(`spur agent doctor <exec> --json` → `capabilityTier`) and writes FAIL for a large task on an
+executor below the `reviewer` role's floor, naming the executor and its tier. An unknown or
+undeclared tier reads as the `coder` floor, so the block is the default. Clear it deliberately —
+`--agent <capable>` / `--vars '{"implementAgent":"<capable>"}'`, or split — never by raising
+`maxImplementReqs`: the caps accept a big task, they do not make a flash model able to finish one.
 
 The empty-implement guard (`requireDiff` on the task-pipeline `implement` step, R3) fails the
 run fast when an implement exits 0 with zero non-corpus changes — a no-op never drifts into

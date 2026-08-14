@@ -1,5 +1,6 @@
 ---
 description: "Review code for a task or path — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\"."
+role: reviewer
 argument-hint: "[<wbs|path>] [--agent <inline|auto|name>] [--focus <dims>] [--fix (deprecated)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---

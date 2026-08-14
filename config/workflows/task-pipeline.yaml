@@ -262,6 +262,8 @@ states:
         options:
           agent: ${vars.implementAgent}
           # Pure slash command only (ADR-043). Anti-recursion / implement discipline
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
           input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.implementTimeoutMs}
@@ -374,6 +376,8 @@ states:
         options:
           agent: ${vars.agent}
           # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           # the full-context escape hatch when the digest is not enough.
           input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
           timeoutMs: ${vars.stepTimeoutMs}
@@ -422,6 +426,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-review ${vars.wbs} --auto
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: reviewer
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
@@ -452,6 +458,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-verify ${vars.wbs} --auto --fix all --focus all
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: reviewer
           timeoutMs: ${vars.stepTimeoutMs}
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell

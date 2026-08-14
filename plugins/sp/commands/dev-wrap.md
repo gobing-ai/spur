@@ -1,5 +1,6 @@
 ---
 description: Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup
+role: coder
 argument-hint: "<wbs> [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---

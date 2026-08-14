@@ -253,7 +253,7 @@ must not be changed without updating the backing skill.
   - **Default:** author task `design` on every batch item + feature satellite when the seam heuristic fires (**ties lean design**). There is **no** `--design` force flag.
   - `--skip-design` — skip feature satellite **and** omit task `design` fields (scaffold only; refine fills later). Sole design opt-out.
   - `--approve-taste` — with `--auto`, pre-clear design-approval taste pause when that gate is used (`design_approved=true`). Alias: `--design-approved`.
-- **Backing:** `sp:spur-dev` skill, `plan` operation. Stage `plan` floors at `capable-2` (fallback `capable-3`).
+- **Backing:** `sp:spur-dev` skill, `plan` operation. Stage floor: the `planner` role per [`roles.md`](../../../references/roles.md) — this file names roles, never tiers (0538 R4).
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON **including `design` (unless `--skip-design`)** → `spur task batch-create` gate. Design package details: [planning-workflow.md](planning-workflow.md) Step 5.5.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 

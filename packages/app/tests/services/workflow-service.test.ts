@@ -209,6 +209,102 @@ describe('WorkflowAppService', () => {
             await rm(dir, { recursive: true });
         });
 
+        test('0538 R2: rejects an agent.run step with no role, naming the step', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-norole-'));
+            const path = join(dir, 'norole.yaml');
+            await writeFile(
+                path,
+                [
+                    'name: norole',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options:',
+                    '          input: hello',
+                    '          agent: claude',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.errors.join('\n')).toContain('start/agent.run[0]');
+                expect(result.errors.join('\n')).toContain('no role:');
+            }
+            await rm(dir, { recursive: true });
+        });
+
+        test('0538 R2: rejects an agent.run step with an unknown role', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-badrole-'));
+            const path = join(dir, 'badrole.yaml');
+            await writeFile(
+                path,
+                [
+                    'name: badrole',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options:',
+                    '          input: hello',
+                    '          agent: claude',
+                    '          role: sorcerer',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.errors.join('\n')).toContain("unknown role: 'sorcerer'");
+            }
+            await rm(dir, { recursive: true });
+        });
+
+        test('0538 R2: accepts an agent.run step declaring a valid role', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-role-'));
+            const path = join(dir, 'role.yaml');
+            await writeFile(
+                path,
+                [
+                    'name: role',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options:',
+                    '          input: hello',
+                    '          agent: claude',
+                    '          role: reviewer',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(true);
+            await rm(dir, { recursive: true });
+        });
+
         test('ok field mirrors valid field', async () => {
             const svc = new WorkflowAppService(makeCtx());
             const result = await svc.validate('/tmp/nonexistent-svc.yaml');

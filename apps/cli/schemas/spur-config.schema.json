@@ -103,7 +103,7 @@
             "properties": {
                 "default": {
                     "type": "string",
-                    "description": "Default executor selector for `--agent auto` (resolved as an executor name first, then a legacy agent name e.g. pi, claude, codex)."
+                    "description": "Default role for `--agent auto` when nothing is declared (0542 R2). A role id (scribe, coder, reviewer, planner) selects its tier's cheapest eligible executor; a configured executor name still resolves during the transition with a one-time warning; any other value is rejected naming both accepted sets."
                 },
                 "executors": {
                     "type": "array",
@@ -182,6 +182,11 @@
                                                 },
                                                 "purpose": {
                                                     "type": "string"
+                                                },
+                                                "role": {
+                                                    "type": "string",
+                                                    "enum": ["scribe", "coder", "reviewer", "planner"],
+                                                    "description": "Layer-1 role id (0538 R3): typed routing field carried onto the materialized spec; purpose stays prose."
                                                 },
                                                 "workspace": {
                                                     "type": "string",

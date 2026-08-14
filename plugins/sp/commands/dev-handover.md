@@ -1,5 +1,6 @@
 ---
 description: Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps
+role: scribe
 argument-hint: "\"<blocker description>\""
 allowed-tools: ["Bash", "Read", "Write"]
 ---

@@ -2,13 +2,14 @@
  * Comprehensive tests for apps/cli/src/commands/agent.ts.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TeamService } from '@gobing-ai/spur-app';
+import { type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
-import { type CliContext, createCliContext } from '../../src/context';
+import { bundledRolesFile, type CliContext, createCliContext, parseAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 
@@ -511,7 +512,10 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
 
         const code = await runAgentRun('hello', context, { drain: true });
         expect(code).toBe(0);
-        expect(output.stderr.join('\n')).toContain('--drain requires an explicit --agent <id>');
+        // 0542 R1: the drain recipient is addressed via --spec <id>.
+        expect(output.stderr.join('\n')).toContain(
+            '--drain requires an explicit --spec <id> matching a message recipient',
+        );
     });
 
     test('runAgentRun with --drain and recipient prepends messages and maps spec type', async () => {
@@ -526,14 +530,16 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
             });
 
             const team = new TeamService(ctx);
-            await team.createAgentSpec({ id: 'worker-1', type: 'coder-type' });
+            await team.createAgentSpec({ id: 'worker-1', type: 'pi' });
             await team.sendMessage(null, 'worker-1', 'Do step 1');
 
             const run = mock((prompt: string | undefined, flags: Record<string, unknown>) => {
                 expect(prompt).toContain('Pending messages:');
                 expect(prompt).toContain('Do step 1');
                 expect(prompt).toContain('Main task prompt');
-                expect(flags.agent).toBe('coder-type');
+                // 0536 R3: the rewritten selector must pass the flag boundary —
+                // a canonical coding-agent type (bare binary shim), not a bogus one.
+                expect(flags.agent).toBe('pi');
                 return Promise.resolve(0);
             });
 
@@ -562,7 +568,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
             });
 
             const team = new TeamService(ctx);
-            await team.createAgentSpec({ id: 'worker-2', type: 'coder-type' });
+            await team.createAgentSpec({ id: 'worker-2', type: 'pi' });
             await team.sendMessage('operator', 'worker-2', 'Solo message');
 
             const run = mock((prompt: string | undefined) => {
@@ -577,6 +583,102 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
 
             const code = await runAgentRun(undefined, customCtx, { drain: true, agent: 'worker-2' });
             expect(code).toBe(0);
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test('runAgentRun with --drain resolves the spec executor, not a bare kind (0537 R2)', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-drain-executor-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: {
+                    executors: [{ name: 'codex-sol', agent: 'codex', model: 'gpt-5.6-sol', tier: 'capable-3' }],
+                } as AgentConfig,
+            });
+
+            // A team-materialized spec carries the executor binding beside the kind.
+            await saveAgentSpec(
+                {
+                    id: 'demo-codex-sol',
+                    name: 'Verifier',
+                    type: 'codex',
+                    executor: 'codex-sol',
+                    workspace: tempDir,
+                    purpose: 'Second opinion',
+                    tags: ['team:demo', 'spur:generated'],
+                    config: { model: 'gpt-5.6-sol' },
+                },
+                join(tempDir, '.spur', 'agents'),
+            );
+            await new TeamService(ctx).sendMessage(null, 'demo-codex-sol', 'Do step 1');
+
+            const run = mock((_prompt: string | undefined, flags: Record<string, unknown>) => {
+                // Regression: the selector is the executor name — resolveExecutor's
+                // executor-first lookup restores {agent, model} + tier, never bare
+                // `codex` on the default model.
+                expect(flags.agent).toBe('codex-sol');
+                // Occupant pin (R3): spec-id survives the selector rewrite.
+                expect(flags['spec-id']).toBe('demo-codex-sol');
+                return Promise.resolve(0);
+            });
+
+            const customCtx = {
+                ...ctx,
+                agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+            };
+
+            const code = await runAgentRun('Main task prompt', customCtx, { drain: true, agent: 'demo-codex-sol' });
+            expect(code).toBe(0);
+            expect(run).toHaveBeenCalledTimes(1);
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test('runAgentRun with --drain fails loud on a dangling executor (0537 R5)', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-drain-ghost-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: { executors: [] } as AgentConfig,
+            });
+
+            // Spec references an executor that no longer exists in agent.executors.
+            await saveAgentSpec(
+                {
+                    id: 'demo-ghost',
+                    name: 'Ghost',
+                    type: 'codex',
+                    executor: 'ghost-exec',
+                    workspace: tempDir,
+                    purpose: 'gone',
+                    tags: [],
+                    config: {},
+                },
+                join(tempDir, '.spur', 'agents'),
+            );
+
+            const run = mock(() => Promise.resolve(0));
+            const customCtx = {
+                ...ctx,
+                agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+            };
+
+            // Exits non-zero naming the spec and the missing executor; no process spawns.
+            await expect(runAgentRun('prompt', customCtx, { drain: true, agent: 'demo-ghost' })).rejects.toThrow(
+                /Spec "demo-ghost" references unknown executor "ghost-exec"/,
+            );
+            expect(run).not.toHaveBeenCalled();
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }
@@ -596,14 +698,15 @@ describe('runAgentLoop', () => {
         rmSync(tempDir, { recursive: true, force: true });
     });
 
-    test('loop requires explicit --agent <id>', async () => {
+    test('loop requires explicit --spec <id>', async () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'loop'], {
             cwd: tempDir,
             output,
             db,
         });
-        expect(exitCode).toBe(1);
+        // 0542 R3: missing occupant address exits 2, matching the run-level error path.
+        expect(exitCode).toBe(2);
     });
 
     test('runAgentLoop errors when agent flag is missing or auto', async () => {
@@ -611,13 +714,18 @@ describe('runAgentLoop', () => {
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const code1 = await runAgentLoop(ctx, {});
         expect(code1).toBe(2);
-        expect(output.stderr.join('\n')).toContain('agent loop requires an explicit --agent <id>');
+        // 0542 R3: the loop addresses the occupant via --spec <id> (legacy --agent still read).
+        expect(output.stderr.join('\n')).toContain(
+            'agent loop requires an explicit --spec <id> matching a team agent spec',
+        );
 
         const output2 = captureOutput();
         const ctx2 = createCliContext({ cwd: tempDir, output: output2, db });
         const code2 = await runAgentLoop(ctx2, { agent: 'auto' });
         expect(code2).toBe(2);
-        expect(output2.stderr.join('\n')).toContain('agent loop requires an explicit --agent <id>');
+        expect(output2.stderr.join('\n')).toContain(
+            'agent loop requires an explicit --spec <id> matching a team agent spec',
+        );
     });
 
     test('runAgentLoop drains inbox when messages exist and runs agent', async () => {
@@ -704,5 +812,125 @@ describe('runAgentLoop', () => {
 
         const code = await runAgentLoop(ctx, { agent: 'worker-1' }, { signal: controller.signal });
         expect(code).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: 0536 — --agent role boundary (R1/R3) at the flag boundary
+// ---------------------------------------------------------------------------
+
+describe('runAgentRun role boundary (0536)', () => {
+    /** Minimal deps whose doctor reports every agent usable; captures dispatches. */
+    function depsWith(runPromptCommand: ReturnType<typeof mock>): AgentRunDeps {
+        const runner = { runPromptCommand } as unknown as AgentRunDeps['runner'];
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock((agent: string) =>
+                Promise.resolve({
+                    agent,
+                    installed: true,
+                    version: '1.0.0',
+                    authenticated: 'authenticated',
+                    usable: true,
+                    tier: 1,
+                    channels: [],
+                    error: null,
+                }),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        return { runner, detector, doctorRunner };
+    }
+
+    test('R1: the bundled roles map parses four roles with their roles.md tiers', () => {
+        const file = bundledRolesFile();
+        expect(file).not.toBeNull();
+        const parsed = parseAgentRoles(readFileSync(file ?? '', 'utf8'));
+        expect([...parsed.keys()].sort()).toEqual(['coder', 'planner', 'reviewer', 'scribe']);
+        expect(parsed.get('scribe')).toBe('cheap');
+        expect(parsed.get('coder')).toBe('standard');
+        expect(parsed.get('reviewer')).toBe('capable-1');
+        expect(parsed.get('planner')).toBe('capable-2');
+    });
+
+    test('R3: an unknown --agent value is rejected at the boundary, before any spawn', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-boundary-reject-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: { executors: [{ name: 'codex-sol', agent: 'codex' }] } as AgentConfig,
+            });
+            const runPromptCommand = mock((_agent: string) =>
+                Promise.resolve({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+            );
+            const code = await runAgentRun('plain prompt', ctx, { agent: 'not-a-name' }, depsWith(runPromptCommand));
+            expect(code).toBe(2);
+            expect(runPromptCommand).not.toHaveBeenCalled();
+            const diag = output.stderr.join('\n');
+            expect(diag).toContain("Unknown agent: 'not-a-name'");
+            expect(diag).toContain('role');
+            expect(diag).toContain('codex-sol');
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1/R3: a role passes the boundary and resolves through the real roles.md map', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-boundary-role-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: {
+                    executors: [
+                        { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+                        { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+                    ],
+                } as AgentConfig,
+            });
+            const runPromptCommand = mock((_agent: string) =>
+                Promise.resolve({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+            );
+            const code = await runAgentRun('plain prompt', ctx, { agent: 'reviewer' }, depsWith(runPromptCommand));
+            expect(code).toBe(0);
+            expect(runPromptCommand).toHaveBeenCalledTimes(1);
+            // reviewer floors at capable-1 → the cheapest eligible executor (claude).
+            expect(runPromptCommand.mock.calls[0]?.[0]).toBe('claude');
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test('R3: a bare coding-agent binary name passes the boundary and the service warns once', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-boundary-bare-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: { executors: [] } as AgentConfig,
+            });
+            const runPromptCommand = mock((_agent: string) =>
+                Promise.resolve({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+            );
+            const code = await runAgentRun('plain prompt', ctx, { agent: 'openclaw' }, depsWith(runPromptCommand));
+            expect(code).toBe(0);
+            expect(runPromptCommand).toHaveBeenCalledTimes(1);
+            expect(output.stderr.join('\n')).toContain('bare coding-agent binary name');
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
     });
 });

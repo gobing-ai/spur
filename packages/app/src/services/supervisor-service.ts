@@ -96,7 +96,8 @@ const MAX_RESTART_BACKOFF = 30_000;
 
 /**
  * Build the default wrapper argv for agents without `command` (option c).
- * Spawns the persistent self-draining loop `spur agent loop --agent <id>` (0258 R6):
+ * Spawns the persistent self-draining loop `spur agent loop --spec <id>` (0258 R6;
+ * flag moved off `--agent` in 0542 R1):
  * the process stays alive, drains its inbox each iteration, and idle-sleeps when empty —
  * so a single successful drain does not end the member. Crash-restart stays with the
  * supervisor's exit handler (R7).
@@ -104,7 +105,7 @@ const MAX_RESTART_BACKOFF = 30_000;
 function defaultWrapperArgv(agentId: string): { command: string; args: string[] } {
     return {
         command: process.execPath,
-        args: [process.argv[1] ?? 'apps/cli/src/index.ts', 'agent', 'loop', '--agent', agentId],
+        args: [process.argv[1] ?? 'apps/cli/src/index.ts', 'agent', 'loop', '--spec', agentId],
     };
 }
 

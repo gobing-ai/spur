@@ -26,6 +26,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { STAGE_FLOOR_TIER, TIER_ORDER } from './stage-registry-adapter';
 
 // ─── Regex (sync with packages/app/src/services/task-size-precheck.ts) ───────
 
@@ -44,8 +45,17 @@ const CHECKLIST_ITEM_RE = /^\s*-\s*\[[ xX]\]/m;
 const LARGE_TASK_REQS = 5;
 const LARGE_TASK_PLAN_ITEMS = 8;
 
-/** Capability tiers strong enough for a large task. Anything else blocks. */
-const CAPABLE_TIERS = new Set(['capable-1', 'capable-2', 'capable-3']);
+/**
+ * Capability tiers strong enough for a large task (R3, task 0487). The floor is
+ * the `review` stage's Layer-1 tier — `reviewer` per `references/roles.md`,
+ * read via the stage-registry adapter (0538 R4: no tier literal here; roles.md
+ * is the pointer). Tiers at or above the floor pass. An unreachable roles.md
+ * degrades to the pre-reconcile band — fail-closed for a safety gate.
+ */
+const CAPABLE_TIERS: ReadonlySet<string> = (() => {
+    const floor = STAGE_FLOOR_TIER.get('review') ?? 'capable-1';
+    return new Set(TIER_ORDER.slice(Math.max(0, TIER_ORDER.indexOf(floor))));
+})();
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 

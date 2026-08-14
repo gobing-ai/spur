@@ -67,6 +67,8 @@ states:
         options:
           agent: ${vars.agent}
           # Pure slash only (ADR-043). Do not bolt docs-only prose onto the input line.
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
           input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
           # Fail a silent no-op draft (same empty-implement class as task-pipeline R3).

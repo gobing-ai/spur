@@ -1,5 +1,6 @@
 ---
 description: Status-aware router — pick and run the next best /sp:dev-* step for a task or feature frontier
+role: planner
 argument-hint: "[<wbs|feature-id>] [--dry-run] [--once] [--auto] [--agent <inline|auto|name>] [--full]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---

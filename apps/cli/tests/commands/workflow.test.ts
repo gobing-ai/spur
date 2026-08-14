@@ -92,6 +92,10 @@ describe('workflow command (main)', () => {
         'feature-lifecycle.yaml',
         'feature-dev.yaml',
         'basic.yaml',
+        'idea-pipeline.yaml',
+        'docs-pipeline.yaml',
+        'wrapup-pipeline.yaml',
+        'wayfinder-resolution.yaml',
     ]) {
         test(`bundled workflows/${wf} validates (schema resolves)`, async () => {
             // Isolate cwd to a temp dir with no .spur/config.yaml so main() takes
@@ -185,6 +189,67 @@ describe('workflow command (main)', () => {
 
         expect(exitCode).toBe(0);
         expect(output.messages).toEqual(['workflow valid: cli-test-flow']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('validate rejects an agent.run step with no role (0538 R2)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'no-role.yaml');
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-no-role-flow',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: agent.run',
+                '        options:',
+                '          input: hello',
+                '          agent: claude',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'validate', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
+        expect(exitCode).not.toBe(0);
+        expect(output.errors.join('\n')).toMatch(/role/i);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('validate rejects an agent.run step with an unknown role (0538 R2)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'bad-role.yaml');
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-bad-role-flow',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: agent.run',
+                '        options:',
+                '          input: hello',
+                '          agent: claude',
+                '          role: sorcerer',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'validate', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
+        expect(exitCode).not.toBe(0);
+        expect(output.errors.join('\n')).toMatch(/sorcerer|role/i);
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -889,6 +954,7 @@ failureStates:
                 '        options:',
                 '          input: hello',
                 '          agent: claude',
+                '          role: coder',
                 '          steeringBoundary: true',
                 '          steeringTimeoutMs: 20',
                 '  - id: done',
@@ -935,7 +1001,10 @@ failureStates:
             ),
         ).toBe(true);
         expect(messages).toContain('workflow done: cli-steer-flow -> done');
-        expect(errors).toEqual([]);
+        // 0536 R3: the fake `claude` binary has no executor entry → one bare-binary
+        // transition warning, no other errors.
+        expect(errors.filter((e) => e.includes('bare coding-agent binary name'))).toHaveLength(1);
+        expect(errors.filter((e) => !e.includes('bare coding-agent binary name'))).toEqual([]);
         await rm(dir, { recursive: true, force: true });
     });
 

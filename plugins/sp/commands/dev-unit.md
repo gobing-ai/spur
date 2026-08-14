@@ -1,5 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
+role: coder
 argument-hint: "<target> [--coverage <n>] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---

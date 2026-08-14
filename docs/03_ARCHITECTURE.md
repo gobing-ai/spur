@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.20.0
+version: 1.21.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-14
@@ -633,7 +633,9 @@ Shapes: `docs/design/actionable-observability-context.md`.
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
 drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
 Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a run is addressed by
-spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the coding-agent type)
+spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the spec's **executor
+name** when the spec records one — falling back to the coding-agent type only via the
+`spec-without-executor-field` shim, task 0537; `--spec <id>` is the canonical carrier since 0542)
 and injects `SPUR_SPEC_ID` / `SPUR_TEAM_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
 Wave 2 (task 0530) ships the identity-pinned wait surface: `spur agent wait <specId>` (pins
 `specId+runId+generation`, typed errors `occupant_gone|run_replaced|wait_stalled|timeout`)
@@ -714,3 +716,40 @@ present and every marker registered; 1 on any violation.
    step.
 
 Shapes: `04 §2.5`; `config/transition-shims.json`.
+
+## 19. Agent Executor Selection — Two-Layer Contract (feature B2, tasks 0535–0542)
+
+Executor selection is a two-layer contract. **Layer 1** maps *role → tier* and is owned by the `sp`
+plugin: `plugins/sp/references/roles.md` (task 0535) declares four roles — `scribe`·cheap,
+`coder`·standard, `reviewer`·capable-1, `planner`·capable-2 — with a closed command→role mapping
+over `plugins/sp/commands/`, asserted by `plugins/sp/tests/roles.test.ts`. Layer 1 never names an
+executor, model, or vendor. **Layer 2** maps *tier → executor* and is owned by the operator in
+`.spur/config.yaml` (`agent.executors` entries carrying a `tier` field). `packages/config` exposes
+the four-id `AGENT_ROLE_NAMES` literal; the CLI parses `roles.md` at the boundary (`context.ts`,
+0536 R1) so `--agent <role>` resolves before any spawn.
+
+Resolution (`AgentService.resolveAgent`): an explicit role starts at its tier's cheapest eligible
+executor; an explicit executor name is a permanent pin (0536 R2, beats role routing); a bare binary
+name survives under the `agent-bare-binary-name` shim with a one-time warning; `auto`/omitted falls
+to the declared role (command frontmatter or workflow step `role:`), else `agent.default` as the
+default role (0542 R2, shim `agent-default-executor`); on miss, Tier-1 priority. `extractPhase`
+prompt-regex stage detection is retired (0536 R4) — the prompt text never derives a stage or role;
+the stage door is the explicit `--stage` flag. Role names, executor names, and spec ids are proven
+pairwise disjoint at config load (0537 R4), so one `--agent` value never means two things. A
+spec-addressed run (`--spec <id>`, legacy `--agent <specId>`) rewrites the selector to the spec's
+executor name when the spec records one (0537), restoring the operator's `{ agent, model }` + tier;
+specs without an executor field fall back to `type` (shim `spec-without-executor-field`), and a
+dangling executor reference fails loudly at drain, spawning nothing.
+
+**Invariants (enforceable)**
+
+1. `--agent` accepts only a Layer-1 role, a configured executor name, a bare binary name (shim), or
+   `auto`/`inline`; anything else exits 2 before a process spawns (0536 R3).
+2. Role names, executor names, and spec ids never collide in one config — a config that collides
+   them fails to load naming both names (0537 R4).
+3. A spec whose `executor` is absent from `agent.executors` fails at drain naming the spec and the
+   missing executor; it never silently downgrades to a bare binary (0537 R5).
+4. The prompt text never derives a stage or role (`extractPhase` retired); undeclared callers land
+   on the default role visibly.
+
+Shapes: `04 §2.1`; `config/config.example.yaml`; `plugins/sp/references/roles.md`.

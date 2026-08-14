@@ -1,5 +1,6 @@
 ---
 description: Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring
+role: planner
 argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <inline|auto|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---

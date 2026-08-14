@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { applyCliMigrations } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, type CapabilityTier } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
@@ -1658,8 +1658,23 @@ describe('AgentService.resolve', () => {
 // passed to runPromptCommand and the model in PromptOptions.
 
 /** Build a service with an `agent` config block threaded in. */
-function makeConfiguredService(agentConfig: AgentConfig, env: Record<string, string | undefined> = {}) {
-    return new AgentService({ cwd: process.cwd(), env, output: nullOutput(), agentConfig });
+function makeConfiguredService(
+    agentConfig: AgentConfig,
+    env: Record<string, string | undefined> = {},
+    roles?: ReadonlyMap<string, CapabilityTier>,
+    output: AgentServiceOutput = nullOutput(),
+) {
+    return new AgentService({ cwd: process.cwd(), env, output, agentConfig, ...(roles ? { roles } : {}) });
+}
+
+/** Layer-1 role → tier map matching `plugins/sp/references/roles.md` (0535). */
+function roleMap(): Map<string, CapabilityTier> {
+    return new Map([
+        ['scribe', 'cheap'],
+        ['coder', 'standard'],
+        ['reviewer', 'capable-1'],
+        ['planner', 'capable-2'],
+    ]);
 }
 
 /**
@@ -1749,16 +1764,16 @@ describe('AgentService phase-aware auto resolution', () => {
         expect(resolvedAgent(runner)).toBe(firstPriority);
     });
 
-    test('backward-compat: a pre-0126 `{ default: <agent> }` config resolves the named agent', async () => {
-        // The exact shape every shipped config has today: a default, no executors,
-        // no phase map. `default` resolves as a legacy direct agent name (R5/R8) —
-        // no model override, no phase routing, no crash.
+    test('R2 (0542): a pre-0126 bare-agent `{ default: <agent> }` fails naming both accepted sets', async () => {
+        // The old contract — `default` resolves as a legacy direct agent name — is
+        // retired by 0542 R2: the value domain moved to roles. A bare agent name
+        // that is neither a role nor a configured executor now fails loudly.
         const svc = makeConfiguredService({ default: 'pi' });
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('/sp:dev-run 0126', { agent: 'auto', json: true }, deps);
-        expect(code).toBe(0);
-        expect(resolvedAgent(runner)).toBe('pi');
-        expect(resolvedModel(runner)).toBeUndefined();
+        expect(code).toBe(2);
+        expect(resolvedAgent(runner)).toBeUndefined();
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
     });
 
     test('R6: explicit --model overrides the executor model override', async () => {
@@ -1770,11 +1785,12 @@ describe('AgentService phase-aware auto resolution', () => {
         expect(resolvedModel(runner)).toBe('my-model');
     });
 
-    test('slash-command phase normalization across every per-agent surface form', async () => {
-        // `spur agent run` may receive a prompt already translated for the target
-        // agent (translateSlashCommand runs after resolution), so extractPhase must
-        // recognize all of: claude (/sp:, /rd3:), opencode/gemini (/sp-, /rd3-),
-        // pi/omp (/skill:sp-, /skill:rd3-), codex ($sp-, $rd3-).
+    test('R4 (0536): prompt text never derives a stage — every slash surface form resolves like free text', async () => {
+        // `extractPhase` is retired (0536 R4): a slash command in the prompt must
+        // not change resolution. Each per-agent surface form (claude /sp:,
+        // opencode/gemini /sp-, pi/omp /skill:sp-, codex $sp-, plus rd3 variants)
+        // and a free-text prompt resolve identically through agent.default — the
+        // role (or default) is the selector, never the prompt text.
         const prompts = [
             '/sp:dev-run 0126', // claude
             '/sp-dev-run 0126', // opencode / gemini
@@ -1784,14 +1800,14 @@ describe('AgentService phase-aware auto resolution', () => {
             '/rd3-dev-run 0126', // rd3 opencode / gemini
             '/skill:rd3-dev-run 0126', // rd3 pi / omp
             '$rd3-dev-run 0126', // rd3 codex
+            'implement task X', // free text
         ];
         for (const prompt of prompts) {
             const svc = makeConfiguredService(fullConfig);
             const { deps, runner } = mockResolutionDeps();
             const code = await svc.run(prompt, { agent: 'auto', json: true }, deps);
             expect(code, `prompt=${prompt}`).toBe(0);
-            // Every form still resolves (phase extract works for stage routing); no
-            // default-by-phase model override after 0452.
+            // No stage derived from the text → default executor 'omp'.
             expect(resolvedAgent(runner), `prompt=${prompt}`).toBe('omp');
         }
     });
@@ -1932,6 +1948,243 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService — role routing (0536)
+// ---------------------------------------------------------------------------
+// `--agent` takes a role (scribe|coder|reviewer|planner) from
+// `plugins/sp/references/roles.md`; a role selects the *starting* tier and
+// resolution begins at that tier's cheapest eligible executor (R1). An explicit
+// executor name remains a permanent pin that beats role routing (R2). A value
+// that is neither a role, a configured executor, nor a bare binary is rejected
+// before any spawn (R3). Prompt-regex phase detection is gone (R4).
+
+describe('AgentService role routing (0536)', () => {
+    const roleCfg: AgentConfig = {
+        executors: [
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    function envelopeJson(output: { lines: string[]; errors: string[] }): Record<string, unknown> {
+        const line = output.lines.find((l) => l.includes('"exitCode"'));
+        expect(line, 'expected a JSON envelope line').toBeDefined();
+        return JSON.parse(line ?? '') as Record<string, unknown>;
+    }
+
+    test('R1: --agent reviewer starts from the reviewer tier (capable-1) and picks the cheapest eligible executor', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'reviewer', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.tier).toBe('capable-1');
+        expect(resolved.executor).toBe('cap1-exec');
+        expect(resolved.agent).toBe('claude');
+        expect(resolved.source).toBe('role');
+    });
+
+    test('R1: --agent coder floors at standard — the cheap executor is not eligible', async () => {
+        const svc = makeConfiguredService(roleCfg, {}, roleMap());
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'coder', json: true }, deps);
+        expect(code).toBe(0);
+        // Cheapest eligible for standard is std-exec (pi), not cheap-exec.
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R1: --agent scribe floors at cheap — the cheapest executor wins', async () => {
+        const svc = makeConfiguredService(roleCfg, {}, roleMap());
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'scribe', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R1: no executor at the role tier → exit 1 naming the role and tier', async () => {
+        const svc = makeConfiguredService(
+            { executors: [{ name: 'cheap-exec', agent: 'pi', tier: 'cheap' }] },
+            {},
+            roleMap(),
+        );
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'planner', json: true }, deps);
+        expect(code).toBe(1);
+    });
+
+    test('R2: an explicit executor pin beats role routing and emits no deprecation warning', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'cap1-exec', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        // The pin is the executor — not a role-resolved choice; both values ride the envelope.
+        expect(resolved.executor).toBe('cap1-exec');
+        expect(resolved.agent).toBe('claude');
+        expect(resolved.source).toBe('explicit');
+        expect(resolved.role).toBeUndefined();
+        expect(errors.join('\n')).not.toMatch(/deprecat/i);
+    });
+
+    test('0538 R2: --agent auto plus a declared role resolves from the declared role tier', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', role: 'reviewer', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.tier).toBe('capable-1');
+        expect(resolved.executor).toBe('cap1-exec');
+        expect(resolved.source).toBe('role');
+    });
+
+    test('0538 R2: an explicit pin plus a declared role runs the pin and records the role for attribution', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'cap1-exec', role: 'reviewer', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.executor).toBe('cap1-exec');
+        expect(resolved.source).toBe('explicit');
+        expect(resolved.role).toBe('reviewer');
+        expect(errors.join('\n')).not.toMatch(/deprecat/i);
+    });
+
+    test('0538 R1: an unknown declared role fails loudly naming the vocabulary', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', role: 'sorcerer', json: true }, deps);
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        expect(errors.join('\n')).toContain("Unknown declared role: 'sorcerer'");
+    });
+
+    test('R3: an unknown value exits 2 naming both accepted sets, and nothing spawns', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        const diag = errors.join('\n');
+        expect(diag).toContain("Unknown agent: 'not-a-name'");
+        expect(diag).toContain('role');
+        expect(diag).toContain('scribe');
+        expect(diag).toContain('configured executor');
+    });
+
+    test('R3: a bare coding-agent binary name warns once and runs under the registered shim', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        // 'hermes' is a canonical agent with no executor entry → bare-binary shim path.
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'hermes', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('hermes');
+        const warnings = errors.filter((e) => e.includes('bare coding-agent binary name'));
+        expect(warnings).toHaveLength(1);
+        // Warn once, not per dispatch: a second run with the same name stays silent.
+        const code2 = await svc.run('plain prompt', { agent: 'hermes', json: true }, deps);
+        expect(code2).toBe(0);
+        expect(errors.filter((e) => e.includes('bare coding-agent binary name'))).toHaveLength(1);
+    });
+
+    test('R4: a free-text prompt with --agent coder resolves the same tier as the equivalent slash command', async () => {
+        const svcSlash = makeConfiguredService(roleCfg, {}, roleMap());
+        const { deps: deps1, runner: runner1 } = mockResolutionDeps();
+        const code1 = await svcSlash.run('/sp:dev-run 0126 --auto', { agent: 'coder', json: true }, deps1);
+        const svcFree = makeConfiguredService(roleCfg, {}, roleMap());
+        const { deps: deps2, runner: runner2 } = mockResolutionDeps();
+        const code2 = await svcFree.run('implement task X', { agent: 'coder', json: true }, deps2);
+        expect(code1).toBe(0);
+        expect(code2).toBe(0);
+        // Both resolve through the coder role's tier → the same executor.
+        expect(resolvedAgent(runner1)).toBe('pi');
+        expect(resolvedAgent(runner2)).toBe('pi');
+    });
+
+    test('R4: --agent auto with a slash prompt no longer derives a stage', async () => {
+        const svc = makeConfiguredService(roleCfg, {}, roleMap());
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-changelog', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // No stage, no default → Tier-1 priority (pi), NOT the changelog stage's cheap executor.
+        expect(resolvedAgent(runner)).toBe(TIER1_PRIORITY[0] as string);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — agent.default role domain (0542 R2)
+// ---------------------------------------------------------------------------
+// `agent.default` is redefined as the default *role* for a dispatch that
+// declares nothing. Three-way migration, all loud: a role uses the new
+// semantics; a configured executor name warns once and keeps legacy fallthrough
+// (shim agent-default-executor); a value that is neither fails naming both
+// accepted sets.
+
+describe('AgentService agent.default role domain (0542)', () => {
+    const execCfg: AgentConfig = {
+        default: 'omp',
+        executors: [
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'omp', agent: 'omp', tier: 'standard' },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    test('R2: a role value resolves via the role (recommended default coder → standard floor)', async () => {
+        const svc = makeConfiguredService({ ...execCfg, default: 'coder' }, {}, roleMap());
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // coder floors at standard → cheapest standard executor (std-exec, array order).
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R2: a configured executor value warns once and keeps legacy fallthrough', async () => {
+        const { errors, output } = captureOutput();
+        // 'std-exec' is not used as an agent.default value anywhere else in this
+        // suite, so the per-selector warn-once module set is cold for it (the
+        // phase-aware describe pre-warms 'omp').
+        const svc = makeConfiguredService({ ...execCfg, default: 'std-exec' }, {}, undefined, output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+        expect(errors.join('\n')).toContain('agent.default "std-exec" is a configured executor name');
+        expect(errors.join('\n')).toContain('agent-default-executor');
+        // Second run warns no more (warn-once per selector).
+        const second = await svc.run('another prompt', { agent: 'auto', json: true }, deps);
+        expect(second).toBe(0);
+        expect(errors.join('\n').split('configured executor name').length - 1).toBe(1);
+    });
+
+    test('R2: a value that is neither a role nor an executor fails naming both accepted sets', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService({ ...execCfg, default: 'bogus-default' }, {}, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        const joined = errors.join('\n');
+        expect(joined).toContain("Unknown agent.default value: 'bogus-default'");
+        expect(joined).toContain('role (');
+        expect(joined).toContain('configured executor (');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService — timeout-kill routing (P0-b)
 // ---------------------------------------------------------------------------
 // The dogfood report claimed a timed-out agent.run reported ok:true and the
@@ -2007,8 +2260,10 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
             ],
         });
         const { deps, runner } = mockResolutionDeps();
-        // Stage changelog has min_tier: cheap -> selects cheap-exec
-        const code = await svc.run('/sp:dev-changelog', { agent: 'auto', json: true }, deps);
+        // Stage changelog has min_tier: cheap -> selects cheap-exec. The stage
+        // comes from the explicit --stage flag (prompt text never derives one,
+        // 0536 R4 — the slash command alone would fall through to default/priority).
+        const code = await svc.run('/sp:dev-changelog', { agent: 'auto', stage: 'changelog', json: true }, deps);
         expect(code).toBe(0);
         expect(resolvedAgent(runner)).toBe('pi');
     });
@@ -2199,10 +2454,11 @@ describe('AgentService automatic tier escalation (0407)', () => {
         } as unknown as AgentRunDeps['doctorRunner'];
         const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
 
-        // Pinned executor (no `stage` flag) — phase resolves implement from the prompt.
+        // Pinned executor — the stage must come from the explicit `--stage` flag
+        // (0536 R4: prompt text never derives a stage; extractPhase is gone).
         const code = await svc.run(
             '/skill:sp-dev-run --mode implement 0482 --auto',
-            { agent: 'std-exec', json: false },
+            { agent: 'std-exec', stage: 'implement', json: false },
             deps,
         );
 

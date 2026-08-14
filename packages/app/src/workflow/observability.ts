@@ -47,6 +47,8 @@ interface WorkflowEventBase {
 export interface WorkflowActionMetadata {
     agent?: string;
     model?: string;
+    /** Declared agent.run step role (0538 R2) — the routing reason. */
+    role?: string;
     invocation?: string;
     timeoutMs?: number;
 }
@@ -160,6 +162,9 @@ export function projectActionMetadata(
     const metadata: WorkflowActionMetadata = {};
     if (typeof options.agent === 'string' && options.agent !== '') metadata.agent = bounded(options.agent);
     if (typeof options.model === 'string' && options.model !== '') metadata.model = bounded(options.model);
+    if (kind === 'agent.run' && typeof options.role === 'string' && options.role !== '') {
+        metadata.role = bounded(options.role);
+    }
     if (typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)) {
         metadata.timeoutMs = Math.max(0, options.timeoutMs);
     }

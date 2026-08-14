@@ -42,7 +42,7 @@ in scripts and audit output but does not change the default.
 | Value | Who does the work | Derived surface |
 |---|---|---|
 | `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
-| `auto` | Tier-resolved from the stage's `min_tier` + `fallback` | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
+| `auto` | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
 | `<name>` (coding agent or configured executor) | That executor | Inline when it resolves to the current session's agent; subprocess otherwise |
 
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this

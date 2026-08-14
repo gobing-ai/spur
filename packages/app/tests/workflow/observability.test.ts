@@ -243,4 +243,14 @@ describe('projectActionMetadata', () => {
         expect(metadata?.agent).toBe('[REDACTED]');
         expect(metadata?.invocation).toBe('/sp:dev-run');
     });
+
+    test('0538 R2: projects the declared step role onto the action metadata', () => {
+        const metadata = projectActionMetadata('agent.run', {
+            agent: 'omp',
+            role: 'coder',
+            input: '/sp:dev-run 0538 --auto',
+        });
+        expect(metadata?.role).toBe('coder');
+        expect(projectActionMetadata('shell', { command: 'true', role: 'coder' })?.role).toBeUndefined();
+    });
 });

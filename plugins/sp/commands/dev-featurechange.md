@@ -1,5 +1,6 @@
 ---
 description: >-
+role: planner
   Restructure the feature tree from a mapping file — dry-run then apply via
   spur feature move / task feature_id edges / root docs/*.md reference rewrites
   (CLI-gated; no raw Write on docs/features or docs/tasks)

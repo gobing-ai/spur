@@ -1,5 +1,6 @@
 ---
 description: Reverse engineer a codebase with selectable depth, focus, and output format
+role: coder
 argument-hint: "[<path>] [--mode <briefing|structure|architecture|design|full>] [--focus <all|stack|dependencies|data|flows|api|security|quality|performance>] [--format <markdown|json|both>] [--output <file>] [--agent <inline|auto|name>]"
 allowed-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash", "Skill"]
 ---

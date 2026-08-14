@@ -1,5 +1,6 @@
 ---
 description: "Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes. Triggers: post-mortem, performance analysis, session review, find issues, identify bottlenecks"
+role: reviewer
 argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---

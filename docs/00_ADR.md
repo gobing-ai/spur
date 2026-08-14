@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.17.0
+version: 1.18.0
 owner: Robin Min
 updated_at: 2026-08-14
 read_before: any structural change; before diverging from a decision
@@ -244,6 +244,21 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 - **Why:** Prompt-regex phase routing could not express capability floors or evidence-based escalation.
 - **Detail:** `04 §2.1`; stage registry; `AgentService`.
 
+> **Amendment (task 0348, applied with task 0536).** Stage-registry `model_policy` is a *default
+> seed*, overridable per-stage via config (deep-replace). The routing key stays `stage_id`; the
+> registry is demoted from sole source to default, not removed.
+>
+> **Amendment (task 0536).** Prompt-regex phase detection (`extractPhase`) is **retired** — the
+> prompt text never derives a stage. The stage door is the explicit `--stage` flag; undeclared
+> callers land on the default role visibly. `--agent` is redefined as the **role selector**
+> (`scribe`·cheap / `coder`·standard / `reviewer`·capable-1 / `planner`·capable-2, the Layer-1
+> vocabulary in `plugins/sp/references/roles.md`, task 0535): a role picks the *starting* tier and
+> resolution begins at that tier's cheapest eligible executor; an executor name remains a permanent
+> pin; a value that is neither a role, a configured executor, nor `auto` is rejected before any
+> spawn. This is an **ADR-051 public CLI surface change**, authorized by the operator ruling of
+> 2026-08-13 (recorded in task 0536 § Background). `default-by-phase` was removed earlier (task
+> 0452).
+
 ## ADR-034: Domain Status Vocabulary; Accessible Board Encoding
 
 - **Status:** Accepted · **Date:** 2026-07-25
@@ -351,6 +366,19 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 **Why.** The repository's native-subagent delegation surface is the default for model-bearing work when the host platform provides one; the inline driver previously bypassed it for every pipeline stage, growing host context. The eligibility test is observable facts only (action kind, pure-slash input, interactive exclusion, capability) — the subjective handoff-cost heuristic is removed.
 
 **Detail:** `04 §7.8`; `cross-cutting.md` § Inline-default execution surface; `inline-pipeline-driver.md`; task 0508.
+
+**Amendment (task 0536 / 0542, feature B2).** The `--agent` value domain gains the Layer-1 role
+selectors (`scribe`/`coder`/`reviewer`/`planner` — `plugins/sp/references/roles.md`, task 0535): a
+role picks a starting tier instead of naming an executor, and `agent.default`'s value domain moves
+from executor names to roles (0542 R2, shim `agent-default-executor`). The unified table stays —
+role, executor name, bare binary name (shim), `auto`, or `inline` — one selector, closed and
+validated at the CLI boundary. Prompt-regex phase detection is retired alongside (ADR-033 amendment
+0536).
+
+**Why.** Role routing expresses the caller's intent without pinning a vendor; the executor pin
+remains a permanent override for the pipeline's deliberate pins.
+
+**Detail:** `04 §2.1`; `plugins/sp/references/roles.md`; `plugins/sp/skills/spur-dev/references/flag-glossary.md`; ADR-033 amendment (0536).
 
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 
