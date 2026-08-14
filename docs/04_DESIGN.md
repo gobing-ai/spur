@@ -1711,6 +1711,23 @@ Unknown names and malformed optional payloads degrade to a bounded generic envel
 the product operation. Canonical shape, projection paths, and pending consumer contracts live in
 [`actionable-observability-context.md`](design/actionable-observability-context.md).
 
+**Routing decision attribution (task 0545).** Agent-run lifecycle rows carry the routing decision as
+envelope metadata — no new table or column. `agent.invoke.start` / `agent.invoke.exit` payloads gain
+a `routing` block (`role?`, `tier`, `executor`, `source`) merged at the per-run invoke bridge in
+`AgentService.executeRun` from the resolution funnel's result (`resolveExecutorSelector` and
+siblings — the only place that knows role, tier, executor, and source together). The selection
+source distinguishes a declared role resolution (`role`) from an explicit pin (`explicit`) from an
+`agent.default` selection (`default`); stage/phase/priority resolutions record their own source.
+Runs join to the history plane over the indexed `run_id` column (task 0557 threads the correlation;
+0547 consumes the join). An escalation is its **own** default-tier record
+(`agent.invoke.escalated`, emitted by the Spur agent-service bridge, producer-attributed to
+`spur`): originating tier, resulting tier, and the objective trigger (`gate-fail`, `timeout`,
+`insufficient-evidence`, `retry-exhausted`, plus the class-level `resource-exhaustion`/`auth`
+members of the registry vocabulary). A run that never escalates emits no such row — absence and
+not-recorded are distinguishable (R2). Attribution carries identifiers, tiers, and counts only:
+prompt text, command lines, and configured secrets are excluded by the J5 bounds and recursive
+redaction before persistence (R4).
+
 **Board projection (task 0527).** The web client narrows envelope v2 once in its history/SSE parser.
 Desktop renders `Time | Severity | Event | Summary | Producer | Correlation | Outcome |
 Action`; below 640 px it keeps `Time | Event` and stacks the semantic fields. The Producer

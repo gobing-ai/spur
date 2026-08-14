@@ -20,6 +20,8 @@ export {
     AgentExecutionLifecycle,
     type AgentExecutionObserver,
     type AgentExecutionOptions,
+    type AgentExecutionStartedEvent,
+    type AgentRoutingAttribution,
     configuredSecretValues,
     redactAndBound,
 } from './observability/agent-execution';

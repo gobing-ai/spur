@@ -71,6 +71,43 @@ over the catalog heuristic. `RuleService` forwards the upstream
 rule-engine events through a Spur-owned bridge that adds the Spur run id, ISO time, severity, and
 evaluator while excluding complete finding details.
 
+## Routing decision attribution (task 0545)
+
+Agent-run lifecycle rows carry the routing decision as envelope metadata — no new table, no new
+column, no historical rewrite. `agent.invoke.start` / `agent.invoke.exit` payloads gain a
+`routing` block (`role?`, `tier`, `executor`, `source`), merged at the per-run invoke bridge in
+`AgentService.executeRun` from the resolution funnel's result — `resolveExecutorSelector` and
+siblings are the only place that knows role, tier, executor, and source together, so the facts are
+recorded where they are decided and never re-derived downstream. The same `routing` block rides the
+`AgentExecutionStartedEvent` (`kind: 'started'`) so the observer path (`workflow.agent`) carries it
+too.
+
+Selection source distinguishes the recorded paths (R5 coverage):
+
+| Source | How the executor was selected |
+| --- | --- |
+| `role` | Declared role (`--role <role>` / `--agent <role>`) or inherited `SPUR_ROLE` resolution |
+| `explicit` | Explicit `--agent <executor>` pin |
+| `default` | `agent.default` selector (a role value routed through the default path) |
+| `stage` / `phase` / `priority` | Stage-registry model policy, phase mapping, legacy Tier-1 priority |
+
+Escalation is its **own** record — `agent.invoke.escalated`, a default-tier catalog entry emitted
+by the Spur agent-service bridge (producer-attributed to `spur` / `agent-runner`, not the
+ts-ai-runner family owner). Its payload carries `fromExecutor`, `fromTier`, `toExecutor`, `toTier`,
+and `trigger` (the objective signal that caused it: `gate-fail`, `timeout`,
+`insufficient-evidence`, `retry-exhausted`, plus the class-level `resource-exhaustion` and `auth`
+members of the stage-registry vocabulary). A run that never escalates emits no such row — absence
+is distinguishable from a null-valued record (R2). The starting decision and each escalation are
+distinct facts with distinct timestamps; collapsing them would destroy the "routing started too
+cheap" signal.
+
+Every attribution row carries `run_id` (the minted run id threads through the invoke
+correlation, task 0557; escalation payloads carry `runId` directly), so 0546 can aggregate by
+selection source and 0547 can join to the history plane. Attribution is identifiers, tiers, and
+counts only — prompt text, command lines, and configured secret values are excluded by the
+catalog's metadata allow-list and recursive redaction before persistence (R4). Pre-existing rows
+without `routing` project cleanly through `projectStoredSystemEventEnvelope` (R3).
+
 ## Board projection (task 0527)
 
 Desktop columns are `Time | Severity | Event | Summary | Producer | Correlation | Outcome |

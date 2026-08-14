@@ -195,6 +195,65 @@ describe('registerSystemEventTap', () => {
         tap.unsubscribe();
     });
 
+    test('0545 R1 — agent.invoke rows persist the routing decision in the envelope with run_id', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        // Shape the per-run invoke bridge produces: AiRunner payload plus the
+        // resolution funnel's routing attribution merged at emit time (0545).
+        await bus.emit('agent.invoke.start', {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            correlation: { runId: 'run-routed-9', executionId: 'exec-7' },
+            routing: { role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' },
+            severity: 'info',
+        });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        const row = fake.inserted.find((r) => r.event_name === 'agent.invoke.start');
+        expect(row).toBeDefined();
+        expect(row?.run_id).toBe('run-routed-9');
+        const payload = JSON.parse(row?.payload_json ?? '{}') as Record<string, unknown>;
+        expect(payload.schemaVersion).toBe(2);
+        const data = payload.data as Record<string, unknown>;
+        expect(data.routing).toEqual({ role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' });
+
+        tap.unsubscribe();
+    });
+
+    test('0545 R2 — agent.invoke.escalated persists with tiers, trigger, and run_id', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        await bus.emit('agent.invoke.escalated', {
+            runId: 'run-escalated-3',
+            executionId: 'exec-7',
+            fromExecutor: 'std-exec',
+            fromTier: 'standard',
+            toExecutor: 'capable-exec',
+            toTier: 'capable-1',
+            trigger: 'gate-fail',
+            severity: 'warning',
+        });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        const row = fake.inserted.find((r) => r.event_name === 'agent.invoke.escalated');
+        expect(row).toBeDefined();
+        expect(row?.run_id).toBe('run-escalated-3');
+        const payload = JSON.parse(row?.payload_json ?? '{}') as Record<string, unknown>;
+        const data = payload.data as Record<string, unknown>;
+        expect(data.fromTier).toBe('standard');
+        expect(data.toTier).toBe('capable-1');
+        expect(data.trigger).toBe('gate-fail');
+
+        tap.unsubscribe();
+    });
+
     test('persists entity correlation from a planning event into the indexed columns', async () => {
         const dao = fakeDao();
         const bus = new EventBus<Record<string, (event: unknown) => void>>();

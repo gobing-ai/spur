@@ -147,6 +147,29 @@ describe('buildSystemEventEnvelope', () => {
         expect(projectStoredSystemEventEnvelope(requireEntry('task.updated'), original, project)).toBe(original);
     });
 
+    test('0545 R3 — rows written before routing attribution project cleanly without it', () => {
+        // Pre-0545 agent.invoke rows carry no `routing` metadata. Both the
+        // raw-stored legacy shape (rebuilt through the builder) and a canonical
+        // v2 envelope must read back without error and without fabricating a
+        // routing block — absence stays absent (R2/R3).
+        const legacyRaw = {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            exitCode: 0,
+        };
+        const fromRaw = projectStoredSystemEventEnvelope(requireEntry('agent.invoke.start'), legacyRaw, project);
+        expect(fromRaw.schemaVersion).toBe(2);
+        expect(fromRaw.data?.routing).toBeUndefined();
+        expect(fromRaw.data?.agent).toBe('pi');
+
+        const storedV2 = buildSystemEventEnvelope(requireEntry('agent.invoke.start'), legacyRaw, project);
+        expect(isSystemEventEnvelopeV2(storedV2)).toBe(true);
+        const projected = projectStoredSystemEventEnvelope(requireEntry('agent.invoke.start'), storedV2, project);
+        expect(projected).toBe(storedV2);
+        expect((projected.data as Record<string, unknown> | null)?.routing).toBeUndefined();
+    });
+
     test('omits command remediation when a payload-derived run id is not a conservative identifier', () => {
         const envelope = buildSystemEventEnvelope(
             requireEntry('workflow.action.failed_continue'),

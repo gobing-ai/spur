@@ -43,9 +43,10 @@ import {
 import {
     AgentExecutionLifecycle,
     type AgentExecutionOptions,
+    type AgentRoutingAttribution,
     configuredSecretValues,
 } from '../observability/agent-execution';
-import { bridgeEventBus } from './event-bridge';
+import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 
@@ -658,12 +659,20 @@ export class AgentService {
             },
             (pid) => publishPid?.(pid),
         );
+        // Routing decision attribution (0545 R1): the funnel's result is
+        // stamped into the per-run invoke bridge after resolution and per
+        // escalation hop, so the `agent.invoke.*` rows the ledger already
+        // writes carry role/tier/executor/source. The holder is filled after
+        // `resolveAgent` below and re-stamped on each escalation re-resolve —
+        // the invoke bridge reads it at emit time.
+        let routing: AgentRoutingAttribution | undefined;
+        const invokeBridge = this.ctx.events !== undefined ? bridgeEventBus(this.ctx.events) : undefined;
         const runner =
             deps?.runner ??
             new AiRunner({
                 processExecutor: dispatchExecutor,
-                ...(this.ctx.events !== undefined ? { events: bridgeEventBus(this.ctx.events) } : {}),
-                ...(this.ctx.events !== undefined ? { processEvents: bridgeEventBus(this.ctx.events) } : {}),
+                ...(invokeBridge !== undefined ? { events: withInvokeRouting(invokeBridge, () => routing) } : {}),
+                ...(invokeBridge !== undefined ? { processEvents: invokeBridge } : {}),
             });
 
         const detector = deps?.detector ?? new AgentDetector({ runner });
@@ -675,6 +684,9 @@ export class AgentService {
         if (!resolved.ok) {
             return { ok: false, exitCode: resolved.exitCode, message: resolved.message };
         }
+        // 0545 R1: the funnel's decision is the attribution for this run's
+        // lifecycle events (started event + agent.invoke.* payloads).
+        routing = buildRoutingAttribution(resolved);
         // Escalation state (0407): mutable per-iteration tracking. `runFlags`
         // is a shallow copy so each escalation can inject `signal` +
         // `from-executor` without mutating the caller's flags.
@@ -886,6 +898,7 @@ export class AgentService {
                         ...(model !== undefined ? { model } : {}),
                         invocation: `${attemptInvocation.command} ${attemptInvocation.argv.join(' ')}`,
                         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                        ...(routing !== undefined ? { routing } : {}),
                     });
                     dispatchStartedAt = Date.now();
                 }
@@ -980,6 +993,24 @@ export class AgentService {
                         `Escalating: ${currentStage.executorName} (tier ${currentStage.executorTier}) failed with ${escalationSignal}; retrying on ${nextResolved.stage.executorName} (tier ${nextResolved.stage.executorTier})`,
                     );
                 }
+                // 0545 R2: the escalation is its OWN record — originating tier,
+                // resulting tier, and the objective trigger — never a null-valued
+                // field on the starting decision. Absence of this row is the
+                // "did not escalate" signal; runs that never escalate emit none.
+                // Correlation rides the payload so the row joins on run_id.
+                if (this.ctx.events !== undefined) {
+                    void this.ctx.events.emit('agent.invoke.escalated', {
+                        runId: lifecycle.identity.runId,
+                        executionId: lifecycle.identity.executionId,
+                        ...(lifecycle.identity.actionId !== undefined ? { actionId: lifecycle.identity.actionId } : {}),
+                        fromExecutor: currentStage.executorName,
+                        fromTier: currentStage.executorTier,
+                        toExecutor: nextResolved.stage.executorName,
+                        toTier: nextResolved.stage.executorTier,
+                        trigger: escalationSignal,
+                        severity: 'warning',
+                    });
+                }
                 currentAgent = nextResolved.agent;
                 currentModel = nextResolved.model;
                 currentSource = nextResolved.source;
@@ -989,6 +1020,9 @@ export class AgentService {
                 dispatchExecutor.setRoleEnv(currentRole);
                 currentTier = nextResolved.tier;
                 currentExecutor = nextResolved.executor;
+                // 0545 R1: re-stamp the routing context so the next dispatch's
+                // `agent.invoke.*` payloads carry the escalated decision.
+                routing = buildRoutingAttribution(nextResolved);
                 attemptedExecutors.add(nextResolved.stage.executorName);
             }
         } finally {
@@ -1436,6 +1470,10 @@ export class AgentService {
                 // `--agent <role>` (explicit) is a declaration; `agent.default`
                 // routing through a role value is config, not a declaration.
                 source === 'explicit' ? 'declared' : undefined,
+                // 0545 R1: a default-routed role is a *defaulted* selection, not a
+                // declared role resolution — the four selection sources (role /
+                // pin / default / escalated) must stay distinct in attribution.
+                source === 'default' ? 'default' : 'role',
             );
         }
 
@@ -1469,8 +1507,18 @@ export class AgentService {
                 return usable.result;
             }
             // R2 (0536): an explicit executor name is a permanent pin, not a shim —
-            // no deprecation warning. The name is carried for the --json envelope.
-            return { ok: true, agent: canonical, model: executor.model, source, executor: executor.name };
+            // no deprecation warning. The name is carried for the --json envelope,
+            // and the executor's capability tier rides the result so routing
+            // attribution (0545 R1) records the resolved tier for explicit/default
+            // selections too (not only role/stage resolutions).
+            return {
+                ok: true,
+                agent: canonical,
+                model: executor.model,
+                source,
+                executor: executor.name,
+                tier: getExecutorTier(executor),
+            };
         }
 
         // No configured executor by this name.
@@ -1542,6 +1590,10 @@ export class AgentService {
         roleTier: CapabilityTier,
         doctorRunner: DoctorRunner,
         origin?: 'declared' | 'inherited',
+        // 0545 R1: 'role' for declared/inherited role resolutions; 'default'
+        // when the selector came from `agent.default` so the selection source
+        // stays distinguishable in attribution.
+        source: AgentResolveSource = 'role',
     ): Promise<AgentResolveResult> {
         const executors = this.ctx.agentConfig?.executors;
         if (executors === undefined || executors.length === 0) {
@@ -1569,7 +1621,7 @@ export class AgentService {
                     ok: true,
                     agent: canonical,
                     model: executor.model,
-                    source: 'role',
+                    source,
                     role,
                     ...(origin !== undefined ? { roleOrigin: origin } : {}),
                     tier: roleTier,
@@ -2027,4 +2079,24 @@ function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
  */
 function classifyObjectiveFailure(result: AgentRunResult): ObjectiveEscalationSignal | undefined {
     return classifyDispatch(result);
+}
+
+/**
+ * Project a resolution result into the routing attribution carried on lifecycle
+ * events (0545 R1). Resolutions without a tier or executor (legacy Tier-1
+ * priority, bare-binary pins with no executor entry) carry no attribution —
+ * there is no decision to record. Everything else records identifiers and the
+ * selection source; role and tier ride along when the funnel produced them.
+ */
+function buildRoutingAttribution(result: AgentResolveResult): AgentRoutingAttribution | undefined {
+    if (!result.ok) return undefined;
+    const tier = result.tier ?? result.stage?.executorTier;
+    const executor = result.executor ?? result.stage?.executorName;
+    if (tier === undefined && executor === undefined) return undefined;
+    return {
+        ...(result.role !== undefined ? { role: result.role } : {}),
+        tier: tier ?? 'unknown',
+        executor: executor ?? result.agent,
+        source: result.source,
+    };
 }

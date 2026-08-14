@@ -171,6 +171,21 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
             field('label', 'Label'),
             field('exitCode', 'Exit code'),
             field('durationMs', 'Duration (ms)'),
+            // Routing decision attribution (task 0545 R1): role, resolved tier,
+            // resolved executor, and selection source ride `agent.invoke.*`
+            // payloads so the ledger rows name which executor served which
+            // intention. Identifiers/tiers only — never prompt or command text.
+            field('routing.role', 'Role'),
+            field('routing.tier', 'Tier'),
+            field('routing.executor', 'Executor'),
+            field('routing.source', 'Selection source'),
+            // Escalation record (task 0545 R2): its own event carrying the
+            // originating tier, resulting tier, and objective trigger.
+            field('fromExecutor', 'From executor'),
+            field('fromTier', 'From tier'),
+            field('toExecutor', 'To executor'),
+            field('toTier', 'To tier'),
+            field('trigger', 'Trigger'),
         ],
         remediationKind: 'prefix-filter',
     },
@@ -234,6 +249,7 @@ function event(
     renderer: string,
     payloadPolicy: SystemEventPayloadPolicy = 'metadata-only',
     tier: SystemEventTier = 'default',
+    producer?: { package: SystemEventProducerPackage; subsystem: string },
 ): SystemEventCatalogEntry {
     const profile = SOURCE_PROFILES[source];
     return {
@@ -250,6 +266,10 @@ function event(
         payloadPolicy,
         renderer,
         ...profile,
+        // Producer attribution override: entries emitted by a Spur-owned
+        // bridge (e.g. agent.invoke.escalated) attribute the spur package
+        // rather than the ts-lib that owns the family (0545 R2).
+        ...(producer !== undefined ? { producerPackage: producer.package, subsystem: producer.subsystem } : {}),
         severity: inferSeverity(name),
         description: describeEvent(name),
     };
@@ -314,6 +334,15 @@ export const SYSTEM_EVENT_CATALOG = [
     // ── agent.* (task 0221 R2/R3) ─────────────────────────────────────────
     event('agent.invoke.start', 'agent', 'agent'),
     event('agent.invoke.exit', 'agent', 'agent'),
+    // Escalation record (task 0545 R2): its own row, emitted by the Spur
+    // agent-service bridge at the escalation point — originating tier,
+    // resulting tier, and the objective trigger. Absence of this row means
+    // "did not escalate"; never a null-valued field on the starting decision.
+    // Attributed to spur (the emitter), not ts-ai-runner (the invoke family).
+    event('agent.invoke.escalated', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'agent-runner',
+    }),
     event('agent.started', 'agent', 'agent'),
     event('agent.stopped', 'agent', 'agent'),
     event('agent.message.sent', 'agent', 'agent'),

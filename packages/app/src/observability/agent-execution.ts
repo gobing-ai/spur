@@ -20,6 +20,24 @@ export interface AgentExecutionBase {
     readonly severity?: 'info' | 'warning' | 'error';
 }
 
+/**
+ * Routing decision attribution for one agent dispatch (task 0545 R1/R2).
+ * Built from the resolution funnel result — role, resolved tier, resolved
+ * executor, and selection source are recorded where they are decided, never
+ * re-derived downstream. Carries identifiers/tiers only (R4): no prompt text,
+ * command line, or configured secret value.
+ */
+export interface AgentRoutingAttribution {
+    /** Role selector that produced this resolution (source `role`). */
+    role?: string;
+    /** Resolved capability tier. */
+    tier: string;
+    /** Resolved executor name. */
+    executor: string;
+    /** How the executor was selected: role resolution, explicit pin, agent.default, stage, phase, or priority. */
+    source: 'role' | 'explicit' | 'default' | 'phase' | 'stage' | 'priority';
+}
+
 /** Emitted after agent/model/invocation resolution and before process dispatch. */
 export interface AgentExecutionStartedEvent extends AgentExecutionBase {
     readonly kind: 'started';
@@ -27,6 +45,8 @@ export interface AgentExecutionStartedEvent extends AgentExecutionBase {
     readonly model?: string;
     readonly invocation: string;
     readonly timeoutMs?: number;
+    /** Routing decision that produced this dispatch (task 0545 R1); absent for resolutions without a tier/executor. */
+    readonly routing?: AgentRoutingAttribution;
 }
 
 /** One bounded, redacted stdout or stderr chunk observed during execution. */
@@ -96,6 +116,8 @@ interface LifecycleStart {
     model?: string;
     invocation: string;
     timeoutMs?: number;
+    /** Routing decision attribution for this dispatch (task 0545 R1). */
+    routing?: AgentRoutingAttribution;
 }
 
 interface LifecycleFinish {
@@ -158,6 +180,7 @@ export class AgentExecutionLifecycle {
             ...(detail.model !== undefined ? { model: redactAndBound(detail.model, this.secrets, 256) } : {}),
             invocation: redactAndBound(detail.invocation, this.secrets, 512),
             ...(detail.timeoutMs !== undefined ? { timeoutMs: detail.timeoutMs } : {}),
+            ...(detail.routing !== undefined ? { routing: detail.routing } : {}),
         });
         if (!this.observer || this.heartbeatMs <= 0) return;
         this.heartbeat = setInterval(() => {

@@ -10,11 +10,13 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import {
     type AgentConfig,
     type AgentExecutionEvent,
+    type AgentExecutionStartedEvent,
     type AgentRunDeps,
     AgentService,
     type AgentServiceOutput,
     RunSessionObserver,
 } from '../../src/index';
+import { RolePropagatingProcessExecutor } from '../../src/services/agent-service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -3017,6 +3019,191 @@ describe('AgentService run→session mapping (E6 / task 0557)', () => {
             adapter.close();
         } finally {
             rmSync(home, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — routing decision attribution (0545 R1/R2/R5)
+// ---------------------------------------------------------------------------
+// R5: one coverage test per selection source — role, pin, default, escalated —
+// each asserting the recorded value, so an unrecorded path fails the suite
+// rather than passing silently. Attribution rides the lifecycle started event
+// (R1) and the escalation's own record (R2), both emitted from the resolution
+// funnel's consumer in executeRun.
+
+describe('AgentService routing decision attribution (0545)', () => {
+    const attributionConfig: AgentConfig = {
+        executors: [
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    /** Collect lifecycle started events and escalation records from the service bus. */
+    function attributionHarness(agentConfig: AgentConfig, env: Record<string, string | undefined> = {}) {
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const started: AgentExecutionStartedEvent[] = [];
+        const escalations: Array<Record<string, unknown>> = [];
+        bus.on('agent.execution', (event) => {
+            const typed = event as AgentExecutionEvent;
+            if (typed.kind === 'started') started.push(typed as AgentExecutionStartedEvent);
+        });
+        bus.on('agent.invoke.escalated', (event) => escalations.push(event as Record<string, unknown>));
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env,
+            output: nullOutput(),
+            agentConfig,
+            roles: roleMap(),
+            events: bus,
+        });
+        return { bus, started, escalations, svc };
+    }
+
+    test('R5 role-resolved: a declared role records role, tier, executor, and source role', async () => {
+        const { started, svc } = attributionHarness(attributionConfig);
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', role: 'scribe', json: true }, deps);
+        expect(code).toBe(0);
+        expect(started[0]?.routing).toEqual({
+            role: 'scribe',
+            tier: 'cheap',
+            executor: 'cheap-exec',
+            source: 'role',
+        });
+    });
+
+    test('R5 pinned: an explicit executor pin records tier, executor, and source explicit', async () => {
+        const { started, svc } = attributionHarness(attributionConfig);
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'capable-exec', json: true }, deps);
+        expect(code).toBe(0);
+        expect(started[0]?.routing).toEqual({
+            tier: 'capable-1',
+            executor: 'capable-exec',
+            source: 'explicit',
+        });
+    });
+
+    test('R5 defaulted: agent.default routing through a role records source default, not role', async () => {
+        const { started, escalations, svc } = attributionHarness({ ...attributionConfig, default: 'scribe' });
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // Default-routed role: the selection source is `default`, distinguishable
+        // from a declared role resolution (R1); role/tier/executor still recorded.
+        expect(started[0]?.routing).toEqual({
+            role: 'scribe',
+            tier: 'cheap',
+            executor: 'cheap-exec',
+            source: 'default',
+        });
+        // A run that never escalates emits no escalation record (R2) — absence,
+        // never a null-valued one.
+        expect(escalations).toHaveLength(0);
+    });
+
+    test('R5 escalated: an objective failure records its own escalation row with both tiers and the trigger', async () => {
+        const { started, escalations, svc } = attributionHarness(attributionConfig);
+        // First dispatch (std-exec, pi) fails with a rate-limit body; the second
+        // (capable-exec, claude) succeeds — the 0407 escalation ladder walks up.
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: '5-hour limit reached; resets at 14:00' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement task', { agent: 'std-exec', stage: 'implement', json: true }, deps);
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+
+        // The starting decision and the escalation are distinct records (R2):
+        // the started event names the starting pin, the escalation names both
+        // tiers and the objective trigger that caused it.
+        expect(started[0]?.routing).toEqual({ tier: 'standard', executor: 'std-exec', source: 'explicit' });
+        expect(escalations).toHaveLength(1);
+        const escalation = escalations[0] as Record<string, unknown>;
+        expect(escalation.fromExecutor).toBe('std-exec');
+        expect(escalation.fromTier).toBe('standard');
+        expect(escalation.toExecutor).toBe('capable-exec');
+        expect(escalation.toTier).toBe('capable-1');
+        expect(escalation.trigger).toBe('resource-exhaustion');
+        // Joinable to the history plane over run_id (R1).
+        expect(typeof escalation.runId).toBe('string');
+        expect((escalation.runId as string).length).toBeGreaterThan(0);
+    });
+
+    test('R1: the escalation hop re-stamps routing on the next dispatch invoke payload (0545 review P3)', async () => {
+        // Mutation coverage for the re-stamp in the escalation loop
+        // (agent-service.ts:1025): the second dispatch's `agent.invoke.*` rows
+        // must persist the ESCALATED decision, not the stale starting one. This
+        // requires the service-built AiRunner (whose events bus is wrapped by
+        // withInvokeRouting) — an injected `deps.runner` would bypass the
+        // wrapper entirely and the re-stamp would be dead code.
+        const { bus, svc } = attributionHarness(attributionConfig);
+        const invokeStarts: Array<Record<string, unknown>> = [];
+        bus.on('agent.invoke.start', (event) => {
+            invokeStarts.push(event as Record<string, unknown>);
+        });
+
+        // Stub the process executor so the real AiRunner never spawns a
+        // subprocess: first dispatch fails with a rate-limit body (triggers the
+        // resource-exhaustion ladder), the escalated dispatch succeeds.
+        const originalRun = RolePropagatingProcessExecutor.prototype.run;
+        let processCall = 0;
+        RolePropagatingProcessExecutor.prototype.run = mock(async () => {
+            if (processCall++ === 0) {
+                return {
+                    command: 'pi',
+                    args: [],
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: '5-hour limit reached',
+                    durationMs: 42,
+                };
+            }
+            return { command: 'claude', args: [], exitCode: 0, stdout: 'ok', stderr: '', durationMs: 42 };
+        }) as typeof originalRun;
+        try {
+            const detector = {
+                detectOne: mock(() =>
+                    Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+                ),
+            } as unknown as AgentRunDeps['detector'];
+            const doctorRunner = {
+                runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            } as unknown as AgentRunDeps['doctorRunner'];
+            // No deps.runner: the service constructs the real AiRunner with the
+            // withInvokeRouting-wrapped events bus (0545 R1 seam).
+            const deps = { detector, doctorRunner };
+
+            const code = await svc.run('Implement task', { agent: 'std-exec', stage: 'implement', json: true }, deps);
+            expect(code).toBe(0);
+
+            // Two dispatches → two invoke.start rows. The first carries the
+            // starting pin's attribution; the second must carry the escalated
+            // tier/executor (capable-1 / capable-exec), not the stale starting
+            // standard / std-exec — this is the re-stamp's observable contract.
+            expect(invokeStarts).toHaveLength(2);
+            expect(invokeStarts[0]?.routing).toEqual({ tier: 'standard', executor: 'std-exec', source: 'explicit' });
+            expect(invokeStarts[1]?.routing).toEqual({ tier: 'capable-1', executor: 'capable-exec', source: 'stage' });
+        } finally {
+            RolePropagatingProcessExecutor.prototype.run = originalRun;
         }
     });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import { bridgeEventBus } from '../../src/services/event-bridge';
+import type { AgentRoutingAttribution } from '../../src/observability/agent-execution';
+import { bridgeEventBus, withInvokeRouting } from '../../src/services/event-bridge';
 
 /** Event map for bridge tests — concrete payload types (not the open `EventMap` never default). */
 type TestEvents = {
@@ -78,5 +79,79 @@ describe('bridgeEventBus', () => {
         expect(typeof bridged.on).toBe('function');
         expect(typeof bridged.off).toBe('function');
         expect(typeof bridged.emit).toBe('function');
+    });
+});
+
+describe('withInvokeRouting (task 0545 R1)', () => {
+    const routing: AgentRoutingAttribution = { role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' };
+    /** AgentEvents-shaped map so the bridge wrapper sees invoke names. */
+    type AgentEvents = {
+        'agent.invoke.start': (event: Record<string, unknown>) => void;
+        'agent.invoke.exit': (event: Record<string, unknown>) => void;
+        'agent.started': (event: Record<string, unknown>) => void;
+    };
+
+    test('attaches the routing context to agent.invoke.start payloads', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => routing);
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi', operation: 'prompt', label: 'x' });
+
+        const detail = calls[0]?.args[0] as Record<string, unknown>;
+        expect(detail.routing).toEqual(routing);
+        expect(detail.agent).toBe('pi');
+    });
+
+    test('attaches the routing context to agent.invoke.exit payloads', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => routing);
+
+        await wrapped.emit('agent.invoke.exit', { agent: 'pi', exitCode: 0, durationMs: 5 });
+
+        const detail = calls[0]?.args[0] as Record<string, unknown>;
+        expect(detail.routing).toEqual(routing);
+    });
+
+    test('re-reads the routing context at emit time (escalation re-stamp)', async () => {
+        const { bus, calls } = stubEventBus();
+        let current: AgentRoutingAttribution | undefined = routing;
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => current);
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi' });
+        expect((calls[0]?.args[0] as Record<string, unknown>).routing).toEqual(routing);
+
+        current = { tier: 'capable-1', executor: 'capable-exec', source: 'stage' };
+        await wrapped.emit('agent.invoke.start', { agent: 'claude' });
+        expect((calls[1]?.args[0] as Record<string, unknown>).routing).toEqual(current);
+    });
+
+    test('passes non-invoke events through untouched', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => routing);
+
+        await wrapped.emit('agent.started', { agentId: 'a1' });
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.args[0]).toEqual({ agentId: 'a1' });
+    });
+
+    test('passes invoke payloads through untouched when no routing context is set', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => undefined);
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi' });
+
+        expect(calls[0]?.args[0]).toEqual({ agent: 'pi' });
+    });
+
+    test('forwards on() and off() to the underlying bridge', () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => routing);
+
+        const listener = (_e: Record<string, unknown>) => {};
+        wrapped.on('agent.invoke.start', listener);
+        wrapped.off('agent.invoke.start', listener);
+
+        expect(calls.map((c) => c.method)).toEqual(['on', 'off']);
     });
 });

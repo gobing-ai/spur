@@ -250,6 +250,36 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             expect(SYSTEM_EVENT_PREFIXES).toContain('history');
         }
     });
+
+    test('registers agent.invoke.escalated as its own default-tier record (task 0545 R2)', () => {
+        const entry = requireEntry('agent.invoke.escalated');
+        expect(entry.source).toBe('agent');
+        expect(entry.renderer).toBe('agent');
+        expect(entry.payloadPolicy).toBe('metadata-only');
+        // The escalation is a low-volume, operator-actionable record — default tier
+        // so it persists and streams without the diagnostic toggle.
+        expect(entry.tier).toBe('default');
+        expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('agent.invoke.escalated');
+        // Emitted by the Spur agent-service bridge, not by ts-ai-runner — producer
+        // attribution names the actual emitter (R2).
+        expect(entry.producerPackage).toBe('spur');
+        expect(entry.subsystem).toBe('agent-runner');
+        for (const path of ['fromTier', 'toTier', 'trigger', 'fromExecutor', 'toExecutor']) {
+            expect(entry.metadataFields.some((field) => field.path === path)).toBe(true);
+        }
+    });
+
+    test('agent.invoke.* entries admit routing decision metadata (task 0545 R1)', () => {
+        for (const name of ['agent.invoke.start', 'agent.invoke.exit', 'agent.invoke.escalated']) {
+            const entry = requireEntry(name);
+            for (const path of ['routing.role', 'routing.tier', 'routing.executor', 'routing.source']) {
+                expect(
+                    entry.metadataFields.some((field) => field.path === path),
+                    `${name} ${path}`,
+                ).toBe(true);
+            }
+        }
+    });
 });
 
 describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
@@ -396,6 +426,78 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         const entry = requireEntry('workflow.agent');
         const result = normalizeSystemEventPayload(entry, 42);
         expect(result).toEqual({ value: 42 });
+    });
+
+    test('projects routing decision metadata on agent.invoke.start (task 0545 R1)', () => {
+        const entry = requireEntry('agent.invoke.start');
+        const result = normalizeSystemEventPayload(entry, {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            correlation: { runId: 'run-42', executionId: 'exec-7' },
+            routing: { role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' },
+        });
+        expect(result).not.toBeNull();
+        expect(result?.routing).toEqual({ role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' });
+        expect(result?.agent).toBe('pi');
+        expect(result?.operation).toBe('prompt');
+    });
+
+    test('projects escalation fields on agent.invoke.escalated (task 0545 R2)', () => {
+        const entry = requireEntry('agent.invoke.escalated');
+        const result = normalizeSystemEventPayload(entry, {
+            runId: 'run-42',
+            executionId: 'exec-7',
+            fromExecutor: 'std-exec',
+            fromTier: 'standard',
+            toExecutor: 'capable-exec',
+            toTier: 'capable-1',
+            trigger: 'gate-fail',
+            severity: 'warning',
+        });
+        expect(result).not.toBeNull();
+        expect(result?.fromTier).toBe('standard');
+        expect(result?.toTier).toBe('capable-1');
+        expect(result?.trigger).toBe('gate-fail');
+        expect(result?.fromExecutor).toBe('std-exec');
+        expect(result?.toExecutor).toBe('capable-exec');
+        expect(result?.runId).toBe('run-42');
+    });
+
+    test('redacts a configured secret in routing attribution before persistence (task 0545 R4)', () => {
+        const entry = requireEntry('agent.invoke.start');
+        const configuredSecret = 'super-secret-configured-token';
+        const result = normalizeSystemEventPayload(
+            entry,
+            {
+                agent: 'pi',
+                operation: 'prompt',
+                label: 'ai-runner.pi.prompt',
+                routing: { role: configuredSecret, tier: 'cheap', executor: 'cheap-exec', source: 'role' },
+            },
+            [configuredSecret],
+        );
+        expect(result).not.toBeNull();
+        expect(JSON.stringify(result)).not.toContain(configuredSecret);
+    });
+
+    test('attribution carries identifiers, tiers, and counts only — no prompt or command bodies (task 0545 R4)', () => {
+        const entry = requireEntry('agent.invoke.start');
+        const result = normalizeSystemEventPayload(entry, {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            invocation: 'pi --dangerous -p "secret prompt body"',
+            prompt: 'secret prompt body',
+            command: 'pi --dangerous',
+            routing: { role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' },
+        });
+        expect(result).not.toBeNull();
+        expect(result?.invocation).toBeUndefined();
+        expect(result?.prompt).toBeUndefined();
+        expect(result?.command).toBeUndefined();
+        // The routing block survives untouched — it is identifiers only.
+        expect(result?.routing).toEqual({ role: 'scribe', tier: 'cheap', executor: 'cheap-exec', source: 'role' });
     });
 });
 
