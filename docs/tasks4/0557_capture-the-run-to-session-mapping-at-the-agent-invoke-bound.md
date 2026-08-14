@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T02:43:12.908Z"
-updated_at: "2026-08-14T06:04:47.588Z"
+updated_at: "2026-08-14T17:39:19.096Z"
 ---
 
 ## 0557. Capture the run-to-session mapping at the agent invoke boundary
@@ -33,7 +33,7 @@ Spur already has both halves of what observation needs: `agent.invoke.start` / `
 are catalogued events (`packages/app/src/services/event-names.ts:315-316`), and the importer knows
 every agent's session root (`~/xprojects/ts-libs/packages/llm-jsonl-importer/src/sources.ts:156-213`).
 ### Requirements
-- [ ] **R1.** Record a `run_id ↔ (source, session_id)` mapping when an agent invocation completes,
+- [x] **R1.** Record a `run_id ↔ (source, session_id)` mapping when an agent invocation completes,
       by watermarking the agent's session root at `agent.invoke.start` and resolving the newly
       written or newly extended session at `agent.invoke.exit`. Mark the mapping **exact**.
       **Prerequisite this task owns:** thread the minted `runId` (`agent-service.ts:959`, `:967`)
@@ -41,19 +41,19 @@ every agent's session root (`~/xprojects/ts-libs/packages/llm-jsonl-importer/src
       populates `system_events.run_id` — measured 0 of 202 today. Without it there is no key.
       Measurable: a `spur agent run` against a real agent produces exactly one mapping row naming the
       run, the source, and the session id, and its invoke events carry a non-null `run_id`.
-- [ ] **R2.** Where an agent's CLI accepts a session id, supply one and take the mapping from it
+- [x] **R2.** Where an agent's CLI accepts a session id, supply one and take the mapping from it
       rather than from observation, still marked exact. The `sessionId` plumbing already exists
       (`agent-service.ts:201`, `:738-739`). Measurable: for such an agent the mapping is written
       without a directory scan, and matches the id supplied.
-- [ ] **R3.** Ambiguity degrades, never guesses. When two invocations of the same agent in the same
+- [x] **R3.** Ambiguity degrades, never guesses. When two invocations of the same agent in the same
       working directory overlap so a session file cannot be attributed to exactly one run, write **no**
       exact mapping for the ambiguous runs and leave them to task 0558. Measurable: an induced
       concurrent-overlap case writes zero exact mappings and logs the ambiguity, rather than
       attributing arbitrarily.
-- [ ] **R4.** The mapping is queryable by `run_id` and by `(source, session_id)`, and records which
+- [x] **R4.** The mapping is queryable by `run_id` and by `(source, session_id)`, and records which
       mechanism produced it (`observed` / `supplied`) alongside its exactness. Measurable: both lookup
       directions are indexed, and the mechanism is readable per row.
-- [ ] **R5.** Observation must not slow or destabilise the invocation. The watermark is a cheap
+- [x] **R5.** Observation must not slow or destabilise the invocation. The watermark is a cheap
       directory stat at start; resolution happens after exit and its failure never fails the run.
       Measurable: an invocation whose session root is missing or unreadable completes normally with
       the mapping recorded as unresolved.
@@ -182,14 +182,14 @@ Measured against the live `.spur/spur.db` after the frozen-names table above was
 Do **not** add a second correlation channel or a new event to carry the id — the tap's existing
 `runId` lookup is the contract; satisfy it.
 ### Plan
-- [ ] Add the `history_run_session` table with both indexes (R1, R4)
-- [ ] Watermark the agent session root at `agent.invoke.start` (R1)
-- [ ] Resolve the produced session at `agent.invoke.exit` and write an exact mapping (R1)
-- [ ] Take the mapping from `sessionId` without observation when it is supplied (R2)
-- [ ] Record `mechanism` (`observed` / `supplied`) and `exactness` per row (R4)
-- [ ] Write no exact mapping on zero-or-many candidates; log the ambiguity (R3)
-- [ ] Record `unresolved` and never fail the run on an unreadable root, and cover it plus single-candidate exact, supplied-id, and concurrent-overlap degrade in tests (R1-R5)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Add the `history_run_session` table with both indexes (R1, R4)
+- [x] Watermark the agent session root at `agent.invoke.start` (R1)
+- [x] Resolve the produced session at `agent.invoke.exit` and write an exact mapping (R1)
+- [x] Take the mapping from `sessionId` without observation when it is supplied (R2)
+- [x] Record `mechanism` (`observed` / `supplied`) and `exactness` per row (R4)
+- [x] Write no exact mapping on zero-or-many candidates; log the ambiguity (R3)
+- [x] Record `unresolved` and never fail the run on an unreadable root, and cover it plus single-candidate exact, supplied-id, and concurrent-overlap degrade in tests (R1-R5)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 #### Change map
 
@@ -203,24 +203,27 @@ Do **not** add a second correlation channel or a new event to carry the id — t
 5. Premise (runId on `agent.invoke.*`): already satisfied in the current tree — the minted runId reaches the events as `correlation: { runId, executionId }` (`packages/app/src/services/agent-service.ts:861` dispatch passes `correlation: lifecycle.identity`; ts-ai-runner ≥0.4.31 emits it on `agent.invoke.start`/`exit`), and the tap's existing `nested.runId` lookup (`packages/app/src/services/system-event-tap.ts:200-201`) extracts it. Pinned with a regression test instead of re-threading a second channel (anti-pattern: no second correlation channel).
 6. `docs/04_DESIGN.md:1011-1012, 262-268` — §3.1 table row + `spur agent run` section (T3).
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-14** (`/sp-dev-verifyall --feature E6 --force --fix all` in worktree `spur-new-runall-e6-e91f`). Task already `done`; `--force` re-audited. Line anchors re-read this run.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/run-session-observer.ts:100-104` (watermark: root resolution + timestamp only), `:125-153` (resolve → exact/observed on single candidate); wiring `packages/app/src/services/agent-service.ts:741-763` (observer creation, supply/watermark), `:861` (re-watermark per dispatch), `:809`/`:882`/`:986`/`:999` (resolve at every exit path); prerequisite runId threading via `correlation: lifecycle.identity` (`agent-service.ts:869` dispatch) + tap `nested.runId` lookup (`packages/app/src/services/system-event-tap.ts:200-201`), pinned by regression test `packages/app/tests/services/system-event-tap.test.ts:159`; end-to-end `packages/app/tests/services/agent-service.test.ts:2799` (exact observed row, run_id set) |
-| R2 | MET | `run-session-observer.ts:114-117` (`supply()` skips observation), `:127-131` (exact/supplied, no scan); `agent-service.ts:760-763` (`supply` when `--session-id` set; watermark skipped); integration test `agent-service.test.ts:2840` (root absent, mapping still exact `supplied`) |
-| R3 | MET | `run-session-observer.ts:43-47` (per-process overlap registry), `:108` (overlap flag), `:132-141` (zero/many candidates → unresolved + ambiguity log, never an exact guess); tests `run-session-observer.test.ts:164` (concurrent overlap → zero exact mappings + ambiguity logged + registry clears for sequential follow-up), `:204` (many candidates → unresolved) |
-| R4 | MET | `packages/domain/src/migrations.ts:135-145` (`history_run_session` DDL + indexes `idx_history_run_session_run` on `run_id` and `idx_history_run_session_source_session` on `(source, session_id)`), `:304` (incremental migration `0012_spur_cli_history_run_session`); `packages/domain/src/dao/run-session-dao.ts` (`insert`/`getByRunId`/`getBySession`, missing-table-tolerant); tests `packages/domain/tests/dao/run-session-dao.test.ts` (forward + reverse lookup); `exactness` (`exact`/`unresolved`) and `mechanism` (`observed`/`supplied`) recorded per row (asserted in observer + integration tests) |
-| R5 | MET | watermark is a timestamp capture only (`run-session-observer.ts:100-104` — no walk at start); `resolve()` never throws (`:125-153`, every failure path records `unresolved` and warns); tests `run-session-observer.test.ts:224` (missing root → unresolved, no rejection), `:241` (zero candidates → unresolved); `agent-service.ts` resolves after exit at every return path (`:809`, `:882`, `:986`, `:999`) |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/migrations.ts:134-146` `history_run_session` table + indexes. Observer `packages/app/src/services/run-session-observer.ts:80-129`. Hook `packages/app/src/services/agent-service.ts:745-761`. Tests `packages/app/tests/services/run-session-observer.test.ts:70` + `packages/app/tests/services/agent-service.test.ts:2799` (this run). |
+| R2 | MET | `packages/app/src/services/run-session-observer.ts:118-122` `supply()`; `:101-104` skip watermark when supplied. Agent flag `packages/app/src/services/agent-service.ts:676,760-761`. Tests `:139` observer + `:2840` agent-service (this run). |
+| R3 | MET | Observer tests `:164` overlapping runs write no exact mapping; `:204` many candidates → unresolved. This run both pass. |
+| R4 | MET | `packages/domain/src/dao/run-session-dao.ts:56-88` insert + `getByRunId` + reverse lookup. Tests `packages/domain/tests/dao/run-session-dao.test.ts` forward/reverse lookup (this run). |
+| R5 | MET | `packages/app/src/services/run-session-observer.ts:124-128` resolve never throws. Tests `:224` missing root + `packages/app/tests/services/agent-service.test.ts:1623` throwing observer never fails the run (this run). |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 — A completed agent run is mapped to the session it produced | MET | test | `packages/app/tests/services/agent-service.test.ts:2799` (integration: `spur agent run` → exact observed mapping row, run_id non-null); `packages/app/tests/services/run-session-observer.test.ts:70` (single candidate → exact/observed, both lookups resolve) |
-| Scenario: R2 — An agent that accepts a session id yields the mapping without observation | MET | test | `packages/app/tests/services/agent-service.test.ts:2840` (supplied `--session-id` → exact `supplied` row with no session root present); `packages/app/tests/services/run-session-observer.test.ts:114-131` (supply path writes exact without scan) |
-| Scenario: R3 — An unresolvable spawn degrades to estimated, never to a guess | MET | test | `packages/app/tests/services/run-session-observer.test.ts:164` (induced concurrent overlap → zero exact mappings, ambiguity logged, follow-up sequential run resolves); `:204` (≥2 candidates → unresolved row, no guess) |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — A completed agent run is mapped to the session it produced | MET | test | `packages/app/tests/services/agent-service.test.ts:2799` + `packages/app/tests/services/run-session-observer.test.ts:70` (this run) |
+| Scenario: R2 — An agent that accepts a session id yields the mapping without observation | MET | test | `packages/app/tests/services/agent-service.test.ts:2840` + `packages/app/tests/services/run-session-observer.test.ts:139` (this run) |
+| Scenario: R3 — An unresolvable spawn degrades to estimated, never to a guess | MET | test | `packages/app/tests/services/run-session-observer.test.ts:164` and `:204` (this run) |
+
+Coverage: N/A (mapping path covered by observer + agent-service + DAO tests; bun coverage does not apply a per-file gate to this verify). `--fix all` flipped leftover checkboxes and replaced basename-only Testing citations. Artifact: `.spur/run/0557-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

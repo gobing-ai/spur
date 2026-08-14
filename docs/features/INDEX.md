@@ -20,7 +20,7 @@
     ├── [backlog] **E3**: Operation-triggered history refresh: coalesced import and analyze off the hot path ([E3_operation-triggered-history-refresh-coalesced-import-and-analyze-off-the-hot-path.md](./E3_operation-triggered-history-refresh-coalesced-import-and-analyze-off-the-hot-path.md))
     ├── [cancelled] **E4**: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite ([E4_session-forensics-implementation-retention-derived-variables-report-modes-find-issue-rewrite.md](./E4_session-forensics-implementation-retention-derived-variables-report-modes-find-issue-rewrite.md))
     ├── [backlog] **E5**: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite ([E5_session-forensics-implementation-retention-derived-variables-report-modes-find-issue-rewrite.md](./E5_session-forensics-implementation-retention-derived-variables-report-modes-find-issue-rewrite.md))
-    └── [backlog] **E6**: Run-to-session correlation and cost-path repair ([E6_run-to-session-correlation-and-cost-path-repair.md](./E6_run-to-session-correlation-and-cost-path-repair.md))
+    └── [done] **E6**: Run-to-session correlation and cost-path repair ([E6_run-to-session-correlation-and-cost-path-repair.md](./E6_run-to-session-correlation-and-cost-path-repair.md))
 [active] **F**: Planning ([F_planning.md](./F_planning.md))
     ├── [active] **F1**: Planning foundation ([F1_planning-foundation.md](./F1_planning-foundation.md))
     ├── [done] **F2**: Task management CLI ([F2_task-management-cli.md](./F2_task-management-cli.md))

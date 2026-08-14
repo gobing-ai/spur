@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0557"]
 ac_numbering: task-local
 created_at: "2026-08-14T02:43:13.136Z"
-updated_at: "2026-08-14T07:21:03.308Z"
+updated_at: "2026-08-14T17:39:19.376Z"
 ---
 
 ## 0558. Correlate existing history retroactively by time window, marked estimated
@@ -30,19 +30,19 @@ estimated** — a distinction the codebase already models with `actionCost` vers
 
 This is the R1b half of the design already sketched at `agent-service.ts:195-201`.
 ### Requirements
-- [ ] **R1.** Correlate imported history rows to runs by time window over `(source, cwd, ts)` against
+- [x] **R1.** Correlate imported history rows to runs by time window over `(source, cwd, ts)` against
       recorded run windows, writing the result with exactness **estimated**. Measurable: a fixture with
       a known run window and matching session yields an estimated mapping.
-- [ ] **R2.** An `exact` mapping from task 0557 is never overwritten or downgraded by an estimated
+- [x] **R2.** An `exact` mapping from task 0557 is never overwritten or downgraded by an estimated
       one. Measurable: running retroactive correlation over a range already covered by exact mappings
       leaves them unchanged, asserted by test.
-- [ ] **R3.** Ambiguous matches — several runs plausibly matching one session, or none — produce no
+- [x] **R3.** Ambiguous matches — several runs plausibly matching one session, or none — produce no
       mapping rather than a nearest-neighbour guess, and are counted in the run's report. Measurable:
       an overlapping-window fixture yields zero mappings and a reported ambiguity count.
-- [ ] **R4.** Correlation is re-runnable and bounded: it takes an explicit window, is idempotent over
+- [x] **R4.** Correlation is re-runnable and bounded: it takes an explicit window, is idempotent over
       the same input, and does not rescan the full 1.3M-row table on every invocation. Measurable:
       a second run over the same window writes no duplicate rows and reads a bounded row count.
-- [ ] **R5.** The run reports coverage — how many rows in the window were correlated, how many were
+- [x] **R5.** The run reports coverage — how many rows in the window were correlated, how many were
       ambiguous, how many had no candidate run at all. Measurable: the result carries all three counts
       and the window.
 ### Acceptance Criteria
@@ -138,14 +138,14 @@ A run whose `exit` is missing (crash, kill) has an open window; bound it by the 
 same agent or by a configured maximum, and mark those correlations estimated like any other — never
 treat an unbounded window as matching everything after it.
 ### Plan
-- [ ] Extend `exactness` with `estimated` and `mechanism` with `inferred` (R1)
-- [ ] Correlate by `(source, cwd, ts)` against run windows over an explicit bounded window (R1, R4)
-- [ ] Refuse to overwrite or downgrade an `exact` row, enforced in the write path (R2)
-- [ ] Write no mapping on ambiguous or absent candidates; count them (R3)
-- [ ] Make re-runs idempotent and the scan indexed (R4)
-- [ ] Report correlated / ambiguous / no-candidate counts and the window (R5)
-- [ ] Add tests: known-window match, exact-not-overwritten, ambiguity yields none, idempotent re-run (R1-R5)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Extend `exactness` with `estimated` and `mechanism` with `inferred` (R1)
+- [x] Correlate by `(source, cwd, ts)` against run windows over an explicit bounded window (R1, R4)
+- [x] Refuse to overwrite or downgrade an `exact` row, enforced in the write path (R2)
+- [x] Write no mapping on ambiguous or absent candidates; count them (R3)
+- [x] Make re-runs idempotent and the scan indexed (R4)
+- [x] Report correlated / ambiguous / no-candidate counts and the window (R5)
+- [x] Add tests: known-window match, exact-not-overwritten, ambiguity yields none, idempotent re-run (R1-R5)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 #### Change map
 
@@ -158,22 +158,25 @@ treat an unbounded window as matching everything after it.
 
 Rationale: correlation lives in `packages/domain` (not the app layer) because it is a pure analytics pass over domain tables with no HTTP/transport dependency, matching the `run-cost.ts` analytics precedent; the R2/R4 guards sit in the DAO write path so any future writer inherits them rather than re-deriving the invariant by convention.
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-14** (`/sp-dev-verifyall --feature E6 --force --fix all` in worktree `spur-new-runall-e6-e91f`). Task already `done`; `--force` re-audited. Line anchors re-read this run.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `packages/domain/src/analytics/retro-correlation.ts:53-67` — single-candidate session written via `RunSessionDao.insertInferred` with exactness `estimated` / mechanism `inferred` (`packages/domain/src/dao/run-session-dao.ts:134`); test `packages/domain/tests/analytics/retro-correlation.test.ts:59-107` asserts the estimated mapping row. Fresh: `bun test packages/domain/tests/analytics/retro-correlation.test.ts packages/domain/tests/dao/run-session-dao.test.ts` → 17 pass / 0 fail. |
-| R2 | MET | `packages/domain/src/dao/run-session-dao.ts:120-131` — `insertInferred` EXISTS guard skips the write when an `exact` row exists for the run (never overwritten/shadowed); tests `retro-correlation.test.ts:109-135` (exact row unchanged, `mappingsWritten: 0`) and `run-session-dao.test.ts:97-121`. |
-| R3 | MET | `packages/domain/src/analytics/retro-correlation.ts:51,55-69` — zero candidates → `noCandidate`, ≥2 candidates → `ambiguous`; nothing written in either case (no nearest-neighbour); tests `retro-correlation.test.ts:137-214`. |
-| R4 | MET | `packages/domain/src/analytics/retro-correlation.ts:94-99,145-152` — both scans window-bounded (`occurred_at` / `ts BETWEEN … AND run_id IS NULL`), index-backed; `run-session-dao.ts:123-128` duplicate-estimated guard makes re-runs idempotent; test `retro-correlation.test.ts:216-253` (2nd run `mappingsWritten: 0`, out-of-window row unscanned). |
-| R5 | MET | `packages/domain/src/analytics/retro-correlation.ts:70-77` — report carries `correlated` / `ambiguous` / `noCandidate` plus the window; test `retro-correlation.test.ts:255-330` (mixed buckets + window asserted). |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/retro-correlation.ts:28` RetroCorrelator; DAO `packages/domain/src/dao/run-session-dao.ts:113` `insertInferred`. Test `packages/domain/tests/analytics/retro-correlation.test.ts:62` (this run). |
+| R2 | MET | DAO `insertInferred` blocks when an exact row exists (`packages/domain/src/dao/run-session-dao.ts:113-133`). Tests `packages/domain/tests/analytics/retro-correlation.test.ts:115` + `packages/domain/tests/dao/run-session-dao.test.ts` insertInferred exact-blocks-estimated (this run). |
+| R3 | MET | Tests `packages/domain/tests/analytics/retro-correlation.test.ts:156` overlap → no mapping; `:209` no candidate counted not guessed (this run). |
+| R4 | MET | Test `packages/domain/tests/analytics/retro-correlation.test.ts:224` re-run writes no duplicates; DAO identical-estimated blocks rewrite (this run). |
+| R5 | MET | Test `packages/domain/tests/analytics/retro-correlation.test.ts:265` mixed window reports all three counts (this run). |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R4 — Already-imported history is correlated retroactively and marked estimated (Given history rows imported before correlation existed / When retroactive correlation runs over a bounded window / Then matched rows carry a run id marked estimated / And an exact mapping is never overwritten by an estimated one) | MET | test | `retro-correlation.test.ts:59-107` (matched rows carry `exactness: 'estimated'`, `mechanism: 'inferred'`) + `retro-correlation.test.ts:109-135` (exact mapping untouched, `mappingsWritten: 0`). Both green this run: `bun test …` → 17 pass / 0 fail. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R4 — Already-imported history is correlated retroactively and marked estimated | MET | test | `packages/domain/tests/analytics/retro-correlation.test.ts:62` estimated/inferred + `:115` exact never overwritten (this run: 20 pass / 0 fail across retro-correlation + run-session-dao) |
+
+Coverage: N/A (correlator + DAO covered by targeted tests). `--fix all` flipped leftover checkboxes and replaced basename-only Testing citations. Artifact: `.spur/run/0558-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
