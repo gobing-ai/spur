@@ -1,0 +1,139 @@
+---
+template: feature-impl
+schema_version: 1
+name: "Watermark live sessions and report refresh coverage honestly"
+description: ""
+status: todo
+type: task
+profile: standard
+feature_id: E3
+parent_wbs: null
+priority: P2
+tags: []
+dependencies: ["0549"]
+ac_numbering: task-local
+created_at: "2026-08-14T00:48:40.978Z"
+updated_at: "2026-08-14T00:51:30.323Z"
+---
+
+## 0550. Watermark live sessions and report refresh coverage honestly
+
+### Background
+Triggering a refresh on work completion means importing sessions that are **still being written** —
+that is the normal case, not an edge case, because the agent that just completed a task is usually
+still running.
+
+E1 verified that incremental import *resumes* correctly against real append-only growth
+(`history_import_checkpoint` / `history_import_ledger`). That is a different guarantee from: *does
+`analyze` produce correct derived values over a session that is only half present?* Nobody has asked
+the second question, and it is the one that matters once the trigger fires mid-session.
+
+The second half of this task is honesty about coverage. Six sources import at full fidelity (claude,
+codex, pi, omp, agy, grok); five are unsupported by operator ruling 2026-08-06 (gemini, opencode,
+antigravity-ide, openclaw, hermes). A refresh that reports success without saying what it skipped
+invites the reader to assume completeness.
+### Requirements
+- [ ] **R1.** Define and implement a watermark policy for still-appending sessions: `analyze` computes
+      derived values only up to a defensible boundary (the last complete turn), and a session past
+      that boundary is marked in progress rather than final. Measurable: analyzing a session file
+      that grows between two refreshes yields values consistent with the completed portion at each
+      point, and never values derived from a partial turn.
+- [ ] **R2.** An in-progress session is distinguishable from a finished one in the analyze output, so
+      a consumer can choose to exclude it. Measurable: the result marks each session's completeness
+      state, and a consumer filtering on it gets only finished sessions.
+- [ ] **R3.** A refresh reports which sources it refreshed and which it skipped as unsupported,
+      rather than reporting bare success. Measurable: the refresh result enumerates refreshed and
+      skipped sources by name.
+- [ ] **R4.** A refresh states the window it covered, so a consumer can tell current data from stale.
+      Measurable: the result carries the covered window, and a consumer reading it can determine
+      recency without inspecting the database.
+- [ ] **R5.** Re-analyzing a session after it completes supersedes the in-progress result rather than
+      duplicating it. A session analyzed three times while running and once after must contribute one
+      final set of derived values. Measurable: repeated refreshes over a growing session leave one
+      final record, not four.
+### Acceptance Criteria
+Covers feature E3 scenarios:
+
+- **R4 — A still-appending session is not analyzed as complete**
+- **R5 — A refresh reports its coverage**
+
+```gherkin
+Scenario: R4 — A still-appending session is not analyzed as complete
+  Given a session file that is still being written by a running agent
+  When a refresh imports and analyzes it
+  Then derived values are computed only up to the watermark the policy defines
+  And the result marks that session as still in progress rather than final
+
+Scenario: R5 — A refresh reports its coverage
+  Given sources at full fidelity and sources with no support
+  When a refresh completes
+  Then it reports which sources were refreshed and which were skipped as unsupported
+  And it states the window covered
+```
+### Q&A
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+### Design
+**Import resumption and analyze correctness are different guarantees.** E1 verified the first. This
+task addresses the second, and must not assume the first covers it. The failure mode is quiet: a
+partial turn yields a derived value that is *plausible* and wrong, and the next refresh silently
+replaces it with a different plausible value.
+
+**Last complete turn is the natural watermark (R1).** A turn is the unit the importer already models;
+deriving anything from a half-written turn is the fabrication risk. Where "complete" is ambiguous for
+a source, prefer excluding the trailing turn over guessing — consistent with the never-fabricate
+invariant already established at `packages/domain/src/analytics/run-cost.ts:240`.
+
+**In-progress is a state, not an error (R2).** Most sessions a triggered refresh sees will be live.
+The output should let a consumer choose: a dashboard may want everything including partials, while
+token attribution (task 0547) may want only finished sessions. Mark it; do not decide for them.
+
+**Supersede, do not accumulate (R5).** A session analyzed on every refresh while it runs must not
+leave four partial records that a consumer sums. Key derived values by session and replace, so the
+final analysis wins. Getting this wrong inflates every aggregate built on top, and does so in
+proportion to how often the trigger fires — meaning the more useful the trigger is, the worse the
+corruption.
+
+**Coverage is part of the result (R3/R4).** Report refreshed and skipped sources by name and the
+covered window. The five unsupported sources are an operator ruling, not a bug, and saying so is what
+keeps a reader from assuming completeness.
+
+**Not in scope:** adding source support (E1 § Out of scope), changing the ETL contract or the analyze
+query set, and anything built on the refreshed data (feature E2).
+### Plan
+- [ ] Define the watermark as the last complete turn and document the per-source ambiguity rule (R1)
+- [ ] Compute derived values only up to the watermark; never from a partial turn (R1)
+- [ ] Mark each session's completeness state in the analyze output (R2)
+- [ ] Supersede an in-progress result when the session is re-analyzed after completion (R5)
+- [ ] Report refreshed and skipped sources by name in the refresh result (R3)
+- [ ] Report the covered window in the refresh result (R4)
+- [ ] Add tests: growing-session watermark, in-progress filtering, supersede-not-duplicate, coverage reporting (R1-R5)
+- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+- **Import resumption already verified (do not re-verify):** `history_import_checkpoint` /
+  `history_import_ledger`, feature E1 § In — "Incremental correctness … verified against real
+  append-only growth"
+- **Never-fabricate precedent (R1):** `packages/domain/src/analytics/run-cost.ts:240-241`; task 0474
+  R7 removed a 4-chars-per-token estimate for the same reason
+- **Analyze surface:** `apps/cli/src/commands/history.ts` (`analyze`, `daily` at `:203-217`)
+- **Source coverage (R3):** full fidelity — claude, codex, pi, omp, agy, grok; unsupported — gemini,
+  opencode, antigravity-ide, openclaw, hermes (feature E1 § Out of scope, operator ruling 2026-08-06)
+- **Consumer that depends on completeness state (R2):** task 0547 (tokens per role)
+- **Upstream dependency:** task 0549 (the trigger whose firing makes mid-session analysis routine)
+- **Surface docs (T3, same commit):** `docs/04_DESIGN.md`
+### History

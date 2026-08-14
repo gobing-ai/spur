@@ -1,0 +1,153 @@
+---
+schema_version: 1
+id: "E3"
+name: "Operation-triggered history refresh: coalesced import and analyze off the hot path"
+status: backlog
+priority: P2
+tags: []
+created_at: "2026-08-14T00:47:15.855Z"
+updated_at: "2026-08-14T00:48:38.674Z"
+---
+
+# E3: Operation-triggered history refresh: coalesced import and analyze off the hot path
+
+## Goal
+Agent conversation history is refreshed as a consequence of **work happening**, not of a clock
+striking — so that anything built on the history plane reads current data without anyone remembering
+to run an import.
+
+The pipeline already exists. `spur history daily`
+(`apps/cli/src/commands/history.ts:203-217`) is a run-once `import-all` fan-out → `analyze` → artifact,
+and E1 shipped incremental import with verified checkpoint/ledger correctness against real
+append-only growth. What does not exist is a way to run it **when something has changed** rather than
+once a morning.
+
+This matters immediately: batch 2's task 0547 attributes token consumption to roles by joining the
+event ledger to the history plane over `run_id`. With a stale or unimported history, 0547 honestly
+reports every role as *unmeasured*. The trigger is what turns that surface from correct-but-empty
+into useful.
+
+Off the hot path by construction: the trigger enqueues, the existing job queue coalesces, and the
+import runs out of band. No operation waits on an import.
+## Scope
+- In:
+    - An explicit trigger that enqueues a history refresh when work completes, coalescing bursts so a
+      run of operations produces one refresh rather than one per operation.
+    - Execution through the embedded job queue and scheduler (feature A2), never inline on the
+      operation's critical path.
+    - A measured cost baseline for incremental `import` + `analyze` on this machine's real data,
+      recorded with the mandated provenance header — taken **first**, because it decides how
+      aggressively the trigger may fire.
+    - A watermark policy for live, still-appending sessions, so `analyze` never presents a partially
+      imported session's derived values as complete.
+    - Honest coverage reporting: which sources were refreshed, which are unsupported, and what window
+      the refresh covered.
+- Out:
+    - Building anything **on** the refreshed data — derived variables, execution graphs, issue
+      detection, forensics reports. That is feature **E2**, whose four charting tickets (0489–0492)
+      are already resolved and awaiting implementation.
+    - Token attribution by role — batch 2, task 0547. This feature makes its inputs fresh; it does
+      not compute them.
+    - Adding source support for gemini, opencode, antigravity-ide, openclaw, or hermes — deferred by
+      operator ruling 2026-08-06 (feature E1 § Out of scope).
+    - Changing the ETL contract, the import schema, or `analyze`'s query set.
+    - Replacing `spur history daily`. The scheduled loop stays; this adds a second trigger, it does
+      not remove the first.
+    - Any new CLI noun (ADR-051).
+## Acceptance Criteria
+```gherkin
+Feature: Operation-triggered history refresh
+
+  @core
+  Scenario: R1 — The cost of an incremental refresh is measured before it is wired
+    Given this machine's real agent session data
+    When an incremental import followed by analyze is run and timed
+    Then the elapsed cost is recorded together with the import provenance header
+    And the recorded measurement states which binary and importer version produced it
+
+  @core
+  Scenario: R2 — Completing work enqueues a refresh without blocking it
+    Given the trigger is enabled and an operation completes
+    When the operation returns
+    Then a history refresh has been enqueued
+    And the operation's own duration is unchanged by the refresh
+
+  @core
+  Scenario: R3 — A burst of operations produces one refresh
+    Given several operations complete inside the coalescing window
+    When the queue drains
+    Then exactly one refresh ran for that burst
+    And its covered window spans all of the operations in it
+
+  @core
+  Scenario: R4 — A still-appending session is not analyzed as complete
+    Given a session file that is still being written by a running agent
+    When a refresh imports and analyzes it
+    Then derived values are computed only up to the watermark the policy defines
+    And the result marks that session as still in progress rather than final
+
+  @core
+  Scenario: R5 — A refresh reports its coverage
+    Given sources at full fidelity and sources with no support
+    When a refresh completes
+    Then it reports which sources were refreshed and which were skipped as unsupported
+    And it states the window covered
+
+  @edge
+  Scenario: R6 — A failing source does not fail the refresh
+    Given one source errors during import
+    When the refresh runs
+    Then the remaining sources still import
+    And the failure is reported per source rather than aborting the whole refresh
+```
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0548 | Measure incremental import and analyze cost on real data with provenance | todo |
+| 0549 | Enqueue a coalesced history refresh on work completion | todo |
+| 0550 | Watermark live sessions and report refresh coverage honestly | todo |
+<!-- END AUTO-GENERATED -->
+
+## Notes
+### Why the trigger and not the pipeline
+
+`spur history daily` already does import-all → analyze → artifact with per-source isolation. E1
+shipped incremental import with `history_import_checkpoint` / `history_import_ledger` verified
+against real append-only growth. This feature changes **when** that runs, not **what** it does. Any
+task here that starts rewriting the pipeline has misread its scope.
+
+### Measure before wiring (operator premise under test)
+
+The proposal rests on "importing and analyzing cost is not too much, acceptable for daily operation."
+That is plausible for incremental import and is probably right — but it is unmeasured, and this repo
+has a specific scar from assuming import behaviour: the 2026-08-10 backfill ran old code for ~83 s
+because a stale global `spur` shadowed the monorepo build, which is why AGENTS.md now mandates a
+provenance header on every import invocation.
+
+So task R1 is a measurement, and it **gates the design of the rest**: a sub-second refresh can fire
+liberally; a multi-second one is background-only with a wide coalescing window. Do not wire the
+trigger before the number exists.
+
+### Off the hot path is a project principle, not a preference
+
+`docs/99_PROJECT_CONSTITUTION.md` and AGENTS.md both require deterministic behaviour over hidden
+automation, and task 0436 R2 caps `spur-check` at twice per task because the verification loop is
+already the dominant per-task cost. An inline import on every operation would compound exactly that.
+The embedded job queue and scheduler (feature A2) is the mechanism: enqueue, coalesce, drain.
+
+### Known coverage limits
+
+Full fidelity: claude, codex, pi, omp, agy, grok. Unsupported by operator ruling 2026-08-06: gemini,
+opencode, antigravity-ide, openclaw, hermes. A refresh must say so (R5) rather than imply it captured
+everything.
+
+### Relationship to E2 and to batch 2
+
+- **E2** is the consumer this unblocks — derived variables, execution graph, issue detection,
+  forensics report. Its four charting tickets (0489–0492) are done and its implementation is
+  proposed as batch 4.
+- **Task 0547** (batch 2) joins tokens to roles over `run_id` and reports *unmeasured* when history
+  is stale. This feature is what makes those numbers real.
+## History
