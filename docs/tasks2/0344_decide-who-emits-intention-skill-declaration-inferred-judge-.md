@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "routing", "determinism"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.129Z"
-updated_at: "2026-07-27T04:09:03.358Z"
+updated_at: "2026-08-14T01:22:10.073Z"
 ---
 
 ## 0344. Decide who emits intention: skill declaration, inferred judge, or hybrid
@@ -164,6 +164,17 @@ and resolve via the intention's `default_tier` from `intentions.md`. Not a hard 
 - `utility` granularity **kept** as a single `cheap` intention. Split to a `standard`-tier `author` only if dogfooding shows quality regressions on rule/workflow authoring under cheap-tier models.
 
 **Verify fix-pass (2026-07-26, `--fix all`).** Cleared D2 dual-listing of `sp:code-testing` (was both "must include" and "need not include"). Multi-intention vs single-intention rule is now exclusive. Minor prose: "two new intentions cover 21 stage-less" → "two new intentions plus adoption of existing intentions cover the 21 stage-less commands."
+
+---
+
+**Superseded 2026-08-13 by task 0535 (§ feature B2, operator ruling).** The eight-intention
+vocabulary above collapses to **four roles — `scribe` / `coder` / `reviewer` / `planner`**, one
+per tier, because the eight intentions carried only four distinct stage floors (`plan` capable-2;
+`verify`/`dogfood` capable-1; `changelog` cheap; everything else standard) — four names had no
+routing consequence. The Layer-1 table now lives at `plugins/sp/references/roles.md` (this
+decision named `plugins/sp/references/intentions.md`; that path was never built). `--agent` becomes
+the role selector; the Layer-2 tier→executor mapping stays operator-owned in `.spur/config.yaml`.
+This note is an append; the D1–D8 decision above remains the recorded 2026-07-26 decision.
 ### Testing
 **Verdict: PASS** (re-audit 2026-07-26, `/sp:dev-verify 0344 --force --fix all --focus all --next`)
 
