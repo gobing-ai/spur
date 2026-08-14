@@ -75,4 +75,12 @@ Source: `spur task show 0532 --json` (status `done`, feature_id `G2`) + `.spur/r
 
 Source: `spur task show 0534 --json` (status `done`, `feature_id: null`) + task file line 266 (`Verdict: PASS`).{"wbs":"0541","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T00:42:30Z"}
 
-Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0541 --json` (status `done`, feature_id `B2`) + task verify verdict `PASS`.
+Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0541 --json` (status `done`, feature_id `B2`) + task verify verdict `PASS`.```jsonl
+{"wbs":"0535","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T01:35:58.010Z"}
+{"wbs":"0536","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T02:51:39.574Z"}
+{"wbs":"0537","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T02:05:20.287Z"}
+{"wbs":"0538","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T04:10:25.933Z"}
+{"wbs":"0542","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T03:37:21.133Z"}
+```
+
+Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{wbs}-verdict.json` files (all PASS); timestamp from each task's `frontmatter.updated_at`.

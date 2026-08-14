@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.31.0
+version: 1.32.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-14
@@ -827,7 +827,7 @@ bootstrap:
   scheduler:
     enabled: false # CLI is run-once; no scheduler
 agent:
-  default: omp # executor selector first, then legacy agent name
+  default: coder # default role for `--agent auto` when nothing is declared (0542 R2 — role domain; legacy executor names warn once under shim agent-default-executor)
   executors: # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
     - name: omp
       agent: omp

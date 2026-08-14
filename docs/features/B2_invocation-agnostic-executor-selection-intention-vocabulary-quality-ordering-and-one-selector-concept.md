@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B2"
 name: "Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept"
-status: active
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-27T01:24:47.771Z"
-updated_at: "2026-08-14T00:37:34.394Z"
+updated_at: "2026-08-14T04:38:38.182Z"
 ---
 
 # B2: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept
@@ -384,3 +384,5 @@ questions arising during implementation go here first — never into a task file
   migration ticket so the audit is informed by what the migration exposes.
 ## History
 - 2026-08-14T00:37:34.394Z backlog → active (system)
+- 2026-08-14T04:37:03.765Z active → verifying (system)
+- 2026-08-14T04:38:38.182Z verifying → done (system)

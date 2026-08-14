@@ -398,3 +398,62 @@ Appended to `.spur/run/wrapup-learnings.md` after the 0534 entry. Verified in fi
 - **Report the two violation directions distinctly, and assert the distinction.** A stale entry fails as "stale manifest entry gone", never "unregistered" — the tests assert the absent word so the directions can't be conflated. Duplicate marker ids in two files are reported once, naming both.
 - **Accepted noise, by design:** an invalid entry (missing field) whose marker still exists in source also reports as unregistered (P4 double-report — the actionable message is the incomplete-field one); the manifest `file` field is recorded info, not validated against the scan — the two-sided marker scan is the enforcement, the field is worklist findability (P4).
 - **Gates wire into the existing quality chain, not a new opt-in step.** `transition-shim-check` appended to `spur-check`, `spur-check-new`, and both `:full` mirrors (`package.json:78-88`); no new CLI noun/verb (ADR-051) — a check script, not a `spur` surface.
+Captured to `.spur/run/wrapup-learnings.md` (appended after 0541 entry; verified in file). Extracted from task files 0535/0536/0537/0538/0542 — all done 2026-08-14, feature B2 role-routing batch.
+
+## 2026-08-14 — task 0535 (Layer-1 role-to-tier table)
+
+- **Right-size the vocabulary by selection consequence, not by name count.** 0344 proposed eight intentions; checked against the stage registry they carried only four distinct tier floors — four names had zero routing difference. Collapsed to four roles, one per tier. The role→tier one-to-one property is self-checking: a proposed fifth role must bring a fifth tier, otherwise it is a synonym.
+- **Fold when tiers agree, keep when they differ.** `tester` folded into `coder` because `test` and `implement` share `min_tier: standard` — same eligible executor set; test-writer-vs-implementer is a *prompting* difference the skill carries, not a selection difference. Reopen only with a concrete model strong at one and weak at the other.
+- **Naming is a decision, record it.** `utility` → `scribe` (other roles name people; work is mostly derived text). `rule-scan` under `reviewer`, not `scribe`: analysis, not transcription.
+- **Supersede, do not rewrite (corpus discipline).** Task 0344 kept its recorded D1–D8; an appended superseding note points at this task. The record of what was decided when is the corpus's value.
+- **Consistency is a test, not a convention.** `roles.test.ts` parses the YAML and asserts every invariant against the live command directory and the real registry — without it the file becomes the seventh place tier facts drift.
+- **The live directory is the authority, not the decided table.** The decided 31-command list was wrong: the directory held 37. Placed the six extras by the same stage logic and documented the placement; the design itself declared the directory authoritative.
+- **The plugin cannot import `@gobing-ai/spur-domain`** — read the registry as text (regex over `schema.ts`), the same discipline as `stage-registry-parity.test.ts`.
+- **Word-boundary match vendor strings** so `resolve` ≠ vendor `sol`; take the first yaml fence — safe while the file carries exactly one.
+
+## 2026-08-14 — task 0536 (--agent takes a role; extractPhase retired)
+
+- **Extend the resolution funnel, never fork it.** `resolveExecutorSelector` gained a `'role'` branch; a parallel selector path is the defect class feature B2 exists to close — two selectors that can disagree.
+- **Never hardcode the role ids in TypeScript.** Parse them from `roles.md`; a second copy of the list is exactly how the tier prose drifted originally. (Exception that stayed: `AGENT_ROLE_NAMES` in config — test-guarded by a parity test, so it cannot drift; documented as acceptable.)
+- **Roles and executor names coexist in one flag only because the collision guard proves the namespaces disjoint.** Match role-first — a closed four-value vocabulary makes a hit unambiguous.
+- **A pin is permanent, a shim is transitional.** Explicit executor name = permanent escape hatch, no deprecation warning, load-bearing for workflow pins. Bare coding-agent binary name = registered transition shim with an objectively checkable removal condition; the two-sided shim gate tracks its removal. Warn once (`warnDeprecationOnce` pattern) so a retry loop cannot spam.
+- **Reject at the flag boundary before any spawn**, naming both accepted sets; unknown value exits non-zero and spawns nothing.
+- **Delete, don't degrade.** `extractPhase` was removed outright — no regex fallback survives; a caller declaring nothing lands on the default role *visibly*, and the stage door is the explicit `--stage` flag.
+- **Deletion leaves residue — prune on the next touch.** P3 finding: dead `'phase'` union member and `phase?` param after R4 (no call site passes one). No behavior impact; queued for 0542's edit of the same files.
+- **Public CLI surface change needs ADR-051 operator consent recorded** — ADR-033 amended in the same commit (T3) as the surface docs.
+
+## 2026-08-14 — task 0537 (executor binding through spec materialization and drain)
+
+- **Root cause was one dropped field, not a redesign.** The executor name was already correct in config; both hops discarded it. Carry it instead of re-architecting.
+- **Silent downgrades are the bug class to hunt.** On-disk proof: config declares `codex-sol` (capable-3, gpt-5.6-sol), spec stores only `type: codex`, so the run was bare `codex` at the undeclared standard tier — no error, no warning. The regression test asserts a spec materialized from `executor: codex-sol` never runs bare `codex`.
+- **Additive fields over replacements.** `executor` sits *beside* `type` — AiRunner resolves the runner from `type`, and existing on-disk specs carry only it. Pre-existing specs without the field fall back to `type` under a registered shim.
+- **Extend the existing `superRefine`, don't add a second validation pass.** The collision guard grew in the schema's existing member-id-uniqueness check.
+- **The namespace guard is three-way** (role × executor × spec id) — roles arrived with 0535, making the original two-way framing incomplete. Each failure message names both colliding names.
+- **Ordering inside a rewrite is a contract.** `spec-id` is set *before* the drain selector rewrite because the flag must survive an empty inbox — `runAgentLoop` depends on it. Never move it.
+- **Fail loud on a dangling reference.** Inject `isCanonicalAgent` so `resolveExecutor` throws on an executor absent from config rather than silently returning a bare binary — the exact downgrade the task removes.
+- **Keep the bare-string member shorthand** (`- claude` → `{executor}`); `normalizeMember` is its contract.
+- **A lockstep ts-libs bump rides outside the task's backticked allowlist** — the pipeline `requireDiff` scope guard needs `implementScopeGuard: off`, or the bump ships as its own chore commit first.
+- **Unreachable guard code and overstated counts get flagged.** P4: composed-id↔role check can never fire (composed ids always carry a `teamId-` prefix); the Solution said "5 collision cases" but the test implements 4.
+
+## 2026-08-14 — task 0538 (declare role across commands, workflows, team members)
+
+- **Deletion is the deliverable, not a tidy-up.** The hand-restated tier prose existed only because Layer 1 had no file; once it does, it is a duplicate source that can drift. Removing it is the point — and it is how you verify the declaration half was total: a grep for tier literals returning only `roles.md` pointers is the completeness proof.
+- **Migration-scoped by ruling.** Touch what the intention layer forces and nothing else; the broad `plugins/sp` defect audit is a sibling feature sequenced *after* so it inventories the post-migration tree.
+- **Never invent the mapping.** A command's role is read from its `roles.md` row; a command missing from the table is a 0535 defect to route back, not a judgment call. Command count is 37, not the charting-era 31.
+- **Pins beat role routing permanently — `role:` declares the reason, not the executor.** Workflow steps keep their `agent:` pin (a misconfigured box must not capture the run); removing a pin later routes correctly instead of falling to the default role.
+- **Preserve real behaviour when re-expressing.** The size→tier rule encodes something real (a large task on a sub-`capable-1` executor burns budget without failing fast) — it must survive as a rule that *reads its floor from Layer 1*, not restate `capable-1` inline.
+- **Enforce, don't convene.** Extend the existing `roles.test.ts` rather than creating a new test file; a command added without `role:` fails the suite naming the file.
+- **Don't split a self-verifying task.** The deletion half verifies the declaration half, so splitting would leave the delete side unable to tell whether coverage was total — run it on a capable-1+ executor instead of slicing.
+- **30-min subprocess timeout hit again** (omp-deepseek on a multi-surface task): implement completed inline per the timed-out-implement runbook; full gate still PASS (5042 tests).
+- **The tier-literal scan excludes the test file itself by design** — that carve-out must stay explicit or a future inline literal silently passes.
+
+## 2026-08-14 — task 0542 (--spec flag; agent.default redefined as a role)
+
+- **One flag per concept — and the split is cheapest inside an existing migration.** `--spec` was deferred twice when `--agent` wasn't otherwise changing; redefining `--agent` anyway made the split cost one deprecation window instead of two.
+- **`agent.default` migration is a three-way branch, not a fallback chain.** Known role → new semantics; known executor name → warn once + legacy fallthrough under a registered shim; neither → fail naming both accepted sets. The middle row is the load-bearing one: silently treating a stale executor name as an unknown role routes every undeclared dispatch to the wrong tier with no signal.
+- **A role is not a unique address.** Two members can share a role — the identical multiplicity argument G4 applied to coding-agent kind — so `--spec` takes ids only.
+- **Don't re-flatten what 0537 fixed.** The spec→executor binding must survive the flag move; the occupant record must stay byte-identical. `spec-id` set before any selector rewrite, unchanged.
+- **Process-global warn-once sets are unobservable in a shared test process** — earlier tests pre-warm the once-set, so first-warning assertions need a fresh-process test file (`agent-spec-flag.test.ts`).
+- **Path-literal markers trip the `sp-runtime-path` rule.** The partial implement wrote `config/workflows/` in the shim marker; the convention is the `.spur/workflows/` symlink path. Matches the 0536 marker convention.
+- **Timed-out implement leaves a non-compiling tree — the runbook is: define the missing symbol, fix failure swallowing, then re-run the full gate.** `resolveAgentAuto` was swallowing the R2 exit-2; the inline completion fixed it.
+- **Config migration must be loud, never silent reinterpretation** — every existing config's `agent.default` value changed domain; the warn-and-legacy branch kept this repo's own `omp-dsv4-flash-opencode` working under a shim.

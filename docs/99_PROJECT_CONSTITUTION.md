@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.3.0
+version: 1.3.1
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-06-18T00:00:00.000Z
+updated_at: 2026-08-14T00:00:00.000Z
 ---
 
 # Project Constitution — How to Organize the Project
