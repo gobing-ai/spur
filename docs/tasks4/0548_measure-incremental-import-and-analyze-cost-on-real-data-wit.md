@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Measure incremental import and analyze cost on real data with provenance"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E3
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.539Z"
-updated_at: "2026-08-14T01:38:48.525Z"
+updated_at: "2026-08-14T21:18:22.766Z"
 ---
 
 ## 0548. Measure incremental import and analyze cost on real data with provenance
@@ -159,17 +159,73 @@ recommendation blocks them.
 - [ ] Write the citeable artifact with figures, conditions, and the recommended trigger cadence (R5)
 - [ ] Run `bun run autofix && bun run spur-check` (no product code expected to change)
 ### Solution
+Measurement task — no product code changed. Output is the citeable artifact
+`docs/tasks4/0548-import-cost-measurement.md` (precedent: `docs/tasks2/0347-inventory.md`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `docs/tasks4/0548-import-cost-measurement.md:1-144` — new artifact: provenance header (source-local
+  binary + `@gobing-ai/ts-llm-jsonl-importer@0.4.33`, identical across every measured run), method,
+  R1 steady-state table (per-source 1.5–3.5 s; all-fanout 20.64 s; fixed overhead 0.59 s), R2 analyze
+  (9.17 s / 8.40 s over 1,534,579 records), R4 bounds (maximal empty-DB import 359.1 s / 4,560 files /
+  1,718,277 records; realistic 72 h-idle backlog 334 files / 248,156 lines → 23.17 s, 34 net inserts
+  after ledger dedup), and the R5 recommendation: import background-only, single-flight, 10-minute
+  coalescing window (5-minute floor); analyze decoupled, chained after completed imports.
+- `docs/tasks4/0548_measure-incremental-import-and-analyze-cost-on-real-data-wit.md` — this Solution
+  and Testing section (corpus write via `spur task update`).
 
+Key findings recorded for 0549/0550: steady state is scan-bound not write-bound (24 inserts in
+20.6 s); ledger dedup makes idle-period backlogs near-free (248k re-parsed lines → 34 inserts);
+`--source all` also imports gemini (3,083 records) and opencode (28,149 records) on this machine,
+contradicting the "unsupported sources import nothing" assumption — scoping decision left to the
+operator in 0549.
+
+Plan item "Run `bun run autofix && bun run spur-check`" is intentionally left to the pipeline's test
+hop (implement-scope rule: the full project gate is never run from inside implement; no product code
+changed, so the gate has nothing new to evaluate).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/tasks4/0548-import-cost-measurement.md:40-55` — steady-state per-source wall figures (claude 2.13 s, codex 1.50 s, pi 1.60 s, omp 3.51 s, agy 2.11 s, grok 3.02 s; re-read this run), six-run sum 13.87 s (sum re-computed ✓), `--source all` fan-out 20.64 s / 4,593 files / 24 new records, fixed overhead 0.59 s isolated via `--source openclaw` |
+| R2 | MET | `docs/tasks4/0548-import-cost-measurement.md:57-65` — analyze timed in a separate process, never bundled with import: 9.17 s / 8.40 s over 1,534,579 records · 215,304 tool calls |
+| R3 | MET | `docs/tasks4/0548-import-cost-measurement.md:7-21` — Provenance section: source-local binary path + `@gobing-ai/ts-llm-jsonl-importer@0.4.33`, every run `--json`. Independently verified this run: fresh dry-run `bun run apps/cli/src/index.ts history import --source pi --file <small> --mode force-file --dry-run --json` printed `provenance: {binary: …/apps/cli/src/index.ts, importer: "0.4.33"}`; `apps/cli/src/commands/history.ts:118-122` embeds `provenance` in the JSON payload (`resolveImportProvenance` at `history.ts:25-38`); installed `node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json` reads `"version": "0.4.33"` |
+| R4 | MET | `docs/tasks4/0548-import-cost-measurement.md:67-93` — both bounds with backlog size stated: (a) maximal empty-DB 359.1 s / 4,560 files / 1,718,277 records (sums re-computed ✓); (b) realistic 72 h-idle 334 files / 248,156 lines (pi 57 + claude 11 + codex 23 + omp 144 + grok 99 + agy 0 = 334 ✓) → 23.17 s / 34 net inserts; ledger-dedup mechanism verified at `node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js:65` (`record_hash TEXT PRIMARY KEY`) and `:134` (`SELECT record_hash FROM history_import_ledger`) |
+| R5 | MET | `docs/tasks4/0548-import-cost-measurement.md:121-144` — "Design consequence (R5)": import background-only + single-flight + 10-minute coalescing window (5-min floor; duty 20.64/600 ≈ 3.4 % ✓), analyze decoupled and chained after completed imports; scope recommendation (six full-fidelity sources) derived from named figures (13.9 s vs 20.6 s) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — The cost of an incremental refresh is measured before it is wired | MET | command | Fresh dry-run this turn (`bun run apps/cli/src/index.ts history import … --dry-run --json`) shows elapsed-run provenance field (`binary:` + `importer: 0.4.33`); artifact `docs/tasks4/0548-import-cost-measurement.md:7-21` records binary + importer version for every measured figure; `git status` confirms the diff is docs-only — no trigger wiring exists |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Review verdict: PASS** — all five requirements MET, the Gherkin AC MET, no P1–P3 findings. Diff scope (re-derived this run): `docs/tasks4/0548-import-cost-measurement.md` (new, 144 lines — the task's entire deliverable) + this task file's Solution/Testing. No product code changed (`git status`: docs-only), matching the task Design ("measurement task, no product code changes").
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | advisory | `docs/tasks4/0548-import-cost-measurement.md:40-55` | Each import condition measured once (n=1); only analyze has two samples (9.17/8.40 s → ~9 % spread). Conclusions carry ≥10× margins (0.59 s fixed floor vs 13.9–20.6 s fan-out), so n=1 does not threaten the R5 recommendation — but 0549 should not quote per-source figures as more precise than run-to-run variance. |
+| P4 | advisory | `docs/tasks4/0548-import-cost-measurement.md:40-93` | File counts drift ±1 between tables (agy 184 in corpus/R4 vs 185 in R1; six-sum 4,561 + gemini 32 + opencode 1 = 4,594 vs all-fanout 4,593) — consistent with a live corpus being written during the 10-minute window; no conclusion affected. |
+| P4 | advisory | `docs/tasks4/0548-import-cost-measurement.md:111-119` | `--source all` imports gemini (3,083 records) and opencode (28,149 records) on this machine, contradicting the 2026-08-06 "unsupported sources import nothing" assumption. Correctly surfaced and deferred to the operator/0549 rather than decided here — 0549 R4 must resolve the six-vs-all scoping before picking its window arithmetic (13.9 s vs 20.6 s). |
 
+**Functional traceability** (every anchor re-read this run):
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/tasks4/0548-import-cost-measurement.md:40-55` — steady-state per-source wall figures (1.50–3.51 s), six-run sum 13.87 s, all-fanout 20.64 s, files-scanned and new-record columns, fixed-overhead isolation (0.59 s via `--source openclaw`) |
+| R2 | MET | `docs/tasks4/0548-import-cost-measurement.md:57-64` — analyze timed separately (9.17 s / 8.40 s, 1,534,579 records), separate process, explicitly never bundled with import |
+| R3 | MET | `docs/tasks4/0548-import-cost-measurement.md:7-21` — Provenance section: source-local binary path + `@gobing-ai/ts-llm-jsonl-importer@0.4.33`, states every run used `--json`. Independently verified: `apps/cli/src/commands/history.ts:118-122` embeds `provenance` in the JSON payload, and installed `node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json` reads `"version": "0.4.33"` |
+| R4 | MET | `docs/tasks4/0548-import-cost-measurement.md:67-93` — both bounds with backlog size stated: maximal empty-DB 359.1 s / 4,560 files / 1,718,277 records; realistic 72 h-idle 334 files / 248,156 lines → 23.17 s / 34 net inserts |
+| R5 | MET | `docs/tasks4/0548-import-cost-measurement.md:121-144` — "Design consequence (R5)": import background-only + single-flight + 10-min coalescing window (5-min floor); analyze decoupled, chained after completed imports; each choice derived from a named figure |
+
+**AC — Gherkin "R1 — cost measured with provenance before wiring":** MET. Elapsed + provenance recorded together (`:7-21` applies to every figure); binary and importer version stated; no trigger wiring exists in the diff.
+
+**Arithmetic re-checked this run:** six-run sum 13.87 s ✓; maximal total 359.1 s ✓; records 1,718,277 ✓; backlog per-source file counts sum to 334 ✓; duty cycle 21/600 ≈ 3.4 % ✓. Ledger-dedup claim mechanically verified: `node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js:134` (`SELECT record_hash FROM history_import_ledger`) and `:65` (`record_hash TEXT PRIMARY KEY`); the `--source` surface lists exactly ten sources at `apps/cli/src/commands/history.ts:54`, matching the artifact's "ten sources".
+
+**Design conformance:** DONE — no product code (as designed); CHANGED (documented) — "prefer `--dry-run`" superseded by real writes, stated in Method (`:33` "All imports were real writes (no `--dry-run`)"), consistent with the Q&A deferral ("if it differs materially, measure a real write and say so"). Plan item `bun run autofix && bun run spur-check` deferred to the pipeline test hop per implement-scope rules — documented in Solution; nothing for the gate to evaluate (no product code).
+
+**SECUA / architecture:** N/A — documentation-only diff; no code surface, no modules in scope. No secrets in the artifact (machine paths already repo-conventional).
+
+**Residual risk:** raw run JSON/time files under `/tmp/0548/` were removed after transcription (F5 housekeeping), so the figures are auditable through this artifact, not the raw payloads. Acceptable for a measurement task; downstream consumers (0549/0550) cite the artifact. Re-measuring any figure costs one command with the provenance header.
 ### References
 - **Provenance mandate:** `AGENTS.md` § *Build & repo commands* — "Real-data history validation must
   use a source-local binary (task 0504 R4)"; every `spur history import` prints `binary:` plus the
@@ -185,3 +241,6 @@ recommendation blocks them.
 - **Artifact precedent:** `docs/tasks2/0347-inventory.md`
 - **Downstream consumers:** tasks 0549 and 0550, whose design depends on this number
 ### History
+- 2026-08-14T20:07:45.711Z todo → wip (system)
+- 2026-08-14T21:18:21.639Z wip → testing (system)
+- 2026-08-14T21:18:22.766Z testing → done (system)
