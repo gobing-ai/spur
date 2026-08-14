@@ -30,12 +30,7 @@ export {
     toolRollup,
 } from './forensic-query';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
-export {
-    type ExtractedTokens,
-    extractClaudeTokens,
-    queryEtlRecords,
-    SOURCE_TABLES,
-} from './query';
+export { type ExtractedTokens, extractClaudeTokens } from './query';
 export {
     ArtifactVersionError,
     artifactToSummary,
@@ -47,14 +42,17 @@ export {
     stalenessBanner,
 } from './render-report';
 export {
+    type RetroCorrelationReport,
+    type RetroCorrelationWindow,
+    RetroCorrelator,
+} from './retro-correlation';
+export {
     type ActionCost,
+    type ActionCostAttribution,
     type ActionRunCostRow,
     actionCost,
     actionCostEstimated,
-    type EtlMatch,
-    extractSessionId,
-    loadAllEtlPayloads,
-    matchEtlForAction,
-    matchEtlPayloads,
+    attributeActionCost,
+    foldTotals,
 } from './run-cost';
 export type { AnalyticsSummary, CostRecord, EtlPayload, ModelPricing, TokenTotals } from './types';

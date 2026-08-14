@@ -311,8 +311,26 @@ import-all → analyze → write artifact → prune reports older than 90 days. 
 external launchd plist (`com.gobing-ai.spur.history.daily.plist`), not an embedded scheduler. The
 history system emits `history.*` events to the event ledger for observability.
 
-**Analytics** (`packages/domain/src/analytics`) reads the ETL tables, estimates tokens/cost per
-model, and aggregates by source/model/day — a domain consumer, not part of the generic importer.
+**Analytics** (`packages/domain/src/analytics`) is a domain consumer, not part of the generic
+importer. The analyze rollup estimates per-model cost for the artifact from `history_message` /
+`history_tool_call` (ADR-049). The workflow-trace cost path (ADR-060) joins the run→session
+mapping to `history_message`'s typed token columns — exact and estimated figures folded apart,
+never priced; the ETL `CostRecord` read path is retired on the read side.
+
+**Run→session correlation (E6, ADR-059).** Every DB-backed `spur agent run` watermarks the
+agent's session root before dispatch and resolves the produced session after exit
+(`RunSessionObserver`, `packages/app/src/services/run-session-observer.ts`), writing an `exact`
+mapping row to `history_run_session` (`observed`, or `supplied` when `--session-id` is given).
+Resolution is conservative by contract: zero candidates, multiple candidates, a concurrent
+same-agent overlap, or an unreadable root records `unresolved` with a NULL `session_id` — never
+an exact row with a guessed session, and never a run failure. Imported history predating
+observation is correlated retroactively by `(source, cwd, ts)` span against `system_events`
+run windows (`RetroCorrelator`, `packages/domain/src/analytics/retro-correlation.ts`), writing
+`estimated`/`inferred` rows — the DAO write path blocks shadowing an `exact` row and duplicate
+`estimated` rows, so re-runs are idempotent and observation always wins. The mapping is the
+provenance authority: `history_message.provenance` (`spur-run` vs `ambient`) is aligned to it
+after import (`RunSessionDao.alignMessageProvenance`), replacing the cwd-substring
+`detectProvenance` heuristic deleted in `@gobing-ai/ts-llm-jsonl-importer@0.4.33`.
 
 ## 8. Data & Storage (ADR-007/008)
 
@@ -328,8 +346,9 @@ model, and aggregates by source/model/day — a domain consumer, not part of the
 Schema is composed from package-owned SQL and applied through the `__spur_cli_migrations` journal
 (`0000` foundation + incremental `_spur_cli_`-marked migrations). Tables: `workspaces`, `runs`,
 `phase_runs`, `transition_runs`, `workflow_states`, `artifacts`, `history_import_ledger`,
-`history_import_checkpoint`, `history_etl_<source>`, `inbox_messages`, `rule_runs`,
-`rule_eval_runs`, plus the workflow engine's tables.
+`history_import_checkpoint`, `history_etl_<source>`, `history_run_session` (E6 run→session
+mapping, ADR-059), `inbox_messages`, `rule_runs`, `rule_eval_runs`, plus the workflow engine's
+tables.
 
 ### 8.1 Persistence boundary (ADR-011)
 
@@ -719,11 +738,11 @@ Shapes: `04 §2.5`; `config/transition-shims.json`.
 
 ## 19. Agent Executor Selection — Two-Layer Contract (feature B2, tasks 0535–0542)
 
-Executor selection is a two-layer contract. **Layer 1** maps *role → tier* and is owned by the `sp`
+Executor selection is a two-layer contract. **Layer 1** maps _role → tier_ and is owned by the `sp`
 plugin: `plugins/sp/references/roles.md` (task 0535) declares four roles — `scribe`·cheap,
 `coder`·standard, `reviewer`·capable-1, `planner`·capable-2 — with a closed command→role mapping
 over `plugins/sp/commands/`, asserted by `plugins/sp/tests/roles.test.ts`. Layer 1 never names an
-executor, model, or vendor. **Layer 2** maps *tier → executor* and is owned by the operator in
+executor, model, or vendor. **Layer 2** maps _tier → executor_ and is owned by the operator in
 `.spur/config.yaml` (`agent.executors` entries carrying a `tier` field). `packages/config` exposes
 the four-id `AGENT_ROLE_NAMES` literal; the CLI parses `roles.md` at the boundary (`context.ts`,
 0536 R1) so `--agent <role>` resolves before any spawn.

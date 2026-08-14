@@ -1,172 +1,137 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { cacheHitRatio, computeRecordCost } from './costs';
-import { extractClaudeTokens, SOURCE_TABLES } from './query';
-import type { CostRecord, EtlPayload, TokenTotals } from './types';
+import { RunSessionDao } from '../dao/run-session-dao';
+import { cacheHitRatio } from './costs';
+import type { CostRecord, TokenTotals } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** Minimal `action_runs` row shape needed for the ETL join. */
+/** Minimal `action_runs` row shape needed for the session-mapping join. */
 export interface ActionRunCostRow {
     id: string;
     kind: string;
     started_at: string | null;
     completed_at: string | null;
-    /** `result_json` column — engine-persisted `ActionResult.data` blob carrying invocation details. */
-    result_json: string | null;
 }
 
-/** Per-action cost computed from matched ETL records. */
+/** Per-action cost computed from mapped history_message token columns. */
 export interface ActionCost {
-    /** Aggregated token + cost totals across all matched records. */
+    /** Aggregated token totals across all matched history_message rows. */
     totals: TokenTotals;
     /** Cache-hit ratio in [0,1], or null when unavailable (0281/0284 invariant). */
     cacheHit: number | null;
-    /** True when the join used the heuristic R1b path (costs are estimates). */
-    estimated: boolean;
-}
-
-/** Zero-value {@link ActionCost} for unjoinable steps. */
-const UNAVAILABLE: ActionCost = Object.freeze({
-    totals: {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        costUsd: 0,
-        records: 0,
-        recordsWithUsage: 0,
-        messages: 0,
-        toolCalls: 0,
-        durationMs: 0,
-        durationUnmeasured: 0,
-    },
-    cacheHit: null,
-    estimated: false,
-});
-
-// ---------------------------------------------------------------------------
-// Session-id extraction (R1a infrastructure)
-// ---------------------------------------------------------------------------
-
-/**
- * Pull the agent session/conversation id from an action's `result_json`.
- * Returns `undefined` when no session id was captured (common — most agents
- * don't expose one through the current runner seam), falling through to R1b.
- */
-export function extractSessionId(action: ActionRunCostRow): string | undefined {
-    if (!action.result_json) return undefined;
-    try {
-        const parsed = JSON.parse(action.result_json);
-        const sid = (parsed as Record<string, unknown>)?.invocation as Record<string, unknown> | undefined;
-        return typeof sid?.sessionId === 'string' ? sid.sessionId : undefined;
-    } catch {
-        return undefined;
-    }
-}
-
-/**
- * Extract the resolved agent name and model from an action's `result_json`.
- * Used by R1b to narrow the time-window join to matching agent/model pairs.
- */
-function extractAgentModel(action: ActionRunCostRow): { agent: string | undefined; model: string | undefined } {
-    if (!action.result_json) return { agent: undefined, model: undefined };
-    try {
-        const parsed = JSON.parse(action.result_json);
-        const inv = (parsed as Record<string, unknown>)?.invocation as Record<string, unknown> | undefined;
-        return {
-            agent: typeof inv?.agent === 'string' ? inv.agent : undefined,
-            model: typeof inv?.model === 'string' ? inv.model : undefined,
-        };
-    } catch {
-        return { agent: undefined, model: undefined };
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ETL matching
-// ---------------------------------------------------------------------------
-
-/** A matched-record set plus whether the R1b heuristic (not an exact session-id join) produced it. */
-export interface EtlMatch {
-    /** ETL payloads attributed to the action. */
-    records: readonly EtlPayload[];
-    /** True when the R1b time-window heuristic was used (no session id) — costs are estimates. */
+    /** True when the figures came from estimated (retroactive) run→session mappings. */
     estimated: boolean;
 }
 
 /**
- * Load every imported ETL payload across all source tables once.
+ * Cost attribution for one workflow action, split by mapping exactness (R2).
+ * Exact and estimated figures are never summed into one number — the operator
+ * can only weigh an estimated total if it is reported apart from an observed one.
+ */
+export interface ActionCostAttribution {
+    /** Figures from `exact` run→session mappings (task 0557 observed/supplied). */
+    exact: ActionCost | null;
+    /** Figures from `estimated` mappings (task 0558 retroactive correlation). */
+    estimated: ActionCost | null;
+}
+
+// ---------------------------------------------------------------------------
+// Attribution (R1: history_message typed columns via the run→session mapping)
+// ---------------------------------------------------------------------------
+
+/**
+ * Attribute token usage to a workflow action from `history_message`'s typed
+ * token columns, joined through the `history_run_session` mapping (feature E6):
+ * the action's run id → mapped (source, session_id) pairs → their message rows.
  *
- * Split out from matching so a caller iterating many actions (e.g. a trace with
- * several `agent.run` steps) pays the table scan a single time and matches each
- * action in memory, instead of re-scanning every table per action. Absent tables
- * and unparseable rows are skipped (best-effort, like the rest of the trace path).
+ * Exact and estimated mappings are folded separately and returned apart (R2);
+ * a class with no mappings or no matching rows is `null`. Absent tables read as
+ * empty (unmigrated DB / missing history plane), never throw — best-effort like
+ * the rest of the trace path. No dollar figure is computed anywhere (R3):
+ * `history_message.cost_usd` and the pricing tables stay unread.
+ *
+ * `ponytail:` figures are narrowed to the action's [started_at, completed_at]
+ * window when both bounds exist; a bound-less action takes the whole mapped
+ * session. Per-message attribution inside a shared session (multi-step
+ * workflows resuming one session) would need per-message run stamps — add when
+ * a step-level breakdown is requested.
  */
-export async function loadAllEtlPayloads(db: DbAdapter): Promise<readonly EtlPayload[]> {
-    const payloads: EtlPayload[] = [];
-    for (const table of SOURCE_TABLES) {
-        let rows: Array<{ payload_json: string }>;
+export async function attributeActionCost(
+    db: DbAdapter,
+    runId: string,
+    action: ActionRunCostRow,
+): Promise<ActionCostAttribution> {
+    const mappings = await new RunSessionDao(db).getByRunId(runId);
+    const [exact, estimated] = await Promise.all([
+        foldMappedSessions(db, mappings, action, 'exact'),
+        foldMappedSessions(db, mappings, action, 'estimated'),
+    ]);
+    return {
+        exact: exact === null ? null : actionCost(exact),
+        estimated: estimated === null ? null : actionCostEstimated(estimated),
+    };
+}
+
+/** Fold the typed token columns of every mapped session of one exactness class. */
+async function foldMappedSessions(
+    db: DbAdapter,
+    mappings: readonly { source: string; session_id: string | null; exactness: string }[],
+    action: ActionRunCostRow,
+    exactness: 'exact' | 'estimated',
+): Promise<TokenTotals | null> {
+    const mapped = mappings.filter((m) => m.session_id !== null && m.exactness === exactness);
+    if (mapped.length === 0) return null;
+
+    const totals = emptyTotals();
+    let matchedAny = false;
+    for (const m of mapped) {
+        const windowed = action.started_at !== null && action.completed_at !== null ? 'AND ts >= ? AND ts <= ?' : '';
+        const params: unknown[] = [m.source, m.session_id];
+        if (windowed !== '') params.push(action.started_at, action.completed_at);
+        let row: MessageTokenRow | undefined;
         try {
-            rows = await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${table}`);
-        } catch {
-            continue; // Table doesn't exist yet — skip
+            row = await db.queryFirst<MessageTokenRow>(
+                `SELECT COUNT(*) AS records,
+                        SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END)
+                            AS recordsWithUsage,
+                        COALESCE(SUM(input_tokens), 0) AS inputTokens,
+                        COALESCE(SUM(output_tokens), 0) AS outputTokens,
+                        COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens,
+                        COALESCE(SUM(cache_write_tokens), 0) AS cacheWriteTokens
+                 FROM history_message
+                 WHERE source = ? AND session_id = ? ${windowed}`,
+                ...params,
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: history_message')) return null;
+            throw error;
         }
-        for (const row of rows) {
-            try {
-                payloads.push(JSON.parse(row.payload_json) as EtlPayload);
-            } catch {
-                // Skip unparseable rows
-            }
-        }
+        if (row === undefined || row.records === 0) continue;
+        matchedAny = true;
+        totals.records += row.records;
+        totals.recordsWithUsage += row.recordsWithUsage;
+        // The typed `input_tokens` column excludes cache; the billed total is the
+        // sum — the TokenTotals.inputTokens contract ("cache reads and writes
+        // included") and the cache-hit denominator.
+        totals.inputTokens += row.inputTokens + row.cacheReadTokens + row.cacheWriteTokens;
+        totals.outputTokens += row.outputTokens;
+        totals.cacheReadTokens += row.cacheReadTokens;
+        totals.cacheWriteTokens += row.cacheWriteTokens;
+        totals.messages += row.records;
     }
-    return payloads;
+    return matchedAny ? totals : null;
 }
 
-/**
- * Match pre-loaded ETL payloads to a workflow `action_runs` row (pure, no I/O).
- *
- * Prefers an exact join on the agent's session id (R1a, `estimated: false`); falls
- * back to a time-window heuristic limited to matching agent/model pairs (R1b,
- * `estimated: true`). The `estimated` flag *is* the R1a/R1b path, so callers no
- * longer re-parse the action to re-derive it.
- */
-export function matchEtlPayloads(payloads: readonly EtlPayload[], action: ActionRunCostRow): EtlMatch {
-    const sessionId = extractSessionId(action);
-    if (sessionId) {
-        const records = payloads.filter((p) => (p as Record<string, unknown>).sessionId === sessionId);
-        return { records, estimated: false };
-    }
-
-    const { agent, model } = extractAgentModel(action);
-    const startedAt = action.started_at ? new Date(action.started_at).getTime() : 0;
-    const completedAt = action.completed_at ? new Date(action.completed_at).getTime() : Date.now();
-
-    const records = payloads.filter((p) => {
-        const record = p as Record<string, unknown>;
-        const createdAt = new Date(String(record.created_at ?? '')).getTime();
-        if (Number.isNaN(createdAt)) return false;
-        if (createdAt < startedAt || createdAt > completedAt) return false;
-        // Narrow by agent/model when available in invocation data
-        if (agent && record.agent !== agent) return false;
-        if (model && record.model !== model) return false;
-        return true;
-    });
-    return { records, estimated: true };
-}
-
-/**
- * Match imported ETL records to a single workflow `action_runs` row: loads the
- * source tables, then matches. For many actions, prefer {@link loadAllEtlPayloads}
- * once + {@link matchEtlPayloads} per action to avoid re-scanning per action.
- *
- * Prefers an exact join on the agent's session id (R1a); falls back to a
- * time-window heuristic limited to matching agent/model pairs (R1b).
- */
-export async function matchEtlForAction(db: DbAdapter, action: ActionRunCostRow): Promise<EtlMatch> {
-    const payloads = await loadAllEtlPayloads(db);
-    return matchEtlPayloads(payloads, action);
+/** One aggregated history_message token row for a mapped (source, session_id). */
+interface MessageTokenRow {
+    records: number;
+    recordsWithUsage: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,53 +139,30 @@ export async function matchEtlForAction(db: DbAdapter, action: ActionRunCostRow)
 // ---------------------------------------------------------------------------
 
 /**
- * Compute per-action token cost and cache-hit ratio from matched ETL records
- * by feeding them through the existing analytics cost path.
- *
- * Returns a zeroed shape with `cacheHit: null` when no records matched —
- * the caller renders `n/a`, never `$0.00` (0281/0284 invariant).
+ * Build an exact {@link ActionCost} from folded token totals. The caller folds
+ * typed `history_message` columns; no pricing is applied (R3) — `costUsd` stays
+ * 0 and the renderer never emits a currency figure.
  */
-export function actionCost(matchedRecords: readonly EtlPayload[], source: string): ActionCost {
-    if (matchedRecords.length === 0) {
-        return UNAVAILABLE;
-    }
-
-    const costRecords: CostRecord[] = [];
-    for (const payload of matchedRecords) {
-        costRecords.push(computeRecordCost(payloadToCostRecord(payload, source)));
-    }
-
-    const totals = foldTotals(costRecords);
-    const cacheHit = cacheHitRatio(totals);
-
-    return {
-        totals,
-        cacheHit,
-        estimated: false,
-    };
+export function actionCost(totals: TokenTotals): ActionCost {
+    return { totals, cacheHit: cacheHitRatio(totals), estimated: false };
 }
 
 /**
- * Fold priced cost records into a {@link TokenTotals} bucket. The in-memory
- * `aggregateCosts` that used to do this was retired with the analyze SQL cut-over
- * (task 0474, R7); run-cost still needs a small local fold over the bounded set of
- * matched records. The forensic dimensions (`messages`, `toolCalls`, `durationMs`,
- * `durationUnmeasured`) are not derivable from ETL payloads and stay 0 here.
+ * Variant of {@link actionCost} marking the result as estimated (R2): the
+ * figures came from retroactive (task 0558) mappings, never an exact join.
  */
-function foldTotals(records: readonly CostRecord[]): TokenTotals {
-    const totals: TokenTotals = {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        costUsd: 0,
-        records: 0,
-        recordsWithUsage: 0,
-        messages: 0,
-        toolCalls: 0,
-        durationMs: 0,
-        durationUnmeasured: 0,
-    };
+export function actionCostEstimated(totals: TokenTotals): ActionCost {
+    return { totals, cacheHit: cacheHitRatio(totals), estimated: true };
+}
+
+/**
+ * Fold priced cost records into a {@link TokenTotals} bucket. Retained for
+ * dependent consumers (task 0547) and the analyze rollup; run-cost attribution
+ * folds SQL rows directly and never builds intermediate `CostRecord`s (the ETL
+ * path was retired — task 0559, R4).
+ */
+export function foldTotals(records: readonly CostRecord[]): TokenTotals {
+    const totals: TokenTotals = emptyTotals();
     for (const record of records) {
         totals.inputTokens += record.inputTokens;
         totals.outputTokens += record.outputTokens;
@@ -233,34 +175,18 @@ function foldTotals(records: readonly CostRecord[]): TokenTotals {
     return totals;
 }
 
-/**
- * Build a {@link CostRecord} from an ETL payload using the provider `usage` object.
- * Mirrors the retired `etlToCostRecord` without its 4-chars-per-token length estimate
- * (task 0474 R7): an estimate silently entering a cost total is the fabrication the
- * forensic contract exists to end. Absent usage yields zero tokens with
- * `usageReported: false` — the never-fabricate invariant, not a guessed number.
- */
-function payloadToCostRecord(payload: EtlPayload, source: string): CostRecord {
-    const tokens = extractClaudeTokens(payload);
+function emptyTotals(): TokenTotals {
     return {
-        source,
-        date: payload.created_at?.slice(0, 10) ?? 'unknown',
-        model: payload.model ?? 'unknown',
-        inputTokens: tokens.inputTokens,
-        outputTokens: tokens.outputTokens,
-        cacheReadTokens: tokens.cacheReadTokens,
-        cacheCreationTokens: tokens.cacheCreationTokens,
-        usageReported: tokens.usageReported,
-        costUsd: 0, // Filled by cost computation
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+        messages: 0,
+        toolCalls: 0,
+        durationMs: 0,
+        durationUnmeasured: 0,
     };
-}
-
-/**
- * Variant of {@link actionCost} that marks the result as estimated (R1b path).
- * Called when the join used the time-window heuristic rather than an exact
- * session-id match.
- */
-export function actionCostEstimated(matchedRecords: readonly EtlPayload[], source: string): ActionCost {
-    const cost = actionCost(matchedRecords, source);
-    return matchedRecords.length === 0 ? cost : { ...cost, estimated: true };
 }

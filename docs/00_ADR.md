@@ -570,3 +570,34 @@ Accepted (design) → Accepted.
   (ADR-050).
 - **Detail:** `03 §18`; `04 §2.5`; `plugins/sp/scripts/transition-shim-check.ts`; task 0541;
   shims registered by 0536/0537/0538/0542.
+
+## ADR-059: Run→Session Correlation Is the Provenance Authority
+
+**Status:** Accepted · **Date:** 2026-08-14 · **Feature:** E6
+
+**Decision.** Every DB-backed `spur agent run` records its run→session mapping in
+`history_run_session` at the invoke boundary (exact; `observed` or `supplied`), and imported
+history predating observation is correlated retroactively by time window (estimated;
+`inferred`) — an `estimated` row never shadows an `exact` one, and zero/several candidates
+write nothing rather than a guess. Session `provenance` (`spur-run` vs `ambient`) is derived
+from that mapping; the cwd-substring `detectProvenance` heuristic is deleted upstream
+(`@gobing-ai/ts-llm-jsonl-importer@0.4.33`).
+
+**Why.** The heuristic guessed provenance from a path substring; the mapping observes or
+infers it from the run that actually produced the session.
+
+**Detail:** `03 §7`; `04 §3.1` (`history_run_session` row) and `spur agent run`; tasks 0557/0558/0559.
+
+## ADR-060: Trace Cost Joins the Mapping to Typed Token Columns — Never Prices
+
+**Status:** Accepted · **Date:** 2026-08-14 · **Feature:** E6
+
+**Decision.** `spur workflow trace` cost attribution joins the `history_run_session` mapping to
+`history_message`'s typed token columns, folding exact and estimated figures apart and never
+summing them; the ETL `CostRecord` read path is retired on the read side. Tokens are reported,
+never priced — no currency value is computed or emitted.
+
+**Why.** Pricing is a consumer concern (0281/0284 never-fabricate); tokens are the measured
+fact, and mixing observed with inferred figures hides the confidence of each.
+
+**Detail:** `03 §7`; `04` `spur workflow trace`; task 0559.

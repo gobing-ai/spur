@@ -2,6 +2,11 @@
 // Application-services layer extracted from the CLI command files (tasks 0009–0011).
 
 export type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-domain';
+export {
+    type RetroCorrelationReport,
+    type RetroCorrelationWindow,
+    RetroCorrelator,
+} from '@gobing-ai/spur-domain';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
 export {
@@ -233,6 +238,13 @@ export {
     type RuleValidateServiceResult as RuleValidateResult,
     type RuleValidateServiceResult,
 } from './services/rule-service';
+export {
+    AGENT_SESSION_SOURCES,
+    RunSessionObserver,
+    type RunSessionObserverOptions,
+    type RunSessionOverlapRegistry,
+    type RunSessionWatermark,
+} from './services/run-session-observer';
 export type {
     RunStoreAction,
     RunStoreDetail,

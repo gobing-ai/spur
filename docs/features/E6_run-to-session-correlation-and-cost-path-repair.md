@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E6"
 name: "Run-to-session correlation and cost-path repair"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T02:43:12.670Z"
-updated_at: "2026-08-14T02:46:12.481Z"
+updated_at: "2026-08-14T17:26:25.929Z"
 ---
 
 # E6: Run-to-session correlation and cost-path repair
@@ -163,3 +163,6 @@ nothing today. Feature J7 task **0552** renders 0547's output and inherits the b
 cannot manufacture data that was never captured, so those two will correlate but report unmeasured
 tokens. Recorded as a finding here; the mapper investigation belongs to feature E1/E5.
 ## History
+- 2026-08-14T06:04:41.907Z backlog → active (system)
+- 2026-08-14T17:23:28.629Z active → verifying (system)
+- 2026-08-14T17:26:25.929Z verifying → done (system)

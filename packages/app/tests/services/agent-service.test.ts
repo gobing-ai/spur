@@ -1,5 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { applyCliMigrations, type CapabilityTier } from '@gobing-ai/spur-domain';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { applyCliMigrations, type CapabilityTier, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
@@ -10,6 +13,7 @@ import {
     type AgentRunDeps,
     AgentService,
     type AgentServiceOutput,
+    RunSessionObserver,
 } from '../../src/index';
 
 // ---------------------------------------------------------------------------
@@ -2759,5 +2763,120 @@ describe('AgentService coordination (G4 / ADR-057 wave 1)', () => {
         expect(run?.status).toBe('errored');
 
         adapter.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: run→session mapping (feature E6 / task 0557)
+// ---------------------------------------------------------------------------
+
+describe('AgentService run→session mapping (E6 / task 0557)', () => {
+    /** Deps whose runner writes a session file when dispatched (the agent's own write). */
+    function sessionWritingDeps(
+        home: string,
+        sessionFile: string,
+        content: string,
+    ): AgentRunDeps & { runner: { runPromptCommand: ReturnType<typeof mock> } } {
+        const runner = {
+            runPromptCommand: mock(async () => {
+                await Bun.write(join(home, sessionFile), content);
+                return makeRunResult();
+            }),
+        } as unknown as AgentRunDeps['runner'];
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        return { runner, detector, doctorRunner } as unknown as AgentRunDeps & {
+            runner: { runPromptCommand: ReturnType<typeof mock> };
+        };
+    }
+
+    test('R1 — a completed agent run maps its produced session file exactly', async () => {
+        const home = mkdtempSync(join(tmpdir(), 'spur-e6-'));
+        try {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            const svc = new AgentService({
+                cwd: process.cwd(),
+                env: {},
+                output: nullOutput(),
+                getDb: async () => adapter,
+            });
+            const deps = sessionWritingDeps(
+                home,
+                join('.pi', 'agent', 'sessions', '11111111-2222-3333-4444-555555555555.jsonl'),
+                '{"id":"11111111-2222-3333-4444-555555555555","type":"user","message":{"role":"user","content":"hi"}}\n',
+            );
+            deps.sessionObserverFactory = (runId) =>
+                new RunSessionObserver({
+                    runId,
+                    getDb: async () => adapter,
+                    output: nullOutput(),
+                    registry: { active: new Map(), overlapped: new Set() },
+                    home,
+                });
+
+            const exitCode = await svc.run('hello', { agent: 'pi' }, deps);
+            expect(exitCode).toBe(0);
+
+            const dao = new RunSessionDao(adapter);
+            const rows = await dao.getBySession('pi', '11111111-2222-3333-4444-555555555555');
+            expect(rows).toHaveLength(1);
+            const row = rows[0];
+            expect(row?.exactness).toBe('exact');
+            expect(row?.mechanism).toBe('observed');
+            expect(row?.run_id).toBeTruthy();
+            adapter.close();
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    test('R2 — a supplied --session-id yields the mapping without observation', async () => {
+        const home = mkdtempSync(join(tmpdir(), 'spur-e6-'));
+        try {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            const svc = new AgentService({
+                cwd: process.cwd(),
+                env: {},
+                output: nullOutput(),
+                getDb: async () => adapter,
+            });
+            const deps = sessionWritingDeps(
+                home,
+                join('.pi', 'agent', 'sessions', '11111111-2222-3333-4444-555555555555.jsonl'),
+                '{"id":"11111111-2222-3333-4444-555555555555"}\n',
+            );
+            deps.sessionObserverFactory = (runId) =>
+                new RunSessionObserver({
+                    runId,
+                    getDb: async () => adapter,
+                    output: nullOutput(),
+                    registry: { active: new Map(), overlapped: new Set() },
+                    home,
+                });
+
+            // The root does not exist under `home` — observation could not find
+            // anything, yet the supplied id is authoritative and exact.
+            const exitCode = await svc.run('hello', { agent: 'pi', 'session-id': 'supplied-42' }, deps);
+            expect(exitCode).toBe(0);
+
+            const dao = new RunSessionDao(adapter);
+            const rows = await dao.getBySession('pi', 'supplied-42');
+            expect(rows).toHaveLength(1);
+            const row = rows[0];
+            expect(row?.exactness).toBe('exact');
+            expect(row?.mechanism).toBe('supplied');
+            expect(row?.run_id).toBeTruthy();
+            adapter.close();
+        } finally {
+            rmSync(home, { recursive: true, force: true });
+        }
     });
 });

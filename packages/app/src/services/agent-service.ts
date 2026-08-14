@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { isatty } from 'node:tty';
 import {
     type CapabilityTier,
@@ -46,6 +47,7 @@ import {
 } from '../observability/agent-execution';
 import { bridgeEventBus } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
+import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -56,6 +58,12 @@ export interface AgentRunDeps {
     runner?: AiRunner;
     detector?: AgentDetector;
     doctorRunner?: DoctorRunner;
+    /**
+     * Test seam (feature E6): override the run→session observer factory.
+     * Receives the minted run id; default constructs a RunSessionObserver
+     * bound to the service context (DB, output, home, overlap registry).
+     */
+    sessionObserverFactory?: (runId: string) => RunSessionObserver;
 }
 
 /**
@@ -307,6 +315,13 @@ export class PidObservingProcessExecutor extends NodeProcessExecutor {
 /** Application-layer orchestration for `spur agent` commands. */
 export class AgentService {
     private readonly ctx: AgentServiceContext;
+    /**
+     * Shared per-process in-flight session-root registry (feature E6): two
+     * concurrent runs of the same agent in the same root must not both claim
+     * the same session file — the second watermark flags both as overlapping
+     * (R3) and neither writes an exact mapping.
+     */
+    private readonly sessionRootRegistry: RunSessionOverlapRegistry = { active: new Map(), overlapped: new Set() };
 
     constructor(ctx: AgentServiceContext) {
         this.ctx = ctx;
@@ -657,6 +672,8 @@ export class AgentService {
         const tags = parseTagsFlag(flags);
         const systemPrompt = stringFlag(flags, 'system-prompt', '') || undefined;
         const taskId = stringFlag(flags, 'task', '') || undefined;
+        const sessionDir = stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
+        const sessionId = stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
 
         // Lifecycle + signal handlers set up ONCE, shared across all dispatches
         // (0407): a single AgentExecutionLifecycle spans the escalation chain,
@@ -720,6 +737,33 @@ export class AgentService {
         let invocation: AgentRunInvocation | undefined;
         let dispatchStartedAt = Date.now();
 
+        // Run→session observation (feature E6 / task 0557). When a DB is
+        // available, watermark the agent's session root at dispatch and record
+        // the run→session mapping at exit. A supplied session id (R2) skips
+        // observation; resolution never fails the run (R5).
+        const getDb = this.ctx.getDb;
+        let sessionObserver: RunSessionObserver | undefined;
+        if (getDb !== undefined) {
+            const factory =
+                deps?.sessionObserverFactory ??
+                ((runId: string) =>
+                    new RunSessionObserver({
+                        runId,
+                        getDb,
+                        output: this.ctx.output,
+                        registry: this.sessionRootRegistry,
+                        home: homedir(),
+                        cwd: cwd || this.ctx.cwd,
+                        json: jsonOutput,
+                    }));
+            sessionObserver = factory(lifecycle.identity.runId);
+            if (sessionId !== undefined) {
+                sessionObserver.supply(currentAgent, sessionId);
+            } else {
+                await sessionObserver.watermark(currentAgent, sessionDir);
+            }
+        }
+
         try {
             for (let attempt = 0; ; attempt++) {
                 const agent = currentAgent;
@@ -732,11 +776,6 @@ export class AgentService {
                         ? translateSlashCommand(agent, prompt)
                         : undefined;
                 const input = translated ?? prompt;
-
-                const sessionDir =
-                    stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
-                const sessionId =
-                    stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
 
                 const promptOptions: PromptOptions = {
                     input,
@@ -767,6 +806,7 @@ export class AgentService {
                     }
                 } catch (error) {
                     if (attempt === 0) {
+                        await sessionObserver?.resolve();
                         return {
                             ok: false,
                             exitCode: 2,
@@ -815,6 +855,11 @@ export class AgentService {
                     dispatchStartedAt = Date.now();
                 }
 
+                // Watermark the session root right before dispatch (E6): a
+                // cheap timestamp capture; on escalation the agent may change,
+                // so re-watermark when the root does.
+                await sessionObserver?.watermark(agent, sessionDir);
+
                 // Dispatch
                 try {
                     result = await runner.runPromptCommand(agent, promptOptions, {
@@ -834,6 +879,7 @@ export class AgentService {
                                 ? { reason: error instanceof Error ? error.message : String(error) }
                                 : {}),
                         });
+                        await sessionObserver?.resolve();
                         return {
                             ok: false,
                             exitCode: 2,
@@ -937,6 +983,7 @@ export class AgentService {
                 durationMs: Date.now() - dispatchStartedAt,
                 reason: 'no dispatch attempted',
             });
+            await sessionObserver?.resolve();
             return { ok: false, exitCode: 2, message: 'No dispatch attempted' };
         }
 
@@ -946,6 +993,10 @@ export class AgentService {
             ...(result.signal !== undefined ? { signal: result.signal } : {}),
             ...(controller.signal.aborted && result.signal === undefined ? { reason: 'cancelled' } : {}),
         });
+
+        // Record the run→session mapping (E6) after the agent has exited — the
+        // outcome is already decided, so resolution failure cannot affect it (R5).
+        await sessionObserver?.resolve();
 
         return {
             ok: true,

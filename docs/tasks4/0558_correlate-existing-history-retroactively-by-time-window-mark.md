@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Correlate existing history retroactively by time window, marked estimated"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E6
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0557"]
 ac_numbering: task-local
 created_at: "2026-08-14T02:43:13.136Z"
-updated_at: "2026-08-14T02:52:59.865Z"
+updated_at: "2026-08-14T07:21:03.308Z"
 ---
 
 ## 0558. Correlate existing history retroactively by time window, marked estimated
@@ -147,17 +147,55 @@ treat an unbounded window as matching everything after it.
 - [ ] Add tests: known-window match, exact-not-overwritten, ambiguity yields none, idempotent re-run (R1-R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+#### Change map
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+1. `packages/domain/src/migrations.ts:122-146` — `HISTORY_RUN_SESSION_SCHEMA_SQL` composed into `CLI_SCHEMA_SQL` (0000 foundation) and shipped as incremental migration `0012_spur_cli_history_run_session`; the table is shared with task 0557, whose `exact`/`unresolved` rows this task must not disturb (R2). No new DDL needed for `estimated` / `inferred` — they are values in existing `exactness` / `mechanism` columns, extended in the DAO types (R1).
+2. `packages/domain/src/dao/run-session-dao.ts:17-21` — `RunSessionExactness` adds `'estimated'`, `RunSessionMechanism` adds `'inferred'` (R1); `insertInferred()` (new, `:96-131`) enforces both write-path guards: an `exact` row for the run blocks the insert (R2 — a task 0557 boundary observation is authoritative and never shadowed), and an identical `estimated` row for `(run_id, source, session_id)` blocks a duplicate (R4 idempotence). Returns whether a row was written so the correlator can report `mappingsWritten`.
+3. `packages/domain/src/analytics/retro-correlation.ts` (new) — `RetroCorrelator.correlate(window)`: loads run windows from `system_events` `agent.invoke.start`/`agent.invoke.exit` pairs keyed by `run_id` (PREMISE VERIFICATION source; `coordination_runs` holds 0 rows) and history sessions via a `WHERE ts BETWEEN ? AND ? AND run_id IS NULL … GROUP BY source, session_id, cwd` scan (R4 — bounded and indexed). A session whose `(source, min_ts, max_ts)` span intersects exactly one run window is written `estimated`/`inferred`; zero or several intersections write nothing and are counted (R3 — no nearest-neighbour guess); an open window (crash/kill, no exit) is bounded by the correlation window's end, never treated as matching everything after it. Source resolves from the event payload's `agent` field, falling back to the `actor` column; events without a `run_id` are skipped. Missing `system_events`/`history_message` tables degrade to an empty report instead of throwing.
+4. `packages/domain/src/analytics/index.ts:49-53` and `packages/domain/src/index.ts` (`export * from './analytics'`) — export `RetroCorrelator`, `RetroCorrelationWindow`, `RetroCorrelationReport`.
+5. `packages/domain/tests/analytics/retro-correlation.test.ts` (new) — 10 tests covering R1 (known window → estimated mapping), R2 (exact row unchanged, no estimated duplicate), R3 (overlap → zero mappings + ambiguity count; no candidate → counted, not guessed; unresolvable source → noCandidate), R4 (re-run writes no duplicates, scans only the window), R5 (mixed report carries all three counts + window), plus open-window bounding and unmigrated-table tolerance.
+6. `docs/04_DESIGN.md:266-281` (§3.1 table row + `spur agent run` section) — retroactive-correlation paragraph and `history_run_session` row (T3).
 
+Rationale: correlation lives in `packages/domain` (not the app layer) because it is a pure analytics pass over domain tables with no HTTP/transport dependency, matching the `run-cost.ts` analytics precedent; the R2/R4 guards sit in the DAO write path so any future writer inherits them rather than re-deriving the invariant by convention.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/retro-correlation.ts:53-67` — single-candidate session written via `RunSessionDao.insertInferred` with exactness `estimated` / mechanism `inferred` (`packages/domain/src/dao/run-session-dao.ts:134`); test `packages/domain/tests/analytics/retro-correlation.test.ts:59-107` asserts the estimated mapping row. Fresh: `bun test packages/domain/tests/analytics/retro-correlation.test.ts packages/domain/tests/dao/run-session-dao.test.ts` → 17 pass / 0 fail. |
+| R2 | MET | `packages/domain/src/dao/run-session-dao.ts:120-131` — `insertInferred` EXISTS guard skips the write when an `exact` row exists for the run (never overwritten/shadowed); tests `retro-correlation.test.ts:109-135` (exact row unchanged, `mappingsWritten: 0`) and `run-session-dao.test.ts:97-121`. |
+| R3 | MET | `packages/domain/src/analytics/retro-correlation.ts:51,55-69` — zero candidates → `noCandidate`, ≥2 candidates → `ambiguous`; nothing written in either case (no nearest-neighbour); tests `retro-correlation.test.ts:137-214`. |
+| R4 | MET | `packages/domain/src/analytics/retro-correlation.ts:94-99,145-152` — both scans window-bounded (`occurred_at` / `ts BETWEEN … AND run_id IS NULL`), index-backed; `run-session-dao.ts:123-128` duplicate-estimated guard makes re-runs idempotent; test `retro-correlation.test.ts:216-253` (2nd run `mappingsWritten: 0`, out-of-window row unscanned). |
+| R5 | MET | `packages/domain/src/analytics/retro-correlation.ts:70-77` — report carries `correlated` / `ambiguous` / `noCandidate` plus the window; test `retro-correlation.test.ts:255-330` (mixed buckets + window asserted). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R4 — Already-imported history is correlated retroactively and marked estimated (Given history rows imported before correlation existed / When retroactive correlation runs over a bounded window / Then matched rows carry a run id marked estimated / And an exact mapping is never overwritten by an estimated one) | MET | test | `retro-correlation.test.ts:59-107` (matched rows carry `exactness: 'estimated'`, `mechanism: 'inferred'`) + `retro-correlation.test.ts:109-135` (exact mapping untouched, `mappingsWritten: 0`). Both green this run: `bun test …` → 17 pass / 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | Efficiency | `packages/domain/src/analytics/retro-correlation.ts:49-62` | Per-session `runs.filter` is O(sessions × run-windows) in memory; fine at current scale (~202 invoke events → ~100 windows), revisit if run-window counts grow large |
+| P4 | Correctness | `packages/domain/src/dao/run-session-dao.ts:120-127` | R2 guard is conservative: any `exact` row for a run blocks *all* estimated inserts for that run, even a different session; documented intent and asserted by the R2 correlator test — over-blocking direction is deliberate, not a defect |
+| P4 | Architecture | `packages/domain/src/dao/run-session-dao.ts:120-135` | R4 idempotence enforced by SELECT-then-INSERT guard rather than a unique index; correct for sequential re-runs (the asserted R4 case), a unique constraint on `(run_id, source, session_id, exactness)` would harden concurrent runs |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `retro-correlation.ts:53-62` — single-candidate session written via `insertInferred` (exactness `estimated`, mechanism `inferred`, `run-session-dao.ts:134`); test `retro-correlation.test.ts:60-107` asserts the estimated mapping row |
+| R2 | MET | `run-session-dao.ts:120-127` — `exact` row for the run blocks the estimated insert; correlator test `retro-correlation.test.ts:109-135` — exact row unchanged, `mappingsWritten: 0`; DAO test `run-session-dao.test.ts:97-121` |
+| R3 | MET | `retro-correlation.ts:51-60` — zero or ≥2 candidate windows write nothing and are counted (`noCandidate` / `ambiguous`); tests `retro-correlation.test.ts:137-214` (overlap → zero mappings + ambiguity count; no candidate → counted, not guessed) |
+| R4 | MET | `retro-correlation.ts:82,140` — window-bounded queries (`WHERE ts BETWEEN ? AND ? AND run_id IS NULL` / `occurred_at` bounds), index-backed by `idx_history_message_ts` (ts-libs `schema-sql.ts:78`); `run-session-dao.ts:120-127` duplicate guard; re-run test `retro-correlation.test.ts:216-253` (second run `mappingsWritten: 0`, `rowsScanned: 1`) |
+| R5 | MET | `retro-correlation.ts:72-77` — report carries `correlated` / `ambiguous` / `noCandidate` plus the window; mixed-bucket test `retro-correlation.test.ts:255-330` asserts all three counts + window |
 
+**Acceptance Criteria (R4 scenario)** — MET: matched rows carry a run id marked estimated (R1 test) and an exact mapping is never overwritten (R2 test).
+
+**Design conformance** — 8/8 plan items DONE: migration `0012_spur_cli_history_run_session` (`migrations.ts:304`, asserted in `migrations.test.ts:75`); no new DDL for the two enum values (types only, `run-session-dao.ts:22-23`); run windows from `system_events` invoke pairs (`retro-correlation.ts:82-137`); open-window bounded by correlation-window end (`:97-106`, test `:411-445`); unmigrated-table tolerance (`:84-87,146-150`, test `:332-348`); source from payload `agent` with actor fallback (`:158-166`, test `:350-409`); exports (`analytics/index.ts:49-54`); `docs/04_DESIGN.md` §3.1 row + retroactive-correlation paragraph (T3, same working tree).
+
+**Validation (this run):** `bun test packages/domain/tests/analytics/retro-correlation.test.ts packages/domain/tests/dao/run-session-dao.test.ts` → 17 pass / 0 fail; `bunx tsc --noEmit` (packages/domain) clean; `bunx biome check` on the 4 new/changed files clean.
+
+Functional Verdict: PASS
 ### References
 - **Design precedent (R1b):** `packages/app/src/services/agent-service.ts:195-201` — "the heuristic
   time-window fallback (R1b) applies"
@@ -171,3 +209,6 @@ treat an unbounded window as matching everything after it.
   `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/mappers.ts:61-64`
 - **Upstream:** task 0557 · **Downstream:** task 0559, feature J6 task 0547
 ### History
+- 2026-08-14T07:16:14.823Z todo → wip (system)
+- 2026-08-14T07:21:01.863Z wip → testing (system)
+- 2026-08-14T07:21:03.308Z testing → done (system)

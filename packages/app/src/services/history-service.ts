@@ -27,6 +27,7 @@ import {
     loops,
     type MessageRollupRow,
     messageRollup,
+    RunSessionDao,
     renderMarkdown,
     renderReport,
     type SourceSummaryRow,
@@ -187,23 +188,34 @@ export class HistoryService {
     ): Promise<HistoryImportResult> {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
+        const dryRun = opts.dryRun ?? false;
 
-        if (parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined) {
-            return runOpenCodeImport({
-                db: await this.ctx.getDb(),
-                sourceDatabase: this.ctx.openCodeSourceDatabase,
-                mode,
-                dryRun: opts.dryRun ?? false,
-            });
+        const result =
+            parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined
+                ? await runOpenCodeImport({
+                      db: await this.ctx.getDb(),
+                      sourceDatabase: this.ctx.openCodeSourceDatabase,
+                      mode,
+                      dryRun,
+                  })
+                : await runJsonlImport(parsedSource, {
+                      db: await this.ctx.getDb(),
+                      mode,
+                      ...(opts.file !== undefined && opts.file.length > 0 ? { files: [opts.file] } : {}),
+                      ...(opts.root !== undefined && opts.root.length > 0 ? { roots: [opts.root] } : {}),
+                      dryRun,
+                  });
+
+        // R5 (task 0559): provenance is launch provenance. The mapper cannot know
+        // whether a session was spur-launched (the cwd substring heuristic was deleted
+        // upstream), so the mapping table — populated by the run path (task 0557) and
+        // retro-correlation (task 0558) — is the authority: a (source, session_id)
+        // present in `history_run_session` is spur-run, anything else is ambient. The
+        // two-way alignment also self-heals rows imported by the old heuristic.
+        if (!dryRun) {
+            await new RunSessionDao(await this.ctx.getDb()).alignMessageProvenance();
         }
-
-        return runJsonlImport(parsedSource, {
-            db: await this.ctx.getDb(),
-            mode,
-            ...(opts.file !== undefined && opts.file.length > 0 ? { files: [opts.file] } : {}),
-            ...(opts.root !== undefined && opts.root.length > 0 ? { roots: [opts.root] } : {}),
-            dryRun: opts.dryRun ?? false,
-        });
+        return result;
     }
 
     /**

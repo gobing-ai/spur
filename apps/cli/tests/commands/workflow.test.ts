@@ -7,7 +7,7 @@ import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, rm, utimes, writeF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type TimelineEvent, WorkflowSteeringController, type WorkflowTraceTimeline } from '@gobing-ai/spur-app';
-import type { ActionCost } from '@gobing-ai/spur-domain';
+import type { ActionCost, ActionCostAttribution } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
@@ -1693,11 +1693,11 @@ failureStates:
 function makeCost(overrides: Partial<ActionCost> = {}): ActionCost {
     return {
         totals: {
-            inputTokens: 1000,
-            outputTokens: 500,
-            cacheReadTokens: 200,
-            cacheWriteTokens: 0,
-            costUsd: 0.0123,
+            inputTokens: 12500,
+            outputTokens: 3200,
+            cacheReadTokens: 2000,
+            cacheWriteTokens: 500,
+            costUsd: 0,
             records: 1,
             recordsWithUsage: 1,
             messages: 1,
@@ -1711,25 +1711,12 @@ function makeCost(overrides: Partial<ActionCost> = {}): ActionCost {
     };
 }
 
-const UNJOINED_COST: ActionCost = {
-    totals: {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        costUsd: 0,
-        records: 0,
-        recordsWithUsage: 0,
-        messages: 0,
-        toolCalls: 0,
-        durationMs: 0,
-        durationUnmeasured: 0,
-    },
-    cacheHit: null,
-    estimated: false,
+const UNJOINED_COST: ActionCostAttribution = {
+    exact: null,
+    estimated: null,
 };
 
-function makeActionEvent(cost?: ActionCost): TimelineEvent {
+function makeActionEvent(cost?: ActionCostAttribution): TimelineEvent {
     return {
         kind: 'action',
         actionId: 'act-1',
@@ -1768,17 +1755,47 @@ describe('formatActionCost', () => {
         expect(rendered).not.toContain('0%');
     });
 
-    test('renders exact cost and cache-hit for a session-id join (R1a)', () => {
-        expect(formatActionCost(makeActionEvent(makeCost()))).toBe(' · $0.012 · cache 25%');
+    test('renders token figures and cache-hit for an exact mapping (R1)', () => {
+        expect(formatActionCost(makeActionEvent({ exact: makeCost(), estimated: null }))).toBe(
+            ' · 12.5k in / 3.2k out · cache 25%',
+        );
     });
 
-    test('marks estimated joins with the ~ prefix (R1b)', () => {
-        expect(formatActionCost(makeActionEvent(makeCost({ estimated: true })))).toBe(' · ~$0.012 · cache ~25%');
+    test('marks estimated mappings with the ~ prefix (R2)', () => {
+        const est = makeCost({
+            estimated: true,
+            totals: { ...makeCost().totals, inputTokens: 5000, outputTokens: 1100 },
+        });
+        expect(formatActionCost(makeActionEvent({ exact: null, estimated: est }))).toBe(
+            ' · ~5.0k in / ~1.1k out · cache ~25%',
+        );
+    });
+
+    test('renders exact and estimated figures apart — never summed (R2)', () => {
+        const est = makeCost({
+            estimated: true,
+            totals: { ...makeCost().totals, inputTokens: 5000, outputTokens: 1100 },
+        });
+        expect(formatActionCost(makeActionEvent({ exact: makeCost(), estimated: est }))).toBe(
+            ' · 12.5k in / 3.2k out · cache 25% · ~5.0k in / ~1.1k out · cache ~25%',
+        );
     });
 
     test('renders `cache n/a` when records matched but carry no cache dimensions', () => {
-        const cost = makeCost({ cacheHit: null, totals: { ...makeCost().totals, costUsd: 0.005 } });
-        expect(formatActionCost(makeActionEvent(cost))).toBe(' · $0.005 · cache n/a');
+        const cost = makeCost({ cacheHit: null });
+        expect(formatActionCost(makeActionEvent({ exact: cost, estimated: null }))).toBe(
+            ' · 12.5k in / 3.2k out · cache n/a',
+        );
+    });
+
+    test('never emits a currency value (R3)', () => {
+        const rendered = formatActionCost(makeActionEvent({ exact: makeCost(), estimated: null }));
+        expect(rendered).not.toMatch(/\$|USD|cost_usd/i);
+    });
+
+    test('renders `cost n/a` for matched rows without token data (0281/0284 never-fabricate)', () => {
+        const noUsage = makeCost({ cacheHit: null, totals: { ...makeCost().totals, recordsWithUsage: 0 } });
+        expect(formatActionCost(makeActionEvent({ exact: noUsage, estimated: null }))).toBe(' · cost n/a');
     });
 });
 
@@ -1807,7 +1824,7 @@ describe('formatTraceTimeline cost footer', () => {
     });
 
     test('omits the hint when every agent.run step is joined', () => {
-        const out = formatTraceTimeline(makeTimeline([makeActionEvent(makeCost())]));
+        const out = formatTraceTimeline(makeTimeline([makeActionEvent({ exact: makeCost(), estimated: null })]));
         expect(out).not.toContain('spur history import');
     });
 });

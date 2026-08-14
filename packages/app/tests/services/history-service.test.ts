@@ -2,7 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ArtifactSelector, createMigratedDb, type DbAdapter, type HistoryArtifact } from '@gobing-ai/spur-domain';
+import {
+    type ArtifactSelector,
+    createMigratedDb,
+    type DbAdapter,
+    type HistoryArtifact,
+    RunSessionDao,
+} from '@gobing-ai/spur-domain';
 import { HistoryService, type HistoryServiceContext, writeArtifact } from '../../src/services/history-service';
 
 /** An empty directory so incremental scans find no real on-disk history (hermetic). */
@@ -459,6 +465,94 @@ describe('HistoryService', () => {
             expect(result.mode).toBe('force-file');
             expect(result.scannedFiles).toBe(1);
             expect(result.processedLines).toBe(0);
+        });
+
+        // R5 (task 0559): provenance is launch provenance, derived from the run→session
+        // mapping — a cwd under a /spur path is not evidence of a spur launch.
+        describe('provenance correction (R5)', () => {
+            function writeClaudeSession(cwd: string, sessionId: string): string {
+                const dir = mkdtempSync(join(tmpdir(), 'spur-hist-prov-'));
+                const file = join(dir, 'session.jsonl');
+                writeFileSync(
+                    file,
+                    `${JSON.stringify({
+                        sessionId,
+                        type: 'user',
+                        timestamp: '2026-05-30T00:00:00.000Z',
+                        content: 'hello',
+                        cwd,
+                    })}\n`,
+                );
+                return file;
+            }
+
+            async function provenanceOf(db: DbAdapter): Promise<string[]> {
+                const rows = await db.queryAll<{ provenance: string }>(
+                    'SELECT provenance FROM history_message ORDER BY record_hash',
+                );
+                return rows.map((r) => r.provenance);
+            }
+
+            test('a session merely run inside a /spur directory imports as ambient when unmapped', async () => {
+                const ctx = makeCtx();
+                const db = await ctx.getDb();
+                const svc = new HistoryService(ctx);
+                await svc.import('claude', {
+                    file: writeClaudeSession('/home/user/projects/spur-work', 'sess-ambient'),
+                });
+
+                expect(await provenanceOf(db)).toEqual(['ambient']);
+            });
+
+            test('a session present in history_run_session imports as spur-run (mapped)', async () => {
+                const ctx = makeCtx();
+                const db = await ctx.getDb();
+                await new RunSessionDao(db).insert({
+                    runId: 'run-prov',
+                    source: 'claude',
+                    sessionId: 'sess-mapped',
+                    exactness: 'exact',
+                    mechanism: 'observed',
+                    resolvedAt: '2026-05-30T01:00:00.000Z',
+                });
+                const svc = new HistoryService(ctx);
+                await svc.import('claude', {
+                    file: writeClaudeSession('/home/user/projects/spur-work', 'sess-mapped'),
+                });
+
+                expect(await provenanceOf(db)).toEqual(['spur-run']);
+            });
+
+            test('a mapped ambient-cwd session is promoted to spur-run even when the cwd is not under /spur', async () => {
+                const ctx = makeCtx();
+                const db = await ctx.getDb();
+                await new RunSessionDao(db).insert({
+                    runId: 'run-prov2',
+                    source: 'claude',
+                    sessionId: 'sess-mapped2',
+                    exactness: 'estimated',
+                    mechanism: 'inferred',
+                    resolvedAt: '2026-05-30T01:00:00.000Z',
+                });
+                const svc = new HistoryService(ctx);
+                await svc.import('claude', {
+                    file: writeClaudeSession('/home/user/projects/elsewhere', 'sess-mapped2'),
+                });
+
+                expect(await provenanceOf(db)).toEqual(['spur-run']);
+            });
+
+            test('dry-run never corrects provenance (no rows written)', async () => {
+                const ctx = makeCtx();
+                const db = await ctx.getDb();
+                const svc = new HistoryService(ctx);
+                await svc.import('claude', {
+                    file: writeClaudeSession('/home/user/projects/spur-work', 'sess-dry'),
+                    dryRun: true,
+                });
+
+                expect(await provenanceOf(db)).toEqual([]);
+            });
         });
     });
 

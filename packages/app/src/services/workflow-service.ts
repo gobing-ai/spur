@@ -4,13 +4,10 @@ import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
-    type ActionCost,
+    type ActionCostAttribution,
     ActionRunDao,
-    actionCost,
-    actionCostEstimated,
+    attributeActionCost,
     createId,
-    loadAllEtlPayloads,
-    matchEtlPayloads,
     PhaseRunDao,
     RunDao,
     TaskRunLinkDao,
@@ -324,8 +321,10 @@ export type TimelineEvent =
           artifacts: string[];
           nextAction?: SystemEventAction;
           label: string;
-          /** Per-step cost + cache-hit computed from matched ETL records (R4). Undefined when cost hasn't been computed yet or isn't available. */
-          cost?: ActionCost;
+          /** Per-step token cost + cache-hit from `history_message` typed columns via the
+           * run→session mapping (task 0559). Undefined when cost hasn't been computed or
+           * isn't available. `exact` and `estimated` figures are never summed (R2). */
+          cost?: ActionCostAttribution;
       };
 
 /** Result of a per-run trace with timeline. */
@@ -914,19 +913,16 @@ export class WorkflowAppService {
         const transitionRows = await new TransitionRunDao(db).transitionRowsByRunId(runId);
         const actionRows = await new ActionRunDao(db).actionRowsByRunId(runId);
 
-        // Pre-compute per-step cost for agent.run actions via the history-ETL join (R4).
-        // Costs are computed eagerly before the merge loop so the timeline merge is a
-        // pure lookup — no async I/O inside the ordered-merge. The ETL source tables are
-        // loaded once and matched in memory per action, not re-scanned per action.
-        const costByActionId = new Map<string, ActionCost>();
+        // Pre-compute per-step cost for agent.run actions via the run→session mapping
+        // (task 0559): `history_run_session` maps the run to (source, session_id) pairs,
+        // and `history_message` typed token columns are folded per mapping — exact and
+        // estimated figures separately, never summed (R2). No dollar value is computed (R3).
+        const costByActionId = new Map<string, ActionCostAttribution>();
         if (actionRows.some((a) => a.kind === 'agent.run')) {
-            const etlPayloads = await loadAllEtlPayloads(db);
             for (const a of actionRows) {
                 if (a.kind !== 'agent.run') continue;
                 try {
-                    const { records, estimated } = matchEtlPayloads(etlPayloads, a);
-                    const cost = estimated ? actionCostEstimated(records, '') : actionCost(records, '');
-                    costByActionId.set(a.id, cost);
+                    costByActionId.set(a.id, await attributeActionCost(db, runId, a));
                 } catch {
                     // Cost lookup is best-effort — don't break the trace.
                 }

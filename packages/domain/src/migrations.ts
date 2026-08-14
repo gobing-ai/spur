@@ -119,6 +119,32 @@ CREATE TABLE IF NOT EXISTS coordination_runs (
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec_id, generation DESC);
 `;
 
+/**
+ * DDL for the `history_run_session` table (feature E6 / task 0557): the
+ * run→session mapping captured at the agent invoke boundary. One row per
+ * agent invocation that resolves a session — the run id to the importer
+ * source + session id the run produced, how the mapping was derived
+ * (`mechanism`: `observed` / `supplied`) and how confident it is
+ * (`exactness`: `exact` / `unresolved`). Ambiguous (R3) and unresolved (R5)
+ * resolutions write a row with a NULL `session_id` — never an exact row with
+ * a guessed id, because task 0559 trusts exactness. Populated by the run
+ * path (AgentService observer), never by the import path; consumers are
+ * tasks 0558 (retroactive correlation) and 0559 (cost attribution).
+ */
+export const HISTORY_RUN_SESSION_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_run_session (
+    run_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    session_id TEXT,
+    exactness TEXT NOT NULL,
+    mechanism TEXT NOT NULL,
+    resolved_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_run_session_run ON history_run_session (run_id);
+CREATE INDEX IF NOT EXISTS idx_history_run_session_source_session ON history_run_session (source, session_id);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
@@ -138,6 +164,8 @@ ${QUEUE_JOBS_SCHEMA_SQL}
 ${SYSTEM_EVENTS_SCHEMA_SQL}
 
 ${COORDINATION_RUNS_SCHEMA_SQL}
+
+${HISTORY_RUN_SESSION_SCHEMA_SQL}
 `;
 
 /**
@@ -241,6 +269,7 @@ CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence
  * `0010` adds the `coordination_runs` occupant/artifact table (ADR-057 wave 1).
  * `0011` indexes `system_events.sequence` for the follow cursor and
  * auto-assign (task 0531).
+ * `0012` adds the `history_run_session` run→session mapping table (feature E6).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -272,6 +301,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0009_spur_cli_history_message_run_idx', sql: HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL },
     { id: '0010_spur_cli_coordination_runs', sql: COORDINATION_RUNS_SCHEMA_SQL },
     { id: '0011_spur_cli_system_events_sequence_idx', sql: SYSTEM_EVENTS_SEQUENCE_INDEX_SCHEMA_SQL },
+    { id: '0012_spur_cli_history_run_session', sql: HISTORY_RUN_SESSION_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

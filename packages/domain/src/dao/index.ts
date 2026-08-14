@@ -16,6 +16,13 @@ export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow 
 export { RuleEvalRunDao, type RuleEvalRunRow, RuleRunDao, type RuleRunRow } from './rule-run-dao';
 export { type CreateRunInput, RunDao, type RunRecord } from './run-dao';
 export {
+    type InsertRunSessionInput,
+    RunSessionDao,
+    type RunSessionExactness,
+    type RunSessionMechanism,
+    type RunSessionRow,
+} from './run-session-dao';
+export {
     type CreateSystemEventInput,
     SystemEventDao,
     type SystemEventQuery,

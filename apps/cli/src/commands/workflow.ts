@@ -25,6 +25,7 @@ import {
     WorkflowTraceWriter,
 } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
+import type { ActionCost } from '@gobing-ai/spur-domain';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -819,7 +820,10 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     // Import is a precondition, not a trigger (R6): when any agent.run step has no
     // joinable usage, point the operator at `history import` rather than auto-running it (AC2).
     const hasUnjoinedCost = events.some(
-        (e) => e.kind === 'action' && e.cost !== undefined && e.cost.totals.records === 0,
+        (e) =>
+            e.kind === 'action' &&
+            e.cost !== undefined &&
+            (e.cost.exact?.totals.records ?? 0) + (e.cost.estimated?.totals.records ?? 0) === 0,
     );
     if (hasUnjoinedCost) {
         lines.push('', 'Some agent.run steps show cost n/a — run `spur history import` to populate cost.');
@@ -995,24 +999,44 @@ export async function followRunLog(
 }
 
 /**
- * Render per-step cost and cache-hit for the human-readable trace timeline.
+ * Render per-step token cost and cache-hit for the human-readable trace timeline.
  *
- * Returns an empty string for non-agent.run actions; ` · cost n/a` when the
- * step cannot be joined to usage data (never `$0.00` — 0281/0284 invariant);
- * ` · ~$X.XX · cache ~Y%` when the time-window heuristic was used (R1b);
- * ` · $X.XX · cache Y%` for exact session-id joins (R1a).
+ * Returns an empty string for non-agent.run actions; ` · cost n/a` when the step
+ * cannot be joined to usage data (never `$0.00` — 0281/0284 invariant); otherwise
+ * the token figures derived from `history_message` typed columns via the run→session
+ * mapping (task 0559). Exact and estimated figures are rendered apart and never
+ * summed (R2); estimated figures carry the `~` prefix. No currency value is ever
+ * emitted (R3) — tokens, never prices.
  */
 export function formatActionCost(event: TimelineEvent): string {
     if (event.kind !== 'action') return '';
     const cost = event.cost;
     if (!cost) return '';
-    // Unjoinable agent.run step (no matched usage) → render `n/a`, never `$0.00`
-    // (0281/0284 never-fabricate invariant; R3).
-    if (cost.totals.records === 0) return ' · cost n/a';
-    const est = cost.estimated ? '~' : '';
-    if (cost.cacheHit === null) {
-        // Records matched but carried no cache dimensions — cost known, ratio not.
-        return cost.totals.costUsd > 0 ? ` · ${est}$${cost.totals.costUsd.toFixed(3)} · cache n/a` : ' · cost n/a';
+    const parts: string[] = [];
+    if (cost.exact !== null && cost.exact.totals.recordsWithUsage > 0) {
+        parts.push(formatTokenCost(cost.exact, false));
     }
-    return ` · ${est}$${cost.totals.costUsd.toFixed(3)} · cache ${est}${(cost.cacheHit * 100).toFixed(0)}%`;
+    if (cost.estimated !== null && cost.estimated.totals.recordsWithUsage > 0) {
+        parts.push(formatTokenCost(cost.estimated, true));
+    }
+    // Unjoinable agent.run step (no matched usage) → render `n/a`, never a fabricated zero
+    // (0281/0284 never-fabricate invariant). Matched rows with no token data also render
+    // n/a: absent telemetry is unknown, not 0 tokens.
+    if (parts.length === 0) return ' · cost n/a';
+    return ` · ${parts.join(' · ')}`;
+}
+
+/** One token-figure segment: `~12.4k in / 3.2k out · cache 41%` (est prefix when estimated). */
+function formatTokenCost(cost: ActionCost, estimated: boolean): string {
+    const est = estimated ? '~' : '';
+    const { inputTokens, outputTokens } = cost.totals;
+    const ratio = cost.cacheHit === null ? 'n/a' : `${(cost.cacheHit * 100).toFixed(0)}%`;
+    return `${est}${formatTokens(inputTokens)} in / ${est}${formatTokens(outputTokens)} out · cache ${est}${ratio}`;
+}
+
+/** Compact token rendering: `1250` → `1.3k`, `5000000` → `5.0M`. */
+function formatTokens(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+    return String(n);
 }

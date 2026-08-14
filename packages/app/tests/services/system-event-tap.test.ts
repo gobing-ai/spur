@@ -156,6 +156,45 @@ describe('registerSystemEventTap', () => {
         tap.unsubscribe();
     });
 
+    test('0557 premise — agent.invoke payloads carry the minted runId via nested correlation', async () => {
+        // The 0557 premise gap (agent.invoke.* rows with run_id NULL) is closed
+        // by the AiRunner emitting `correlation: { runId, executionId }` on the
+        // invoke events; the tap's `nested.runId` lookup must extract it. This
+        // pins the exact event shape ts-ai-runner produces.
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        await bus.emit('agent.invoke.start', {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            correlation: { runId: 'minted-run-0557', executionId: 'exec-1' },
+            severity: 'info',
+        });
+        await bus.emit('agent.invoke.exit', {
+            agent: 'pi',
+            operation: 'prompt',
+            label: 'ai-runner.pi.prompt',
+            exitCode: 0,
+            durationMs: 42,
+            correlation: { runId: 'minted-run-0557', executionId: 'exec-1' },
+            severity: 'info',
+        });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        const rows = fake.inserted.filter(
+            (r) => r.event_name === 'agent.invoke.start' || r.event_name === 'agent.invoke.exit',
+        );
+        expect(rows).toHaveLength(2);
+        for (const row of rows) {
+            expect(row?.run_id).toBe('minted-run-0557');
+        }
+
+        tap.unsubscribe();
+    });
+
     test('persists entity correlation from a planning event into the indexed columns', async () => {
         const dao = fakeDao();
         const bus = new EventBus<Record<string, (event: unknown) => void>>();

@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { DbAdapter } from '@gobing-ai/ts-db';
 import { computeRecordCost, formatSummary, resolvePricing } from '../../src/analytics';
 import { byCostDesc, byDateAsc } from '../../src/analytics/costs';
-import { extractClaudeTokens, queryEtlRecords } from '../../src/analytics/query';
+import { extractClaudeTokens } from '../../src/analytics/query';
 import type { CostRecord, TokenTotals } from '../../src/analytics/types';
 
 /** CostRecord with cache/usage fields defaulted — a test states only what it exercises. */
@@ -122,44 +121,6 @@ describe('analytics', () => {
         });
     });
 
-    test('queries ETL records from a single source table without since filter', async () => {
-        const db = createMockDb([
-            {
-                payload_json: JSON.stringify({
-                    source_record_id: 'a',
-                    created_at: '2026-01-01T00:00:00Z',
-                    content: 'x',
-                }),
-            },
-            {
-                payload_json: JSON.stringify({
-                    source_record_id: 'b',
-                    created_at: '2026-01-02T00:00:00Z',
-                    content: 'y',
-                }),
-            },
-        ]);
-        const records = await queryEtlRecords(db, 'history_etl_pi');
-        expect(records).toHaveLength(2);
-        expect(records[0]?.source_record_id).toBe('a');
-        expect(records[1]?.source_record_id).toBe('b');
-    });
-
-    test('queries ETL records with since filter', async () => {
-        const db = createMockDb([
-            {
-                payload_json: JSON.stringify({
-                    source_record_id: 'recent',
-                    created_at: '2026-06-01T00:00:00Z',
-                    content: 'z',
-                }),
-            },
-        ]);
-        const records = await queryEtlRecords(db, 'history_etl_pi', '2026-05-01');
-        expect(records).toHaveLength(1);
-        expect(records[0]?.source_record_id).toBe('recent');
-    });
-
     test('byDateAsc sorts by date ascending', () => {
         const items = [{ date: '2026-05-31' }, { date: '2026-05-30' }, { date: '2026-06-01' }];
         const sorted = [...items].sort(byDateAsc);
@@ -178,17 +139,3 @@ describe('analytics', () => {
 });
 
 /** Create a minimal mock DbAdapter that returns controlled rows from queryAll. */
-function createMockDb(rows: Array<{ payload_json: string }>): DbAdapter {
-    return {
-        // ts-db 0.2.x exposes the internal typed db via `db`; this mock only uses
-        // the string-SQL methods, so `db` is an unused stub.
-        db: {} as DbAdapter['db'],
-        exec: async () => {},
-        run: async () => {},
-        queryFirst: async <T>() => undefined as T | undefined,
-        queryAll: async <T>() => rows as T[],
-        // ts-db 0.4.7 requires batch() on DbAdapter; unused by analytics.
-        batch: async () => {},
-        close: () => {},
-    };
-}

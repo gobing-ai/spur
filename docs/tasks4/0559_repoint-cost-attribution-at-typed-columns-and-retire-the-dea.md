@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Repoint cost attribution at typed columns and retire the dead ETL path"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E6
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0557", "0558"]
 ac_numbering: task-local
 created_at: "2026-08-14T02:43:13.363Z"
-updated_at: "2026-08-14T02:53:00.329Z"
+updated_at: "2026-08-14T17:16:35.987Z"
 ---
 
 ## 0559. Repoint cost attribution at typed columns and retire the dead ETL path
@@ -184,17 +184,196 @@ proof. Check that no importer path writes the `history_etl_*` tables before dele
 - [ ] Add tests: typed-column attribution, exact/estimated split, ambient-under-spur-path provenance (R1-R3, R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/workflow.ts:1002` |
+| `apps/cli/src/commands/workflow.ts:1004` |
+| `apps/cli/src/commands/workflow.ts:1015` |
+| `apps/cli/src/commands/workflow.ts:1019` |
+| `apps/cli/src/commands/workflow.ts:28` |
+| `apps/cli/src/commands/workflow.ts:823` |
+| `apps/cli/tests/commands/workflow.test.ts:10` |
+| `apps/cli/tests/commands/workflow.test.ts:1696` |
+| `apps/cli/tests/commands/workflow.test.ts:1714` |
+| `apps/cli/tests/commands/workflow.test.ts:1719` |
+| `apps/cli/tests/commands/workflow.test.ts:1758` |
+| `apps/cli/tests/commands/workflow.test.ts:1774` |
+| `apps/cli/tests/commands/workflow.test.ts:1785` |
+| `apps/cli/tests/commands/workflow.test.ts:1827` |
+| `packages/app/src/index.ts:241` |
+| `packages/app/src/index.ts:5` |
+| `packages/app/src/services/agent-service.ts:1` |
+| `packages/app/src/services/agent-service.ts:318` |
+| `packages/app/src/services/agent-service.ts:50` |
+| `packages/app/src/services/agent-service.ts:61` |
+| `packages/app/src/services/agent-service.ts:675` |
+| `packages/app/src/services/agent-service.ts:740` |
+| `packages/app/src/services/agent-service.ts:779` |
+| `packages/app/src/services/agent-service.ts:809` |
+| `packages/app/src/services/agent-service.ts:858` |
+| `packages/app/src/services/agent-service.ts:882` |
+| `packages/app/src/services/agent-service.ts:986` |
+| `packages/app/src/services/agent-service.ts:997` |
+| `packages/app/src/services/history-service.ts:191` |
+| `packages/app/src/services/history-service.ts:218` |
+| `packages/app/src/services/history-service.ts:30` |
+| `packages/app/src/services/workflow-service.ts:10` |
+| `packages/app/src/services/workflow-service.ts:324` |
+| `packages/app/src/services/workflow-service.ts:7` |
+| `packages/app/src/services/workflow-service.ts:9` |
+| `packages/app/src/services/workflow-service.ts:916` |
+| `packages/app/src/services/workflow-service.ts:921` |
+| `packages/app/src/services/workflow-service.ts:925` |
+| `packages/app/tests/services/agent-service.test.ts:16` |
+| `packages/app/tests/services/agent-service.test.ts:2` |
+| `packages/app/tests/services/agent-service.test.ts:2768` |
+| `packages/app/tests/services/history-service.test.ts:469` |
+| `packages/app/tests/services/history-service.test.ts:5` |
+| `packages/app/tests/services/system-event-tap.test.ts:159` |
+| `packages/domain/src/analytics/index.ts:33` |
+| `packages/domain/src/analytics/index.ts:44` |
+| `packages/domain/src/analytics/index.ts:51` |
+| `packages/domain/src/analytics/index.ts:55` |
+| `packages/domain/src/analytics/query.ts:0` |
+| `packages/domain/src/analytics/query.ts:2` |
+| `packages/domain/src/analytics/run-cost.ts:10` |
+| `packages/domain/src/analytics/run-cost.ts:124` |
+| `packages/domain/src/analytics/run-cost.ts:127` |
+| `packages/domain/src/analytics/run-cost.ts:142` |
+| `packages/domain/src/analytics/run-cost.ts:146` |
+| `packages/domain/src/analytics/run-cost.ts:15` |
+| `packages/domain/src/analytics/run-cost.ts:150` |
+| `packages/domain/src/analytics/run-cost.ts:159` |
+| `packages/domain/src/analytics/run-cost.ts:164` |
+| `packages/domain/src/analytics/run-cost.ts:178` |
+| `packages/domain/src/analytics/run-cost.ts:18` |
+| `packages/domain/src/analytics/run-cost.ts:180` |
+| `packages/domain/src/analytics/run-cost.ts:192` |
+| `packages/domain/src/analytics/run-cost.ts:2` |
+| `packages/domain/src/analytics/run-cost.ts:20` |
+| `packages/domain/src/analytics/run-cost.ts:24` |
+| `packages/domain/src/analytics/run-cost.ts:27` |
+| `packages/domain/src/analytics/run-cost.ts:29` |
+| `packages/domain/src/analytics/run-cost.ts:33` |
+| `packages/domain/src/analytics/run-cost.ts:41` |
+| `packages/domain/src/analytics/run-cost.ts:43` |
+| `packages/domain/src/analytics/run-cost.ts:45` |
+| `packages/domain/src/analytics/run-cost.ts:55` |
+| `packages/domain/src/analytics/run-cost.ts:61` |
+| `packages/domain/src/analytics/run-cost.ts:77` |
+| `packages/domain/src/dao/index.ts:18` |
+| `packages/domain/src/index.ts:25` |
+| `packages/domain/src/migrations.ts:122` |
+| `packages/domain/src/migrations.ts:167` |
+| `packages/domain/src/migrations.ts:272` |
+| `packages/domain/src/migrations.ts:304` |
+| `packages/domain/tests/analytics/analytics.test.ts:1` |
+| `packages/domain/tests/analytics/analytics.test.ts:123` |
+| `packages/domain/tests/analytics/analytics.test.ts:141` |
+| `packages/domain/tests/analytics/analytics.test.ts:4` |
+| `packages/domain/tests/analytics/query.test.ts:2` |
+| `packages/domain/tests/analytics/query.test.ts:82` |
+| `packages/domain/tests/analytics/run-cost.test.ts:10` |
+| `packages/domain/tests/analytics/run-cost.test.ts:112` |
+| `packages/domain/tests/analytics/run-cost.test.ts:117` |
+| `packages/domain/tests/analytics/run-cost.test.ts:131` |
+| `packages/domain/tests/analytics/run-cost.test.ts:134` |
+| `packages/domain/tests/analytics/run-cost.test.ts:151` |
+| `packages/domain/tests/analytics/run-cost.test.ts:165` |
+| `packages/domain/tests/analytics/run-cost.test.ts:170` |
+| `packages/domain/tests/analytics/run-cost.test.ts:173` |
+| `packages/domain/tests/analytics/run-cost.test.ts:181` |
+| `packages/domain/tests/analytics/run-cost.test.ts:193` |
+| `packages/domain/tests/analytics/run-cost.test.ts:195` |
+| `packages/domain/tests/analytics/run-cost.test.ts:213` |
+| `packages/domain/tests/analytics/run-cost.test.ts:22` |
+| `packages/domain/tests/analytics/run-cost.test.ts:223` |
+| `packages/domain/tests/analytics/run-cost.test.ts:231` |
+| `packages/domain/tests/analytics/run-cost.test.ts:238` |
+| `packages/domain/tests/analytics/run-cost.test.ts:240` |
+| `packages/domain/tests/analytics/run-cost.test.ts:248` |
+| `packages/domain/tests/analytics/run-cost.test.ts:250` |
+| `packages/domain/tests/analytics/run-cost.test.ts:261` |
+| `packages/domain/tests/analytics/run-cost.test.ts:27` |
+| `packages/domain/tests/analytics/run-cost.test.ts:270` |
+| `packages/domain/tests/analytics/run-cost.test.ts:275` |
+| `packages/domain/tests/analytics/run-cost.test.ts:286` |
+| `packages/domain/tests/analytics/run-cost.test.ts:289` |
+| `packages/domain/tests/analytics/run-cost.test.ts:291` |
+| `packages/domain/tests/analytics/run-cost.test.ts:30` |
+| `packages/domain/tests/analytics/run-cost.test.ts:301` |
+| `packages/domain/tests/analytics/run-cost.test.ts:308` |
+| `packages/domain/tests/analytics/run-cost.test.ts:317` |
+| `packages/domain/tests/analytics/run-cost.test.ts:320` |
+| `packages/domain/tests/analytics/run-cost.test.ts:33` |
+| `packages/domain/tests/analytics/run-cost.test.ts:336` |
+| `packages/domain/tests/analytics/run-cost.test.ts:349` |
+| `packages/domain/tests/analytics/run-cost.test.ts:49` |
+| `packages/domain/tests/analytics/run-cost.test.ts:7` |
+| `packages/domain/tests/analytics/run-cost.test.ts:73` |
+| `packages/domain/tests/analytics/run-cost.test.ts:94` |
+| `packages/domain/tests/analytics/run-cost.test.ts:97` |
+| `packages/domain/tests/dao/migrations.test.ts:141` |
+| `packages/domain/tests/dao/migrations.test.ts:144` |
+| `packages/domain/tests/dao/migrations.test.ts:179` |
+| `packages/domain/tests/dao/migrations.test.ts:355` |
+| `packages/domain/tests/dao/migrations.test.ts:61` |
+| `packages/domain/tests/dao/migrations.test.ts:75` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/run-cost.ts:57-75` — `attributeActionCost` folds `history_message` typed token columns (`input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`) through `RunSessionDao.getByRunId` (run→session mapping); test `packages/domain/tests/analytics/run-cost.test.ts:181` asserts non-zero figures via an exact mapping. Re-confirmed this run: `bun test packages/domain/tests/analytics/run-cost.test.ts packages/domain/tests/analytics/query.test.ts` → 19 pass / 0 fail on the bumped dependency. |
+| R2 | MET | `run-cost.ts:15-24` — `ActionCostAttribution.exact`/`estimated` buckets never summed; test `run-cost.test.ts:213` mixed fixture reports both apart; renderer `apps/cli/src/commands/workflow.ts:1007-1025` renders exact and `~`-prefixed estimated figures separately. Suite green this run (19 pass). |
+| R3 | MET | `workflow.ts` `formatTokenCost` emits tokens only; `costUsd` stays 0 in the attribution path; tests `never emits a currency value (R3)` (workflow.test.ts) and `costUsd stays 0` (run-cost.test.ts:151); no new pricing call site — `costs.ts:6` `resolvePricing` consumer is the pre-existing analyze rollup, unchanged. |
+| R4 | MET | `loadAllEtlPayloads`, `SOURCE_TABLES`, `queryEtlRecords`, `payloadToCostRecord`, `matchEtlPayloads`/`matchEtlForAction`, `extractSessionId`, `EtlMatch` deleted from `query.ts` and `run-cost.ts`; barrel exports pruned (`index.ts:30-56`); grep confirms no production caller remains; suite green this run (19 pass / 0 fail proves no dangling references). |
+| R5 | MET | Released dist verified this run: `@gobing-ai/ts-llm-jsonl-importer@0.4.33` resolved (`bun.lock`), installed `dist/mappers.js` has **0** `detectProvenance` hits and every splitter emits `provenance: 'ambient'` (heuristic deleted, not tuned; upstream ts-libs `HEAD e63ba6d`, tree clean, format fix landed `a626fe5` and shipped in release `38465bd`). Correlation-derived correction: `packages/app/src/services/history-service.ts:209-216` runs `RunSessionDao.alignMessageProvenance` after import; `packages/domain/src/dao/run-session-dao.ts:154-186` two-way alignment (ambient→spur-run for mapped, reverse self-heal for unmapped spur-run). Tests against the released dist: `history-service.test.ts:496` (cwd `/home/user/projects/spur-work` — contains `/spur` — imports `['ambient']` when unmapped), `:520` (mapped → `spur-run`), `:526` (mapped ambient-cwd promoted), `:544` (dry-run never corrects); `run-session-dao.test.ts` two-way. `bun test packages/app/tests/services/history-service.test.ts packages/domain/tests/dao/run-session-dao.test.ts` → 35 pass / 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R5 — Cost attribution reads the columns that hold data | MET | test | `packages/domain/tests/analytics/run-cost.test.ts:181` — attribution via exact mapping yields non-zero token figures from `history_message` typed columns; `:151` asserts `costUsd` stays 0; re-run this verify: run-cost + query suites 19 pass / 0 fail |
+| Scenario: R6 — The dead ETL path is removed, not left dormant | MET | command | `bun test packages/domain/tests/analytics/run-cost.test.ts packages/domain/tests/analytics/query.test.ts` → 19 pass / 0 fail (suite compiles and passes with the loader gone, proving no caller references it); static: `rg 'loadAllEtlPayloads |
+| Scenario: R7 — provenance means launch provenance | MET | test | `packages/app/tests/services/history-service.test.ts:496` — session under `/spur` cwd imports as `['ambient']` when unmapped (the old heuristic would have labelled it spur-run); `:520` mapped session imports `['spur-run']`; `run-session-dao.test.ts` two-way alignment; verified against released dist 0.4.33 (0 `detectProvenance` hits in `dist/mappers.js`) — 35 pass / 0 fail across the two files |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P2 | delivery | `~/xprojects/ts-libs` `7d17414` vs `bun.lock:399` | R5's mapper fix is unreleased: the monorepo still resolves `@gobing-ai/ts-llm-jsonl-importer@0.4.32`, which still ships the cwd-substring `detectProvenance` (10 hits in the installed dist). `alignMessageProvenance` (history-service.ts:209-216) makes end-state provenance correct either way, but the requirement's "heuristic deleted, not tuned" is only true in the ts-libs working tree. Required before done: republish ts-libs (≥0.4.33), `bun update` in this repo, re-run the provenance tests. Also the ts-libs tree carries an uncommitted format fix (`forensic-contract.test.ts`) — the R5 change is not fully landed there. |
+| P3 | dead code | `packages/domain/src/analytics/query.ts:24`, `index.ts:33` | `extractClaudeTokens` + `ExtractedTokens` remain exported with zero production callers (only tests). It consumes `EtlPayload`, the dead ETL data shape — R4's "delete, don't leave dormant" rationale applies to it too. Either delete it with its tests or name a live consumer. |
+| P4 | documentation | `docs/04_DESIGN.md` §3.1, `history_etl_<source>` row | R4's "confirm unwritten" is only partially confirmed: importer generic sources (opencode/antigravity/openclaw) still target `history_etl_<source>` on the write side; the 10 tables are empty only on the measured machine. The read-path deletion is safe regardless (nothing reads them) — documented caveat, not a defect. |
+| P4 | correctness | `packages/domain/src/analytics/run-cost.ts:104-107` | The fold adds `cache_read + cache_write` to `input_tokens`, assuming the typed column excludes cache. True for pi/codex/omp (mapper reads `usage.input` fresh); claude's `raw.inputTokens` may already include cache reads — bounded impact because claude captures no token rows today (deferred to feature E1/E5). Test encodes the assumption (run-cost.test.ts:181). |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional traceability (task 0559, requirements)**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/run-cost.ts:57-75` — `attributeActionCost` folds `history_message` typed token columns through `RunSessionDao.getByRunId` (run→session mapping); test `packages/domain/tests/analytics/run-cost.test.ts:181` asserts non-zero figures via an exact mapping |
+| R2 | MET | `run-cost.ts:15-24` — `ActionCostAttribution.exact/estimated` buckets never summed; test `run-cost.test.ts:213` mixed fixture reports both apart; renderer `apps/cli/src/commands/workflow.ts:1007-1025` renders exact and `~`-prefixed estimated figures separately |
+| R3 | MET | `workflow.ts` `formatTokenCost` emits tokens only; `costUsd` stays 0 in the attribution path; tests `never emits a currency value (R3)` (workflow.test.ts) and `costUsd stays 0` (run-cost.test.ts:151); no new pricing call site — `costs.ts:6` `resolvePricing` consumer is the pre-existing analyze rollup, unchanged |
+| R4 | MET | `loadAllEtlPayloads`, `SOURCE_TABLES`, `queryEtlRecords`, `payloadToCostRecord`, `matchEtlPayloads`/`matchEtlForAction`, `extractSessionId`, `EtlMatch` deleted from `query.ts` and `run-cost.ts`; barrel exports pruned (`index.ts:30-56`); grep confirms no production caller remains (P3 residue noted above); suite green |
+| R5 | MET | `packages/app/src/services/history-service.ts:209-216` runs `RunSessionDao.alignMessageProvenance` after import; `packages/domain/src/dao/run-session-dao.ts:154-186` two-way alignment (ambient→spur-run for mapped, reverse self-heal); ts-libs `7d17414` deletes `detectProvenance` (all splitters emit `'ambient'`); tests `history-service.test.ts:472-520` (ambient-under-`/spur`-path) and `run-session-dao.test.ts:167+` — P2 delivery gap above is the residual |
+
+**Design conformance**
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| design-conformance | pass | All frozen delete names gone; kept names (`actionCost`, `actionCostEstimated`, `foldTotals`, `TokenTotals`) present with `foldTotals` retention documented for 0547 (run-cost.ts:122-127); `cost_usd`/pricing never read by the attribution path; no exact+estimated summing; no cwd-substring tuning (replaced by mapping-derived alignment); docs/04_DESIGN.md updated in-tree (T3) |
+
+**Validation (run this review)**
+
+- `bun test packages/domain/tests/analytics/run-cost.test.ts packages/domain/tests/analytics/query.test.ts` → 19 pass, 0 fail
+- `bun test apps/cli/tests/commands/workflow.test.ts` → 107 pass, 0 fail
+- `bun test packages/app/tests/services/{history-service,agent-service,system-event-tap}.test.ts packages/domain/tests/dao/{run-session-dao,migrations}.test.ts` → 237 pass, 0 fail
+- `bun test packages/domain apps/cli` → 1556 pass, 1 fail (`registerServeCommand` 5s timeout — serve untouched by this diff, passes in isolation; environmental flake)
+- `bun run lint` (biome + per-workspace tsc) → green; `biome check` on the 7 changed source files → clean
+
+**Disposition:** functional verdict PASS; review gate blocked on P2 (republish ts-libs importer + `bun update` so the resolved dependency actually ships the R5 deletion) before `done`. P3/P4 items are post-landing candidates.
 ### References
 - **Dead path to remove:** `packages/domain/src/analytics/run-cost.ts:98-112` (`loadAllEtlPayloads`),
   `packages/domain/src/analytics/query.ts:8-16` (`SOURCE_TABLES`),
@@ -209,3 +388,6 @@ proof. Check that no importer path writes the `history_etl_*` tables before dele
   E1's cost-attribution surface"
 - **Upstream:** tasks 0557, 0558 · **Downstream:** feature J6 task 0547
 ### History
+- 2026-08-14T07:45:29.000Z todo → wip (system)
+- 2026-08-14T17:16:34.437Z wip → testing (system)
+- 2026-08-14T17:16:35.987Z testing → done (system)

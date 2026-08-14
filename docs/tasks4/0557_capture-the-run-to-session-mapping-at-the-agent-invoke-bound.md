@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Capture the run-to-session mapping at the agent invoke boundary"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E6
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T02:43:12.908Z"
-updated_at: "2026-08-14T02:53:00.592Z"
+updated_at: "2026-08-14T06:04:47.588Z"
 ---
 
 ## 0557. Capture the run-to-session mapping at the agent invoke boundary
@@ -191,17 +191,55 @@ Do **not** add a second correlation channel or a new event to carry the id — t
 - [ ] Record `unresolved` and never fail the run on an unreadable root, and cover it plus single-candidate exact, supplied-id, and concurrent-overlap degrade in tests (R1-R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+#### Change map
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+1. `packages/domain/src/migrations.ts:157-184` — new `history_run_session` table + indexes on `run_id` and `(source, session_id)` (R4), composed into `CLI_SCHEMA_SQL` (0000 foundation) and shipped as incremental migration `0012_spur_cli_history_run_session` (R1).
+2. `packages/domain/src/dao/run-session-dao.ts` (new) — `RunSessionDao`: `insert`, `getByRunId` (R4 forward lookup), `getBySession(source, sessionId)` (R4 reverse lookup); missing-table-tolerant like `CoordinationRunDao`.
+3. `packages/app/src/services/run-session-observer.ts` (new) — `RunSessionObserver`:
+   - `watermark(agent, sessionDir?)` — R1/R5: resolve the agent's session root (importer `SOURCE_DEFINITIONS` roots under `$HOME`, or the explicit `--session-dir`) and capture a timestamp; no directory walk at start, so observation cannot slow the invocation. Bumps a per-process active-root registry: a second concurrent watermark on the same root flags both runs as overlapping (R3).
+   - `supply(agent, sessionId)` — R2: supplied id skips observation entirely.
+   - `resolve()` — R1/R3/R5: walk the root for files with `mtime >= watermark`; exactly one candidate → `exact/observed` (session id read from the file's first record for claude/codex/pi, file stem fallback); zero candidates → `unresolved`; ≥2 candidates → `unresolved` + ambiguity log (R3); overlap → `unresolved` + log; root missing/unreadable → `unresolved` + log (R5). Never throws — resolution failure cannot fail the run.
+4. `packages/app/src/services/agent-service.ts:55-68` (deps seam), `:323-330` (registry), `:738-761` (observer), `:852` (watermark), `:1000` (resolve) — `executeRun` creates the observer when a DB is available (`deps.sessionObserverFactory` test seam), hoists `--session-id`/`--session-dir` reads, watermarks before dispatch (re-watermarks on escalation agent change), and resolves at every exit point (shim failure, dispatch failure, post-loop). Added the shared `sessionRootRegistry` instance field.
+5. Premise (runId on `agent.invoke.*`): already satisfied in the current tree — the minted runId reaches the events as `correlation: { runId, executionId }` (`packages/app/src/services/agent-service.ts:861` dispatch passes `correlation: lifecycle.identity`; ts-ai-runner ≥0.4.31 emits it on `agent.invoke.start`/`exit`), and the tap's existing `nested.runId` lookup (`packages/app/src/services/system-event-tap.ts:200-201`) extracts it. Pinned with a regression test instead of re-threading a second channel (anti-pattern: no second correlation channel).
+6. `docs/04_DESIGN.md:1011-1012, 262-268` — §3.1 table row + `spur agent run` section (T3).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/run-session-observer.ts:100-104` (watermark: root resolution + timestamp only), `:125-153` (resolve → exact/observed on single candidate); wiring `packages/app/src/services/agent-service.ts:741-763` (observer creation, supply/watermark), `:861` (re-watermark per dispatch), `:809`/`:882`/`:986`/`:999` (resolve at every exit path); prerequisite runId threading via `correlation: lifecycle.identity` (`agent-service.ts:869` dispatch) + tap `nested.runId` lookup (`packages/app/src/services/system-event-tap.ts:200-201`), pinned by regression test `packages/app/tests/services/system-event-tap.test.ts:159`; end-to-end `packages/app/tests/services/agent-service.test.ts:2799` (exact observed row, run_id set) |
+| R2 | MET | `run-session-observer.ts:114-117` (`supply()` skips observation), `:127-131` (exact/supplied, no scan); `agent-service.ts:760-763` (`supply` when `--session-id` set; watermark skipped); integration test `agent-service.test.ts:2840` (root absent, mapping still exact `supplied`) |
+| R3 | MET | `run-session-observer.ts:43-47` (per-process overlap registry), `:108` (overlap flag), `:132-141` (zero/many candidates → unresolved + ambiguity log, never an exact guess); tests `run-session-observer.test.ts:164` (concurrent overlap → zero exact mappings + ambiguity logged + registry clears for sequential follow-up), `:204` (many candidates → unresolved) |
+| R4 | MET | `packages/domain/src/migrations.ts:135-145` (`history_run_session` DDL + indexes `idx_history_run_session_run` on `run_id` and `idx_history_run_session_source_session` on `(source, session_id)`), `:304` (incremental migration `0012_spur_cli_history_run_session`); `packages/domain/src/dao/run-session-dao.ts` (`insert`/`getByRunId`/`getBySession`, missing-table-tolerant); tests `packages/domain/tests/dao/run-session-dao.test.ts` (forward + reverse lookup); `exactness` (`exact`/`unresolved`) and `mechanism` (`observed`/`supplied`) recorded per row (asserted in observer + integration tests) |
+| R5 | MET | watermark is a timestamp capture only (`run-session-observer.ts:100-104` — no walk at start); `resolve()` never throws (`:125-153`, every failure path records `unresolved` and warns); tests `run-session-observer.test.ts:224` (missing root → unresolved, no rejection), `:241` (zero candidates → unresolved); `agent-service.ts` resolves after exit at every return path (`:809`, `:882`, `:986`, `:999`) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — A completed agent run is mapped to the session it produced | MET | test | `packages/app/tests/services/agent-service.test.ts:2799` (integration: `spur agent run` → exact observed mapping row, run_id non-null); `packages/app/tests/services/run-session-observer.test.ts:70` (single candidate → exact/observed, both lookups resolve) |
+| Scenario: R2 — An agent that accepts a session id yields the mapping without observation | MET | test | `packages/app/tests/services/agent-service.test.ts:2840` (supplied `--session-id` → exact `supplied` row with no session root present); `packages/app/tests/services/run-session-observer.test.ts:114-131` (supply path writes exact without scan) |
+| Scenario: R3 — An unresolvable spawn degrades to estimated, never to a guess | MET | test | `packages/app/tests/services/run-session-observer.test.ts:164` (induced concurrent overlap → zero exact mappings, ambiguity logged, follow-up sequential run resolves); `:204` (≥2 candidates → unresolved row, no guess) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | Correctness | packages/app/src/services/run-session-observer.ts:127-131, :175; packages/app/src/services/agent-service.ts:861 | Supplied-id path leaks the overlap registry. `resolve()` early-returns on `supplied_` without `release()`, but the dispatch loop calls `watermark()` unconditionally (`agent-service.ts:861`) even when a session id was supplied — so a supplied-id run leaves `registry.active[root]` at 1 and `watermark_` set. A subsequent sequential run of the same agent/root in the same process (server mode, in-process repeats) is then falsely flagged as an R3 overlap and degrades to `unresolved`. CLI is one-run-per-process, so production blast radius is narrow; the integration R2 test masks it (fresh registry per observer). Fix: skip `watermark()` when `supplied_` is set, or release the watermark in the supplied branch of `resolve()`. |
+| P4 | Correctness | packages/app/src/services/agent-service.ts:809, :882 | A supplied `--session-id` run whose dispatch fails on attempt 0 (shim build or dispatch error) still writes an exact `supplied` mapping via `resolve()` before returning — attributing a session to a run that never executed. Corner case; 0559 cost attribution would find no messages for that session id, so it is self-consistent but arguably a fabricated exact row. |
+| P4 | Scope | packages/app/src/services/run-session-observer.ts:28-38 | `AGENT_SESSION_SOURCES` maps `gemini`/`opencode`/`openclaw` beyond the frozen roots list. `gemini`'s `defaultRoots[0]` is `.gemini/tmp`, not a session root — observation there can only yield `unresolved` (safe, conservative; no wrong exact mapping possible). |
+| P4 | Scope | docs/04_DESIGN.md:1431 | Stray unrelated formatting edit `*reason*` → `_reason_` inside the 0536 note — not part of the E6 surface. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/run-session-observer.ts:100-104` (watermark), `:125-153` (resolve → exact/observed); wiring `packages/app/src/services/agent-service.ts:759-763`, `:861`, `:999`; prerequisite runId threading via `correlation: lifecycle.identity` (`agent-service.ts:869`) + tap `nested.runId` lookup (`system-event-tap.ts:200-201`), pinned by the `system-event-tap.test.ts` premise regression test; end-to-end `agent-service.test.ts` R1 integration test (exact observed row, run_id set) |
+| R2 | MET | `run-session-observer.ts:114-117` (`supply()`), `:127-131` (exact/supplied, no scan); `agent-service.ts:760-763` flag hoist + supply; `agent-service.test.ts` R2 integration test (root absent, mapping still exact `supplied`) |
+| R3 | MET | `run-session-observer.ts:43-47` (registry), `:108` (overlap flag), `:132-141` (zero/many → unresolved + ambiguity log); tests: R3 overlap (zero exact, ambiguity logged, registry clears for sequential follow-up) and R3 many-candidates (`run-session-observer.test.ts`) |
+| R4 | MET | `packages/domain/src/migrations.ts:122-150` (table + `run_id` and `(source, session_id)` indexes, `0012_spur_cli_history_run_session`); `run-session-dao.ts` `getByRunId`/`getBySession`; `run-session-dao.test.ts` forward + reverse lookup tests |
+| R5 | MET | watermark is a timestamp capture only (`run-session-observer.ts:100-104`); resolve never throws (`:125-153`), missing-root test records `unresolved` and resolves without rejection; `agent-service.ts` resolves after exit at every return path (`:809`, `:882`, `:986`, `:999`) |
 
+Residual risk: R3 overlap detection is process-local (documented `ponytail:` comment at `run-session-observer.ts:66-72`) — cross-process concurrent same-agent runs rely on the conservative mtime window filter, which can only drop candidates toward `unresolved`, never fabricate an exact mapping.
+
+Review Verdict: PASS — all requirements MET; one P3 + three P4 non-blocking findings. Design conformance: all Solution change-map claims DONE (premise satisfied via existing correlation flow + regression test rather than a second channel, as specified).
 ### References
 - **Boundary events:** `packages/app/src/services/event-names.ts:315-316`;
   `packages/app/src/services/occupant-wait.ts:13-14` (how the pair is already consumed)
@@ -215,3 +253,6 @@ Do **not** add a second correlation channel or a new event to carry the id — t
 - **Operator ruling:** feature E6 § *Why observe rather than dictate* (2026-08-13)
 - **Blocked consumer:** feature J6 task 0547
 ### History
+- 2026-08-14T05:39:51.067Z todo → wip (system)
+- 2026-08-14T06:04:41.069Z wip → testing (system)
+- 2026-08-14T06:04:47.588Z testing → done (system)

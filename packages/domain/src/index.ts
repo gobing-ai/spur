@@ -22,6 +22,7 @@ export {
     CLI_MIGRATIONS,
     CLI_SCHEMA_SQL,
     type CliMigration,
+    HISTORY_RUN_SESSION_SCHEMA_SQL,
     INBOX_MESSAGES_SCHEMA_SQL,
     loadSqlMigrations,
     QUEUE_JOBS_SCHEMA_SQL,

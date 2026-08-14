@@ -263,6 +263,29 @@ drain, naming the spec and the missing executor, and no process spawns — it ne
 downgrades to a bare binary. It also
 sets a `spec-id` flag (the spec id, **before** rewriting `agent`) so a spec-addressed run
 persists an occupant pin + coordination-facing run row in `coordination_runs` (ADR-057 wave 1).
+Every run that resolves a DB also records a **run→session mapping** in `history_run_session`
+(feature E6 / task 0557): `AgentService` watermarks the agent's session root (a timestamp,
+cheap) right before dispatch and, after the agent exits, walks the root for session files
+written during the run. Exactly one candidate → `exactness: exact, mechanism: observed`; a
+supplied `--session-id`/`--sessionDir` skips observation entirely (`mechanism: supplied`, still
+exact); zero candidates, multiple candidates, a concurrent same-agent overlap (R3), or an
+unreadable root (R5) record `unresolved` with a NULL `session_id` — never an exact row with a
+guessed session. Resolution happens after the run outcome is decided and never fails the run
+(R5).
+
+**Retroactive correlation (task 0558, R1b) fills the pre-observation gap.** Imported history
+rows predating the mapping (all 1.3M rows carry `run_id` NULL) are correlated by
+`RetroCorrelator` (`packages/domain/src/analytics/retro-correlation.ts`): history sessions are
+matched by `(source, cwd, ts)` span against run windows built from `system_events`
+(`agent.invoke.start` → `agent.invoke.exit` pairs keyed by `run_id`, never `coordination_runs`
+which holds 0 rows), writing `exactness: estimated, mechanism: inferred` rows. Invariants:
+run cwd is not persisted so cwd is a session-identity dimension, not a per-run filter; an
+`exact` row is never shadowed (guarded in `RunSessionDao.insertInferred`, R2); a session
+matching zero or several run windows writes nothing and is counted, never a nearest-neighbour
+guess (R3); the scan is bounded by an explicit window (indexed on `ts` / `occurred_at`) and
+re-runs are idempotent (R4); the report carries correlated / ambiguous / no-candidate row
+counts plus the window (R5). An open window (crash/kill, no `exit`) is bounded by the
+correlation window's end — never treated as matching everything after it.
 Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent execution failure.
 
 #### `spur agent list [--json] [--specs]`
@@ -457,13 +480,16 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   days). `--logs` scopes to log reclamation only; `--dry-run` lists what would be cleaned without
   writing; `--force` overrides `--older-than`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
-  **Per-step cost (0311):** `agent.run` lines also carry token cost + cache-hit joined from imported
-  history ETL rows — `· $X.XXX · cache Y%` for an exact session-id join (R1a), `· ~$…` when the
-  time-window heuristic was used (R1b estimate), and `· cost n/a` when no imported usage matches
-  (never `$0.00` — 0281/0284 never-fabricate). An unjoined step appends a footer hinting
-  `spur history import`. `--json` gains a nullable per-action `cost` object (`costUsd`, input/output +
-  cache token dims, `cacheHitRatio`, `estimated`), additive so existing consumers are unaffected. Cost
-  is read from already-imported ETL; `trace` never triggers an import. Join + math:
+  **Per-step cost (0311 / task 0559):** `agent.run` lines carry token usage + cache-hit joined from
+  `history_message`'s typed token columns through the `history_run_session` mapping — the action's
+  run id → mapped `(source, session_id)` pairs → their message rows. Exact (task 0557) and estimated
+  (task 0558 retroactive) mappings are folded and rendered apart, never summed (R2), with `~` marking
+  estimated figures; `· cost n/a` when no mapped usage matches (never `$0.00` — 0281/0284
+  never-fabricate). An unjoined step appends a footer hinting `spur history import`. Tokens only — no
+  currency value is computed or emitted (R3); `history_message.cost_usd` and the pricing tables stay
+  unread. `--json` gains a nullable per-action `cost` object (`exact`/`estimated` attribution, each
+  with token dims + `cacheHitRatio`), additive so existing consumers are unaffected. Cost is read from
+  already-imported history; `trace` never triggers an import. Join + math:
   `packages/domain/src/analytics/run-cost.ts`.
   Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
@@ -1007,9 +1033,10 @@ registered the four agent-role entries now in the manifest (`agent-bare-binary-n
 | `artifacts`                                                | CLI                       | Captured output references                                                                                                                                                      |
 | `history_import_ledger`                                    | importer                  | One row per imported record (hash, source, file, line)                                                                                                                          |
 | `history_import_checkpoint`                                | importer                  | Incremental position, composite PK `(source, source_file)`                                                                                                                      |
-| `history_etl_<source>`                                     | importer                  | Validated per-source ETL rows (`payload_json`, `imported_at`)                                                                                                                   |
+| `history_etl_<source>`                                     | importer                  | Validated per-source ETL rows (`payload_json`, `imported_at`). Retired on the read side (task 0559 R4): spur's cost path reads `history_message` typed columns via `history_run_session` instead; only the importer's generic sources (opencode/antigravity/openclaw) still target these tables.                                                                                                                   |
 | `inbox_messages`                                           | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
 | `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
+| `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `exact`/`unresolved` rows come from the run path's `RunSessionObserver` at the agent invoke boundary (task 0557, migration `0012_spur_cli_history_run_session`); `estimated`/`inferred` rows come from `RetroCorrelator`'s retroactive time-window correlation of pre-observation history (task 0558) — the write path never shadows an `exact` row. Indexed on `run_id` and `(source, session_id)`. Ambiguous/unresolved resolutions carry a NULL `session_id`; consumers 0559/0547 trust `exactness`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)
@@ -1020,9 +1047,11 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 ### 3.3 Analytics records
 
-`CostRecord` (source, date, model, input/output tokens, cache split, costUsd) is the single-ETL-row cost
-shape consumed by `run-cost.ts` attribution. The analyze path no longer folds it in memory: it
-aggregates in SQL over `history_message` / `history_tool_call` into a versioned `HistoryArtifact`
+`CostRecord` (source, date, model, input/output tokens, cache split, costUsd) is the single-record cost
+shape kept for the analyze rollup helpers. The run-cost path (task 0559) no longer builds `CostRecord`s:
+`attributeActionCost` folds `history_message`'s typed token columns directly through the
+`history_run_session` mapping (exact vs estimated apart, never priced). The analyze path aggregates in
+SQL over `history_message` / `history_tool_call` into a versioned `HistoryArtifact`
 (`packages/domain/src/analytics/artifact.ts`), whose core bucket is `TokenTotals` extended with the
 forensic dimensions (`messages`, `toolCalls`, `durationMs`, `durationUnmeasured`) and
 `cacheWriteTokens` (matching the `history_message.cache_write_tokens` column). Artifact contract:
@@ -1418,7 +1447,7 @@ fallback for any dispatch path that bypassed validate — so neither verb ever s
 step. The runner threads
 the role onto the underlying `spur agent run` — the `--json` envelope and the run trace record it —
 and the step-reporter renders it on the action line (`role=<id>`). An `agent:` pin still beats role
-routing permanently (0536 R2): the role declares the *reason*, so removing the pin later routes
+routing permanently (0536 R2): the role declares the _reason_, so removing the pin later routes
 correctly instead of falling to the default role.
 
 **Run status (ADR-044):** terminal states partition into success and failure via an optional

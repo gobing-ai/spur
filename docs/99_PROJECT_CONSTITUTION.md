@@ -58,7 +58,7 @@ Tools are bound by **role**; roles are permanent, bindings evolve. This table is
 project-variable section besides Lessons — update the binding when the toolchain migrates.
 
 | Role | Current binding | Notes |
-|------|-----------------|-------|
+| ------ | ----------------- | ------- |
 | Spec lifecycle — tasks | `tasks` CLI (WBS markdown task files) → migrating to `spur task` | Task files are tool-owned; edit through the tool, never the Write tool |
 | Spec lifecycle — features | `ftree` (feature markdown files) → migrating to `spur feature` | Same tool-owned rule |
 | Delivery harness | `spur` (constraint rules, workflows, agent runner, history analytics) | Quality gates are self-hosted through it where possible |
@@ -72,7 +72,7 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 **one** doc; other docs link to it, never restate it.
 
 | Doc | Owns the question | Authority | Read / edit when |
-|-----|-------------------|-----------|------------------|
+| ----- | ------------------- | ----------- | ------------------ |
 | `docs/00_ADR.md` | **WHY** — which cross-cutting decision was made, and the one-line reason | **Authoritative** (wins all content) | Read before any structural change; add a dated entry before diverging from a decision |
 | `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
 | `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
@@ -94,7 +94,7 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 ### 4.2 Working layers (outside the authority chain)
 
 | Location | Purpose | Rules |
-|----------|---------|-------|
+| ---------- | --------- | ------- |
 | `docs/plans/YYYY-MM-DD-<topic>.md` | Dated working documents: research, triage, design discussions, decision records-in-progress | They **record**, they do not **govern**. Once concluded, immutable except dated correction sections. Decisions they reach must be promoted into `00`–`05` to take effect |
 | `docs/tasks/` | Task files | Tool-owned (§3). Never edited with raw file writes |
 | other `docs/` folders | Optional scratch (analysis, refactor notes, ...) | Nothing in the authority chain may depend on them |
@@ -183,7 +183,7 @@ it. Each trigger below has a stable ID (referenced by doc frontmatter `sync:` li
 names the docs that must be touched **in the same commit / same change**:
 
 | ID | When this happens | Touch (same change) |
-|----|-------------------|---------------------|
+| ---- | ------------------- | --------------------- |
 | T1 | New cross-cutting decision, or reversal of one | `00` **first** (dated entry), then `03` mechanism, `01` if scope shifts |
 | T2 | A code change would contradict an existing ADR | **Stop.** Add the superseding/amending ADR entry first — never silently diverge |
 | T3 | Command, flag, config key, env var, schema, or DTO added/changed | `04` + the `AGENTS.md` surface block |
@@ -422,6 +422,11 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/00_ADR.md`
 
+- [2026-08-14] spur-new: Feature E6 (0557–0559) shipped run→session correlation, a provenance
+  semantics reversal (cwd-substring `detectProvenance` deleted upstream), and the cost-path
+  repointing with no `00` entry — the scheduled doc-sync hop retrofitted ADR-059/060. A decision
+  that reverses a shipped mechanism (T1/T2) belongs in `00` in the implementing change, not at
+  wrapup.
 - [2026-08-13] spur-new: The B2 role-selector delta (0536) amended ADR-033 (stage routing) but left ADR-047 — the ADR that owns the `--agent` table — untouched until the wrapup added a cross-amendment. A decision delta that changes a value domain owned by *another* ADR must cross-amend the owner in the same change; grep the ADRs that own the surface, not just the ADR you are extending.
 - [2026-08-12] spur-new: Draft ADRs that bundled a principle + a deferred design + a mechanism
   choice + implementation tips had to be unbundled on operator review. Split before proposing,
