@@ -12,6 +12,7 @@ import {
 } from '../../src/analytics/derived';
 import { sessionSpans, sessionToolDurations, todoToolCalls } from '../../src/analytics/forensic-query';
 import { assertArtifactVersion } from '../../src/analytics/render-report';
+import { applyCliMigrations } from '../../src/migrations';
 
 const ALL: ArtifactSelector = {
     since: null,
@@ -33,6 +34,8 @@ async function setup(): Promise<DbAdapter> {
         .filter(Boolean)) {
         await adapter.exec(statement);
     }
+    // 0012 adds args_raw to history_tool_call (importer 0.4.32 schema lacks it).
+    await applyCliMigrations(adapter);
     return adapter;
 }
 

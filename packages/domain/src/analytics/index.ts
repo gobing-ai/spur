@@ -58,16 +58,23 @@ export {
     queryEtlRecords,
     SOURCE_TABLES,
 } from './query';
+export { renderForensics } from './render-forensics';
 export {
     ArtifactVersionError,
     artifactToSummary,
     assertArtifactVersion,
     isStale,
-    renderMarkdown,
     renderReport,
     STALENESS_THRESHOLD_HOURS,
     stalenessBanner,
 } from './render-report';
+export {
+    REPORT_MODES,
+    type ReportRenderer,
+    renderMarkdown,
+    resolveReportMode,
+    UnknownReportModeError,
+} from './report-modes';
 export {
     type ActionCost,
     type ActionRunCostRow,

@@ -517,7 +517,7 @@ skipped records at the source level — `degraded` status + non-zero exit — wh
 isolation intact. The compensating signals remain the artifact's error counts and the `history.*`
 events.
 
-#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--json]`
+#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--mode <name>] [--json]`
 
 Run-once daily pipeline (task 0470 R6): **import-all → analyze → write artifact → prune** reports
 older than 90 days (`REPORT_RETENTION_DAYS`), in a single process that exits when done — never stays
@@ -528,6 +528,12 @@ Only the **analyze** step scopes the report via `--since`/`--until`. `--root <pa
 per-source history roots (test seam; default is each source's platform dir). `--json` emits the
 structured `DailyResult` (`{ fanOut, artifact, pruned }`). Exit code follows the fan-out import
 outcome (0/1/2), so `history.daily.failed` and the exit agree.
+
+**`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
+`.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
+`report:` line in the human output). The mode is validated up front — an unknown name fails before
+the import fan-out runs. Daily's composition (per-source isolation, checkpoint self-heal, 90-day
+pruning) is untouched; without `--mode`, behavior is unchanged.
 
 #### `spur history analyze [--since <iso>] [--until <iso>] [--source <s|all>] [--session <id>] [--run <runId>] [--task <wbs>] [--top <n>] [--out <path>] [--json]`
 
@@ -575,7 +581,7 @@ three new forensic queries (`sessionSpans`, `sessionToolDurations`, `todoToolCal
 reading the 0012 `args_raw` column) alongside the existing SQL set; registry metrics never load the
 corpus into memory.
 
-#### `spur history report [path] [--json]`
+#### `spur history report [path] [--mode <name>] [--json]`
 
 Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the
 artifact JSON, asserts `schemaVersion === HISTORY_ARTIFACT_SCHEMA_VERSION`, then renders a stdout
@@ -598,6 +604,27 @@ needs no CLI invocation.
   `formatRatio` uses for unavailable cache-hit ratios.
 - Rendering is pure (`packages/domain/src/analytics/render-report.ts`); the FS seam lives in
   `packages/app/src/services/history-service.ts` (`runHistoryReport`).
+
+**Report mode registry (task 0555 R1):** rendering resolves through
+`REPORT_MODES` (`packages/domain/src/analytics/report-modes.ts`) — a `Readonly<Record<string,
+ReportRenderer>>` of pure `HistoryArtifact → string` functions. The registry **subsumes** the former
+direct `renderReport`/`renderMarkdown` call path: `default` maps to `renderReport` (byte-identical
+legacy output), `forensics` to `renderForensics`. `--mode <name>` (default: `default`) resolves via
+`resolveReportMode`; an unknown name fails with `UnknownReportModeError` naming the registered set —
+before any import or render work. Built-in TS renderers only: no template engine, no
+variable-binding contract, no config surface (operator ruling 2026-08-09). `renderMarkdown` moved
+into `report-modes.ts` and is mode-aware (fenced sidecar of the selected mode's body).
+
+**Forensics renderer (0555 R2–R5):** `renderForensics`
+(`packages/domain/src/analytics/render-forensics.ts`) renders the 8 sections task 0491 identified
+as derivable from the artifact alone — Session Data Summary (incl. Tool Breakdown + Token
+Profile), Time Decomposition, Per-Phase Breakdown, Per-Tool Execution Time, Bottleneck Ranking,
+Raw Data. Tokens only, never currency (R3): no `$`/USD value appears, `MODEL_PRICING` gains no
+consumer; cache efficiency renders as `cacheRead / inputTokens` ("share of billed input served
+from cache", `n/a` when `recordsWithUsage === 0`). Missing derived inputs render honest
+`not available` lines — artifact without a `derived` block (rerun `spur history analyze`) for the
+three derived-dependent sections, `phaseSupport: 'unsupported'` for phases (R5). The 8 partial /
+model-authored sections from 0491 are deliberately absent, not stubbed (task 0556).
 
 #### History nightly loop — scheduling surface and observability (task 0471)
 

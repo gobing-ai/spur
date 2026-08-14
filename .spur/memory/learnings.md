@@ -168,21 +168,25 @@ File write declined — say "approve" to capture this to `.spur/run/wrapup-learn
 ## 2026-08-05 — 0436 (spur-dev pipeline performance)
 
 #### Conventions
+
 - **Env-var shell refs don't re-parse operators.** `( $qualityGateCmd )` in `/bin/sh -c` word-splits the var; `&&` becomes a literal arg, so a multi-command gate (`bun run autofix && bun run spur-check`) breaks with TS5112. Use `( sh -c "$qualityGateCmd" )` to re-parse the command string (task-pipeline.yaml test/test-recheck) — prefer `sh -c` over `eval` for the same multi-command effect. `qualityGateCmd` is trusted pipeline config only; never interpolate untrusted input into it. Regression introduced by task 0432's env-handoff rewrite of `${vars.X}` → `$X`.
 
 #### Gotchas
+
 - **`spur workflow continue --yes` ≠ injecting the HITL answer.** `--yes` only skips the CLI confirm; use `--answer yes` to set the persisted `__hitlAnswer`, else the approve guard treats empty answer as rejection → `failed`.
 - **Review section must carry a populated `| P# |` table row** for `spur task check` L3 to pass (precheck guard). Prose SECUA findings alone fail `hasPopulatedPriorityTable`; add a `| P3 | … |` row.
 
 ## 2026-08-08 — E1 batch (0455, 0457, 0463–0471, 0474)
 
 #### Conventions
-- **DD-09 orphan-scenario resolution: carry, don't create.** When a feature's scenarios aren't covered by linked task AC sections, add the destination scenario titles (bare, no R-prefix) to the tasks that already genuinely deliver them — following the 0466 pattern (`# Carried verbatim from feature E1's AC for DD-09 coverage`). One task may carry several scenarios. The normalized-title matcher in `feature-check.ts:464-489` strips `R<n> — ` from feature scenarios and compares against task AC scenario titles.
+
+- **DD-09 orphan-scenario resolution: carry, don't create.** When a feature's scenarios aren't covered by linked task AC sections, add the destination scenario titles (bare, no R-prefix) to the tasks that already genuinely deliver them — following the 0466 pattern (`# Carried verbatim from feature E1's AC for DD-09 coverage`). One task may carry several scenarios. The normalized-title matcher in `feature-check.ts:464-489` strips `R<n> —` from feature scenarios and compares against task AC scenario titles.
 - **Verdict artifact MET rows must reference carried scenario titles.** After carrying a scenario into a task's AC section, the corresponding `.spur/run/<wbs>-verdict.json` must have an `acceptanceCriteria` MET row whose `id` normalizes to the same value as the feature scenario title (via `rowMatchesScenario` at `feature-check.ts:912-924`). Adding scenarios to AC without updating verdicts produces `L4.scenario-unverified` warnings.
 - **External anchors convention for cross-package work.** When implementation spans `~/xprojects/ts-libs/` and the Spur monorepo, cite the external package + symbol (e.g., `llm-jsonl-importer types.ts — splitConfig`) per the convention established in 0455 and followed throughout E1.
 - **`--source all` fan-out with per-source failure isolation.** History import fans out across all sources; per-source failures are isolated (one failing source doesn't abort the others). Empty sources report distinguishable from total failure. Ad-hoc `--file <path>` targets one session.
 
 #### Gotchas
+
 - **`bun link` does not enqueue `prepare` hooks.** Bun only runs `prepare` for `Git | Github | Root` and `Workspace` resolution tags, never for `Symlink` (which `bun link` produces). A ts-libs source edit can silently appear as "my edit did nothing" because `dist/` isn't regenerated. Guard with `bun run --filter <pkg> build` after `bun link`, not a `prepare` hook (task 0468, 77 minutes lost).
 - **`@ts-nocheck` hides errors across an entire package.** A package-wide `@ts-nocheck` in `ts-llm-jsonl-importer` masked multiple type errors. Removing it and running `tsc --noEmit` is the only reliable way to surface them (task 0468).
 - **Source-conversion changes the ETL table.** Converting a built-in source to a custom mapper moves rows from `history_etl_<source>` to `history_message`/`history_tool_call`. Any test asserting generic ETL behavior must account for the table change (task 0468 R3).
@@ -191,6 +195,7 @@ File write declined — say "approve" to capture this to `.spur/run/wrapup-learn
 - **Never-fabricate convention: `n/a` not `0`.** In history reports, unmeasured durations (`durationUnmeasured === calls`) render as `n/a`, never `0`. Same convention as `formatRatio` for unavailable cache-hit ratios. Together: unavailable is never rendered as zero (task 0469 R5).
 
 #### Patterns
+
 - **Versioned artifact as contract.** `spur history analyze` writes a JSON artifact with `schemaVersion`; `spur history report` asserts `schemaVersion` matches `HISTORY_ARTIFACT_SCHEMA_VERSION` before rendering. A mismatch refuses the artifact with a clear message — no silent downgrade. The artifact is a versioned contract, not ad-hoc JSON (tasks 0474, 0469).
 - **Daily pipeline as single run-once invocation.** `spur history daily`: import-all → analyze → write artifact → prune (90-day retention). Scheduled via external launchd plist, not an embedded scheduler. History `.*` events emitted to the event ledger for observability. Pre-logging failures captured by routing launchd stdout/stderr to `.spur/logs/` (tasks 0470, 0471).
 - **SQL aggregation over load-all+JS.** `spur history analyze` uses SQL `GROUP BY` and `HAVING` queries (`forensic-query.ts`) instead of loading every ETL record into memory. Every query carries a `GROUP BY` or `LIMIT` — a benchmark passing on a small fixture proves nothing about a 600k-row corpus (task 0474).
@@ -200,12 +205,14 @@ Captured to `.spur/run/wrapup-learnings.md`. Preserved the existing 0481 entry a
 Key learnings extracted per task:
 
 **0480 — SSOT for `--agent` contract**
+
 - One SSOT or drift is the default (8+ files restated the value table); a parity gate is what keeps an SSOT an SSOT (R1 without R8 decays at next ADR).
 - "Declared impossible" ≠ impossible — host-agent detection was implemented twice in hooks while a test rationale recorded it absent.
 - A shipped reference contradicted the code (`execution-batch.md:223` said `auto` detects the runtime; `resolveAgentAuto` does no detection).
 - Freeze behavior when the real fix needs an ADR, so cleanup lands without blocking on a decision.
 
 **0482 — E1 batch waste**
+
 - A pin chooses where a run *starts*, not whether it may *recover* — pinned executor silently set `maxEscalations=0`, severing the 0407 tier-fallback ladder.
 - The proof must exercise the mode production actually uses; 0407's `agent:'auto'` test passed with the path severed.
 - Preflight can't see the wall — doctor degrades to `usable · auth:no · model:unknown` and the dominant burn consumed quota mid-run.
@@ -217,6 +224,7 @@ Captured to `.spur/run/wrapup-learnings.md`.
 Extracted 0487's learnings from its full task body (the post-mortem of 0486), grouped under `## 2026-08-09 — 0487` with `### Conventions / patterns` and `### Errors fixed / gotchas` sections, plus a key-evidence block. Preserved the existing 0480/0481/0482 bullets under their own date/WBS headers.
 
 Core learnings:
+
 - **Conventions:** one writer per working tree (git worktree isolation); commit per task (pre-launch warning, never block); agent var precedence `implementAgent` > `agent` > `agent.default` > YAML; size precheck uses default caps (raising `maxImplementReqs` doesn't make flash finish); unknown tier ⇒ `standard`; doctor `tier` is the *support* tier, not capability tier.
 - **Errors fixed:** implement stage didn't scope to target WBS (dominant S0 — sibling committed-but-`todo` 0485 pulled in, reverted 4+ times); unauth `agent.default` isn't a precheck failure; `--vars '{"agent":...}'` never reached the implement hop; parallel-session collision mis-read as regression; `extractReviewSectionBody` literal-`Z` lookahead truncation; prose severity `P1 (blocker)` rejected; `--force-done` from `todo` denied.
 
@@ -288,6 +296,7 @@ Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grou
 **0507** — OMP envelope fix at the owning mapper (released `0.4.26`, tag `f817429`), additive assistant-duration fields (schemaVersion stays 1), selected-file force-file history bridge. Errors fixed: released mapper read `raw.*` instead of `raw.message` — wrong roles, event-ID-as-session-ID, dropped duration, zero tool rows. Patterns: ETL-vs-raw signal split, filename-stem session keys, sanitized regressions (structural keys only).
 
 **0508** — inline redefined as host-controlled/native-subagent-first, four-check deterministic eligibility, dual provenance, no post-launch replay. Errors fixed: contradictory prior draft with subjective handoff-cost heuristic; host-only promises across ADR-047 + 7 doc surfaces updated in lockstep.
+
 ## 2026-08-11 — task 0510
 
 - **Solution citation is a write-seam concern, not a check-time concern.** The L3 `solution-file-line`
@@ -316,7 +325,6 @@ Extracted from the three task files (all `done`, verdict PASS, 2026-08-11), grou
 - **GH Actions run lookup needs eventual-consistency headroom**: a just-dispatched
   `workflow_dispatch` run may not appear in `gh run list` immediately; the fail-loud path (throw,
   no tag mutation) is the safe recovery for the release script.
-
 
 ## 2026-08-13 — 0530
 
