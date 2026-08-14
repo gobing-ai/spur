@@ -47,14 +47,15 @@ map is wrong, not that the sessions were idle. Report a probable field-map error
 idle-session / no-waste finding — a parser that matches nothing must never produce a clean
 verdict (0534 R3).
 
-## History bridge (`--use-history`)
+## History bridge
 
-`spur history` holds **validated ETL + ledger**, not a full replacement for forensic JSONL:
+`spur history` holds **validated ETL + ledger**. It is the primary REPORT path
+(`spur history report --mode forensics`). Raw session JSONL is the named fallback only.
 
 | Need | Use |
 |------|-----|
-| Token / cost aggregates | `spur history analyze [--since …] --json` after import |
-| Identical test-command loops, guard retries, git red herrings | Raw session JSONL (this skill's primary path) |
+| Token / cost aggregates, derived forensics | `spur history analyze` then `spur history report --mode forensics` |
+| Identical test-command loops, guard retries, git red herrings | Raw session JSONL (fallback — primitives the typed tables do not retain) |
 | Multi-agent cost rollups | Import per source, then analyze |
 
 Import does not invent bottleneck categories. If import fails or the DB is empty, continue with
@@ -75,7 +76,7 @@ If a column you expected is absent, trust the live schema — do not guess. The 
 `HISTORY_IMPORT_SCHEMA_SQL` + `mappers.ts` are the authority; this skill holds no duplicate
 column contract.
 
-**Selected-file bridge (task 0507 R3):** `--use-history` imports the frozen Phase-1 file set one
+**Selected-file bridge (task 0507 R3):** the data-plane path imports the frozen Phase-1 file set one
 file at a time — never a root scan, never a full reconciliation. Ambient discovery covers the
 normal OMP root (`~/.omp/agent/sessions/`) **and** workflow subprocess sessions under
 `.spur/run/<run-id>/agent-sessions/<omp-executor>/*.jsonl` (same `type: "message"` envelope). For

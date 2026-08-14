@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0553"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.385Z"
-updated_at: "2026-08-14T16:22:46.951Z"
+updated_at: "2026-08-14T18:46:17.275Z"
 ---
 
 ## 0554. Compute derived variables in analyze via an in-analyze metric registry
@@ -35,22 +35,22 @@ old readers.
 
 Phases depend on the todo arguments task 0553 retains; do not start before it lands.
 ### Requirements
-- [ ] **R1.** Implement the in-analyze metric registry (Mechanism B, 0490): derived variables computed
+- [x] **R1.** Implement the in-analyze metric registry (Mechanism B, 0490): derived variables computed
       during `spur history analyze` at query time. Not materialized at import, not shell-orchestrated,
       not a sidecar process. Measurable: `analyze` produces derived values in one invocation with no
       additional process or workflow step.
-- [ ] **R2.** Compute **phases** from the retained todo-writing tool arguments (task 0553). A source
+- [x] **R2.** Compute **phases** from the retained todo-writing tool arguments (task 0553). A source
       with no todo signal yields no phases for that session rather than fabricated ones. Measurable:
       a todo-bearing session yields named phases; a non-todo-bearing source yields none and is
       identifiable as unsupported rather than empty.
-- [ ] **R3.** Compute **time decomposition** — LLM versus tool versus idle — from
+- [x] **R3.** Compute **time decomposition** — LLM versus tool versus idle — from
       `message.duration_ms` and `tool_call.started_at` / `completed_at` / `duration_ms`. Time that
       cannot be attributed is reported as unattributed rather than folded into idle. Measurable: the
       three buckets plus an explicit unattributed remainder sum to the session span.
-- [ ] **R4.** Compute **bottleneck ranking** over the decomposition, ordered by contribution.
+- [x] **R4.** Compute **bottleneck ranking** over the decomposition, ordered by contribution.
       Measurable: a session with a known dominant cost ranks it first, and the ranking is
       reproducible across runs on the same artifact.
-- [ ] **R5.** Surface all of it as an additive optional block on the artifact with **no version
+- [x] **R5.** Surface all of it as an additive optional block on the artifact with **no version
       bump** (0490 R3). An artifact produced before this change must still validate, and a new
       artifact must still be readable by a consumer that ignores the block. Measurable: old artifacts
       pass `assertArtifactVersion`; a reader unaware of `derived` is unaffected.
@@ -206,14 +206,14 @@ task must **not** re-parse raw JSONL to obtain any of them — if a primitive is
 **Leaves for dependents:** task **0555** renders `derived` and must not compute it. Any metric the
 forensics report needs is added to the registry here, not derived inside a renderer.
 ### Plan
-- [ ] Implement the in-analyze metric registry with independently testable metrics (R1)
-- [ ] Compute phases from the todo args retained by task 0553 (R2)
-- [ ] Report "source cannot produce phases" distinctly from "session had no phases" (R2)
-- [ ] Compute LLM/tool/idle time decomposition with an explicit unattributed remainder (R3)
-- [ ] Compute bottleneck ranking over the decomposition, reproducible on a fixed artifact (R4)
-- [ ] Surface as an additive optional `derived` block with no version bump (R5)
-- [ ] Add tests: old artifact still validates, unaware reader unaffected, buckets sum to span, no-todo source (R2-R5)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Implement the in-analyze metric registry with independently testable metrics (R1)
+- [x] Compute phases from the todo args retained by task 0553 (R2)
+- [x] Report "source cannot produce phases" distinctly from "session had no phases" (R2)
+- [x] Compute LLM/tool/idle time decomposition with an explicit unattributed remainder (R3)
+- [x] Compute bottleneck ranking over the decomposition, reproducible on a fixed artifact (R4)
+- [x] Surface as an additive optional `derived` block with no version bump (R5)
+- [x] Add tests: old artifact still validates, unaware reader unaffected, buckets sum to span, no-todo source (R2-R5)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 **Derived-variable pipeline (MetricRegistry) — `packages/domain/src/analytics/derived.ts` (new, 368 lines)**
 
@@ -247,15 +247,32 @@ forensics report needs is added to the registry here, not derived inside a rende
 
 **Dependency note (validation-time only):** runtime validation uses a local dist copy of `@gobing-ai/ts-llm-jsonl-importer` 0.4.32+args_raw under `packages/{domain,app}/node_modules/` (real dir, not symlink — symlinks break tsc type identity by realpath-ing into the ts-libs tree, where `ts-db` resolution falls through to a stale `~/node_modules` 0.4.31). Final delivery requires npm publish (0.4.33) + `bun update` per AGENTS.md; npm auth was unavailable this session.
 ### Testing
-- **New suite**: `packages/domain/tests/analytics/derived.test.ts` — 11 tests, 11 pass / 0 fail:
-  - `parseTodoItems` — Claude `{todos}` shape, codex `{plan:[{step}]}` shape, malformed JSON → `[]`, non-string/empty filtering.
-  - `extractPhases` — started/ended from in_progress/completed, endedAt fallback to last todo-call ts, per-session grouping.
-  - `computeDerived` via real in-memory SQLite (fresh schema incl. `args_raw`): fully-measured session decomposition sums to span (llm 5000 + tool 1500 + idle 103500 = 110000, unattributed 0); bottleneck order `['idle','llm','tool']` desc with `share = ms/spanMs`; phases from TodoWrite replay; unmeasured session → `unattributedMs = span`, warning `derived-unattributed-time`; zero-todo source → `phaseSupport: 'unsupported'`.
-  - Artifact compat — v1 artifact without `derived` validates via `assertArtifactVersion`; `emptyDerived` shape.
-- **Regression**: `packages/domain` + `packages/app` suites — 2453 pass / 0 fail across 119 files (includes R2 structural invariant tests on the three new SQL queries).
-- **Coverage** (from derived.test.ts run): `derived.ts` 93.33% funcs / 100.00% lines.
-- **Full monorepo gate**: `bun run test` — 5073 pass / 0 fail / 0 skip across 282 files; `bun run test-cf` green; `bun run build` green (all three workspace builds); `bun run lint` + per-workspace `tsc --noEmit` clean; `spur task check --corpus` OK (2 baselined, 0 new, 0 stale); `transition-shim-check` PASS (4/4 baselined).
-- **Fixed during verification**: R24b `skill-structure.test.ts` regression — task 0553's committed session-formats.md reduction dropped the 0507 R3 selected-file bridge phrases (`spur history import`, `agent-sessions`, `--mode force-file`) pinned by the test; restored the section verbatim (plugins/sp/skills/issue-finding/references/session-formats.md:77-90).
+Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan. Artifact: `.spur/run/0554-verdict.json`.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/derived.ts:329-333` (`createDefaultRegistry`); `packages/domain/src/analytics/derived.ts:344-349` (`computeDerived`) called from `packages/app/src/services/history-service.ts:284` inside `analyze()` — no extra process |
+| R2 | MET | `packages/domain/src/analytics/derived.ts:166-187` (`parseTodoItems`); `packages/domain/src/analytics/derived.ts:196` (`extractPhases`); `packages/domain/src/analytics/forensic-query.ts:391-408` (`todoToolCalls`, `args_raw IS NOT NULL`). Zero-todo → `phaseSupport: 'unsupported'` (this run: derived.test.ts) |
+| R3 | MET | `packages/domain/src/analytics/forensic-query.ts:357-369` (`sessionSpans`); `packages/domain/src/analytics/forensic-query.ts:373-384` (`sessionToolDurations`). Unmeasured remainder → `unattributedMs` + warning `derived-unattributed-time` (`packages/domain/src/analytics/derived.ts:356-364`) |
+| R4 | MET | Default registry registers `bottlenecks` after `decomposition` (`packages/domain/src/analytics/derived.ts:329-333`). This run: fully-measured session ranks `idle`/`llm`/`tool` desc |
+| R5 | MET | `packages/domain/src/analytics/artifact.ts:136` `derived?: DerivedVariables`; schema version stays 1 (this run: `artifact compatibility` test) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R3 — Analyze computes derived variables without a schema break | MET | test | `packages/domain/tests/analytics/derived.test.ts` this run: 11 pass / 0 fail (parseTodoItems, extractPhases, computeDerived via in-memory SQLite incl. 0012 `args_raw`, unmeasured → unattributed, zero-todo unsupported, v1 artifact without `derived` still validates) |
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | E | `packages/domain/src/analytics/forensic-query.ts:405` | `todoToolCalls` is `LIMIT ?` (default 5000) — bounded, not a blocker |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+
+This run: `bun test packages/domain/tests/analytics/derived.test.ts` → 11 pass / 0 fail; `derived.ts` 93.33% funcs / 100.00% lines on that file.
 ### Review
 **L3 review — P1–P4 findings:**
 

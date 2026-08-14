@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0555"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.828Z"
-updated_at: "2026-08-14T18:25:19.948Z"
+updated_at: "2026-08-14T19:20:49.734Z"
 ---
 
 ## 0556. Rewrite dev-find-issue as report-first over the data plane
@@ -33,24 +33,24 @@ report; task creation moves behind `--create-task`, and `--use-history` / `--no-
 and the **command/skill split** puts DISCOVER/ANALYZE extraction and rendering in the CLI while the
 skill keeps IDENTIFY/PROPOSE and a gated GENERATE.
 ### Requirements
-- [ ] **R1.** `/sp:dev-find-issue` is report-first: default output is the markdown report to stdout,
+- [x] **R1.** `/sp:dev-find-issue` is report-first: default output is the markdown report to stdout,
       composed of the 8 CLI-derivable sections (task 0555) plus the 6 model-authored ones. Task
       creation happens only behind `--create-task`. `--use-history` and `--no-task` are removed.
       Measurable: a default invocation writes no task file and emits a report; `--create-task`
       writes one; the removed flags are rejected with a message naming the replacement.
-- [ ] **R2.** Apply the command/skill split (0492 R2): the CLI absorbs DISCOVER and ANALYZE extraction
+- [x] **R2.** Apply the command/skill split (0492 R2): the CLI absorbs DISCOVER and ANALYZE extraction
       plus report rendering; the skill keeps IDENTIFY and PROPOSE, and a `--create-task`-gated
       GENERATE. Measurable: the skill no longer performs extraction, and its length reflects the
       removal rather than growing.
-- [ ] **R3.** Invert the skill's raw-evidence stance without abandoning it. The data plane is primary;
+- [x] **R3.** Invert the skill's raw-evidence stance without abandoning it. The data plane is primary;
       raw JSONL parsing is the fallback under exactly three conditions — a source with no typed
       mapper, an explicit `--sessions`, or a primitive the typed tables do not retain (0492 R7).
       Measurable: the SKILL.md states the inverted position and enumerates the three fallback
       conditions; a source with a typed mapper does not trigger raw parsing.
-- [ ] **R4.** Issue categorization continues to work from the raw-JSONL fallback, since tool result
+- [x] **R4.** Issue categorization continues to work from the raw-JSONL fallback, since tool result
       content is deliberately not retained (ruling 2026-08-09). Measurable: categorization produces
       the same findings as before the rewrite on a fixture session.
-- [ ] **R5.** The rewritten command and skill agree with the shipped CLI surface — flags, modes, and
+- [x] **R5.** The rewritten command and skill agree with the shipped CLI surface — flags, modes, and
       `--json` shapes are checked against the real commands rather than described from memory.
       Measurable: an assertion or test ties the documented flags to the actual command definitions.
 ### Acceptance Criteria
@@ -209,14 +209,14 @@ fallback note (0553 R5). This task must not re-add per-source fidelity prose the
 
 **Leaves for dependents:** none. This is the terminal task of feature E5's chain.
 ### Plan
-- [ ] Read the current `plugins/sp/skills/issue-finding/SKILL.md` Phase 2 stance, then make report-first the default with task creation behind `--create-task` (R1, R3)
-- [ ] Remove `--use-history` and `--no-task`, failing with a message naming the replacement (R1)
-- [ ] Move DISCOVER/ANALYZE extraction and rendering into the CLI (R2)
-- [ ] Shrink the skill to IDENTIFY/PROPOSE plus a `--create-task`-gated GENERATE (R2)
-- [ ] Rewrite the raw-evidence stance and enumerate exactly the three fallback conditions (R3)
-- [ ] Confirm categorization still works from the raw-JSONL fallback on a fixture session (R4)
-- [ ] Tie documented flags to the real command definitions by assertion or test (R5)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Read the current `plugins/sp/skills/issue-finding/SKILL.md` Phase 2 stance, then make report-first the default with task creation behind `--create-task` (R1, R3)
+- [x] Remove `--use-history` and `--no-task`, failing with a message naming the replacement (R1)
+- [x] Move DISCOVER/ANALYZE extraction and rendering into the CLI (R2)
+- [x] Shrink the skill to IDENTIFY/PROPOSE plus a `--create-task`-gated GENERATE (R2)
+- [x] Rewrite the raw-evidence stance and enumerate exactly the three fallback conditions (R3)
+- [x] Confirm categorization still works from the raw-JSONL fallback on a fixture session (R4)
+- [x] Tie documented flags to the real command definitions by assertion or test (R5)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 # Solution — 0556
 
@@ -266,40 +266,32 @@ raw-JSONL fallback under exactly three conditions.
 - Pre-existing session-formats `--source` enum asymmetry (grok/agy rows) — out of scope.
 - `fmtDur`, cache-hit ratio formula, report-mode registry — 0555 surface, untouched.
 ### Testing
-# Testing — 0556
+Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan and remapped verdict AC ids to feature scenario titles R6/R7 (shippable id match). Artifacts: `.spur/run/0556-verdict.json` (AC ids rewritten), `.spur/run/0556-verify-answer.txt`.
 
-## New tests
+**Per-Requirement Traceability**
 
-`plugins/sp/tests/issue-finding-fallback.test.ts` (9 tests):
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/commands/dev-find-issue.md:10-13` report-first; `plugins/sp/commands/dev-find-issue.md:49-53` task creation only behind `--create-task`; removed flags named. `plugins/sp/skills/issue-finding/SKILL.md:33-37`, `plugins/sp/skills/issue-finding/SKILL.md:117-125` |
+| R2 | MET | Command is a thin `Skill()` wrapper (`plugins/sp/commands/dev-find-issue.md:63`). SKILL.md 423 lines; REPORT uses `spur history report --mode forensics` (`plugins/sp/skills/issue-finding/SKILL.md:139-147`); GENERATE gated (`plugins/sp/skills/issue-finding/SKILL.md:239-242`) |
+| R3 | MET | `plugins/sp/skills/issue-finding/SKILL.md:155-165` enumerates exactly three fallback conditions (no typed mapper / explicit `--sessions` / primitive not retained). Typed-mapper source must not wholesale-parse |
+| R4 | MET | `plugins/sp/tests/issue-finding-fallback.test.ts` R4 block this run: fixture categories match `expected-findings.json` |
+| R5 | MET | Same file R5 block: argument-hint carries `--create-task` not removed flags; live `history report` exposes `--mode` |
 
-- R4 (5 tests): fallback categorization on `examples/session-test-loop.jsonl` reproduces
-  expected-findings.json — test-loop (identical command ≥3 runs), guard (`spur task check 0376`
-  ≥3), git-red-herring (stash/status/diff present), compaction (>5), smoke command carries
-  `--sessions` and no removed flags.
-- R5 (3 tests): command argument-hint carries `--create-task` and not removed flags; SKILL.md
-  names replacements ("Removed flags (task 0556)", forensics recipe, fallback conditions);
-  live CLI surface `history report` exposes `--mode`.
+**Acceptance Criteria Verification**
 
-## Same-commit edited tests
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R6 — find-issue is report-first | MET | test | `plugins/sp/tests/issue-finding-fallback.test.ts` smoke + argument-hint this run: report-only default, `--create-task` present, `--use-history`/`--no-task` absent; `plugins/sp/commands/dev-find-issue.md:49-53` |
+| Scenario: R7 — The data plane is primary and raw JSONL is the named fallback | MET | test | `plugins/sp/skills/issue-finding/SKILL.md:155-165` + `plugins/sp/tests/issue-finding-fallback.test.ts` asserts `no typed mapper` / `do not retain` / `0492 R7`; `plugins/sp/skills/issue-finding/references/session-formats.md:10-13` fallback intro |
 
-- `plugins/sp/tests/command-contract.test.ts:1093` — `--no-task` → `--create-task`.
-- `plugins/sp/tests/skill-structure.test.ts:349,376-380` — `--create-task` assert; skill-level
-  asserts replaced with data-plane-primary substrings (forensics recipe, no typed mapper,
-  do-not-retain, 0492 R7); stale skill-level Freeze-Phase-1/force-file asserts dropped (their
-  surface lives in session-formats.md, still asserted at 372–375).
+**SECUA Review**
 
-## Coverage & gates
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS. `--fix all` also dropped the leftover `--use-history` heading on the history-bridge section of `plugins/sp/skills/issue-finding/references/session-formats.md` |
 
-- Targeted: `bun test plugins/sp/tests/issue-finding-fallback.test.ts
-  plugins/sp/tests/skill-structure.test.ts plugins/sp/tests/command-contract.test.ts` —
-  126 pass / 0 fail (1153 expects).
-- `bun run autofix` — all typechecks green.
-- `bun run spur-check` — 5124 tests / 288 files, 0 fail; coverage gate PASS (baseline
-  `All files 99.19 | 99.22`); rule preset `recommended-post-check` PASS; transition-shim-check
-  4/4 PASS.
-- `bun run test-cf` — 1/1 PASS.
-- `bun run build` — green (web 1 page).
-- `bun run corpus-check` — OK (2 baselined errors, 0 new, 0 stale).
+This run: `bun test plugins/sp/tests/issue-finding-fallback.test.ts plugins/sp/tests/skill-structure.test.ts plugins/sp/tests/command-contract.test.ts` → 126 pass / 0 fail (1153 expects). Isolated-suite coverage exit 1 is not a product failure.
 ### Review
 # Review — 0556 (L3 self-review, report-first rewrite)
 

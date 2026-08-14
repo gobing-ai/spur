@@ -105,9 +105,10 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | 10 source definitions (pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy) | ✅ | one `SourceDefinition` each; omp/grok/agy added in E1 (0467) |
 | Forensic ETL contract (`ts-llm-jsonl-importer`) | ✅ | normalized output with `MAX_ERROR_SAMPLES`, `importOneIsolated`, `schemaVersion`, `assertArtifactVersion` (E1/0466/0468) |
 | `spur history analyze` — SQL aggregation, versioned JSON artifact | ✅ | forensic queries (Q1–Q10), `schemaVersion` gate, `assertArtifactVersion`; artifact is a contract (E1/0474) |
+| Session forensics implementation (E5) | ✅ | import retains todo-tool `args_raw` + `duration_ms` (0553); analyze `derived` via in-analyze registry (0554); `report --mode` + forensics renderer, tokens not prices (0555); `/sp:dev-find-issue` report-first over the data plane (0556) |
 | Run→session correlation and typed-column cost (E6) | ✅ | `history_run_session` at invoke (0557); retro-correlation marked estimated (0558); `attributeActionCost` reads `history_message` typed columns; `provenance` is launch mapping, not cwd (0559) |
-| `spur history report` — pure artifact renderer | ✅ | database-free; reads + asserts `schemaVersion`; never-fabricate (unavailable ≠ 0); markdown sidecar (E1/0469) |
-| `spur history daily` — single run-once invocation | ✅ | import-all → analyze → write artifact → prune (90-day retention); launchd plist (E1/0470/0471) |
+| `spur history report` — pure artifact renderer | ✅ | database-free; reads + asserts `schemaVersion`; never-fabricate (unavailable ≠ 0); markdown sidecar (E1/0469); `--mode default\|forensics` registry (E5/0555) |
+| `spur history daily` — single run-once invocation | ✅ | import-all → analyze → write artifact → prune (90-day retention); launchd plist (E1/0470/0471); `--mode` sidecar pass-through (E5/0555) |
 | History system events + launchd scheduling | ✅ | `history.*` event catalog; `com.gobing-ai.spur.history.daily.plist`; pre-logging failure capture (E1/0471) |
 | Configurable splitting (one-to-one/one-to-many/custom) | ✅ | declarative `splitConfig` |
 | Field firewall (fieldMap + transforms) | ✅ | raw→canonical decoupling |

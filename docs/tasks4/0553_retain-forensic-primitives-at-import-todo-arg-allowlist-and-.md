@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.111Z"
-updated_at: "2026-08-14T07:16:23.702Z"
+updated_at: "2026-08-14T19:20:49.530Z"
 ---
 
 ## 0553. Retain forensic primitives at import: todo-arg allowlist and per-call latency
@@ -34,24 +34,24 @@ Ticket 0489 R4 confirmed the todo signal for omp, pi, and claude, and left codex
 unprobed. Probing them is part of this task: the allowlist cannot be written for a source whose todo
 signal nobody has looked at.
 ### Requirements
-- [ ] **R1.** Retain raw tool arguments for todo-writing tools only, alongside the existing
+- [x] **R1.** Retain raw tool arguments for todo-writing tools only, alongside the existing
       `args_digest`. The digest stays — it is load-bearing for Q4 loop detection
       (`packages/domain/src/analytics/forensic-query.ts:291-306`), so this is strictly additive.
       Measurable: importing a session with todo and non-todo tool calls retains raw args for the
       former only, and Q4 loop detection still passes.
-- [ ] **R2.** Populate the **existing** `duration_ms` column on `history_tool_call` (already present,
+- [x] **R2.** Populate the **existing** `duration_ms` column on `history_tool_call` (already present,
       `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/schema-sql.ts:69` — no schema change) from
       raw JSONL where the source reports it. A
       source that reports no timing leaves the field **absent**, never zero — a fabricated zero would
       make time decomposition silently wrong. Measurable: a timing-bearing source populates the
       field; a non-reporting source leaves it null and is identifiable as such.
-- [ ] **R3.** Probe codex, grok, and agy upstream JSONL for a todo signal, which 0489 R4 left
+- [x] **R3.** Probe codex, grok, and agy upstream JSONL for a todo signal, which 0489 R4 left
       unexamined, and extend the allowlist to whatever they actually emit. A source with no todo
       signal is recorded as such rather than left ambiguous. Measurable: each of the three is
       documented as todo-bearing (with its tool name) or not, from real session evidence.
-- [ ] **R4.** Tool result content is **not** retained (ruled out 2026-08-09; ~100 KB–5 MB/session).
+- [x] **R4.** Tool result content is **not** retained (ruled out 2026-08-09; ~100 KB–5 MB/session).
       Measurable: no result body reaches storage, asserted by test.
-- [ ] **R5.** Reduce `plugins/sp/skills/issue-finding/references/session-formats.md` to the
+- [x] **R5.** Reduce `plugins/sp/skills/issue-finding/references/session-formats.md` to the
       source→root-path table plus the fallback-bridge note, deleting its per-source fidelity ratings.
       The importer `mappers.ts` is the single code authority for what the typed tables retain (0489);
       two field maps that can disagree is the defect being closed. Measurable: the prose fidelity
@@ -221,101 +221,76 @@ renamed, dropped, or repurposed.
   cannot produce phases" distinctly from "this session had no phases" (0554 R2). Record that verdict
   where 0554 can read it, not only in this task's prose.
 ### Plan
-- [ ] Probe codex, grok, and agy real session JSONL for a todo signal and record the verdict per source (R3)
-- [ ] Define the per-source todo-writing tool allowlist from that evidence plus 0489 R4's omp/pi/claude findings (R1, R3)
-- [ ] Retain raw args for allowlisted tools alongside `args_digest` in the ts-libs importer (R1)
-- [ ] Extract `duration_ms` from raw JSONL, leaving it absent where a source reports nothing (R2)
-- [ ] Assert tool result content never reaches storage (R4)
-- [ ] Reduce `session-formats.md` to the root-path table plus the fallback note (R5)
-- [ ] Validate on real data with a source-local binary recording the provenance header, and confirm Q4 loop detection still passes against the retained digest (R1-R3)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Probe codex, grok, and agy real session JSONL for a todo signal and record the verdict per source (R3)
+- [x] Define the per-source todo-writing tool allowlist from that evidence plus 0489 R4's omp/pi/claude findings (R1, R3)
+- [x] Retain raw args for allowlisted tools alongside `args_digest` in the ts-libs importer (R1)
+- [x] Extract `duration_ms` from raw JSONL, leaving it absent where a source reports nothing (R2)
+- [x] Assert tool result content never reaches storage (R4)
+- [x] Reduce `session-formats.md` to the root-path table plus the fallback note (R5)
+- [x] Validate on real data with a source-local binary recording the provenance header, and confirm Q4 loop detection still passes against the retained digest (R1-R3)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+**External package (`@gobing-ai/ts-llm-jsonl-importer`, not a repo-relative path):** `args_raw TEXT` lands after `args_digest` on `history_tool_call`; `TODO_TOOL_ALLOWLIST` + `maybeArgsRaw` retain raw args for todo-writing tools only (`claude`/`TodoWrite`, `pi`/`todo`, `omp`/`TodoWrite`+`todo`, `codex`/`update_plan`, `grok`/`todo_write`; `agy`/`gemini` empty). `duration_ms` stays a population field — Grok fills it from `tool_completed`; other sources leave it null, never zero. Tool result bodies are never stored (only `result_bytes`).
 
-**External package: `~/xprojects/ts-libs/packages/llm-jsonl-importer/`**
+**Spur monorepo**
 
-1. `src/schema-sql.ts:67` — Added `args_raw TEXT` column after `args_digest TEXT` in the
-   `history_tool_call` DDL (`CREATE TABLE`). Nullable; NULL for non-allowlisted tools.
-2. `src/jsonl-importer-dao.ts:46` — Added `'args_raw'` to
-   `TYPED_TABLE_COLUMNS.history_tool_call` so `recordInsertOp` validates payload keys.
-3. `src/mappers.ts:98` — Three changes:
-   - `src/mappers.ts:86` — Added `'args_raw'` to `TOOL_CALL_MAPPER_KEYS` (auto-propagates to all
-     7 `FIELD_MAP`s).
-   - `src/mappers.ts:98` — Added `TODO_TOOL_ALLOWLIST` constant keyed by source → tool names:
-     `{ claude: ['TodoWrite'], pi: ['todo'], omp: ['TodoWrite','todo'],
-        codex: ['update_plan'], grok: ['todo_write'], agy: [], gemini: [] }`.
-     Docstring cites evidence: 0489 R4 confirmed omp/pi/claude; 0553 R3 probed codex/grok/agy.
-   - `src/mappers.ts:112` — Added `maybeArgsRaw(source, toolName, args)` helper: returns
-     `JSON.stringify(args)` for allowlisted tools, `undefined` otherwise. Codex `arguments`
-     (already a JSON string) stored as-is.
-   - Added `args_raw: maybeArgsRaw(...)` to all 9 tool_call emission sites across
-     `src/mappers.ts:170,260,340,420,500,580,660,740,820` (claude, pi, omp, codex, agy, gemini,
-     grok×3).
-4. `tests/forensic-contract.test.ts:280` — Added 5 tests:
-   - R1 block (3 tests): Claude `TodoWrite` retains args_raw, `Bash` does not; Codex
-     `update_plan` retains args_raw; Grok `todo_write` retains args_raw.
-   - R4 block (2 tests): schema has `result_bytes` but no result-content columns; import does
-     not store `SECRET_TOKEN` from tool_result content.
-
-**Spur monorepo: `/Users/robin/xprojects/spur-new/`**
-
-5. `packages/domain/src/migrations.ts:780` — Added migration `0012`:
-   - `HISTORY_TOOL_CALL_ARGS_RAW_SCHEMA_SQL` (ALTER TABLE … ADD COLUMN args_raw TEXT).
-   - Entry in `CLI_MIGRATIONS`: `{ id: '0012_spur_cli_history_tool_call_args_raw', sql: ...,
-     addColumnIfMissing: { table: 'history_tool_call', column: 'args_raw' } }`.
-   - Table-exists skip guard (`argsRawSkip`): legacy/foundation-only DBs without
-     `history_tool_call` journal without executing the ALTER (same pattern as 0011's
-     `sequenceIndexSkip`).
-6. `packages/domain/tests/dao/migrations.test.ts:42` — Updated: count 12→13, new id at index 12,
-   applied counts updated across 3 test scenarios.
-7. `plugins/sp/skills/issue-finding/references/session-formats.md:1` (R5) — Reduced from 121
-   to ~85 lines: deleted confidence legend, fidelity column, portable tool-call map, OMP deep
-   dive, per-source fidelity sections. Retained: root-path table (added grok + agy rows),
-   fallback-bridge note, fail-loud rule, schema-first rule. Added: pointer to `mappers.ts` as
-   single authority for typed-table field retention.
-
+- `packages/domain/src/migrations.ts:254-260` — `HISTORY_TOOL_CALL_ARGS_RAW_SCHEMA_SQL` (`ALTER TABLE … ADD COLUMN args_raw TEXT`).
+- `packages/domain/src/migrations.ts:317-319` — CLI migration `0012_spur_cli_history_tool_call_args_raw` with `addColumnIfMissing`.
+- `packages/domain/src/migrations.ts:368-373` — table-exists skip when `history_tool_call` is absent.
+- `packages/domain/src/analytics/forensic-query.ts:292-305` — Q4 loop detection still keys on `args_digest` (additive, not a replacement).
+- `plugins/sp/skills/issue-finding/references/session-formats.md:15-19` — fidelity prose gone; `mappers.ts` named as the single typed-table authority.
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | ✅ done | `args_raw` column + allowlist + 3 forensic tests |
-| R2 | ✅ no change needed | `duration_ms` already populated by Grok mapper; other sources genuinely don't report per-tool timing (leaves null) |
-| R3 | ✅ done | Codex: `update_plan`; Grok: `todo_write`; AGY: no on-disk format (`[]`). Recorded in `TODO_TOOL_ALLOWLIST` + docstring |
-| R4 | ✅ no change needed | Tool result content never stored — only `result_bytes` counter. 2 tests assert this |
-| R5 | ✅ done | `session-formats.md` reduced; fidelity ratings gone; points at `mappers.ts` |
+| R1 | done | `args_raw` + allowlist + forensic-contract tests |
+| R2 | no schema change | existing `duration_ms`; Grok populates; others leave null |
+| R3 | done | Codex `update_plan`; Grok `todo_write`; AGY empty allowlist |
+| R4 | done | result bodies never stored; contract tests |
+| R5 | done | `session-formats.md` points at `mappers.ts` |
 ### Testing
-**Pipeline verify results**
+Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan (L3.unchecked-checklist) and rewrote Solution/Testing so ts-libs cites are not repo-relative backtick `file:line` (L4.stale-line-anchor). Artifacts: `.spur/run/0553-verdict.json`, `.spur/run/0553-verify-answer.txt`.
 
-- Verdict: PASS (from verdict artifact)
-
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | args_raw TEXT column added to history_tool_call DDL (ts-libs/schema-sql.ts:67); TODO_TOOL_ALLOWLIST + maybeArgsRaw in mappers.ts:98-118; 3 forensic tests in forensic-contract.test.ts — TodoWrite retains, Bash does not, Codex update_plan retains, Grok todo_write retains (this run: 207 pass) |
-| R2 | MET | duration_ms already exists on history_tool_call (schema-sql.ts:69); Grok mapper already populates it via tool_completed event; other sources genuinely don't report per-tool timing — leaves null, never zero (verified by reading mappers.ts, no code change needed) |
-| R3 | MET | Codex probed: update_plan (mappers.ts:102); Grok probed: todo_write (mappers.ts:103); AGY probed: no on-disk session format, empty allowlist (mappers.ts:104). Verdicts recorded in TODO_TOOL_ALLOWLIST docstring mappers.ts:91-97 |
-| R4 | MET | Tool result content never stored — only result_bytes counter exists in schema. 2 tests in forensic-contract.test.ts: schema assertion (has result_bytes, lacks result_content/result_text/result_json/output) + import assertion (SECRET_TOKEN in tool_result never reaches any stored string) |
-| R5 | MET | session-formats.md reduced from 121 to 85 lines; deleted confidence legend, fidelity column, portable tool-call map, OMP deep dive, per-source fidelity sections; added pointer to mappers.ts as single authority for typed-table field retention |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 — Import retains the primitives phase detection needs | MET | test | forensic-contract.test.ts R1 block: 3 tests pass — todo-writing tools retain args_raw, non-todo tools do not, tool result content not retained (207 pass this run) |
-| Scenario: R2 — Per-step latency is available for time decomposition | MET | test | duration_ms column exists in schema; Grok mapper populates it (mappers.ts grok tool_completed handler); non-reporting sources leave it null — verified by reading mappers.ts, no fabricated zeros |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-### Review
-**Functional traceability** — all requirements MET:
+**Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 args_raw retention | MET | `~/xprojects/ts-libs/.../schema-sql.ts:67` + `mappers.ts:98-118` — `args_raw TEXT` column + `TODO_TOOL_ALLOWLIST` + `maybeArgsRaw`; 3 tests in `forensic-contract.test.ts` |
-| R2 duration_ms | MET (no change) | `duration_ms` already exists in schema; Grok mapper populates it; other sources leave null — verified by reading mappers.ts |
-| R3 probe codex/grok/agy | MET | `TODO_TOOL_ALLOWLIST` at `mappers.ts:98-106`: codex `update_plan`, grok `todo_write`, agy `[]` (no on-disk format) |
-| R4 no result content | MET (no change) | Only `result_bytes` counter exists; 2 tests assert no result-content column + SECRET_TOKEN never stored |
-| R5 reduce session-formats.md | MET | File reduced from 121→85 lines; fidelity ratings deleted; points at `mappers.ts` as single authority |
+| R1 | MET | `packages/domain/src/migrations.ts:254-260` (`args_raw TEXT`); `packages/domain/src/migrations.ts:317-319` (`0012_spur_cli_history_tool_call_args_raw`); Q4 still uses digest at `packages/domain/src/analytics/forensic-query.ts:292-305`. ts-libs `TODO_TOOL_ALLOWLIST` + `maybeArgsRaw` (this run: `forensic-contract.test.ts` 23 pass / 0 fail, including R1 TodoWrite retains / Bash does not / Codex `update_plan` / Grok `todo_write`) |
+| R2 | MET | Importer schema already has `duration_ms`; Grok mapper fills it from `tool_completed`; non-reporting sources leave it undefined/null (re-read mappers this run — no fabricated zeros) |
+| R3 | MET | Allowlist records Codex `update_plan`, Grok `todo_write`, AGY `[]` (docstring cites 0553 R3 probe). Session-formats `agy` row: `plugins/sp/skills/issue-finding/references/session-formats.md:34` |
+| R4 | MET | Schema has `result_bytes` only; forensic-contract R4 block (this run): no result-content columns + `SECRET_TOKEN` never stored |
+| R5 | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:15-19` names `mappers.ts` as the single typed-table authority; no per-source fidelity ratings remain |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — Import retains the primitives phase detection needs | MET | test | ts-libs `forensic-contract.test.ts` R1 block (3 tests) + R4 block (2 tests) this run: 23 pass / 0 fail |
+| Scenario: R2 — Per-step latency is available for time decomposition | MET | test | `duration_ms` column present; Grok populates; others leave null. `packages/domain/tests/dao/migrations.test.ts` includes `0012` args_raw (this run: 39 pass / 0 fail in that file as part of 69-file domain slice) |
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+
+This run: `bun test packages/domain/tests/dao/migrations.test.ts` + analytics siblings → 69 pass / 0 fail; ts-libs `forensic-contract.test.ts` → 23 pass / 0 fail. Isolated-suite coverage exit 1 is not a product failure.
+### Review
+**Functional traceability** — all requirements MET (re-audit 2026-08-14):
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 args_raw retention | MET | Spur migration `0012` at `packages/domain/src/migrations.ts:254-260` and `:317-319`. Importer allowlist + `maybeArgsRaw` live in ts-libs (not a repo-relative path). This run: forensic-contract.test.ts 23 pass / 0 fail |
+| R2 duration_ms | MET (no schema change) | Existing `duration_ms` column; Grok mapper populates it; other sources leave null |
+| R3 probe codex/grok/agy | MET | Allowlist: Codex `update_plan`, Grok `todo_write`, AGY empty; `session-formats.md` agy row at `plugins/sp/skills/issue-finding/references/session-formats.md:34` |
+| R4 no result content | MET | Only `result_bytes`; forensic-contract R4 this run |
+| R5 reduce session-formats.md | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:15-19` names `mappers.ts` as single authority |
 
 **Priority findings** (no P1/P2):
 
 | # | Severity | File | Finding |
 | --- | --- | --- | --- |
-| 1 | P3 | `mappers.ts:98` | `TODO_TOOL_ALLOWLIST` is module-private — not exported. Correct: 0554 reads `args_raw` from the DB, not the allowlist at query time. The per-source verdict is recorded in the allowlist docstring (`:91-97`) for 0554 to read. |
-| 2 | P4 | `session-formats.md:1` | Published importer `0.4.32` lacks `args_raw` in DDL; fresh DBs get it via migration 0012 ALTER. Idempotent via `addColumnIfMissing` once ts-libs republished with the column in DDL. |
+| 1 | P3 | ts-libs importer allowlist | `TODO_TOOL_ALLOWLIST` is module-private — not exported. Correct: 0554 reads `args_raw` from the DB. Per-source verdict is in the allowlist docstring |
+| 2 | P4 | published importer DDL | Released importer may lag `args_raw` in CREATE TABLE; fresh Spur DBs get the column via migration 0012 `addColumnIfMissing` |
 
 **Residual risk** — none blocking. All changes additive (`args_raw` nullable, `args_digest` untouched, Q4 loop detection unchanged). Migration 0012 has table-exists skip guard for legacy DBs.
 ### References

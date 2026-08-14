@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0554"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.605Z"
-updated_at: "2026-08-14T17:45:13.446Z"
+updated_at: "2026-08-14T18:46:07.798Z"
 ---
 
 ## 0555. Add the report mode registry and the forensics renderer
@@ -236,16 +236,32 @@ Task 0555 — report mode registry + forensics renderer. All changes same-commit
 
 Out of scope (unchanged, by design): model-authored forensics sections (task 0556); TTFT/generation split (0491 deferral); template engines.
 ### Testing
-- Domain analytics (report modes, renderers, derived, costs): `bun test packages/domain/tests/analytics` — 137 pass / 0 fail / 409 expect() calls.
-  - `render-forensics.ts` coverage: **100.00% lines / 100.00% functions** (bunfig threshold 90/90).
-  - `report-modes.ts`, `render-report.ts`: ≥90/90.
-- App + CLI history surface: `bun test packages/app/tests/services/history-service.test.ts apps/cli/tests/commands/history.test.ts` — 49 pass / 0 fail / 185 expect() calls (mode validation, sidecar paths, unknown-mode errors, JSON envelope).
-- Full monorepo: `bun run spur-check` — biome + all-workspace typecheck + **5090 pass / 0 fail** across 284 files, per-file 90/90 coverage thresholds met, tsdoc 2/2, transition-shim-check PASS.
-- `bun run test-cf` exit 0 (Cloudflare Workers vitest).
-- `bun run build` exit 0 (CLI bundle + server + web).
-- `bun run corpus-check` OK — 2 baselined errors, 0 new/stale.
+Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). Requirements + Plan already `[x]`; no checkbox/anchor fix. Artifact: `.spur/run/0555-verdict.json`.
 
-N/A: manual UI verification (no UI surface in this task).
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/report-modes.ts:26-28` `REPORT_MODES`; `packages/domain/src/analytics/report-modes.ts:32-38` (`resolveReportMode`); `packages/domain/src/analytics/report-modes.ts:13-17` (`UnknownReportModeError`). `packages/app/src/services/history-service.ts:853` (`runHistoryReport`). CLI `apps/cli/src/commands/history.ts:174` |
+| R2 | MET | `packages/domain/src/analytics/render-forensics.ts:20-37` (`renderForensics`; 8 derivable sections; model-authored not stubbed). This run: `packages/domain/tests/analytics/render-forensics.test.ts` 14 pass |
+| R3 | MET | Tokens-only documented at `packages/domain/src/analytics/render-forensics.ts:12-14`; `MODEL_PRICING` is referenced only in the comment (no new consumer). Test asserts no currency value |
+| R4 | MET | `daily` validates mode before import (`packages/app/src/services/history-service.ts:369`); CLI `apps/cli/src/commands/history.ts:219`. `docs/04_DESIGN.md:558-562` |
+| R5 | MET | Honest `not available` / `n/a` (this run: render-forensics unavailability + empty-bucket tests) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R4 — Report renders by selected mode | MET | test | `packages/domain/tests/analytics/report-modes.test.ts` this run: 5 pass / 0 fail (default + forensics resolve; default byte-identical to legacy `renderReport`; unknown mode names registered set; `renderMarkdown` mode-aware) |
+| Scenario: R5 — The forensics mode reproduces the derivable sections | MET | test | `packages/domain/tests/analytics/render-forensics.test.ts` this run: 14 pass / 0 fail (8 headings, tokens/cache not currency, missing derived → not-available, unsupported phases, n/a not 0) |
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+
+This run: report-modes 5 + render-forensics 14 + derived 11 + migrations 39 = 69 pass / 0 fail. `report-modes.ts` and `render-forensics.ts` 100% lines/funcs on that slice.
 ### Review
 L3 review (inline, model-authored). No P1/P2 findings.
 
