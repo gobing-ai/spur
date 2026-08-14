@@ -2128,6 +2128,146 @@ describe('AgentService role routing (0536)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService — role propagation across fan-out (0551)
+// ---------------------------------------------------------------------------
+// A dispatched subagent that declares its own role resolves through that
+// role's tier (declared wins); with nothing declared it inherits the
+// dispatcher's effective role via SPUR_ROLE. The effective role and its
+// origin ('declared' | 'inherited') ride the --json envelope per dispatched
+// subagent (R3).
+
+describe('AgentService role propagation (0551)', () => {
+    const roleCfg: AgentConfig = {
+        executors: [
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    function envelopeJson(output: { lines: string[]; errors: string[] }): Record<string, unknown> {
+        const line = output.lines.find((l) => l.includes('"exitCode"'));
+        expect(line, 'expected a JSON envelope line').toBeDefined();
+        return JSON.parse(line ?? '') as Record<string, unknown>;
+    }
+
+    test("R1: a declared role beats the inherited SPUR_ROLE — origin 'declared'", async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'scribe' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', role: 'reviewer', json: true }, deps);
+        expect(code).toBe(0);
+        // reviewer floors at capable-1 — NOT the inherited scribe tier.
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.roleOrigin).toBe('declared');
+    });
+
+    test("R2: with nothing declared, the run inherits the dispatcher's role and its tier", async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'reviewer' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // Inherited reviewer floors at capable-1 → claude, not the cheap pi executor.
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.roleOrigin).toBe('inherited');
+        expect(resolved.source).toBe('role');
+        expect(resolved.executor).toBe('cap1-exec');
+    });
+
+    test("R2: inheritance respects the role's tier floor — coder inherits standard, not cheap", async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'coder' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // Both cheap-exec and std-exec map to agent pi; the tier + executor
+        // assertions are what distinguish the inherited standard floor.
+        expect(resolvedAgent(runner)).toBe('pi');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('coder');
+        expect(resolved.tier).toBe('standard');
+        expect(resolved.executor).toBe('std-exec');
+    });
+
+    test('R2: an unknown inherited role warns once and falls through to priority', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'sorcerer' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        // Inheritance must never hard-fail a dispatch — stale env degrades to priority.
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe(TIER1_PRIORITY[0] as string);
+        expect(errors.join('\n')).toContain("ignoring inherited role 'sorcerer'");
+    });
+
+    test('R3: an explicit pin inherits attribution — the pin wins routing, the envelope carries role + origin', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'reviewer' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'cap1-exec', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.executor).toBe('cap1-exec');
+        expect(resolved.source).toBe('explicit');
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.roleOrigin).toBe('inherited');
+    });
+
+    test('R3: a stale inherited role under an executor pin warns — never drops silently', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'sorcerer' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'cap1-exec', json: true }, deps);
+        expect(code).toBe(0);
+        // The pin still wins routing; the unknown inherited role must surface as
+        // a warning (same path as the auto branch), not vanish without a trace.
+        expect(resolvedAgent(runner)).toBe('claude');
+        expect(errors.join('\n')).toContain("ignoring inherited role 'sorcerer'");
+    });
+
+    test("R3: a role selector under an inherited role records 'declared', not 'inherited'", async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'scribe' }, roleMap(), output);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'reviewer', json: true }, deps);
+        expect(code).toBe(0);
+        // --agent reviewer resolves through reviewer's tier (capable-1), ignoring scribe.
+        expect(resolvedAgent(runner)).toBe('claude');
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.role).toBe('reviewer');
+        expect(resolved.roleOrigin).toBe('declared');
+    });
+
+    test('R3: a mixed fan-out surfaces each dispatched subagent’s own role and origin', async () => {
+        const { lines, output } = captureOutput();
+        // One dispatcher (SPUR_ROLE=scribe) fans out two subagents.
+        const svc = makeConfiguredService(roleCfg, { SPUR_ROLE: 'scribe' }, roleMap(), output);
+        const { deps: depsA, runner: runnerA } = mockResolutionDeps();
+        const { deps: depsB, runner: runnerB } = mockResolutionDeps();
+        // Subagent A declares nothing → inherits the dispatcher's scribe role.
+        const codeA = await svc.run('summarize the diff', { agent: 'auto', json: true }, depsA);
+        // Subagent B declares its own reviewer role → declared wins.
+        const codeB = await svc.run('review the plan', { agent: 'auto', role: 'reviewer', json: true }, depsB);
+        expect(codeA).toBe(0);
+        expect(codeB).toBe(0);
+        expect(resolvedAgent(runnerA)).toBe('pi');
+        expect(resolvedAgent(runnerB)).toBe('claude');
+        const origins = lines
+            .filter((l) => l.includes('"roleOrigin"'))
+            .map((l) => (JSON.parse(l) as Record<string, unknown>).resolved as Record<string, unknown>);
+        expect(origins).toHaveLength(2);
+        expect(origins[0]).toMatchObject({ role: 'scribe', roleOrigin: 'inherited' });
+        expect(origins[1]).toMatchObject({ role: 'reviewer', roleOrigin: 'declared' });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService — agent.default role domain (0542 R2)
 // ---------------------------------------------------------------------------
 // `agent.default` is redefined as the default *role* for a dispatch that

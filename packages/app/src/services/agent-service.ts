@@ -128,6 +128,8 @@ export type AgentResolveResult =
           stage?: StageEscalationContext;
           /** Role selector that produced this resolution (source `role`, 0536 R1). */
           role?: string;
+          /** Whether the role was declared by the caller or inherited via SPUR_ROLE (0551). */
+          roleOrigin?: 'declared' | 'inherited';
           /** Tier the role's row declares in `roles.md` (source `role`). */
           tier?: CapabilityTier;
           /** Executor entry name that won — role resolution or an executor pin. */
@@ -170,6 +172,8 @@ export interface AgentRunInvocation {
     source: AgentResolveSource;
     /** Role selector that produced this resolution (source `role`, 0536 R1). */
     role?: string;
+    /** Origin of the effective role — declared or inherited via SPUR_ROLE (0551). */
+    roleOrigin?: 'declared' | 'inherited';
     /** Tier the role's row declares in `roles.md` (source `role`). */
     tier?: CapabilityTier;
     /** Executor entry name that won — role resolution or an executor pin. */
@@ -305,6 +309,28 @@ export class PidObservingProcessExecutor extends NodeProcessExecutor {
                 this.publishPid(pid);
             },
         });
+    }
+}
+
+/**
+ * Process executor that stamps the dispatching run's effective role into every
+ * spawned subprocess environment as `SPUR_ROLE` (0551). Recursive by
+ * construction: a child `spur agent run` reads it as its inherited role when it
+ * declares none of its own. An empty value strips a parent's stale role
+ * (stage/default/priority resolutions dispatch with no role). Preserves any
+ * caller-supplied env (ai-runner correlation vars) — `SPUR_ROLE` is the only
+ * key overridden.
+ */
+export class RolePropagatingProcessExecutor extends PidObservingProcessExecutor {
+    private roleEnv = '';
+
+    /** Set the role stamped into subsequent spawns; undefined strips. */
+    setRoleEnv(role: string | undefined): void {
+        this.roleEnv = role ?? '';
+    }
+
+    override async run(options: ProcessOptions): Promise<ProcessResult> {
+        return super.run({ ...options, env: { ...options.env, SPUR_ROLE: this.roleEnv } });
     }
 }
 
@@ -623,16 +649,19 @@ export class AgentService {
         // deps or defaults. When the service has a server EventBus, thread it
         // onto the runner so `agent.invoke.*` emits also reach the system_events
         // tap (task 0221 R3).
+        // Constructed even when deps.runner is injected (then unused — it is
+        // side-effect free): one shape for every caller of this method.
+        const dispatchExecutor = new RolePropagatingProcessExecutor(
+            {
+                output: outputPolicy,
+                ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
+            },
+            (pid) => publishPid?.(pid),
+        );
         const runner =
             deps?.runner ??
             new AiRunner({
-                processExecutor: new PidObservingProcessExecutor(
-                    {
-                        output: outputPolicy,
-                        ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
-                    },
-                    (pid) => publishPid?.(pid),
-                ),
+                processExecutor: dispatchExecutor,
                 ...(this.ctx.events !== undefined ? { events: bridgeEventBus(this.ctx.events) } : {}),
                 ...(this.ctx.events !== undefined ? { processEvents: bridgeEventBus(this.ctx.events) } : {}),
             });
@@ -657,6 +686,11 @@ export class AgentService {
         // Role attribution (0536 R1/R2): stable per run — role resolution never
         // escalates (no stage context) and pins carry no role in this task.
         let currentRole = resolved.role;
+        let currentRoleOrigin = resolved.roleOrigin;
+        // Propagate the effective role into every dispatched subprocess (0551):
+        // doctor/detector probes spawned during resolution above ran with
+        // SPUR_ROLE='' (stripped) — harmless; children need the resolved role.
+        dispatchExecutor.setRoleEnv(currentRole);
         let currentTier = resolved.tier;
         let currentExecutor = resolved.executor;
         const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
@@ -827,6 +861,7 @@ export class AgentService {
                     agent,
                     source: currentSource,
                     ...(currentRole !== undefined ? { role: currentRole } : {}),
+                    ...(currentRoleOrigin !== undefined ? { roleOrigin: currentRoleOrigin } : {}),
                     ...(currentTier !== undefined ? { tier: currentTier } : {}),
                     ...(currentExecutor !== undefined ? { executor: currentExecutor } : {}),
                     command: shimCommand.command,
@@ -950,6 +985,8 @@ export class AgentService {
                 currentSource = nextResolved.source;
                 currentStage = nextResolved.stage;
                 currentRole = nextResolved.role;
+                currentRoleOrigin = nextResolved.roleOrigin;
+                dispatchExecutor.setRoleEnv(currentRole);
                 currentTier = nextResolved.tier;
                 currentExecutor = nextResolved.executor;
                 attemptedExecutors.add(nextResolved.stage.executorName);
@@ -1075,11 +1112,30 @@ export class AgentService {
         }
         const base = await this.resolveExecutorSelector(selector, doctorRunner, 'explicit');
         if (!base.ok) return base;
-        // Declared role attribution (0538 R2): the pin beats role routing, but the
+        // Role attribution (0538 R2 / 0551 R2): the pin beats role routing, but a
         // declared role is still recorded on the resolution so the --json envelope
-        // carries both values (0536 R2) — the reason survives removing the pin later.
+        // carries both values (0536 R2) — the reason survives removing the pin
+        // later. With nothing declared, the run inherits the dispatcher's role
+        // (0551) — recorded as roleOrigin: 'inherited'; the pin still wins routing.
+        // `base.role === undefined` guards the `--agent <role>` selector, which
+        // already resolved through the role and carries its own origin.
         const declaredRole = stringFlag(flags, 'role', '');
-        const attributed = base.ok && declaredRole !== '' ? { ...base, role: declaredRole } : base;
+        let attributed = base;
+        if (declaredRole !== '') {
+            attributed = { ...base, role: declaredRole, roleOrigin: 'declared' };
+        } else if (base.role === undefined) {
+            const inherited = this.inheritedRole();
+            if (inherited !== undefined && this.ctx.roles?.get(inherited) !== undefined) {
+                attributed = { ...base, role: inherited, roleOrigin: 'inherited' };
+            } else if (inherited !== undefined) {
+                // Mirror the auto path's warning (0551 R3): a stale SPUR_ROLE under
+                // a pin must not vanish silently — attribution is dropped but the
+                // observation stays visible. Routing is unaffected (the pin wins).
+                this.ctx.output.error(
+                    `Warning: ignoring inherited role '${inherited}' — not in ${this.roleVocabulary()}`,
+                );
+            }
+        }
         const stageRecord = this.resolveCanonicalStage(flags);
         // Role-resolved selectors carry the winning executor in `base.executor`;
         // the pin-attach below assumes the selector IS the executor name, so it
@@ -1144,7 +1200,7 @@ export class AgentService {
                     message: `Unknown declared role: '${declaredRole}'. Accepted: ${this.roleVocabulary()}.`,
                 };
             }
-            return this.resolveRole(declaredRole, roleTier, doctorRunner);
+            return this.resolveRole(declaredRole, roleTier, doctorRunner, 'declared');
         }
 
         // Stage-registry adaptive model routing (R1/R2/R3)
@@ -1153,6 +1209,23 @@ export class AgentService {
             const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
             if (stageRes !== undefined) {
                 return stageRes;
+            }
+        }
+
+        // Inherited role (0551 R2): nothing declared and no explicit stage — a
+        // fan-out subagent inherits the dispatcher's effective role via SPUR_ROLE
+        // and resolves through that role's tier. An unknown inherited role (stale
+        // env) warns once and falls through to default/priority — inheritance
+        // must never hard-fail a dispatch.
+        const inherited = this.inheritedRole();
+        if (inherited !== undefined) {
+            const inheritedTier = this.ctx.roles?.get(inherited);
+            if (inheritedTier === undefined) {
+                this.ctx.output.error(
+                    `Warning: ignoring inherited role '${inherited}' — not in ${this.roleVocabulary()}`,
+                );
+            } else {
+                return this.resolveRole(inherited, inheritedTier, doctorRunner, 'inherited');
             }
         }
 
@@ -1356,7 +1429,14 @@ export class AgentService {
         // 0537's collision guard proves roles and executor names pairwise disjoint.
         const roleTier = this.ctx.roles?.get(selector);
         if (roleTier !== undefined) {
-            return this.resolveRole(selector, roleTier, doctorRunner);
+            return this.resolveRole(
+                selector,
+                roleTier,
+                doctorRunner,
+                // `--agent <role>` (explicit) is a declaration; `agent.default`
+                // routing through a role value is config, not a declaration.
+                source === 'explicit' ? 'declared' : undefined,
+            );
         }
 
         const executor = this.ctx.agentConfig?.executors?.find((e) => e.name === selector);
@@ -1454,12 +1534,14 @@ export class AgentService {
      * role's tier) sorted by tier ascending, first usable wins. No stage context
      * is attached: a role picks the *starting* tier; escalation stays
      * stage-policy-driven (0348). `role`/`tier`/`executor` ride the result for
-     * the `--json` envelope (R1).
+     * the `--json` envelope (R1), along with `roleOrigin` when `origin` is set
+     * (0551).
      */
     private async resolveRole(
         role: string,
         roleTier: CapabilityTier,
         doctorRunner: DoctorRunner,
+        origin?: 'declared' | 'inherited',
     ): Promise<AgentResolveResult> {
         const executors = this.ctx.agentConfig?.executors;
         if (executors === undefined || executors.length === 0) {
@@ -1489,6 +1571,7 @@ export class AgentService {
                     model: executor.model,
                     source: 'role',
                     role,
+                    ...(origin !== undefined ? { roleOrigin: origin } : {}),
                     tier: roleTier,
                     executor: executor.name,
                 };
@@ -1500,6 +1583,15 @@ export class AgentService {
             exitCode: 1,
             message: `No usable executor for role '${role}' (tier ${roleTier}) — tried: ${tried} (spur agent doctor)`,
         };
+    }
+
+    /**
+     * The dispatcher's effective role, threaded through SPUR_ROLE (0551 R2).
+     * Absent/empty → undefined (top-level dispatch, no inheritance).
+     */
+    private inheritedRole(): string | undefined {
+        const raw = this.ctx.env.SPUR_ROLE;
+        return raw !== undefined && raw !== '' ? raw : undefined;
     }
 
     /**
@@ -1639,6 +1731,7 @@ export class AgentService {
                         ? {
                               resolved: {
                                   ...(invocation.role !== undefined ? { role: invocation.role } : {}),
+                                  ...(invocation.roleOrigin !== undefined ? { roleOrigin: invocation.roleOrigin } : {}),
                                   ...(invocation.tier !== undefined ? { tier: invocation.tier } : {}),
                                   ...(invocation.executor !== undefined ? { executor: invocation.executor } : {}),
                                   agent: invocation.agent,

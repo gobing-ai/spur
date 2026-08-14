@@ -6,7 +6,7 @@ import {
     configuredSecretValues,
     redactAndBound,
 } from '../../src/observability/agent-execution';
-import { PidObservingProcessExecutor } from '../../src/services/agent-service';
+import { PidObservingProcessExecutor, RolePropagatingProcessExecutor } from '../../src/services/agent-service';
 
 describe('AgentExecutionLifecycle', () => {
     test('emits one correlated lifecycle and retains redacted bounded output', () => {
@@ -247,5 +247,78 @@ describe('PidObservingProcessExecutor wiring (0421 R5 glue)', () => {
 
         expect(sink.length).toBe(1);
         expect(caller).toEqual(sink);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: 0551 — role propagation into the dispatched subprocess env
+// ---------------------------------------------------------------------------
+
+describe('RolePropagatingProcessExecutor (0551)', () => {
+    test('stamps the set role into the spawned subprocess env as SPUR_ROLE', async () => {
+        const executor = new RolePropagatingProcessExecutor({}, () => {});
+        executor.setRoleEnv('reviewer');
+
+        const result = await executor.run({ command: '/bin/sh', args: ['-c', 'echo $SPUR_ROLE'] });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe('reviewer');
+    });
+
+    test('strips a parent role when none is set — a child must not inherit stale env', async () => {
+        const executor = new RolePropagatingProcessExecutor({}, () => {});
+
+        const result = await executor.run({ command: '/bin/sh', args: ['-c', 'echo "[$SPUR_ROLE]"'] });
+
+        expect(result.exitCode).toBe(0);
+        // Empty string overrides any parent value: the child sees no role.
+        expect(result.stdout.trim()).toBe('[]');
+    });
+    test('setRoleEnv(undefined) reverts to stripping', async () => {
+        const executor = new RolePropagatingProcessExecutor({}, () => {});
+        executor.setRoleEnv('coder');
+        executor.setRoleEnv(undefined);
+
+        const result = await executor.run({ command: '/bin/sh', args: ['-c', 'echo "[$SPUR_ROLE]"'] });
+
+        expect(result.stdout.trim()).toBe('[]');
+    });
+
+    test('preserves caller-supplied env keys — SPUR_ROLE is the only key overridden', async () => {
+        const executor = new RolePropagatingProcessExecutor({}, () => {});
+        executor.setRoleEnv('scribe');
+
+        const result = await executor.run({
+            command: '/bin/sh',
+            args: ['-c', 'echo "$SPUR_ROLE $SPUR_RUN_ID"'],
+            env: { SPUR_RUN_ID: 'run-42' },
+        });
+
+        expect(result.stdout.trim()).toBe('scribe run-42');
+    });
+
+    test('composes with the pid sink — role stamping does not break pid observation', async () => {
+        const seen: number[] = [];
+        const executor = new RolePropagatingProcessExecutor({}, (pid: number) => seen.push(pid));
+        executor.setRoleEnv('reviewer');
+
+        await executor.run({ command: '/bin/sh', args: ['-c', 'echo $SPUR_ROLE'] });
+
+        expect(seen.length).toBe(1);
+    });
+
+    test('stamps SPUR_ROLE into a child spur agent run env under a parent SPUR_ROLE', async () => {
+        const executor = new RolePropagatingProcessExecutor({}, () => {});
+        executor.setRoleEnv('coder');
+
+        // Simulates the actual fan-out: a parent run holds SPUR_ROLE in its own
+        // env; the executor must override it, not pass it through untouched.
+        const result = await executor.run({
+            command: '/bin/sh',
+            args: ['-c', 'echo $SPUR_ROLE'],
+            env: { SPUR_ROLE: 'reviewer' },
+        });
+
+        expect(result.stdout.trim()).toBe('coder');
     });
 });

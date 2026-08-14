@@ -63,6 +63,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `spur agent list` (detection) | ✅ | installed/missing per known agent |
 | `spur agent doctor [agent]` (readiness) | ✅ | usable/needs-auth/missing + tier; exit on tier-1 failure |
 | `spur agent run <prompt>` (execution + capture) | 🔶 | single-shot migrated, pending verification; team-mode pending verification (triage M12) |
+| Subagent role propagation across fan-out (I4) | ✅ | declared role wins; absent inherits via `SPUR_ROLE` with `roleOrigin` on the `--json` envelope (0551); inventory in `dispatch-surface.md` |
 | Slash-command translation | ✅ | Claude-style `/plugin:cmd` translated per agent via ts-ai-runner `translateSlashCommand` (agent-service) — corrected 2026-06-12 after code verification (was 💤) |
 
 ## 4. Rules (`ts-rule-engine`)

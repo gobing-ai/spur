@@ -98,6 +98,44 @@ native subagent with shared-worktree capability); the inline driver remains the 
 provenance, artifact validation, and no-replay guarantees. This reference stays the authority for
 the native-subagent versus `spur agent run` choice everywhere else.
 
+## Role propagation across fan-out (task 0551, feature I4)
+
+When a run dispatches subagents, the **effective role** each subagent resolves through follows one
+rule: **a declared role wins; absent a declaration, the subagent inherits the dispatcher's.**
+Propagation is recorded, never implied: the resolution envelope carries `roleOrigin:
+'declared' | 'inherited'` per dispatched subagent (R3), so a wrong inheritance is observable
+without reading the dispatcher's source. The role travels on the existing `--agent` selector —
+no new flag (feature I4 § Notes).
+
+Mechanism: `AgentService` stamps the dispatcher's resolved role into every spawned subprocess
+environment as `SPUR_ROLE` (`RolePropagatingProcessExecutor`,
+`packages/app/src/services/agent-service.ts`). A child `spur agent run` reads it at resolution;
+a subagent that declares its own role (role selector, workflow `role:` step, explicit
+`--agent <role>`) resolves through that role's tier and records `roleOrigin: 'declared'`; one
+that declares nothing and carries no explicit `--stage` resolves through the inherited role's
+tier and records `roleOrigin: 'inherited'` (an explicit `--stage` routes through stage policy
+before the inherited branch — direct CLI only, the workflow action exposes no stage option).
+Nested fan-out applies the rule recursively by construction — a grandchild reads
+its parent's `SPUR_ROLE`, which the parent already set. An unknown inherited role (stale env)
+warns once and falls through to `agent.default`/priority — inheritance never hard-fails a
+dispatch (task 0536 R3 precedent).
+
+**Dispatch-path inventory (R4)** — every path that shells out to `spur agent run` applies the
+rule at the source, so no per-path shim is needed:
+
+| Path | Where it dispatches | Rule coverage |
+| --- | --- | --- |
+| `spur agent run` (CLI) | `AgentService.run` → resolution → child process | Declared wins; absent inherits via `SPUR_ROLE`; envelope carries `roleOrigin` |
+| Workflow `agent.run` step | `AgentRunActionRunner` → `AgentService.runTraced` | Step `role:` is **mandatory** (0538 R2, `agent-run.ts` fails a role-less step before dispatch) — always a declaration (`roleOrigin: 'declared'`); inheritance applies at the next fan-out boundary the step's subagent itself dispatches |
+| `spur agent loop` | `AgentService.run` per drained iteration | Same resolution path as `spur agent run`; inherits its own `SPUR_ROLE` |
+| `spur team` supervisor → member | spawns `spur agent loop` | Member inherits the supervisor's `SPUR_ROLE` (recursive by construction) |
+| Native subagent fan-out (this skill's default) | in-session `Task()`/`Skill()` | In-session subagents share the host session; when they themselves dispatch, the host's role is already in the session env — the rule holds at the next `spur agent run` boundary |
+| `plugins/sp/evals/run-eval.ts` | `spawnSync('spur agent run', …)` per scenario | Out of scope: a top-level eval harness, not a fan-out — no dispatcher role exists to inherit; each scenario is an independent top-level run (documented, no shim) |
+
+The inventory is recorded in `docs/04_DESIGN.md` § `spur agent run` envelope (`roleOrigin`).
+Paths that shell out to `spur agent run` without the rule would silently drop or double-attribute
+a role; this table is the check that none do.
+
 ## See also
 
 - **`parallel-execution`** SKILL.md - the dispatch disciplines this rule sits beside.

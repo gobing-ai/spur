@@ -232,10 +232,14 @@ the deprecation window. The stage-registry schema version is 1.2 (`auth` is an a
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope
 (`{ exitCode: number|null, stdout, stderr, signal?, durationMs, resolved }`), where `resolved`
-(`{ role?, tier?, executor?, agent, source }`, task 0536 R1/R2) reports the resolution decision:
+(`{ role?, roleOrigin?, tier?, executor?, agent, source }`, tasks 0536 R1/R2 + 0551) reports the
+resolution decision:
 the role selector and its `roles.md` tier and the executor entry that won for role routing, the
 executor pin for an explicit executor, the canonical agent, and the resolution source
-(`role`/`explicit`/`default`/`stage`/`priority`). When the run is
+(`role`/`explicit`/`default`/`stage`/`priority`). `roleOrigin` (`'declared' | 'inherited'`, task
+0551) records whether the effective role was declared by the caller (a role selector, workflow
+`role:` step, or explicit `--agent <role>`) or inherited from the dispatching run's `SPUR_ROLE`
+environment (a fanned-out subagent that declared none). When the run is
 addressed by a **spec id** (`--spec <id>`, or the legacy `--agent <specId>` matching an agent
 spec), the envelope **adds** two optional keys (ADR-057 wave 1 / G4): `occupant`
 (`{ specId, agentKind, processId|null, runId, generation }`) — the live occupant pin
