@@ -12,6 +12,25 @@ export {
 } from './artifact';
 export { cacheHitRatio, computeRecordCost, formatRatio, formatSummary } from './costs';
 export {
+    type Bottleneck,
+    computeDerived,
+    createDefaultRegistry,
+    type DerivedVariables,
+    derivedWarnings,
+    emptyDerived,
+    extractPhases,
+    type MetricContext,
+    type MetricFn,
+    MetricRegistry,
+    type Phase,
+    type PhaseResult,
+    parseTodoItems,
+    type SessionSpanRow,
+    type SessionToolDurationRow,
+    type TimeDecomposition,
+    type TodoToolCallRow,
+} from './derived';
+export {
     buildMessageWhere,
     bySession,
     byTool,
@@ -24,23 +43,33 @@ export {
     messageRollup,
     type SessionRow,
     type SourceSummaryRow,
+    sessionSpans,
+    sessionToolDurations,
     sourceSummary,
     type ToolRollupRow,
     type ToolStatRow,
+    todoToolCalls,
     toolRollup,
 } from './forensic-query';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
 export { type ExtractedTokens, extractClaudeTokens } from './query';
+export { renderForensics } from './render-forensics';
 export {
     ArtifactVersionError,
     artifactToSummary,
     assertArtifactVersion,
     isStale,
-    renderMarkdown,
     renderReport,
     STALENESS_THRESHOLD_HOURS,
     stalenessBanner,
 } from './render-report';
+export {
+    REPORT_MODES,
+    type ReportRenderer,
+    renderMarkdown,
+    resolveReportMode,
+    UnknownReportModeError,
+} from './report-modes';
 export {
     type RetroCorrelationReport,
     type RetroCorrelationWindow,

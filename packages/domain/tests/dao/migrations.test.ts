@@ -58,8 +58,8 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation through system-events-sequence-idx plus history-run-session migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(13);
+        test('has foundation through args_raw plus history-run-session migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(14);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -72,7 +72,8 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[9]?.id).toBe('0009_spur_cli_history_message_run_idx');
             expect(CLI_MIGRATIONS[10]?.id).toBe('0010_spur_cli_coordination_runs');
             expect(CLI_MIGRATIONS[11]?.id).toBe('0011_spur_cli_system_events_sequence_idx');
-            expect(CLI_MIGRATIONS[12]?.id).toBe('0012_spur_cli_history_run_session');
+            expect(CLI_MIGRATIONS[12]?.id).toBe('0012_spur_cli_history_tool_call_args_raw');
+            expect(CLI_MIGRATIONS[13]?.id).toBe('0013_spur_cli_history_run_session');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -135,13 +136,10 @@ describe('db migrations', () => {
                 },
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
-            // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid
-            // + 0006 system-events + 0007 runs-external-key
-            // + 0008 system-events-correlation + 0009 history-message-run-idx
-            // + 0010 coordination-runs + 0011 system-events-sequence-idx
-            // + 0012 history-run-session applied on top.
+            // 0002–0011 plus 0012 args_raw (journaled, skipped: no history_tool_call
+            // in stub) plus 0013 history-run-session applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(11);
+            expect(applied).toBe(12);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -176,8 +174,9 @@ describe('db migrations', () => {
             const applied = await applyCliMigrations(adapter);
             // renamed inbox + rule + planning + queue-jobs + run-pid + system-events
             // + runs-external-key + system-events-correlation + history-message-run-idx
-            // + coordination-runs + system-events-sequence-idx + history-run-session
-            expect(applied).toBe(12);
+            // + coordination-runs + system-events-sequence-idx + args_raw
+            // + history-run-session
+            expect(applied).toBe(13);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -352,8 +351,8 @@ describe('db migrations', () => {
             ).toBeNull();
 
             // 0009 (history index, provisions importer tables first) + 0010 coordination-runs
-            // + 0011 system-events-sequence-idx + 0012 history-run-session.
-            expect(await applyCliMigrations(adapter)).toBe(4);
+            // + 0011 system-events-sequence-idx + 0012 args_raw + 0013 history-run-session.
+            expect(await applyCliMigrations(adapter)).toBe(5);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );

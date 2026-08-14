@@ -18,8 +18,10 @@ import {
     bySession,
     byTool,
     type CoverageEntry,
+    computeDerived,
     countCheckpointsBySource,
     type DriftRow,
+    derivedWarnings,
     drift,
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -29,11 +31,14 @@ import {
     messageRollup,
     RunSessionDao,
     renderMarkdown,
-    renderReport,
+    resolveReportMode,
     type SourceSummaryRow,
     selectorDigest,
+    sessionSpans,
+    sessionToolDurations,
     sourceSummary,
     type ToolRollupRow,
+    todoToolCalls,
     toolRollup,
 } from '@gobing-ai/spur-domain';
 import {
@@ -127,6 +132,12 @@ export interface DailyOptions {
     sources?: readonly string[];
     /** History root override (testing). */
     root?: string;
+    /**
+     * Report mode pass-through (0555 R4): when set, a `.md` sidecar of the artifact rendered
+     * in this mode is written next to it. Validated up front so an unknown mode fails before
+     * the import fan-out runs. Absent → no sidecar; daily's composition is otherwise untouched.
+     */
+    mode?: string;
 }
 
 /** Result of {@link HistoryService.daily}. */
@@ -137,6 +148,8 @@ export interface DailyResult {
     artifact: HistoryArtifact;
     /** Pruned report directory names (`YYYY-MM-DD`), oldest first. */
     pruned: string[];
+    /** Path of the mode-rendered `.md` sidecar (present only when `mode` was passed, 0555 R4). */
+    reportPath?: string;
 }
 
 /** Context injected into HistoryService. */
@@ -229,15 +242,19 @@ export class HistoryService {
         const top = opts.top ?? 20;
         const db = await this.ctx.getDb();
 
-        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows] = await Promise.all([
-            messageRollup(db, selector),
-            toolRollup(db, selector),
-            byTool(db, selector, top),
-            bySession(db, selector, top),
-            loops(db, selector),
-            drift(db, selector),
-            sourceSummary(db, selector),
-        ]);
+        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows, spanRows, toolDurRows, todoRows] =
+            await Promise.all([
+                messageRollup(db, selector),
+                toolRollup(db, selector),
+                byTool(db, selector, top),
+                bySession(db, selector, top),
+                loops(db, selector),
+                drift(db, selector),
+                sourceSummary(db, selector),
+                sessionSpans(db, selector),
+                sessionToolDurations(db, selector),
+                todoToolCalls(db, selector),
+            ]);
 
         const totals = foldTotals(mRows, tRows);
         const bySource = foldGrouped(
@@ -264,6 +281,7 @@ export class HistoryService {
             .sort((a, b) => a.date.localeCompare(b.date));
 
         const coverage = buildCoverage(sourceRows, tRows, driftRows, opts.coverageErrors, opts.importCoverage);
+        const derived = computeDerived(spanRows, toolDurRows, todoRows);
 
         const artifact: HistoryArtifact = {
             schemaVersion: HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -298,7 +316,12 @@ export class HistoryService {
                 assistantDurationUnmeasured: r.assistantDurationUnmeasured,
             })),
             loops: loopRows,
-            warnings: [...buildWarnings(driftRows, coverage), ...(opts.extraWarnings ?? [])],
+            warnings: [
+                ...buildWarnings(driftRows, coverage),
+                ...derivedWarnings(derived),
+                ...(opts.extraWarnings ?? []),
+            ],
+            derived,
         };
 
         if (opts.out !== undefined || opts.cwd !== undefined) {
@@ -337,10 +360,13 @@ export class HistoryService {
      * reports beyond {@link REPORT_RETENTION_DAYS}. Exits when done; never stays resident. The
      * import step takes no date window — it relies on checkpoint resume (R7), so a missed night
      * self-heals on the next run with no gap and no double-count. Only the analyze step scopes
-     * the report via `since`/`until`.
+     * the report via `since`/`until`. `opts.mode` (0555 R4) is a pure pass-through: it only
+     * adds a `.md` sidecar next to the artifact and never alters this pipeline's steps.
      */
     async daily(opts: DailyOptions = {}): Promise<DailyResult> {
         const cwd = opts.cwd ?? process.cwd();
+        // Fail fast on an unknown mode — before a potentially long import fan-out.
+        const renderer = opts.mode !== undefined ? resolveReportMode(opts.mode) : null;
         const fanOut = await this.importAll({
             sources: opts.sources,
             sourceTimeout: opts.sourceTimeout,
@@ -363,9 +389,15 @@ export class HistoryService {
             extraWarnings: fanOut.warnings,
         });
 
+        let reportPath: string | undefined;
+        if (renderer !== null) {
+            reportPath = resolveArtifactPaths(artifact, { cwd }).artifactPath.replace(/\.json$/, '.md');
+            writeFileSync(reportPath, renderMarkdown(artifact, opts.mode));
+        }
+
         const pruned = pruneReports(cwd, REPORT_RETENTION_DAYS);
 
-        return { fanOut, artifact, pruned };
+        return { fanOut, artifact, pruned, ...(reportPath !== undefined ? { reportPath } : {}) };
     }
 
     /**
@@ -794,11 +826,17 @@ export interface RunHistoryReportResult {
 /**
  * Read, validate, and render a history artifact into a stdout report + `.md`
  * sidecar. This is the FS seam: it never opens the database (R1). Rendering is
- * delegated to the pure {@link renderReport} / {@link renderMarkdown} in the
- * domain package; this function owns file resolution, version assertion (R4),
- * and sidecar persistence (R8).
+ * delegated through the domain report-mode registry (`resolveReportMode`,
+ * 0555 R1) — `default` reproduces the legacy {@link renderReport} output; this
+ * function owns file resolution, version assertion (R4), and sidecar
+ * persistence (R8).
  */
-export function runHistoryReport(opts: { path?: string; cwd: string; now?: Date }): RunHistoryReportResult {
+export function runHistoryReport(opts: {
+    path?: string;
+    cwd: string;
+    now?: Date;
+    mode?: string;
+}): RunHistoryReportResult {
     const { path: artifactPath, resolution } = resolveArtifactPath(opts.path, opts.cwd);
 
     const raw = readFileSync(artifactPath, 'utf8');
@@ -812,8 +850,9 @@ export function runHistoryReport(opts: { path?: string; cwd: string; now?: Date 
     const artifact = parsed as HistoryArtifact;
     assertArtifactVersion(artifact.schemaVersion ?? -1, artifactPath);
 
-    const report = renderReport(artifact);
-    const markdown = renderMarkdown(artifact);
+    const renderer = resolveReportMode(opts.mode ?? 'default');
+    const report = renderer(artifact);
+    const markdown = renderMarkdown(artifact, opts.mode);
     // Same basename, `.md` extension (R8) — an extensionless explicit path must
     // yield `<path>.md`, never clobber the artifact itself.
     const markdownPath = artifactPath.endsWith('.json') ? artifactPath.replace(/\.json$/, '.md') : `${artifactPath}.md`;

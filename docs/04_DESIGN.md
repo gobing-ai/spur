@@ -543,7 +543,7 @@ skipped records at the source level — `degraded` status + non-zero exit — wh
 isolation intact. The compensating signals remain the artifact's error counts and the `history.*`
 events.
 
-#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--json]`
+#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--mode <name>] [--json]`
 
 Run-once daily pipeline (task 0470 R6): **import-all → analyze → write artifact → prune** reports
 older than 90 days (`REPORT_RETENTION_DAYS`), in a single process that exits when done — never stays
@@ -554,6 +554,12 @@ Only the **analyze** step scopes the report via `--since`/`--until`. `--root <pa
 per-source history roots (test seam; default is each source's platform dir). `--json` emits the
 structured `DailyResult` (`{ fanOut, artifact, pruned }`). Exit code follows the fan-out import
 outcome (0/1/2), so `history.daily.failed` and the exit agree.
+
+**`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
+`.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
+`report:` line in the human output). The mode is validated up front — an unknown name fails before
+the import fan-out runs. Daily's composition (per-source isolation, checkpoint self-heal, 90-day
+pruning) is untouched; without `--mode`, behavior is unchanged.
 
 #### `spur history analyze [--since <iso>] [--until <iso>] [--source <s|all>] [--session <id>] [--run <runId>] [--task <wbs>] [--top <n>] [--out <path>] [--json]`
 
@@ -586,7 +592,22 @@ assistant responses — role-filtered to `role = 'assistant'`, additive, and dis
 non-finite durations count as unmeasured, never as zero. `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 —
 the fields are additive.
 
-#### `spur history report [path] [--json]`
+**Derived variables (task 0554):** `analyze` additionally computes `derived` on the artifact via a
+**MetricRegistry** (`packages/domain/src/analytics/derived.ts`) — an ordered list of `MetricFn`s run
+after the SQL aggregation, each receiving `{ sessionSpans, sessionTools, todoCalls, results }` and
+returning an additive key. Defaults: `phases` (todo-tool `args_raw` replay — per-session first
+`in_progress` → first `completed` per todo name, `endedAt` falls back to the session's last todo-call
+ts; sources without todo tools report `phaseSupport: 'unsupported'`), `timeDecomposition` (per-session
+`llmMs` + `toolMs` + `idleMs`, with `unattributedMs` holding the remainder whenever any duration in
+the session is unmeasured — the never-fabricate invariant extends to decomposition), and
+`bottlenecks` (time buckets ranked desc by `ms`, `share = ms / spanMs`). `derived` is optional on the
+artifact: old artifacts remain valid (`schemaVersion` stays 1), and sessions with no measured time
+surface `derivedWarnings[]` (`derived-unattributed-time`) instead of zeros. Metric inputs come from
+three new forensic queries (`sessionSpans`, `sessionToolDurations`, `todoToolCalls` — the latter
+reading the 0012 `args_raw` column) alongside the existing SQL set; registry metrics never load the
+corpus into memory.
+
+#### `spur history report [path] [--mode <name>] [--json]`
 
 Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the
 artifact JSON, asserts `schemaVersion === HISTORY_ARTIFACT_SCHEMA_VERSION`, then renders a stdout
@@ -609,6 +630,27 @@ needs no CLI invocation.
   `formatRatio` uses for unavailable cache-hit ratios.
 - Rendering is pure (`packages/domain/src/analytics/render-report.ts`); the FS seam lives in
   `packages/app/src/services/history-service.ts` (`runHistoryReport`).
+
+**Report mode registry (task 0555 R1):** rendering resolves through
+`REPORT_MODES` (`packages/domain/src/analytics/report-modes.ts`) — a `Readonly<Record<string,
+ReportRenderer>>` of pure `HistoryArtifact → string` functions. The registry **subsumes** the former
+direct `renderReport`/`renderMarkdown` call path: `default` maps to `renderReport` (byte-identical
+legacy output), `forensics` to `renderForensics`. `--mode <name>` (default: `default`) resolves via
+`resolveReportMode`; an unknown name fails with `UnknownReportModeError` naming the registered set —
+before any import or render work. Built-in TS renderers only: no template engine, no
+variable-binding contract, no config surface (operator ruling 2026-08-09). `renderMarkdown` moved
+into `report-modes.ts` and is mode-aware (fenced sidecar of the selected mode's body).
+
+**Forensics renderer (0555 R2–R5):** `renderForensics`
+(`packages/domain/src/analytics/render-forensics.ts`) renders the 8 sections task 0491 identified
+as derivable from the artifact alone — Session Data Summary (incl. Tool Breakdown + Token
+Profile), Time Decomposition, Per-Phase Breakdown, Per-Tool Execution Time, Bottleneck Ranking,
+Raw Data. Tokens only, never currency (R3): no `$`/USD value appears, `MODEL_PRICING` gains no
+consumer; cache efficiency renders as `cacheRead / inputTokens` ("share of billed input served
+from cache", `n/a` when `recordsWithUsage === 0`). Missing derived inputs render honest
+`not available` lines — artifact without a `derived` block (rerun `spur history analyze`) for the
+three derived-dependent sections, `phaseSupport: 'unsupported'` for phases (R5). The 8 partial /
+model-authored sections from 0491 are deliberately absent, not stubbed (task 0556).
 
 #### History nightly loop — scheduling surface and observability (task 0471)
 
@@ -1036,7 +1078,7 @@ registered the four agent-role entries now in the manifest (`agent-bare-binary-n
 | `history_etl_<source>`                                     | importer                  | Validated per-source ETL rows (`payload_json`, `imported_at`). Retired on the read side (task 0559 R4): spur's cost path reads `history_message` typed columns via `history_run_session` instead; only the importer's generic sources (opencode/antigravity/openclaw) still target these tables.                                                                                                                   |
 | `inbox_messages`                                           | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
 | `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
-| `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `exact`/`unresolved` rows come from the run path's `RunSessionObserver` at the agent invoke boundary (task 0557, migration `0012_spur_cli_history_run_session`); `estimated`/`inferred` rows come from `RetroCorrelator`'s retroactive time-window correlation of pre-observation history (task 0558) — the write path never shadows an `exact` row. Indexed on `run_id` and `(source, session_id)`. Ambiguous/unresolved resolutions carry a NULL `session_id`; consumers 0559/0547 trust `exactness`. |
+| `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `exact`/`unresolved` rows come from the run path's `RunSessionObserver` at the agent invoke boundary (task 0557, migration `0013_spur_cli_history_run_session`); `estimated`/`inferred` rows come from `RetroCorrelator`'s retroactive time-window correlation of pre-observation history (task 0558) — the write path never shadows an `exact` row. Indexed on `run_id` and `(source, session_id)`. Ambiguous/unresolved resolutions carry a NULL `session_id`; consumers 0559/0547 trust `exactness`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)

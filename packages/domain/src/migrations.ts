@@ -251,6 +251,16 @@ CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence
 `;
 
 /**
+ * Add the `args_raw` column to the forensic `history_tool_call` table (task 0553,
+ * feature E5). Stores the full JSON arguments for allowlisted planning tools
+ * (TodoWrite, todo_write, update_plan, etc.); other tools keep only
+ * `args_digest`. Idempotent via `addColumnIfMissing`.
+ */
+export const HISTORY_TOOL_CALL_ARGS_RAW_SCHEMA_SQL = `
+ALTER TABLE history_tool_call ADD COLUMN args_raw TEXT;
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -269,7 +279,9 @@ CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence
  * `0010` adds the `coordination_runs` occupant/artifact table (ADR-057 wave 1).
  * `0011` indexes `system_events.sequence` for the follow cursor and
  * auto-assign (task 0531).
- * `0012` adds the `history_run_session` run→session mapping table (feature E6).
+ * `0012` adds the `args_raw` column to `history_tool_call` for forensic
+ * retention of planning-tool arguments (task 0553, feature E5).
+ * `0013` adds the `history_run_session` run→session mapping table (feature E6).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -301,7 +313,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0009_spur_cli_history_message_run_idx', sql: HISTORY_MESSAGE_RUN_INDEX_SCHEMA_SQL },
     { id: '0010_spur_cli_coordination_runs', sql: COORDINATION_RUNS_SCHEMA_SQL },
     { id: '0011_spur_cli_system_events_sequence_idx', sql: SYSTEM_EVENTS_SEQUENCE_INDEX_SCHEMA_SQL },
-    { id: '0012_spur_cli_history_run_session', sql: HISTORY_RUN_SESSION_SCHEMA_SQL },
+    {
+        id: '0012_spur_cli_history_tool_call_args_raw',
+        sql: HISTORY_TOOL_CALL_ARGS_RAW_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'history_tool_call', column: 'args_raw' },
+    },
+    { id: '0013_spur_cli_history_run_session', sql: HISTORY_RUN_SESSION_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -348,7 +365,14 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0011_spur_cli_system_events_sequence_idx' &&
             !(await tableExists(adapter, 'system_events'));
 
-        if (shouldApplySql && !sequenceIndexSkip) {
+        // Migration 0012 adds args_raw to history_tool_call — the importer table
+        // may not exist on legacy/foundation-only DBs. Journal without executing
+        // if the table is absent; fresh DBs get the column from the importer DDL.
+        const argsRawSkip =
+            migration.id === '0012_spur_cli_history_tool_call_args_raw' &&
+            !(await tableExists(adapter, 'history_tool_call'));
+
+        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }

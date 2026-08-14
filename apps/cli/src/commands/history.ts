@@ -171,14 +171,15 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .argument('[path]', 'Artifact JSON path (defaults to the latest.json pointer)')
         .option('--json', 'Emit the parsed artifact as JSON instead of the human report')
+        .option('--mode <name>', 'Report mode: default | forensics (registry-resolved; unknown names fail)')
         .action(async (pathArg, options) => {
             try {
                 const { report, artifactPath, resolution, artifact } = runHistoryReport({
                     path: pathArg,
                     cwd: context.cwd,
                     now: new Date(),
+                    mode: options.mode,
                 });
-
                 if (options.json) {
                     context.output.write(toJson(artifact));
                     context.setExitCode(0);
@@ -215,6 +216,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .option('--root <path>', 'History root override (default: per-source platform dir)')
         .option('--json', 'Emit the daily result as JSON')
+        .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
             const svc = new HistoryService({ getDb: () => context.getDb() });
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
@@ -234,6 +236,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                     spurVersion: CLI_CONFIG.binaryVersion,
                     cwd: context.cwd,
                     root: options.root || undefined,
+                    mode: options.mode,
                 });
             } catch (e) {
                 failure = { exitCode: 1, detail: e instanceof Error ? e.message : String(e) };
@@ -365,6 +368,9 @@ function formatDailyResult(r: DailyResult): string {
         }
     }
     lines.push(`artifact totals: messages=${r.artifact.totals.messages} toolCalls=${r.artifact.totals.toolCalls}`);
+    if (r.reportPath !== undefined) {
+        lines.push(`report: ${r.reportPath}`);
+    }
     lines.push(`pruned: ${r.pruned.length} report dir(s) older than 90 days`);
     lines.push(`exit_code: ${r.fanOut.exitCode}`);
     return lines.join('\n');
