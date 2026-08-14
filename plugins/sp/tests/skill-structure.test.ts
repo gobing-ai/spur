@@ -346,7 +346,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(command).toContain('--source');
         expect(command).toContain('--severity');
         expect(command).toContain('--min-cost');
-        expect(command).toContain('--no-task');
+        expect(command).toContain('--create-task');
         expect(command).toContain('--json');
 
         // Optional topic + multi-source honesty live on the skill.
@@ -373,9 +373,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(sessionFormats).toContain('--mode force-file');
         expect(sessionFormats).toContain('history analyze --session');
         expect(sessionFormats).toContain('filename stem');
-        expect(skill).toContain('Freeze Phase 1');
-        expect(skill).toContain('--mode force-file');
-        expect(skill).toContain('.spur/run/<run-id>/agent-sessions');
+        // 0556 R3: data plane primary; raw JSONL fallback gated to exactly three conditions.
+        expect(skill).toContain('spur history report --mode forensics');
+        expect(skill).toContain('no typed mapper');
+        expect(skill).toContain('do not retain');
+        expect(skill).toContain('0492 R7');
         // Runtime-path boundary: no build-time config/{workflows,...} literals in skill packaging.
         expect(skill).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
         expect(sessionFormats).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);

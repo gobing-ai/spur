@@ -652,6 +652,15 @@ from cache", `n/a` when `recordsWithUsage === 0`). Missing derived inputs render
 three derived-dependent sections, `phaseSupport: 'unsupported'` for phases (R5). The 8 partial /
 model-authored sections from 0491 are deliberately absent, not stubbed (task 0556).
 
+**Report-first surface (task 0556):** `/sp:dev-find-issue` defaults to rendering the report —
+the forensics renderer's 8 data sections plus model-authored IDENTIFY/PROPOSE analysis — and
+creates a task only behind `--create-task`. `--use-history`/`--no-task` are removed (rejected
+with a message naming the replacement). The backing skill `sp:issue-finding` keeps the data
+plane primary; raw JSONL parsing is the fallback under exactly three conditions (no typed mapper
+for the resolved source, explicit `--sessions`, or a primitive the typed tables do not retain —
+0492 R7). Documented flags/modes are tied to real command definitions by
+`plugins/sp/tests/issue-finding-fallback.test.ts`.
+
 #### History nightly loop — scheduling surface and observability (task 0471)
 
 The daily pipeline runs on an **external macOS launchd agent**, not Spur's embedded scheduler. The

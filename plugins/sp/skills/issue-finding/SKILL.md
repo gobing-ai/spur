@@ -1,8 +1,8 @@
 ---
 name: issue-finding
-description: "Analyze agent session logs, find performance bottlenecks, propose fixes, and generate a structured task file. Triggers: find issues, post-mortem, session review, topic focus."
+description: "Render the session forensics report, analyze agent session logs, find performance bottlenecks, propose fixes, and optionally create a structured task. Triggers: find issues, post-mortem, session review, topic focus."
 license: Apache-2.0
-version: 1.1.0
+version: 2.0.0
 metadata:
   author: spur
   platforms: "claude-code,codex,openclaw,opencode,antigravity,pi"
@@ -11,8 +11,7 @@ metadata:
     - pipeline
     - inversion
   pipeline_steps:
-    - discover
-    - analyze
+    - report
     - identify
     - propose
     - generate
@@ -30,11 +29,13 @@ see_also:
 
 # sp:issue-finding — Session Log Issue Finder
 
-Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, propose
-fixes, and generate a structured task file capturing findings for future execution.
+Render the forensic report for agent session logs, identify performance bottlenecks and behavioral
+anti-patterns, propose fixes, and — only with `--create-task` — create a structured task file.
 
-This skill codifies the forensic session-log analysis performed after the J4 batch execution
-(task 0379), making the process reusable for any set of agent sessions.
+**Default output is a report, not a task** (task 0556): the typed data plane
+(`spur history report --mode forensics`) renders the quantitative sections; this skill authors the
+interpretation on top. It codifies the forensic analysis performed after the J4 batch execution
+(task 0379), reusable for any set of agent sessions.
 
 **Honesty contract:** install-time skill packaging works on all declared platforms. **Native
 session forensics depth varies by agent** — OMP is the deepest documented adapter; other sources
@@ -61,23 +62,23 @@ bottlenecks", "post-mortem", "what went wrong", "why was this slow"
 
 ## Arguments
 
-| Argument                          | Description                                                                                                                                                                                          | Default         |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `[topic]`                         | Optional free-text focus or smart positional input (see below). Narrows IDENTIFY/PROPOSE/GENERATE; DISCOVER still inventories selected sessions.                                                     | (full taxonomy) |
-| `--sessions <glob>`               | Session JSONL file(s) or directory to analyze. When omitted, uses the most recent sessions for the resolved source + current project.                                                                | (most recent)   |
+| Argument                          | Description                                                                                                                                                             | Default         |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `[topic]`                         | Optional free-text focus or smart positional input (see below). Narrows IDENTIFY/PROPOSE/GENERATE; the report still covers all selected sessions.                        | (full taxonomy) |
+| `--sessions <glob>`               | Session JSONL file(s) or directory to analyze. When omitted, uses the most recent sessions for the resolved source + current project. Pins the raw-fallback path (below). | (most recent)   |
 | `--source <name>`                 | Session log source: `auto`, `omp`, `claude`, `codex`, `gemini`, `opencode`, `antigravity`, `openclaw`, `pi`. `auto` = cwd agent when known, else `omp` if present, else first existing default root. | `auto`          |
-| `--feature <id>`                  | Feature ID to link the generated task to (e.g., `H51`).                                                                                                                                              | (none)          |
-| `--template <name>`               | Task template: `meta` (multi-fix umbrella), `issue` (single finding), or `standard`.                                                                                                                 | `meta`          |
-| `--priority <P0\|P1\|P2\|P3>`     | **Task** priority frontmatter (`spur task update --priority`). Not bottleneck severity.                                                                                                              | `P2`            |
-| `--severity <S0\|S1\|S2>`         | Minimum **bottleneck** severity to keep after ranking (S0 most severe).                                                                                                                              | (all)           |
-| `--category <list>`               | Comma-separated bottleneck categories to keep (see IDENTIFY table ids).                                                                                                                              | `all`           |
-| `--since <iso>` / `--until <iso>` | Optional wall-clock bounds on session start times (when timestamps are available).                                                                                                                   | (none)          |
-| `--top <n>`                       | Cap the number of requirements / fixes written into the task.                                                                                                                                        | (no cap)        |
-| `--min-cost <duration>`           | Drop bottlenecks whose estimated waste is below this floor (e.g. `30m`, `2h`). Applied after severity ranking.                                                                                       | (none)          |
-| `--strict-topic`                  | When `[topic]` is set, drop off-topic bottlenecks even if they dominate wall time.                                                                                                                   | off             |
-| `--use-history`                   | Optionally import/analyze via `spur history` for token/cost aggregates; raw JSONL remains authoritative for tool-loop forensics.                                                                     | off             |
-| `--no-task`                       | Markdown report to stdout only; do not create a task.                                                                                                                                                | off             |
-| `--json`                          | JSON findings to stdout only; do not create a task. Mutually exclusive with default task creation.                                                                                                   | off             |
+| `--feature <id>`                  | Feature ID to link the generated task to (e.g., `H51`).                                                                                                                  | (none)          |
+| `--template <name>`               | Task template: `meta` (multi-fix umbrella), `issue` (single finding), or `standard`.                                                                                     | `meta`          |
+| `--priority <P0\|P1\|P2\|P3>`     | **Task** priority frontmatter (`spur task update --priority`). Not bottleneck severity.                                                                                  | `P2`            |
+| `--severity <S0\|S1\|S2>`         | Minimum **bottleneck** severity to keep after ranking (S0 most severe).                                                                                                  | (all)           |
+| `--category <list>`               | Comma-separated bottleneck categories to keep (see IDENTIFY table ids).                                                                                                  | `all`           |
+| `--since <iso>` / `--until <iso>` | Optional wall-clock bounds on session start times (when timestamps are available).                                                                                       | (none)          |
+| `--top <n>`                       | Cap the number of requirements / fixes written into the task.                                                                                                            | (no cap)        |
+| `--min-cost <duration>`           | Drop bottlenecks whose estimated waste is below this floor (e.g. `30m`, `2h`). Applied after severity ranking.                                                            | (none)          |
+| `--strict-topic`                  | When `[topic]` is set, drop off-topic bottlenecks even if they dominate wall time.                                                                                       | off             |
+| `--agent <name>`                  | Narrow sessions to one agent/subagent executor name.                                                                                                                    | (all agents)    |
+| `--create-task`                   | Opt **in** to task creation (GENERATE). Default mode stops after the report.                                                                                             | off             |
+| `--json`                          | JSON findings to stdout instead of the markdown report. Composable with `--create-task`.                                                                                 | off             |
 
 ### Smart positional `[topic]`
 
@@ -104,54 +105,67 @@ Severity thresholds:
 
 ### Output mode matrix
 
-| Flags                  | Create task | Stdout                |
-| ---------------------- | ----------- | --------------------- |
-| (default)              | yes         | short summary + WBS   |
-| `--no-task`            | no          | markdown report       |
-| `--json`               | no          | JSON only             |
-| `--no-task` + `--json` | no          | JSON only (json wins) |
+| Flags                  | Create task | Stdout                          |
+| ---------------------- | ----------- | ------------------------------- |
+| (default)              | no          | markdown report                 |
+| `--json`               | no          | JSON findings (`task: null`)    |
+| `--create-task`        | yes         | short summary + WBS             |
+| `--create-task --json` | yes         | JSON findings with `task` block |
 
-Never invent a dual-write mode: either create a task **or** emit a report/JSON, not both.
+Without `--create-task` the run is report-only — never create a task unasked.
 
-## The 5-Phase Protocol
+### Removed flags (task 0556)
+
+| Removed flag    | Old behavior                         | Replacement                                                            |
+| --------------- | ------------------------------------ | ---------------------------------------------------------------------- |
+| `--use-history` | Opt in to the `spur history` bridge  | None — the typed data plane is now the default REPORT path             |
+| `--no-task`     | Report to stdout, skip task creation | None — report-only is the default; pass `--create-task` to opt **in**  |
+
+If an invocation passes either removed flag, do not swallow it as generic unknown-option noise:
+reject the invocation with a message naming the replacement above.
+
+## The 4-Phase Protocol
 
 ```
-sessions (JSONL — source-dependent roots; see session-formats.md)
-  → DISCOVER   locate session logs; build session inventory with timestamps
-  → ANALYZE    extract metrics: tool calls, compactions, test runs, guard failures
+sessions (typed ETL via `spur history` — or raw JSONL under the three fallback conditions)
+  → REPORT     render the forensic report: 8 CLI-derivable sections; author analysis on top
   → IDENTIFY   rank bottlenecks by time cost; filter by topic/category/severity
   → PROPOSE    design fixes for in-scope root causes; estimate time savings
-  → GENERATE   create a structured task via `spur task create` (unless --no-task/--json)
+  → GENERATE   create a structured task via `spur task create` (only with --create-task)
 ```
 
-### Phase 1: DISCOVER — Session Inventory
+### Phase 1: REPORT — Data plane first
 
-**Goal:** Locate and catalog the session logs to analyze.
+**Primary path (typed sources):** `spur history report --mode forensics` (task 0555).
 
-**Steps:**
+```bash
+spur history import --source <source> --json   # checkpoint resume makes re-runs cheap
+spur history analyze --json                    # writes the versioned artifact; derived
+                                               # variables are computed here (task 0554)
+spur history report --mode forensics           # pure renderer of the artifact; never opens
+                                               # the database; defaults to the latest pointer
+```
 
-1. Resolve `--source` (or `auto`) and default roots from
-   [references/session-formats.md](references/session-formats.md).
-2. If `[topic]` or `--sessions` already selects paths, use those files.
-3. Otherwise list the source root for the current project slug and take the most recent
-   timestamped session set (include subagent session files when the layout has them).
-4. Apply `--since` / `--until` when session start timestamps are available.
-5. Build a session inventory table:
+The forensics renderer emits **8 CLI-derivable sections**: Session Data Summary, Tool Breakdown,
+Token Profile (tokens + cache-hit ratio — never prices), Time Decomposition, Per-Phase, Per-Tool
+Execution Time, Bottleneck Ranking, and the Raw Data appendix. The CLI does not write the
+interpretation: IDENTIFY and PROPOSE below author the root-cause narrative, fix design, and
+acceptance criteria on top of the rendered data — that analysis is why this skill exists.
 
-   | Session | File                        | Start Time | End Time | Duration |
-   | ------- | --------------------------- | ---------- | -------- | -------- |
-   | Main    | `…/*.jsonl`                 | …          | …        | …        |
-   | Run0376 | subdirectory / subagent log | …          | …        | …        |
+**Raw JSONL fallback — exactly three conditions** (0492 R7):
 
-6. Compute total wall time across all sessions. State the resolved source and confidence
-   (High = known adapter + readable tool events; Medium = path found, format partial;
-   Low = operator-supplied paths only).
+1. The resolved `--source` has **no typed mapper** in the importer.
+2. The operator passed **explicit `--sessions`** — respect the pin; do not reconcile the pinned
+   files against the database.
+3. You need a **primitive the typed tables do not retain** (e.g. identical-command loop strings) —
+   parse raw lines for just that primitive and keep the data plane for the rest.
 
-### Phase 2: ANALYZE — Metric Extraction
+A source with a typed mapper must **not** trigger wholesale raw parsing. If an import fails or the
+DB is empty, note that aggregate data is unavailable and fall back strictly per the conditions
+above.
 
-**Goal:** Extract quantitative metrics from each session's JSONL log.
-
-**Portable signals to count** (map field names per source — see session-formats.md):
+**Fallback parser — portable signals to count** (map field names per source — see
+[references/session-formats.md](references/session-formats.md)):
 
 | Signal                                                                | Metric                           |
 | --------------------------------------------------------------------- | -------------------------------- |
@@ -164,34 +178,11 @@ sessions (JSONL — source-dependent roots; see session-formats.md)
 | Identical command string repeated 3+ times                            | Loop candidate                   |
 
 **Extraction approach:** read each JSONL file line-by-line; parse tool name + command inputs;
-count identical commands for loop detection.
+count identical commands for loop detection. Produce per-session metrics (duration, tools,
+compactions, test runs, spur calls, guard failures, key finding) plus aggregate totals. Discovery
+roots for the fallback path are in [references/session-formats.md](references/session-formats.md).
 
-Produce per-session metrics (duration, tools, compactions, test runs, spur calls, guard failures,
-key finding). Aggregate totals across sessions.
-
-When `--use-history` is set, the **selected-file history bridge** supplies ETL aggregates for the
-frozen session set (task 0507 R3):
-
-1. **Freeze Phase 1's selected OMP JSONL files once** — the same inventory the raw analysis reads.
-   Discovery roots: the normal OMP session root (`~/.omp/agent/sessions/`) **and**
-   `.spur/run/<run-id>/agent-sessions/<omp-executor>/*.jsonl` for workflow subprocess sessions.
-   Never import a broad `.spur/run` scan and never run a full/source-root reconciliation here.
-2. **Import each frozen file once, through the source-local CLI**, with single-file `force-file`
-   mode:
-   `bun run apps/cli/src/index.ts history import --source omp --file <absolute-file> --mode force-file --json`.
-   The importer derives the session key from the filename; use the same stem for analysis.
-3. **Analyze scoped to that key**: `history analyze --session <filename-stem> --json`.
-4. Use the artifact for the aggregates ETL can represent — tokens, cost, messages, tool calls,
-   loops, and assistant response duration. **Continue parsing the same raw files** for command text,
-   compactions, test/guard retries, tool execution duration/status/errors, and every other signal
-   the ETL does not carry.
-
-ETL supplies normalized aggregates; it is **not** a substitute for raw tool-loop evidence. If an
-import fails or the DB is empty, continue with raw logs and note that cost data is unavailable.
-Before any ad-hoc verification SQL against `history_*` tables, follow the schema-first rule in
-[references/session-formats.md](references/session-formats.md) — inspect the live schema once.
-
-### Phase 3: IDENTIFY — Root Cause Ranking
+### Phase 2: IDENTIFY — Root Cause Ranking
 
 **Goal:** Rank bottlenecks by estimated time cost; apply topic / category / severity filters.
 
@@ -223,7 +214,7 @@ Before any ad-hoc verification SQL against `history_*` tables, follow the schema
 
 Also note **what worked well** so efficient patterns are preserved.
 
-### Phase 4: PROPOSE — Fix Design
+### Phase 3: PROPOSE — Fix Design
 
 **Goal:** Design a concrete fix for each **in-scope** root cause.
 
@@ -245,9 +236,10 @@ When the same anti-pattern appears across **≥2 independent sessions** (or the 
 codify it), offer a handoff to **`/sp:rule-scan`** / rule authoring after GENERATE — do not invent
 rules inside this skill.
 
-### Phase 5: GENERATE — Task File Creation
+### Phase 4: GENERATE — Task File Creation
 
-**Goal:** Create a structured task via CLI-gated corpus writes (unless `--no-task` / `--json`).
+**Goal:** Create a structured task via CLI-gated corpus writes (`--create-task` only; default
+mode stops after the report).
 
 **Task creation (correct CLI — do not invent flags):**
 
@@ -258,24 +250,14 @@ spur task create "Fix <context> performance bottlenecks: <top issues>" \
   --json
 ```
 
-Notes:
-
 - Title is the **positional** argument (there is no `--name`).
 - Template is space form `--template meta` (or `issue` / `standard`); never the dotted form.
+- Single-finding tasks: prefer `--template issue`; multi-requirement umbrella: keep `meta`.
 - Priority is **not** available on create. After create:
 
 ```bash
 spur task update <wbs> --priority P2 --json
 ```
-
-- If `--feature` was omitted at create time and the operator later supplies one:
-
-```bash
-spur task update <wbs> --feature <feature-id> --json
-```
-
-- Single-finding tasks: prefer `--template issue` (aligned with `sp:sys-debugging`).
-- Multi-requirement umbrella: keep `--template meta` (default).
 
 **Section population** — write each section body to a temp file, then:
 
@@ -304,7 +286,7 @@ spur task update <wbs> --section Background --from-file /tmp/issue-bg.md --json
 **Section format rules** (from task 0379):
 
 1. **Solution `file:line` citations**: repo-relative `file:line` (e.g. `apps/web/src/components/SupervisorTab.tsx:17-20`), never bare `:line` or bare filename without path.
-2. **Review P1–P4 table**: if a Review section exists, include a markdown table with a cell matching
+2. **Review P1–P4 table**: if a Review section exists, include a table with a cell matching
    `/^\s*P[1-4]\s*$/` and a non-placeholder content cell.
 3. **Meta template**: no `Root Cause` section — put analyses in `Notes`.
 4. **Canonical sections only**: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`,
@@ -324,10 +306,12 @@ Must return `pass: true` with 0 errors. Warnings may be acceptable on meta tasks
 
 ## Output
 
-**Default:** A task file under the configured tasks folder (`docs/tasks/`, `docs/tasks3/`, …) with
-WBS, optional feature link, and structured sections.
+**Default:** markdown report on stdout — the 8 CLI-derivable forensics sections (when the data
+plane path applies) plus the model-authored IDENTIFY/PROPOSE analysis.
 
-**With `--no-task`:** Markdown findings report on stdout.
+**With `--create-task`:** a task file under the configured tasks folder (`docs/tasks/`,
+`docs/tasks3/`, …) with WBS, optional feature link, and structured sections, plus a short summary
+with the WBS.
 
 **With `--json`:**
 
@@ -351,42 +335,36 @@ WBS, optional feature link, and structured sections.
 }
 ```
 
-When a task was created (default mode), include `"task": { "wbs": "…", "file": "…", "status": "…" }`
-in the short summary; JSON-only mode leaves `task` null.
+With `--create-task`, include `"task": { "wbs": "…", "file": "…", "status": "…" }`; otherwise
+`task` stays `null`.
 
 ## Integration
 
-- **Session log parsing** — manual JSONL analysis (no required external analyzer script)
+- **Session forensics report** — `spur history report --mode forensics` (primary data plane)
 - **Multi-source roots / field maps** — [references/session-formats.md](references/session-formats.md)
-- **Optional** `spur history import` / `analyze` when `--use-history`
+- **Raw JSONL fallback** — only under the three conditions in Phase 1
 - **`spur task create` / `update` / `check`** — CLI-gated corpus only (never direct-write task files)
 
 ## Required Permissions
 
-| Capability      | Purpose                               |
-| --------------- | ------------------------------------- |
-| `Read`          | Session JSONL, skill/source files     |
-| `Grep` / `Glob` | Pattern search and session discovery  |
-| `Bash`          | `spur task` / optional `spur history` |
-| `Write`         | Temp files for section bodies         |
+| Capability      | Purpose                              |
+| --------------- | ------------------------------------ |
+| `Read`          | Session JSONL, skill/source files    |
+| `Grep` / `Glob` | Pattern search and session discovery |
+| `Bash`          | `spur history` + `spur task` CLI     |
+| `Write`         | Temp files for section bodies        |
 
 ## Platform Notes
 
-### Claude Code
-
-- Invoke via `/sp:dev-find-issue …` or `Skill(skill="sp:issue-finding", args="…")`.
-- Prefer structured tools for file discovery; parse JSONL with Read/Grep.
-
-### Codex / OpenClaw / OpenCode / Antigravity / Pi
-
-- Read this skill and follow the 5-phase protocol (slash commands may be adapted at install time).
-- Prefer `rg` for scanning large JSONL; expand globs carefully.
-- If the agent’s session root differs from the table in session-formats.md, require `--sessions`.
-
-### Multi-agent reality
-
-- Packaging is portable; **forensic fidelity is source-dependent**.
-- When unsure of layout, ask once for a session path or use `--sessions` rather than guessing.
+- **Claude Code** — invoke via `/sp:dev-find-issue …` or `Skill(skill="sp:issue-finding",
+  args="…")`. Prefer structured tools for file discovery; parse JSONL with Read/Grep only on the
+  fallback path.
+- **Other platforms** (Codex / OpenClaw / OpenCode / Antigravity / Pi) — follow the 4-phase
+  protocol (slash commands may be adapted at install time); prefer `rg` for large JSONL on the
+  fallback path. If the agent's session root differs from the session-formats.md table, require
+  `--sessions`.
+- **Multi-agent reality** — packaging is portable; **forensic fidelity is source-dependent**. When
+  unsure of layout, ask once for a session path or use `--sessions` rather than guessing.
 
 ## Shipped command
 
@@ -398,38 +376,41 @@ Thin wrapper: `Skill(skill="sp:issue-finding", args="$ARGUMENTS")`.
 /sp:dev-find-issue
 /sp:dev-find-issue "test-loop spinning"
 /sp:dev-find-issue --sessions "~/.omp/agent/sessions/-xprojects-spur-new/2026-07-29T*" --feature H51
-/sp:dev-find-issue "L3 guard format discovery" --source omp --severity S1 --priority P1
-/sp:dev-find-issue --category test-loop,guard --no-task
+/sp:dev-find-issue --category test-loop,guard
+/sp:dev-find-issue --create-task "J4 batch bottlenecks" --template meta --priority P1
 /sp:dev-find-issue --json --source claude --since 2026-07-28
 ```
 
 ## Common rationalizations
 
-| Rationalization                             | Reality                                                                                                        |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| "Sessions are huge — I'll sample randomly." | Prefer signal Grep first, then deep-read hot regions. Random samples invent severity.                          |
-| "I'll just write the task file with Write." | Corpus writes are CLI-gated (`spur task create` / `update`). Direct Write fails the harness contract.          |
-| "OMP format everywhere."                    | Only OMP is High-fidelity documented. Other sources need portable field maps + `--sessions` when roots differ. |
-| "P0 severity means task priority P0."       | Severity (S0–S2) ranks waste; `--priority` is separate task frontmatter (P0–P3).                               |
-| "History import replaces JSONL forensics."  | History gives token/cost aggregates; tool-loop loops still need raw session lines.                             |
+| Rationalization                              | Reality                                                                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| "Sessions are huge — I'll sample randomly."  | Prefer signal Grep first, then deep-read hot regions. Random samples invent severity.                          |
+| "I must hand-parse JSONL for everything."    | The typed data plane renders 8 sections. Raw parsing is only for the three fallback conditions.                |
+| "I'll just write the task file with Write."   | Corpus writes are CLI-gated (`spur task create` / `update`). Direct Write fails the harness contract.          |
+| "OMP format everywhere."                     | Only OMP is High-fidelity documented. Other sources need portable field maps + `--sessions` when roots differ. |
+| "P0 severity means task priority P0."        | Severity (S0–S2) ranks waste; `--priority` is separate task frontmatter (P0–P3).                               |
+| "The CLI report is the whole deliverable."    | The renderer emits data; the model-authored IDENTIFY/PROPOSE analysis makes it actionable.                     |
 
 ## Red flags
 
+- Creating a task without `--create-task` (default mode is report-only).
+- Wholesale raw JSONL parsing when the source has a typed mapper.
+- Accepting `--use-history` or `--no-task` silently instead of naming their replacements.
 - GENERATE recipes inventing a title flag, dotted template forms, or quoted dotted section flags.
 - Claiming multi-agent forensics without stating source confidence (High/Medium/Low).
-- Creating a task when `--no-task` or `--json` was requested.
-- Skipping batch section writes + single `spur task check`.
+- Skipping batch section writes + single `spur task check` (when generating).
 - Emitting empty findings without inventorying sessions first.
 
 ## Dogfood / self-check fixture
 
 A tiny synthetic OMP session lives under
 [examples/session-test-loop.jsonl](examples/session-test-loop.jsonl) with expected categories in
-[examples/expected-findings.json](examples/expected-findings.json). Use it to smoke-check IDENTIFY
-without real operator logs:
+[examples/expected-findings.json](examples/expected-findings.json). Use it to smoke-check the
+fallback parser without real operator logs (explicit `--sessions` is fallback condition 2):
 
 ```
-/sp:dev-find-issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl --no-task
+/sp:dev-find-issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl
 ```
 
 Expect at least the `test-loop` category (and whatever else the expected-findings file lists).

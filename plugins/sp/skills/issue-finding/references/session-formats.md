@@ -7,9 +7,10 @@ see_also:
 
 # Session log formats — source discovery
 
-`sp:issue-finding` analyzes **raw session JSONL** for tool-loop forensics. Layout and event
-shapes differ by coding agent. This file covers **DISCOVER path** (where logs live) and the
-**history bridge** (`--use-history`).
+`sp:issue-finding` analyzes **raw session JSONL** for tool-loop forensics — as the **fallback**
+path only (task 0556): the primary REPORT path is the typed data plane
+(`spur history report --mode forensics`). Layout and event shapes differ by coding agent. This
+file covers **DISCOVER path** (where logs live) and the **history bridge**.
 
 **What typed tables retain is owned by `mappers.ts`.** The importer
 `@gobing-ai/ts-llm-jsonl-importer/src/mappers.ts` is the single code authority for which JSONL

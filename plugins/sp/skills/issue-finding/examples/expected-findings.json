@@ -23,5 +23,5 @@
             "minCompactions": 6
         }
     ],
-    "smokeCommand": "/sp:dev-find-issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl --no-task"
+    "smokeCommand": "/sp:dev-find-issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl"
 }

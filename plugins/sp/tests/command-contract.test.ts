@@ -1090,7 +1090,7 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).toContain('--severity');
         expect(raw).toContain('--category');
         expect(raw).toContain('--min-cost');
-        expect(raw).toContain('--no-task');
+        expect(raw).toContain('--create-task');
         expect(raw).toContain('--json');
         // Skill SSOT exists for target resolution.
         expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'SKILL.md'))).toBe(true);

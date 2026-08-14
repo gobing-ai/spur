@@ -33,10 +33,13 @@ each would be scope creep for one-liner procedures.
 > it does not map to a numbered dev-\* operation. See its command file and the backing skill for details.
 
 > **`dev-find-issue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
-> (session-log forensics → optional CLI-gated fix task). Hygiene / post-batch analysis — not a spine
-> pipeline stage. See `plugins/sp/commands/dev-find-issue.md` and
-> `plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
-> `/sp:dev-find-issue [<topic>]` before re-running the batch.
+>(session-log forensics report → optional CLI-gated fix task via `--create-task`). Hygiene /
+>post-batch analysis — not a spine pipeline stage. Report-first (task 0556): the default run
+>renders the `spur history report --mode forensics` data plane plus model-authored analysis and
+>creates nothing; task creation is opt-in behind `--create-task` (`--use-history`/`--no-task` are
+>removed). See `plugins/sp/commands/dev-find-issue.md` and
+>`plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
+>`/sp:dev-find-issue [<topic>]` before re-running the batch.
 
 > **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
 > **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,
