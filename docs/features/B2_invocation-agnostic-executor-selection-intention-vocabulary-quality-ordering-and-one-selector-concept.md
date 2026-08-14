@@ -94,12 +94,12 @@ the map closes only on a clean `/sp:dev-verifyall --feature B2` reporting **Ship
 | 0346 | Unify the --agent selector namespace with agent.executors | done |
 | 0347 | Inventory the backward-compatibility surface before any agent-config redesign | done |
 | 0348 | Decide the fate of REGISTERED_CANONICAL_STAGES and prompt-regex phase detection | done |
-| 0535 | Create plugins/sp/references/roles.md as the Layer-1 role-to-tier table | todo |
-| 0536 | Make --agent take a role and retire extractPhase | todo |
-| 0537 | Keep the executor binding through team spec materialization and drain | todo |
-| 0538 | Declare role across sp commands, workflow steps, and team members | todo |
+| 0535 | Create plugins/sp/references/roles.md as the Layer-1 role-to-tier table | done |
+| 0536 | Make --agent take a role and retire extractPhase | done |
+| 0537 | Keep the executor binding through team spec materialization and drain | done |
+| 0538 | Declare role across sp commands, workflow steps, and team members | done |
 | 0541 | Establish the transition-shim marker and two-sided manifest gate | done |
-| 0542 | Add --spec for occupant addressing and redefine agent.default as a role | todo |
+| 0542 | Add --spec for occupant addressing and redefine agent.default as a role | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

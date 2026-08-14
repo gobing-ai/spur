@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0541"]
 ac_numbering: task-local
 created_at: "2026-08-13T23:24:34.653Z"
-updated_at: "2026-08-14T02:05:20.287Z"
+updated_at: "2026-08-14T04:43:05.903Z"
 ---
 
 ## 0537. Keep the executor binding through team spec materialization and drain
@@ -42,29 +42,29 @@ team spec id, and nothing validates that a spec id and an executor name do not c
 Operator ruling 2026-08-13 (feature B2 § *Where a role may be declared*): keep the `--agent` flag
 name, fix the binding, and close the ambiguity with a collision guard rather than a new flag.
 ### Requirements
-- [ ] **R1.** Carry the executor **name** into the materialized agent spec alongside the
+- [x] **R1.** Carry the executor **name** into the materialized agent spec alongside the
       coding-agent kind. `packages/app/src/services/team-service.ts:674-680` currently resolves
       `member.executor` and writes only `type: resolved.agent`, discarding the name and the model.
       The kind must stay (AiRunner resolves the runner from it, and existing specs carry only
       `type`). Measurable: a spec materialized from `- executor: codex-sol` records `codex-sol`;
       a pre-existing spec with no executor field still loads, under a shim registered per 0541.
-- [ ] **R2.** Addressing a spec runs the executor the operator configured. Rewrite the drain
+- [x] **R2.** Addressing a spec runs the executor the operator configured. Rewrite the drain
       selector (`apps/cli/src/commands/agent.ts:357-383`) to the spec's executor **name** instead of
       `spec.type`, so `resolveExecutor`'s executor-first lookup restores `{agent, model}` with its
       declared tier. Measurable: draining a spec bound to `codex-sol` runs on `gpt-5.6-sol` at tier
       `capable-3`, not bare `codex` at the undeclared default. Task 0536 later relocates this path
       from `--agent` to `--spec`; the binding fix carries forward unchanged.
-- [ ] **R3.** The occupant pin does not regress. `spec-id` is still set before the selector rewrite,
+- [x] **R3.** The occupant pin does not regress. `spec-id` is still set before the selector rewrite,
       so `AgentService.executeRun` persists the ADR-057 wave 1 occupant record. Measurable: the
       occupant record still carries specId, agentKind, runId, and generation, and the existing G4 R1
       test still passes.
-- [ ] **R4.** Reject namespace collisions at config load across **all three** selector namespaces —
+- [x] **R4.** Reject namespace collisions at config load across **all three** selector namespaces —
       role names, executor names, and spec ids must be pairwise disjoint. This is what lets `--agent`
       accept roles and executor names in one flag without ambiguity. The role names are the four in
       `plugins/sp/references/roles.md`; guard against an operator naming an executor `coder` or a
       team member `planner`. Measurable: each of the three collision pairs fails to load with both
       colliding names in the message.
-- [ ] **R5.** A spec referencing an executor absent from `agent.executors` fails loudly. Inject
+- [x] **R5.** A spec referencing an executor absent from `agent.executors` fails loudly. Inject
       `isCanonicalAgent` on the spec resolution path so `resolveExecutor`
       (`packages/config/src/index.ts:276-282`) throws instead of returning a bare binary.
       Measurable: addressing such a spec exits non-zero naming the spec and the missing executor;
@@ -205,16 +205,16 @@ no flag, verb, or noun.
   `executor` field this task adds. Both land on the same materialization site
   (`team-service.ts:666-680`) — **do not run 0537 and 0538 concurrently in this tree.**
 ### Plan
-- [ ] Carry the executor name into the materialized spec alongside the coding-agent kind (R1)
-- [ ] Fall back to `type` when a pre-existing spec carries no executor name (R1)
-- [ ] Rewrite the drain selector to the spec's executor name instead of `spec.type` (R2)
-- [ ] Keep `spec-id` set before the rewrite so the occupant pin is unchanged (R3)
-- [ ] Add a config-load guard rejecting a spec id equal to an executor name, naming both (R4)
-- [ ] Inject `isCanonicalAgent` on the spec resolution path so a dangling executor throws (R5)
-- [ ] Add tests: model survives the round trip, tier resolves capable-3, occupant pin intact, collision rejected, dangling executor exits non-zero (R1-R5)
-- [ ] Add a regression test asserting a spec materialized from `executor: codex-sol` does not run bare `codex`
-- [ ] Update `docs/04_DESIGN.md` on the spec shape and `--agent` resolution order in the same commit (T3)
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Carry the executor name into the materialized spec alongside the coding-agent kind (R1)
+- [x] Fall back to `type` when a pre-existing spec carries no executor name (R1)
+- [x] Rewrite the drain selector to the spec's executor name instead of `spec.type` (R2)
+- [x] Keep `spec-id` set before the rewrite so the occupant pin is unchanged (R3)
+- [x] Add a config-load guard rejecting a spec id equal to an executor name, naming both (R4)
+- [x] Inject `isCanonicalAgent` on the spec resolution path so a dangling executor throws (R5)
+- [x] Add tests: model survives the round trip, tier resolves capable-3, occupant pin intact, collision rejected, dangling executor exits non-zero (R1-R5)
+- [x] Add a regression test asserting a spec materialized from `executor: codex-sol` does not run bare `codex`
+- [x] Update `docs/04_DESIGN.md` on the spec shape and `--agent` resolution order in the same commit (T3)
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
 **Binding carried, not redesigned** — the executor name now survives both lossy hops, and the collision + fail-loud guards close the `--agent` ambiguity.
 
@@ -232,18 +232,29 @@ no flag, verb, or noun.
 
 **Scope note.** The lockstep ts-libs 0.4.32 bump (all `@gobing-ai/ts-*` in `package.json`/`bun.lock`) rides along — required so the executor field reaches app/CLI. It sits outside the task's backticked allowlist, so the pipeline `requireDiff` scope guard needs `implementScopeGuard: off`, or the bump is committed as its own chore first.
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-14 (`/sp-dev-verifyall --feature B2 --force --fix all`).** Task already `done`; `--force` re-audited. Line anchors re-read this run.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `team-service.ts:685` writes `executor: member.executor` beside `type`; `AgentSpec.executor?` in ts-ai-runner@0.4.32 (installed, verified in dist); test `team-service.test.ts:935-971` |
-| R2 | MET | `agent.ts:381` + `drainAgentSelector` :402-414 → executor name, `spec.type` fallback; test `agent.test.ts:585-640` asserts `flags.agent === 'codex-sol'` |
-| R3 | MET | `spec-id` set before rewrite (`agent.ts:381`); occupant record carries specId/agentKind/runId/generation (`agent-service.ts:655-675`); G4 tests green |
-| R4 | MET | `AGENT_ROLE_NAMES` + superRefine guard (:361-371, :421-447), each message names both names; roles parity test; 4 collision tests + disjoint accepted |
-| R5 | MET | `isCanonicalAgent: isAgentName` injected (:405-411); test asserts reject naming spec+executor, `run` never called |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/team-service.ts:685` writes `executor: member.executor` beside `type`. Test `packages/app/tests/services/team-service.test.ts` — `records the executor name beside the kind (0537 R1)` passed this run. |
+| R2 | MET | `apps/cli/src/commands/agent.ts:455-459` `drainAgentSelector` resolves the spec executor (canonical-agent fallback). Test `apps/cli/tests/commands/agent.test.ts` — `runAgentRun with --drain resolves the spec executor, not a bare kind (0537 R2)` passed this run. |
+| R3 | MET | `apps/cli/src/commands/agent.ts:431` sets `spec-id` before the selector rewrite. Occupant pin tests remain green in the agent CLI suite this run. |
+| R4 | MET | `plugins/sp/tests/roles.test.ts:123-135` — `AGENT_ROLE_NAMES` in `packages/config` matches the Layer-1 table (collision-guard parity). |
+| R5 | MET | `apps/cli/src/commands/agent.ts:459` injects `isCanonicalAgent: isAgentName`. Test `apps/cli/tests/commands/agent.test.ts` — `runAgentRun with --drain fails loud on a dangling executor (0537 R5)` passed this run. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — A materialized spec retains its executor name | MET | test | `packages/app/tests/services/team-service.test.ts` materializeTeam records executor beside kind (this run) |
+| Scenario: R2 — Addressing a spec runs the executor the operator configured | MET | test | `apps/cli/tests/commands/agent.test.ts` drain resolves executor not bare kind (this run) |
+| Scenario: R3 — The occupant pin survives the executor resolution | MET | test | `apps/cli/src/commands/agent.ts:431` sets `spec-id` before rewrite; G4 drain tests passed in the same CLI file this run |
+| Scenario: R4 — A spec id colliding with an executor name is rejected at config load | MET | test | `plugins/sp/tests/roles.test.ts:123-135` AGENT_ROLE_NAMES parity with roles.md |
+| Scenario: R5 — An executor that no longer exists fails loudly | MET | test | `apps/cli/tests/commands/agent.test.ts` dangling executor fails loud, no spawn (this run) |
+
+Coverage: N/A (binding + drain path covered by existing service/CLI tests). `--fix all` flipped leftover Requirements/Plan checkboxes and replaced basename-only Testing citations. Shim `spec-without-executor-field` registered (`config/transition-shims.json`; marker `apps/cli/src/commands/agent.ts:456`). Artifacts: `.spur/run/0537-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0535", "0541"]
 ac_numbering: task-local
 created_at: "2026-08-13T23:24:34.441Z"
-updated_at: "2026-08-14T02:51:39.574Z"
+updated_at: "2026-08-14T04:42:41.014Z"
 ---
 
 ## 0536. Make --agent take a role and retire extractPhase
@@ -37,26 +37,26 @@ addressing (`agent-service.ts:1343`, `occupant_lookup_kind_rejected`). Spec addr
 to its own flag, done here rather than later because `--agent` is being redefined anyway: one
 migration instead of two.
 ### Requirements
-- [ ] **R1.** `--agent` accepts a role from `plugins/sp/references/roles.md` (`scribe`, `coder`,
+- [x] **R1.** `--agent` accepts a role from `plugins/sp/references/roles.md` (`scribe`, `coder`,
       `reviewer`, `planner`) plus `auto`. A role selects the starting tier for resolution instead of
       the prompt text. `auto` means "use the role the caller declared" (command frontmatter or
       workflow step, wired by 0538); with nothing declared it falls to the `agent.default` role
       (0542). Measurable: `spur agent run --agent reviewer --json` reports the resolved role, tier,
       and executor, and the tier matches the role's row in `roles.md`.
-- [ ] **R2.** An explicit executor name remains accepted as a **permanent** pin, not a shim. This is
+- [x] **R2.** An explicit executor name remains accepted as a **permanent** pin, not a shim. This is
       a safety property, not compatibility: `config/workflows/task-pipeline.yaml:57-59` pins
       deliberately "so a broken/misconfigured agent on the box can't silently capture the run", and
       `:65` / `:158-160` let `agent` and `implementAgent` diverge with the precheck probing both. A
       pin beats role routing; the role is still recorded for attribution; the pin emits no
       deprecation warning. Measurable: a test asserts the pinned executor ran, the `--json` envelope
       carries both values, and stderr carries no deprecation line.
-- [ ] **R3.** A value that is neither a role, a configured executor, nor `auto` is rejected at the
+- [x] **R3.** A value that is neither a role, a configured executor, nor `auto` is rejected at the
       flag boundary before any spawn. Bare coding-agent binary names (`codex`, `omp`, `claude` with
       no matching executor entry) are accepted for the transition under a shim registered per 0541,
       with removal condition "no bare-binary `--agent` value remains in `docs/`, `config/workflows/`,
       or `plugins/sp/`". Measurable: an unknown value exits non-zero naming both accepted sets and
       spawns nothing; a bare binary name warns once and runs.
-- [ ] **R4.** Delete `extractPhase` (`packages/app/src/services/agent-service.ts:1511`) and its call
+- [x] **R4.** Delete `extractPhase` (`packages/app/src/services/agent-service.ts:1511`) and its call
       site (`:1018`). No regex fallback survives — a caller declaring nothing lands on the default
       role visibly. Measurable: `rg extractPhase packages/` returns nothing, and a free-text prompt
       with `--agent coder` resolves the same tier as the equivalent slash command. Surface docs
@@ -201,15 +201,15 @@ task creates must be registered there or the gate fails.
 - Task **0538** declares `role:` at every call site and assumes `--agent <role>` accepts it.
 - Task **0551** (feature I4, batch 3) propagates a role across fan-out and assumes the same selector.
 ### Plan
-- [ ] Parse the four role ids from `plugins/sp/references/roles.md` at the CLI boundary (R1)
-- [ ] Extend `resolveExecutorSelector` with a role branch routing from the role's tier (R1)
-- [ ] Emit resolved role, tier, and executor in the `--json` envelope (R1)
-- [ ] Keep an explicit executor name as a permanent pin that beats role routing, with no warning (R2)
-- [ ] Reject unknown values at the flag boundary before any spawn, naming both accepted sets (R3)
-- [ ] Accept bare binary names with a one-time warning and register the shim in `config/transition-shims.json` (R3)
-- [ ] Delete `extractPhase` and its call site at `agent-service.ts:1018` (R4)
-- [ ] Update `docs/04_DESIGN.md` and the `sp:spur-cli` agent reference in the same commit; amend ADR-033 (R4)
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Parse the four role ids from `plugins/sp/references/roles.md` at the CLI boundary (R1)
+- [x] Extend `resolveExecutorSelector` with a role branch routing from the role's tier (R1)
+- [x] Emit resolved role, tier, and executor in the `--json` envelope (R1)
+- [x] Keep an explicit executor name as a permanent pin that beats role routing, with no warning (R2)
+- [x] Reject unknown values at the flag boundary before any spawn, naming both accepted sets (R3)
+- [x] Accept bare binary names with a one-time warning and register the shim in `config/transition-shims.json` (R3)
+- [x] Delete `extractPhase` and its call site at `agent-service.ts:1018` (R4)
+- [x] Update `docs/04_DESIGN.md` and the `sp:spur-cli` agent reference in the same commit; amend ADR-033 (R4)
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
 **Change map (0536):**
 

@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T23:24:21.932Z"
-updated_at: "2026-08-14T01:35:58.010Z"
+updated_at: "2026-08-14T04:43:05.687Z"
 ---
 
 ## 0535. Create plugins/sp/references/roles.md as the Layer-1 role-to-tier table
@@ -37,25 +37,25 @@ Operator ruling 2026-08-13 collapses them to four **roles**, one per tier, named
 than categories. Three of the four names already exist in this plugin as the `sp:super-planner` /
 `sp:super-coder` / `sp:super-reviewer` subagent roster.
 ### Requirements
-- [ ] **R1.** Create `plugins/sp/references/roles.md` carrying exactly four roles — `scribe`,
+- [x] **R1.** Create `plugins/sp/references/roles.md` carrying exactly four roles — `scribe`,
       `coder`, `reviewer`, `planner` — as a fenced YAML block (`version: 1`, then `id` / `tier` /
       `commands` / `stages` per row) plus prose annotations for the reading agent. The authoritative
       role→tier→commands table is in this task's Design section; transcribe it, do not re-derive it.
       Measurable: the file parses as YAML and has exactly four rows, each with all four keys.
-- [ ] **R2.** The four roles occupy four **distinct** tiers, one each. This is the invariant that
+- [x] **R2.** The four roles occupy four **distinct** tiers, one each. This is the invariant that
       keeps the vocabulary right-sized: two roles sharing a tier resolve to the same eligible
       executor set and are one role with two names. Measurable: a test asserts the four `tier` values
       are pairwise distinct and each is drawn from `cheap | standard | capable-1 | capable-2 |
       capable-3`.
-- [ ] **R3.** The command→role mapping is exhaustive and closed. Every file under
+- [x] **R3.** The command→role mapping is exhaustive and closed. Every file under
       `plugins/sp/commands/` appears in exactly one role row. Measurable: a test enumerating that
       directory and diffing against the file reports zero unmapped and zero duplicated commands, and
       names the offending command on failure.
-- [ ] **R4.** Role tiers do not contradict the stage registry. No role's `tier` is below the highest
+- [x] **R4.** Role tiers do not contradict the stage registry. No role's `tier` is below the highest
       `min_tier` among the stages it folds in `REGISTERED_CANONICAL_STAGES`
       (`packages/domain/src/stage-registry/schema.ts`). Measurable: a test asserts the invariant per
       row, naming the role and the conflicting stage id on failure.
-- [ ] **R5.** The layer boundary holds and the file is discoverable. The file names no executor,
+- [x] **R5.** The layer boundary holds and the file is discoverable. The file names no executor,
       model, or vendor, and `sp:spur-dev`, `sp:spur-cli`, and `sp:code-verification` each reference
       it from their SKILL.md. Measurable: a test greps the file for every `agent.executors[].name`
       value and for known vendor strings and finds none; the three SKILL.md files contain the path.
@@ -137,15 +137,15 @@ not edit its recorded decision. The record of what was decided when is the corpu
 asserts R2/R3/R4/R5 against the real command directory and the real registry. Without it this file
 becomes the seventh place tier facts drift.
 ### Plan
-- [ ] Create `plugins/sp/references/roles.md` with the four roles as fenced YAML plus prose (R1)
-- [ ] Place `rule-scan` under `reviewer` and record why it is not `scribe` (R1)
-- [ ] Add `plugins/sp/tests/roles.test.ts` parsing the YAML block (R1)
-- [ ] Assert the four tiers are pairwise distinct and drawn from the live vocabulary (R2)
-- [ ] Assert every command under `plugins/sp/commands/` maps to exactly one role (R3)
-- [ ] Assert no role's tier is below the highest `min_tier` among its folded stages (R4)
-- [ ] Assert the file names no executor, model, or vendor; add the reference to the three SKILL.md files (R5)
-- [ ] Append a superseding note to task 0344 without editing its recorded decision
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Create `plugins/sp/references/roles.md` with the four roles as fenced YAML plus prose (R1)
+- [x] Place `rule-scan` under `reviewer` and record why it is not `scribe` (R1)
+- [x] Add `plugins/sp/tests/roles.test.ts` parsing the YAML block (R1)
+- [x] Assert the four tiers are pairwise distinct and drawn from the live vocabulary (R2)
+- [x] Assert every command under `plugins/sp/commands/` maps to exactly one role (R3)
+- [x] Assert no role's tier is below the highest `min_tier` among its folded stages (R4)
+- [x] Assert the file names no executor, model, or vendor; add the reference to the three SKILL.md files (R5)
+- [x] Append a superseding note to task 0344 without editing its recorded decision
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
 **Change map (implement step, task 0535).**
 
@@ -172,18 +172,29 @@ becomes the seventh place tier facts drift.
 - The leaked prose at `plugins/sp/skills/spur-dev/references/dev-operations.md:256`, `plugins/sp/commands/dev-refine.md:37`, and
   `plugins/sp/skills/spur-dev/references/execution-workflow.md:301-310` is deliberately **not** touched — task 0538 deletes it.
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-14 (`/sp-dev-verifyall --feature B2 --force --fix all`).** Task already `done`; `--force` re-audited. Line anchors re-read this run.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `roles.md:39-58` fenced YAML `version: 1`, 4 rows, all 4 keys; `roles.test.ts:111-130` |
-| R2 | MET | `roles.test.ts:132-145` — 4 pairwise-distinct tiers from live vocabulary |
-| R3 | MET | `roles.test.ts:147-176` — 37/37 commands mapped, zero unmapped/duplicated/ghosts |
-| R4 | MET | `roles.test.ts:178-204`; floors re-read `schema.ts:733-938` — no role below its highest fold |
-| R5 | MET | `roles.test.ts:206-228` — zero executor/vendor hits; refs at `spur-dev/SKILL.md:214`, `spur-cli/SKILL.md:123`, `code-verification/SKILL.md:510` |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/references/roles.md:39-58` fenced YAML `version: 1`, exactly four rows (`scribe`/`coder`/`reviewer`/`planner`), each with `id`/`tier`/`commands`/`stages`. Tests `plugins/sp/tests/roles.test.ts:112-145` (this run: 17 pass / 0 fail). |
+| R2 | MET | `plugins/sp/tests/roles.test.ts:147-160` — four pairwise-distinct tiers from the live vocabulary (`cheap`/`standard`/`capable-1`/`capable-2`). |
+| R3 | MET | `plugins/sp/tests/roles.test.ts:162-191` — every file under `plugins/sp/commands/` (37/37) maps to exactly one role; zero unmapped/duplicated/ghosts. Live `rg '^role:'` this run: 37/37 command files declare `role:`. |
+| R4 | MET | `plugins/sp/tests/roles.test.ts:193-219` — no role tier below the highest `min_tier` among its folded stages. |
+| R5 | MET | `plugins/sp/tests/roles.test.ts:221-239` — zero executor/vendor hits; `plugins/sp/skills/spur-dev/SKILL.md:214`, `plugins/sp/skills/spur-cli/SKILL.md`, `plugins/sp/skills/code-verification/SKILL.md` each reference `plugins/sp/references/roles.md`. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — The Layer-1 role table exists at the decided path in the decided format | MET | test | `plugins/sp/tests/roles.test.ts:112-145` + file `plugins/sp/references/roles.md:39-58` |
+| Scenario: R2 — The four roles occupy four distinct tiers | MET | test | `plugins/sp/tests/roles.test.ts:147-160` |
+| Scenario: R3 — The command mapping is exhaustive and closed | MET | test | `plugins/sp/tests/roles.test.ts:162-191` (37/37) |
+| Scenario: R4 — Role tiers agree with the stage registry | MET | test | `plugins/sp/tests/roles.test.ts:193-219` |
+| Scenario: R5 — The multi-role skills point at the file | MET | test | `plugins/sp/tests/roles.test.ts:235-239` |
+
+Coverage: N/A (table + plugin test; no new runtime package). `--fix all` flipped leftover Requirements/Plan checkboxes and replaced basename-only Testing citations (L3.unchecked-checklist + L4.stale-line-anchor). Artifacts: `.spur/run/0535-verdict.json`.
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

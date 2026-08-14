@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0535", "0536", "0541"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:05:19.993Z"
-updated_at: "2026-08-14T03:37:21.133Z"
+updated_at: "2026-08-14T04:42:42.943Z"
 ---
 
 ## 0542. Add --spec for occupant addressing and redefine agent.default as a role
@@ -40,7 +40,7 @@ must be loud, never a silent reinterpretation.
 Split out of task 0536 to keep both inside the size budget. Runs after it; both edit
 `apps/cli/src/commands/agent.ts`, so they must not run concurrently in the same working tree.
 ### Requirements
-- [ ] **R1.** Add `--spec <id>` for occupant addressing and move `--drain` onto it. The occupant pin
+- [x] **R1.** Add `--spec <id>` for occupant addressing and move `--drain` onto it. The occupant pin
       behaviour is unchanged: `spec-id` is still set before any selector rewrite so
       `AgentService.executeRun` persists the ADR-057 wave 1 record. Passing a spec id to `--agent`
       warns once and still works for the transition, under a shim registered per 0541 with removal
@@ -48,17 +48,17 @@ Split out of task 0536 to keep both inside the size budget. Runs after it; both 
       `docs/`". Measurable: `--spec <id> --drain` drives the drain path; the occupant record carries
       the same specId, agentKind, runId, and generation as before the change; the same value on
       `--agent` warns once and behaves identically.
-- [ ] **R2.** `agent.default` is redefined as the **default role** for a dispatch that declares
+- [x] **R2.** `agent.default` is redefined as the **default role** for a dispatch that declares
       nothing (recommended value `coder`). Migration is three-way and loud: a known role uses the new
       semantics; a known executor name warns once and keeps legacy fallthrough behaviour under a
       registered shim; a value that is neither fails naming both accepted sets. Measurable: all three
       paths are covered by tests, and this repo's current `.spur/config.yaml` value
       (`omp-dsv4-flash-opencode`) produces a warning rather than silent misbehaviour.
-- [ ] **R3.** `spur agent loop` keeps working across the flag move. It calls `drainIntoPrompt` with
+- [x] **R3.** `spur agent loop` keeps working across the flag move. It calls `drainIntoPrompt` with
       `drain: true` and relies on `spec-id` surviving an empty drain
       (`apps/cli/src/commands/agent.ts:446-472`). Measurable: the loop still resolves its spec, still
       idles on an empty inbox, and still exits cleanly on abort.
-- [ ] **R4.** Config and surface docs record the new shapes in the same commit (T3):
+- [x] **R4.** Config and surface docs record the new shapes in the same commit (T3):
       `docs/04_DESIGN.md`, `config/config.example.yaml`, `apps/cli/schemas/spur-config.schema.json`,
       and the `sp:spur-cli` agent reference. Both shims created here are registered in
       `config/transition-shims.json` with objectively checkable removal conditions. Measurable: the
@@ -192,14 +192,14 @@ and the occupant record must stay byte-identical.
 **Leaves for dependents:** feature M5 (batch 2) builds role-declared rosters on the spec shape this
 task finalizes; feature G4's occupant contract is preserved, not extended.
 ### Plan
-- [ ] Add `--spec <id>` to `spur agent run` and route `--drain` through it (R1)
-- [ ] Keep `spec-id` set before any selector rewrite so the occupant pin is byte-identical (R1)
-- [ ] Accept a spec id on `--agent` with a one-time warning; register the shim (R1)
-- [ ] Redefine `agent.default` as the default role with the three-way migration branch (R2)
-- [ ] Register the legacy-executor-value shim with a checkable removal condition (R2)
-- [ ] Verify `spur agent loop` still resolves its spec, idles on empty inbox, and exits on abort (R3)
-- [ ] Update `docs/04_DESIGN.md`, `config.example.yaml`, the config JSON schema, and `sp:spur-cli` (R4)
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Add `--spec <id>` to `spur agent run` and route `--drain` through it (R1)
+- [x] Keep `spec-id` set before any selector rewrite so the occupant pin is byte-identical (R1)
+- [x] Accept a spec id on `--agent` with a one-time warning; register the shim (R1)
+- [x] Redefine `agent.default` as the default role with the three-way migration branch (R2)
+- [x] Register the legacy-executor-value shim with a checkable removal condition (R2)
+- [x] Verify `spur agent loop` still resolves its spec, idles on empty inbox, and exits on abort (R3)
+- [x] Update `docs/04_DESIGN.md`, `config.example.yaml`, the config JSON schema, and `sp:spur-cli` (R4)
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
 - **R1 — `--spec <id>` occupant addressing.** `apps/cli/src/commands/agent.ts:353-469` — `runAgentRun` reads `--spec` (canonical) or legacy `--agent <spec-id>`; `drainIntoPrompt` sets `spec-id` before the selector rewrite so the ADR-057 wave 1 occupant pin survives (`:414-431`); explicit `--spec` with an unknown id exits 2 without spawning (`:372-375`); legacy path warns once via `warnAgentSpecIdOnce` (`:480-486`, shim `agent-flag-spec-id` at `:477`). `runAgentLoop` (`:557-585`) reads `--spec` and keeps the empty-inbox idle behavior.
 - **R2 — `agent.default` redefined as the default role.** `packages/app/src/services/agent-service.ts:1328-1342` — three-way branch: role uses new semantics; configured executor warns once (`warnAgentDefaultExecutorOnce`, `:1672-1687`, shim `agent-default-executor` at `:1679`) and keeps legacy fallthrough; neither fails exit 2 naming both accepted sets. `resolveAgentAuto` (`:1087-1092`) propagates the R2 exit-2 instead of silently falling to Tier-1 priority.
