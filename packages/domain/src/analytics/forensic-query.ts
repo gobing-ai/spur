@@ -1,5 +1,6 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
+import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
 
 /**
  * Forensic SQL over `history_message` / `history_tool_call` (0464 R1). Sole owner of
@@ -347,4 +348,62 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
         source,
     );
     return row?.cnt ?? 0;
+}
+// ---------------------------------------------------------------------------
+// Derived-variable queries (task 0554)
+// ---------------------------------------------------------------------------
+
+/** Per-session timing span: MIN/MAX ts + assistant duration sums (derived metric input). */
+export async function sessionSpans(db: DbAdapter, sel: ArtifactSelector): Promise<SessionSpanRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    return db.queryAll<SessionSpanRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source,
+                MIN(m.ts) AS firstTs,
+                MAX(m.ts) AS lastTs,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
+                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
+         FROM history_message m
+         ${where}
+         GROUP BY m.session_id, m.source`,
+        ...params,
+    );
+}
+
+/** Per-session tool-call duration sums (derived metric input). */
+export async function sessionToolDurations(db: DbAdapter, sel: ArtifactSelector): Promise<SessionToolDurationRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    return db.queryAll<SessionToolDurationRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source,
+                SUM(tc.duration_ms) AS toolDurationMs,
+                SUM(tc.duration_ms IS NULL) AS toolDurationUnmeasured
+         FROM history_tool_call tc
+         JOIN history_message m ON m.record_hash = tc.message_hash
+         ${where}
+         GROUP BY m.session_id, m.source`,
+        ...params,
+    );
+}
+
+/**
+ * Todo-tool calls with `args_raw` populated (task 0553), ordered for phase extraction.
+ * `LIMIT ?` satisfies the R2 structural invariant (no unbounded corpus materialization).
+ */
+export async function todoToolCalls(db: DbAdapter, sel: ArtifactSelector, limit = 5000): Promise<TodoToolCallRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    // Built outside the SQL template: a nested backtick expression inside the literal
+    // would break the R2 source scan (which treats backticks as query boundaries).
+    const whereClause = where ? `${where} AND tc.args_raw IS NOT NULL` : 'WHERE tc.args_raw IS NOT NULL';
+    return db.queryAll<TodoToolCallRow>(
+        `SELECT tc.session_id AS sessionId, tc.source AS source,
+                m.ts AS ts,
+                tc.tool_name AS toolName,
+                tc.args_raw AS argsRaw
+         FROM history_tool_call tc
+         JOIN history_message m ON m.record_hash = tc.message_hash
+         ${whereClause}
+         ORDER BY tc.session_id, m.ts
+         LIMIT ?`,
+        ...params,
+        limit,
+    );
 }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
+import type { DerivedVariables } from './derived';
 import type { TokenTotals } from './types';
 
 /**
@@ -131,6 +132,8 @@ export interface HistoryArtifact {
     bySession: SessionStat[];
     loops: LoopFinding[];
     warnings: ArtifactWarning[];
+    /** Derived variables (phases, time decomposition, bottlenecks) from task 0554. Absent on pre-0554 artifacts. */
+    derived?: DerivedVariables;
 }
 
 /**

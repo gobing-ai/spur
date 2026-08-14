@@ -18,8 +18,10 @@ import {
     bySession,
     byTool,
     type CoverageEntry,
+    computeDerived,
     countCheckpointsBySource,
     type DriftRow,
+    derivedWarnings,
     drift,
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -31,8 +33,11 @@ import {
     renderReport,
     type SourceSummaryRow,
     selectorDigest,
+    sessionSpans,
+    sessionToolDurations,
     sourceSummary,
     type ToolRollupRow,
+    todoToolCalls,
     toolRollup,
 } from '@gobing-ai/spur-domain';
 import {
@@ -217,15 +222,19 @@ export class HistoryService {
         const top = opts.top ?? 20;
         const db = await this.ctx.getDb();
 
-        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows] = await Promise.all([
-            messageRollup(db, selector),
-            toolRollup(db, selector),
-            byTool(db, selector, top),
-            bySession(db, selector, top),
-            loops(db, selector),
-            drift(db, selector),
-            sourceSummary(db, selector),
-        ]);
+        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows, spanRows, toolDurRows, todoRows] =
+            await Promise.all([
+                messageRollup(db, selector),
+                toolRollup(db, selector),
+                byTool(db, selector, top),
+                bySession(db, selector, top),
+                loops(db, selector),
+                drift(db, selector),
+                sourceSummary(db, selector),
+                sessionSpans(db, selector),
+                sessionToolDurations(db, selector),
+                todoToolCalls(db, selector),
+            ]);
 
         const totals = foldTotals(mRows, tRows);
         const bySource = foldGrouped(
@@ -252,6 +261,7 @@ export class HistoryService {
             .sort((a, b) => a.date.localeCompare(b.date));
 
         const coverage = buildCoverage(sourceRows, tRows, driftRows, opts.coverageErrors, opts.importCoverage);
+        const derived = computeDerived(spanRows, toolDurRows, todoRows);
 
         const artifact: HistoryArtifact = {
             schemaVersion: HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -286,7 +296,12 @@ export class HistoryService {
                 assistantDurationUnmeasured: r.assistantDurationUnmeasured,
             })),
             loops: loopRows,
-            warnings: [...buildWarnings(driftRows, coverage), ...(opts.extraWarnings ?? [])],
+            warnings: [
+                ...buildWarnings(driftRows, coverage),
+                ...derivedWarnings(derived),
+                ...(opts.extraWarnings ?? []),
+            ],
+            derived,
         };
 
         if (opts.out !== undefined || opts.cwd !== undefined) {

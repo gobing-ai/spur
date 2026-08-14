@@ -560,6 +560,21 @@ assistant responses — role-filtered to `role = 'assistant'`, additive, and dis
 non-finite durations count as unmeasured, never as zero. `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 —
 the fields are additive.
 
+**Derived variables (task 0554):** `analyze` additionally computes `derived` on the artifact via a
+**MetricRegistry** (`packages/domain/src/analytics/derived.ts`) — an ordered list of `MetricFn`s run
+after the SQL aggregation, each receiving `{ sessionSpans, sessionTools, todoCalls, results }` and
+returning an additive key. Defaults: `phases` (todo-tool `args_raw` replay — per-session first
+`in_progress` → first `completed` per todo name, `endedAt` falls back to the session's last todo-call
+ts; sources without todo tools report `phaseSupport: 'unsupported'`), `timeDecomposition` (per-session
+`llmMs` + `toolMs` + `idleMs`, with `unattributedMs` holding the remainder whenever any duration in
+the session is unmeasured — the never-fabricate invariant extends to decomposition), and
+`bottlenecks` (time buckets ranked desc by `ms`, `share = ms / spanMs`). `derived` is optional on the
+artifact: old artifacts remain valid (`schemaVersion` stays 1), and sessions with no measured time
+surface `derivedWarnings[]` (`derived-unattributed-time`) instead of zeros. Metric inputs come from
+three new forensic queries (`sessionSpans`, `sessionToolDurations`, `todoToolCalls` — the latter
+reading the 0012 `args_raw` column) alongside the existing SQL set; registry metrics never load the
+corpus into memory.
+
 #### `spur history report [path] [--json]`
 
 Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the

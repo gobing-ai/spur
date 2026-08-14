@@ -74,6 +74,21 @@ If a column you expected is absent, trust the live schema — do not guess. The 
 `HISTORY_IMPORT_SCHEMA_SQL` + `mappers.ts` are the authority; this skill holds no duplicate
 column contract.
 
+**Selected-file bridge (task 0507 R3):** `--use-history` imports the frozen Phase-1 file set one
+file at a time — never a root scan, never a full reconciliation. Ambient discovery covers the
+normal OMP root (`~/.omp/agent/sessions/`) **and** workflow subprocess sessions under
+`.spur/run/<run-id>/agent-sessions/<omp-executor>/*.jsonl` (same `type: "message"` envelope). For
+each file, the session key is the JSONL filename stem (importer `sessionIdFromContext`); import and
+analyze per key:
+
+```bash
+spur history import --source omp --file <absolute-file> --mode force-file --json
+spur history analyze --session <filename-stem> --json
+```
+
+ETL owns token/cost/message/tool/loop/assistant-duration aggregates; raw JSONL stays authoritative
+for command text, compactions, test/guard retries, and tool execution duration/status/errors.
+
 ## Edge cases
 
 | Scenario | Handling |
