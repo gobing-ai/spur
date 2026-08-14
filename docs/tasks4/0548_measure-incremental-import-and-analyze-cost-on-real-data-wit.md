@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.539Z"
-updated_at: "2026-08-14T00:51:17.104Z"
+updated_at: "2026-08-14T01:38:48.525Z"
 ---
 
 ## 0548. Measure incremental import and analyze cost on real data with provenance
@@ -72,6 +72,22 @@ Scenario: R1 — The cost of an incremental refresh is measured before it is wir
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Which binary?** A source-local one — `bun run apps/cli/src/index.ts …` or built `apps/cli/spur.js`.
+  Never a bare global `spur`; AGENTS.md mandates this after the 2026-08-10 incident.
+- **Steady state or cold?** Both, reported separately: steady state decides the cadence, the
+  backlogged case bounds the first firing after an idle period.
+- **Import and analyze together or apart?** Apart (R2) — they may differ by an order of magnitude and
+  can then be triggered at different cadences.
+- **Does this change product code?** No. Measurement plus a citeable artifact.
+
+**Deferred with owner.**
+
+- **Measuring the five unsupported sources** — owner: operator, blocked by the 2026-08-06
+  source-support ruling. They import nothing, so they contribute no cost.
+- **Whether write cost differs materially from `--dry-run`** — resolve during measurement; if it does,
+  measure a real write and say so in the artifact.
 ### Design
 **This is a measurement task, not an implementation task.** It changes no product code. Its output is
 an artifact other tasks cite — the same shape as task 0347's inventory
@@ -96,6 +112,44 @@ is material to the answer, measure a real write and say so.
 
 **State the consequence (R5).** A table of milliseconds that stops short of "therefore the trigger
 should…" leaves the next task to re-derive the judgement. Name the recommended cadence.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Import command | `spur history import` — `--mode <full\|incremental\|force-file>`, default `incremental` | `apps/cli/src/commands/history.ts:57`, `:77` |
+| Daily pipeline | `spur history daily` — import-all fan-out → analyze → artifact | `history.ts:203-217` |
+| Invocation (mandated) | `bun run apps/cli/src/index.ts history import …` or built `apps/cli/spur.js` | AGENTS.md § Build & repo commands |
+| Provenance header | `binary:` + resolved `@gobing-ai/ts-llm-jsonl-importer@<version>`; `--json` embeds `provenance` | same |
+| Full-fidelity sources | `claude` · `codex` · `pi` · `omp` · `agy` · `grok` | feature E1 § In |
+| Unsupported sources | `gemini` · `opencode` · `antigravity-ide` · `openclaw` · `hermes` | feature E1 § Out of scope (2026-08-06) |
+| Checkpoint tables | `history_import_checkpoint` · `history_import_ledger` | feature E1 |
+| Output artifact | a citeable measurement file, precedent `docs/tasks2/0347-inventory.md` | — |
+
+**No product code changes.** This task measures and writes an artifact.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** measure with a bare global `spur`. The 2026-08-10 backfill ran old code for ~83 s exactly
+  that way; a figure without a provenance header is not evidence.
+- Do **not** report one combined import+analyze number (R2). If import is cheap and analyze is
+  expensive, the right design is frequent import with a lazier analyze — a conclusion a single number
+  hides.
+- Do **not** measure only a cold full import. The trigger fires in the steady state; that is the
+  number that decides the cadence (R1), with the backlogged case as an upper bound (R4).
+- Do **not** stop at a table of milliseconds (R5). State the cadence the figures imply, or the next
+  task re-derives the judgement.
+- Do **not** change product code to make measuring easier.
+
+#### Cross-task contract
+
+**Assumes from upstream:** nothing — root of feature E3's chain.
+
+**Leaves for dependents:** tasks **0549** and **0550** take their cadence and coalescing window from
+this artifact (0549 R4 requires the window be traceable to a figure here). A missing or vague
+recommendation blocks them.
 ### Plan
 - [ ] Confirm a source-local binary is in use and its provenance header prints (R3)
 - [ ] Measure steady-state incremental import across the six full-fidelity sources, per source and total (R1)

@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0545"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:15.171Z"
-updated_at: "2026-08-14T00:33:43.225Z"
+updated_at: "2026-08-14T01:38:47.641Z"
 ---
 
 ## 0546. Make role-to-executor routing queryable in one indexed round trip
@@ -65,6 +65,23 @@ Scenario: R4 — Routing is queryable in one indexed round trip
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **May an index be added?** Yes. Task 0545 R3 forbids a new *table or column*; an index on an
+  existing column is the sanctioned way to make the access path indexed (R2).
+- **Are pinned runs counted as role routing?** No — reported separately (R4). Pinning is the common
+  case here, so merging them would flatter the routing badly.
+- **What happens to rows written before attribution existed?** Excluded from counts, with the covered
+  window reported (R5). Imputing "unknown role" would dilute every ratio.
+- **Does this need a new CLI noun?** No (R3) — ADR-051 gates that, and J5 already ruled new
+  nouns/verbs out for this plane.
+
+**Deferred with owner.**
+
+- **Which existing surface hosts the query** — owner: operator, if no existing surface fits cleanly.
+  Prefer the observability read API; a noun addition is a decision brief, not an implementation choice.
+- **Token totals in the same aggregate** — owner: task 0547. Kept separate so this query carries no
+  history-plane dependency.
 ### Design
 **The comparison is the product.** A flat list of runs is not an answer; the operator is asking
 whether cheap roles land on cheap executors. Aggregate by (role, executor) with run and escalation
@@ -91,6 +108,48 @@ in scope — adding a *table* is not (task 0545 R3).
 plane over `run_id`, and it is kept separate so this query carries no history-plane dependency. Any
 dollar figure is excluded permanently, not deferred (feature J6 § *Tokens, not prices*). Board
 rendering is J4's; routing behavior is feature B2's.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Source rows | `system_events` filtered to attribution-bearing events | `packages/domain/src/migrations.ts:81-91` |
+| Indexes available | `idx_system_events_run_id` · `_event_name` · `_occurred_at` · `_entity` · `_sequence` | `migrations.ts:93-98` |
+| Aggregate key | `(role, executor)` | — |
+| Aggregate shape | `{ role, executor, source, runs, escalations }` over a bounded window | new |
+| Selection sources | `role` · `explicit` (pin) · `default` · escalated | from task 0545 |
+| Window bound | explicit `since` / `until`, defaulting to a bounded recent range | no unbounded scan |
+
+**No new CLI noun or verb** (R3). The query rides the existing observability read API and/or an
+existing noun's `--json`; ADR-051 gates any noun addition regardless.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** filter client-side over a fixed row window. That is precisely the failure feature J3
+  fixed on this ledger (exact-`name` + `since` + `limit` only, forcing 100-row client sifting).
+- Do **not** count pinned runs as evidence of role routing (R4). This repo's own
+  `config/workflows/task-pipeline.yaml:56-65` pins deliberately, so pinned is the common case, not an
+  edge case — merging them would make a fully-pinned pipeline look like perfect routing.
+- Do **not** impute a role for pre-attribution rows (R5). Exclude them and report the window; counting
+  them as "unknown" silently dilutes every ratio.
+- Do **not** add a table. If the access path needs an index, add the **index** (task 0545 R3 forbids
+  the table, not the index).
+- Do **not** compute token totals here — that is task 0547, kept separate so this query has no
+  history-plane dependency.
+
+#### Cross-task contract
+
+**Assumes from 0545:** every attribution row carries `run_id` and a stable selection-source value, and
+escalations are separate records. Without separate escalation records the escalation count is not
+computable.
+
+**Leaves for dependents:**
+
+- Task **0547** extends this aggregate with a token dimension and must not re-implement the grouping.
+- Task **0552** (feature J7, batch 3) renders this aggregate and adds no query of its own — the shape
+  frozen above is the interface it consumes.
 ### Plan
 - [ ] Define the aggregate shape: (role, executor) → run count, escalation count, over a window (R1)
 - [ ] Implement it as an indexed query on the existing ledger, adding an index if needed (R2)

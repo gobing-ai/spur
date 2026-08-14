@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Create plugins/sp/references/roles.md as the Layer-1 role-to-tier table"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: B2
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T23:24:21.932Z"
-updated_at: "2026-08-14T00:08:30.496Z"
+updated_at: "2026-08-14T01:35:58.010Z"
 ---
 
 ## 0535. Create plugins/sp/references/roles.md as the Layer-1 role-to-tier table
@@ -147,17 +147,76 @@ becomes the seventh place tier facts drift.
 - [ ] Append a superseding note to task 0344 without editing its recorded decision
 - [ ] Run `bun run autofix && bun run spur-check`
 ### Solution
+**Change map (implement step, task 0535).**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `plugins/sp/references/roles.md` (new) — the Layer-1 role→tier table: fenced YAML `version: 1`
+  with exactly four roles (`scribe` cheap / `coder` standard / `reviewer` capable-1 / `planner`
+  capable-2), each declaring `id` / `tier` / `commands` / `stages`, plus prose annotations. The
+  decided four-row table from this task's Design is transcribed verbatim; the live command
+  directory has **37** files vs the 31 the decided table listed, so the six additional commands are
+  placed by the same stage logic (documented in the file's Placement notes): `dev-refineall`,
+  `dev-find-next`, `dev-featurechange` → planner; `dev-gtd` → coder; `dev-find-conflict`,
+  `dev-find-issue` → reviewer. `rule-scan` sits under reviewer (analysis, not transcription).
+- `plugins/sp/tests/roles.test.ts` (new) — parses the fenced YAML and asserts R2 (four pairwise
+  distinct tiers from the live vocabulary), R3 (every file under `plugins/sp/commands/` maps to
+  exactly one role; zero unmapped/duplicated, names the offender), R4 (no role tier below the
+  highest `min_tier` among its folded stages, read from `REGISTERED_CANONICAL_STAGES` as text —
+  the plugin cannot import `@gobing-ai/spur-domain`), and R5 (no executor name from
+  `.spur/config.yaml` `agent.executors`, no known vendor string — word-boundary matched so
+  `resolve` ≠ vendor `sol`; the three SKILL.md files contain the path).
+- `plugins/sp/skills/spur-dev/SKILL.md`, `plugins/sp/skills/spur-cli/SKILL.md`,
+  `plugins/sp/skills/code-verification/SKILL.md` — each now references
+  `plugins/sp/references/roles.md` (R5).
+- Task 0344 Solution — appended a superseding note pointing at this task; the recorded D1–D8
+  decision was not edited (corpus discipline).
+- The leaked prose at `plugins/sp/skills/spur-dev/references/dev-operations.md:256`, `plugins/sp/commands/dev-refine.md:37`, and
+  `plugins/sp/skills/spur-dev/references/execution-workflow.md:301-310` is deliberately **not** touched — task 0538 deletes it.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `roles.md:39-58` fenced YAML `version: 1`, 4 rows, all 4 keys; `roles.test.ts:111-130` |
+| R2 | MET | `roles.test.ts:132-145` — 4 pairwise-distinct tiers from live vocabulary |
+| R3 | MET | `roles.test.ts:147-176` — 37/37 commands mapped, zero unmapped/duplicated/ghosts |
+| R4 | MET | `roles.test.ts:178-204`; floors re-read `schema.ts:733-938` — no role below its highest fold |
+| R5 | MET | `roles.test.ts:206-228` — zero executor/vendor hits; refs at `spur-dev/SKILL.md:214`, `spur-cli/SKILL.md:123`, `code-verification/SKILL.md:510` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; functional verdict PASS |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/references/roles.md:23-36` — fenced `yaml` block, `version: 1`, exactly 4 rows (scribe/coder/reviewer/planner), each with `id`/`tier`/`commands`/`stages`; `plugins/sp/tests/roles.test.ts:103-110` asserts 4 rows, exact ids, all 4 keys |
+| R2 | MET | `plugins/sp/tests/roles.test.ts:112-128` — pairwise-distinct tiers + membership in live vocabulary (`cheap/standard/capable-1/capable-2/capable-3`); tiers used: cheap/standard/capable-1/capable-2, all distinct |
+| R3 | MET | `plugins/sp/tests/roles.test.ts:130-158` — enumerates `plugins/sp/commands/` (37 files), zero unmapped, zero duplicated, zero ghosts; error names the offending command |
+| R4 | MET | `plugins/sp/tests/roles.test.ts:160-190` — floors read from `REGISTERED_CANONICAL_STAGES` (`packages/domain/src/stage-registry/schema.ts`:757 plan capable-2, :827 verify capable-1, :896 dogfood capable-1, :938 changelog cheap, rest standard); no role tier below its highest folded floor; error names role + conflicting stage id |
+| R5 | MET | `plugins/sp/tests/roles.test.ts:192-217` — zero hits for `.spur/config.yaml` executor names (10+ active) and zero known-vendor hits (word-boundary matched); `plugins/sp/skills/spur-dev/SKILL.md`, `spur-cli/SKILL.md`, `code-verification/SKILL.md` each contain `plugins/sp/references/roles.md` (verified via grep, 1 occurrence each) |
 
+**Design conformance.** The decided four-row table is transcribed verbatim. The 6 commands absent
+from the decided 31-command list (`dev-refineall`, `dev-find-next`, `dev-featurechange`,
+`dev-gtd`, `dev-find-conflict`, `dev-find-issue`) are placed by the same stage logic and documented
+in the file's Placement notes + Solution — CHANGED-documented, PASS-acceptable (design itself
+declares the live directory authoritative for R3). `rule-scan` sits under reviewer with the
+analysis-vs-transcription rationale recorded. Task 0344 got an appended superseding note; its
+recorded D1–D8 decision untouched.
+
+**SECUA.** No security, efficiency, correctness, or usability findings. `yamlBlock` /
+`stageMinTiers` regexes are read-only against repo-owned files; no injection surface.
+
+**Architecture.** No blocker/major candidates. Advisory: `roles.test.ts:66-84` `VENDOR_STRINGS`
+is a hand-maintained belt-and-suspenders list — the config-driven executor check is the primary
+boundary; rotate if new vendors ship. Advisory: `roles.test.ts:44-46` takes the first ` ```yaml `
+fence — safe while the file carries exactly one. Registry-read-as-text discipline matches
+`stage-registry-parity.test.ts` (plugin cannot import `@gobing-ai/spur-domain`).
+
+**Verification run this turn.** `bun test plugins/sp/tests/roles.test.ts` → 12 pass / 0 fail (53
+expect). `bun test plugins/sp` → 727 pass / 0 fail. `bunx biome check plugins/sp/tests/roles.test.ts`
+→ clean.
 ### References
 - **Source of the vocabulary:** task 0344 § Solution D1/D2 —
   `docs/tasks2/0344_decide-who-emits-intention-skill-declaration-inferred-judge-.md`
@@ -177,3 +236,6 @@ becomes the seventh place tier facts drift.
 - **Existing subagent roster the names align with:** `sp:super-planner`, `sp:super-coder`,
   `sp:super-reviewer`
 ### History
+- 2026-08-14T01:23:40.701Z todo → wip (system)
+- 2026-08-14T01:35:57.059Z wip → testing (system)
+- 2026-08-14T01:35:58.010Z testing → done (system)

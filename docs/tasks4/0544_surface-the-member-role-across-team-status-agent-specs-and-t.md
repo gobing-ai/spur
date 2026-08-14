@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0543"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:14.718Z"
-updated_at: "2026-08-14T00:21:34.001Z"
+updated_at: "2026-08-14T01:38:46.771Z"
 ---
 
 ## 0544. Surface the member role across team status, agent specs, and the Teams roster
@@ -61,6 +61,21 @@ Scenario: R6 — Rosters show the role wherever they already show the member
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Which fields are added, and where?** `role?` and `executor?` on `TeamStatusEntry`
+  (`team-service.ts:188-196`) — additive, so existing `--json` consumers are unaffected.
+- **How does an undeclared role render?** The literal `unset` in human output, `undefined` in
+  `--json`. Never blank, never inferred from tier.
+- **Is this a Board redesign?** No — one cell on an existing roster row. A layout question is M3's,
+  not this task's.
+
+**Deferred with owner.**
+
+- **Filtering or grouping a roster by role** — owner: operator. Display first; add interaction only
+  if the display proves useful.
+- **Showing the tier alongside the role** — owner: operator. The tier is derivable from `roles.md`;
+  rendering it duplicates Layer 1 into the UI and can drift.
 ### Design
 **Additive only.** Three surfaces, one new field each. If adding a column forces a layout decision,
 that is a signal to stop and route the question to feature M3 (Teams board UX) rather than to make
@@ -77,6 +92,43 @@ it right first and let the human rendering follow it.
 
 **Not in scope:** Teams Board layout or interaction changes (M3), Board observability surfaces (J4),
 and any role-based filtering or grouping — display only.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Status row type | `TeamStatusEntry { id, name, type, workspace, purpose, status: 'running'\|'stopped'\|'errored'\|'unknown', pid? }` | `packages/app/src/services/team-service.ts:188-196` |
+| Status result | `TeamStatusResult { agents: TeamStatusEntry[] }` | `team-service.ts:199` |
+| **Fields added** | `role?: string` and `executor?: string` on `TeamStatusEntry` | additive; existing consumers unaffected |
+| Spec listing | `listAgentSpecs(): Promise<AgentSpec[]>` | `team-service.ts:542` |
+| CLI surfaces | `spur team status` (`apps/cli/src/commands/team.ts:50`) · `spur agent list --specs` (`apps/cli/src/commands/agent.ts:29-36`) | — |
+| Unset rendering | literal `unset` (not blank, not `-`, not inferred) | human output; `undefined` in `--json` |
+| Board surface | Teams roster module | `apps/web/` |
+
+**No new CLI flag or verb.** Two existing commands gain a column/field; the Board roster gains a cell.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** infer a role from the executor's tier when none is declared (R4). `capable-3 executor →
+  planner` manufactures a declaration the operator never made; feature B2's terrain notes record the
+  regex-inference failure this mirrors.
+- Do **not** render unset as blank or `-`. It is a value; make it read as one.
+- Do **not** merge role and executor into one display string — they are distinct fields (R2), and a
+  merged string cannot be filtered or parsed.
+- Do **not** restructure Teams board layout. Features M3 and J4 own those surfaces; if adding the
+  column forces a layout decision, stop and route it to M3.
+- Do **not** add filtering or grouping by role. Display only.
+
+#### Cross-task contract
+
+**Assumes from 0543:** the spec records both the declared `role` and the resolved `executor`. This task
+renders them and computes nothing — if a value is missing on the spec, that is a 0543 defect to route
+back, not to reconstruct here.
+
+**Leaves for dependents:** none in batch 2. Feature J7 (batch 3, task 0552) renders *routing and token*
+data on the Board — a different surface with a different data source; the two must not be conflated.
 ### Plan
 - [ ] Add the role to `spur team status` human output and its `--json` field set (R1)
 - [ ] Add role and resolved executor as distinct fields to `spur agent list --specs` (R2)

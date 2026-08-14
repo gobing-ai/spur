@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0536"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:41.204Z"
-updated_at: "2026-08-14T00:51:30.529Z"
+updated_at: "2026-08-14T01:38:49.818Z"
 ---
 
 ## 0551. Propagate a declared subagent role across fan-out, inheriting when absent
@@ -75,6 +75,22 @@ Scenario: R3 — The effective role is visible per subagent
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Declared or inherited by default?** Declared wins; absent inherits. Recorded in feature I4 §
+  Notes with the reasoning — the alternative runs implementation work at planning rates.
+- **Why not fail when undeclared?** Consistent with task 0536 R3's treatment of an unmapped role: a
+  missing declaration is a plausible authoring omission, and refusing to run is disproportionate.
+  Visibility (R3) is the safeguard.
+- **Does nested fan-out need special handling?** No — the rule applies recursively by construction.
+- **Is a new flag needed?** No; the role travels on `--agent`.
+
+**Deferred with owner.**
+
+- **Tightening to warn-on-inherit or hard-require** — owner: operator, and only after R3's visibility
+  shows whether inheritance masks real mistakes. Reversible by design.
+- **Whether `roleOrigin` appears in J6's attribution payload** — owner: task 0545. This task exposes
+  it; the payload decision is J6's.
 ### Design
 **Declared wins; absent inherits.** The rule is already decided (feature I4 § Notes) — implement it,
 do not relitigate it. The rationale is recorded there: the alternative fails in the expensive
@@ -99,6 +115,39 @@ applies recursively by construction. Do not add depth tracking until a case dema
 
 **Not in scope:** the role vocabulary and `--agent` (feature B2), recording or aggregating
 attribution (feature J6), and how fan-out chooses concurrency.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Rule | declared role wins; absent inherits the dispatcher's | feature I4 § Notes |
+| Role vocabulary | `scribe` · `coder` · `reviewer` · `planner` | `plugins/sp/references/roles.md` |
+| Selector it passes through | `--agent <role>` | task 0536 |
+| Origin marker | `roleOrigin: 'declared' \| 'inherited'` | new, recorded per dispatched subagent |
+| Documented dispatch surface | `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` | § *Composition with ADR-033* |
+| Precedent for inherit-not-refuse | unmapped role warns and defaults | task 0536 R3 |
+
+**No new CLI flag.** The role travels on the existing `--agent`.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** make a subagent inherit when it declared its own role — declared always wins (R1).
+- Do **not** refuse to run when no role is declared. Inheritance is the chosen default; visibility
+  (R3) is what keeps it safe.
+- Do **not** record only the effective role. Origin (`declared` vs `inherited`) is a separate fact, and
+  feature J6's aggregate is what would surface a wrong inheritance.
+- Do **not** add depth tracking for nested fan-out. The rule applies recursively by construction.
+- Do **not** leave a dispatch path silently dropping the role (R4) — that reintroduces the defect.
+
+#### Cross-task contract
+
+**Assumes from 0536 (batch 1):** `--agent <role>` accepts the four ids, so a propagated role resolves.
+
+**Leaves for dependents:** feature J6 task **0545** records whatever role a dispatch resolved. This
+task makes that value *correct* for fanned-out subagents; it does not record it. If `roleOrigin` is to
+appear in attribution, that is 0545's payload decision, and this task must expose it.
 ### Plan
 - [ ] Inventory every fan-out path that shells out to `spur agent run` (R4)
 - [ ] Apply declared-wins-over-inherited on each, or record why a path is out of scope (R1, R4)

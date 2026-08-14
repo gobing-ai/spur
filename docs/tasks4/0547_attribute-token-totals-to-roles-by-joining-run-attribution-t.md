@@ -10,10 +10,10 @@ feature_id: J6
 parent_wbs: null
 priority: P2
 tags: []
-dependencies: ["0545", "0546"]
+dependencies: ["0545", "0546", "0557", "0558"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:31:56.915Z"
-updated_at: "2026-08-14T00:34:18.182Z"
+updated_at: "2026-08-14T02:46:27.758Z"
 ---
 
 ## 0547. Attribute token totals to roles by joining run attribution to the history plane
@@ -86,6 +86,45 @@ Scenario: R8 — Unmeasured consumption is reported as unmeasured
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Does the token extraction need building?** No. `extractClaudeTokens` (`query.ts:71-98`) already
+  returns all four counts plus `usageReported`. Reuse it.
+- **Does the join need building?** No. `run-cost.ts` already joins `system_events` to
+  `history_message` over `run_id`, with both sides indexed (migration `0009`). This task adds the
+  role dimension to an existing fold.
+- **What about `costUsd`?** It exists on `CostRecord` / `TokenTotals` and stays untouched — not
+  populated, not read, not removed. Removing it is a separate operator decision.
+- **Is `inputTokens` exclusive of cache?** No — it is the summed total (fresh + cache-read +
+  cache-write), per `query.ts:73`. Do not subtract; report the four numbers as extracted.
+
+**Deferred with owner.**
+
+- **Dollar cost** — owner: nobody. Permanently excluded 2026-08-13; per-model pricing is too volatile
+  to hold correctly, and `UNKNOWN_MODEL_PRICING`'s unmeasured $3/$15 fallback is why the existing
+  figures are already untrustworthy.
+- **History-plane coverage gaps** (`history_etl_*` dead for six sources) — owner: feature E1. This
+  task reports coverage; it does not repair ingestion.
+
+**Reopened by measurement (2026-08-13).**
+
+- **Is the existing `run-cost.ts` join reusable?** **No** — corrected. All 10 `history_etl_*` tables
+  hold 0 rows, so that path reads nothing. The earlier "add a dimension to an existing join"
+  instruction was written from code shape, not from data, and is wrong.
+- **Where do tokens actually live?** Typed columns on `history_message`
+  (`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`) — 166,162 rows carry
+  them. No JSON extraction needed.
+- **Does the `run_id` join work?** **No.** `history_message.run_id` is NULL for all 1,296,633 rows.
+  The column and its index exist; nothing populates them. This blocks the task.
+
+**Open — operator decision required before implementing.**
+
+- **How is an agent run correlated to a history session?** Populate `run_id` at import (preferred), or
+  fall back to `(source, session_id, time-window)` matching and accept that every total becomes
+  estimated. Owner: operator. This task is not startable until it is answered.
+- **Why do `claude` and `codex` carry 0 token rows** while `omp`, `pi`, `opencode`, `gemini`, `grok`
+  do? Full-fidelity sources per feature E1, yet no usage captured. Owner: feature E1 / the next batch;
+  it bounds how much of the roster this feature can ever measure.
 ### Design
 **Add a dimension to an existing join; do not build a second data path.** `run-cost.ts` already joins
 `system_events` to `history_message` over `run_id` and folds token totals. This task groups that fold
@@ -115,6 +154,89 @@ this task's output, it has failed its own contract.
 
 **Not in scope:** Board rendering (J4), repairing history ETL coverage (E1), and any change to
 routing behavior (feature B2).
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Token extractor (**reuse**) | `extractClaudeTokens(payload)` → `{ inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, usageReported }` | `packages/domain/src/analytics/query.ts:71-98` |
+| Token semantics | `inputTokens` = fresh + cache-read + cache-write (summed total) | `query.ts:73`, `:93` |
+| Totals bucket | `TokenTotals` — includes `costUsd` (**do not read, do not populate**) | `packages/domain/src/analytics/run-cost.ts:200-235` |
+| Fold (reuse) | `foldTotals(records)` | `run-cost.ts:210` |
+| Record builder | `payloadToCostRecord(payload, source)` | `run-cost.ts:246` |
+| Never-fabricate invariant | absent usage → zero tokens **with `usageReported: false`** | `run-cost.ts:240-241` |
+| Join key (both sides indexed) | `system_events.run_id` · `history_message.run_id` | `migrations.ts:87`/`:95`, `:200-211` (`idx_history_message_provenance_run`, migration `0009`) |
+| Exact vs estimated | existing exact-`run_id` path vs the time-window heuristic variant marked estimated | `run-cost.ts` (variant below `payloadToCostRecord`) |
+| Pricing (**never call**) | `MODEL_PRICING` · `UNKNOWN_MODEL_PRICING` ($3/$15 per 1M) · `getModelPricing` | `packages/domain/src/analytics/models.ts:4`, `:31`, `:35` |
+
+**No dollar figure is computed, stored, or emitted.** `costUsd` stays on the shared record types
+untouched — neither extended, populated, nor read by this task.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** write a second token extractor. `extractClaudeTokens` is the single place that knows the
+  `usage` mapping, including that `inputTokens` is the summed total.
+- Do **not** reintroduce any length-based estimate. Task 0474 R7 removed a 4-chars-per-token heuristic
+  precisely because an estimate entering a total is the fabrication the forensic contract exists to end.
+- Do **not** report `0` for a role with no matched rows (R3). Observed-zero and unmeasured are
+  different facts, and conflating them makes a broken ETL source look like a free role.
+- Do **not** sum exact and time-window-estimated totals into one number (R4) — that discards the only
+  trust signal the operator has.
+- Do **not** silently compensate for history-plane coverage gaps. Feature E1 owns ingestion health;
+  report coverage (R5) and leave it.
+- Do **not** call `getModelPricing` or read `costUsd`.
+
+#### Cross-task contract
+
+**Assumes from 0545:** attribution rows carry `run_id` and a role, so the join has something to group
+by. **Assumes from 0546:** the `(role, executor)` grouping exists; this task adds a consumption
+dimension to it rather than re-implementing it.
+
+**Assumes from feature E1 (done):** `history_message.run_id` is populated for imported sessions.
+Where it is not, R5's coverage reporting is the honest response — not a workaround.
+
+**Leaves for dependents:** task **0552** (feature J7, batch 3) renders these totals and must preserve
+the unmeasured and estimated states as distinct; flattening them to `0` is the failure this task's R3
+and R4 exist to prevent.
+
+**Note on E3 (batch 3):** feature E3's operation-triggered refresh is what makes this task's numbers
+non-empty in practice. It is not a hard dependency — this task is correct against a stale history, it
+just reports most roles as unmeasured.
+
+#### PREMISE CORRECTION (2026-08-13) — this task is BLOCKED as specified
+
+Measured against the live `.spur/spur.db`, **after** the frozen-names table above was written. Two of
+its premises are false. Do not start this task until the blocker below is resolved.
+
+| Measured | Value | Consequence |
+| --- | --- | --- |
+| All 10 `history_etl_*` tables | **0 rows** | `loadAllEtlPayloads` / `SOURCE_TABLES` / `payloadToCostRecord` / `extractClaudeTokens` operate on nothing. The "reuse the existing join" instruction above is **wrong**. |
+| `history_message` | 1,296,633 rows | the real data lives here, in **typed columns**, not in JSON payloads |
+| `history_message` rows with token data | 166,162 | usable — but `claude` and `codex` contribute **0** despite being full-fidelity sources |
+| `history_message` rows with `run_id` | **0** | **the join key is never populated.** The column and `idx_history_message_provenance_run` (migration `0009`) exist; nothing writes them. |
+
+**Corrected token source.** Tokens are first-class columns on `history_message`, not a JSON `usage`
+object: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, plus `model`,
+`duration_ms`, and `cost_usd`. No extractor is needed — `extractClaudeTokens` is for the dead ETL
+payload path. (`cost_usd` exists as a column and must still **not** be read: tokens, never prices.)
+
+**The blocker.** This task joins routing attribution (`system_events.run_id`, written by task 0545)
+to history rows over `run_id`. `history_message.run_id` is NULL for all 1.3M rows, so the join
+returns nothing and every role reports `unmeasured` — a correct result, and a useless feature.
+
+**Resolution required before implementing.** One of:
+
+1. **Populate `run_id` at import** — correlate an agent run to the session it produced. This is the
+   real fix and is proposed as the next batch (see § *Cross-task contract*).
+2. **Correlate by `(source, session_id, time window)`** instead — the approach `run-cost.ts`'s
+   estimated variant already takes. Weaker, and it would make *every* total estimated rather than
+   exact, collapsing R4's exact-versus-estimated distinction into a single degraded mode.
+
+Option 1 is preferred and is an operator decision, not an implementer's. Until it is settled this
+task stays `todo` with the blocker recorded here rather than being handed to an implementer who
+would discover it after building the query.
 ### Plan
 - [ ] Group the existing `run_id` join's token fold by the role recorded in task 0545's attribution (R1)
 - [ ] Reuse `extractClaudeTokens` to report input, cache-read, cache-write, and output totals per role over a bounded window (R1)

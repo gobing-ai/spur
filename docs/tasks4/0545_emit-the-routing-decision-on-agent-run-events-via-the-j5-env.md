@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0536"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:14.945Z"
-updated_at: "2026-08-14T00:33:43.017Z"
+updated_at: "2026-08-14T02:53:15.259Z"
 ---
 
 ## 0545. Emit the routing decision on agent run events via the J5 envelope
@@ -105,6 +105,25 @@ Scenario: R6 — Attribution never carries secrets or prompt bodies
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Where does attribution live physically?** `system_events.payload_json`, as envelope content. No
+  new table, no new column — `run_id` is already a column and already indexed
+  (`idx_system_events_run_id`).
+- **Which call site emits?** `resolveExecutorSelector` (`agent-service.ts:1235`) — the only place that
+  knows role, tier, executor, and source simultaneously.
+- **What are the escalation triggers?** The existing objective vocabulary: `gate-fail`, `timeout`,
+  `insufficient-evidence`, `retry-exhausted` (`stage-registry/schema.ts:375-379`). No new trigger is
+  invented here.
+- **Is a new event name needed?** Attribution rides existing agent-run lifecycle events; the escalation
+  is its own record (R2). Any new name must be registered in the event catalog
+  (`event-names.ts:30-36`), not emitted ad hoc.
+
+**Deferred with owner.**
+
+- **If J5's envelope cannot carry this metadata** — owner: feature J5. Route it back rather than
+  adding a column; J5 is `verifying` and still open to a contract finding.
+- **Dollar cost** — owner: nobody, permanently. Excluded 2026-08-13 (feature J6 § *Tokens, not prices*).
 ### Design
 **Consume the envelope; do not extend the plane.** J5 owns the payload envelope shape, producer
 attribution, redaction, and bounds. Routing metadata is envelope *content*. If J5's envelope turns
@@ -128,6 +147,62 @@ moment a path is missed — which is precisely what R5's per-source coverage exi
 **Not in scope:** any change to selection or escalation behavior. This task observes; feature B2
 decides, and task 0540 exercises. If writing the tests here reveals a behavioral defect, file it
 against B2/I3 rather than fixing it in an observability task.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Ledger table (**no change**) | `system_events (id, event_name, occurred_at, actor, payload_json, run_id, entity_kind, entity_id, sequence)` | `packages/domain/src/migrations.ts:81-91` |
+| Metadata carrier | `payload_json` — attribution rides here, **no new column** | same |
+| Join key (already indexed) | `run_id` / `idx_system_events_run_id` | `migrations.ts:87`, `:95` |
+| Envelope builder | `buildSystemEventEnvelope(...)` | `packages/app/src/services/system-event-tap.ts:83` |
+| Envelope type | `SystemEventEnvelopeV2` | exported `packages/app/src/index.ts:275` |
+| Version guard | `isSystemEventEnvelopeV2` | `packages/app/src/index.ts:74` |
+| Legacy projection (unchanged) | `projectStoredSystemEventEnvelope` | `packages/app/src/index.ts:77` |
+| Correlation type | `SystemEventCorrelation` | `system-event-tap.ts:174` |
+| Catalog types | `SystemEventCatalogEntry` · `SystemEventMetadataField` | `packages/app/src/services/event-names.ts:30`, `:36` |
+| Emission point | `resolveExecutorSelector` — knows role, tier, executor, source together | `packages/app/src/services/agent-service.ts:1235` |
+| Selection-source union | `'phase' \| 'default' \| 'explicit'` + `'role'` (added by task 0536) | `agent-service.ts:1238` |
+| Escalation source | `getNextFallback` · trigger vocabulary | `packages/domain/src/stage-registry/schema.ts:432-444`, `:375-379` |
+| Trigger values | `gate-fail` · `timeout` · `insufficient-evidence` · `retry-exhausted` | `schema.ts:375-379` |
+
+**No new table, column, transport, or CLI noun.** Attribution is envelope content inside `payload_json`.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** add a column to `system_events`. J5's own scope rules out new tables/columns for this
+  plane, and R3 requires pre-existing rows to project cleanly.
+- Do **not** emit from a call site downstream of resolution. Only `resolveExecutorSelector` knows
+  role, tier, executor, and source together; re-deriving downstream is how the two facts drift apart.
+- Do **not** collapse the escalation into the initial decision event. They are distinct facts with
+  distinct timestamps; merging them destroys the "routing started too cheap" signal.
+- Do **not** represent "did not escalate" as a null-valued escalation record — absence and
+  not-recorded must be distinguishable (R2).
+- Do **not** write prompt text, command lines, or configured secrets into the payload (R4); J5's
+  bounds and recursive redaction apply.
+
+#### Cross-task contract
+
+**Assumes from 0536 (batch 1):** `resolveExecutorSelector` resolves roles and its `source` union
+carries `'role'`, so a role-resolved dispatch is distinguishable from a pin or a default. Without
+that, three of the four selection sources in R5 cannot be recorded.
+
+**Assumes from E6 task 0557:** `agent.invoke.*` events carry a non-null `run_id`. Measured
+2026-08-13: 0 of 202 invoke rows have one — the minted runId (`agent-service.ts:959`) is never
+threaded into the payload the tap reads (`system-event-tap.ts:200-201`). Task 0557 owns that fix.
+If 0545 runs first, wire it here and note the overlap; do not add a second correlation channel.
+
+**Assumes from J5 (verifying):** `buildSystemEventEnvelope` admits additional metadata under its
+bounds and redaction rules. If it does not, that is a finding to route back to J5 — **not** a licence
+to add a column here.
+
+**Leaves for dependents:**
+
+- Task **0546** aggregates these rows and needs `run_id` present on every attribution row plus a
+  stable selection-source value.
+- Task **0547** joins on `run_id` to the history plane; this task is why that join has a role to group by.
 ### Plan
 - [ ] Emit role, resolved tier, resolved executor, and selection source from the resolution funnel (R1)
 - [ ] Carry them as J5 envelope metadata on agent-run lifecycle events (R1, R3)

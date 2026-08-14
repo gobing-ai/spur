@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0549"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.978Z"
-updated_at: "2026-08-14T00:51:30.323Z"
+updated_at: "2026-08-14T01:38:49.388Z"
 ---
 
 ## 0550. Watermark live sessions and report refresh coverage honestly
@@ -76,6 +76,21 @@ Scenario: R5 — A refresh reports its coverage
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **What is the watermark?** The last complete turn — the unit the importer already models. Where
+  "complete" is ambiguous for a source, exclude the trailing turn rather than guess.
+- **Is import resumption in scope?** No — feature E1 already verified it against real append-only
+  growth. This task addresses *analyze* correctness over a partial session, a different guarantee.
+- **Does a growing session leave multiple records?** No (R5). Key by session and supersede; otherwise
+  aggregates inflate in proportion to trigger frequency.
+- **Are in-progress sessions excluded from analyze?** No — they are *marked* (R2). Consumers choose.
+
+**Deferred with owner.**
+
+- **Adding source support for the five unsupported sources** — owner: operator (2026-08-06 ruling).
+- **History-row pruning** — owner: feature E2's retention note; `daily` prunes reports only, and the
+  allowlist ruling bounds growth at ~18 KB/session, so pressure is minimal.
 ### Design
 **Import resumption and analyze correctness are different guarantees.** E1 verified the first. This
 task addresses the second, and must not assume the first covers it. The failure mode is quiet: a
@@ -103,6 +118,44 @@ keeps a reader from assuming completeness.
 
 **Not in scope:** adding source support (E1 § Out of scope), changing the ETL contract or the analyze
 query set, and anything built on the refreshed data (feature E2).
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Watermark unit | last **complete turn** (the unit the importer already models) | — |
+| Session state | `sessionState: 'in-progress' \| 'complete'` on analyze output | new, additive |
+| Coverage report | `{ refreshed: string[], skipped: string[], window: { since, until } }` | new, on the refresh result |
+| Checkpoint tables (unchanged) | `history_import_checkpoint` · `history_import_ledger` | feature E1 |
+| Never-fabricate precedent | absent ≠ zero | `packages/domain/src/analytics/run-cost.ts:240-241` |
+| Full-fidelity sources | `claude` · `codex` · `pi` · `omp` · `agy` · `grok` | feature E1 § In |
+| Unsupported sources | `gemini` · `opencode` · `antigravity-ide` · `openclaw` · `hermes` | feature E1 § Out of scope |
+
+**No schema change.** Session state and coverage are analyze/refresh output, not new columns.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** derive values from a partial turn. A half-written turn yields a *plausible* wrong number
+  that the next refresh silently replaces with a different plausible number.
+- Do **not** accumulate one record per refresh for a growing session (R5). Key by session and replace;
+  otherwise every aggregate inflates **in proportion to how often the trigger fires** — the more
+  useful the trigger, the worse the corruption.
+- Do **not** decide for consumers whether to include in-progress sessions. Mark the state (R2) and let
+  them filter; a dashboard may want partials, token attribution may not.
+- Do **not** report bare success without naming skipped sources (R3) — that invites the reader to
+  assume completeness.
+- Do **not** re-verify import resumption. Feature E1 already verified it against real append-only
+  growth; this task is about analyze correctness, a different guarantee.
+
+#### Cross-task contract
+
+**Assumes from 0549:** a refresh that fires on work completion, which is what makes mid-session
+analysis routine rather than exceptional.
+
+**Leaves for dependents:** task **0547** (feature J6, batch 2) can filter on `sessionState` to exclude
+in-progress sessions from token totals. This task defines the state; 0547 chooses how to use it.
 ### Plan
 - [ ] Define the watermark as the last complete turn and document the per-source ambiguity rule (R1)
 - [ ] Compute derived values only up to the watermark; never from a partial turn (R1)

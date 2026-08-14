@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0538"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:14.490Z"
-updated_at: "2026-08-14T00:21:33.788Z"
+updated_at: "2026-08-14T01:38:46.340Z"
 ---
 
 ## 0543. Make role the primary axis of a team member and resolve role-only members
@@ -103,6 +103,23 @@ Scenario: R5 — An unknown role is rejected at config load
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Does `role` get added here?** No — task 0538 (batch 1) adds the optional field. This task makes it
+  the primary axis and relaxes `executor` from required to optional.
+- **What is a role-only member's local id?** `member.id ?? member.executor ?? <role>`, disambiguated
+  as `<role>-<n>` by declaration order when a role repeats. Frozen above, because a shifting id breaks
+  inbox addressing.
+- **Does the bare-string shorthand still mean `executor`?** Yes. `- claude` stays
+  `{ executor: "claude" }`; it is not reinterpreted as a role. Roles and executor names are disjoint
+  by the 0537 collision guard, so there is no ambiguity to resolve.
+
+**Deferred with owner.**
+
+- **Auto-composing a roster from a workload** ("give me a team for feature X") — owner: operator,
+  feature M5 § Deferred to batch 3. Wait until role-declared rosters have been used in anger.
+- **Role-aware supervision policy** (restart a failing `reviewer` differently from a `coder`) —
+  owner: operator; unexamined.
 ### Design
 **Extend the union, do not fork it.** `TeamMemberConfigSchema`
 (`packages/config/src/index.ts:182-197`) is already a union of a bare string and an object. Add
@@ -132,6 +149,50 @@ break inbox addressing.
 
 **Not in scope:** addressing a member by role (multiplicity — feature M5 § Notes), and any Teams
 Board layout work (task 0544 only adds the field to what is already rendered).
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Member schema (object arm) | `TeamMemberConfigSchema` — `executor` (currently **required**), `id?`, `purpose?`, `workspace?`, `model?`, `autonomy?`, `systemPrompt?`, `command?`, `autostart?` | `packages/config/src/index.ts:182-196` |
+| Field added by 0538 | `role?: string` | same schema |
+| **This task's change** | `executor` becomes optional; `superRefine` requires **at least one** of `role` / `executor` | `packages/config/src/index.ts:182-196`, guard in `AgentConfigSchema.superRefine` `:317-345` |
+| Normalized form | `NormalizedTeamMember` — same field set | `packages/config/src/index.ts:219-230` |
+| Shorthand (must keep working) | bare string `- claude` → `{ executor: "claude" }` | `normalizeMember`, `:236-237` |
+| Local id rule (extend) | `member.id ?? member.executor` | `packages/app/src/services/team-service.ts:666` |
+| Role vocabulary source | `roles[].id` / `roles[].tier` | `plugins/sp/references/roles.md` |
+| Tier eligibility (reuse) | `isTierEligible(candidate, min)` | `packages/domain/src/stage-registry/schema.ts:425-427` |
+| Spec write site | member → `AgentSpecInput { id, name?, type, workspace?, purpose?, tags?, config?, autoStart? }` | `team-service.ts:666-680`, `:237-246` |
+
+**Local-id rule when `executor` is absent:** `member.id ?? member.executor ?? <role>` , and when two
+role-only members share a role, `<role>-<n>` by declaration order. Freeze the ordering rule — an id
+that shifts when the roster is reordered breaks inbox addressing.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** write a second selector. Role → tier → cheapest eligible is the funnel task 0536 built;
+  call it. Two selectors that can disagree is exactly what feature B2 closed.
+- Do **not** drop the bare-string shorthand — `normalizeMember` is its contract and it is in use.
+- Do **not** delete `purpose`. It stays as human annotation (R3); only its *role* as the routing
+  signal is removed.
+- Do **not** derive a member's role from its executor's tier. That invents a declaration the operator
+  never made — the same inference failure that misclassified the whole roster before tiers were
+  declared (feature B2 § Verified terrain).
+- Do **not** make `role` required. At least one of role/executor is the rule (R4).
+
+#### Cross-task contract
+
+**Assumes from 0538 (batch 1):** `role?` already exists on `TeamMemberConfigSchema` and
+`NormalizedTeamMember`, and is carried onto the materialized spec. This task promotes it to the
+primary axis and relaxes `executor`; it does not add the field.
+
+**Assumes from 0537 (batch 1):** materialization already carries the resolved `executor` name onto the
+spec, so a role-only member's resolution is recordable (R1).
+
+**Leaves for dependents:** task **0544** renders the role on three surfaces and assumes this task
+records both the declared role and the resolved executor on the spec. It renders; it does not resolve.
 ### Plan
 - [ ] Add `role` to the object arm of `TeamMemberConfigSchema` and to `NormalizedTeamMember` (R1, R3)
 - [ ] Add a `superRefine` requiring at least one of role or executor, naming team id and position (R4)

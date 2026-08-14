@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0546", "0547"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:41.426Z"
-updated_at: "2026-08-14T00:51:53.618Z"
+updated_at: "2026-08-14T01:38:50.270Z"
 ---
 
 ## 0552. Render role routing and token consumption on the Board
@@ -86,6 +86,19 @@ Scenario: R4 — An empty dataset reads as empty, not as zero activity
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **Does this task query anything?** No. It renders what tasks 0546 and 0547 expose, through the
+  existing typed oRPC client.
+- **How do the honest states render?** `unmeasured` and `no-data-yet` as themselves, `estimated`
+  marked distinctly from `exact`. Three of four scenarios are about not lying with a number.
+- **Any dollar figures?** None, permanently.
+- **New Board module?** No — extends feature J4's existing surfaces.
+
+**Deferred with owner.**
+
+- **A dedicated routing module** — owner: operator, only if the data outgrows an existing surface.
+- **Interaction (filtering, drill-down)** — owner: operator; display first.
 ### Design
 **Render, do not re-derive (R1).** Tasks 0546 and 0547 expose the aggregate and the token totals. This
 surface consumes them through the existing typed client. A second query here would be a second place
@@ -114,6 +127,40 @@ anything out, and keep tokens, typography, and responsive behaviour consistent w
 
 **Not in scope:** producing the data (J6), any new observability table or transport, and any change
 to routing behavior.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Routing aggregate consumed | `{ role, executor, source, runs, escalations }` | task 0546 |
+| Token totals consumed | `{ inputTokens, cacheReadTokens, cacheCreationTokens, outputTokens }` per role | task 0547 |
+| States that must survive rendering | `unmeasured` · `estimated` · `exact` · `no-data-yet` | tasks 0547 R3/R4 |
+| Web app | `apps/web/` (Astro + typed oRPC client) | — |
+| Existing Board surfaces to extend | feature J4 (Board observability + Teams supervisor) | — |
+| UI SSOT | root `DESIGN.md` when present | CLAUDE.md § Design system |
+
+**No new query, no new module, no currency field.**
+
+#### Anti-patterns — what not to implement
+
+- Do **not** add a query. Tasks 0546 and 0547 expose the data; a second query here is a second place
+  the numbers can be wrong.
+- Do **not** render `unmeasured`, `estimated`, or `no-data-yet` as `0`. A dashboard that flattens all
+  three into zero is worse than no dashboard — it converts a known gap into an apparent measurement.
+- Do **not** show any dollar figure. Permanently excluded (feature J6 § *Tokens, not prices*).
+- Do **not** add a peer Board module. This extends J4's established surfaces; if the data seems to
+  demand its own module, that is an operator question.
+- Do **not** lay out before reading root `DESIGN.md` when it exists.
+
+#### Cross-task contract
+
+**Assumes from 0546:** the `(role, executor)` aggregate with run and escalation counts and the
+selection-source split. **Assumes from 0547:** per-role token totals carrying their `unmeasured` /
+`estimated` / `exact` state. Both are consumed as-is.
+
+**Leaves for dependents:** none — terminal task of feature J7.
 ### Plan
 - [ ] Read root `DESIGN.md` and the existing J4 surfaces, then render task 0546's role-to-executor aggregate with run and escalation counts (R1)
 - [ ] Show role-resolved and pinned runs separately (R1)

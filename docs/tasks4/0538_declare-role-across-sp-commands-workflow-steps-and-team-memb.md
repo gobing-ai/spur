@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Declare role across sp commands, workflow steps, and team members"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: B2
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0535", "0536", "0537", "0542"]
 ac_numbering: task-local
 created_at: "2026-08-13T23:24:34.865Z"
-updated_at: "2026-08-14T00:07:39.446Z"
+updated_at: "2026-08-14T04:10:25.933Z"
 ---
 
 ## 0538. Declare role across sp commands, workflow steps, and team members
@@ -98,6 +98,25 @@ Scenario: R5 — A command missing its intention fails the check
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**Closed during refine (2026-08-13).**
+
+- **How many commands need a `role:`?** 37, not the 31 the charting session assumed. Task 0535
+  reconciled the decided table against the live directory and placed the six extras; its `commands`
+  lists are authoritative.
+- **Do workflow steps lose their `agent:` pin?** No. `role:` is added *beside* it. Pins beat role
+  routing permanently, so today's routing is unchanged — the declaration exists so removing a pin
+  later routes correctly instead of falling to the default role.
+- **New test file or extend?** Extend `plugins/sp/tests/roles.test.ts`, landed by 0535.
+- **Does `purpose` go away on team members?** No. `role` is the typed routing field; `purpose`
+  remains human annotation. Feature M5 (batch 2) demotes it further, not this task.
+
+**Deferred with owner.**
+
+- **Making `role` required on team members** — owner: feature M5 task 0543, which decides the
+  role-versus-executor requirement rule (at least one of the two).
+- **Whether every workflow step must declare a role, or only `agent.run` steps** — scoped here to
+  `agent.run` steps only; broadening is owner: operator, and only if a non-`agent.run` step ever
+  dispatches a model.
 ### Design
 **Four declaration sites, one vocabulary:**
 
@@ -129,6 +148,56 @@ this migration rots on the next command added.
 `plugins/sp/skills/spur-dev/references/execution-workflow.md:301-310`. Run it on a `capable-1`+
 executor rather than splitting: the deletion half (R4) is how you verify the declaration half (R1-R3)
 is complete, so splitting them would leave the delete-side unable to tell whether coverage was total.
+
+#### Frozen names
+
+Verified against the current tree 2026-08-13, **after** task 0535 landed `roles.md`.
+
+| Frozen | Value | Location |
+| --- | --- | --- |
+| Frontmatter key | `role: <scribe\|coder\|reviewer\|planner>` | every file under `plugins/sp/commands/` |
+| Workflow step key | `role: <id>` beside the existing `agent:` | `config/workflows/*.yaml`, `kind: agent.run` steps |
+| Config field | `role?: string` on `TeamMemberConfigSchema` object arm + `NormalizedTeamMember` | `packages/config/src/index.ts:182-196`, `:219-230` |
+| Mapping source (do not re-derive) | `roles[].commands` in the YAML block | `plugins/sp/references/roles.md` § The table |
+| Test to **extend** (already exists) | `plugins/sp/tests/roles.test.ts` | landed by 0535 |
+| Workflow action runner | `AgentRunActionRunner` | `packages/app/src/workflow/actions/` |
+| Prose to delete | `dev-operations.md:256` · `dev-refine.md:37` · `execution-workflow.md:301-310` | `plugins/sp/…` |
+| Adapter to reconcile | `plugins/sp/scripts/stage-registry-adapter.ts` | 0348 Follow-up C |
+
+**Command count is 37, not 31.** Task 0535 found the live `plugins/sp/commands/` directory holds 37
+files and placed the six the decided table omitted: `dev-refineall`, `dev-find-next`,
+`dev-featurechange` → `planner`; `dev-gtd` → `coder`; `dev-find-conflict`, `dev-find-issue` →
+`reviewer`. Read the shipped table, not the charting-era count.
+
+#### Anti-patterns — what not to implement
+
+- Do **not** re-derive any command's role. `roles.md`'s `commands` list is the mapping; a command
+  missing from it is a 0535 defect to route back, not a judgement call here.
+- Do **not** remove the `agent:` pin from workflow steps. A pin beats role routing permanently
+  (0536 R2), and `config/workflows/task-pipeline.yaml:57-59` pins deliberately so a misconfigured box
+  cannot capture the run. `role:` declares the *reason*, changing nothing about today's routing.
+- Do **not** create a new test file. `plugins/sp/tests/roles.test.ts` exists; extend it.
+- Do **not** delete `purpose` from team members — `role` is the typed routing field, `purpose` stays
+  as human annotation.
+- Do **not** leave a tier literal anywhere in `plugins/sp` outside a pointer to `roles.md` (R4),
+  including in the re-expressed size→tier rule.
+
+#### Cross-task contract
+
+**Assumes from 0535:** `roles.md` with the closed `commands` mapping over all 37 command files, and
+`plugins/sp/tests/roles.test.ts` to extend. **Landed.**
+
+**Assumes from 0536:** `--agent <role>` accepts the four ids, so a declared `role:` has somewhere to
+go. **Assumes from 0537:** the materialization site already carries `executor` onto the spec — this
+task adds `role` alongside it, on the same code path (`team-service.ts:666-680`), so the two must not
+run concurrently in one tree.
+
+**Leaves for dependents:**
+
+- Task **0539** (feature I3, batch 3) audits `plugins/sp` and `config/workflows` against the live CLI
+  and is sequenced *after* this task precisely so it inventories the post-migration tree.
+- Task **0543** (feature M5, batch 2) promotes the `role` field this task adds to the primary axis of
+  a roster. This task adds the optional field; 0543 makes `executor` optional when `role` is given.
 ### Plan
 - [ ] Add `role:` frontmatter to every command from its roles.md row and thread it into `--agent` (R1)
 - [ ] Add `role:` to `agent.run` steps across `config/workflows/*.yaml` and thread it through `AgentRunActionRunner` (R2)
@@ -140,21 +209,56 @@ is complete, so splitting them would leave the delete-side unable to tell whethe
 - [ ] Extend the plugin test to fail on a missing role or a surviving tier literal; register any residual shim (R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- **R1 — command `role:` frontmatter.** All 37 `plugins/sp/commands/*.md` declare exactly one `role:` matching their `plugins/sp/references/roles.md` row (values: scribe/coder/reviewer/planner); the invocation role is threaded into `--agent` resolution (`packages/app/src/services/agent-service.ts` — declared-role branch reads the command's role before resolution). Enforced by `plugins/sp/tests/roles.test.ts` (0538 R5 extension: a command with no `role:` fails naming the file).
+- **R2 — workflow step `role:`.** Every `kind: agent.run` step across `config/workflows/*.yaml` declares a `role:` beside its `agent:` pin (0 steps missing); `packages/app/src/services/workflow-service.ts:470-477` rejects a workflow whose agent.run step has a missing/unknown role at validate time; `packages/app/src/workflow/actions/agent-run.ts` threads the step role onto the composed `spur agent run` and the step reporter surfaces it.
+- **R3 — team member `role:`.** `agent.team[].members[].role` is an optional Layer-1 role (config schema `packages/config/src/index.ts`); the materializer carries it onto the spec (`team-service.ts`, `packages/app/src/services/team-service.ts:693`). A member without `role` still materializes. Team-config tests cover the typed field and the selector-namespace collision guard.
+- **R4 — tier prose removed.** Deleted the duplicated tier prose at `skills/spur-dev/references/dev-operations.md`, `commands/dev-refine.md`, and `skills/spur-dev/references/execution-workflow.md` (re-expressed as pointers to Layer 1); `plugins/sp/scripts/stage-registry-adapter.ts` reconciled against Layer 1. `roles.test.ts` asserts `capable-N` literals appear only in `roles.md` + tests across `plugins/sp`.
+- **R5 — enforced, not conventional.** `plugins/sp/tests/roles.test.ts` extended (17 tests): command-without-role fails naming the file; tier-literal scan; stage min_tier parity. No shim registration was needed — every command and workflow step declares a role (the shim path stays for the transition period per 0541).
+- **Docs (T3).** `docs/04_DESIGN.md` records the command frontmatter, workflow step, and member `role:` fields.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | 37/37 plugins/sp/commands/*.md declare role: matching roles.md; roles.test.ts asserts presence + row match, naming the file on failure |
+| R2 | MET | workflow-service.ts role validation (agent.run steps must declare a Layer-1 role); 0 steps missing; agent-run action threads role onto the composed command |
+| R3 | MET | team-service.ts:693 carries member.role onto the materialized spec; member without role still materializes; team-config tests green |
+| R4 | MET | tier-literal prose in plugins/sp replaced with roles.md pointers; stage-registry-adapter reconciled; roles.test.ts tier-literal scan passes |
+| R5 | MET | roles.test.ts 17/17 — command-without-role fails naming the file; no shim registration needed (all declare roles) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — every command file declares role: matching its row | MET | test | roles.test.ts 'every command file declares role: matching its roles.md row, naming the file' passes; 37/37 commands |
+| R2 — workflow validate rejects a step with no role | MET | test | workflow-service.test.ts role-validation block passes; agent-run step role threaded (agent-run.ts) |
+| R3 — member role carried onto the materialized spec | MET | test | team-config.test.ts + team-service.test.ts member-role tests pass |
+| R4 — no tier restatement outside pointers | MET | command | rg for capable-[123] across plugins/sp markdown returns only roles.md + tests; stage-registry-adapter reconciled |
+| R5 — adding a command without role: fails the suite naming the file | MET | test | roles.test.ts presence test names the offending file; shim registration unnecessary (all commands/steps declare roles) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** — all requirements MET:
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 command role frontmatter | MET | 37/37 `plugins/sp/commands/*.md` declare `role:` matching roles.md rows; roles.test.ts asserts presence + row match, naming the file on failure |
+| R2 workflow step role | MET | 0 agent.run steps missing `role:` across `config/workflows/*.yaml`; workflow-service.ts:470-477 rejects missing/unknown step role at validate; agent-run action threads it |
+| R3 team member role | MET | `packages/config/src/index.ts:691-693` carries member.role onto the spec; member without role still materializes; team-config tests green |
+| R4 tier prose removed | MET | tier literals in plugins/sp prose → roles.md pointers only; stage-registry-adapter reconciled; roles.test.ts asserts the invariant |
+| R5 enforced + shims | MET | roles.test.ts 17/17 (command-no-role fails, tier-literal scan); no shim registration needed — all commands/steps declare roles |
 
+**Priority findings** (no P1/P2):
+
+| # | Severity | File | Finding |
+| --- | --- | --- | --- |
+| 1 | P4 | `plugins/sp/tests/roles.test.ts` | The tier-literal scan excludes the test file itself by design; a future test that names a tier literal inline must keep that carve-out explicit. Acceptable. |
+| 2 | P4 | `config/workflows/*.yaml` | Step roles are declared today; nothing re-validates them on workflow YAML edits until `spur workflow validate` runs — the precheck/CI gate covers this. Acceptable. |
+
+**Residual risk** — implement completed inline after a 30-min subprocess timeout (same as 0542; omp-deepseek exhausts the budget on multi-surface tasks). Full gate PASS (5042 tests, 0 fail); shim gate PASS 4/4.
 ### References
 - **Vocabulary source:** `plugins/sp/references/roles.md` (task 0535); test to extend:
   `plugins/sp/tests/roles.test.ts`
-- **R1 targets:** every file under `plugins/sp/commands/` (31 commands); dispatcher wiring per 0536
+- **R1 targets:** every file under `plugins/sp/commands/` (37 commands — 0535 reconciled the decided 31 against the live directory); dispatcher wiring per 0536
 - **R2 targets:** `config/workflows/*.yaml` (10 definitions; `agent.run` steps in
   `task-pipeline.yaml`, `wrapup-pipeline.yaml`, `wayfinder-resolution.yaml`), `AgentRunActionRunner`
   (workflow `agent.run` action), workflow step schema
@@ -168,3 +272,6 @@ is complete, so splitting them would leave the delete-side unable to tell whethe
 - **Prior decisions:** task 0344 § Solution D3, task 0348 (Follow-up C), feature B2 § *The role vocabulary*
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`
 ### History
+- 2026-08-14T04:08:40.724Z todo → wip (system)
+- 2026-08-14T04:10:25.195Z wip → testing (system)
+- 2026-08-14T04:10:25.933Z testing → done (system)
