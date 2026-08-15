@@ -371,6 +371,7 @@ legacy rows are projected on read without rewriting storage. Shape and policy:
 
 - Schema SQL owned per domain package; `packages/domain/src/migrations.ts` → `CLI_SCHEMA_SQL`
   (+ history / workflow engine SQL + `_spur_cli_` increments).
+- New migrations take `max(prefix)+1` (four-digit numeric prefix, e.g. `0015_...`). If a merge surfaces a duplicate prefix, the incoming branch renumbers to `max(prefix)+1` (the E6 precedent, commit `fa41669c`).
 - Migrator: top-level `drizzle/*.sql` with `_spur_cli_` marker only.
 - History: raw in files; DB holds ETL rows, import ledger, checkpoints.
 - `drizzle/_legacy_reference/` inert — never activate.
