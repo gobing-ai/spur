@@ -58,6 +58,65 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
+        function assertMigrationPrefixSequence(migrations: { id: string }[]): void {
+            const seen = new Map<string, string>();
+            let prevPrefix: number | null = null;
+            let prevId: string | null = null;
+
+            for (let i = 0; i < migrations.length; i++) {
+                const item = migrations[i];
+                if (!item) {
+                    continue;
+                }
+                const id = item.id;
+                const prefixStr = id.slice(0, 4);
+                const prefix = Number.parseInt(prefixStr, 10);
+                if (Number.isNaN(prefix) || !/^\d{4}/.test(id)) {
+                    throw new Error(`migration at index ${i} (${id}) does not have a 4-digit numeric prefix`);
+                }
+
+                const existing = seen.get(prefixStr);
+                if (existing) {
+                    throw new Error(`duplicate migration prefix ${prefixStr}: ${existing}, ${id}`);
+                }
+                seen.set(prefixStr, id);
+
+                if (prevPrefix !== null && prefix <= prevPrefix) {
+                    throw new Error(
+                        `non-ascending migration prefix sequence at index ${i}: ${prevId} (prefix ${prevPrefix}) >= ${id} (prefix ${prefix})`,
+                    );
+                }
+                prevPrefix = prefix;
+                prevId = id;
+            }
+        }
+
+        test('migration ids have strictly ascending 4-digit numeric prefixes with no duplicate prefix', () => {
+            assertMigrationPrefixSequence(CLI_MIGRATIONS);
+        });
+
+        test('fails when two migrations share a numeric prefix, naming both colliding ids (R1)', () => {
+            const mock = [
+                { id: '0000_spur_cli_foundation' },
+                { id: '0012_spur_cli_history_tool_call_args_raw' },
+                { id: '0012_spur_cli_history_run_session' },
+            ];
+            expect(() => assertMigrationPrefixSequence(mock)).toThrow(
+                'duplicate migration prefix 0012: 0012_spur_cli_history_tool_call_args_raw, 0012_spur_cli_history_run_session',
+            );
+        });
+
+        test('fails when migration prefixes are not strictly ascending, naming the offending position (R2)', () => {
+            const mock = [
+                { id: '0000_spur_cli_foundation' },
+                { id: '0002_spur_cli_rule_history' },
+                { id: '0001_spur_cli_team_inbox' },
+            ];
+            expect(() => assertMigrationPrefixSequence(mock)).toThrow(
+                'non-ascending migration prefix sequence at index 2',
+            );
+        });
+
         test('has foundation through args_raw plus history-run-session migrations', () => {
             expect(CLI_MIGRATIONS).toHaveLength(15);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
