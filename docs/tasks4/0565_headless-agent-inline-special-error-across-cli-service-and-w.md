@@ -13,7 +13,7 @@ tags: ["agent", "cli-surface", "adr-047"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-15T16:12:04.361Z"
-updated_at: "2026-08-15T16:25:07.668Z"
+updated_at: "2026-08-15T16:54:05.828Z"
 ---
 
 ## 0565. Headless --agent inline special error across CLI, service, and workflow action
@@ -39,6 +39,7 @@ Covers feature G5 scenarios:
 
 - **R1 — Headless CLI surfaces reject --agent inline with a stable special error**
 - **R3 — omit, auto, and named selectors are unchanged**
+- **R5 — Invalid --agent names keep failing at the flag boundary**
 
 ```gherkin
 Scenario: R1 — Headless CLI surfaces reject --agent inline with a stable special error
@@ -51,6 +52,11 @@ Scenario: R3 — omit, auto, and named selectors are unchanged
   Given the existing resolution paths for omitted `--agent`, `--agent auto`, and named roles
   When this feature lands
   Then their behavior, including 0508 native-subagent eligibility for omit, is unchanged
+
+Scenario: R5 — Invalid --agent names keep failing at the flag boundary
+  Given a value that is neither inline, auto, a configured role, nor a configured executor
+  When `spur agent run` is invoked with it
+  Then it exits with an explicit error naming the valid values before any process spawns
 ```
 ### Q&A
 
