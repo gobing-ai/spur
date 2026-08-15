@@ -120,6 +120,38 @@ async function foldMappedSessions(
         totals.cacheReadTokens += row.cacheReadTokens;
         totals.cacheWriteTokens += row.cacheWriteTokens;
         totals.messages += row.records;
+
+        // Task 0564 R2: fold the mapped session's tool-call rows so the duration
+        // buckets carry real values instead of the emptyTotals() zeros they were
+        // structurally stuck at. Session-scoped (no window — history_tool_call has
+        // no ts column; the duration columns are the tool's own measurement). A
+        // missing history_tool_call table (unmigrated DB) degrades to zeros, never
+        // throws — same best-effort as the message fold. NOTE: this fold is only
+        // observable once the RESOLVED importer version carries the 0564 R1
+        // duration attach; until then it reads NULLs and reports honest zeros.
+        let toolRow: ToolCallRow | undefined;
+        try {
+            toolRow = await db.queryFirst<ToolCallRow>(
+                `SELECT COUNT(*) AS toolCalls,
+                        COALESCE(SUM(duration_ms), 0) AS durationMs,
+                        SUM(CASE WHEN duration_ms IS NULL THEN 1 ELSE 0 END) AS durationUnmeasured
+                 FROM history_tool_call
+                 WHERE source = ? AND session_id = ?`,
+                m.source,
+                m.session_id,
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: history_tool_call')) {
+                toolRow = undefined;
+            } else {
+                throw error;
+            }
+        }
+        if (toolRow !== undefined && toolRow !== null) {
+            totals.toolCalls += toolRow.toolCalls;
+            totals.durationMs += toolRow.durationMs;
+            totals.durationUnmeasured += toolRow.durationUnmeasured;
+        }
     }
     return matchedAny ? totals : null;
 }
@@ -132,6 +164,13 @@ interface MessageTokenRow {
     outputTokens: number;
     cacheReadTokens: number;
     cacheWriteTokens: number;
+}
+
+/** One aggregated history_tool_call row for a mapped (source, session_id). */
+interface ToolCallRow {
+    toolCalls: number;
+    durationMs: number;
+    durationUnmeasured: number;
 }
 
 // ---------------------------------------------------------------------------

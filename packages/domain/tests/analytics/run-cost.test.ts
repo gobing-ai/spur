@@ -90,6 +90,40 @@ async function insertMapping(
     });
 }
 
+async function insertToolCall(
+    db: DbAdapter,
+    input: {
+        record_hash: string;
+        message_hash: string;
+        session_id: string;
+        seq: number;
+        tool_name?: string;
+        duration_ms?: number | null;
+    },
+): Promise<void> {
+    await db.run(
+        `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+             session_id, seq, tool_name, status, started_at, completed_at, duration_ms,
+             result_bytes, error_text, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        input.record_hash,
+        input.message_hash,
+        'pi',
+        'test.jsonl',
+        1,
+        input.session_id,
+        input.seq,
+        input.tool_name ?? 'Bash',
+        'ok',
+        null,
+        null,
+        input.duration_ms ?? null,
+        null,
+        null,
+        '2026-01-15T10:10:00.000Z',
+    );
+}
+
 // ---------------------------------------------------------------------------
 // actionCost / actionCostEstimated (R2/R3)
 // ---------------------------------------------------------------------------
@@ -310,6 +344,100 @@ describe('attributeActionCost', () => {
         const result = await attributeActionCost(db, 'run-x', makeAction());
         expect(result.exact).toBeNull();
         expect(result.estimated).toBeNull();
+    });
+
+    test('missing history_tool_call table degrades the tool fold to zeros, never throws (0564 P4-1)', async () => {
+        const db = await setupDb();
+        await db.run('DROP TABLE history_tool_call');
+        await insertMapping(db, { runId: 'run-5b', source: 'pi', sessionId: 'sess-1', exactness: 'exact' });
+        await insertMessage(db, {
+            record_hash: 'm1',
+            session_id: 'sess-1',
+            seq: 1,
+            ts: '2026-01-15T10:02:00.000Z',
+            input: 100,
+            output: 50,
+        });
+
+        const result = await attributeActionCost(db, 'run-5b', makeAction());
+        // Token fold still works; only the tool fold degraded.
+        expect(result.exact?.totals.inputTokens).toBe(100);
+        expect(result.exact?.totals.toolCalls).toBe(0);
+        expect(result.exact?.totals.durationMs).toBe(0);
+        expect(result.exact?.totals.durationUnmeasured).toBe(0);
+    });
+
+    test('folds tool-call counts and durations into the bucket (0564 R2)', async () => {
+        const db = await setupDb();
+        await insertMapping(db, { runId: 'run-6', source: 'pi', sessionId: 'sess-1', exactness: 'exact' });
+        await insertMessage(db, {
+            record_hash: 'm1',
+            session_id: 'sess-1',
+            seq: 1,
+            ts: '2026-01-15T10:02:00.000Z',
+            input: 100,
+            output: 50,
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc1',
+            message_hash: 'm1',
+            session_id: 'sess-1',
+            seq: 1,
+            tool_name: 'Bash',
+            duration_ms: 500,
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc2',
+            message_hash: 'm1',
+            session_id: 'sess-1',
+            seq: 1,
+            tool_name: 'Bash',
+            duration_ms: null, // unmeasured — counts toward durationUnmeasured
+        });
+
+        const result = await attributeActionCost(db, 'run-6', makeAction());
+        expect(result.estimated).toBeNull();
+        const exact = result.exact;
+        expect(exact).not.toBeNull();
+        // toolCalls = COUNT of history_tool_call rows; durationMs = SUM(duration_ms);
+        // durationUnmeasured = COUNT of NULL duration_ms rows.
+        expect(exact?.totals.toolCalls).toBe(2);
+        expect(exact?.totals.durationMs).toBe(500);
+        expect(exact?.totals.durationUnmeasured).toBe(1);
+        // Token fold still works alongside the tool fold.
+        expect(exact?.totals.inputTokens).toBe(100);
+        expect(exact?.totals.messages).toBe(1);
+    });
+
+    test('tool-duration fold sums across every mapped session of the class (0564 R2)', async () => {
+        const db = await setupDb();
+        await insertMapping(db, { runId: 'run-7', source: 'pi', sessionId: 'sess-a', exactness: 'exact' });
+        await insertMapping(db, { runId: 'run-7', source: 'pi', sessionId: 'sess-b', exactness: 'exact' });
+        for (const [hash, session, dur] of [
+            ['a1', 'sess-a', 100],
+            ['a2', 'sess-a', 200],
+            ['b1', 'sess-b', 300],
+            ['b2', 'sess-b', null],
+        ] as const) {
+            await insertMessage(db, {
+                record_hash: `m-${hash}`,
+                session_id: session,
+                seq: 1,
+                ts: '2026-01-15T10:02:00.000Z',
+            });
+            await insertToolCall(db, {
+                record_hash: hash,
+                message_hash: `m-${hash}`,
+                session_id: session,
+                seq: 1,
+                duration_ms: dur,
+            });
+        }
+
+        const result = await attributeActionCost(db, 'run-7', makeAction());
+        expect(result.exact?.totals.toolCalls).toBe(4);
+        expect(result.exact?.totals.durationMs).toBe(600);
+        expect(result.exact?.totals.durationUnmeasured).toBe(1);
     });
 });
 
