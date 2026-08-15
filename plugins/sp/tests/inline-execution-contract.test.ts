@@ -50,7 +50,7 @@ const EXCLUDED_COMMANDS = [
 const HEADLESS_ONLY_WORKFLOW_COMMANDS = ['dev-plan'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
-    test('inline is the default and the single --agent selector governs the surface', () => {
+    test('the unified --agent selector governs the surface; omit is the default, explicit inline is the zero-dispatch carve-out', () => {
         // Extracted claims (R2/R3) — not prose pins. The value→behavior table and the
         // one-rule blockquote are compared mechanically by the cross-surface gate
         // (flag-contract-parity.test.ts); here we assert the extracted claim directly.
@@ -60,7 +60,10 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             throw new Error('cross-cutting.md inline-default value table must parse');
         }
         expect(table.get('inline')?.surfaces.has('inline')).toBe(true);
-        expect(table.get('inline')?.defaultWhenOmitted).toBe(true);
+        // G5 carve-out: explicit inline is NOT the default and never dispatches — omit is its own
+        // row with 0508 eligibility; inline is the zero-dispatch host-session guarantee.
+        expect(table.get('inline')?.defaultWhenOmitted).toBe(false);
+        expect(table.get('inline')?.surfaces.has('subprocess')).toBe(false);
         expect(table.get('auto')?.surfaces.has('subprocess')).toBe(true);
         expect(table.get('<name>')?.surfaces.has('subprocess')).toBe(true);
         expect(table.get('<name>')?.conditional).toBe(true);
@@ -116,7 +119,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('ADR-047 — non-inverted workflow commands accept inline as a synonym for default', () => {
+    test('G5 — headless workflow commands (dev-plan) reject explicit inline and name agent.default as the omit redirect', () => {
         for (const command of HEADLESS_ONLY_WORKFLOW_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must be mode-aware to carry --agent`).toContain(

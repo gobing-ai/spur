@@ -18,7 +18,7 @@ Wraps the **sp:reverse-engineering** skill.
 | `--focus` `<all\|stack\|dependencies\|data\|flows\|api\|security\|quality\|performance>` | Analysis lens. | all |
 | `--format` `<markdown\|json\|both>` | Output format. | markdown |
 | `--output` `<file>` | Write to a file instead of stdout. | stdout |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing analysis. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing analysis. | omit |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

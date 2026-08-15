@@ -20,7 +20,7 @@ Answers *"which X"* — the question `/sp:dev-next` deliberately does not (next-
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--task` `[<feature-id>]` | After the report, confirm one target and dispatch the planning half to produce implement-ready tasks. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing analysis. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing analysis. | omit |
 | `--auto` | Skip the `--task` confirm (accept the offered target) and forward into dispatched children. | off |
 | `--json` | Emit the ranked frontier, gated list, and proposals as a JSON envelope. | off |
 

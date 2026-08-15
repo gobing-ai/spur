@@ -30,7 +30,7 @@ task file via `spur task create`.
 | `--min-cost` `<duration>`                                                            | Minimum wasted duration to report.   | omitted    |
 | `--strict-topic`                                                                     | Drop findings off-topic.             | off        |
 | `--create-task`                                                                      | Generate a fix task for findings.    | off        |
-| `--agent` `<inline\|auto\|name>`                                                     | Who runs the model-bearing analysis. | inline     |
+| `--agent` `<inline\|auto\|name>`                                                     | Who runs the model-bearing analysis. | omit       |
 | `--json`                                                                             | Emit structured JSON.                | off        |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

@@ -16,7 +16,7 @@ Wraps the **sp:sys-debugging** skill.
 | `"<symptom \| failing command>"` | Symptom or failing command to diagnose. | required |
 | `--scope` `<path>` | Scope the reproduction/isolation to a path. | cwd |
 | `--task` `[<wbs>]` | Attach findings to a task. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing diagnosis. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing diagnosis. | omit |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

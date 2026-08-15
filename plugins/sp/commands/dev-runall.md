@@ -18,7 +18,7 @@ Wraps the **sp:spur-dev** skill.
 | `--mode` `<sequential\|parallel>` | Batch execution order. | sequential |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver — host-controlled, eligible `agent.run` stages may use a native subagent (task 0508); `auto`, a name, parallel mode, and headless invocation use subprocesses. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver — host-controlled; **omit**'s eligible `agent.run` stages may use a native subagent (task 0508); explicit `--agent inline` is the zero-dispatch carve-out (every stage executes in the invoking session). `auto`, a name, parallel mode, and headless invocation use subprocesses. | omit |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop per task. The `--agent` selector is preserved into each `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -81,6 +81,6 @@ full distinction.
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md); eligible `agent.run` stages may dispatch once to a native subagent with host fallback (task 0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md); **omitted** `--agent`'s eligible `agent.run` stages may dispatch once to a native subagent with host fallback (task 0508); explicit `--agent inline` is the zero-dispatch carve-out. `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
 - Interactive sequential omit/inline: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")`.
 - Explicit executor or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.

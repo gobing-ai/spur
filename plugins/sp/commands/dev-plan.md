@@ -16,7 +16,7 @@ Wraps the **sp:spur-dev** skill.
 | `"<description>"` | Feature description to plan. | required |
 | `--feature` `<id>` | Attach to an existing feature. | omitted |
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. The planning pipeline's `agent.run` stages always dispatch a subprocess; `inline` is accepted there as a synonym for omit, resolving to `agent.default` (ADR-047). `auto` tier-resolves an executor; a name pins that executor. | agent.default |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. The planning pipeline's `agent.run` stages are headless — they always dispatch a subprocess. Explicit `--agent inline` is rejected there with the stable special error (exit 2): a headless surface cannot host a session — no dispatch, no `agent.default` fallback. Use `omit` (resolves to `agent.default`), `auto` (tier-resolves an executor), or a name (pins that executor). | agent.default |
 | `--skip-design` | Omit the system-design hop. | off |
 | `--auto` | Skip objective HITL gates. | off |
 | `--approve-taste` | With --auto: skip design-approval pause. | off |

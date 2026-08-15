@@ -380,6 +380,23 @@ remains a permanent override for the pipeline's deliberate pins.
 
 **Detail:** `04 §2.1`; `plugins/sp/references/roles.md`; `plugins/sp/skills/spur-dev/references/flag-glossary.md`; ADR-033 amendment (0536).
 
+**Amendment (2026-08-15, feature G5 / task 0565).** Explicit `--agent inline` is a **hard
+host-session guarantee**, not a synonym for `omit`. Host-session surfaces (slash commands, backend
+agent skills) keep model-bearing work in the invoking session. Headless surfaces (`spur agent run`,
+workflow `agent.run`, serve-side dispatch) cannot host a session and reject `inline` with the
+frozen exported `AGENT_INLINE_HEADLESS_MESSAGE` at exit 2 (CLI boundary) or through the existing
+resolve/action failure channels — no dispatch, no `agent.default` fallback, no partial side
+effects. 0508 native-subagent eligibility applies to **`omit` only**, never explicit `inline`. The
+unified table stays: role, executor name, bare binary name (shim), `auto`, or `inline`
+(host-session-only).
+
+**Why.** Explicit `inline` was silently ≡ omit → `agent.default` on headless surfaces, so an
+inline request could execute in another session with zero signal — the debugging trap feature G5
+removes. The stable greppable message (not a new exit code) carries attribution; exit-code taxonomy
+is already crowded.
+
+**Detail:** `04 §7.8`; `docs/design/agent-inline-host-session.md`; task 0565.
+
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 
 - **Status:** Accepted · **Date:** 2026-08-05 · **Task:** 0436 R4

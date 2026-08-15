@@ -36,12 +36,22 @@ answer. Everything below is a consequence of that sentence, not an additional ru
 
 **Default: execute the backing skill directly in the current coding-agent session.** Do not invoke
 `spur agent run` when no escalation trigger applies and the operator did not select subprocess via
-the `--agent` selector. Omitting `--agent` is exactly `--agent inline`; the explicit value is useful
-in scripts and audit output but does not change the default.
+the `--agent` selector. Omitting `--agent` keeps the default — the backing skill runs in the
+current session, and eligible model stages may dispatch once to a native subagent (task 0508). The
+explicit value is useful in scripts and audit output but is not the default: explicit `inline`
+selects the zero-dispatch carve-out below.
+
+> **Explicit `--agent inline` is a hard host-session guarantee: all model-bearing work executes in
+> the invoking host session — never a native subagent, never a subprocess, never a workflow hop.
+> The 0508 native-subagent eligibility applies to **omitted** `--agent` only. Headless surfaces
+> (`spur agent run`, workflow `agent.run`, serve-side dispatch) reject `inline` with the stable
+> special error (exit 2 at the CLI) and take no further action — no dispatch, no `agent.default`
+> fallback.**
 
 | Value | Who does the work | Derived surface |
 |---|---|---|
-| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
+| `(omitted)` | The agent running this session | Host session — host-controlled; eligible model stages may use a native subagent (0508) |
+| `inline` | The agent running this session | Host session — hard guarantee: zero dispatch, never a subprocess, never a workflow hop; headless surfaces reject `inline` (exit 2, stable special error) |
 | `auto` | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
 | `<name>` (coding agent or configured executor) | That executor | Inline when it resolves to the current session's agent; subprocess otherwise |
 
@@ -53,8 +63,11 @@ This is a prompt-runtime rule owned by the command wrapper and its backing skill
 `AgentService`: the current coding agent is already executing the command, so inline means continuing
 in that session. Threading an `inline` option through `AiRunner` would still start a subprocess and
 would therefore be a false implementation. On a headless surface (`spur agent run` / workflow
-`agent.run`) `inline` is **not** rejected (ADR-047): it resolves exactly like omitting the flag to a
-subprocess of `agent.default`.
+`agent.run`) explicit `inline` is **rejected** (ADR-047 G5 amendment) with the stable special error —
+headless surfaces cannot host a session: `--agent inline requires a host session: this surface is
+headless and never dispatches inline runs (no fallback to agent.default). Use 'auto', a role, or an
+executor name.` (exit 2 at the CLI; the exported `AGENT_INLINE_HEADLESS_MESSAGE` in
+`agent-service`). No further action is taken — no dispatch, no `agent.default` fallback.
 
 ### Objective triggers override the answer
 
@@ -68,8 +81,10 @@ cannot satisfy, so it wins regardless:
 | **Durable auditable run record required** | The caller requires a persisted cost/trace/exit-code record. | `trigger 3: durable auditable run record required` |
 | **Workspace or credential isolation required** | The work must not share the host workspace or credentials. | `trigger 4: workspace or credential isolation required` |
 
-A trigger selects subprocess even when `--agent inline` was supplied, and the applied trigger must be
-named in the dispatch or result. When the operator selected a non-current executor and no objective trigger
+A trigger selects subprocess when the selector is omitted, `auto`, or a name, and the applied trigger
+must be named in the dispatch or result. Explicit `--agent inline` is the hard host-session carve-out:
+a trigger requirement that cannot be satisfied in-session rejects with the stable special error rather
+than dispatching a subprocess. When the operator selected a non-current executor and no objective trigger
 applies, report `operator override` rather than inventing one of the four. The trigger vocabulary and
 evidence standard are owned by
 [dispatch-surface.md](../../parallel-execution/references/dispatch-surface.md). If none can be named
@@ -103,20 +118,23 @@ the thinking happens in the stages. Selecting an executor for a loop that runs n
 meaningless.
 
 **Interactive task pipelines invert control into the host session (ADR-047 amendment).**
-`dev-run --mode full` and sequential `dev-runall` with omit/`inline` interpret the existing
-`task-pipeline.yaml` in the host session; they do not launch `spur workflow run` and never redirect
-silently to `agent.default`. Interactive inline is **host-controlled and non-subprocess**, but no
-longer guarantees host-context execution for every model stage (task 0508): an eligible `agent.run`
-stage — pure-slash input, non-interactive state, native subagent with shared-worktree
-read/write/shell capability — dispatches **once** to that native subagent and joins before the
-driver continues; any pre-dispatch eligibility failure falls back to one host execution, and a
-failure after dispatch follows the stage's error policy with no automatic host replay. Operator
+`dev-run --mode full` and sequential `dev-runall` with omitted `--agent` or explicit `--agent
+inline` interpret the existing `task-pipeline.yaml` in the host session; they do not launch `spur
+workflow run` and never redirect silently to `agent.default`. Interactive **omit** is
+**host-controlled and non-subprocess**, but no longer guarantees host-context execution for every
+model stage (task 0508): an eligible `agent.run` stage — pure-slash input, non-interactive state,
+native subagent with shared-worktree read/write/shell capability — dispatches **once** to that
+native subagent and joins before the driver continues; any pre-dispatch eligibility failure falls
+back to one host execution, and a failure after dispatch follows the stage's error policy with no
+automatic host replay. Explicit `--agent inline` is the zero-dispatch carve-out: every model stage
+executes in the invoking host session — no native-subagent leg. Operator
 confirmation actions, `pause: true`, and approve/taste/ask decisions stay host-owned. Each inline
 model stage appends `stage <id> executed inline in session <session-id>` to its run log; a
 subagent-dispatched stage appends `stage <id> executed via subagent <agent-id> (host session
 <session-id>)` instead. `dev-plan` remains a workflow subprocess, as do `dev-run`/`dev-runall` with
 `--agent auto` or a name, parallel batches, and every headless `spur workflow run` / `spur agent
-run`. `dev-run --mode implement` continues to run its single competency in-session under omit/`inline`.
+run`. `dev-run --mode implement` continues to run its single competency in-session under omitted
+`--agent` or explicit `--agent inline` (zero-dispatch).
 
 ### Executor precedence chain (R7)
 
@@ -133,10 +151,11 @@ resolved in this order; first match wins:
 
 `--agent auto` tier-resolves an executor (stage `model_policy` → `agent.default` → tier priority)
 **before** merging, so it enters the chain at step 1 already resolved to a concrete name.
-On a headless workflow surface, `--agent inline` resolves like omit to `agent.default`. Interactive
-task wrappers consume omit/`inline` before this chain and use the host driver. Omitting the flag on a
-headless surface forwards nothing, so the spawned step resolves to `agent.default` (step 2) or the
-YAML literal (step 3).
+On a headless workflow surface, explicit `--agent inline` is rejected with the stable special error
+— the surface cannot host a session. Interactive task wrappers consume omitted `--agent` (0508
+eligibility) and explicit `inline` (zero-dispatch carve-out) before this chain and use the host
+driver. Omitting the flag on a headless surface forwards nothing, so the spawned step resolves to
+`agent.default` (step 2) or the YAML literal (step 3).
 
 ### Implement-only executor override (R6)
 
@@ -181,8 +200,10 @@ explicit process boundary and retain their existing resolution, output, timeout,
 contracts. The interactive task wrapper does not change the YAML or engine; it reads the YAML as
 SSOT and interprets the actions in-session before any workflow subprocess exists. It records inline
 provenance without fabricating an `AgentRunTracedResult`.
-`spur agent run` itself resolves omit/`inline` to `agent.default` and `--agent auto` tier-resolves —
-the unified `--agent` selector on the dev command surface does not change the CLI's resolution.
+`spur agent run` itself resolves omitted `--agent` to `agent.default`, rejects explicit `--agent
+inline` with the stable special error (a headless surface cannot host a session), and `--agent
+auto` tier-resolves — the unified `--agent` selector on the dev command surface does not change the
+CLI's resolution.
 
 ### Inline trade-off
 

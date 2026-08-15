@@ -16,7 +16,7 @@ Wraps the **sp:spur-dev** skill.
 | `[<feature-id\|wbs>]` | Feature id or task WBS to refresh. | active |
 | `--all` | Refresh every feature. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refresh. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refresh. | omit |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

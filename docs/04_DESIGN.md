@@ -38,6 +38,7 @@ When collaborating with the design team:
 | [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365)                                                               | partial                         |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                      | implemented                     |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector, interactive task-pipeline host driver (0503), named escalation triggers, and `sp:dogfood-testing` extraction                | implemented                     |
+| [`agent-inline-host-session.md`](design/agent-inline-host-session.md)                                   | `--agent inline` host-session-only guarantee — headless surfaces reject explicit `inline` with a frozen greppable message; no `agent.default` fallback; 0508 eligibility is omit-only (ADR-047 amendment, feature G5 / task 0565) | implemented (0565)             |
 | [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md)                           | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment)                                                            | implemented                     |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md)               | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167)                                                      | design                          |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md)                     | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md`                                                                           | implemented                     |
@@ -156,9 +157,13 @@ identity in one place, and is the seam where a future remote/SSE execution chann
 touching callers.
 
 Model-bearing `/sp:dev-*` commands invoked from a live coding-agent session use the host-native
-skill/subagent surface inline by default; omitting `--agent` is `--agent inline`. `--agent auto` /
-`--agent <name>` force this verb. The four dispatch-surface triggers override inline: a different
-model/coding agent,
+skill/subagent surface by default; omitting `--agent` keeps the host-session default (eligible
+model stages may use a native subagent, task 0508) and explicit `--agent inline` is the
+zero-dispatch host-session carve-out. `--agent auto` /
+`--agent <name>` force this verb. The four dispatch-surface triggers select the subprocess path
+when the selector is omitted/`auto`/a name; explicit `--agent inline` is the hard carve-out — a
+trigger requirement it cannot satisfy in-session rejects with the stable special error rather than
+dispatching: a different model/coding agent,
 headless or unattended execution, a durable auditable run record, or workspace/credential isolation.
 The applied trigger is named. Inline has no isolated workspace, per-stage subprocess action record,
 independent timeout/abort boundary, or tier-selected executor. Interactive `dev-run --mode full`
@@ -878,7 +883,7 @@ Thin wrapper over the `sp:conflict-finding` skill. Standalone audit, not a spine
     [--pillar <source|tasks|features|authority|all>]   # default all
     [--mode <adaptive|full>]                            # default adaptive
     [--resolve]                                         # default off
-    [--agent <inline|auto|name>]                        # default inline
+    [--agent <inline|auto|name>]                        # default omitted
     [--json]                                            # default off
 ```
 
@@ -917,7 +922,7 @@ declares out of v1 (routing-table §0 step 1c); within-target routing stays `/sp
 ```text
 /sp:dev-find-next
     [--task [<feature-id>]]                             # default omitted
-    [--agent <inline|auto|name>]                        # default inline
+    [--agent <inline|auto|name>]                        # default omitted
     [--auto]                                            # default off
     [--json]                                            # default off
 ```
@@ -1673,9 +1678,15 @@ Model-bearing operations share the single execution-surface selector `--agent <i
 (`inline` is the default when omitted; the former `--inline`/`--subprocess` flags are collapsed into
 it, ADR-041/047). `--agent auto` / `--agent <name>`, or another named dispatch-surface trigger,
 selects `spur agent run`; headless workflow operations retain their `agent.run` subprocess actions.
+**Explicit `--agent inline` is a hard host-session guarantee (ADR-047 amendment, feature G5 / task
+0565):** host-session surfaces execute model-bearing work in the invoking session; headless
+surfaces (`spur agent run`, workflow `agent.run`, serve-side dispatch) cannot host a session and
+reject `inline` with the frozen `AGENT_INLINE_HEADLESS_MESSAGE` at exit 2 — no dispatch, no
+`agent.default` fallback, no partial side effects. 0508 native-subagent eligibility applies to
+**`omit` only** — never to explicit `inline`.
 Interactive full task execution uses the YAML-backed host driver defined in
 [`inline-pipeline-driver.md`](../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
-Interactive omit/`inline` is host-controlled and **non-subprocess** (no `spur agent run`, no
+Interactive omit is host-controlled and **non-subprocess** (no `spur agent run`, no
 `spur workflow run`), but eligible sequential model-bearing `agent.run` stages dispatch once to a
 native platform subagent when the host exposes one with shared-worktree read/write/shell
 capability; host fallback covers every ineligible stage, and post-dispatch failures follow the

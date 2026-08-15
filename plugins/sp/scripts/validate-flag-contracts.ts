@@ -406,10 +406,13 @@ export function extractTriggerTable(crossCuttingRaw: string): string[] | null {
 function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
     if (adrRaw.includes('## ADR-047')) {
         const out = new Map<string, SurfaceBehavior>();
+        // G5 amendment (feature G5 / task 0565): explicit inline is host-session-only — headless
+        // surfaces reject it with the stable special error; 0508 native-subagent eligibility
+        // applies to omitted --agent only, never explicit inline.
         out.set('inline', {
-            surfaces: new Set(['inline', 'subprocess']),
+            surfaces: new Set(['inline']),
             conditional: false,
-            defaultWhenOmitted: true,
+            defaultWhenOmitted: false,
         });
         out.set('auto', { surfaces: new Set(['subprocess']), conditional: false });
         out.set('<name>', { surfaces: new Set(['inline', 'subprocess']), conditional: true });

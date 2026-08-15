@@ -249,18 +249,23 @@ partial writes (see `LifecycleAdapter.requestTransition` in §12.2).
 
 ### 6.3 Interactive task-pipeline control inversion (ADR-047 amendment)
 
-Interactive `dev-run --mode full` and sequential `dev-runall` omit/inline invocations execute at the
+Interactive `dev-run --mode full` and sequential `dev-runall` invocations execute at the
 agent-command layer, which already owns the live host session. The driver reads
 `task-pipeline.yaml` at invocation time and interprets the same ordered actions and transition
 guards; it does not add an engine inline mode or define a second FSM. Explicit executors, parallel
 batches, and headless `spur workflow run` continue through `WorkflowService` and `agent.run`.
 
-**Native-subagent-first model stages (task 0508).** Interactive inline keeps the controller in the
-host session and is **non-subprocess** — it never invokes `spur agent run` or `spur workflow run` —
-but eligible model-bearing `agent.run` stages may execute on a native platform subagent. Eligibility
-is decided by observable facts only: the action is a pure-slash `agent.run`, the state is not
-interactive (no operator-confirmation action, `pause: true`, or approve/taste/ask decision), and the
-host platform exposes a native subagent with shared-worktree read/write/shell capability. Dispatch
+**Native-subagent-first model stages (task 0508, amended by feature G5).** Interactive
+omitted-`--agent` keeps the controller in the host session and is **non-subprocess** — it never
+invokes `spur agent run` or `spur workflow run` — but eligible model-bearing `agent.run` stages may
+execute on a native platform subagent. Eligibility is decided by observable facts only: the action
+is a pure-slash `agent.run`, the state is not interactive (no operator-confirmation action,
+`pause: true`, or approve/taste/ask decision), and the host platform exposes a native subagent with
+shared-worktree read/write/shell capability. **Explicit `--agent inline` is the zero-dispatch
+carve-out (G5):** 0508 eligibility applies to omitted `--agent` only — explicit inline never
+dispatches a native subagent, subprocess, or workflow hop, and headless surfaces (`spur agent run`,
+workflow `agent.run`, serve-side dispatch) reject it with the stable
+`AGENT_INLINE_HEADLESS_MESSAGE` special error (exit 2 at the CLI) instead of resolving it. Dispatch
 happens **once**, sequentially (one writer at a time), and joins before the driver evaluates the
 next action or guard; a pre-dispatch eligibility failure falls back to one host execution, while a
 failure after dispatch follows the stage's error policy and is never replayed in the host. Operator

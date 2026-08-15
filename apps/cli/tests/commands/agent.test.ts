@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
+import { AGENT_INLINE_HEADLESS_MESSAGE, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { runAgentLoop, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
+import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
 import { bundledRolesFile, type CliContext, createCliContext, parseAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -930,6 +930,43 @@ describe('runAgentRun role boundary (0536)', () => {
             expect(code).toBe(0);
             expect(runPromptCommand).toHaveBeenCalledTimes(1);
             expect(output.stderr.join('\n')).toContain('bare coding-agent binary name');
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    // G5 (ADR-047 amendment): explicit --agent inline is host-session-only; a
+    // headless surface cannot host a session, so the CLI boundary rejects it
+    // with the frozen message at exit 2 — no spawn, no agent.default fallback.
+    test('R1 (G5): validateAgentSelector returns the frozen message for inline; omit/auto stay null', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-inline-selector-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({ cwd: tempDir, output, db, agentConfig: {} as AgentConfig });
+            expect(validateAgentSelector({ agent: 'inline' }, ctx)).toBe(AGENT_INLINE_HEADLESS_MESSAGE);
+            expect(validateAgentSelector({}, ctx)).toBeNull();
+            expect(validateAgentSelector({ agent: 'auto' }, ctx)).toBeNull();
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test('R1 (G5): --agent inline exits 2 with the frozen message and never spawns', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-inline-reject-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({ cwd: tempDir, output, db, agentConfig: {} as AgentConfig });
+            const runPromptCommand = mock((_agent: string) =>
+                Promise.resolve({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+            );
+            const code = await runAgentRun('plain prompt', ctx, { agent: 'inline' }, depsWith(runPromptCommand));
+            expect(code).toBe(2);
+            expect(runPromptCommand).not.toHaveBeenCalled();
+            const diag = output.stderr.join('\n');
+            expect(diag).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
+            expect(diag).toContain('inline');
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }

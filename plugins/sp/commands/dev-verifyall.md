@@ -15,7 +15,7 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 | --- | --- | --- |
 | `--tasks` `<selector>` | Task selector to verify. | required |
 | `--feature` `<id>` | Restrict to a feature. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs each verification. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs each verification. | omit |
 | `--fix` `<none\|blockers-first\|all>` | Auto-fix policy on findings. | none |
 | `--focus` `<lens>` | Verification lens. | omitted |
 | `--bdd` | Run BDD scenarios. | off |

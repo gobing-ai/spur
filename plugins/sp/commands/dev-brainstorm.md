@@ -16,7 +16,7 @@ Wraps the **sp:brainstorm** and **sp:wayfinder** skills.
 | `<topic>` | Topic or problem statement to explore. | required |
 | `--depth` `<basic\|detailed\|comprehensive>` | Breadth vs. depth of the exploration. | detailed |
 | `--options` `<n>` | Number of solution options to generate. | 3 |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing ideation. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing ideation. | omit |
 | `--skip-discovery` | Skip the discovery interview; ideate immediately. | off |
 | `--wayfind` | Spawn a wayfinder feature for multi-session routing. | off |
 | `--task` `[<feature-id>]` | Create a tracking task under a feature. | omitted |

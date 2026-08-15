@@ -14,7 +14,7 @@ Wraps the **sp:functional-review**, **sp:code-verification**, and **sp:code-impr
 | Flag | Description | Default |
 | --- | --- | --- |
 | `[<wbs\|path>]` | Task WBS or source path to review. | cwd |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing review. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing review. | omit |
 | `--focus` `<dims>` | Review dimensions (functional / SECUA / architecture). | all |
 | `--fix` | Deprecated no-op + warning; route remediation to /sp:dev-verify --fix. | off |
 

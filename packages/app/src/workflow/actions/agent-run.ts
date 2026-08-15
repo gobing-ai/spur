@@ -4,7 +4,12 @@ import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
-import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
+import {
+    AGENT_INLINE_HEADLESS_MESSAGE,
+    type AgentRunInvocation,
+    type AgentRunTracedResult,
+    type AgentService,
+} from '../../services/agent-service';
 import { TaskLocator } from '../../services/task-locator';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
@@ -122,15 +127,24 @@ export class AgentRunActionRunner implements ActionRunner {
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
+        // ADR-047 amendment (G5): explicit `inline` is a host-session guarantee;
+        // this workflow action is a headless dispatch surface and cannot host a
+        // session. Fail loudly instead of normalizing to agentConfig.default —
+        // no fallback, no dispatch (a default-executor subprocess would run in
+        // another session with zero signal). `omit` still resolves
+        // agentConfig.default through the service.
+        if (agent === 'inline') {
+            return {
+                ok: false,
+                error: `agent.run: ${AGENT_INLINE_HEADLESS_MESSAGE}`,
+            };
+        }
         // Declared step role (0538 R2): threaded onto the underlying `spur agent run`
         // so the resolution records the reason even when the `agent:` pin beats it.
         const role = asOptionalString(options.role);
         // R1 (0451): config is injected at composition root, not read from a fake cast.
         // Affinity config via this.agentConfig below.
-        // ADR-047 (0449 R2): `inline` on a headless dispatch surface ≡ omit → agent.default.
-        // Normalize to the configured default executor name before dispatch so session
-        // affinity / labels key off the real executor, never the literal `inline`.
-        const dispatchAgent = agent === 'inline' ? (this.agentConfig.default ?? undefined) : agent;
+        const dispatchAgent = agent;
         const model = asOptionalString(options.model);
         const mode = asOptionalString(options.mode) ?? 'text';
         const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';

@@ -11,6 +11,7 @@ import type {
     AgentExecutionOptions,
 } from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
+import { AGENT_INLINE_HEADLESS_MESSAGE } from '../../../src/services/agent-service';
 import {
     AGENT_RUN_PROGRESS_INTERVAL_MS,
     AgentRunActionRunner,
@@ -1983,7 +1984,7 @@ describe('R1 — config injection (task 0451)', () => {
         expect(result.setVars?.__agentSessionId).toBeUndefined();
     });
 
-    test('injected agentConfig.default appears in sessionDir when agent is inline', async () => {
+    test('G5: agent: inline fails the action with the frozen message and never dispatches', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1995,13 +1996,16 @@ describe('R1 — config injection (task 0451)', () => {
         const ctx = makeCtx({ runId: 'run-456', workdir: '/tmp/w2' });
         const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'inline' }, ctx);
 
-        expect(result.ok).toBe(true);
-        expect(capturedFlags.agent).toBe('my-agent');
-        expect(capturedFlags.sessionDir).toContain('agent-sessions/my-agent');
-        expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('my-agent');
+        // ADR-047 amendment (G5): a workflow agent.run action is a headless
+        // dispatch surface — inline is rejected loudly, never normalized to
+        // agentConfig.default (no fallback, no dispatch).
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
+        expect(result.error).toContain('inline');
+        expect(capturedFlags.agent).toBeUndefined();
     });
 
-    test('injected agentConfig.default without explicit agent uses default', async () => {
+    test('G5 regression: a step with no agent: still dispatches to agentConfig.default', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -2013,7 +2017,11 @@ describe('R1 — config injection (task 0451)', () => {
         const ctx = makeCtx({ runId: 'run-789', workdir: '/tmp/w3' });
         const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
 
+        // omit path unchanged (0508 eligibility is omit-only): no agent flag is
+        // forwarded; the service resolves agentConfig.default, and session
+        // affinity keys off that default executor.
         expect(result.ok).toBe(true);
+        expect(capturedFlags.agent).toBeUndefined();
         expect(capturedFlags.sessionDir).toContain('agent-sessions/claude');
         expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('claude');
     });

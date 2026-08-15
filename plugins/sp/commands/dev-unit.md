@@ -15,7 +15,7 @@ Wraps the **sp:code-testing** skill.
 | --- | --- | --- |
 | `<target>` | File / module / path to generate tests for. | required |
 | `--coverage` `<n>` | Coverage percentage target. | configured |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing test work. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing test work. | omit |
 | `--auto` | Skip objective HITL gates. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

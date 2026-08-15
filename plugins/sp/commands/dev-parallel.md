@@ -16,7 +16,7 @@ Wraps the **sp:parallel-execution** skill.
 | `--tasks` `<selector>` | Task selector to fan out. | required |
 | `--feature` `<id>` | Restrict the selector to a feature. | omitted |
 | `--mode` `<fan-out\|review-panel\|investigation>` | Fan-out pattern. | fan-out |
-| `--agent` `<inline\|auto\|name>` | Who runs each dispatched slice. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs each dispatched slice. Parallel fan-out is dispatch, so explicit `--agent inline` runs the batch **sequentially in the host session** with a printed notice (zero dispatch); omit keeps the default fan-out semantics; `auto` tier-resolves an executor; a name pins that executor. | omit |
 | `--json` | Emit structured JSON. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

@@ -1,5 +1,6 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
+    AGENT_INLINE_HEADLESS_MESSAGE,
     type AgentRunDeps,
     AgentService,
     type AgentSpecInput,
@@ -50,7 +51,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('run')
         .description('Execute a prompt or slash command via a coding agent.')
-        .option('--agent <name>', 'Role, executor, agent binary, or auto')
+        .option(
+            '--agent <name>',
+            'Role, executor, agent binary, auto, or inline (host-session-only; errors on headless surfaces)',
+        )
         .option('--spec <id>', 'Team agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')
         .option('--model <name>', 'Agent model argument')
@@ -156,15 +160,18 @@ function commanderOptionsToFlags(options: Record<string, unknown>): Record<strin
 }
 
 /**
- * Reject an `--agent` value that is neither a role, a configured executor, nor
- * `auto`/`inline` at the flag boundary, before any agent process spawns (0536 R3).
- * The message names both accepted sets. Bare coding-agent binary names are
- * accepted for the transition — the service warns once under the registered
- * shim (`agent-bare-binary-name`). Returns an error message, or null to proceed.
+ * Validate an `--agent` value at the flag boundary, before any agent process
+ * spawns (0536 R3). `omit`/`auto` pass. Explicit `inline` is rejected with the
+ * frozen headless-surface message (G5 / ADR-047 amendment): a headless surface
+ * cannot host a session, so `inline` never resolves to `agent.default` here. A
+ * role, a configured executor, or a bare coding-agent binary name passes — the
+ * service warns once under the registered shim (`agent-bare-binary-name`).
+ * Returns an error message, or null to proceed. Exported as a test seam.
  */
-function validateAgentSelector(flags: Record<string, string | boolean>, context: CliContext): string | null {
+export function validateAgentSelector(flags: Record<string, string | boolean>, context: CliContext): string | null {
     const raw = typeof flags.agent === 'string' ? flags.agent : undefined;
-    if (raw === undefined || raw === 'auto' || raw === 'inline') return null;
+    if (raw === undefined || raw === 'auto') return null;
+    if (raw === 'inline') return AGENT_INLINE_HEADLESS_MESSAGE;
     if (context.agentRoles?.has(raw) === true) return null;
     if ((context.agentConfig?.executors ?? []).some((e) => e.name === raw)) return null;
     if (isAgentName(raw)) return null;
@@ -396,7 +403,9 @@ export async function runAgentRun(
             return await svc.run(drained, rewritten, deps);
         }
         // R3 (0536): reject a value that is neither a role, a configured executor,
-        // nor auto/inline at the flag boundary — before any agent process spawns.
+        // nor auto at the flag boundary — before any agent process spawns.
+        // Explicit `inline` is rejected here too (G5 / ADR-047 amendment): exit 2
+        // with the frozen headless-surface message, zero spawn, no fallback.
         const invalid = validateAgentSelector(flags, context);
         if (invalid !== null) {
             context.output.error(invalid);

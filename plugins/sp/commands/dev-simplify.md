@@ -16,7 +16,7 @@ Wraps the **sp:code-simplification** skill.
 | `[<path-or-scope>]` | Path or scope to simplify. | recent |
 | `--scope` `<recent\|all\|path>` | Scope of the simplification pass. | recent |
 | `--check` `<cmd>` | Validation command to iterate against. | project gate |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing simplification. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing simplification. | omit |
 | `--auto` | Skip objective HITL gates (taste gates: over-engineering removal & cross-file utility extraction still require approval). | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

@@ -50,6 +50,15 @@ import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 
+/**
+ * Stable, greppable error for explicit `--agent inline` on a headless surface
+ * (ADR-047 amendment / feature G5). A headless surface cannot host a session,
+ * so `inline` is rejected loudly — never normalized to `agent.default`. Tests
+ * assert this text verbatim; keep it stable (task 0566 consumes it verbatim).
+ */
+export const AGENT_INLINE_HEADLESS_MESSAGE =
+    "--agent inline requires a host session: this surface is headless and never dispatches inline runs (no fallback to agent.default). Use 'auto', a role, or an executor name.";
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -1128,12 +1137,15 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
         if (raw === 'auto') return this.resolveAgentAuto(flags, doctorRunner, exclude);
-        // ADR-047: omit and `inline` are identical. On a headless dispatch surface
-        // (`spur agent run` / workflow agent.run) both resolve to `agent.default` —
-        // a subprocess of the configured default executor — never a host-session
-        // stage. The ADR-046-era sentinel reject is withdrawn; unknown executor
-        // names still fail clearly below via resolveExecutorSelector.
-        if (raw === 'inline') return this.resolveAgentAuto(flags, doctorRunner, exclude);
+        // ADR-047 amendment (G5): explicit `inline` is a host-session guarantee.
+        // A headless dispatch surface (`spur agent run` / workflow agent.run)
+        // cannot host a session, so `inline` fails resolution loudly — no
+        // `agent.default` fallback (a subprocess of the default executor would
+        // run in another session with zero signal). `omit`/`auto`/named
+        // selectors are untouched; 0508 native-subagent eligibility is omit-only.
+        if (raw === 'inline') {
+            return { ok: false, exitCode: 2, message: AGENT_INLINE_HEADLESS_MESSAGE };
+        }
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`; a role (0536 R1) is matched
         // first inside resolveExecutorSelector. No phase map is consulted

@@ -47,7 +47,7 @@ silently (that is a HITL stop).
 | `--dry-run` | Print the resolved plan (**P1**) and do not dispatch. |
 | `--once` | Strip `--next` from the shaped child argv so only the current step runs; no router re-entry. |
 | `--auto` | Forward into dispatched children that support it. **Never** breaks multi-candidate HITL ties. |
-| `--agent <inline\|auto\|name>` | Execution-surface selector forwarded into the dispatched child when that child documents `--agent`. Router defaults inline; a named escalation trigger overrides `--agent inline`. Omit → forward nothing. |
+| `--agent <inline\|auto\|name>` | Execution-surface selector forwarded into the dispatched child when that child documents `--agent`. Router defaults to omit semantics: Omit forwards nothing, and the dispatched child applies its own default (host session, 0508 eligibility). Explicit `--agent inline` is the zero-dispatch carve-out, forwarded as-is; escalation triggers reject `inline` (no override). |
 | `--full` | When the primary route is `dev-run … --next`, substitute `dev-run <wbs> --mode full` (no `--next`). No effect on non-run routes → warning **W-FULL**. |
 
 ## Protocol (deterministic)

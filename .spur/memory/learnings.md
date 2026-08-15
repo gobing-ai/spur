@@ -678,3 +678,46 @@ Source: task file `docs/tasks4/0561_harden-verdict-ac-row-id-matching-so-embedde
 - **Errors fixed** — verdict id preserved the full Gherkin body (`Scenario: R4 — … (Given … / Then …)`), exact normalized-title matching in the feature scenario gate (`isScenarioVerified`, `feature-check.ts:681-696`) flagged `L4.scenario-unverified` against a PASS/MET verdict, forcing post-hoc answer-file surgery (task 0558, E6 batch). Root cause was the matcher, not the parser: `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:57-65`) absorbs prefix/case/quotes/whitespace but nothing trailing. Fixed additively: `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` as a third derived form beside `id`/`stripped` (`feature-check.ts:926-940`).
 - **Patterns** — additive matching: four existing comparisons untouched, two added — never replace existing comparisons with the new form, or legitimately parenthesized titles regress (R2). Greedy `[\s\S]*` anchored from first `(` to string-final `)` strips a whole trailing parenthetical incl. nested pairs and line breaks; a conservative `[^(]*` leaves a dangling fragment (Q1 closed greedy). Backstop + guidance split: matcher is the backstop for broken artifacts, the style guide (`ac-style-guide.md` "id is exactly the scenario title") is the prevention half — guidance alone already failed once. Frozen design shape agreed pre-implementation; implementation matched it exactly.
 - **Gotchas** — accepted ceiling (Q2): a title legitimately ending in `(...)` *and* carrying an appended body (`handles (a) and (b) cases (Given …)`) strips from the first `(`, no form matches → still unverified, same as before, not a regression. Greedy regex is O(n²)-worst-case on ids without a trailing `)` — negligible for short sentence ids. `feature_id` unset on purpose: E6 is done, linking a backlog issue under it would leave a done feature holding unfinished work. Doc drift: "six new tests" vs 8 added (5 e2e + 3 direct) — fix count on next touch. E6/0558 regression AC verified via verbatim-faithful *reconstructed* fixture (literal `.spur/run/0558-verdict.json` lived in deleted sibling worktree `spur-new-runall-e6-e91f`); byte-for-byte artifact test needs the run dir restored. Unpinned path: `bodyStripped === sc.alias` (e.g. `AC-1 (Given …)`) has no direct test — recommend a one-liner on next touch.
+## 2026-08-15 — feature G5 batch (tasks 0565, 0566)
+
+### 0565 — Headless --agent inline special error
+
+- Frozen-message pattern: a stable greppable error text lives as ONE exported const
+  (`AGENT_INLINE_HEADLESS_MESSAGE`) co-located with the resolution it guards
+  (agent-service.ts), imported by CLI + workflow action. Tests assert the text verbatim,
+  not by substring/pattern. This makes the contract greppable and single-sourced.
+- Split-by-class error contract: `inline` on headless surfaces = exit 2 special message;
+  invalid names keep the existing flag-boundary rejection (`Unknown agent:` naming valid
+  values). Do not merge the classes into one error.
+- Exit code 2 (usage class) reused for the inline rejection — no dedicated exit code.
+
+### 0566 — Explicit-inline zero-dispatch contract
+
+- The frozen `rg` sweep pattern (`inline.{0,40}(omit|agent\.default)|synonym for omit|exactly .inline`)
+  is **pattern-invisible to `default: inline` cells** — 17 command files still defaulted
+  `--agent` to `inline` post-sweep. Sweeps over inline≡omit equivalence must also grep
+  `default[: ]+inline` (review found it; verify --fix all corrected it).
+- Review PARTIAL → verify `--fix all` is the designed fix loop for doc-contract tasks:
+  the review surfaces P2/P3 gaps, verify applies the fixes and re-verifies. No ad-hoc
+  fix hop needed.
+- next-router/SKILL.md documents dispatch routing rules that skill docs elsewhere assume
+  inverted — when inverting a routing rule (inline no longer overrideable), grep the
+  router docs, not just the command docs.
+
+### Batch-wide
+
+- Strict feature check (feature-derived runall preflight) aborts on
+  `L4.uncovered-feature-scenario`: every feature scenario needs a covering task link.
+  R5 (edge) was uncovered because its behavior lived inside 0565's scope but was never
+  linked — link edge scenarios to the task that owns their regression guard.
+- `spur task verdict` warns when REQUIREMENT rows (bare R1 ids) match no feature scenario,
+  but the L4 gate credits the ACCEPTANCE rows — key AC rows by FULL scenario title
+  (`Scenario: R2 — …`), then the warning is diagnostic-only.
+- `project-start.test.ts:181` ("port polling times out") is a timing flake — passes
+  standalone; do not attribute to unrelated diffs (0565's gate hit it once).
+- Worktree inline runs: `.spur/context/.session.json` is absent in a fresh worktree →
+  the driver allocates `host-session-<run-id>` and records the fallback in the run log.
+- Recorded `## Testing` evidence anchors from verify answers must be project-root
+  resolvable: abbreviating `plugins/sp/commands/dev-runall.md:84` to `dev-runall.md:84`
+  produces L4.stale-line-anchor warnings.
+

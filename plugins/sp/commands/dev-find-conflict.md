@@ -19,7 +19,7 @@ owner-routed remediation.
 | `--pillar` `<source\|tasks\|features\|authority\|all>` | Limit the internal audit to one pillar; the minimum authorities needed to judge it still load.                                           | all             |
 | `--mode` `<adaptive\|full>`                            | Scan protocol — adaptive reuses fresh indexed context and discloses skipped areas; full forces a cold comprehensive scan.                | adaptive        |
 | `--resolve`                                            | Enable the proposal, confirmation, and owner-routed remediation workflow. Its absence guarantees no source/corpus/numbered-doc mutation. | off             |
-| `--agent` `<inline\|auto\|name>`                       | Who runs the model-bearing analysis.                                                                                                     | inline          |
+| `--agent` `<inline\|auto\|name>`                       | Who runs the model-bearing analysis.                                                                                                     | omit           |
 | `--json`                                               | Emit the same result envelope as Markdown as JSON.                                                                                       | off             |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

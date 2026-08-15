@@ -47,7 +47,8 @@ The value table below is the C3a cross-file parity surface (kept in lockstep wit
 
 | Value                           | Who does the work                                                           | Derived surface                                                             |
 | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `inline` (default when omitted) | Whoever is running this session (interactive) or `agent.default` (headless) | Interactive: inline — host-controlled, eligible model stages may use a native subagent (0508); headless: subprocess of `agent.default` |
+| `(omitted)`                     | The agent running this session                                              | Host session — host-controlled; eligible model stages may use a native subagent (0508) |
+| `inline`                        | The agent running this session                                              | Host session — hard guarantee: zero dispatch, never a subprocess, never a workflow hop; headless surfaces reject `inline` (exit 2, stable special error) |
 | `auto`                          | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess                                                                  |
 | `<name>`                        | That coding agent or configured executor                                    | Inline when it is the current session's agent; subprocess otherwise         |
 
@@ -61,7 +62,10 @@ threaded by `AgentRunActionRunner`; a pin still beats role routing permanently (
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
 selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no
 longer part of the command surface; their anchors (`#flag-inline`, `#flag-subprocess`) are retained
-as stubs below so external links do not dangle. Operator-layer vocabulary (task 0405): `agent` names
+as stubs below so external links do not dangle. **Superseded (feature G5):** the `--inline` →
+`--agent inline` leg of the collapse no longer means "equivalent to omitting the flag" — explicit
+`inline` is the zero-dispatch host-session carve-out (see
+[cross-cutting.md](cross-cutting.md#inline-default-execution-surface)). Operator-layer vocabulary (task 0405): `agent` names
 the concrete coding-agent tool; `executor` remains the domain-layer role and is not a command flag.
 `inline` and `auto` are reserved values — config validation rejects an executor claiming either.
 

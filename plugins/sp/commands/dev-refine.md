@@ -19,7 +19,7 @@ agent will implement and L3-clean is not enough (frozen APIs, anti-patterns, fil
 | `--focus` `<mode>` | Refinement focus mode. | omitted |
 | `--description` `<text>` | Override the task description. | omitted |
 | `--depth` `<standard\|ready>` | Spec depth bar (see flag glossary). | `standard` |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | omit |
 | `--auto` | Skip objective HITL gates. | off |
 | `--next` | Hand off to the next-router on success. | off |
 

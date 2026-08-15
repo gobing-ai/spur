@@ -20,7 +20,7 @@ operation, applied to a resolved set (typically every task under a feature). Pas
 | `--focus` `<mode>` | Refinement focus mode. | omitted |
 | `--description` `<text>` | Override description for each task. | omitted |
 | `--depth` `<standard\|ready>` | Spec depth bar (see flag glossary). | `standard` |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | omit |
 | `--auto` | Skip objective HITL gates. | off |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--status` `<s>` | Only refine tasks in a status. | backlog,todo |

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Headless --agent inline special error across CLI, service, and workflow action"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: G5
@@ -13,7 +13,7 @@ tags: ["agent", "cli-surface", "adr-047"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-15T16:12:04.361Z"
-updated_at: "2026-08-15T16:54:05.828Z"
+updated_at: "2026-08-15T17:22:44.800Z"
 ---
 
 ## 0565. Headless --agent inline special error across CLI, service, and workflow action
@@ -126,17 +126,61 @@ internationalization; a dedicated exit code (2 is reused by design).
 - [ ] Grep: no remaining `inline` → `agent.default` normalization or doc equivalence in edited layers (R2)
 - [ ] Run `bun run autofix && bun run spur-check`
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:163` |
+| `apps/cli/src/commands/agent.ts:171` |
+| `apps/cli/src/commands/agent.ts:173` |
+| `apps/cli/src/commands/agent.ts:3` |
+| `apps/cli/src/commands/agent.ts:406` |
+| `apps/cli/src/commands/agent.ts:54` |
+| `apps/cli/tests/commands/agent.test.ts:11` |
+| `apps/cli/tests/commands/agent.test.ts:8` |
+| `apps/cli/tests/commands/agent.test.ts:937` |
+| `packages/app/src/index.ts:44` |
+| `packages/app/src/services/agent-service.ts:1140` |
+| `packages/app/src/services/agent-service.ts:53` |
+| `packages/app/src/workflow/actions/agent-run.ts:130` |
+| `packages/app/src/workflow/actions/agent-run.ts:147` |
+| `packages/app/src/workflow/actions/agent-run.ts:7` |
+| `packages/app/tests/services/agent-service.test.ts:11` |
+| `packages/app/tests/services/agent-service.test.ts:1658` |
+| `packages/app/tests/services/agent-service.test.ts:1949` |
+| `packages/app/tests/services/agent-service.test.ts:1954` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:14` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:1987` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:1999` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:2008` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:2020` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:2024` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-service.ts:59-60` (single exported definition of `AGENT_INLINE_HEADLESS_MESSAGE`, frozen text) · `apps/cli/src/commands/agent.ts:174` (`validateAgentSelector` returns the frozen message for `inline`; omit/auto stay null at `:173`) · `apps/cli/src/commands/agent.ts:56` (`--agent` help gains the inline host-session-only clause) · `apps/cli/src/commands/agent.ts:409-412` (exit-2 path: print message, `return 2`, before any spawn) · tests `apps/cli/tests/commands/agent.test.ts:941` (selector returns frozen message; omit/auto null) and `:955` (e2e: `--agent inline` exits 2, dispatch mock never called, verbatim message on stderr) — CLI suite 43 pass, 0 fail this run |
+| R2 | MET | `packages/app/src/services/agent-service.ts:1146-1148` (`raw === 'inline'` fails resolution with `exitCode: 2` + frozen message via the existing resolve-failure channel; the `inline → resolveAgentAuto` normalization is removed, ADR-047 comment rewritten at `:1140-1144`) · `packages/app/src/workflow/actions/agent-run.ts:136-141` (`agent === 'inline'` fails the action with `agent.run: <frozen message>`; the `inline → agentConfig.default` normalization is deleted) · serve-side dispatch inherits the service-layer failure (no extra branch; grep of edited layers finds zero remaining `inline → agent.default` normalization) · tests `packages/app/tests/services/agent-service.test.ts:1949` (inline fails resolution, exit 2, no dispatch) and `packages/app/tests/workflow/actions/agent-run.test.ts:1987` (inline action fails with message, never dispatches) — service 160 pass, workflow 113 pass, 0 fail |
+| R3 | MET | `apps/cli/src/commands/agent.ts:173` (omit/auto pass the boundary unchanged) · `packages/app/src/services/agent-service.ts:1138-1139` (`stringFlag(flags,'agent','auto')` — omit defaults to auto; `raw === 'auto'` → `resolveAgentAuto`, unchanged) · `packages/app/src/workflow/actions/agent-run.ts:147` (dispatchAgent = agent; omit forwards no agent flag — `agentConfig.default` resolves via the service, unchanged) · regression tests `packages/app/tests/services/agent-service.test.ts:1659` (omitted `--agent` resolves ok) and `packages/app/tests/workflow/actions/agent-run.test.ts:2008` (step with no `agent:` still dispatches to `agentConfig.default`); auto/named/role suites (0126 auto-resolution, 0346 executor-aware, 0536 role routing) green — 160/113/43 pass, 0 fail · T3 docs same commit: `docs/00_ADR.md:383` (ADR-047 amendment), `docs/04_DESIGN.md:41` (design-satellite index row), `docs/04_DESIGN.md:1677` (§7.8 inline hard-guarantee paragraph), satellite `docs/design/agent-inline-host-session.md` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Headless CLI surfaces reject --agent inline with a stable special error | MET | test | `apps/cli/tests/commands/agent.test.ts:955` — `runAgentRun('plain prompt', ctx, { agent: 'inline' })` returns code 2, prints `AGENT_INLINE_HEADLESS_MESSAGE` verbatim on stderr, and `runPromptCommand` (dispatch mock) is never called; `:941` asserts `validateAgentSelector({ agent: 'inline' })` returns the frozen message exactly. CLI suite: 43 pass, 0 fail (this run). |
+| Scenario: R3 — omit, auto, and named selectors are unchanged | MET | test | `packages/app/tests/services/agent-service.test.ts:1659` — `svc.resolve({})` ok (omit path unchanged); 0126 auto-resolution / 0346 executor-aware / 0536 role-routing suites unchanged and green (160 pass, 0 fail this run). `packages/app/tests/workflow/actions/agent-run.test.ts:2008` — step with no `agent:` still dispatches to `agentConfig.default` (`capturedFlags.agent` undefined, sessionDir keyed to default executor, `__agentSessionAgent` = 'claude'). `apps/cli/tests/commands/agent.test.ts:941` — omit/auto return null from the boundary. Grep of `packages/app/src` + `apps/cli/src`: no `inline → agent.default` normalization remains. |
+| Scenario: R5 — Invalid --agent names keep failing at the flag boundary | MET | test | `apps/cli/tests/commands/agent.test.ts:874` — `--agent not-a-name` exits 2 with `Unknown agent: 'not-a-name'` naming role/executor valid sets, dispatch mock never called; unchanged 0536 boundary suite green (43 pass, 0 fail this run). Service layer: `packages/app/tests/services/agent-service.test.ts:1931` and `:2089` — invalid name exits 2 with no spawn. `apps/cli/src/commands/agent.ts:178-181` — unknown-value path returns the `Unknown agent:` message unchanged. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P1 | ac-row-dropped | — | 2 AC row(s) could not be parsed and were omitted from the verdict: Priority (unrecognised status "Dimension"); P4 (unrecognised status "—"). Accepted evidence types: test, command, static-ref (aliases: static, doc, docs, documentation), manual-review, llm-judge, n/a. Accepted statuses: MET, PARTIAL, UNMET, N/A. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 L
@@ -144,3 +188,6 @@ L
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-15T17:09:19.769Z todo → wip (system)
+- 2026-08-15T17:22:27.045Z wip → testing (system)
+- 2026-08-15T17:22:44.800Z testing → done (system)

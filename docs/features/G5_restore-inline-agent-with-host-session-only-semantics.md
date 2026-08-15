@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G5"
 name: "Restore inline --agent with host-session-only semantics"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-15T16:01:40.730Z"
-updated_at: "2026-08-15T16:17:20.013Z"
+updated_at: "2026-08-15T18:01:46.205Z"
 ---
 
 # G5: Restore inline --agent with host-session-only semantics
@@ -81,3 +81,6 @@ Feature: Restore inline --agent with host-session-only semantics
 ## History
 
 - 2026-08-15T16:17:20.013Z moved L → G5 (system)
+- 2026-08-15T17:22:32.480Z backlog → active (system)
+- 2026-08-15T17:58:52.858Z active → verifying (system)
+- 2026-08-15T18:01:46.205Z verifying → done (system)

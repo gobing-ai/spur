@@ -14,7 +14,7 @@ Wraps the **sp:dogfood-testing** skill.
 | Flag | Description | Default |
 | --- | --- | --- |
 | `<testee>` | Skill / command / CLI to exercise end-to-end. | required |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing dogfood work. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing dogfood work. | omit |
 | `--max-retry` `<n>` | Max auto-fix retries per stage. | 3 |
 | `--save` | Compatibility no-op; saving is now default. Retained until evidenced retirement. | off |
 | `--task` | Record outcomes against a task. | omitted |

@@ -49,3 +49,5 @@
 {"wbs":"0544","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
 {"wbs":"0552","feature_id":"J7","status":"done","verdict":"PASS","timestamp":"2026-08-15T15:47:40.856Z"}
 {"wbs":"0561","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-15T16:36:35.551Z"}
+{"wbs":"0565","feature_id":"G5","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:00.000Z"}
+{"wbs":"0566","feature_id":"G5","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:00.000Z"}

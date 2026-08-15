@@ -8,6 +8,7 @@ import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
+    AGENT_INLINE_HEADLESS_MESSAGE,
     type AgentConfig,
     type AgentExecutionEvent,
     type AgentExecutionStartedEvent,
@@ -1654,6 +1655,13 @@ describe('AgentService.resolve', () => {
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.exitCode).toBe(2);
     });
+
+    test('G5 regression: omitted --agent resolves ok (omit path unchanged)', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps();
+        const result = await svc.resolve({}, deps);
+        expect(result.ok).toBe(true);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -1938,18 +1946,17 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         expect(diag).toContain('claude');
     });
 
-    test('ADR-047: --agent inline on spur agent run resolves to agent.default (subprocess)', async () => {
+    test('ADR-047 (G5): --agent inline fails resolution with the frozen message — no agent.default fallback, no dispatch', async () => {
         const { errors, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'inline', json: true }, deps);
-        // inline ≡ omit on a headless surface → agent.default executor, subprocess.
-        // Not exit 2 solely because the value was inline (ADR-047 supersedes the
-        // ADR-046 reject-inline guard).
-        expect(code).toBe(0);
-        expect(runner.runPromptCommand).toHaveBeenCalled();
-        expect(resolvedAgent(runner)).toBe('omp');
-        expect(errors.join('\n')).not.toContain('cannot be passed');
+        // Explicit inline is host-session-only; a headless surface cannot host a
+        // session, so resolution fails loudly through the resolve-failure channel
+        // — never normalized to agent.default (no default-executor subprocess).
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        expect(errors.join('\n')).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
     });
 });
 

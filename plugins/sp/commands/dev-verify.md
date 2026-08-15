@@ -14,7 +14,7 @@ Wraps the **sp:code-verification** skill.
 | Flag | Description | Default |
 | --- | --- | --- |
 | `<wbs>` | Task WBS to verify. | required |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing verification. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing verification. | omit |
 | `--fix` `<none\|blockers-first\|all>` | Auto-fix policy on findings. | none |
 | `--focus` `<lens>` | Verification lens. | omitted |
 | `--bdd` | Run BDD scenarios. | off |

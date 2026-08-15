@@ -15,7 +15,7 @@ Wraps the **sp:sys-architecture** skill.
 | --- | --- | --- |
 | `[<module-path>]` | Module path to scope the architecture survey. | omitted (whole repo) |
 | `--scope` `<all\|path>` | Limit the survey to a path or expand to the whole repo. | all |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing survey work. | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing survey work. | omit |
 | `--json` | Emit structured JSON instead of markdown. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
