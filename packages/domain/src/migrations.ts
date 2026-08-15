@@ -287,6 +287,16 @@ ALTER TABLE history_tool_call ADD COLUMN args_raw TEXT;
 `;
 
 /**
+ * Add the `call_id` column to the forensic `history_tool_call` table (task 0564
+ * R1). Stores the tool's own call id so the importer's streaming loop can join a
+ * toolResult's `toolCallId` to its row and attach the measured duration.
+ * Idempotent via `addColumnIfMissing` — the `0012` args_raw precedent.
+ */
+export const HISTORY_TOOL_CALL_CALL_ID_SCHEMA_SQL = `
+ALTER TABLE history_tool_call ADD COLUMN call_id TEXT;
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -308,6 +318,10 @@ ALTER TABLE history_tool_call ADD COLUMN args_raw TEXT;
  * `0012` adds the `args_raw` column to `history_tool_call` for forensic
  * retention of planning-tool arguments (task 0553, feature E5).
  * `0013` adds the `history_run_session` run→session mapping table (feature E6).
+ * `0014` indexes `system_events (event_name, occurred_at)` for the routing
+ * aggregate (task 0546).
+ * `0015` adds the `call_id` column to `history_tool_call` so omp tool durations
+ * survive import (task 0564 R1).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -348,6 +362,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         id: '0014_spur_cli_system_events_name_occurred_idx',
         sql: SYSTEM_EVENTS_NAME_OCCURRED_INDEX_SCHEMA_SQL,
+    },
+    {
+        id: '0015_spur_cli_history_tool_call_call_id',
+        sql: HISTORY_TOOL_CALL_CALL_ID_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'history_tool_call', column: 'call_id' },
     },
 ];
 
@@ -402,6 +421,13 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0012_spur_cli_history_tool_call_args_raw' &&
             !(await tableExists(adapter, 'history_tool_call'));
 
+        // Migration 0015 adds call_id to history_tool_call — same table-absence
+        // shape as 0012 (task 0564 R1). Journal without executing on
+        // legacy/foundation-only DBs; fresh DBs get the column from the importer DDL.
+        const callIdSkip =
+            migration.id === '0015_spur_cli_history_tool_call_call_id' &&
+            !(await tableExists(adapter, 'history_tool_call'));
+
         // Migration 0014 indexes (event_name, occurred_at) on system_events —
         // same ledger-absence shape as 0011. Journal without executing when the
         // table is missing; the index lands on any DB where the ledger exists
@@ -411,7 +437,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0014_spur_cli_system_events_name_occurred_idx' &&
             !(await tableExists(adapter, 'system_events'));
 
-        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip && !nameOccurredIndexSkip) {
+        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip && !nameOccurredIndexSkip && !callIdSkip) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }
