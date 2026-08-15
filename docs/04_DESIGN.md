@@ -651,7 +651,7 @@ three new forensic queries (`sessionSpans`, `sessionToolDurations`, `todoToolCal
 reading the 0012 `args_raw` column) alongside the existing SQL set; registry metrics never load the
 corpus into memory.
 
-#### `spur history report [path] [--mode <name>] [--json]`
+#### `spur history report [path] [--mode <name>] [--task <wbs>] [--top <n>] [--json]`
 
 Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the
 artifact JSON, asserts `schemaVersion === HISTORY_ARTIFACT_SCHEMA_VERSION`, then renders a stdout
@@ -663,6 +663,14 @@ needs no CLI invocation.
 - `[path]` — explicit artifact JSON path. When omitted, resolves `.spur/reports/history/latest.json`
   (a symlink to the newest artifact, written by `analyze`). An explicit path wins (R6).
 - `--json` — emit the parsed artifact shape instead of the human report.
+- **Render-time narrowing (task 0564 R3):** `--task <wbs>` and `--top <n>` mirror `analyze`'s
+  flags exactly and narrow the already-loaded artifact JSON client-side — the renderer never gains
+  database access. `--task` renders only when the artifact's selector carried that task dimension
+  (the artifact WAS analyzed with `--task <wbs>`; its buckets are that task's rows); an artifact
+  with no task dimension, or one analyzed for a different task, exits 1 with a message naming the
+  artifact id and the missing/mismatched dimension — never a silent unfiltered render. `--top`
+  re-slices the `byTool`/`bySession` leaderboards to depth `n`. A narrowed render prints one banner
+  line naming the applied filter and the artifact id.
 - **Staleness banner (R7):** when the artifact is resolved via the `latest.json` pointer and is older
   than 36 hours, a `⚠ STALE ARTIFACT` banner prints before the report body — the daily loop may have
   stopped. Suppressed for explicit paths (the operator already knows the file's age).

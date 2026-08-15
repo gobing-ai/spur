@@ -31,6 +31,7 @@ import {
     loops,
     type MessageRollupRow,
     messageRollup,
+    narrowArtifact,
     RunSessionDao,
     renderMarkdown,
     resolveReportMode,
@@ -891,6 +892,11 @@ export interface RunHistoryReportResult {
     markdownPath: string;
     /** Parsed artifact (for `--json` consumers). */
     artifact: HistoryArtifact;
+    /**
+     * One banner line naming the applied narrowing and the artifact (task 0564 R3).
+     * Null when no narrowing was requested.
+     */
+    banner: string | null;
 }
 
 /**
@@ -898,14 +904,18 @@ export interface RunHistoryReportResult {
  * sidecar. This is the FS seam: it never opens the database (R1). Rendering is
  * delegated through the domain report-mode registry (`resolveReportMode`,
  * 0555 R1) — `default` reproduces the legacy {@link renderReport} output; this
- * function owns file resolution, version assertion (R4), and sidecar
- * persistence (R8).
+ * function owns file resolution, version assertion (R4), sidecar
+ * persistence (R8), and render-time narrowing (0564 R3).
  */
 export function runHistoryReport(opts: {
     path?: string;
     cwd: string;
     now?: Date;
     mode?: string;
+    /** Render-time task narrowing (mirrors `analyze --task`; 0564 R3). */
+    task?: string;
+    /** Render-time leaderboard depth (mirrors `analyze --top`; 0564 R3). */
+    top?: number;
 }): RunHistoryReportResult {
     const { path: artifactPath, resolution } = resolveArtifactPath(opts.path, opts.cwd);
 
@@ -920,15 +930,22 @@ export function runHistoryReport(opts: {
     const artifact = parsed as HistoryArtifact;
     assertArtifactVersion(artifact.schemaVersion ?? -1, artifactPath);
 
+    // R3 (0564): narrowing is client-side over the already-loaded artifact — never a
+    // database query. A narrowing the artifact cannot answer throws ArtifactNarrowError
+    // (exit 1 naming the artifact and the missing dimension), never a silent unfiltered
+    // render.
+    const narrowed = narrowArtifact(artifact, { task: opts.task, top: opts.top }, artifactPath);
+    const banner = narrowed.banner === null ? null : `Narrowed report — ${narrowed.banner} (artifact: ${artifactPath})`;
+
     const renderer = resolveReportMode(opts.mode ?? 'default');
-    const report = renderer(artifact);
-    const markdown = renderMarkdown(artifact, opts.mode);
+    const report = renderer(narrowed.artifact);
+    const markdown = renderMarkdown(narrowed.artifact, opts.mode);
     // Same basename, `.md` extension (R8) — an extensionless explicit path must
     // yield `<path>.md`, never clobber the artifact itself.
     const markdownPath = artifactPath.endsWith('.json') ? artifactPath.replace(/\.json$/, '.md') : `${artifactPath}.md`;
     writeFileSync(markdownPath, markdown);
 
-    return { report, artifactPath, resolution, markdownPath, artifact };
+    return { report, artifactPath, resolution, markdownPath, artifact: narrowed.artifact, banner };
 }
 // ---------------------------------------------------------------------------
 // Private helpers

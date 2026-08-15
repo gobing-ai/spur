@@ -52,6 +52,12 @@ export {
     toolRollup,
 } from './forensic-query';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
+export {
+    ArtifactNarrowError,
+    type ArtifactNarrowOptions,
+    type ArtifactNarrowResult,
+    narrowArtifact,
+} from './narrow-artifact';
 export { type ExtractedTokens, extractClaudeTokens } from './query';
 export { renderForensics } from './render-forensics';
 export {

@@ -167,18 +167,24 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
     noun.command('report')
         .description(
             'Render a previously-generated history artifact as a spend + forensic report. ' +
-                'Never opens the database — pure renderer of the analyze JSON.',
+                'Never opens the database — pure renderer of the analyze JSON. ' +
+                '--task / --top narrow the already-loaded artifact client-side (0564 R3).',
         )
         .argument('[path]', 'Artifact JSON path (defaults to the latest.json pointer)')
         .option('--json', 'Emit the parsed artifact as JSON instead of the human report')
         .option('--mode <name>', 'Report mode: default | forensics (registry-resolved; unknown names fail)')
+        .option('--task <wbs>', 'Narrow to a single task WBS the artifact was analyzed with')
+        .option('--top <n>', 'Leaderboard depth for byTool/bySession (re-slices the artifact)')
         .action(async (pathArg, options) => {
             try {
-                const { report, artifactPath, resolution, artifact } = runHistoryReport({
+                const topRaw = options.top !== undefined ? Number.parseInt(options.top, 10) : undefined;
+                const { report, artifactPath, resolution, artifact, banner } = runHistoryReport({
                     path: pathArg,
                     cwd: context.cwd,
                     now: new Date(),
                     mode: options.mode,
+                    task: options.task,
+                    top: topRaw !== undefined && Number.isFinite(topRaw) && topRaw > 0 ? topRaw : undefined,
                 });
                 if (options.json) {
                     context.output.write(toJson(artifact));
@@ -188,9 +194,12 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
 
                 // Staleness banner only when resolved via pointer, never on explicit path (R7).
                 if (resolution === 'pointer') {
-                    const banner = stalenessBanner(artifact.generatedAt, new Date());
-                    if (banner !== null) context.output.write(banner);
+                    const staleBanner = stalenessBanner(artifact.generatedAt, new Date());
+                    if (staleBanner !== null) context.output.write(staleBanner);
                 }
+
+                // Narrowing banner (R3, 0564): one line naming the applied filter and the artifact.
+                if (banner !== null) context.output.write(`${banner}\n`);
 
                 context.output.write(report);
                 context.output.write(`\n(artifact: ${artifactPath})\n`);

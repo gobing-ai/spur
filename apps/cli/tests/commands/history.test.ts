@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { HistoryService } from '@gobing-ai/spur-app';
 import {
     type CoverageEntry,
+    type DbAdapter,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
     SystemEventDao,
@@ -664,5 +665,179 @@ describe('CLI history events -> system_events ledger (0471 R2)', () => {
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }
+    });
+});
+
+// ─── Task 0564 R3: `history report` render-time narrowing (no database access) ───
+
+function makeToolStat(name: string, calls: number) {
+    return {
+        toolName: name,
+        calls,
+        errors: 0,
+        durationMsTotal: calls * 100,
+        durationMsMean: 100,
+        durationMsMax: 100,
+        durationUnmeasured: 0,
+        resultBytes: 0,
+    };
+}
+
+function makeSessionStat(id: string, source = 'claude') {
+    return {
+        sessionId: id,
+        source,
+        startedAt: null,
+        messages: 5,
+        toolCalls: 2,
+        tokens: 1_000,
+        costUsd: 0.1,
+        topTool: 'Bash',
+        assistantDurationMs: 0,
+        assistantDurationUnmeasured: 0,
+    };
+}
+
+/** A DbAdapter spy whose every data-path method fails if the render path touches it. */
+function noDbSpy(): DbAdapter {
+    return {
+        db: undefined as never,
+        exec: () => {
+            throw new Error('report must not exec SQL');
+        },
+        run: () => {
+            throw new Error('report must not run SQL');
+        },
+        queryFirst: () => {
+            throw new Error('report must not query the database');
+        },
+        queryAll: () => {
+            throw new Error('report must not query the database');
+        },
+        batch: () => {
+            throw new Error('report must not batch SQL');
+        },
+        close: () => undefined,
+    };
+}
+
+describe('history report render-time narrowing (0564 R3)', () => {
+    test('--task renders only that task rows with a banner naming filter and artifact', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact({
+            selector: { ...makeArtifact().selector, taskWbs: '0042' },
+            bySession: [makeSessionStat('sess-task-a'), makeSessionStat('sess-task-b')],
+            byTool: [makeToolStat('Bash', 3)],
+        });
+        const artifactPath = writeArtifactFile(cwd, 'task-a.json', artifact);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--task', '0042'], {
+            output,
+            cwd,
+            db: noDbSpy(),
+        });
+
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        // Banner names the applied filter AND the artifact id.
+        expect(joined).toContain('Narrowed report — task 0042');
+        expect(joined).toContain(artifactPath);
+        // The artifact's rows are rendered.
+        expect(joined).toContain('sess-task-a');
+        expect(joined).toContain('sess-task-b');
+        // No database connection is opened — the spy would have thrown.
+    });
+
+    test('--top re-slices leaderboards and never touches the database', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact({
+            byTool: [makeToolStat('t0', 5), makeToolStat('t1', 4), makeToolStat('t2', 3), makeToolStat('t3', 2)],
+            bySession: [makeSessionStat('s0'), makeSessionStat('s1'), makeSessionStat('s2'), makeSessionStat('s3')],
+        });
+        const artifactPath = writeArtifactFile(cwd, 'top.json', artifact);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--top', '2'], {
+            output,
+            cwd,
+            db: noDbSpy(),
+        });
+
+        expect(exitCode).toBe(0);
+        const joined = lines.join('');
+        expect(joined).toContain('Narrowed report — top 2');
+        expect(joined).toContain('Session leaderboard (2):');
+        // Re-sliced depth: top two rows survive, deeper rows are gone.
+        expect(joined).toContain('s0');
+        expect(joined).toContain('s1');
+        expect(joined).not.toContain('s2');
+        expect(joined).toContain('t0');
+        expect(joined).toContain('t1');
+        expect(joined).not.toContain('t2');
+    });
+
+    test('--task on an artifact with no task dimension exits 1 naming artifact id and missing dimension', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact(); // selector.taskWbs === null
+        const artifactPath = writeArtifactFile(cwd, 'no-task.json', artifact);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--task', '0042'], {
+            output,
+            cwd,
+            db: noDbSpy(),
+        });
+
+        expect(exitCode).toBe(1);
+        const joined = lines.join('');
+        expect(joined).toContain(artifactPath); // artifact id named
+        expect(joined).toContain('task'); // missing dimension named
+        expect(joined).toContain('0042');
+        // Never a silent unfiltered render.
+        expect(joined).not.toContain('Total:');
+    });
+
+    test('--task for a different task than the artifact was analyzed with exits 1', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact({
+            selector: { ...makeArtifact().selector, taskWbs: '0556' },
+            bySession: [makeSessionStat('sess-0556')],
+        });
+        const artifactPath = writeArtifactFile(cwd, 'other-task.json', artifact);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--task', '0042'], {
+            output,
+            cwd,
+            db: noDbSpy(),
+        });
+
+        expect(exitCode).toBe(1);
+        const joined = lines.join('');
+        expect(joined).toContain(artifactPath);
+        expect(joined).toContain('0556');
+        expect(joined).toContain('0042');
+    });
+
+    test('--task --json emits the narrowed artifact (narrowing applies before output)', async () => {
+        const cwd = makeTmpCwd();
+        const artifact = makeArtifact({
+            selector: { ...makeArtifact().selector, taskWbs: '0042' },
+            bySession: [makeSessionStat('sess-0042')],
+        });
+        const artifactPath = writeArtifactFile(cwd, 'task-json.json', artifact);
+        const { output, lines } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--task', '0042', '--json'], {
+            output,
+            cwd,
+            db: noDbSpy(),
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.join('')) as HistoryArtifact;
+        expect(parsed.selector.taskWbs).toBe('0042');
+        expect(parsed.bySession).toHaveLength(1);
     });
 });
