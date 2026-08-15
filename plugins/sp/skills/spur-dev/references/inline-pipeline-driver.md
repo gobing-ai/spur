@@ -73,10 +73,18 @@ Action semantics come from the YAML and the workflow action contract:
    and Spur task/run-artifact access.
 
 All four pass → dispatch. Any pre-dispatch failure → execute the stage **once** in the host session.
+An `agent.run` whose `input` is free-form prose rather than a pure slash command fails condition 2
+and is never dispatch-eligible: the driver executes it in the host session and logs it with the
+existing host-fallback line `stage <id> executed inline in session <session-id>` — it does not
+reformulate the prose into a command, spawn a subagent for it, or silently promote it to dispatch.
 No token estimate, stage-size threshold, model heuristic, or configuration switch is added.
 
 **Dispatch and join:** before dispatch, capture the same pre-action git snapshot used by
-`requireDiff` enforcement. Send only: the stage id, the YAML's exact pure slash command, and
+`requireDiff` enforcement, and resolve `answerFile`/`expectFile` against the worktree root — the
+resolved absolute path, not the YAML's relative string, is what the dispatched agent is instructed
+to write and what post-join validation reads. Resolving once at the dispatch boundary fixes every
+surface at once; a relative path would resolve against whatever cwd the writer process happens to
+have. Send only: the stage id, the YAML's exact pure slash command, and
 `execution surface already resolved: native subagent; do not dispatch this stage again`. The WBS/path
 already carried by the slash command is the handoff — do not paste task/session transcripts or embed
 machine-specific session paths. Dispatch exactly one native subagent and wait for it; the inline FSM

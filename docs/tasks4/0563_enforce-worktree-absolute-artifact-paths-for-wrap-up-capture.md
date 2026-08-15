@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Enforce worktree-absolute artifact paths for wrap-up capture steps"
 description: ""
-status: backlog
+status: done
 type: issue
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:15.539Z"
-updated_at: "2026-08-14T19:35:12.465Z"
+updated_at: "2026-08-15T21:58:08.982Z"
 ---
 
 ## 0563. Enforce worktree-absolute artifact paths for wrap-up capture steps
@@ -164,17 +164,58 @@ resolution in place the artifact lands in the worktree and the append consumes i
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+| --- | --- | --- |
+| `config/workflows/wrapup-pipeline.yaml` | 108-113 | `learning-capture` append shell gains an `else` branch: when `test -s .spur/run/wrapup-learnings.md` finds the artifact missing or empty, stderr gets `wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped` naming the resolved absolute path; `exit 0` retained so the soft append never aborts wrap-up (R1). `$PWD` survives the engine's `${vars.*}` interpolation — `resolveTemplates` expands only `${vars.X}`/`${env.X}` and does no shell expansion (confirmed against `packages/app/src/services/workflow/actions/shell.ts`; Q2 closed). |
+| `config/workflows/wrapup-pipeline.yaml` | 133-138 | `metrics-record` append shell gains the identical `else` branch with its own artifact path (`.spur/run/wrapup-metrics.jsonl`) and the word `metrics`, keeping `exit 0` — the second capture cannot regress the way the first did (R4). |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` | 82-86 | Dispatch-and-join paragraph now states `answerFile`/`expectFile` are resolved against the worktree root **before** dispatch; the resolved absolute path — not the YAML's relative string — is what the dispatched agent is instructed to write and what post-join validation reads. Resolving once at the dispatch boundary fixes every surface (R2). |
+| `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` | 75-80 | Beside the four eligibility conditions: an `agent.run` whose `input` is free-form prose (not a pure slash command) fails condition 2 and is never dispatch-eligible — the driver executes it in the host session, logs it with the existing host-fallback line `stage <id> executed inline in session <session-id>`, and neither reformulates the prose into a command nor spawns a subagent for it (R3). |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — missing/empty capture never silent; stderr names resolved absolute path; soft exit 0 | MET | config/workflows/wrapup-pipeline.yaml:110-111 (learning-capture `else` → `echo "wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped" >&2`), :113 (`exit 0`). Behavioral: missing artifact in temp cwd → exactly one stderr line `wrapup: learning capture missing or empty at /private/var/.../tmpXXXX/.spur/run/wrapup-learnings.md - append skipped` (=$PWD-resolved absolute path), exit 0, no learnings.md written. Empty artifact → same line, exit 0. `$PWD` reaches shell intact: engine resolveTemplates expands only `${vars.*}`/`${env.*}` (review-confirmed against dist/variables.js); bare `$PWD` unexpanded. |
+| R2 — capture artifacts worktree-absolute across dispatch boundary | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:82-87 (dispatch-and-join): "resolve `answerFile`/`expectFile` against the worktree root — the resolved absolute path, not the YAML's relative string, is what the dispatched agent is instructed to write and what post-join validation reads"; :86-87 names the failure mode ("a relative path would resolve against whatever cwd the writer process happens to have"). Consistent with engine surface: packages/app/src/workflow/actions/agent-run.ts resolves answerFile/expectFile against cwd with isAbsolute guard (review-verified). |
+| R3 — free-prose agent.run never dispatch-eligible, consequence stated | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:68-69 (condition 2: `agent.run` + pure slash command required) and :76-79 ("An `agent.run` whose `input` is free-form prose ... fails condition 2 and is never dispatch-eligible: the driver executes it in the host session and logs it with the existing host-fallback line `stage <id> executed inline in session <session-id>` — it does not reformulate the prose into a command, spawn a subagent for it, or silently promote it to dispatch"); :75 states the generic host-execute consequence; :99 confirms host-fallback line retained. |
+| R4 — metrics-record consistent with learning-capture | MET | config/workflows/wrapup-pipeline.yaml:133-138 (metrics-record append shell: `if test -s .spur/run/wrapup-metrics.jsonl; then ... else echo "wrapup: metrics capture missing or empty at $PWD/.spur/run/wrapup-metrics.jsonl - append skipped" >&2; fi && exit 0`); answerFile/expectFile declared identically at :126-127 (learning-capture at :100-101). Behavioral: empty metrics artifact → stderr names absolute metrics path, exit 0, no metrics file created; non-empty → appended to .spur/memory/wrapup-metrics.jsonl, no stderr line. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Review — sp:dev-review 0563 --auto** (SECUA + functional traceability + architecture depth; surface: `config/workflows/wrapup-pipeline.yaml` + `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: APPROVE — 0 P1/P2 (blocking), 2 P4 (informational). All four requirements PASS; AC R1-1/R1-2/R4 behaviorally verified by execution.**
 
+**Functional traceability**
+
+- **R1 PASS** — `config/workflows/wrapup-pipeline.yaml:110-111` (learning-capture `else`) emits `wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped` to stderr when `test -s` fails (missing or empty); `exit 0` retained at `:113`. AC R1-1 verified by execution: missing artifact -> exactly one stderr line naming the `$PWD`-resolved absolute path, exit 0, no `learnings.md` written. AC R1-2 verified: non-empty artifact -> contents appended to `.spur/memory/learnings.md`, no missing-artifact line. `$PWD` survival confirmed against engine source: `resolveTemplates` substitutes only `/\$\{([^}]+)\}/g` (`node_modules/@gobing-ai/ts-dual-workflow-engine/dist/variables.js:4,21-23`); bare `$PWD` is not matched and reaches the shell unexpanded (Q2 closed; corroborated by `packages/app/src/workflow/actions/file-read-into-var.ts:25-27` and `shell.ts:52-57`). YAML + embedded shell validated: `spur workflow validate` -> `workflow valid: wrapup-pipeline`.
+- **R4 PASS** — `config/workflows/wrapup-pipeline.yaml:135-136` (metrics-record `else`) is the identical shape with its own artifact path (`.spur/run/wrapup-metrics.jsonl`) and the word `metrics`; `exit 0` at `:138`. Verified by execution: empty metrics artifact -> stderr names absolute path, exit 0, no metrics file created. Both steps declare matching `answerFile`/`expectFile` (`:100-101`, `:123-124`) — AC R4 satisfied; the second capture cannot regress silently the way the first did.
+- **R2 PASS** — `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:82-86` (dispatch-and-join paragraph) states `answerFile`/`expectFile` are resolved against the worktree root before dispatch and that the resolved absolute path — not the YAML's relative string — is what the dispatched agent is instructed to write and what post-join validation reads. AC R2 satisfied. Contract is consistent with actual engine behavior: `packages/app/src/workflow/actions/agent-run.ts:150` (`cwd = options.cwd ?? context.workdir ?? '.'`) and `:323`/`:331` resolve both files against `cwd` with an `isAbsolute` guard — the reference now states for the inline surface exactly what the engine already does, so both surfaces agree.
+- **R3 PASS** — `inline-pipeline-driver.md:76-79`, placed immediately after the four eligibility conditions (`:62-73`) and the "All four pass" line (`:75`), states a free-prose `agent.run` fails condition 2 (pure slash command, `:62-66`), is never dispatch-eligible, is executed in the host session and logged with the existing host-fallback line `stage <id> executed inline in session <session-id>`, and is neither reformulated into a command nor spawned as a subagent. AC R3 satisfied (host-executed stated; driver consequence stated). Scope wording is accurate: the consequence names "the driver", so it does not falsely claim the engine never dispatches free-prose `agent.run` (the wrap-up capture design depends on engine dispatch).
+
+**SECUA**
+
+- Security: no new surface. The added lines are a static echo to stderr; `$PWD` is shell-expanded runtime data, not engine-pre-resolved template content; no secrets, no injection path, no new file writes.
+- Efficiency: one conditional stderr write on the failure path; zero cost on the happy path.
+- Correctness: `test -s` covers missing and empty (matches R1 wording); both branches terminate at `exit 0` (`fi && exit 0` — the else-branch last command `echo` succeeds); harness validation passes. All three branches (missing / present / empty) executed with expected output and exit code.
+- Usability: the failure that cost manual reconstruction (silent skip at 17:22:43) is now announced with the exact absolute path the append looked at — actionable for manual recovery.
+- Architecture: R1 is the executable backstop; R2/R3 are contract text in the model-interpreted inline driver reference — the correct home per Q3 (no host code path for inline runs). No new steps, guards, engine features, or hard-fail introduced; the diff is two `else` branches plus two reference paragraphs. Generated trees untouched — `git status` shows only the two target files plus pre-existing 0562 dirt (`.rulesync`/`apps/cli/plugins` clean).
+
+**Findings**
+
+| Severity | Location | Finding | Disposition |
+| --- | --- | --- | --- |
+| P4 | `config/workflows/wrapup-pipeline.yaml:107-113`, `inline-pipeline-driver.md:76-79` | Solution-table line ranges drift from the final files: R3 paragraph is :76-79 (table stated 75-80); learning-capture if-block is :107-113 (table stated 108-113). Cosmetic only; this Review cites actual lines. | Accept; no code impact. |
+| P4 | `inline-pipeline-driver.md:82-86` vs `packages/app/src/workflow/actions/agent-run.ts:150,323,331` | R2/R3 text binds only the inline-driver surface; the engine surface that produced the incident (wrap-up via `spur workflow run`) is covered by the engine's existing cwd-based answerFile resolution plus R1's stderr backstop, not by new binding text. Consistent with task Q3; residual risk: an explicit `options.cwd` on a future engine `agent.run` would move answerFile/expectFile resolution off-worktree and only R1's message would reveal it. | Accept as scoped; keep `options.cwd` unset in the wrap-up YAML. |
+
+**Residual risk**
+
+- Engine-side free-prose `agent.run` remains dispatch-capable by design (the capture steps depend on it); R3 constrains only the inline driver. R1 is the deterministic backstop for the engine path.
+- Pre-existing then-branch semantics unchanged: a failing `cat`/`printf` in learning-capture still fails the step before `exit 0` (not introduced by this diff; not in scope).
+- R1's message names the shell's `$PWD` (step execution cwd = worktree). If a future run ever executes the step from a foreign cwd, the message truthfully names where the append looked — the actionable fact — but would not name the worktree itself.
+
+**Disposition: APPROVE.** No P1/P2. R1-R4 fully implemented with behavior verified by execution (missing / present / empty branches), `spur workflow validate` green, and R2/R3 contract text accurate against engine source. Proceed to verification.
 ### References
 - Code (fix target): `config/workflows/wrapup-pipeline.yaml` — `learning-capture` (:88-111, `answerFile`/`expectFile` at :100-101) · `metrics-record` (:113-135, at :123-124). `.spur/workflows` is a symlink to this tree; never edit through it.
 - Contract (fix target): `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` — `agent.run` action semantics (:56-60), native-subagent eligibility conditions (:62-73), dispatch-and-join validation (:76-86). `.rulesync/**` and `apps/cli/plugins/**` copies are generated — do not edit.
@@ -183,3 +224,7 @@ resolution in place the artifact lands in the worktree and the append consumes i
 - Report: `docs/report/2026-08-14-E6-batch-forensic-report.md` §4 wrap item
 - Related: task 0508 (native-subagent-first dispatch) · task 0538 R2 (declared Layer-1 roles)
 ### History
+- 2026-08-15T21:50:29.440Z backlog → todo (system)
+- 2026-08-15T21:50:29.592Z todo → wip (system)
+- 2026-08-15T21:58:03.727Z wip → testing (system)
+- 2026-08-15T21:58:08.982Z testing → done (system)

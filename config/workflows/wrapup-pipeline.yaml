@@ -107,6 +107,8 @@ states:
             if test -s .spur/run/wrapup-learnings.md; then
               cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md &&
               printf '\n' >> .spur/memory/learnings.md;
+            else
+              echo "wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped" >&2;
             fi &&
             exit 0
 
@@ -130,6 +132,8 @@ states:
             mkdir -p .spur/memory &&
             if test -s .spur/run/wrapup-metrics.jsonl; then
               cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl;
+            else
+              echo "wrapup: metrics capture missing or empty at $PWD/.spur/run/wrapup-metrics.jsonl - append skipped" >&2;
             fi &&
             exit 0
 
