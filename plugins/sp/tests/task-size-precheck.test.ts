@@ -45,6 +45,34 @@ fi
     }
 });
 
+test('task-size-precheck honors SPUR_BIN when --spur-bin is absent (0539)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-env-'));
+    try {
+        const fakeSpur = join(dir, 'spur');
+        const marker = join(dir, 'env-rung-used');
+        writeFileSync(
+            fakeSpur,
+            `#!/bin/sh
+printf '%s\\n' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] x"}' > ${marker}
+printf '%s\\n' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] x"}'
+`,
+        );
+        chmodSync(fakeSpur, 0o755);
+
+        execFileSync('bun', [join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'), '0539'], {
+            cwd: dir,
+            stdio: 'pipe',
+            env: { ...process.env, SPUR_BIN: fakeSpur },
+        });
+
+        // The fake bin ran (marker) and the status file was written from its within-limits body.
+        expect(existsSync(marker)).toBe(true);
+        expect(readFileSync(join(dir, '.spur/run/0539-precheck-size.status'), 'utf8')).toBe('PASS\n');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('plugin large-task thresholds stay aligned with the application defaults', () => {
     const repoRoot = join(import.meta.dir, '..', '..', '..');
     const app = readFileSync(join(repoRoot, 'packages/app/src/services/task-size-precheck.ts'), 'utf8');

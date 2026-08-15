@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Inventory and repair plugins/sp and workflow YAML drift against the live spur CLI"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: I3
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0538"]
 ac_numbering: task-local
 created_at: "2026-08-13T23:28:17.604Z"
-updated_at: "2026-08-14T00:07:32.132Z"
+updated_at: "2026-08-15T07:13:55.294Z"
 ---
 
 ## 0539. Inventory and repair plugins/sp and workflow YAML drift against the live spur CLI
@@ -111,26 +111,42 @@ against the surface, it does not move the surface.
 **The inventory is an artifact, not a message.** Write it to a file the follow-up can cite, the way
 0347 produced `docs/tasks2/0347-inventory.md`.
 ### Plan
-- [ ] Confirm task 0538 is done before starting; re-read I2's findings and method (R1)
-- [ ] Enumerate every `spur` flag/verb/`--json` assertion across commands, skills, references, scripts, hooks (R1)
-- [ ] Check each mechanically where possible; mark the rest unverified with the reason (R1)
-- [ ] Validate and dry-run all ten `config/workflows/*.yaml`; confirm the `.spur/workflows` symlink target (R2)
-- [ ] Write the inventory to a citeable artifact file with the check method per entry (R1, R2)
-- [ ] Fix confirmed plugin/workflow drift; file CLI-surface changes for operator consent instead (R3)
-- [ ] File a task for any confirmed entry too large to fix here and record its WBS in the inventory (R3)
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Confirm task 0538 is done before starting; re-read I2's findings and method (R1)
+- [x] Enumerate every `spur` flag/verb/`--json` assertion across commands, skills, references, scripts, hooks (R1)
+- [x] Check each mechanically where possible; mark the rest unverified with the reason (R1)
+- [x] Validate and dry-run all ten workflow YAMLs via `.spur/workflows`; confirm the symlink target (R2)
+- [x] Write the inventory to a citeable artifact file with the check method per entry (R1, R2)
+- [x] Fix confirmed plugin/workflow drift; file CLI-surface changes for operator consent instead (R3)
+- [x] File a task for any confirmed entry too large to fix here and record its WBS in the inventory (R3)
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
+Implemented by sp-super-coder subagent (inline pipeline, run 22CB59EB-3226-4E60-8CCB-261509EE7876); Solution section appended by host after subagent timeout at final bookkeeping step.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- **R1 inventory script (re-runnable):** `plugins/sp/scripts/surface-drift-inventory.ts`. Methods: help-capture (live Commander help diff), json-exec (read-only `--json` envelope recording; mutating commands stay unverified), script-exec (fake-bin execution), file-resolution/json-parse, host-contract (recorded unverified, never passed). CLI provenance pinned to source-local entry @ 0.3.47.
+- **R1 inventory report:** `docs/tasks2/0539-inventory.md` — totals **278 ok · 0 mismatch · 8 unverified**, every entry names its check method. R1 scope: `plugins/sp/{commands,skills,scripts,hooks}`; R2 scope: all `config/workflows/*.yaml` + `.spur/workflows` symlink.
+- **R2 repairs from confirmed drift:**
+  - `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:116` — prose asserted a direct-CLI `--stage` flag on `agent run`; commander rejects it (`stage` is engine-internal only). Corrected.
+  - `plugins/sp/scripts/feature-sync-bounded.ts` + `task-size-precheck.ts` — CLI resolution repaired: source-local repo-root resolution (three `..` from `plugins/sp/scripts`), no PATH-`spur` dependence. (`--output` checked and confirmed real — `workflow trace`.)
+- **Tests:** targeted additions to `plugins/sp/tests/feature-sync-bounded.test.ts` (+22) and `task-size-precheck.test.ts` (+28) covering the resolution chain; 67/67 pass (137 expect() calls).
 
+Unverified items (8) are host-owned or mutating-command assertions with no mechanical check — recorded in the inventory, never marked passing.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Re-runnable inventory script `plugins/sp/scripts/surface-drift-inventory.ts` + artifact `docs/tasks2/0539-inventory.md`: 278 ok / 0 mismatch / 8 unverified, exit 0, reproduced at implement and again independently at review. Every entry carries file:line + check method; non-mechanically-checkable assertions recorded unverified with reason, never passing. Post-review fix removed the 16 `undefined:undefined` occurrence cells (arg-order defect). |
+| R2 | MET | All ten workflow definitions validated + dry-run walked by the live engine (`workflow-validate` / `workflow-dry-run` rows in artifact); `.spur/workflows` symlink realpath resolves to the tracked SSOT tree (`symlink-realpath` row ok; independently re-confirmed by review). |
+| R3 | MET | Final inventory: 0 confirmed mismatches remain — none recorded-and-ignored. Two confirmed drifts fixed in-task: dispatch-surface.md:116 `--stage` prose corrected (engine-internal only); plugin scripts' spur CLI resolution repaired to source-local repo-root with regression tests. No CLI-surface change made (ADR-051 consent gate respected); no entry was too large to fix here, so no WBS filing was needed. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 - **Prior pass to read first:** feature `I2` and its tasks — method and findings
 - **Inventory artifact precedent:** `docs/tasks2/0347-inventory.md` (task 0347's citeable inventory)
@@ -142,3 +158,6 @@ against the surface, it does not move the surface.
 - **Consent boundary:** ADR-051 — a mismatch whose correct fix is a CLI change is filed, not landed
 - **Upstream dependency:** task 0538 (role migration) must be `done` first
 ### History
+- 2026-08-15T07:13:48.028Z todo → wip (system)
+- 2026-08-15T07:13:48.615Z wip → testing (system)
+- 2026-08-15T07:13:55.294Z testing → done (system)

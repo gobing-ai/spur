@@ -112,9 +112,9 @@ environment as `SPUR_ROLE` (`RolePropagatingProcessExecutor`,
 `packages/app/src/services/agent-service.ts`). A child `spur agent run` reads it at resolution;
 a subagent that declares its own role (role selector, workflow `role:` step, explicit
 `--agent <role>`) resolves through that role's tier and records `roleOrigin: 'declared'`; one
-that declares nothing and carries no explicit `--stage` resolves through the inherited role's
-tier and records `roleOrigin: 'inherited'` (an explicit `--stage` routes through stage policy
-before the inherited branch — direct CLI only, the workflow action exposes no stage option).
+that declares nothing resolves through the inherited role's tier and records
+`roleOrigin: 'inherited'` (stage context is engine-internal — stage-registry policy and
+escalation — with no `--stage` CLI flag and no workflow step input; 0539 surface sweep).
 Nested fan-out applies the rule recursively by construction — a grandchild reads
 its parent's `SPUR_ROLE`, which the parent already set. An unknown inherited role (stale env)
 warns once and falls through to `agent.default`/priority — inheritance never hard-fails a

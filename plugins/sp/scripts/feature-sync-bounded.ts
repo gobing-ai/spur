@@ -20,7 +20,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // ── Local types (match packages/app FeatureService shapes; no package import) ───────────
@@ -241,9 +241,23 @@ through unchanged.
 
 Exit: 0 = sync handled (applied / no-op / suppressed-blocked / live-blocked).`;
 
+/**
+ * Resolve the spur CLI command in a monorepo-safe way:
+ * --spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`.
+ * The plugin's own CI always passes an explicit --spur-bin; this fallback chain
+ * keeps ad-hoc invocations from silently hitting a stale PATH install.
+ */
+export function defaultSpurBin(): string {
+    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts
+    const local = new URL('../../../apps/cli/src/index.ts', import.meta.url).pathname;
+    if (existsSync(local)) return `bun ${local}`;
+    return 'spur';
+}
+
 export function parseBoundedSyncCliArgs(argv: string[]): BoundedSyncCliArgs {
     let featureId = '';
-    let spurBin = 'spur';
+    let spurBin = defaultSpurBin();
     let runDir = '.spur/run';
     let json = false;
     let help = false;
@@ -411,6 +425,16 @@ function invokeLiveSync(
     } catch {
         // Unparseable sync output — surface it raw rather than guessing.
         return { exitCode: r.exitCode, stdout: r.stdout, stderr: '' };
+    }
+    // Shape guard (review finding 1): a parseable envelope that is not a FeatureSyncResult
+    // (missing `proposal`) must fail loudly with a message, not a TypeError in
+    // classifySyncResult. Mirrors the validation the read side already performs.
+    if (!result || typeof result !== 'object' || !result.proposal) {
+        return {
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: 'unrecognized feature sync envelope: missing proposal',
+        };
     }
 
     // If we have no fingerprint (pre-check fallback path), recompute minimal signals so we can

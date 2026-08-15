@@ -66,6 +66,20 @@ function usage(): never {
     process.exit(1);
 }
 
+/**
+ * Resolve the spur CLI command in a monorepo-safe way:
+ * --spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`.
+ * The plugin's own CI always passes an explicit --spur-bin; this fallback chain
+ * keeps ad-hoc invocations from silently hitting a stale PATH install.
+ */
+function defaultSpurBin(): string {
+    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts
+    const local = new URL('../../../apps/cli/src/index.ts', import.meta.url).pathname;
+    if (existsSync(local)) return `bun ${local}`;
+    return 'spur';
+}
+
 function parseArgs(argv: string[]): {
     wbs: string;
     spurBin: string;
@@ -73,7 +87,7 @@ function parseArgs(argv: string[]): {
     maxPlanItems: number;
     executor: string;
 } {
-    let spurBin = process.env.SPUR_BIN ?? 'spur';
+    let spurBin = defaultSpurBin();
     let wbs = '';
     let maxReqs = Number(process.env.MAX_IMPLEMENT_REQS) || 5;
     let maxPlanItems = Number(process.env.MAX_IMPLEMENT_PLAN_ITEMS) || 8;
@@ -83,7 +97,7 @@ function parseArgs(argv: string[]): {
     while (i < argv.length) {
         const arg = argv[i];
         if (arg === '--spur-bin') {
-            spurBin = argv[i + 1] ?? 'spur';
+            spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;
         } else if (arg === '--max-reqs') {
             maxReqs = Number(argv[i + 1]) || 5;

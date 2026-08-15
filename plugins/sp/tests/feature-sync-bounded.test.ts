@@ -8,6 +8,7 @@ import {
     classifySyncResult,
     computeFingerprint,
     decideBoundedSync,
+    defaultSpurBin,
     type FeatureSyncResult,
     parseBlockedState,
     parseBoundedSyncCliArgs,
@@ -16,6 +17,25 @@ import {
     serializeBlockedState,
     shouldSuppressBlocked,
 } from '../scripts/feature-sync-bounded';
+
+describe('defaultSpurBin (monorepo-safe CLI resolution, 0539)', () => {
+    const prev = process.env.SPUR_BIN;
+    afterEach(() => {
+        if (prev === undefined) delete process.env.SPUR_BIN;
+        else process.env.SPUR_BIN = prev;
+    });
+
+    test('SPUR_BIN env wins over every other rung', () => {
+        process.env.SPUR_BIN = '/custom/spur';
+        expect(defaultSpurBin()).toBe('/custom/spur');
+    });
+
+    test('falls back to the monorepo-local CLI entry before PATH spur', () => {
+        delete process.env.SPUR_BIN;
+        const repoRoot = join(import.meta.dir, '..', '..', '..');
+        expect(defaultSpurBin()).toBe(`bun ${join(repoRoot, 'apps/cli/src/index.ts')}`);
+    });
+});
 
 // ── fixtures ────────────────────────────────────────────────────────────────────────────
 
@@ -314,7 +334,7 @@ describe('parseBoundedSyncCliArgs', () => {
     test('minimal: featureId only, defaults applied', () => {
         const a = parseBoundedSyncCliArgs(['H9']);
         expect(a.featureId).toBe('H9');
-        expect(a.spurBin).toBe('spur');
+        expect(a.spurBin).toBe(defaultSpurBin()); // 0539: default is monorepo-local, not PATH spur
         expect(a.runDir).toBe('.spur/run');
         expect(a.json).toBe(false);
         expect(a.help).toBe(false);
@@ -611,6 +631,24 @@ describe('runBoundedCli — I/O layer (subprocess mocking)', () => {
         expect(err).toBe('');
         // No state file.
         expect(Bun.file(statePath).size).toBe(0);
+    });
+
+    test('live sync envelope missing proposal → loud structured failure, no TypeError (review F1)', () => {
+        restoreSpawn = mockSpawnSync((cmd) => {
+            if (cmd.includes('show')) return { stdout: JSON.stringify({ content: 'feat' }), stderr: '', exitCode: 0 };
+            if (cmd.includes('list'))
+                return { stdout: JSON.stringify([{ wbs: '0411', status: 'done' }]), stderr: '', exitCode: 0 };
+            // Parseable JSON that is NOT a FeatureSyncResult (plain ack, no `proposal`).
+            if (cmd.includes('sync')) return { stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+            return { stdout: '', stderr: '', exitCode: 0 };
+        });
+
+        const statePath = blockedStateFile('H9', tmpDir);
+        const { result } = captureOutput(() => runBoundedCli(['H9', '--run-dir', tmpDir, '--json']));
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('"ok":true'); // raw envelope surfaced, not swallowed
+        expect(result.stderr).toContain('missing proposal'); // loud reason, not a TypeError
+        expect(Bun.file(statePath).size).toBe(0); // nothing persisted from garbage
     });
 
     test('second call with identical inputs → suppresses (no feature sync invoked)', () => {
