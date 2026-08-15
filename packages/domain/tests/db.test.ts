@@ -10,6 +10,8 @@ import {
     createQueueConsumer,
     dbHealthCheck,
     enqueueCoalesced,
+    findPendingQueueJob,
+    updatePendingQueueJob,
 } from '../src/db';
 
 /**
@@ -264,6 +266,222 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
             });
             expect(after.status).toBe('enqueued');
             expect((await rows(db)).length).toBe(2);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('join without mergePayload replaces the pending payload with the incoming one', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                now: () => t0,
+            });
+            const second = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0 + 1, end: t0 + 1 },
+                debounceMs: 60_000,
+                now: () => t0 + 1,
+            });
+            expect(second.status).toBe('coalesced');
+            expect(second.payload).toEqual({ start: t0 + 1, end: t0 + 1 });
+            const all = await rows(db);
+            expect(all.length).toBe(1);
+            expect(JSON.parse(all[0]?.payload ?? '{}')).toEqual({ start: t0 + 1, end: t0 + 1 });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('retries when the pending job is claimed between read and update', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                now: () => t0,
+            });
+
+            const original = db.queryFirst.bind(db);
+            db.queryFirst = (async <T>(sql: string, ...params: unknown[]) => {
+                const row = await original<T>(sql, ...params);
+                if (
+                    typeof sql === 'string' &&
+                    sql.includes('SELECT id, payload FROM queue_jobs') &&
+                    row !== undefined &&
+                    row !== null &&
+                    typeof row === 'object' &&
+                    'id' in row
+                ) {
+                    await db.run(
+                        "UPDATE queue_jobs SET status = 'processing' WHERE id = ?",
+                        (row as { id: string }).id,
+                    );
+                }
+                return row;
+            }) as typeof db.queryFirst;
+
+            const after = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0 + 1, end: t0 + 1 },
+                debounceMs: 60_000,
+                mergePayload: mergeWindow,
+                now: () => t0 + 1,
+            });
+            // Pass 0: INSERT conflicts, SELECT finds the pending row, we claim it,
+            // UPDATE misses, loop continues. Pass 1: INSERT wins (processing is
+            // invisible to the unique pending index).
+            expect(after.status).toBe('enqueued');
+            expect((await rows(db)).length).toBe(2);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('throws after three failed enqueue attempts when no insert can land', async () => {
+        const db = mockDb(false);
+        db.queryFirst = async () => undefined;
+        await expect(
+            enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { x: 1 },
+                debounceMs: 1000,
+                now: () => 1,
+            }),
+        ).rejects.toThrow('enqueueCoalesced: could not enqueue history.refresh after 3 attempts');
+    });
+
+    test('fallback insert after three claimed-mid-merge passes still enqueues', async () => {
+        const db = mockDb(false);
+        let inserts = 0;
+        db.queryFirst = async <T>(sql?: string) => {
+            const text = String(sql ?? '');
+            if (text.includes('INSERT INTO queue_jobs')) {
+                inserts += 1;
+                // Three loop-body inserts miss; the post-loop fallback lands.
+                if (inserts <= 3) return undefined as T;
+                return { id: 'fallback-id' } as T;
+            }
+            return undefined as T;
+        };
+        const result = await enqueueCoalesced(db, {
+            type: 'history.refresh',
+            payload: { x: 1 },
+            debounceMs: 1000,
+            now: () => 1,
+        });
+        expect(result).toEqual({ status: 'enqueued', jobId: 'fallback-id', payload: { x: 1 } });
+        expect(inserts).toBe(4);
+    });
+});
+
+describe('findPendingQueueJob / updatePendingQueueJob', () => {
+    test('findPendingQueueJob returns undefined when no pending row exists', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            expect(await findPendingQueueJob(db, 'history.refresh')).toBeUndefined();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('findPendingQueueJob returns the oldest pending job of that type', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const first = await enqueueCoalesced(db, {
+                type: 'demo',
+                payload: { n: 1 },
+                debounceMs: 1000,
+                now: () => 10,
+            });
+            await enqueueCoalesced(db, {
+                type: 'demo',
+                payload: { n: 2 },
+                debounceMs: 1000,
+                now: () => 20,
+            });
+            const found = await findPendingQueueJob<{ n: number }>(db, 'demo');
+            expect(found).toEqual({ id: first.jobId, payload: { n: 1 } });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('findPendingQueueJob ignores processing jobs and other types', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { n: 1 },
+                debounceMs: 1000,
+                now: () => 1,
+            });
+            await db.run("UPDATE queue_jobs SET status = 'processing' WHERE type = 'history.refresh'");
+            await enqueueCoalesced(db, {
+                type: 'other',
+                payload: { n: 2 },
+                debounceMs: 1000,
+                now: () => 2,
+            });
+            expect(await findPendingQueueJob(db, 'history.refresh')).toBeUndefined();
+            const other = await findPendingQueueJob<{ n: number }>(db, 'other');
+            expect(other?.payload).toEqual({ n: 2 });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('findPendingQueueJob returns undefined when the pending payload is not JSON', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES (?, ?, ?, 'pending', 0, 3, ?, ?)`,
+                'bad-json',
+                'history.refresh',
+                'not-json',
+                1,
+                1,
+            );
+            expect(await findPendingQueueJob(db, 'history.refresh')).toBeUndefined();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('updatePendingQueueJob replaces payload and nextRetryAt on a live row', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const first = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { n: 1 },
+                debounceMs: 1000,
+                now: () => 10,
+            });
+            const id = await updatePendingQueueJob(db, first.jobId, { n: 9 }, 99);
+            expect(id).toBe(first.jobId);
+            const found = await findPendingQueueJob<{ n: number }>(db, 'history.refresh');
+            expect(found).toEqual({ id: first.jobId, payload: { n: 9 } });
+            const row = await db.queryFirst<{ next_retry_at: number }>(
+                'SELECT next_retry_at FROM queue_jobs WHERE id = ?',
+                first.jobId,
+            );
+            expect(row?.next_retry_at).toBe(99);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('updatePendingQueueJob returns undefined when the job is gone', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            expect(await updatePendingQueueJob(db, 'missing-id', { n: 1 }, 1)).toBeUndefined();
         } finally {
             db.close();
         }

@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.539Z"
-updated_at: "2026-08-14T21:18:22.766Z"
+updated_at: "2026-08-15T05:24:02.345Z"
 ---
 
 ## 0548. Measure incremental import and analyze cost on real data with provenance
@@ -35,22 +35,22 @@ This task produces the number, with that provenance recorded. It gates tasks 054
 sub-second refresh may fire liberally; a multi-second one is background-only with a wide coalescing
 window.
 ### Requirements
-- [ ] **R1.** Measure elapsed cost of an incremental `spur history import` across the six
+- [x] **R1.** Measure elapsed cost of an incremental `spur history import` across the six
       full-fidelity sources (claude, codex, pi, omp, agy, grok) on this machine's real session data,
       in the steady state — i.e. shortly after a previous import, which is the condition the trigger
       will actually run in. Measurable: a recorded wall-clock figure per source and in total.
-- [ ] **R2.** Measure elapsed cost of the `analyze` pass that follows it, separately from import, so
+- [x] **R2.** Measure elapsed cost of the `analyze` pass that follows it, separately from import, so
       the two can be triggered at different cadences if the numbers differ materially. Measurable: a
       recorded figure for analyze independent of import.
-- [ ] **R3.** Record the provenance header for every measured invocation — the resolved binary and
+- [x] **R3.** Record the provenance header for every measured invocation — the resolved binary and
       the `@gobing-ai/ts-llm-jsonl-importer` version — and use a source-local binary
       (`bun run apps/cli/src/index.ts …` or the built `apps/cli/spur.js`), never a bare global `spur`.
       A measurement without provenance is not evidence. Measurable: each recorded figure carries its
       header.
-- [ ] **R4.** Measure the cold/backlogged case as a bound, not just the steady state: elapsed cost
+- [x] **R4.** Measure the cold/backlogged case as a bound, not just the steady state: elapsed cost
       when a meaningful backlog of unimported sessions exists. This is what the first trigger firing
       after an idle period will pay. Measurable: a recorded figure with the backlog size stated.
-- [ ] **R5.** Write the measurements to a citeable artifact and state the design consequence
+- [x] **R5.** Write the measurements to a citeable artifact and state the design consequence
       explicitly: whether the trigger may run per-operation, or must be background-only with a
       coalescing window, and what window size the numbers imply. Measurable: the artifact names a
       recommended cadence and the figures it follows from.
@@ -151,13 +151,13 @@ Verified against the current tree 2026-08-13.
 this artifact (0549 R4 requires the window be traceable to a figure here). A missing or vague
 recommendation blocks them.
 ### Plan
-- [ ] Confirm a source-local binary is in use and its provenance header prints (R3)
-- [ ] Measure steady-state incremental import across the six full-fidelity sources, per source and total (R1)
-- [ ] Measure the analyze pass separately from import (R2)
-- [ ] Measure the backlogged case with the backlog size recorded (R4)
-- [ ] Record every figure with its provenance header (R3)
-- [ ] Write the citeable artifact with figures, conditions, and the recommended trigger cadence (R5)
-- [ ] Run `bun run autofix && bun run spur-check` (no product code expected to change)
+- [x] Confirm a source-local binary is in use and its provenance header prints (R3)
+- [x] Measure steady-state incremental import across the six full-fidelity sources, per source and total (R1)
+- [x] Measure the analyze pass separately from import (R2)
+- [x] Measure the backlogged case with the backlog size recorded (R4)
+- [x] Record every figure with its provenance header (R3)
+- [x] Write the citeable artifact with figures, conditions, and the recommended trigger cadence (R5)
+- [x] Run `bun run autofix && bun run spur-check` (no product code expected to change)
 ### Solution
 Measurement task — no product code changed. Output is the citeable artifact
 `docs/tasks4/0548-import-cost-measurement.md` (precedent: `docs/tasks2/0347-inventory.md`).
@@ -182,22 +182,29 @@ Plan item "Run `bun run autofix && bun run spur-check`" is intentionally left to
 hop (implement-scope rule: the full project gate is never run from inside implement; no product code
 changed, so the gate has nothing new to evaluate).
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-15** (`/sp-dev-verifyall --feature E3 --force --fix all`). Status guard bypassed with `--force` (task already `done`). `--next: no-op — task already terminal (done)`.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `docs/tasks4/0548-import-cost-measurement.md:40-55` — steady-state per-source wall figures (claude 2.13 s, codex 1.50 s, pi 1.60 s, omp 3.51 s, agy 2.11 s, grok 3.02 s; re-read this run), six-run sum 13.87 s (sum re-computed ✓), `--source all` fan-out 20.64 s / 4,593 files / 24 new records, fixed overhead 0.59 s isolated via `--source openclaw` |
-| R2 | MET | `docs/tasks4/0548-import-cost-measurement.md:57-65` — analyze timed in a separate process, never bundled with import: 9.17 s / 8.40 s over 1,534,579 records · 215,304 tool calls |
-| R3 | MET | `docs/tasks4/0548-import-cost-measurement.md:7-21` — Provenance section: source-local binary path + `@gobing-ai/ts-llm-jsonl-importer@0.4.33`, every run `--json`. Independently verified this run: fresh dry-run `bun run apps/cli/src/index.ts history import --source pi --file <small> --mode force-file --dry-run --json` printed `provenance: {binary: …/apps/cli/src/index.ts, importer: "0.4.33"}`; `apps/cli/src/commands/history.ts:118-122` embeds `provenance` in the JSON payload (`resolveImportProvenance` at `history.ts:25-38`); installed `node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json` reads `"version": "0.4.33"` |
-| R4 | MET | `docs/tasks4/0548-import-cost-measurement.md:67-93` — both bounds with backlog size stated: (a) maximal empty-DB 359.1 s / 4,560 files / 1,718,277 records (sums re-computed ✓); (b) realistic 72 h-idle 334 files / 248,156 lines (pi 57 + claude 11 + codex 23 + omp 144 + grok 99 + agy 0 = 334 ✓) → 23.17 s / 34 net inserts; ledger-dedup mechanism verified at `node_modules/@gobing-ai/ts-llm-jsonl-importer/dist/jsonl-importer-dao.js:65` (`record_hash TEXT PRIMARY KEY`) and `:134` (`SELECT record_hash FROM history_import_ledger`) |
-| R5 | MET | `docs/tasks4/0548-import-cost-measurement.md:121-144` — "Design consequence (R5)": import background-only + single-flight + 10-minute coalescing window (5-min floor; duty 20.64/600 ≈ 3.4 % ✓), analyze decoupled and chained after completed imports; scope recommendation (six full-fidelity sources) derived from named figures (13.9 s vs 20.6 s) |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/tasks4/0548-import-cost-measurement.md:40-55` — steady-state per-source walls (claude 2.13 s, codex 1.50 s, pi 1.60 s, omp 3.51 s, agy 2.11 s, grok 3.02 s); six-run sum 13.87 s (recomputed this run); `--source all` fan-out 20.64 s / 4,593 files / 24 new records; fixed overhead 0.59 s via `--source openclaw` |
+| R2 | MET | `docs/tasks4/0548-import-cost-measurement.md:57-65` — analyze timed in a separate process: 9.17 s / 8.40 s over 1,534,579 records · 215,304 tool calls |
+| R3 | MET | `docs/tasks4/0548-import-cost-measurement.md:7-21` — provenance for every measured figure (source-local binary + `@gobing-ai/ts-llm-jsonl-importer@0.4.33`). Fresh this run: `bun run apps/cli/src/index.ts history import --source openclaw --mode incremental --dry-run --json` printed `provenance.binary=/Users/robin/xprojects/spur-new/apps/cli/src/index.ts` and `provenance.importer=0.4.32`. Resolver: `apps/cli/src/commands/history.ts:25-38` (`resolveImportProvenance`). Hoisted `node_modules/@gobing-ai/ts-llm-jsonl-importer/package.json` reads `0.4.33`; `createRequire` from the CLI resolved a bun-store `0.4.32` copy. Measurement recorded the version it actually ran. |
+| R4 | MET | `docs/tasks4/0548-import-cost-measurement.md:67-93` — (a) maximal empty-DB 359.1 s / 4,560 files / 1,718,277 records (sums recomputed this run); (b) 72 h-idle 334 files / 248,156 lines → 23.17 s / 34 net inserts |
+| R5 | MET | `docs/tasks4/0548-import-cost-measurement.md:121-144` — import background-only + single-flight + 10-minute coalescing window (5-min floor; duty 20.64/600 ≈ 3.4 %); analyze decoupled and chained after completed imports |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 — The cost of an incremental refresh is measured before it is wired | MET | command | Fresh dry-run this turn (`bun run apps/cli/src/index.ts history import … --dry-run --json`) shows elapsed-run provenance field (`binary:` + `importer: 0.4.33`); artifact `docs/tasks4/0548-import-cost-measurement.md:7-21` records binary + importer version for every measured figure; `git status` confirms the diff is docs-only — no trigger wiring exists |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — The cost of an incremental refresh is measured before it is wired | MET | command | Fresh this run: `bun run apps/cli/src/index.ts history import --source openclaw --mode incremental --dry-run --json` exit 0 with `provenance.binary` + `provenance.importer`; elapsed + provenance recorded together in `docs/tasks4/0548-import-cost-measurement.md:7-21` and figures at `:40-55`, `:57-65`, `:67-93`; design consequence at `:121-144`; no trigger wiring in the 0548 deliverable |
+
+**Design conformance:** DONE — docs-only measurement artifact, no product code (as designed). CHANGED (documented) — "prefer `--dry-run`" superseded by real writes, stated in Method (`:33`).
+
+**SECUA:** P4 only — live `createRequire` can resolve a bun-store importer copy (`0.4.32`) different from the hoisted `package.json` (`0.4.33`). Does not invalidate the recorded measurement.
+
+Coverage: N/A (documentation-only change; no runtime code path added).
 ### Review
 **Review verdict: PASS** — all five requirements MET, the Gherkin AC MET, no P1–P3 findings. Diff scope (re-derived this run): `docs/tasks4/0548-import-cost-measurement.md` (new, 144 lines — the task's entire deliverable) + this task file's Solution/Testing. No product code changed (`git status`: docs-only), matching the task Design ("measurement task, no product code changes").
 

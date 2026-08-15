@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0549"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.978Z"
-updated_at: "2026-08-15T00:00:14.057Z"
+updated_at: "2026-08-15T05:49:58.771Z"
 ---
 
 ## 0550. Watermark live sessions and report refresh coverage honestly
@@ -33,21 +33,21 @@ codex, pi, omp, agy, grok); five are unsupported by operator ruling 2026-08-06 (
 antigravity-ide, openclaw, hermes). A refresh that reports success without saying what it skipped
 invites the reader to assume completeness.
 ### Requirements
-- [ ] **R1.** Define and implement a watermark policy for still-appending sessions: `analyze` computes
+- [x] **R1.** Define and implement a watermark policy for still-appending sessions: `analyze` computes
       derived values only up to a defensible boundary (the last complete turn), and a session past
       that boundary is marked in progress rather than final. Measurable: analyzing a session file
       that grows between two refreshes yields values consistent with the completed portion at each
       point, and never values derived from a partial turn.
-- [ ] **R2.** An in-progress session is distinguishable from a finished one in the analyze output, so
+- [x] **R2.** An in-progress session is distinguishable from a finished one in the analyze output, so
       a consumer can choose to exclude it. Measurable: the result marks each session's completeness
       state, and a consumer filtering on it gets only finished sessions.
-- [ ] **R3.** A refresh reports which sources it refreshed and which it skipped as unsupported,
+- [x] **R3.** A refresh reports which sources it refreshed and which it skipped as unsupported,
       rather than reporting bare success. Measurable: the refresh result enumerates refreshed and
       skipped sources by name.
-- [ ] **R4.** A refresh states the window it covered, so a consumer can tell current data from stale.
+- [x] **R4.** A refresh states the window it covered, so a consumer can tell current data from stale.
       Measurable: the result carries the covered window, and a consumer reading it can determine
       recency without inspecting the database.
-- [ ] **R5.** Re-analyzing a session after it completes supersedes the in-progress result rather than
+- [x] **R5.** Re-analyzing a session after it completes supersedes the in-progress result rather than
       duplicating it. A session analyzed three times while running and once after must contribute one
       final set of derived values. Measurable: repeated refreshes over a growing session leave one
       final record, not four.
@@ -157,14 +157,14 @@ analysis routine rather than exceptional.
 **Leaves for dependents:** task **0547** (feature J6, batch 2) can filter on `sessionState` to exclude
 in-progress sessions from token totals. This task defines the state; 0547 chooses how to use it.
 ### Plan
-- [ ] Define the watermark as the last complete turn and document the per-source ambiguity rule (R1)
-- [ ] Compute derived values only up to the watermark; never from a partial turn (R1)
-- [ ] Mark each session's completeness state in the analyze output (R2)
-- [ ] Supersede an in-progress result when the session is re-analyzed after completion (R5)
-- [ ] Report refreshed and skipped sources by name in the refresh result (R3)
-- [ ] Report the covered window in the refresh result (R4)
-- [ ] Add tests: growing-session watermark, in-progress filtering, supersede-not-duplicate, coverage reporting (R1-R5)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Define the watermark as the last complete turn and document the per-source ambiguity rule (R1)
+- [x] Compute derived values only up to the watermark; never from a partial turn (R1)
+- [x] Mark each session's completeness state in the analyze output (R2)
+- [x] Supersede an in-progress result when the session is re-analyzed after completion (R5)
+- [x] Report refreshed and skipped sources by name in the refresh result (R3)
+- [x] Report the covered window in the refresh result (R4)
+- [x] Add tests: growing-session watermark, in-progress filtering, supersede-not-duplicate, coverage reporting (R1-R5)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
@@ -245,46 +245,52 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/domain/src/analytics/forensic-query.ts:470` |
 | `packages/domain/src/analytics/index.ts:88` |
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-15** (`/sp-dev-verifyall --feature E3 --force --fix all`). Status guard bypassed with `--force` (task already `done`). `--next: no-op — task already terminal (done)`.
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `packages/domain/src/analytics/watermark.ts:145-158` — completeness predicate = last non-meta message is assistant-like with no open tool call (`EXISTS` against `history_tool_call` at `:101`); trailing partial turn excluded via `buildWatermarkFilter` (`:169-177`). Tests: `packages/domain/tests/analytics/watermark.test.ts:96` (user-final in-progress truncates at last closer), `:262` (growing in-progress session contributes only completed portion to totals — 30 tokens not 80), `:298` (derived `sessionSpans` exclude the partial turn). 0 fail this run (16 pass in watermark suite). |
-| R2 | MET | `packages/domain/src/analytics/artifact.ts:106` — additive `sessionState?: SessionState` on `SessionStat`; wired per-session at `packages/app/src/services/history-service.ts:383` (absent ⇒ 'complete' fallback). Tests: `packages/app/tests/services/history-service.test.ts:337` (in-progress mark), `:368` (complete mark). |
-| R3 | MET | `packages/app/src/services/history-service.ts:221-233` — `buildRefreshCoverage` reports `refreshed` (full-fidelity sources, non-failed) and `skipped` (five unsupported by 2026-08-06 ruling); carried on `DailyResult.coverage` (`:173`). CLI prints it `apps/cli/src/commands/history.ts:372`. Test: `packages/app/tests/services/history-service.test.ts:815` (6 refreshed vs 5 skipped by name). |
-| R4 | MET | `coverage.window` = MIN/MAX message ts via `dataWindow` (`packages/domain/src/analytics/watermark.ts:196-205`), assembled at `packages/app/src/services/history-service.ts:231-233`. Tests: `packages/app/tests/services/history-service.test.ts:830` (window asserted), `packages/domain/tests/analytics/watermark.test.ts:311` (null + non-null window). |
-| R5 | MET | One `bySession` record per session rebuilt from DB each analyze; artifact written as a per-selector-digest snapshot (overwrite + `latest.json` pointer) at `packages/app/src/services/history-service.ts:776-795`. Test: `packages/app/tests/services/history-service.test.ts:417-439` — 3 analyzes while running + 1 after completion ⇒ ONE complete record (4 messages), never four partials. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/watermark.ts:145-158` — completeness = last non-meta message is assistant-like with no open tool call (`EXISTS` against `history_tool_call` at `packages/domain/src/analytics/watermark.ts:101`); trailing partial turn excluded via `buildWatermarkFilter` (`packages/domain/src/analytics/watermark.ts:169-178`). Tests this run (16 pass / 0 fail): `packages/domain/tests/analytics/watermark.test.ts:96` (user-final in-progress), `packages/domain/tests/analytics/watermark.test.ts:181` (role=unknown regression), `packages/domain/tests/analytics/watermark.test.ts:267` (growing session totals 30 not 80), `packages/domain/tests/analytics/watermark.test.ts:334` (`sessionSpans` exclude partial turn). `packages/domain/src/analytics/watermark.ts` 100% line/func coverage this run. |
+| R2 | MET | `packages/domain/src/analytics/artifact.ts:106` — additive `sessionState?: SessionState` on `SessionStat`; wired at `packages/app/src/services/history-service.ts:383` (absent ⇒ `'complete'` fallback). Tests this run (0 fail): `packages/app/tests/services/history-service.test.ts:327` (in-progress mark + partial excluded), `packages/app/tests/services/history-service.test.ts:370` (complete mark). |
+| R3 | MET | `packages/app/src/services/history-service.ts:221-230` — `buildRefreshCoverage` reports `refreshed` (full-fidelity, non-failed) and `skipped` (five unsupported); on `DailyResult.coverage` (`packages/app/src/services/history-service.ts:173`). CLI prints it `apps/cli/src/commands/history.ts:372`. Test this run (0 fail): `packages/app/tests/services/history-service.test.ts:830` (6 refreshed vs 5 skipped by name). |
+| R4 | MET | `coverage.window` = MIN/MAX message ts via `dataWindow` (`packages/domain/src/analytics/watermark.ts:196-206`), assembled at `packages/app/src/services/history-service.ts:228-229`. Tests this run (0 fail): `packages/app/tests/services/history-service.test.ts:830` (window asserted), `packages/domain/tests/analytics/watermark.test.ts` dataWindow cases. |
+| R5 | MET | One `bySession` record per session rebuilt from DB each analyze; artifact overwrite + `latest.json` pointer at `packages/app/src/services/history-service.ts:779-795`. Test this run (0 fail): `packages/app/tests/services/history-service.test.ts:404` — analyzes while running + one after ⇒ ONE complete record (4 messages), never four partials. |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| R4 — A still-appending session is not analyzed as complete | MET | test | `packages/domain/tests/analytics/watermark.test.ts:96` (session ending on user message ⇒ `in-progress`, truncates after last turn closer); `packages/app/tests/services/history-service.test.ts:417` (in-progress during run, `messages: 2` — partial turn excluded) |
-| R5 — A refresh reports its coverage | MET | test | `packages/app/tests/services/history-service.test.ts:815` (refreshed 6 / skipped 5 by name + window `{ since, until }`); `apps/cli/tests/commands/history.test.ts:561` (coverage rendered) |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R4 — A still-appending session is not analyzed as complete | MET | test | `packages/domain/tests/analytics/watermark.test.ts` (16 pass / 0 fail this run) + `packages/app/tests/services/history-service.test.ts:327` (in-progress, messages=2, partial excluded) |
+| R5 — A refresh reports its coverage | MET | test | `packages/app/tests/services/history-service.test.ts:830` (refreshed 6 / skipped 5 by name + window); CLI render fixture `apps/cli/tests/commands/history.test.ts:561` |
+
+**Design conformance:** DONE — last-complete-turn watermark, `sessionState` additive, supersede-not-accumulate, coverage on the refresh result. Prior Review P2s closed: unknown-role regression test at `packages/domain/tests/analytics/watermark.test.ts:181`; T3 `docs/04_DESIGN.md:559-576` now documents `coverage` + `sessionState` + watermark. `--fix all` this run also corrected `DailyResult.refreshCoverage` → `DailyResult.coverage` at `docs/04_DESIGN.md:576`.
+
+**SECUA:** no P1–P2 remaining. P3 residuals unchanged: failed full-fidelity source drops out of `refreshed` (still in `fanOut`); `dataWindow` includes imported-but-not-analyzed trailing ts. P4: O(N) watermark filter at current session counts.
+
+Coverage: N/A (verdict-based; verify pipeline does not measure code coverage).
 ### Review
-**Verdict: PARTIAL** — functional AC R1–R5 are met and verified (0 fail across the changed suites; `tsc --noEmit` clean in `packages/domain`, `packages/app`, `apps/cli`), but two P2 findings must be resolved before `done`: the 0550 review-fix (role-less/'unknown'-role completeness) has no regression test, and `docs/04_DESIGN.md` (T3, task-plan line) was not updated.
+**Review verdict: PASS** — R1–R5 MET. Both prior P2s are closed.
 
-| # | Finding | Dim | Location | P | Disposition |
-|---|---------|-----|----------|---|-------------|
-| 1 | **Review-fix untested.** The completeness predicate treats a trailing `role='unknown'` (or undefined/null/'') message with no open tool call as `complete` — the fix so role-less/'unknown'-role imported messages are analyzed, not zeroed — but no test inserts `role='unknown'`; the branch is dead in the suites (reverting the fix would not fail any test). Add a regression test: a session whose final message is `role='unknown'` with no tool call ⇒ `state: 'complete'` and its data counted. | SECUA correctness / traceability | packages/domain/src/analytics/watermark.ts:150-153 | P2 | OPEN |
-| 2 | **T3 surface docs not updated.** Task-plan line + constitution T3 require `docs/04_DESIGN.md` in the same commit; the working-tree diff touches no docs. `spur history daily` still documents `DailyResult ({ fanOut, artifact, pruned })` without `coverage` (docs/04_DESIGN.md:550-556), and the `analyze` section documents neither `sessionState` nor the watermark policy. | Process / surface docs | docs/04_DESIGN.md:546-590 | P2 | OPEN |
-| 3 | **Failed source drops out of coverage.** `coverage.refreshed` excludes a failed full-fidelity source and `skipped` never names it, so a coverage-only consumer cannot distinguish "claude failed" from "not in scope". Failure is still surfaced via `fanOut`, exit code, and `history.daily.failed` — not lost, but the coverage field alone is ambiguous. | SECUA honesty | packages/app/src/services/history-service.ts:213-222 | P3 | DEFERRED (frozen `{ refreshed, skipped, window }` shape) |
-| 4 | **Coverage window not watermark-aware.** `dataWindow` returns MIN/MAX over all messages in scope; for an in-progress session `until` includes the trailing partial turn (imported but not analyzed), while the comment calls it "the MIN/MAX message ts the analyze covered". Defensible (window = data present, watermark = analysis boundary), but the wording overstates what the analyze derived from. | SECUA correctness | packages/domain/src/analytics/watermark.ts:196-205 | P3 | NOTE |
-| 5 | **'unknown'-role-as-complete vs "exclude when ambiguous" (Design § Watermark).** Treating an 'unknown' trailing message as complete can count an unanswered role-less user prompt (`mapRole` maps any unlisted/role-less type → 'unknown'). Directionally right (role-less claude final responses are commoner than role-less prompts) and self-documenting, but a session abandoned on a role-less prompt is permanently counted. | SECUA residual risk | packages/domain/src/analytics/watermark.ts:141-153 | P3 | DOCUMENTED |
-| 6 | **O(N) watermark filter.** `buildWatermarkFilter` emits one `(m.session_id=? AND m.source=? AND m.seq>?)` OR-disjunct per in-progress session; large live-session counts could degrade the SQLite plan. Bounded by session counts at current scale. | Architecture / perf | packages/domain/src/analytics/watermark.ts:169-177 | P4 | NOTE |
-| 7 | **Coverage only on `history.import.completed`.** The analyze event does not carry `coverage`, though coverage is analyze-derived; a consumer on the analyze event cannot see refreshed/skipped/window. | Consistency | packages/app/src/services/history-refresh-service.ts:180-190 | P4 | NOTE |
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P2 | correctness | `packages/domain/src/analytics/watermark.ts:145-158` | Role-less / `unknown` trailing message treated as complete had no regression test. | CLOSED — `packages/domain/tests/analytics/watermark.test.ts:181` (state `complete`, data counted). |
+| P2 | process / T3 | `docs/04_DESIGN.md:559-576` | Surface docs omitted `coverage`, `sessionState`, and the watermark policy. | CLOSED — `DailyResult.coverage`, `sessionState`, and last-complete-turn watermark documented. Debounce default aligned to 600000. |
+| P3 | honesty | `packages/app/src/services/history-service.ts:221-230` | Failed full-fidelity source drops out of `refreshed` and is not named in `skipped`. Still in `fanOut` / exit / `history.daily.failed`. | DEFERRED — frozen `{ refreshed, skipped, window }` shape. |
+| P3 | correctness | `packages/domain/src/analytics/watermark.ts:196-206` | `dataWindow` MIN/MAX includes imported-but-not-analyzed trailing ts. | NOTE — window = data present; watermark = analysis boundary. |
+| P3 | residual risk | `packages/domain/src/analytics/watermark.ts:141-153` | An abandoned role-less prompt can be counted complete. | DOCUMENTED — prefer analyzing role-less claude finals over guessing. |
+| P4 | perf | `packages/domain/src/analytics/watermark.ts:169-178` | One OR-disjunct per in-progress session. | NOTE — bounded by live session count. |
+| P4 | consistency | `packages/app/src/services/history-refresh-service.ts:175-177` | Coverage is on `history.import.completed`, not the analyze event. | NOTE |
 
-**Functional traceability (R1–R5 all met):**
-- **R1 — watermark = last complete turn.** `sessionWatermarks`/`buildWatermarkFilter` bound analysis to the last turn-closing message (assistant, non-meta, no open tool call); watermark.test.ts:15 pass incl. growing-session totals and derived-input (`sessionSpans`) truncation. The review-fix landed here (role-less/'unknown'-role final messages now `complete`, not zeroed) — see P2-1.
-- **R2 — in-progress distinguishable.** `sessionState: 'in-progress' | 'complete'` on `SessionStat` (additive optional; absent ⇒ unknown for pre-0550 artifacts); 0550 history-service test asserts the mark and a consumer can filter.
-- **R3 — refresh reports coverage.** `coverage.refreshed`/`coverage.skipped` on `DailyResult`, printed by the CLI (`formatDailyResult`), emitted on `history.import.completed`; tests assert the six full-fidelity vs five unsupported sets.
-- **R4 — window stated.** `coverage.window` (MIN/MAX `ts`) on the refresh result + CLI output; `dataWindow` test covers null and non-null.
-- **R5 — supersede, not duplicate.** The artifact is a per-selector-digest snapshot (`analyze-<digest>.json`, overwritten each analyze + `latest.json` symlink), one `bySession` record per session, rebuilt from the DB each refresh; the 0550 R5 test asserts one in-progress record while running and one complete record after, never accumulation.
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/watermark.ts:145-178`; `packages/domain/tests/analytics/watermark.test.ts` 16 pass / 0 fail |
+| R2 | MET | `packages/domain/src/analytics/artifact.ts:106` + `packages/app/src/services/history-service.ts:383`; tests `packages/app/tests/services/history-service.test.ts:327`, `packages/app/tests/services/history-service.test.ts:370` |
+| R3 | MET | `packages/app/src/services/history-service.ts:221-230`; test `packages/app/tests/services/history-service.test.ts:830` |
+| R4 | MET | `packages/domain/src/analytics/watermark.ts:196-206`; test `packages/app/tests/services/history-service.test.ts:830` |
+| R5 | MET | `packages/app/src/services/history-service.ts:779-795`; test `packages/app/tests/services/history-service.test.ts:404` |
 
-**Residual risk:** P2-1 (fix untested — highest), P3-5 (unknown-role trade-off), P3-4 (window wording), P3-3 (failed source invisible in coverage). The artifact date-dir split across day boundaries is pre-existing 0464 R2 behavior, out of 0550 scope.
-
-**Verification performed:** `bun test` — watermark 15 pass / 0 fail (watermark.ts 100% line/func coverage), history-service 0550-scoped 5 pass, CLI history 28 pass, full history-service 30 pass, forensic-query 17 pass. `tsc --noEmit` clean in all three changed workspaces. Test success judged by "0 fail" per the known machine-wide `bun test` exit-1 coverage bug.
+**Residual risk.** P3 coverage-shape / window-wording / unknown-role trade-off only. No open P1–P2.
 ### References
 - **Import resumption already verified (do not re-verify):** `history_import_checkpoint` /
   `history_import_ledger`, feature E1 § In — "Incremental correctness … verified against real
