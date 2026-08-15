@@ -661,3 +661,12 @@ Verdict: PASS (R1–R5 MET, AC R7/R8 MET). 11 tests, 0 fail; `role-tokens.ts` 10
 - `claude` and `codex` contribute 0 token rows despite being full-fidelity sources — bounds how much of the roster this feature can ever measure (E1 scope).
 - Never reintroduce length-based token estimates (task 0474 R7 removed the 4-chars-per-token heuristic) — an estimate entering a total is the fabrication the forensic contract exists to end.
 - Distinct-run counting in coverage: accumulate per-class then sum, and a run straddling exactness classes inflates the numerator — use `DISTINCT run_id`.
+Appended to `.spur/run/wrapup-learnings.md` — `## 2026-08-15 — task 0552` entry after the 0542 block.
+
+Source: task file `docs/tasks4/0552_render-role-routing-and-token-consumption-on-the-board.md` (done 2026-08-15). Nine learnings:
+
+- **Conventions** — render-don't-re-derive (consume 0546/0547 as-is, route holds no query/window logic); extend-via-tab-registry not a peer module; permanent exclusions asserted by regex both sides, not just documented; T3 docs same commit; ADR-005 §4 type seam over scratch DB.
+- **Patterns** — narrow the envelope once at the client boundary; `Promise.all` honest-failure composition matching sibling handlers; single `parseRoutingSummaryResponse`.
+- **Errors/gotchas** — flattening unmeasured/estimated/no-data-yet into `0` is the core failure mode; trusting 0547's `unmeasured` boolean requires knowing its invariant (`exact === null && estimated === null` at `role-tokens.ts:166`); `toContain('4')` substring assertions cross-match digits (row-count is the real guard); review scoped to task diff, concurrent 0539/0540 edits excluded.
+
+Format matches prior entries: dated header, title, bolded lesson + rationale, `file:line` evidence.
