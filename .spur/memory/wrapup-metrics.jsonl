@@ -91,3 +91,6 @@ Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{w
 {"wbs":"0550","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:14.057Z"}
 {"wbs":"0543","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
 {"wbs":"0544","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
+`{"wbs":"0547","feature_id":"J6","status":"done","verdict":"PASS","timestamp":"2026-08-15T07:35:40Z"}`
+
+Appended to `.spur/run/wrapup-metrics.jsonl`. The input list `[""]` was an empty render; line reflects the run's actual task (0547, done, PASS per `0547-verdict.json`, feature J6). No other tasks.

@@ -614,3 +614,42 @@ commits. Date is the task's done date (UTC).
 - **Biome forbids `!` (noNonNullAssertion).** Replace with an explicit undefined check (cheapest-eligible winner) or a cast in tests — never `biome-ignore` to force green.
 - **Edit-tool hazard with structural-summary reads.** A ranged read can render elided bodies as `{ … }`; using that rendered text as an edit old_string corrupts the target block (mangled a describe header mid-task). Always verify edits that matched suspiciously against `git diff`/raw read before proceeding.
 
+Captured to `.spur/run/wrapup-learnings.md` from task 0547 (run `dev-run-0547-3751c`; task list arrived empty, resolved to the run's task).
+
+# Working learnings
+
+## 2026-08-15 — 0547. Attribute token totals to roles by joining run attribution to the history plane
+
+Verdict: PASS (R1–R5 MET, AC R7/R8 MET). 11 tests, 0 fail; `role-tokens.ts` 100% function / 93.83% line coverage.
+
+### Conventions
+
+- **Tokens, never prices** (operator ruling 2026-08-13). Per-model pricing changes faster than any table can track, so a stored price is a stored error. `costUsd` on `CostRecord`/`TokenTotals` is left untouched — neither extended, populated, nor read. New surface carries no currency field; a test asserts it by regex on serialized output (`/costUsd|cost_usd|price|\$|usd/i`) plus a key check.
+- **Never-fabricate invariant.** Absent usage → `unmeasured: true` with the matched-run count, never zero tokens presented as observed fact. `recordsWithUsage > 0` gates bucket population. A role with no matched rows or no usage reads unmeasured; observed-zero (measured 0 tokens) is a distinct, separately-tested state.
+- **Exact vs estimated never summed.** `exact` and `estimated` are separate buckets per role (R4); summing them discards the only trust signal the operator has. Mirrors `attributeActionCost`'s split.
+- **Coverage is part of the answer.** Report `matchedRuns`/`totalRuns` per role; partial coverage is the expected condition (feature E1: `history_etl_*` dead for six sources), never silently compensated.
+- **One extractor, one fold.** Reuse `extractClaudeTokens` / `foldTotals` semantics; a second implementation is how the two drift. Typed columns summed in SQL (`inputTokens` = fresh + cache-read + cache-write — never subtract cache).
+- **Frozen-names table verified against the live tree before implementing.** Pinning `file:line` + semantics + "never call" list upfront is what made the premise correction possible.
+- **T3 same-commit surface docs.** `docs/04_DESIGN.md` updated in the same commit.
+- **Accepted ceilings are documented, not hidden.** Time-window narrowing absent and per-message attribution inside shared sessions are recorded in a `ponytail:` comment naming the upgrade path (per-message run stamps), matching the existing `attributeActionCost` ceiling.
+- **Missing tables read as empty, never throw** — unmigrated DB and dead history plane are tested.
+- **Null-role group included** (pure pins), mirroring 0546 parity; 0552 must render it distinctly.
+
+### Errors fixed
+
+- **Premise correction (blocked the task as specified):** the "reuse the `run-cost.ts` join" instruction was written from code shape, not from data. Measured against the live `.spur/spur.db`: all 10 `history_etl_*` tables hold 0 rows; `history_message.run_id` is NULL for all 1,296,633 rows (column and index exist, nothing populates them); real tokens live in typed columns on `history_message` (166,162 rows carry them). Resolution: 0557/0558 built the `history_run_session` run→session mapping; 0547 joins routing rows → mapping by indexed `run_id` → `history_message`.
+- **P3 review fix — `matchedRuns` double-count (R5).** First fold summed per-exactness `matchedRuns`, so a run with mappings in both exactness classes counted twice in coverage. Fixed with a `matched_runs` CTE counting `DISTINCT run_id` per role across both classes; assignment, not accumulation, in the assembly loop. Regression test: "a run mapped in both exactness classes counts once in coverage".
+
+### Patterns
+
+- **Measure data before trusting code shape.** The premise-correction table (live row counts + consequence per premise) is the template for "is this join actually reusable?" — check data existence, not just API shape.
+- **Two indexed SQL passes:** attributed runs (window-bounded routing rows), then folds grouped by `(role, exactness)` — avoids one wide join.
+- **Deterministic output:** roles ordered `role ASC, nulls as ''`; window reported in the result rather than implied.
+- **Executable evidence per AC row** — every behavior-bearing AC carries a named test; verify asserts "no currency field" via serialization regex + key check, not just type inspection.
+
+### Gotchas
+
+- Reusing code by shape ≠ reusing it by data path: `extractClaudeTokens` is the dead ETL-payload path, not the live typed-column path — know which one actually reads rows.
+- `claude` and `codex` contribute 0 token rows despite being full-fidelity sources — bounds how much of the roster this feature can ever measure (E1 scope).
+- Never reintroduce length-based token estimates (task 0474 R7 removed the 4-chars-per-token heuristic) — an estimate entering a total is the fabrication the forensic contract exists to end.
+- Distinct-run counting in coverage: accumulate per-class then sum, and a run straddling exactness classes inflates the numerator — use `DISTINCT run_id`.
