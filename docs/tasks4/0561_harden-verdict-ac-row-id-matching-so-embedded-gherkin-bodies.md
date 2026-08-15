@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:14.986Z"
-updated_at: "2026-08-15T16:47:33.569Z"
+updated_at: "2026-08-15T16:48:02.131Z"
 ---
 
 ## 0561. Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate
@@ -164,7 +164,7 @@ Rationale: the mismatch lived in the matcher, not the parser — verdict artifac
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons (`:935-941`), additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:200-207` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 8 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression). |
+| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons, additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:200-207` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 9 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression and the alias-path pin added this run). |
 | R2 | MET | Additive-only design confirmed by re-read: the four pre-existing comparisons are intact and evaluated; legitimately parenthesized titles match on the raw form — asserted by the 0561 R2 tests in both the e2e and direct-matcher blocks (pass this run). |
 | R3 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116` — subsection "The id is exactly the scenario title — no Gherkin body appended" present (re-read this run): id = scenario title exactly, body never appended, verifier-verbatim + gate-backstop rationale. |
 
@@ -172,12 +172,14 @@ Rationale: the mismatch lived in the matcher, not the parser — verdict artifac
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R1 — an AC row id with an embedded Gherkin body still verifies its scenario | MET | test | 0561-block e2e + direct-matcher tests pass this run (8/8); 0 `L4.scenario-unverified` asserted |
+| Scenario: R1 — an AC row id with an embedded Gherkin body still verifies its scenario | MET | test | 0561-block e2e + direct-matcher tests pass this run (9/9); 0 `L4.scenario-unverified` asserted |
 | Scenario: R1 — the repair applies to artifacts already on disk | MET | test | E6/0558 regression test (verbatim-faithful reconstructed R4 row id) passes this run — shape-equivalent per the documented deleted-worktree caveat |
 | Scenario: R2 — a legitimately parenthesized scenario title still matches | MET | test | R2 tests in both blocks pass this run |
-| Scenario: R3 — the answer-file contract names the rule | MET | static-ref | `ac-style-guide.md:116` subsection re-read this run |
+| Scenario: R3 — the answer-file contract names the rule | MET | static-ref | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116` subsection re-read this run |
 
-**Design conformance:** frozen shape implemented exactly (`bodyStripped` on `stripped` only, greedy `[\s\S]*`, additive, no new API/exported symbol/file, no shared helper); anti-patterns all held (no parser normalization, non-additive replacement, interior stripping, or helper abstraction); the Q2 accepted ceiling (interior-parenthetical + appended body still unverified) is documented and unchanged. Full suite this run: 96 pass / 0 fail / 352 assertions.
+**Design conformance:** frozen shape implemented exactly (`bodyStripped` on `stripped` only, greedy `[\s\S]*`, additive, no new API/exported symbol/file, no shared helper); anti-patterns all held; the Q2 accepted ceiling is documented and unchanged. Full suite this run: **97 pass / 0 fail / 353 assertions** (96 prior + the alias-path test added in the 2026-08-15 cleanup pass).
+
+**Cleanup pass (2026-08-15, pre-commit):** closed the Review's "next touch" items — added the `AC-1 (Given …)` → `bodyStripped === sc.alias` direct-matcher test (was the only P4 test-gap recommendation); corrected the Solution's test count (six → nine); flipped Requirements/Plan checkboxes; anchored the R3 citation repo-relative.
 
 **SECUA Review**
 
@@ -185,8 +187,8 @@ Rationale: the mismatch lived in the matcher, not the parser — verdict artifac
 | --- | --- | --- | --- |
 | P4 | efficiency | `packages/app/src/services/feature-check.ts:935` | Greedy `[\s\S]*` is O(n²)-worst-case on adversarial ids without a trailing `)`; row ids are short sentences — negligible, as the original review noted. No blocker/major/minor findings. |
 
-Coverage: N/A (verdict-based; targeted 8/8 + suite 96/96 re-run this turn).
-Fix-pass writes: `.spur/run/0561-verdict.json` (regenerated this run).
+Coverage: N/A (verdict-based; targeted 9/9 + suite 97/97 re-run this turn).
+Fix-pass writes: `.spur/run/0561-verdict.json` (regenerated this run); `packages/app/tests/services/feature-check.test.ts` (alias-path test added).
 ### Review
 
 | Priority | Finding | Evidence | Disposition |
