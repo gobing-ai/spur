@@ -1370,7 +1370,7 @@ describe('teams module components', () => {
                             teamId: 'alpha',
                             name: 'Alpha',
                             members: [
-                                { id: 'planner', type: 'claude', status: 'running' },
+                                { id: 'planner', type: 'claude', status: 'running', role: 'planner' },
                                 { id: 'coder', type: 'codex', status: 'stopped' },
                             ],
                         },
@@ -1397,6 +1397,11 @@ describe('teams module components', () => {
         const coderRow = container.querySelector('[data-supervisor-member-row="coder"]') as HTMLElement;
         expect(coderRow.textContent).toContain('stopped');
         expect(coderRow.textContent).toContain('codex');
+        // 0544 R3/R4: declared role renders as a value; undeclared renders the literal `unset`.
+        const plannerRole = container.querySelector('[data-supervisor-member-role="planner"]') as HTMLElement;
+        expect(plannerRole?.textContent).toBe('planner');
+        const coderRole = container.querySelector('[data-supervisor-member-role="coder"]') as HTMLElement;
+        expect(coderRole?.textContent).toBe('unset');
     });
 
     test('SupervisorTab shows per-member uptime and last activity from events (0378 R3)', async () => {

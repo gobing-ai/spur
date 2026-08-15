@@ -194,10 +194,22 @@ const AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/;
 export const TeamMemberConfigSchema = z.union([
     z.string().min(1),
     z.object({
-        executor: z.string().min(1),
+        // 0543 R4: executor is optional — at least one of role/executor is
+        // required (superRefine on AgentConfigSchema names team id + position).
+        executor: z.string().min(1).optional(),
         id: z.string().min(1).optional(),
         // Layer-1 role id (0538 R3): typed routing field; `purpose` stays prose.
-        role: z.enum(AGENT_ROLE_NAMES).optional(),
+        // The role is the primary axis (0543): a role-only member resolves an
+        // executor through the tier ladder at materialization.
+        // R5 (0543): the error names the offending value AND the accepted set —
+        // zod's default enum error ("Invalid option: expected one of …") omits
+        // the value, which the requirement explicitly demands.
+        role: z
+            .enum(AGENT_ROLE_NAMES, {
+                error: (issue) =>
+                    new Error(`Unknown role "${issue.input}" — expected one of: ${AGENT_ROLE_NAMES.join(', ')}`),
+            })
+            .optional(),
         purpose: z.string().optional(),
         workspace: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
@@ -231,7 +243,11 @@ export type TeamConfig = z.infer<typeof TeamConfigSchema>;
 
 /** A team member in its normalized object form (shorthand string expanded). */
 export interface NormalizedTeamMember {
-    executor: string;
+    /**
+     * Executor name — optional since 0543: a role-only member (no executor)
+     * resolves one through the tier ladder at materialization (R1).
+     */
+    executor?: string;
     id?: string;
     /** Layer-1 role id (scribe | coder | reviewer | planner); typed routing field (0538 R3). */
     role?: AgentRoleName;
@@ -251,6 +267,32 @@ export interface NormalizedTeamMember {
  */
 export function normalizeMember(member: TeamMemberConfig): NormalizedTeamMember {
     return typeof member === 'string' ? { executor: member } : { ...member };
+}
+
+/**
+ * Local member id (0251 + 0543 R3). `id` wins, then `executor`; a role-only
+ * member (neither) derives from its role plus a 1-based declaration-order index
+ * among role-only members sharing that role: `<role>-<n>`. The index is frozen
+ * so the id does not shift when the roster is reordered or gains another member
+ * of the same role — a shifting id would break inbox addressing (0543 Design).
+ * The neither-role-nor-executor case yields `''` — R4 validation rejects that
+ * member before it reaches materialization; callers treat `''` as invalid.
+ */
+export function memberLocalId(
+    member: NormalizedTeamMember,
+    roster: readonly NormalizedTeamMember[],
+    index: number,
+): string {
+    if (member.id !== undefined) return member.id;
+    if (member.executor !== undefined) return member.executor;
+    const role = member.role;
+    if (role === undefined) return '';
+    let n = 0;
+    for (let i = 0; i <= index; i++) {
+        const m = roster[i];
+        if (m !== undefined && m.id === undefined && m.executor === undefined && m.role === role) n += 1;
+    }
+    return `${role}-${n}`;
 }
 
 /** A resolved executor: a canonical agent plus an optional model override. */
@@ -394,9 +436,22 @@ export const AgentConfigSchema = z
         const seenComposed = new Set<string>();
         for (const [teamId, teamConfig] of Object.entries(team)) {
             const seenLocal = new Set<string>();
-            teamConfig.members.forEach((member, index) => {
-                const ref = normalizeMember(member);
-                const localId = ref.id ?? ref.executor;
+            const members = teamConfig.members.map(normalizeMember);
+            members.forEach((ref, index) => {
+                // R4 (0543): a member must declare at least one of role or
+                // executor — the message names the team id and the member
+                // position, and states the at-least-one rule. The bare-string
+                // shorthand always carries `executor` (normalizeMember), so
+                // this only fires on the object arm.
+                if (ref.executor === undefined && ref.role === undefined) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Team member at index ${index} in team "${teamId}" declares neither role nor executor — at least one of role or executor is required.`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                    return;
+                }
+                const localId = memberLocalId(ref, members, index);
                 if (seenLocal.has(localId)) {
                     ctx.addIssue({
                         code: z.ZodIssueCode.custom,

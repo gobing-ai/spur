@@ -37,6 +37,26 @@ async function makeCtx(): Promise<{
     return { cwd, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
 }
 
+/** Config with tiered executors + a role-only member and an executor-only member (0544 fixtures). */
+const ROLE_TEAM_CONFIG = [
+    'agent:',
+    '  executors:',
+    '    - name: cheap-exec',
+    '      agent: pi',
+    '      tier: cheap',
+    '    - name: capable-exec',
+    '      agent: claude',
+    '      tier: capable-1',
+    '  team:',
+    '    alpha:',
+    '      name: Alpha',
+    '      work_dir: /tmp/alpha-ws',
+    '      members:',
+    '        - role: reviewer',
+    '        - executor: cheap-exec',
+    '',
+].join('\n');
+
 describe('spur team assign', () => {
     test('sets assignee in the task frontmatter', async () => {
         const { cwd, out, cleanup } = await makeCtx();
@@ -133,6 +153,43 @@ describe('spur team status', () => {
                     expect(line).toContain('stopped');
                     expect(line).toContain('coder');
                     expect(line).toContain('write code');
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
+    });
+
+    test('0544 R1/R4: status shows the declared role and unset for undeclared (human + json)', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        await withMockedFetch(
+            async () => jsonResponse(200, { processes: [], count: 0 }),
+            async () => {
+                try {
+                    await mkdir(join(cwd, '.spur'), { recursive: true });
+                    await writeFile(join(cwd, '.spur', 'config.yaml'), ROLE_TEAM_CONFIG, 'utf8');
+                    const up = await main(['team', 'up', 'alpha'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(up).toBe(0);
+
+                    // Human output: declared role renders; undeclared renders the literal `unset`.
+                    out.messages.length = 0;
+                    const statusCode = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(statusCode).toBe(0);
+                    const human = out.messages.join('\n');
+                    expect(human).toContain('reviewer');
+                    expect(human).toContain('unset');
+
+                    // JSON: role and executor are fields; undeclared role is absent (undefined).
+                    out.messages.length = 0;
+                    const code = await main(['team', 'status', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+                    const reviewer = payload.agents.find((a: { id: string }) => a.id === 'alpha-reviewer-1');
+                    expect(reviewer?.role).toBe('reviewer');
+                    expect(reviewer?.executor).toBe('capable-exec');
+                    const plain = payload.agents.find((a: { id: string }) => a.id === 'alpha-cheap-exec');
+                    expect(plain?.role).toBeUndefined();
+                    expect(plain?.executor).toBe('cheap-exec');
                 } finally {
                     await cleanup();
                 }

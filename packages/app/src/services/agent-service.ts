@@ -1603,9 +1603,7 @@ export class AgentService {
                 message: `No executors configured to serve role '${role}' (tier ${roleTier}) — define executors under agent.executors`,
             };
         }
-        const eligible = executors
-            .filter((e) => isTierEligible(getExecutorTier(e), roleTier))
-            .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
+        const eligible = cheapestEligibleExecutors(executors, roleTier);
         for (const executor of eligible) {
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
@@ -2062,6 +2060,23 @@ function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
     if (/\b(cheap|haiku|flash|lite|mini|fast)\b/.test(combined)) return 'cheap';
     if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable-1';
     return 'standard';
+}
+
+/**
+ * The shared role → executor funnel (0543 R1): eligible executors (tier at or
+ * above `minTier`) sorted by tier ascending — cheapest eligible first. One
+ * selector, never two: `resolveRole` (`--agent <role>`) and
+ * `TeamService.materializeTeam` (role-only members) both route through this, so
+ * the two can never disagree. `resolveRole` doctor-walks the result; team
+ * materialization takes the first entry (config-time, no liveness probe).
+ */
+export function cheapestEligibleExecutors(
+    executors: readonly AgentExecutorConfig[],
+    minTier: CapabilityTier,
+): AgentExecutorConfig[] {
+    return executors
+        .filter((e) => isTierEligible(getExecutorTier(e), minTier))
+        .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
 }
 
 /**

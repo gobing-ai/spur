@@ -194,7 +194,8 @@ describe('agent list --specs', () => {
             db,
         });
         expect(exitCode).toBe(0);
-        expect(output.stdout.join('\n')).toContain('agent-a\tcoder\tcoding purpose');
+        // 0544 R2/R4: id \t type \t role \t executor \t purpose — unset when undeclared.
+        expect(output.stdout.join('\n')).toContain('agent-a\tcoder\tunset\tunset\tcoding purpose');
     });
 });
 

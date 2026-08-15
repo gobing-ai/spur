@@ -326,6 +326,14 @@ export default function SupervisorTab({ teamId }: { teamId?: string }) {
                                                 <Badge variant="outline" size="xs">
                                                     {member.type}
                                                 </Badge>
+                                                {/* Declared role (0544 R3): unset renders as a value, never inferred. */}
+                                                <Badge
+                                                    variant={member.role !== undefined ? 'accent' : 'ghost'}
+                                                    size="xs"
+                                                    data-supervisor-member-role={member.id}
+                                                >
+                                                    {member.role ?? 'unset'}
+                                                </Badge>
                                                 {/* Uptime (R3) */}
                                                 <span
                                                     className="text-[10px] text-spur-text-muted font-mono"

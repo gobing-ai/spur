@@ -101,6 +101,25 @@ describe('resolveAutostartSet (0258 R8/AC5)', () => {
         expect(result).toEqual(['alpha-reviewer']);
     });
 
+    test('0543 R3: a role-only member derives <role>-<n> for the composed id', () => {
+        const config = {
+            agent: {
+                team: {
+                    alpha: {
+                        name: 'Alpha',
+                        work_dir: '/tmp',
+                        members: [
+                            { role: 'coder', autostart: true },
+                            { role: 'coder', autostart: true },
+                        ],
+                    },
+                },
+            },
+        } as unknown as SpurConfig;
+        const result = resolveAutostartSet(config);
+        expect(result).toEqual(['alpha-coder-1', 'alpha-coder-2']);
+    });
+
     test('returns sorted results', () => {
         const config = {
             agent: {

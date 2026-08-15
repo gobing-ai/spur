@@ -1,8 +1,16 @@
 import { join, resolve } from 'node:path';
-import { type NormalizedTeamMember, normalizeMember, resolveExecutor, type SpurConfig } from '@gobing-ai/spur-config';
+import {
+    memberLocalId,
+    type NormalizedTeamMember,
+    normalizeMember,
+    type ResolvedExecutor,
+    resolveExecutor,
+    type SpurConfig,
+} from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
+    type CapabilityTier,
     type DbAdapter,
     InboxMessageDao,
     InboxRecentDao,
@@ -21,6 +29,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
+import { cheapestEligibleExecutors } from './agent-service';
 import { TaskLocator } from './task-locator';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +69,14 @@ export interface TeamServiceContext {
      * {@link eventBus} when both are present (task 0371 R2).
      */
     events?: EventBus<AgentEvents>;
+    /**
+     * Layer-1 role → tier map parsed from `plugins/sp/references/roles.md`
+     * at the CLI boundary (0543 R1) — the same map AgentService receives, so a
+     * role-only team member resolves through the SAME ladder as `--agent <role>`.
+     * Absent → a role-only member fails materialization loudly (the CLI threads
+     * it from `agentRoles`; the server path does not resolve roles).
+     */
+    roles?: ReadonlyMap<string, CapabilityTier>;
 }
 
 /**
@@ -189,8 +206,15 @@ export interface TeamStatusEntry {
     id: string;
     name: string;
     type: string;
-    workspace: string;
-    purpose: string;
+    /**
+     * Declared Layer-1 role read off the materialized spec (`config.role`,
+     * 0544 R1). Undefined = unset — never inferred from the executor's tier.
+     */
+    role?: string;
+    /** Executor name the spec is bound to (0537 R1; resolved for role-only members, 0543 R1). */
+    executor?: string;
+    workspace?: string;
+    purpose?: string;
     status: 'running' | 'stopped' | 'errored' | 'unknown';
     pid?: number;
 }
@@ -461,6 +485,12 @@ export class TeamService {
                     workspace: spec.workspace,
                     purpose: spec.purpose,
                     status,
+                    // 0544 R1: role + resolved executor surface wherever the
+                    // roster shows (unset = field absent, never inferred).
+                    ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
+                        ? { role: spec.config.role }
+                        : {}),
+                    ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
                     ...(pid !== null ? { pid } : {}),
                 };
             }),
@@ -662,8 +692,10 @@ export class TeamService {
         const desiredIds = new Set<string>();
         const toUpsert: AgentSpec[] = [];
 
-        for (const member of desiredMembers) {
-            const localId = member.id ?? member.executor;
+        for (const [index, member] of desiredMembers.entries()) {
+            // 0543 R3: a role-only member derives `<role>-<n>` (frozen index) so
+            // the id matches the config-load derivation (memberLocalId).
+            const localId = memberLocalId(member, desiredMembers, index);
             const composedId = `${teamId}-${localId}`;
             desiredIds.add(composedId);
 
@@ -671,7 +703,41 @@ export class TeamService {
             const existing = specs.find((s) => s.id === composedId);
             if (existing && !existing.tags?.includes('spur:generated')) continue;
 
-            const resolved = resolveExecutor(member.executor, agentConfig);
+            // 0543 R1/R2: an executor pin is authoritative (R2); a role-only
+            // member resolves through the shared tier ladder — the SAME funnel
+            // `--agent <role>` uses (cheapest eligible executor), never a second
+            // selector. The resolved executor name is recorded on the spec so
+            // the resolution is inspectable, not implicit (R1).
+            let resolved: ResolvedExecutor;
+            let executorName: string;
+            if (member.executor !== undefined) {
+                resolved = resolveExecutor(member.executor, agentConfig);
+                executorName = member.executor;
+            } else {
+                const role = member.role;
+                // R4 validation rejects neither-role-nor-executor at config load;
+                // this is a defensive loud error for unvalidated callers.
+                if (role === undefined) {
+                    throw new Error(
+                        `Team "${teamId}" member at index ${index} declares neither role nor executor — at least one is required`,
+                    );
+                }
+                const roleTier = this.ctx.roles?.get(role);
+                if (roleTier === undefined) {
+                    throw new Error(
+                        `Team "${teamId}" member at index ${index} declares role "${role}" but no Layer-1 role table is available — run spur team up from the CLI (roles.md not resolved)`,
+                    );
+                }
+                const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
+                const winner = eligible[0];
+                if (winner === undefined) {
+                    throw new Error(
+                        `Team "${teamId}" member at index ${index}: no executor configured to serve role "${role}" (tier ${roleTier}) — define executors under agent.executors`,
+                    );
+                }
+                resolved = { agent: winner.agent, model: winner.model };
+                executorName = winner.name;
+            }
             const spec: AgentSpec = {
                 id: composedId,
                 name: member.purpose ?? composedId,
@@ -680,16 +746,19 @@ export class TeamService {
                 // beside the coding-agent kind so drain can resolve back through
                 // `resolveExecutor`'s executor-first lookup — restoring the
                 // operator's model + tier instead of a bare binary on the default
-                // model. `type` stays: AiRunner resolves the runner from it, and
-                // pre-existing specs carry only `type` (drain falls back to it).
-                executor: member.executor,
+                // model. For a role-only member this is the RESOLVED executor
+                // entry (0543 R1). `type` stays: AiRunner resolves the runner
+                // from it, and pre-existing specs carry only `type` (drain
+                // falls back to it).
+                executor: executorName,
                 workspace: member.workspace ?? teamConfig.work_dir,
                 purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
                 tags: [`team:${teamId}`, 'spur:generated'],
                 config: {
                     ...(resolved.model !== undefined ? { model: resolved.model } : {}),
                     // Layer-1 role (0538 R3): carried beside the executor binding so
-                    // routing reads it off the spec (0543 promotes it further).
+                    // routing reads it off the spec (0543 R1 — the role and the
+                    // resolved executor name are BOTH recorded).
                     ...(member.role !== undefined ? { role: member.role } : {}),
                     ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
                     ...(member.command !== undefined ? { command: member.command } : {}),
@@ -941,9 +1010,9 @@ export function resolveAutostartSet(config: SpurConfig | null, envAutostart?: st
     const teams = config?.agent?.team;
     if (teams) {
         for (const [teamId, teamConfig] of Object.entries(teams)) {
-            for (const member of teamConfig.members) {
-                const ref = normalizeMember(member);
-                const localId = ref.id ?? ref.executor;
+            const members = teamConfig.members.map(normalizeMember);
+            for (const [index, ref] of members.entries()) {
+                const localId = memberLocalId(ref, members, index);
                 const composedId = `${teamId}-${localId}`;
                 const effective = ref.autostart ?? teamConfig.autostart ?? false;
                 if (effective) ids.add(composedId);

@@ -101,6 +101,13 @@ agent:
   #         purpose: "Lead — planning & review"
   #       - executor: omp
   #         purpose: "Implementer"
+  #       # Role is the primary axis (0543): a role-only member resolves an
+  #       # executor through the tier ladder at materialization; the resolved
+  #       # executor and the role are both recorded on the materialized spec.
+  #       - role: reviewer
+  #       - role: coder
+  #         executor: omp
+  #         purpose: "Pinned executor, role recorded alongside (pin beats policy)"
 
 rules:
   paths:

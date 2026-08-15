@@ -194,6 +194,11 @@ async function runAgentList(
                     id: spec.id,
                     type: spec.type,
                     purpose: spec.purpose,
+                    // 0544 R2: role and executor are DISTINCT fields — never merged.
+                    ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
+                        ? { role: spec.config.role }
+                        : {}),
+                    ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
                     path: `.spur/agents/${spec.id}.yaml`,
                 })),
             }),
@@ -204,7 +209,17 @@ async function runAgentList(
         context.output.write('No agent specs found in .spur/agents/');
         return 0;
     }
-    context.output.write(specs.map((spec) => `${spec.id}\t${spec.type}\t${spec.purpose}`).join('\n'));
+    // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
+    context.output.write(
+        specs
+            .map((spec) => {
+                const role =
+                    typeof spec.config?.role === 'string' && spec.config.role.length > 0 ? spec.config.role : 'unset';
+                const executor = spec.executor ?? 'unset';
+                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}`;
+            })
+            .join('\n'),
+    );
     return 0;
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { type CapabilityTier, createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentProcessOptions,
@@ -36,6 +36,7 @@ function nullOutput() {
 async function makeService(
     bus?: MessageEventBus | TeamServiceEventBus,
     events?: EventBus<AgentEvents>,
+    roles?: ReadonlyMap<string, CapabilityTier>,
 ): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
@@ -47,6 +48,7 @@ async function makeService(
         fs: createNodeFileSystem(cwd),
         ...(bus ? { eventBus: bus } : {}),
         ...(events ? { events } : {}),
+        ...(roles ? { roles } : {}),
     };
     return {
         svc: new TeamService(ctx),
@@ -473,6 +475,43 @@ describe('TeamService status & assignment', () => {
             expect(status.agents[0]?.id).toBe('planner');
             expect(status.agents[0]?.status).toBe('stopped');
             expect(status.agents[0]?.pid).toBeUndefined();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('0544 R1: getStatus carries the declared role and resolved executor; unset when absent', async () => {
+        const { svc, cwd, cleanup } = await makeService(
+            undefined,
+            undefined,
+            new Map<string, CapabilityTier>([['reviewer', 'capable-1']]),
+        );
+        try {
+            await writeConfig(
+                cwd,
+                `agent:
+  executors:
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: reviewer
+        - executor: capable-exec
+`,
+            );
+            await svc.materializeTeam('demo');
+            const status = await svc.getStatus();
+            const byId = new Map(status.agents.map((a) => [a.id, a]));
+            const reviewer = byId.get('demo-reviewer-1');
+            expect(reviewer?.role).toBe('reviewer');
+            expect(reviewer?.executor).toBe('capable-exec');
+            const plain = byId.get('demo-capable-exec');
+            expect(plain?.role).toBeUndefined();
+            expect(plain?.executor).toBe('capable-exec');
         } finally {
             await cleanup();
         }
@@ -996,6 +1035,200 @@ describe('TeamService team management (0258)', () => {
                 expect(byId.get('demo-codex')?.config?.role).toBeUndefined();
                 // purpose stays as documentation.
                 expect(byId.get('demo-claude')?.purpose).toBe('verdict writer');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('0543 R1: a role-only member resolves through the tier ladder, recording role + resolved executor', async () => {
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                new Map<string, CapabilityTier>([
+                    ['coder', 'standard'],
+                    ['reviewer', 'capable-1'],
+                ]),
+            );
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  executors:
+    - name: cheap-exec
+      agent: pi
+      tier: cheap
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: reviewer
+`,
+                );
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('demo');
+                const specs = await loadAgentSpecs(configDir);
+                const byId = new Map(specs.map((s) => [s.id, s]));
+                const spec = byId.get('demo-reviewer-1');
+                expect(spec).toBeDefined();
+                // Cheapest executor eligible for reviewer (capable-1): capable-exec.
+                expect(spec?.type).toBe('claude');
+                expect(spec?.executor).toBe('capable-exec');
+                expect(spec?.config?.role).toBe('reviewer');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('0543 R2: a pinned executor beats role tier resolution, role still recorded', async () => {
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                new Map<string, CapabilityTier>([['coder', 'standard']]),
+            );
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  executors:
+    - name: cheap-exec
+      agent: pi
+      tier: cheap
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - executor: cheap-exec
+          role: coder
+`,
+                );
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('demo');
+                const specs = await loadAgentSpecs(configDir);
+                const byId = new Map(specs.map((s) => [s.id, s]));
+                const spec = byId.get('demo-cheap-exec');
+                expect(spec).toBeDefined();
+                // cheap-exec is NOT eligible for coder's standard tier — the pin wins.
+                expect(spec?.executor).toBe('cheap-exec');
+                expect(spec?.type).toBe('pi');
+                expect(spec?.config?.role).toBe('coder');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('0543 R3: purpose is annotation — the same role-only member resolves identically without it', async () => {
+            const roles = new Map<string, CapabilityTier>([['reviewer', 'capable-1']]);
+            const {
+                svc: svcWithPurpose,
+                cwd: cwdWithPurpose,
+                cleanup: cleanupWithPurpose,
+            } = await makeService(undefined, undefined, roles);
+            const {
+                svc: svcPlain,
+                cwd: cwdPlain,
+                cleanup: cleanupPlain,
+            } = await makeService(undefined, undefined, roles);
+            try {
+                const config = (purposeLine: string) =>
+                    `agent:
+  executors:
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: reviewer
+${purposeLine}
+`;
+                await writeConfig(cwdWithPurpose, config('          purpose: annotation-only'));
+                await writeConfig(cwdPlain, config(''));
+                const configDirWithPurpose = join(cwdWithPurpose, '.spur', 'agents');
+                const configDirPlain = join(cwdPlain, '.spur', 'agents');
+
+                await svcWithPurpose.materializeTeam('demo');
+                await svcPlain.materializeTeam('demo');
+                const withPurpose = (await loadAgentSpecs(configDirWithPurpose)).find(
+                    (s) => s.id === 'demo-reviewer-1',
+                );
+                const plain = (await loadAgentSpecs(configDirPlain)).find((s) => s.id === 'demo-reviewer-1');
+                // Same id, same resolution; only the purpose annotation differs.
+                expect(withPurpose?.executor).toBe('capable-exec');
+                expect(plain?.executor).toBe('capable-exec');
+                expect(withPurpose?.purpose).toBe('annotation-only');
+                expect(plain?.purpose).toBe('claude agent');
+            } finally {
+                await cleanupWithPurpose();
+                await cleanupPlain();
+            }
+        });
+
+        test('0543 R1/R3: repeated role-only members derive distinct <role>-<n> ids', async () => {
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                new Map<string, CapabilityTier>([['coder', 'standard']]),
+            );
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  executors:
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: coder
+        - role: coder
+`,
+                );
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('demo');
+                const specs = await loadAgentSpecs(configDir);
+                const byId = new Map(specs.map((s) => [s.id, s]));
+                expect(byId.get('demo-coder-1')).toBeDefined();
+                expect(byId.get('demo-coder-2')).toBeDefined();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('0543 R1: a role-only member fails loudly when no role table is available (server path)', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(
+                    cwd,
+                    `agent:
+  executors:
+    - name: capable-exec
+      agent: claude
+      tier: capable-1
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: reviewer
+`,
+                );
+                await expect(svc.materializeTeam('demo')).rejects.toThrow('no Layer-1 role table is available');
             } finally {
                 await cleanup();
             }

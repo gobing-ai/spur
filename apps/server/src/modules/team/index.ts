@@ -232,6 +232,12 @@ export const teamModule: ServerModule = {
                         // Surfaced so the Roster can show a hint when no member is
                         // autostart (the Up button starts only autostart members).
                         autoStart: spec.autoStart === true,
+                        // 0544 R3: declared role + resolved executor ride the member
+                        // payload (omitted when unset — the Board renders `unset`).
+                        ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
+                            ? { role: spec.config.role }
+                            : {}),
+                        ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
                         ...(typeof configModel === 'string' && configModel.length > 0 ? { model: configModel } : {}),
                         ...(proc?.pid !== undefined ? { pid: proc.pid } : {}),
                     };

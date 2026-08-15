@@ -193,7 +193,9 @@ under `plugins/sp/commands/` declares `role:` in its YAML frontmatter (from its 
 table; enforced by `plugins/sp/tests/roles.test.ts`, which fails on a command with no `role:`),
 and the command dispatcher threads it into `--agent` so subprocess dispatch routes by the declared
 role; workflow `agent.run` steps declare `role:` beside their `agent:` pin; and
-`agent.team[].members[]` entries may declare an optional `role` carried onto the materialized spec.
+`agent.team[].members[]` entries declare an optional `role` — the **primary axis** since 0543: a
+member may name the role alone (executor optional) and materialization resolves an executor through
+the tier ladder; a member declaring at least one of role/executor is the load rule (R4).
 An explicit `--agent` value always wins over a declaration.
 **Explicit `--agent` is role-first, then executor-aware (0346 / 0536).** An explicit `--agent <name>`
 matches roles first (the vocabulary is closed and pairwise-disjoint from executor names, 0537 R4),
@@ -260,7 +262,10 @@ team-materialized spec records the executor name beside the coding-agent kind (t
 `.spur/agents/<teamId>-<localId>.yaml` carries `type: <kind>` **and** `executor: <name>`, so the
 rewrite resolves back through `resolveExecutor`'s executor-first lookup and restores the
 operator's `{ agent, model }` with the executor's declared tier — a spec bound to `codex-sol`
-runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. Pre-existing specs
+runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. For a **role-only**
+member (0543 R1) `executor` is the executor the tier ladder resolved (cheapest eligible for the
+role's tier — the same funnel `--agent <role>` uses), so the resolution is inspectable on the
+spec, not implicit. Pre-existing specs
 with no executor field fall back to the coding-agent type (`@transition-shim(spec-without-executor-field)`).
 A spec whose executor is absent from `agent.executors` (renamed or removed) **fails loudly** at
 drain, naming the spec and the missing executor, and no process spawns — it never silently
@@ -298,7 +303,9 @@ Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-
 `AgentDetector` / `DISPLAY_ORDER`. Canonical agents (0.4.8+): `claude`, `codex`, `gemini`, `pi`,
 `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok` (`antigravity` is a deprecated
 alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.spur/agents/` instead
-(`<id> <type> <purpose>`; `--json` includes the spec path).
+(`<id> <type> <role> <executor> <purpose>` — role and executor are distinct columns; an undeclared
+role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
+omitted when unset).
 
 #### `spur agent doctor [agent] [--json]`
 
@@ -329,10 +336,18 @@ and the app-layer `TeamService`).
   runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
   optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
-  (`@transition-shim(spec-without-executor-field)`). A member may also declare
-  `role: <scribe|coder|reviewer|planner>` (0538 R3) — the typed routing field from the Layer-1
-  table; `purpose` stays human annotation. `spur team up` records it on the materialized spec
-  (`config.role`), beside the executor binding, so routing reads the role off the spec.
+  (`@transition-shim(spec-without-executor-field)`). **Role is the primary axis (0543).** A member
+  may declare `role: <scribe|coder|reviewer|planner>` (the Layer-1 vocabulary of
+  `plugins/sp/references/roles.md`, task 0535) with or without an executor; `purpose` stays human
+  annotation. A member declaring a role **and** an executor pins the executor (R2, pin beats policy);
+  a member declaring a role **alone** resolves at materialization through the shared tier ladder —
+  cheapest executor eligible for the role's tier, the same funnel `--agent <role>` uses (0543 R1) —
+  and the spec records **both** the role (`config.role`) and the resolved executor (`executor`), so
+  the resolution is inspectable. A member declaring neither role nor executor fails config load
+  naming the team id and member position (R4); an unknown role fails naming the value and the
+  accepted set (R5). Local id stays `id ?? executor` (0251); a role-only member derives
+  `<role>-<n>` by declaration order among same-role role-only members (frozen index — a shifting
+  id would break inbox addressing, 0543 R3).
 - `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
 - `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
 
@@ -371,8 +386,9 @@ Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve
 - `assign` — set `assignee: <agent-id>` in the YAML frontmatter of `docs/tasks/<task-id>_*.md`
   (replacing any existing assignee). Errors if no matching task file is found.
 - `status` — list every spec under `.spur/agents/` with its run status; `--by-team` groups by
-  `agent.team.<id>`; `--json` emits `{ agents: [...] }`. When `--server` is reachable, rows enrich
-  from the supervisor; otherwise they fall back to local spec metadata.
+  `agent.team.<id>`; `--json` emits `{ agents: [...] }`. Each row carries the declared `role`
+  (rendered `unset` when undeclared, 0544 R1/R4) and the spec's `executor`. When `--server` is
+  reachable, rows enrich from the supervisor; otherwise they fall back to local spec metadata.
 - `up` / `down` — materialize or tear down the roster for `<team>`. `up --check` is a dry-run.
   `down --purge` deletes `spur:generated` specs only. When serve is reachable, `up` best-effort
   starts autostart members and `down` stops members.
@@ -1958,7 +1974,7 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 | POST   | `/api/team/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
 | POST   | `/api/team/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
 | GET    | `/api/team/processes/:id/stream` | —                       | SSE stream of `{stream, ts, line, seq}` frames                               | Ring-buffer replay + live tail. Heartbeat every 15s.          |
-| GET    | `/api/team/teams`                | —                       | `{ teams: [{teamId, name, members: [{id, type, status, pid?}]}], count }`    | Teams grouped by `team:<id>` tag + config (0256 R2).          |
+| GET    | `/api/team/teams`                | —                       | `{ teams: [{teamId, name, members: [{id, type, status, pid?, role?, executor?}]}], count }` | Teams grouped by `team:<id>` tag + config (0256 R2); member payload carries the declared role + resolved executor, omitted when unset (0544 R3/R4). |
 | POST   | `/api/team/:team/up`             | `?check=true` (dry-run) | `{ materialized: {upserted, orphaned, written}, started: [{id, ok, pid?}] }` | Materialize + best-effort start (0256 R3/R5).                 |
 | POST   | `/api/team/:team/down`           | `?purge=true`           | `{ stopped: string[], purged: string[] }`                                    | Stop members + optional purge (0256 R3).                      |
 | GET    | `/api/team/health`               | —                       | `{ ok: true }`                                                               | Liveness probe for CLI `team up` best-effort start (0256 R4). |

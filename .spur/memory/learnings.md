@@ -603,3 +603,14 @@ commits. Date is the task's done date (UTC).
 - **Where recorded:** `.spur/context/buglog.md` (bugs 146/148/762 + root-coverage instrumentation),
   `.spur/context/learnings.md`.
 
+## 2026-08-15 — M5 batch 1 (0543, 0544)
+
+- **Extend the union, do not fork it.** Role became the primary axis by relaxing `executor` to optional on the EXISTING member schema + one superRefine (R4), not by adding a parallel member type. A second member shape is how the tier prose drifted before.
+- **One selector, never two (0543 R1).** The role → tier → cheapest-eligible funnel was extracted from `AgentService.resolveRole` into a shared `cheapestEligibleExecutors` — `--agent <role>` and team materialization now route through the same code. The task's own design demanded this; duplicating the sort in team-service would have created exactly the disagreeing-selector defect feature B2 exists to remove.
+- **Derive local ids in ONE shared function.** `memberLocalId` (config core) is called by config-load validation AND materialization AND autostart derivation — config-load ids and materialized spec ids can never disagree. Indexed `<role>-<n>` by declaration order, frozen.
+- **Unset is a value (0544 R4).** Undeclared role renders literal `unset` in human output and the Board badge, and is field-absent (undefined) in `--json` — never blank, never back-derived from the executor's tier. Tier inference over executor names is the exact failure feature B2's terrain notes record.
+- **Zod 4.4.3 enum errors are terse.** Default enum error ("Invalid option: expected one of …") omits the received value; `z.enum(vals, { error: (issue) => new Error(...) })` gives a dynamic message naming value + accepted set while preserving the union type. Union parses nest variant errors in `error.message`, not top-level `issues` — assert on `error.message` in tests.
+- **Inline-driver + worktree pitfall: agent.run stages must NOT dispatch native subagents when the batch runs in a worktree.** A native subagent shares the HOST tree, not the worktree — it would implement in the wrong checkout. The inline driver contract's eligibility condition 4 (subagent shares the working tree) fails; execute the stage in the host with every command pinned to the worktree cwd.
+- **Biome forbids `!` (noNonNullAssertion).** Replace with an explicit undefined check (cheapest-eligible winner) or a cast in tests — never `biome-ignore` to force green.
+- **Edit-tool hazard with structural-summary reads.** A ranged read can render elided bodies as `{ … }`; using that rendered text as an edit old_string corrupts the target block (mangled a describe header mid-task). Always verify edits that matched suspiciously against `git diff`/raw read before proceeding.
+

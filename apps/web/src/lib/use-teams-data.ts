@@ -14,6 +14,10 @@ export interface TeamMember {
     autoStart?: boolean;
     /** Process pid when the member is running. */
     pid?: number;
+    /** Declared Layer-1 role (0544 R3). Omitted when unset — the roster renders `unset`, never inferred. */
+    role?: string;
+    /** Executor name the spec is bound to (0544 R3). */
+    executor?: string;
 }
 
 /** A team and its members as surfaced by GET /api/team/teams. */
@@ -50,6 +54,8 @@ function parseTeamsResponse(body: unknown): TeamGroup[] | null {
                 ...(typeof r.model === 'string' && r.model.length > 0 ? { model: r.model } : {}),
                 ...(typeof r.autoStart === 'boolean' ? { autoStart: r.autoStart } : {}),
                 ...(typeof r.pid === 'number' ? { pid: r.pid } : {}),
+                ...(typeof r.role === 'string' && r.role.length > 0 ? { role: r.role } : {}),
+                ...(typeof r.executor === 'string' && r.executor.length > 0 ? { executor: r.executor } : {}),
             });
         }
         teams.push({

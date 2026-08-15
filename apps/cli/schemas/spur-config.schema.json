@@ -168,12 +168,11 @@
                                         },
                                         {
                                             "type": "object",
-                                            "required": ["executor"],
                                             "properties": {
                                                 "executor": {
                                                     "type": "string",
                                                     "minLength": 1,
-                                                    "description": "Executor name \u2014 resolved against agent.executors first, else a raw canonical agent type."
+                                                    "description": "Executor name \u2014 resolved against agent.executors first, else a raw canonical agent type. Optional since 0543: a role-only member (no executor) resolves one through the tier ladder at materialization; at least one of role or executor is required."
                                                 },
                                                 "id": {
                                                     "type": "string",

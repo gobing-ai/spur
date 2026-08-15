@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
@@ -253,6 +253,59 @@ describe('spur agent list --specs', () => {
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
             expect(payload.specs[0].id).toBe('coder');
             expect(payload.specs[0].path).toBe('.spur/agents/coder.yaml');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('0544 R2/R4: --specs shows role and executor as distinct fields, unset when undeclared', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await mkdir(join(cwd, '.spur'), { recursive: true });
+            await writeFile(
+                join(cwd, '.spur', 'config.yaml'),
+                [
+                    'agent:',
+                    '  executors:',
+                    '    - name: cheap-exec',
+                    '      agent: pi',
+                    '      tier: cheap',
+                    '    - name: capable-exec',
+                    '      agent: claude',
+                    '      tier: capable-1',
+                    '  team:',
+                    '    alpha:',
+                    '      name: Alpha',
+                    '      work_dir: /tmp/alpha-ws',
+                    '      members:',
+                    '        - role: reviewer',
+                    '        - executor: cheap-exec',
+                    '',
+                ].join('\n'),
+                'utf8',
+            );
+            const up = await main(['team', 'up', 'alpha'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(up).toBe(0);
+
+            // Human: distinct role and executor columns; undeclared role renders `unset`.
+            out.messages.length = 0;
+            const code = await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            const human = out.messages.join('\n');
+            expect(human).toContain('reviewer');
+            expect(human).toContain('capable-exec');
+            expect(human).toContain('unset');
+
+            // JSON: role and executor are distinct fields; role omitted when undeclared.
+            out.messages.length = 0;
+            await main(['agent', 'list', '--specs', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+            const reviewer = payload.specs.find((s: { id: string }) => s.id === 'alpha-reviewer-1');
+            expect(reviewer?.role).toBe('reviewer');
+            expect(reviewer?.executor).toBe('capable-exec');
+            const plain = payload.specs.find((s: { id: string }) => s.id === 'alpha-cheap-exec');
+            expect(plain?.role).toBeUndefined();
+            expect(plain?.executor).toBe('cheap-exec');
         } finally {
             await cleanup();
         }

@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
     type AgentConfig,
     AgentConfigSchema,
+    memberLocalId,
+    type NormalizedTeamMember,
     normalizeMember,
     resolveExecutor,
     spurConfigSchema,
@@ -31,8 +33,22 @@ describe('TeamMemberConfigSchema', () => {
         ).toBe(true);
     });
 
-    test('rejects an object form missing executor', () => {
-        expect(TeamMemberConfigSchema.safeParse({ purpose: 'reviewer' }).success).toBe(false);
+    test('accepts a role-only object form (0543 R1 — executor optional)', () => {
+        expect(TeamMemberConfigSchema.safeParse({ role: 'coder' }).success).toBe(true);
+        expect(TeamMemberConfigSchema.safeParse({ role: 'reviewer', purpose: 'review pass' }).success).toBe(true);
+    });
+
+    test('rejects an unknown role, naming the offending value and the accepted set (0543 R5)', () => {
+        const result = TeamMemberConfigSchema.safeParse({ role: 'lead', executor: 'claude' });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            // Union parses nest variant errors in the message tree; the surfaced
+            // message is what a config-load failure prints to the operator.
+            expect(result.error.message).toContain('lead');
+            for (const accepted of ['scribe', 'coder', 'reviewer', 'planner']) {
+                expect(result.error.message).toContain(accepted);
+            }
+        }
     });
 });
 
@@ -48,6 +64,54 @@ describe('normalizeMember', () => {
         const normalized = normalizeMember(member);
         expect(normalized).toEqual(member);
         expect(normalized).not.toBe(member);
+    });
+});
+
+// ---- memberLocalId (0543 R3) ----
+// `id` wins, then `executor`; a role-only member derives `<role>-<n>` where n
+// is its 1-based declaration-order index among role-only members sharing the
+// role (0543 Design — "derive from the role plus an index"). Purpose is
+// annotation, not identity — it never enters the derivation.
+
+describe('memberLocalId (0543 R3)', () => {
+    const roster: NormalizedTeamMember[] = [
+        { executor: 'claude' },
+        { id: 'explicit', role: 'coder' },
+        { role: 'coder' },
+        { role: 'coder', purpose: 'second pass' },
+        { role: 'reviewer' },
+        { role: 'reviewer' },
+    ];
+
+    test('explicit id wins over executor and role', () => {
+        expect(memberLocalId(roster[1] as NormalizedTeamMember, roster, 1)).toBe('explicit');
+    });
+
+    test('executor wins for an executor-declared member', () => {
+        expect(memberLocalId(roster[0] as NormalizedTeamMember, roster, 0)).toBe('claude');
+    });
+
+    test('a role-only member derives <role>-<n>, n = 1-based occurrence', () => {
+        expect(memberLocalId(roster[2] as NormalizedTeamMember, roster, 2)).toBe('coder-1');
+        expect(memberLocalId(roster[3] as NormalizedTeamMember, roster, 3)).toBe('coder-2');
+        expect(memberLocalId(roster[4] as NormalizedTeamMember, roster, 4)).toBe('reviewer-1');
+        expect(memberLocalId(roster[5] as NormalizedTeamMember, roster, 5)).toBe('reviewer-2');
+    });
+
+    test('indices count only role-only members of the same role', () => {
+        // The explicit-id member at index 1 does not occupy a coder index slot.
+        expect(memberLocalId(roster[3] as NormalizedTeamMember, roster, 3)).toBe('coder-2');
+    });
+
+    test('purpose does not affect the derived id (annotation, not identity)', () => {
+        const withPurpose: NormalizedTeamMember = { role: 'coder', purpose: 'second pass' };
+        const plain: NormalizedTeamMember = { role: 'coder' };
+        expect(memberLocalId(withPurpose, [plain, withPurpose], 1)).toBe('coder-2');
+        expect(memberLocalId(plain, [plain, withPurpose], 1)).toBe('coder-2');
+    });
+
+    test('a member declaring neither role nor executor yields "" (R4 rejects it)', () => {
+        expect(memberLocalId({ purpose: 'ghost' }, [{ purpose: 'ghost' }], 0)).toBe('');
     });
 });
 
@@ -363,5 +427,59 @@ describe('backward-compat (no agent.team)', () => {
 
     test('an empty config still parses', () => {
         expect(spurConfigSchema.safeParse({}).success).toBe(true);
+    });
+});
+
+// ---- Role is the primary axis (0543 R4) ----
+// A member must declare at least one of role or executor; the bare-string
+// shorthand always carries `executor`, so only the object arm can trip R4.
+
+describe('AgentConfigSchema role-or-executor requirement (0543 R4)', () => {
+    const team = (members: unknown[]) => ({
+        team: {
+            alpha: {
+                name: 'Alpha',
+                work_dir: '~/x',
+                members,
+            },
+        },
+    });
+
+    test('a member declaring neither role nor executor fails, naming team id, position, and the rule', () => {
+        const result = AgentConfigSchema.safeParse(team([{ purpose: 'ghost' }, { executor: 'claude' }]));
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('neither role nor executor'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('alpha');
+            expect(issue?.message).toContain('index 0');
+            expect(issue?.message).toContain('at least one of role or executor is required');
+            expect(issue?.path).toEqual(['team', 'alpha', 'members', 0]);
+        }
+    });
+
+    test('a role-only member is accepted and derives a distinct composed id', () => {
+        const result = AgentConfigSchema.safeParse(team([{ role: 'coder' }, { role: 'coder' }]));
+        expect(result.success).toBe(true);
+    });
+
+    test('a purpose-only member is rejected even though the role field is optional', () => {
+        const result = AgentConfigSchema.safeParse(team([{ purpose: 'not a role' }]));
+        expect(result.success).toBe(false);
+    });
+
+    test('an unknown role fails AgentConfigSchema load naming the value and the accepted set', () => {
+        const result = AgentConfigSchema.safeParse(team([{ role: 'lead', executor: 'claude' }]));
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.message).toContain('lead');
+            expect(result.error.message).toContain('scribe');
+            expect(result.error.message).toContain('planner');
+        }
+    });
+
+    test('the bare-string shorthand still means executor and never trips R4', () => {
+        const result = AgentConfigSchema.safeParse(team(['claude']));
+        expect(result.success).toBe(true);
     });
 });

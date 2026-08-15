@@ -746,6 +746,57 @@ describe('team module', () => {
             expect(members.find((m) => m.id === 'runner')?.autoStart).toBe(true);
             expect(members.find((m) => m.id === 'idle')?.autoStart).toBe(false);
         });
+
+        test('0544 R3: member payload carries the declared role and resolved executor (omitted when unset)', async () => {
+            const roleSpec: TeamListing['specs'][number] = {
+                id: 'devops-reviewer-1',
+                name: 'reviewer',
+                type: 'claude',
+                executor: 'capable-exec',
+                workspace: '/tmp',
+                purpose: 'review pass',
+                tags: ['team:devops', 'spur:generated'],
+                config: { role: 'reviewer' },
+            };
+            const plainSpec: TeamListing['specs'][number] = {
+                id: 'devops-claude',
+                name: 'claude',
+                type: 'claude',
+                executor: 'cheap-exec',
+                workspace: '/tmp',
+                purpose: 'plain',
+                tags: ['team:devops', 'spur:generated'],
+                config: {},
+            };
+            const team: TeamListing = {
+                teamId: 'devops',
+                name: 'DevOps',
+                members: [],
+                specs: [roleSpec, plainSpec],
+                workDir: '/tmp',
+                isCurrentProject: false,
+            };
+            const teamService = teamServiceStub({ listTeams: async () => [team] });
+            const { ctx } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                teams: Array<{
+                    members: Array<{ id: string; role?: string; executor?: string }>;
+                }>;
+            };
+            const members = body.teams[0]?.members ?? [];
+            const reviewer = members.find((m) => m.id === 'devops-reviewer-1');
+            expect(reviewer?.role).toBe('reviewer');
+            expect(reviewer?.executor).toBe('capable-exec');
+            // Undeclared role is omitted (undefined in JSON) — never blank, never inferred.
+            const plain = members.find((m) => m.id === 'devops-claude');
+            expect(plain?.role).toBeUndefined();
+            expect(plain?.executor).toBe('cheap-exec');
+        });
     });
 
     describe('POST /api/team/:team/up', () => {

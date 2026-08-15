@@ -313,7 +313,9 @@ async function runTeamStop(
 /** Format a single agent status row for plain-text listing. */
 function formatStatusLine(agent: TeamStatusEntry): string {
     const pid = agent.pid === undefined ? '' : ` pid=${agent.pid}`;
-    return `${agent.status}\t${agent.id}\t${agent.type}\t${agent.purpose}${pid}`;
+    // 0544 R4: an undeclared role renders the literal `unset` — never blank, never inferred.
+    const role = agent.role ?? 'unset';
+    return `${agent.status}\t${agent.id}\t${agent.type}\t${role}\t${agent.purpose}${pid}`;
 }
 
 /** `spur team status --by-team` — group specs by their `team:<id>` membership (0258 R4). */
@@ -337,7 +339,11 @@ async function runTeamStatusGrouped(
 /** Render one team as a header line plus one indented row per spec. */
 function formatTeamBlock(team: TeamListing): string {
     const header = team.name && team.name !== team.teamId ? `# ${team.teamId} (${team.name})` : `# ${team.teamId}`;
-    const rows = team.specs.map((spec) => `  ${spec.id}\t${spec.type}\t${spec.purpose}`);
+    const rows = team.specs.map((spec) => {
+        // 0544 R1/R4: role is a distinct column; undeclared renders `unset`.
+        const role = typeof spec.config?.role === 'string' ? spec.config.role : 'unset';
+        return `  ${spec.id}\t${spec.type}\t${role}\t${spec.purpose}`;
+    });
     return [header, ...rows].join('\n');
 }
 
@@ -354,6 +360,9 @@ async function makeTeamServiceWithLedger(
     const svc = new TeamService({
         ...context,
         eventBus: bus as unknown as TeamServiceEventBus,
+        // 0543 R1: role-only members resolve through the Layer-1 role table —
+        // same map AgentService receives for `--agent <role>`.
+        roles: context.agentRoles,
     });
     return { svc, ledger };
 }

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M5"
 name: "Teams declared by role: a member is a role plus an executor"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T00:18:06.752Z"
-updated_at: "2026-08-14T00:19:09.550Z"
+updated_at: "2026-08-15T06:46:56.866Z"
 ---
 
 # M5: Teams declared by role: a member is a role plus an executor
@@ -120,3 +120,6 @@ argument G4 already applied to coding-agent kind
 - **Role-aware supervision policy.** Whether a failing `reviewer` should be restarted differently
   from a failing `coder` is unexamined.
 ## History
+- 2026-08-15T06:37:04.942Z backlog → active (system)
+- 2026-08-15T06:46:56.596Z active → verifying (system)
+- 2026-08-15T06:46:56.866Z verifying → done (system)
