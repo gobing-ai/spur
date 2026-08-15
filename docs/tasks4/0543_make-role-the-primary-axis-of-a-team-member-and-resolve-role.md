@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0538"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:14.490Z"
-updated_at: "2026-08-15T06:37:31.631Z"
+updated_at: "2026-08-15T06:55:03.128Z"
 ---
 
 ## 0543. Make role the primary axis of a team member and resolve role-only members
@@ -34,27 +34,27 @@ The resolution machinery already exists — `resolveExecutor`
 (`packages/config/src/index.ts:262-282`) and the tier eligibility sort used by
 `agent-service`. This task points a role-only member at it instead of requiring an executor name.
 ### Requirements
-- [ ] **R1.** A member declaring `role` and no `executor` resolves to a concrete executor through the
+- [x] **R1.** A member declaring `role` and no `executor` resolves to a concrete executor through the
       existing tier ladder — cheapest executor whose tier meets the role's tier from
       `plugins/sp/references/roles.md`. The materialized spec records **both** the role and the
       resolved executor name, so the resolution is inspectable rather than implicit. Measurable: a
       member declaring `role: reviewer` alone materializes a spec naming the role and a `capable-1`+
       executor.
-- [ ] **R2.** A member declaring both `role` and `executor` uses the pinned executor without tier
+- [x] **R2.** A member declaring both `role` and `executor` uses the pinned executor without tier
       resolution, and the spec records the role alongside it. Pin beats policy, consistent with
       `--agent` (feature B2 task 0536 R2). Measurable: a member pinning
       `omp-dsv4-flash-opencode` under `role: coder` materializes with that exact executor.
-- [ ] **R3.** `purpose` is demoted to human annotation. It is still accepted and carried through, but
+- [x] **R3.** `purpose` is demoted to human annotation. It is still accepted and carried through, but
       it is not the identity, not the routing signal, and not what a roster display reads. Local id
       derivation stays `member.id ?? executor` (0251) with a role-only member falling back to the
       role plus a disambiguating index when two members share it. Measurable: a member with a purpose
       and a role resolves identically to the same member without the purpose.
-- [ ] **R4.** A member declaring neither `role` nor `executor` fails config load, naming the team id
+- [x] **R4.** A member declaring neither `role` nor `executor` fails config load, naming the team id
       and the member position, and stating that at least one is required. The bare-string shorthand
       (`- claude`) keeps meaning `{ executor: "claude" }` per `normalizeMember`
-      (`packages/config/src/index.ts:236-237`). Measurable: the empty-member case fails with both
+      (`packages/config/src/index.ts:268-269`). Measurable: the empty-member case fails with both
       identifiers in the message.
-- [ ] **R5.** A role outside the four in `plugins/sp/references/roles.md` fails config load, naming
+- [x] **R5.** A role outside the four in `plugins/sp/references/roles.md` fails config load, naming
       the offending value and the accepted set. This is the same validation the `--agent` role branch
       applies, so the two must not drift — read the vocabulary from one place. Measurable: an unknown
       role fails at load; a valid one loads; both assertions run against the shared vocabulary source.
@@ -194,14 +194,14 @@ spec, so a role-only member's resolution is recordable (R1).
 **Leaves for dependents:** task **0544** renders the role on three surfaces and assumes this task
 records both the declared role and the resolved executor on the spec. It renders; it does not resolve.
 ### Plan
-- [ ] Add `role` to the object arm of `TeamMemberConfigSchema` and to `NormalizedTeamMember` (R1, R3)
-- [ ] Add a `superRefine` requiring at least one of role or executor, naming team id and position (R4)
-- [ ] Validate `role` against the shared vocabulary source, not a local copy (R5)
-- [ ] Resolve a role-only member through the existing tier eligibility sort rather than a new selector (R1)
-- [ ] Record both role and resolved executor on the materialized spec (R1, R2)
-- [ ] Keep a pinned executor authoritative when both fields are present (R2)
-- [ ] Define and document local-id derivation when a role-only member repeats a role (R3)
-- [ ] Update `docs/04_DESIGN.md` and `config/config.example.yaml` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Add `role` to the object arm of `TeamMemberConfigSchema` and to `NormalizedTeamMember` (R1, R3)
+- [x] Add a `superRefine` requiring at least one of role or executor, naming team id and position (R4)
+- [x] Validate `role` against the shared vocabulary source, not a local copy (R5)
+- [x] Resolve a role-only member through the existing tier eligibility sort rather than a new selector (R1)
+- [x] Record both role and resolved executor on the materialized spec (R1, R2)
+- [x] Keep a pinned executor authoritative when both fields are present (R2)
+- [x] Define and document local-id derivation when a role-only member repeats a role (R3)
+- [x] Update `docs/04_DESIGN.md` and `config/config.example.yaml` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 **Change map (0543 — role is the primary axis of a team member):**
 
@@ -245,43 +245,59 @@ Role validation reads the parity-asserted `AGENT_ROLE_NAMES` (roles.test.ts asse
 `roles.md` ids), so member validation and the `--agent` role branch share one vocabulary (R5).
 Bare-string shorthand unchanged (`normalizeMember`). `purpose` stays carried, never identity (R3).
 ### Testing
-**Quality gate (test hop):** `bun run format && bun run spur-check` → **PASS** (5237 tests / 0 fail across 291 files; coverage-gate, tsdoc-gate, transition-shim-check all PASS). Workspace suites: packages/config 43/43 (135 incl. loader/etc.), packages/app 1687/1687 (incl. team-service 79/79), apps/cli 732/732.
+**Re-verify 2026-08-14** (`/sp-dev-verifyall --feature M5 --force --fix all`). Prior Testing cited a stale pin-branch range (the loop + `memberLocalId` comment rather than the pin at `packages/app/src/services/team-service.ts:713-715`). Line anchors re-read this run.
 
-**Targeted suites for this change:**
+**Targeted tests this run (19 pass / 0 fail):** `bun test packages/config/tests/team-config.test.ts packages/app/tests/services/team-service.test.ts packages/app/tests/services/team-service-0258.test.ts --test-name-pattern "0543|role-only|neither role nor executor|unknown role|memberLocalId|purpose is annotation|pinned executor|role-only member"`
+
+**Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/app/src/services/agent-service.ts:2073-2085` cheapestEligibleExecutors shared funnel; `packages/app/src/services/team-service.ts:706-725` role branch; spec records role + resolved executor `packages/app/src/services/team-service.ts:735-753`; test `packages/app/tests/services/team-service.test.ts` "0543 R1: a role-only member resolves through the tier ladder" (capable-exec won for reviewer/capable-1, spec.executor=capable-exec, config.role=reviewer) |
-| R2 | MET | pin branch `packages/app/src/services/team-service.ts:695-698` runs before role branch; test "0543 R2: a pinned executor beats role tier resolution" (cheap-exec pin under coder/standard still wins, role recorded) |
-| R3 | MET | `packages/config/src/index.ts:281-303` memberLocalId (id ?? executor ?? <role>-<n>); purpose never read; tests: memberLocalId block (config) + team-service "0543 R3: purpose is annotation" + autostart ids `alpha-coder-1/2` (`packages/app/tests/services/team-service-0258.test.ts`) |
-| R4 | MET | `packages/config/src/index.ts:449-451` superRefine names team id + index + rule; test "a member declaring neither role nor executor fails" (message contains alpha, index 0, at-least-one rule) |
-| R5 | MET | `packages/config/src/index.ts:207-213` enum error fn names offending value + accepted set; tests assert message contains lead + scribe..planner at schema and config level |
+| R1 | MET | Shared funnel `packages/app/src/services/agent-service.ts:2073-2080` (`cheapestEligibleExecutors`); `resolveRole` calls it at `:1606`. Role-only branch `packages/app/src/services/team-service.ts:716-739`; spec records `executor` + `config.role` at `:753` and `:762`. Test `packages/app/tests/services/team-service.test.ts` "0543 R1: a role-only member resolves through the tier ladder" (this run). |
+| R2 | MET | Pin branch runs first `packages/app/src/services/team-service.ts:713-715` before the role-only else. Test "0543 R2: a pinned executor beats role tier resolution" (this run). |
+| R3 | MET | `memberLocalId` `packages/config/src/index.ts:281-296` (`id ?? executor ?? <role>-<n>`); purpose never read. Tests: config `memberLocalId` block + team-service "0543 R3: purpose is annotation" + autostart ids `packages/app/tests/services/team-service-0258.test.ts` (this run). |
+| R4 | MET | `AgentConfigSchema` superRefine `packages/config/src/index.ts:446-451` names team id, member index, and the at-least-one rule. Test "a member declaring neither role nor executor fails" (this run). |
+| R5 | MET | Enum error `packages/config/src/index.ts:207-211` names offending value + accepted set (`AGENT_ROLE_NAMES` `:151`). Tests at schema and config level (this run). |
 
-**AC verification:** all five M5 scenarios MET via tests (see verdict artifact `.spur/run/0543-verdict.json`; checks: task check pass + evidence-rule-pass).
+**Acceptance Criteria Verification**
 
-**Coverage:** N/A for this change surface — config validation + materialization paths are covered by the targeted behavioral tests above; the pipeline's quality gate does not gate per-file line coverage (verdict-based).
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — A member declared by role alone resolves an executor | MET | test | `packages/app/tests/services/team-service.test.ts` "0543 R1: a role-only member resolves through the tier ladder" (this run) |
+| Scenario: R2 — A member may still pin an executor, with the role recorded | MET | test | `packages/app/tests/services/team-service.test.ts` "0543 R2: a pinned executor beats role tier resolution" (this run) |
+| Scenario: R3 — purpose is annotation, not identity | MET | test | `packages/app/tests/services/team-service.test.ts` "0543 R3: purpose is annotation" + `packages/config/tests/team-config.test.ts` memberLocalId purpose-invariance (this run) |
+| Scenario: R4 — A member declaring neither role nor executor is rejected | MET | test | `packages/config/tests/team-config.test.ts` "a member declaring neither role nor executor fails" (this run) |
+| Scenario: R5 — An unknown role is rejected at config load | MET | test | `packages/config/tests/team-config.test.ts` "rejects an unknown role" + AgentConfigSchema unknown-role load test (this run) |
+
+**Design conformance:** 5/5 claims DONE (union+superRefine; shared `cheapestEligibleExecutors`; record role+resolved executor; one `AGENT_ROLE_NAMES` vocabulary; `<role>-<n>` local id). No silent deviation.
+
+**Coverage:** N/A (config validation + materialization; no new runtime path that the per-file coverage gate owns).
+
+**Fix-pass artifacts:** `.spur/run/0543-verdict.json` and `.spur/run/0543-verify-answer.txt` written this run (were missing; feature check L4.scenario-unverified).
 ### Review
-**Three-dimensional review (0543) — verdict PASS.**
+**Three-dimensional review (0543) — verdict PASS.** Re-verified 2026-08-14 under `/sp-dev-verifyall --feature M5 --force --fix all`. Added the required P1–P4 table (L3.review-priority-table was failing `--strict-core`).
 
 **Functional traceability:**
-- R1 MET — `cheapestEligibleExecutors` shared funnel (`packages/app/src/services/agent-service.ts:2073-2085`); `resolveRole` and `materializeTeam` both call it — one selector, never two (R1 Design). Role-only branch `packages/app/src/services/team-service.ts:706-725`; spec records role + resolved executor (`team-service.ts:735-753`).
-- R2 MET — pin branch runs first (`team-service.ts:695-698`); test asserts a pin below the role tier still wins.
-- R3 MET — `memberLocalId` (`packages/config/src/index.ts:281-303`): `id ?? executor ?? <role>-<n>`; purpose never enters derivation; config-load and materialization share the helper so ids match exactly.
-- R4 MET — `AgentConfigSchema` superRefine (`packages/config/src/index.ts:449-451`) rejects neither-role-nor-executor naming team id, member index, and the rule.
-- R5 MET — enum error function (`packages/config/src/index.ts:207-213`) names the offending value AND the accepted set; vocabulary is the parity-asserted `AGENT_ROLE_NAMES` (roles.test.ts), shared with the `--agent` role branch.
+- R1 MET — `cheapestEligibleExecutors` shared funnel (`packages/app/src/services/agent-service.ts:2073-2080`); `resolveRole` (`:1606`) and `materializeTeam` (`:731`) both call it — one selector, never two. Role-only branch `:716-739`; spec records role + resolved executor (`:753`, `:762`).
+- R2 MET — pin branch runs first (`packages/app/src/services/team-service.ts:713-715`); test asserts a pin below the role tier still wins.
+- R3 MET — `memberLocalId` (`packages/config/src/index.ts:281-296`): `id ?? executor ?? <role>-<n>`; purpose never enters derivation.
+- R4 MET — `AgentConfigSchema` superRefine (`packages/config/src/index.ts:446-451`) rejects neither-role-nor-executor naming team id, member index, and the rule.
+- R5 MET — enum error (`packages/config/src/index.ts:207-211`) names the offending value AND the accepted set; vocabulary is `AGENT_ROLE_NAMES`.
 
 **SECUA:**
-- Security: no new untrusted input; error messages interpolate config values only. Low risk.
-- Efficiency: materialization is config-time; `memberLocalId` is O(n) per member on single-digit rosters — not worth optimizing.
-- Correctness: guarded — no-executor-for-tier, missing-role-table, and neither-field all throw loud, never silently mis-resolve; no-role-table error tells the operator the supported surface (`spur team up` from CLI).
-- Usability: R4/R5 errors name the team, the position, the offending value, and the accepted set — directly actionable.
-- Architecture: extraction into one shared funnel is the anti-fork the task demands; `memberLocalId` in the CF-safe config core keeps load-time and materialization-time derivation identical.
+- Security: no new untrusted input; error messages interpolate config values only.
+- Efficiency: materialization is config-time; `memberLocalId` is O(n) on single-digit rosters.
+- Correctness: no-executor-for-tier, missing-role-table, and neither-field all throw loud.
+- Usability: R4/R5 errors name the team, the position, the offending value, and the accepted set.
+- Architecture: one shared funnel; `memberLocalId` in the CF-safe config core keeps load-time and materialization-time derivation identical.
 
-**Priority findings:** none P1/P2. P3 (residual, accepted):
-- Server/Board `teamService()` has no `roles` map — a role-only member materialized via the Board throws a loud error instead of resolving. Documented on `TeamServiceContext.roles` (`team-service.ts:69-78`); `spur team up` (CLI) is the supported materialization surface this task targets.
-- Role-only member ids follow declaration order — reordering the roster reassigns `<role>-<n>` ids. This is the frozen rule (0543 Design: "an id that shifts when the roster is reordered would break inbox addressing" — the rule is frozen for determinism); rostered configs are static. Low risk.
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | Architecture | `packages/app/src/services/team-service.ts:72-78` | Server/Board `teamService()` has no `roles` map — a role-only member materialized via the Board throws a loud error instead of resolving. `spur team up` (CLI) is the supported surface. Accepted residual. |
+| P3 | Correctness | `packages/config/src/index.ts:281-296` | Role-only ids follow declaration order — reordering the roster reassigns `<role>-<n>`. Frozen rule for determinism; rostered configs are static. Accepted residual. |
+| P4 | — | — | No P1–P2 findings; verify verdict PASS |
 
-**Disposition:** PASS — all requirements MET with real evidence; no blockers.
+**Disposition:** PASS — all requirements MET with re-read evidence this run; no blockers.
 ### References
 - **R1/R2 targets:** `packages/config/src/index.ts:177-198` (`TeamMemberConfigSchema`,
   `NormalizedTeamMember`), `:236-237` (`normalizeMember`), `:262-282` (`resolveExecutor`),

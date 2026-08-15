@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0543"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:19:14.718Z"
-updated_at: "2026-08-15T06:46:29.354Z"
+updated_at: "2026-08-15T06:55:03.404Z"
 ---
 
 ## 0544. Surface the member role across team status, agent specs, and the Teams roster
@@ -29,16 +29,16 @@ coding-agent kind or the prose `purpose`, neither of which is the routing signal
 This task adds the field to those surfaces. It is deliberately additive — features M3 and J4 own
 Teams and Board layout, and this task must not redesign either.
 ### Requirements
-- [ ] **R1.** `spur team status` shows each member's role, and `--json` carries it as a field.
+- [x] **R1.** `spur team status` shows each member's role, and `--json` carries it as a field.
       Measurable: a roster with mixed role-declared and executor-only members renders both correctly
       in human and `--json` output.
-- [ ] **R2.** `spur agent list --specs` shows the role recorded on each materialized spec, alongside
+- [x] **R2.** `spur agent list --specs` shows the role recorded on each materialized spec, alongside
       the executor it resolved to. Measurable: the spec listing shows role and executor as distinct
       columns/fields, not a merged string.
-- [ ] **R3.** The Teams Board roster shows the role. Additive only — no layout redesign, no new
+- [x] **R3.** The Teams Board roster shows the role. Additive only — no layout redesign, no new
       interaction; features M3 and J4 own those. Measurable: the roster row includes the role and the
       existing Teams board tests still pass.
-- [ ] **R4.** A member with no declared role reads as explicitly unset, never blank and never
+- [x] **R4.** A member with no declared role reads as explicitly unset, never blank and never
       inferred. Inferring a role from the executor's tier would invent information the operator did
       not declare, which is the failure mode the whole role model exists to remove. Measurable: a
       roster mixing declared and undeclared members shows the undeclared one as unset in all three
@@ -130,13 +130,13 @@ back, not to reconstruct here.
 **Leaves for dependents:** none in batch 2. Feature J7 (batch 3, task 0552) renders *routing and token*
 data on the Board — a different surface with a different data source; the two must not be conflated.
 ### Plan
-- [ ] Add the role to `spur team status` human output and its `--json` field set (R1)
-- [ ] Add role and resolved executor as distinct fields to `spur agent list --specs` (R2)
-- [ ] Add the role to the Teams Board roster row without changing layout (R3)
-- [ ] Render an undeclared role as explicitly unset in all three surfaces, never inferred (R4)
-- [ ] Add tests covering a roster mixing declared and undeclared members across all three surfaces (R1-R4)
-- [ ] Confirm existing Teams board tests still pass (R3)
-- [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
+- [x] Add the role to `spur team status` human output and its `--json` field set (R1)
+- [x] Add role and resolved executor as distinct fields to `spur agent list --specs` (R2)
+- [x] Add the role to the Teams Board roster row without changing layout (R3)
+- [x] Render an undeclared role as explicitly unset in all three surfaces, never inferred (R4)
+- [x] Add tests covering a roster mixing declared and undeclared members across all three surfaces (R1-R4)
+- [x] Confirm existing Teams board tests still pass (R3)
+- [x] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
 **Change map (0544 — surface the member role; additive only, no layout redesign):**
 
@@ -175,40 +175,59 @@ Board renders the literal `unset` badge — never blank, never back-derived from
 everywhere (R2) — a merged string cannot be filtered or parsed. The Board change is one cell on an
 existing row; anything more is M3's call.
 ### Testing
-**Pipeline verify results**
+**Re-verify 2026-08-14** (`/sp-dev-verifyall --feature M5 --force --fix all`). Prior Testing used basename-only anchors which L4 flagged as stale. All citations below are repo-relative and were re-read this run.
 
-- Verdict: PASS (from verdict artifact)
+**Targeted tests this run:**
+- `packages/app/tests/services/team-service.test.ts` "0544 R1: getStatus carries the declared role" — PASS
+- `apps/cli/tests/commands/team.test.ts` "0544 R1/R4: status shows the declared role and unset" — PASS
+- `apps/cli/tests/commands/agent-team.test.ts` "0544 R2/R4: --specs shows role and executor as distinct fields" — PASS
+- `apps/server/tests/modules/team/index.test.ts` "0544 R3: member payload carries the declared role" — PASS
+- `apps/web/tests/modules/teams/components.test.tsx` "SupervisorTab shows team roster..." (0544 R3/R4 assertions) — PASS
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 — spur team status shows the role (human + --json) | MET | `packages/app/src/services/team-service.ts:205-218` TeamStatusEntry role/executor; `:488-492` getStatus reads them off the spec; `apps/cli/src/commands/team.ts:315-318` formatStatusLine role column, `:343-346` by-team block; tests: team-service.test.ts getStatus test + `apps/cli/tests/commands/team.test.ts` 0544 test (human `reviewer` + `unset`, JSON role/executor fields) |
-| R2 — agent list --specs shows role and executor as distinct fields | MET | `apps/cli/src/commands/agent.ts:197-210` — distinct role/executor JSON fields + human columns; tests `apps/cli/tests/commands/agent-team.test.ts` 0544 test (distinct fields, unset when undeclared) + `agent.test.ts` column-shape assertion |
-| R3 — Teams Board roster shows the role (additive) | MET | `apps/server/src/modules/team/index.ts:235-240` member payload role/executor; `apps/web/src/lib/use-teams-data.ts:17-18,57-58` TeamMember + parse narrow; `apps/web/src/modules/teams/SupervisorTab.tsx:329-336` roster role cell; tests: server `index.test.ts` 0544 test + web `components.test.tsx` roster test (role badge + unset) |
-| R4 — undeclared role reads as explicitly unset, never inferred | MET | literal `unset` in human (`team.ts:317`, `:344`, `agent.ts` human column, `SupervisorTab.tsx:334`); field-absent (undefined) in `--json` (`team-service.ts:490`, `agent.ts:199`, server `:239`); no tier→role back-derivation anywhere (grep: no role inference added) |
+**CLI golden path this run:** `bun run apps/cli/src/index.ts team status --json` — demo members omit `role` (undeclared). Human `team status` prints the literal `unset` column. `agent list --specs` human prints distinct `role` + `executor` columns as `unset`.
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| R6 — Rosters show the role wherever they already show the member | MET | test | all three surfaces: team status (team.test.ts 0544), agent list --specs (agent-team.test.ts 0544), Board roster (web components.test.tsx roster test); undeclared shows `unset` in all three |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `TeamStatusEntry.role/executor` `packages/app/src/services/team-service.ts:205-215`; `getStatus` `:488-493`. Human column `apps/cli/src/commands/team.ts:314-318`; by-team `apps/cli/src/commands/team.ts:342-345`. Tests: team-service getStatus + `apps/cli/tests/commands/team.test.ts` 0544 (this run). CLI golden path this run. |
+| R2 | MET | Distinct JSON fields + human columns `apps/cli/src/commands/agent.ts:197-219`. Test `apps/cli/tests/commands/agent-team.test.ts` 0544 (this run). |
+| R3 | MET | Server payload `apps/server/src/modules/team/index.ts:235-240`; parse `apps/web/src/lib/use-teams-data.ts:17-20,57-58`; roster cell `apps/web/src/modules/teams/SupervisorTab.tsx:329-336`. Tests: server index.test.ts 0544 + web SupervisorTab roster (this run). |
+| R4 | MET | Literal `unset` in human (`apps/cli/src/commands/team.ts:317`, `:344`, `apps/cli/src/commands/agent.ts:216-217`, `apps/web/src/modules/teams/SupervisorTab.tsx:335`); field-absent in `--json` (`packages/app/src/services/team-service.ts:490-492`, `apps/cli/src/commands/agent.ts:198-200`, server `:237-239`). Live CLI this run printed `unset` for undeclared demo members. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R6 — Rosters show the role wherever they already show the member | MET | test | All three surfaces this run: `apps/cli/tests/commands/team.test.ts` 0544; `apps/cli/tests/commands/agent-team.test.ts` 0544; `apps/web/tests/modules/teams/components.test.tsx` SupervisorTab roster (`unset` for undeclared). CLI golden path `team status` / `agent list --specs` this run. |
+
+**Design conformance:** 4/4 claims DONE (additive fields; unset is a value; `--json` first; role/executor stay distinct). No layout redesign.
+
+**Coverage:** N/A (surface/field additive; verdict-based).
+
+**Fix-pass artifacts:** `.spur/run/0544-verdict.json` and `.spur/run/0544-verify-answer.txt` written this run (were missing; feature check L4.scenario-unverified).
 ### Review
-**Three-dimensional review (0544) — verdict PASS.**
+**Three-dimensional review (0544) — verdict PASS.** Re-verified 2026-08-14 under `/sp-dev-verifyall --feature M5 --force --fix all`. Added the required P1–P4 table (L3.review-priority-table was failing `--strict-core`).
 
 **Functional traceability:**
-- R1 MET — `TeamStatusEntry.role/executor` (`packages/app/src/services/team-service.ts:205-218`) fed by `getStatus` (`:488-492`); human rows render the role column (`apps/cli/src/commands/team.ts:315-318`, `:343-346`), `--json` rides the fields. Tests: team-service getStatus test + team.test.ts human/json.
-- R2 MET — `spur agent list --specs` role + executor as distinct fields/columns (`apps/cli/src/commands/agent.ts:197-210`); test agent-team.test.ts asserts distinct `role`/`executor` JSON fields and human columns.
-- R3 MET — server member payload (`apps/server/src/modules/team/index.ts:235-240`) → `TeamMember` parse (`apps/web/src/lib/use-teams-data.ts:17-18,57-58`) → roster cell (`apps/web/src/modules/teams/SupervisorTab.tsx:329-336`); server + web tests assert the chain.
-- R4 MET — unset is a value: literal `unset` in human output and Board badge, field-absent in `--json`; nothing back-derives a role from the executor's tier. Asserted in all surface tests.
+- R1 MET — `TeamStatusEntry.role/executor` (`packages/app/src/services/team-service.ts:205-215`) fed by `getStatus` (`:488-493`); human rows `apps/cli/src/commands/team.ts:314-318`, `:342-345`.
+- R2 MET — `spur agent list --specs` role + executor as distinct fields/columns (`apps/cli/src/commands/agent.ts:197-219`).
+- R3 MET — server member payload (`apps/server/src/modules/team/index.ts:235-240`) → `TeamMember` parse (`apps/web/src/lib/use-teams-data.ts:17-20,57-58`) → roster cell (`apps/web/src/modules/teams/SupervisorTab.tsx:329-336`).
+- R4 MET — unset is a value: literal `unset` in human output and Board badge, field-absent in `--json`; nothing back-derives a role from the executor's tier.
 
 **SECUA:**
-- Security: the web parse narrows untrusted API fields (string, non-empty) before carrying — no new injection surface; role/executor render as text (React escapes).
-- Efficiency: three additive field reads; no new queries or allocations of note.
-- Correctness: `length > 0` guards cover hand-authored specs with empty strings; role enum validation at config load means a spec's `config.role` is always a valid Layer-1 role (belt-and-braces only).
-- Usability: `unset` is unambiguous and never conflated with a declared role; columns are distinct so the output is parseable.
-- Architecture: additive fields at each layer; no layout/interaction changes — M3/J4 boundaries respected; the web narrow is consistent with the existing `model`/`pid` pattern.
+- Security: web parse narrows untrusted API fields (string, non-empty) before carrying; React escapes text.
+- Efficiency: three additive field reads.
+- Correctness: `length > 0` guards; role enum is validated at config load.
+- Usability: `unset` is unambiguous; columns stay distinct.
+- Architecture: additive fields; no layout/interaction — M3/J4 boundaries respected.
 
-**Priority findings:** none P1/P2. P3 (residual, accepted): `spur team status` human columns grew from 4 to 5 — any downstream script parsing the tab-separated output without a header would shift; the `--json` surface (the machine contract) is unchanged in shape. Low risk; recorded, not actioned.
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | Usability | `apps/cli/src/commands/team.ts:314-318` | `spur team status` human columns grew from 4 to 5 — a script parsing TSV without a header would shift. `--json` shape is additive. Accepted residual. |
+| P4 | — | — | No P1–P2 findings; verify verdict PASS |
 
-**Disposition:** PASS — all requirements MET with real evidence; no blockers.
+**Disposition:** PASS — all requirements MET with re-read evidence this run; no blockers.
 ### References
 - **R1 target:** `spur team status` in `apps/cli/src/commands/` (team noun) and `TeamService`
   (`packages/app/src/services/team-service.ts`)

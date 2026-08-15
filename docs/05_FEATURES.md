@@ -127,11 +127,12 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | `inbox_messages` migration + schema composition | ✅ | `0001_spur_cli_team_inbox`; table usable after `applyCliMigrations` |
 | `TeamService` (app layer) over `TeamOrchestrator`/`MessageService` | ✅ | send/inbox/reply, specs, status, assign; 100% covered |
 | `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
-| `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard |
+| `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard. `--specs` shows declared `role` and resolved `executor` as distinct fields; undeclared role is `unset` (M5/0544) |
 | `spur agent run --drain` + spec-sourced identity | ✅ | identity (purpose/tags/system-prompt) comes from the `.spur/agents/<id>.yaml` spec via `agent create` flags; `--drain` folds inbox into prompt. Run-level identity flags were folded into specs — corrected 2026-06-12 after code verification |
-| `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs and enriches from the supervisor when `spur serve` is reachable |
+| `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs and enriches from the supervisor when `spur serve` is reachable. Human/`--json` carry declared `role` (literal `unset` when undeclared) and `executor` (M5/0544) |
 | `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
-| `spur team up\|down` | ✅ | Materialize/teardown roster; best-effort start/stop when serve is up |
+| `spur team up\|down` | ✅ | Materialize/teardown roster; best-effort start/stop when serve is up. Role-only members resolve through the shared tier ladder; pin beats policy (M5/0543) |
+| Role as primary team-member axis (M5) | ✅ | Member is role + optional executor; role-only resolves via `cheapestEligibleExecutors`; neither-field and unknown-role fail load; purpose is annotation; rosters show role/`unset` (0543/0544) |
 | `spur team start\|stop` | ✅ | Requires `spur serve`; starts/stops `agent loop`. Process-pipe stdin is operator attach, not the durable inbox |
 | Inter-agent control plane (occupant pin, coordination artifacts, pinned wait) | 🔶 | Waves 1–2 landed (0529/0530). Wave 3 follow helper landed (0531: `followSystemEventsAfter`). First-class `blocked` not built |
 | Server team process API + SSE + stdin POST | ✅ | `GET /api/team/processes`, `GET …/stream` (SSE), `POST …/stdin`, start/stop. No WebSocket |
