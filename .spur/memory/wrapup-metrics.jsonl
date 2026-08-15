@@ -89,6 +89,8 @@ Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{w
 {"wbs":"0548","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-14T21:18:22.766Z"}
 {"wbs":"0549","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-14T22:39:20.253Z"}
 {"wbs":"0550","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:14.057Z"}
+{"feature":"I3","wbs":"0539","verdict":"PASS","targeted":"68 pass/0 fail","gate":"rc=0","review":"PASS(4 minor,2 advisory; F1-F3 fixed)"}
+{"feature":"I3","wbs":"0540","verdict":"PASS","targeted":"272 pass/0 fail","gate":"rc=0","review":"PASS(2 minor,2 advisory; notes)"}
 {"wbs":"0543","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
 {"wbs":"0544","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
 `{"wbs":"0547","feature_id":"J6","status":"done","verdict":"PASS","timestamp":"2026-08-15T07:35:40Z"}`

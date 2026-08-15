@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I3"
 name: "Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-13T23:27:41.734Z"
-updated_at: "2026-08-13T23:28:17.393Z"
+updated_at: "2026-08-15T07:36:51.108Z"
 ---
 
 # I3: Harness surface reconciliation: plugins/sp and workflow YAML against the live spur CLI
@@ -116,3 +116,6 @@ standing observation is that it has never been exercised well under real failure
 an existing mechanism rather than part of B2's selection redesign, and it shares this feature's
 evidence base — runtime behavior of the harness as installed.
 ## History
+- 2026-08-15T07:33:54.429Z backlog → active (system)
+- 2026-08-15T07:34:56.663Z active → verifying (system)
+- 2026-08-15T07:36:51.108Z verifying → done (system)

@@ -603,6 +603,14 @@ commits. Date is the task's done date (UTC).
 - **Where recorded:** `.spur/context/buglog.md` (bugs 146/148/762 + root-coverage instrumentation),
   `.spur/context/learnings.md`.
 
+## I3 batch learnings (0539, 0540) — 2026-08-15
+
+- `spur task verdict --from-answer` requires a `| Req | Status | Evidence |` markdown table (header located by column name); free-form PASS prose parses to UNKNOWN. (0539)
+- Reviewer/implementer subagents reliably trip on `intercom` AFTER delivering complete reports — treat that error class as benign; validate the artifact, not the exit status. (0539, 0540)
+- Inline YAML action execution: yq `-o=json` with brackets + jq `===CMD===` delimiters + awk split; each action = own bash process with env exported. (0539)
+- `task update <wbs> <status>` is positional; `--status` is unknown. Status hops todo→wip→testing are host-driven when subagents implement. (0539)
+- Reviewer minor diagnostics that are polish, not defects, go to wrap notes — no fix cycle. (0540)
+
 ## 2026-08-15 — M5 batch 1 (0543, 0544)
 
 - **Extend the union, do not fork it.** Role became the primary axis by relaxing `executor` to optional on the EXISTING member schema + one superRefine (R4), not by adding a parallel member type. A second member shape is how the tier prose drifted before.
