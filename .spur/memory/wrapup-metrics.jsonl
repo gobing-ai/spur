@@ -86,3 +86,6 @@ Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0541 --jso
 Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{wbs}-verdict.json` files (all PASS); timestamp from each task's `frontmatter.updated_at`.{"wbs":"0557","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T06:04:47.588Z"}
 {"wbs":"0558","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T07:21:03.308Z"}
 {"wbs":"0559","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T17:16:35.987Z"}
+{"wbs":"0548","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-14T21:18:22.766Z"}
+{"wbs":"0549","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-14T22:39:20.253Z"}
+{"wbs":"0550","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:14.057Z"}

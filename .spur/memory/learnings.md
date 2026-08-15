@@ -474,3 +474,131 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after 0541 entry; verified
 - 0559: ts-libs fix delivery — detectProvenance removal requires a lockstep ts-libs release (bun run bump-ver <ver> --push, OIDC CI publish) THEN bun update in the monorepo. The tag trigger didn't fire on push; workflow_dispatch on main published the same version (workflow reads package.json versions). Pre-push lefthook blocks on pre-existing lint warnings — fix the warning (rename to _col), never --no-verify.
 - Batch ops gotchas: inline implement can exhaust implementTimeoutMs (30 min) on large tasks mid-work — raise the budget for resume (partial state carries). A hung review subagent (zero tool calls >5 min) should be stopped and re-dispatched fresh — no partial mutations to protect when nothing was called.
 - Verdict answer files: stray review-table rows leak into the AC table and trip ac-row-dropped warnings — cosmetic, verdict stays authoritative.
+# Wrap-up LEARNING-CAPTURE — Feature E3 (tasks 0548, 0549, 0550)
+
+Raw markdown grouped by date + task WBS. Captured from verdicts, verify answers, test-gate logs, and
+commits. Date is the task's done date (UTC).
+
+## 2026-08-14 — 0548 (measure incremental import + analyze cost on real data)
+
+### Conventions
+
+- Real-data history validation must use a source-local binary (`bun run apps/cli/src/index.ts …` or
+  built `apps/cli/spur.js`), never a bare global `spur` — mandated after the 2026-08-10 backfill ran
+  old code ~83 s. Every `spur history import` prints a provenance header (`binary:` + resolved
+  `@gobing-ai/ts-llm-jsonl-importer@<version>`); `--json` embeds the same `provenance` field.
+- A measurement task produces a citeable artifact (precedent `docs/tasks2/0347-inventory.md`) and
+  leaves the full `spur-check` gate to the pipeline's test hop (implement-scope rule: the full gate is
+  never run from inside implement).
+- Measure the condition the trigger will actually run in (steady state), then the backlogged case as
+  an upper bound — a cold full import is the wrong number.
+
+### Patterns
+
+- Import and analyze measured in **separate** processes so they can be triggered at different
+  cadences; a single combined number hides the order-of-magnitude split (import ≈ 20.6 s all-fanout,
+  analyze ≈ 9 s over 1.5 M records).
+- Ledger dedup (`record_hash TEXT PRIMARY KEY` on `history_import_ledger`) makes idle-period backlogs
+  near-free: 248k re-parsed lines → 34 net inserts.
+
+### Gotchas
+
+- `--source all` also imports gemini (3,083 records) and opencode (28,149 records) on this machine,
+  contradicting the "unsupported sources import nothing" assumption of the 2026-08-06 ruling. Scope
+  decision (six full-fidelity vs all) must be explicit before quoting window arithmetic (13.9 s vs
+  20.6 s).
+- n=1 measurements: each import condition measured once; conclusions carry ≥10× margins so the R5
+  recommendation holds, but downstream tasks must not quote per-source figures as more precise than
+  run-to-run variance.
+- Raw run JSON/time files under /tmp/0548/ were deleted after transcription — figures are auditable
+  through the artifact, not raw payloads.
+
+## 2026-08-14 — 0549 (enqueue coalesced history refresh on work completion)
+
+### Conventions
+
+- Off the hot path is a project principle (deterministic over hidden automation): the trigger enqueues
+  and returns; the refresh never runs inline on the firing operation.
+- The trigger is explicit + opt-in config (`history.refresh.on_completion`, default off), observable,
+  and disable-able without code edits — hidden automation is ruled out by the constitution.
+- Trigger points are exhaustive and terminal: task-done + pipeline-run completion; never "every CLI
+  invocation".
+
+### Errors fixed
+
+- **P2 correctness/concurrency:** coalescing made atomic via `INSERT … ON CONFLICT DO NOTHING` + a
+  **scoped partial unique index** `queue_jobs_history_refresh_pending_unique`
+  (`queue_jobs(type) WHERE type='history.refresh' AND status='pending'`). Index scoped to ONE type on
+  purpose: `task-action`/`feature-action` legitimately hold multiple pending rows. Cross-process
+  concurrency test added (`packages/domain/tests/db.test.ts:201-244`).
+- **P3 observability:** `enqueueHistoryRefresh` returns the POST-merge payload (merged burst window),
+  asserted in tests.
+
+### Patterns
+
+- Coalescing join: merged payload keeps earliest `windowStart`, extends `windowEnd` to latest
+  completion, `nextRetryAt` slides to `now + debounce_ms`; once claimed (`processing`), next
+  completion starts a fresh job — an in-flight refresh is never starved.
+- Debounce default (600 000 ms) follows 0548's measured figures: window must dwarf the import cost
+  (~20.6 s) so a burst pays one import.
+
+### Gotchas
+
+- **Server-only consumption (P2, documented not fixed):** `history.refresh` jobs are consumed ONLY by
+  `spur serve`'s `JobWorkerService`; the CLI has no worker/scheduler. A CLI-only operator (common:
+  `spur task done` / `spur workflow run`, incl. runall parallel agents) enqueues a pending job that
+  never runs without the server. Operator-confirmed intended (2026-08-14); documented as a
+  precondition in `docs/04_DESIGN.md` + task `### Notes`.
+- **Coalescing migration residual:** `CREATE UNIQUE INDEX IF NOT EXISTS` fails on an existing DB that
+  already holds duplicate pending rows of that type (only possible via the pre-fix race); none
+  expected since the trigger is opt-in and default-off.
+- 0548's single-flight guard + stricter cadence recommendations were NOT implemented here — recorded
+  as residual, not silently dropped.
+
+## 2026-08-14/15 — 0550 (watermark live sessions + report refresh coverage honestly)
+
+### Conventions
+
+- Honesty about coverage is a hard requirement: a refresh must report `{ refreshed, skipped, window }`
+  rather than bare success, so the reader can tell current data from stale.
+- Additive output: `sessionState` is output on the artifact, never a new DB column — pre-0550
+  artifacts are unaffected (absent ⇒ unknown).
+
+### Errors fixed
+
+- **Watermark role-unknown regression (P2, review-fix):** the original watermark predicate treated a
+  final `role='unknown'` / role-less message as *not assistant-like*, so the session was marked
+  in-progress and its data **zeroed** — but the claude mapper writes `'unknown'` for role-less
+  messages and imported rows commonly lack a role. Fix: role-less / `'unknown'`-role imported messages
+  **degrade to complete** — analyzed, not zeroed. New regression test
+  `packages/domain/tests/analytics/watermark.test.ts:181-202` (final `role='unknown'` no tool call ⇒
+  state complete, watermarkSeq = maxSeq, rollup counts 3 messages / 42 input tokens).
+
+### Patterns
+
+- Watermark policy: analyze bound to the last **complete turn** (assistant-like, non-meta message with
+  no open tool call); everything after is a possibly-incomplete trailing turn excluded from derived
+  values. Where "complete" is ambiguous (no tool-call rows), degrade to "last message is assistant-like".
+- Growing in-progress session contributes only the completed portion to totals (30 tokens not 80) —
+  verified by test.
+
+### Gotchas
+
+- Pre-0550 behavior for complete sessions is unchanged — no data is excluded; the policy only affects
+  sessions still being written.
+
+## Cross-task — bun 1.3.14 coverage-exit-1 bug (all three tasks)
+
+- **Symptom:** `bun test` prints "0 fail" then `error: script "test" exited with code 1`; the
+  project coverage gate (bunfig `coverageThreshold` lines 0.9 / functions 0.8, plus the
+  `.coverage/lcov.info` post-check) exits nonzero spuriously.
+- **Root cause:** Bun 1.3.14 coverage instrumentation is unreliable from monorepo root with
+  `--coverage`; lcov is sometimes written to a workspace-relative dir, sometimes not at all, and the
+  gate fails closed. Focused runs apply the repo threshold to every loaded dependency pulled through
+  package barrels, so a single-file target at 100% can still exit 1.
+- **Workaround (this batch):** judge test success by "0 fail", not exit code; use the per-file
+  coverage row as focused evidence; verify the real gate with `bun run test`. 0549's test-gate.status
+  shows FAIL purely from this spurious exit while the actual suite was 51 pass / 0 fail.
+- **Where recorded:** `.spur/context/buglog.md` (bugs 146/148/762 + root-coverage instrumentation),
+  `.spur/context/learnings.md`.
+

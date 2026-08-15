@@ -311,6 +311,24 @@ import-all → analyze → write artifact → prune reports older than 90 days. 
 external launchd plist (`com.gobing-ai.spur.history.daily.plist`), not an embedded scheduler. The
 history system emits `history.*` events to the event ledger for observability.
 
+**Completion-triggered refresh** (E3/0549): a second trigger bound to **work completing**
+(`history.refresh.on_completion`, opt-in config, default off) enqueues one coalesced `history.refresh`
+job on the feature-A2 embedded job queue at task-done and pipeline-run completion — never inline on
+the firing operation. `enqueueCoalesced` (`packages/domain/src/db.ts`) makes the lookup-then-insert
+atomic under cross-process concurrency via a **partial unique index** on `queue_jobs`
+(`queue_jobs_history_refresh_pending_unique`, scoped to `type='history.refresh' AND status='pending'`
+so other job types keep multiple pending rows); a burst inside `debounce_ms` joins the pending job
+(earliest `windowStart`, latest `windowEnd`) instead of enqueuing a duplicate. Consumption is
+server-side: `spur serve`'s job worker runs the job body, which reuses `HistoryService.daily`'s
+import-all fan-out with per-source isolation. Coalescing shapes in `04 §3`.
+
+**Watermark policy** (E3/0550): `analyze` bounds derived values to a still-appending session's **last
+complete turn** (`packages/domain/src/analytics/watermark.ts`), so a half-written session never
+contributes a partial turn's derived values; each `bySession[]` row carries additive
+`sessionState: 'in-progress' | 'complete'`. The daily result reports honest coverage
+(`RefreshCoverage { refreshed, skipped, window }`): full-fidelity sources refreshed, unsupported
+sources skipped (operator ruling 2026-08-06), and the MIN/MAX message `ts` analyzed.
+
 **Analytics** (`packages/domain/src/analytics`) is a domain consumer, not part of the generic
 importer. The analyze rollup estimates per-model cost for the artifact from `history_message` /
 `history_tool_call` (ADR-049). The workflow-trace cost path (ADR-060) joins the run→session
