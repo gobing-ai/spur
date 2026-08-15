@@ -91,6 +91,51 @@ spur history analyze --session <filename-stem> --json
 ETL owns token/cost/message/tool/loop/assistant-duration aggregates; raw JSONL stays authoritative
 for command text, compactions, test/guard retries, and tool execution duration/status/errors.
 
+## OMP tool-call block shapes (task 0564 R5)
+
+Live OMP assistant messages emit **flat** toolCall blocks whose argument bag sits under
+`arguments`; older sessions emit the **legacy nested** `{toolCall:{…}}` envelope, and an
+intermediate shape used `input` as the argument key. The fallback parser and this skill must
+read all three the way the importer does — **`mappers.ts` (`normalizeOmpToolCall`,
+`call.input ?? call.arguments`) is the single field-map authority**; this section records the
+shapes for recognition, it is not a second map.
+
+1. **Legacy nested block** — argument bag under a `toolCall` envelope:
+
+```json
+{"type":"message","message":{"role":"assistant","content":[
+  {"toolCall":{"id":"call_x","name":"bash","arguments":{"command":"git status","i":"Check state"}}}
+]}}
+```
+
+2. **Flat block, legacy `input` key**:
+
+```json
+{"type":"message","message":{"role":"assistant","content":[
+  {"type":"toolCall","id":"call_x","name":"bash","input":{"command":"git status","i":"Check state"}}
+]}}
+```
+
+3. **Flat block, current `arguments` key (live shape)** — `{type, id, name, arguments, intent,
+   partialArgs, streamIndex}`:
+
+```json
+{"type":"message","message":{"role":"assistant","content":[
+  {"type":"toolCall","id":"call_x","name":"bash","arguments":{"command":"git status","i":"Check state"},
+   "intent":"Check state","partialArgs":"{\"command\":\"git status\",\"i\":\"Check state\"}","streamIndex":0}
+]}}
+```
+
+The command text is the `command` field inside the argument bag: `call.input ?? call.arguments`
+then `.command` — never a hardcoded key choice.
+
+**toolResult messages** are `role: "toolResult"` message envelopes (not content blocks) carrying
+`{toolCallId, toolName, content, details, isError, timestamp}` — `details.wallTimeMs` is the
+tool's own measured wall time when present; `toolCallId` joins the originating `toolCall.id`.
+The importer retains the timing (`history_tool_call.duration_ms` / `started_at` /
+`completed_at`, task 0564 R1); raw logs stay authoritative for result text, which lives in
+`content[].text` — not a `block.output` field.
+
 ## Edge cases
 
 | Scenario | Handling |

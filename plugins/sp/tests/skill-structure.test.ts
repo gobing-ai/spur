@@ -378,6 +378,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(skill).toContain('no typed mapper');
         expect(skill).toContain('do not retain');
         expect(skill).toContain('0492 R7');
+        // 0564 R5: session-formats reference records the accepted tool-call block shapes and
+        // the toolResult shape, and points at mappers.ts as the single field-map authority.
+        expect(sessionFormats).toContain('OMP tool-call block shapes (task 0564 R5)');
+        expect(sessionFormats).toContain('legacy nested');
+        expect(sessionFormats).toContain('call.input ?? call.arguments');
+        expect(sessionFormats).toContain('single field-map authority');
+        expect(sessionFormats).toMatch(
+            /toolResult.*\n.*\{toolCallId, toolName, content, details, isError, timestamp\}/,
+        );
         // Runtime-path boundary: no build-time config/{workflows,...} literals in skill packaging.
         expect(skill).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
         expect(sessionFormats).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
