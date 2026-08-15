@@ -368,6 +368,10 @@ function formatDailyResult(r: DailyResult): string {
         }
     }
     lines.push(`artifact totals: messages=${r.artifact.totals.messages} toolCalls=${r.artifact.totals.toolCalls}`);
+    lines.push(
+        `coverage: refreshed=[${r.coverage.refreshed.join(', ')}] skipped=[${r.coverage.skipped.join(', ')}] ` +
+            `window=${r.coverage.window.since ?? '…'} → ${r.coverage.window.until ?? '…'}`,
+    );
     if (r.reportPath !== undefined) {
         lines.push(`report: ${r.reportPath}`);
     }

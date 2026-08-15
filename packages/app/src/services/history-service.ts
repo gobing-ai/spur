@@ -15,12 +15,14 @@ import {
     type ArtifactSelector,
     type ArtifactWarning,
     assertArtifactVersion,
+    buildWatermarkFilter,
     bySession,
     byTool,
     type CoverageEntry,
     computeDerived,
     countCheckpointsBySource,
     type DriftRow,
+    dataWindow,
     derivedWarnings,
     drift,
     type ForensicTotals,
@@ -32,10 +34,12 @@ import {
     RunSessionDao,
     renderMarkdown,
     resolveReportMode,
+    type SessionState,
     type SourceSummaryRow,
     selectorDigest,
     sessionSpans,
     sessionToolDurations,
+    sessionWatermarks,
     sourceSummary,
     type ToolRollupRow,
     todoToolCalls,
@@ -140,6 +144,20 @@ export interface DailyOptions {
     mode?: string;
 }
 
+/**
+ * Honest refresh coverage (task 0550, R3/R4): which sources were refreshed, which were
+ * skipped as unsupported, and the data window covered. Carried on the refresh result so a
+ * reader never mistakes a refresh for full capture of every source.
+ */
+export interface RefreshCoverage {
+    /** Full-fidelity sources this refresh imported (non-failed fan-out entries). */
+    refreshed: string[];
+    /** Sources without full-fidelity support, skipped by operator ruling (feature E1 § Out of scope). */
+    skipped: string[];
+    /** MIN/MAX message `ts` the analyze covered (recency without touching the DB). */
+    window: { since: string | null; until: string | null };
+}
+
 /** Result of {@link HistoryService.daily}. */
 export interface DailyResult {
     /** The fan-out import outcome. */
@@ -148,6 +166,11 @@ export interface DailyResult {
     artifact: HistoryArtifact;
     /** Pruned report directory names (`YYYY-MM-DD`), oldest first. */
     pruned: string[];
+    /**
+     * Honest coverage report (task 0550, R3/R4): refreshed + skipped sources and the
+     * covered window. Always present — a refresh reports its coverage, never bare success.
+     */
+    coverage: RefreshCoverage;
     /** Path of the mode-rendered `.md` sidecar (present only when `mode` was passed, 0555 R4). */
     reportPath?: string;
 }
@@ -175,6 +198,36 @@ const SOURCES: readonly LlmJsonlSource[] = [
     'grok',
     'agy',
 ];
+
+/**
+ * Sources with full-fidelity import support (feature E1 § In). The coverage report
+ * (task 0550 R3) enumerates these as refreshed and the unsupported set as skipped.
+ */
+const FULL_FIDELITY_SOURCES: readonly string[] = ['claude', 'codex', 'pi', 'omp', 'agy', 'grok'];
+
+/**
+ * Sources without full-fidelity support — deferred by operator ruling 2026-08-06
+ * (feature E1 § Out of scope). Named in the coverage report so a refresh never reads
+ * as if it captured every source.
+ */
+const UNSUPPORTED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity-ide', 'openclaw', 'hermes'];
+
+/**
+ * Build the honest coverage report (task 0550 R3/R4) from the import fan-out and the
+ * analyze selector. `refreshed` = full-fidelity sources whose fan-out entry did not
+ * fail; `skipped` = the unsupported set; `window` = the MIN/MAX message `ts` the
+ * analyze covered (recency without touching the DB).
+ */
+async function buildRefreshCoverage(
+    db: DbAdapter,
+    selector: ArtifactSelector,
+    fanOut: FanOutResult,
+): Promise<RefreshCoverage> {
+    const statusBySource = new Map(fanOut.entries.map((e) => [e.source, e.status]));
+    const refreshed = FULL_FIDELITY_SOURCES.filter((s) => statusBySource.has(s) && statusBySource.get(s) !== 'failed');
+    const { since, until } = await dataWindow(db, selector);
+    return { refreshed, skipped: [...UNSUPPORTED_SOURCES], window: { since, until } };
+}
 const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 const MAX_ERROR_SAMPLES = 20;
 /** Per-source import timeout default (10 minutes, task 0470 R5). */
@@ -242,18 +295,26 @@ export class HistoryService {
         const top = opts.top ?? 20;
         const db = await this.ctx.getDb();
 
+        // Task 0550 watermark (R1/R2): compute each session's last-complete-turn boundary,
+        // then exclude the trailing partial turn of in-progress sessions from every query.
+        // Complete sessions contribute no filter — their data is untouched.
+        const watermarks = await sessionWatermarks(db, selector);
+        const wm = buildWatermarkFilter(watermarks);
+        const queryOpts = wm.sql === '' ? undefined : { watermark: wm };
+
         const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows, spanRows, toolDurRows, todoRows] =
             await Promise.all([
-                messageRollup(db, selector),
-                toolRollup(db, selector),
-                byTool(db, selector, top),
-                bySession(db, selector, top),
-                loops(db, selector),
-                drift(db, selector),
+                messageRollup(db, selector, queryOpts),
+                toolRollup(db, selector, queryOpts),
+                byTool(db, selector, top, queryOpts),
+                bySession(db, selector, top, queryOpts),
+                loops(db, selector, queryOpts),
+                drift(db, selector, queryOpts),
+                // sourceSummary is import coverage — not watermarked, stays import-faithful.
                 sourceSummary(db, selector),
-                sessionSpans(db, selector),
-                sessionToolDurations(db, selector),
-                todoToolCalls(db, selector),
+                sessionSpans(db, selector, queryOpts),
+                sessionToolDurations(db, selector, queryOpts),
+                todoToolCalls(db, selector, undefined, queryOpts),
             ]);
 
         const totals = foldTotals(mRows, tRows);
@@ -282,6 +343,11 @@ export class HistoryService {
 
         const coverage = buildCoverage(sourceRows, tRows, driftRows, opts.coverageErrors, opts.importCoverage);
         const derived = computeDerived(spanRows, toolDurRows, todoRows);
+
+        // R2: mark each session's completeness state so consumers can exclude in-progress
+        // sessions (task 0547). Analyze always writes it; the field stays additive.
+        const stateByKey = new Map<string, SessionState>();
+        for (const w of watermarks) stateByKey.set(`${w.sessionId}\0${w.source}`, w.state);
 
         const artifact: HistoryArtifact = {
             schemaVersion: HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -314,6 +380,7 @@ export class HistoryService {
                 topTool: r.topTool,
                 assistantDurationMs: r.assistantDurationMs ?? 0,
                 assistantDurationUnmeasured: r.assistantDurationUnmeasured,
+                sessionState: stateByKey.get(`${r.sessionId}\0${r.source}`) ?? 'complete',
             })),
             loops: loopRows,
             warnings: [
@@ -367,6 +434,7 @@ export class HistoryService {
         const cwd = opts.cwd ?? process.cwd();
         // Fail fast on an unknown mode — before a potentially long import fan-out.
         const renderer = opts.mode !== undefined ? resolveReportMode(opts.mode) : null;
+        const db = await this.ctx.getDb();
         const fanOut = await this.importAll({
             sources: opts.sources,
             sourceTimeout: opts.sourceTimeout,
@@ -397,7 +465,9 @@ export class HistoryService {
 
         const pruned = pruneReports(cwd, REPORT_RETENTION_DAYS);
 
-        return { fanOut, artifact, pruned, ...(reportPath !== undefined ? { reportPath } : {}) };
+        const coverage = await buildRefreshCoverage(db, selector, fanOut);
+
+        return { fanOut, artifact, pruned, coverage, ...(reportPath !== undefined ? { reportPath } : {}) };
     }
 
     /**

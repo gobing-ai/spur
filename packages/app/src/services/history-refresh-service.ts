@@ -172,6 +172,9 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, paylo
             trigger: job.trigger,
             windowStart: job.windowStart,
             windowEnd: job.windowEnd,
+            // Task 0550 R3/R4: honest coverage — which sources were refreshed, which were
+            // skipped as unsupported, and the data window covered.
+            coverage: result.coverage,
             severity: 'info',
         });
         await deps.bus.emit('history.analyze.completed', {

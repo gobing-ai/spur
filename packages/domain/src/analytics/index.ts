@@ -85,3 +85,13 @@ export {
     foldTotals,
 } from './run-cost';
 export type { AnalyticsSummary, CostRecord, EtlPayload, ModelPricing, TokenTotals } from './types';
+export {
+    applyWatermarkToWhere,
+    buildWatermarkFilter,
+    dataWindow,
+    type SessionState,
+    type SessionWatermark,
+    sessionWatermarks,
+    type WatermarkFilter,
+    type WatermarkQueryOptions,
+} from './watermark';

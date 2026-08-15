@@ -552,8 +552,14 @@ resident (a resident schedule belongs to 0471's launchd agent, not Spur's embedd
 checkpoint resume (R7): a missed night self-heals on the next run with no gap and no double-count.
 Only the **analyze** step scopes the report via `--since`/`--until`. `--root <path>` overrides the
 per-source history roots (test seam; default is each source's platform dir). `--json` emits the
-structured `DailyResult` (`{ fanOut, artifact, pruned }`). Exit code follows the fan-out import
-outcome (0/1/2), so `history.daily.failed` and the exit agree.
+structured `DailyResult` (`{ fanOut, artifact, pruned, coverage }`). Exit code follows the fan-out import
+outcome (0/1/2), so `history.daily.failed` and the exit agree. `coverage` (task 0550, R3/R4) is the honest
+coverage report `{ refreshed, skipped, window }`: `refreshed` names the full-fidelity sources this refresh
+imported (claude, codex, pi, omp, agy, grok), `skipped` names the unsupported sources deferred by the
+2026-08-06 operator ruling (gemini, opencode, antigravity-ide, openclaw, hermes), and `window` carries the
+MIN/MAX message `ts` the analyze covered (`{ since, until }`) so a reader can tell current data from stale
+without inspecting the database. A failed full-fidelity source drops out of `refreshed` (surfaced via
+`fanOut`/exit code) rather than being silently counted as refreshed.
 
 **`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
 `.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
@@ -583,6 +589,15 @@ full detail streamed to `analyze-<digest>.errors.jsonl` (R6). `recordsWithUsage`
 `durationUnmeasured` carry the never-fabricate invariant — a consumer renders `n/a`, never a
 fabricated `0`. No artifact flags ⇒ human stdout summary (rendered from the artifact); `--json` ⇒ the
 artifact shape.
+
+**Watermark policy (task 0550, R1/R2):** a session still being written is analyzed only up to its **last
+complete turn** — an assistant (non-meta) message with no open tool call closes a turn, and everything
+after it is a possibly-incomplete trailing turn excluded from derived values. Each `bySession[]` row
+carries an additive `sessionState: 'in-progress' | 'complete'` (absent ⇒ unknown for artifacts written
+before 0550) so a consumer can filter to finished sessions; the state is output, never a new column.
+Where "complete" is ambiguous for a source (no tool-call rows to inspect), the rule degrades to "last
+message is assistant-like" — including `role='unknown'`/role-less rows, so imported role-less messages are
+analyzed rather than zeroed. Pre-0550 behavior for complete sessions is unchanged — no data is excluded.
 
 **Assistant response duration (task 0507 R2):** totals (`assistantDurationMs`,
 `assistantDurationUnmeasured`) and per-session stats (`bySession[].assistantDurationMs` /

@@ -1,6 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
+import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
 /**
  * Forensic SQL over `history_message` / `history_tool_call` (0464 R1). Sole owner of
@@ -98,48 +99,66 @@ export interface SourceSummaryRow {
 }
 
 /**
- * Build the `WHERE` clause (and params) for the six composable selectors against
- * `history_message` (aliased `m`). Selectors compose as `AND` — narrowing, never widening.
- * `null` means "no predicate" for that axis; an empty/`null` source list means no source filter.
+ * Selector predicate clauses against `history_message`, parameterized by alias so
+ * the watermark queries can reuse the same scope against a second alias (`m2`).
  */
-export function buildMessageWhere(sel: ArtifactSelector): { where: string; params: unknown[] } {
+export function buildMessageWhereClauses(
+    sel: ArtifactSelector,
+    alias: string,
+): { clauses: string[]; params: unknown[] } {
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (sel.since != null) {
-        clauses.push('m.ts >= ?');
+        clauses.push(`${alias}.ts >= ?`);
         params.push(sel.since);
     }
     if (sel.until != null) {
-        clauses.push('m.ts <= ?');
+        clauses.push(`${alias}.ts <= ?`);
         params.push(sel.until);
     }
     if (sel.sources != null && sel.sources.length > 0) {
-        clauses.push(`m.source IN (${sel.sources.map(() => '?').join(', ')})`);
+        clauses.push(`${alias}.source IN (${sel.sources.map(() => '?').join(', ')})`);
         params.push(...sel.sources);
     }
     if (sel.sessionId != null) {
-        clauses.push('m.session_id = ?');
+        clauses.push(`${alias}.session_id = ?`);
         params.push(sel.sessionId);
     }
     if (sel.runId != null) {
         // `run_id`/`task_wbs` only exist on `provenance='spur-run'` rows, and the 0009 index
         // is `(provenance, run_id)` — the provenance equality is what makes the --run/--task
         // selectors resolve against an index rather than a scan (R3).
-        clauses.push("m.provenance = 'spur-run'");
-        clauses.push('m.run_id = ?');
+        clauses.push(`${alias}.provenance = 'spur-run'`);
+        clauses.push(`${alias}.run_id = ?`);
         params.push(sel.runId);
     }
     if (sel.taskWbs != null) {
-        clauses.push("m.provenance = 'spur-run'");
-        clauses.push('m.task_wbs = ?');
+        clauses.push(`${alias}.provenance = 'spur-run'`);
+        clauses.push(`${alias}.task_wbs = ?`);
         params.push(sel.taskWbs);
     }
+    return { clauses, params };
+}
+
+/**
+ * Build the `WHERE` clause (and params) for the six composable selectors against
+ * `history_message` (aliased `m` by default). Selectors compose as `AND` — narrowing,
+ * never widening. `null` means "no predicate" for that axis; an empty/`null` source
+ * list means no source filter.
+ */
+export function buildMessageWhere(sel: ArtifactSelector, alias = 'm'): { where: string; params: unknown[] } {
+    const { clauses, params } = buildMessageWhereClauses(sel, alias);
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
 /** Message-side spend rollup (Q8) grouped by source, model, and day. */
-export async function messageRollup(db: DbAdapter, sel: ArtifactSelector): Promise<MessageRollupRow[]> {
+export async function messageRollup(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<MessageRollupRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<MessageRollupRow>(
         `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
                 COUNT(*) AS messages,
@@ -152,15 +171,21 @@ export async function messageRollup(db: DbAdapter, sel: ArtifactSelector): Promi
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m
-         ${where}
+         ${wm.where}
          GROUP BY m.source, m.model, DATE(m.ts)`,
         ...params,
+        ...wm.params,
     );
 }
 
 /** Tool-call rollup per (source, model, day) — the duration/toolCall side of the buckets. */
-export async function toolRollup(db: DbAdapter, sel: ArtifactSelector): Promise<ToolRollupRow[]> {
+export async function toolRollup(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<ToolRollupRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolRollupRow>(
         `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
                 COUNT(*) AS toolCalls,
@@ -168,15 +193,22 @@ export async function toolRollup(db: DbAdapter, sel: ArtifactSelector): Promise<
                 SUM(tc.duration_ms IS NULL) AS durationUnmeasured
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
-         ${where}
+         ${wm.where}
          GROUP BY m.source, m.model, DATE(m.ts)`,
         ...params,
+        ...wm.params,
     );
 }
 
 /** Per-tool forensic stats (Q1 time + Q3/Q6 calls/errors), bounded by `top`. */
-export async function byTool(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<ToolStatRow[]> {
+export async function byTool(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    top: number,
+    opts?: WatermarkQueryOptions,
+): Promise<ToolStatRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolStatRow>(
         `SELECT tc.tool_name AS toolName,
                 COUNT(*) AS calls,
@@ -188,18 +220,25 @@ export async function byTool(db: DbAdapter, sel: ArtifactSelector, top: number):
                 SUM(tc.result_bytes) AS resultBytes
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
-         ${where}
+         ${wm.where}
          GROUP BY tc.tool_name
          ORDER BY durationMsTotal DESC
          LIMIT ?`,
         ...params,
+        ...wm.params,
         top,
     );
 }
 
 /** Per-session leaderboard (Q5), bounded by `top`. */
-export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<SessionRow[]> {
+export async function bySession(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    top: number,
+    opts?: WatermarkQueryOptions,
+): Promise<SessionRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
 
     // Message-side stats per session, selector-scoped (Q5).
     const msgRows = await db.queryAll<{
@@ -220,11 +259,12 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m
-         ${where}
+         ${wm.where}
          GROUP BY m.session_id, m.source
          ORDER BY tokens DESC
          LIMIT ?`,
         ...params,
+        ...wm.params,
         top,
     );
 
@@ -240,9 +280,10 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
                 COUNT(*) AS cnt
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
-         ${where}
+         ${wm.where}
          GROUP BY m.session_id, m.source, tc.tool_name`,
         ...params,
+        ...wm.params,
     );
 
     // Build per-session tool counts from the flat (session, tool) rows.
@@ -290,9 +331,10 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
 }
 
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */
-export async function loops(db: DbAdapter, sel: ArtifactSelector): Promise<LoopRow[]> {
+export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: WatermarkQueryOptions): Promise<LoopRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    const extra = where === '' ? 'WHERE tc.args_digest IS NOT NULL' : `${where} AND tc.args_digest IS NOT NULL`;
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const extra = wm.where === '' ? 'WHERE tc.args_digest IS NOT NULL' : `${wm.where} AND tc.args_digest IS NOT NULL`;
     return db.queryAll<LoopRow>(
         `SELECT tc.session_id AS sessionId, tc.tool_name AS toolName,
                 tc.args_digest AS argsDigest,
@@ -306,13 +348,15 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector): Promise<LoopR
          HAVING COUNT(*) >= 3
          ORDER BY repeats DESC`,
         ...params,
+        ...wm.params,
     );
 }
 
 /** Unknown-disposition drift counts (Q10) per source and record_type. */
-export async function drift(db: DbAdapter, sel: ArtifactSelector): Promise<DriftRow[]> {
+export async function drift(db: DbAdapter, sel: ArtifactSelector, opts?: WatermarkQueryOptions): Promise<DriftRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    const extra = where === '' ? "WHERE m.disposition = 'unknown'" : `${where} AND m.disposition = 'unknown'`;
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const extra = wm.where === '' ? "WHERE m.disposition = 'unknown'" : `${wm.where} AND m.disposition = 'unknown'`;
     return db.queryAll<DriftRow>(
         `SELECT m.source AS source, m.record_type AS recordType, COUNT(*) AS n
          FROM history_message m
@@ -320,6 +364,7 @@ export async function drift(db: DbAdapter, sel: ArtifactSelector): Promise<Drift
          GROUP BY m.source, m.record_type
          ORDER BY n DESC`,
         ...params,
+        ...wm.params,
     );
 }
 
@@ -354,8 +399,13 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
 // ---------------------------------------------------------------------------
 
 /** Per-session timing span: MIN/MAX ts + assistant duration sums (derived metric input). */
-export async function sessionSpans(db: DbAdapter, sel: ArtifactSelector): Promise<SessionSpanRow[]> {
+export async function sessionSpans(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<SessionSpanRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<SessionSpanRow>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 MIN(m.ts) AS firstTs,
@@ -363,24 +413,31 @@ export async function sessionSpans(db: DbAdapter, sel: ArtifactSelector): Promis
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m
-         ${where}
+         ${wm.where}
          GROUP BY m.session_id, m.source`,
         ...params,
+        ...wm.params,
     );
 }
 
 /** Per-session tool-call duration sums (derived metric input). */
-export async function sessionToolDurations(db: DbAdapter, sel: ArtifactSelector): Promise<SessionToolDurationRow[]> {
+export async function sessionToolDurations(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<SessionToolDurationRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<SessionToolDurationRow>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 SUM(tc.duration_ms) AS toolDurationMs,
                 SUM(tc.duration_ms IS NULL) AS toolDurationUnmeasured
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
-         ${where}
+         ${wm.where}
          GROUP BY m.session_id, m.source`,
         ...params,
+        ...wm.params,
     );
 }
 
@@ -388,11 +445,17 @@ export async function sessionToolDurations(db: DbAdapter, sel: ArtifactSelector)
  * Todo-tool calls with `args_raw` populated (task 0553), ordered for phase extraction.
  * `LIMIT ?` satisfies the R2 structural invariant (no unbounded corpus materialization).
  */
-export async function todoToolCalls(db: DbAdapter, sel: ArtifactSelector, limit = 5000): Promise<TodoToolCallRow[]> {
+export async function todoToolCalls(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    limit = 5000,
+    opts?: WatermarkQueryOptions,
+): Promise<TodoToolCallRow[]> {
     const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     // Built outside the SQL template: a nested backtick expression inside the literal
     // would break the R2 source scan (which treats backticks as query boundaries).
-    const whereClause = where ? `${where} AND tc.args_raw IS NOT NULL` : 'WHERE tc.args_raw IS NOT NULL';
+    const whereClause = wm.where ? `${wm.where} AND tc.args_raw IS NOT NULL` : 'WHERE tc.args_raw IS NOT NULL';
     return db.queryAll<TodoToolCallRow>(
         `SELECT tc.session_id AS sessionId, tc.source AS source,
                 m.ts AS ts,
@@ -404,6 +467,7 @@ export async function todoToolCalls(db: DbAdapter, sel: ArtifactSelector, limit 
          ORDER BY tc.session_id, m.ts
          LIMIT ?`,
         ...params,
+        ...wm.params,
         limit,
     );
 }
