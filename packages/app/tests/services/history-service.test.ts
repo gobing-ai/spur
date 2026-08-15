@@ -41,6 +41,7 @@ interface Msg {
     seq: number;
     ts: string;
     model: string | null;
+    role?: string;
     input?: number | null;
     output?: number | null;
     cost?: number | null;
@@ -62,7 +63,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         1,
         m.session_id,
         m.seq,
-        'assistant',
+        m.role ?? 'assistant',
         m.record_type ?? 'message',
         m.disposition ?? 'conversation',
         m.ts,
@@ -220,6 +221,7 @@ describe('HistoryService', () => {
             expect(artifact.bySession[0]?.topTool).toBe('Read');
             expect(artifact.bySession[0]?.assistantDurationMs).toBe(10000);
             expect(artifact.bySession[0]?.assistantDurationUnmeasured).toBe(1);
+            expect(artifact.bySession[0]?.sessionState).toBe('complete');
             // loops: Read/abc repeated 2 — below the >=3 threshold, so none
             expect(artifact.loops).toEqual([]);
             // drift warning
@@ -229,6 +231,31 @@ describe('HistoryService', () => {
             expect(artifact.coverage[0]?.messages).toBe(3);
             expect(artifact.coverage[0]?.toolCalls).toBe(3);
             expect(artifact.coverage[0]?.unknownRecords).toBe(1);
+        });
+
+        test('marks a still-appending session in-progress and excludes the trailing turn', async () => {
+            const ctx = makeCtx();
+            await seed(ctx);
+            const db = await ctx.getDb();
+            await insertMessage(db, {
+                record_hash: 'm-live',
+                session_id: 'sess-1',
+                seq: 4,
+                ts: '2026-05-31T10:01:00Z',
+                model: null,
+                role: 'user',
+                input: 777,
+                output: 0,
+                cost: 9,
+            });
+            const svc = new HistoryService(ctx);
+            const first = await svc.analyze(ALL);
+            expect(first.bySession[0]?.sessionState).toBe('in-progress');
+            expect(first.totals.messages).toBe(3);
+            expect(first.bySource.claude?.messages).toBe(3);
+            const second = await svc.analyze(ALL);
+            expect(second.bySession).toHaveLength(1);
+            expect(second.bySession[0]?.sessionState).toBe('in-progress');
         });
 
         test('reports loop findings when a digest repeats >= 3 times', async () => {

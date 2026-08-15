@@ -18,8 +18,10 @@ import {
     BusPlanningEventEmitter,
     bridgeEventBus,
     configuredSecretValues,
+    createHistoryRefreshService,
     createPsProcessInspector,
     type EventEmitter,
+    enqueueHistoryRefreshSafe,
     FeatureService as FeatureServiceImpl,
     hitlConfirmDefault,
     systemEventProjectContext as makeSystemEventProjectContext,
@@ -368,6 +370,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     tasksDir: folders.tasksDir,
                     foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
+                    onTaskReachedDone: async (wbs) => {
+                        const refresh = createHistoryRefreshService({
+                            getDb: this.getDb.bind(this),
+                            cwd,
+                        });
+                        await enqueueHistoryRefreshSafe(refresh, {
+                            trigger: 'task-done',
+                            at: new Date().toISOString(),
+                            wbs,
+                        });
+                    },
                 });
             }
             return taskSvc;
@@ -486,6 +499,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 // duplication; dedup deferred (task 0236 R3).
                 observabilityBus: () => bridgeEventBus(eventsBus),
                 events: () => bridgeEventBus(eventsBus),
+                onPipelineCompleted: async ({ runId, workflowName }) => {
+                    const refresh = createHistoryRefreshService({
+                        getDb: this.getDb.bind(this),
+                        cwd,
+                    });
+                    await enqueueHistoryRefreshSafe(refresh, {
+                        trigger: 'pipeline-done',
+                        at: new Date().toISOString(),
+                        runId: `${workflowName}:${runId}`,
+                    });
+                },
             });
             return workflowSvc;
         },

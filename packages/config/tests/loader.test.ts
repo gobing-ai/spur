@@ -206,6 +206,17 @@ describe('app-section schemas', () => {
         }
     });
 
+    test('spurConfigSchema accepts the history.refresh section (task 0549)', () => {
+        const result = spurConfigSchema.safeParse({
+            history: { refresh: { on_completion: true, debounce_ms: 15_000 } },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.history?.refresh.on_completion).toBe(true);
+            expect(result.data.history?.refresh.debounce_ms).toBe(15_000);
+        }
+    });
+
     test('spurConfigSchema accepts the workflow section (task 0429)', () => {
         const result = spurConfigSchema.safeParse({ workflow: { logRetentionDays: 14 } });
         expect(result.success).toBe(true);

@@ -256,6 +256,26 @@
                 }
             }
         },
+        "history": {
+            "type": "object",
+            "description": "History import/analyze configuration (feature E3). Opt-in operation-triggered refresh.",
+            "properties": {
+                "refresh": {
+                    "type": "object",
+                    "properties": {
+                        "on_completion": {
+                            "type": "boolean",
+                            "description": "Enqueue a coalesced history refresh when a task or pipeline run completes. Default false (opt-in; hidden automation is out of contract)."
+                        },
+                        "debounce_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Coalescing window in milliseconds. Completions inside the window join one pending refresh. Default 60000."
+                        }
+                    }
+                }
+            }
+        },
         "tasks": {
             "type": "object",
             "description": "Task-folder registration (design \u00a79). Absorbs the legacy docs/.tasks/config.json folders + baseCounter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",

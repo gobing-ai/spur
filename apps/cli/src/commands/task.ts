@@ -4,8 +4,10 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     aggregateBatchVerdicts,
     CorpusMigrator,
+    createHistoryRefreshService,
     DependencyMutationError,
     DuplicateFollowUpError,
+    enqueueHistoryRefreshSafe,
     ensurePipelineRunLink,
     evaluateDoneTransition,
     type MigrationReport,
@@ -1243,6 +1245,17 @@ async function makeService(context: CliContext, folderOverride?: string, noLifec
         resolveTemplate: (variant: string) => loadTemplateContent(context.cwd, variant),
         resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
         foldersConfig,
+        onTaskReachedDone: async (wbs) => {
+            const refresh = createHistoryRefreshService({
+                getDb: () => context.getDb(),
+                cwd: context.cwd,
+            });
+            await enqueueHistoryRefreshSafe(refresh, {
+                trigger: 'task-done',
+                at: new Date().toISOString(),
+                wbs,
+            });
+        },
     });
 }
 

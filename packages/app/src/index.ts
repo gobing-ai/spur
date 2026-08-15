@@ -126,6 +126,19 @@ export {
     isFindingCode,
 } from './services/finding-codes';
 export type {
+    EnqueueHistoryRefreshResult,
+    HistoryRefreshPayload,
+    HistoryRefreshServiceContext,
+    HistoryRefreshTrigger,
+    HistoryRefreshTriggerEvent,
+} from './services/history-refresh-service';
+export {
+    createHistoryRefreshService,
+    enqueueHistoryRefreshSafe,
+    HISTORY_REFRESH_JOB,
+    HistoryRefreshService,
+} from './services/history-refresh-service';
+export type {
     AnalyzeOptions,
     ArtifactResolution,
     DailyOptions,
@@ -135,16 +148,19 @@ export type {
     HistoryImportResult,
     HistoryServiceContext,
     ImportAllOptions,
+    RefreshCoverage,
     ResolvedArtifact,
     RunHistoryReportResult,
 } from './services/history-service';
 export {
     computeExitCode,
+    FULL_FIDELITY_HISTORY_SOURCES,
     formatIssue,
     HistoryService,
     pruneReports,
     resolveArtifactPath,
     runHistoryReport,
+    UNSUPPORTED_HISTORY_SOURCES,
 } from './services/history-service';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';

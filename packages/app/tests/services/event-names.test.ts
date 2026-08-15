@@ -236,6 +236,9 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             { name: 'history.import.completed', renderer: 'history-import' },
             { name: 'history.analyze.completed', renderer: 'history-analyze' },
             { name: 'history.daily.failed', renderer: 'history-daily' },
+            { name: 'history.refresh.enqueued', renderer: 'history-refresh' },
+            { name: 'history.refresh.completed', renderer: 'history-refresh' },
+            { name: 'history.refresh.skipped', renderer: 'history-refresh' },
         ] as const;
         for (const { name, renderer } of cases) {
             const entry = requireEntry(name);

@@ -5,6 +5,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
 import {
     configuredSecretValues,
+    createHistoryRefreshService,
+    enqueueHistoryRefreshSafe,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
@@ -167,6 +169,17 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             secretValues: configuredSecretValues(context.env),
             warn: (message) => context.output.error(`Warning: ${message}`),
             getDb: () => context.getDb(),
+            onPipelineCompleted: async ({ runId, workflowName }) => {
+                const refresh = createHistoryRefreshService({
+                    getDb: () => context.getDb(),
+                    cwd: context.cwd,
+                });
+                await enqueueHistoryRefreshSafe(refresh, {
+                    trigger: 'pipeline-done',
+                    at: new Date().toISOString(),
+                    runId: `${workflowName}:${runId}`,
+                });
+            },
             // Intentionally leave AgentService without a server-style events bus: the
             // workflow-dispatched agent lifecycle is the single `workflow.agent` series
             // (0365 R9 / 0370 R4). Wiring AiRunner.events here would dual-emit

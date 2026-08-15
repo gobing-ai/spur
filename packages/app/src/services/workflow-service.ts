@@ -368,6 +368,11 @@ export interface WorkflowAppServiceContext {
      */
     events?(): EventBus<Record<string, (event: unknown) => void>>;
     /**
+     * Called after a successful (non-dry) run reaches `done` (feature E3).
+     * Must not throw into the run result.
+     */
+    onPipelineCompleted?: (detail: { runId: string; workflowName: string }) => Promise<void>;
+    /**
      * Embedded Spur JSON schemas keyed by `schemas/<name>.schema.json` subpath. When
      * present, a bundled workflow's `$schema: "@gobing-ai/spur/schemas/..."` ref is
      * served from this map instead of resolved through `node_modules`. Required for
@@ -583,6 +588,16 @@ export class WorkflowAppService {
                 }
             }
             (runResult as Record<string, unknown>).warnings = warnings;
+        }
+        if (!isDry && runResult.status === 'done') {
+            try {
+                await this.ctx.onPipelineCompleted?.({
+                    runId: runResult.runId,
+                    workflowName: runResult.workflowName,
+                });
+            } catch {
+                // Refresh enqueue must not fail a completed pipeline.
+            }
         }
         return runResult;
     }

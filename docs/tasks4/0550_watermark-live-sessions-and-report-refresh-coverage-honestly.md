@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Watermark live sessions and report refresh coverage honestly"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E3
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0549"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.978Z"
-updated_at: "2026-08-14T01:38:49.388Z"
+updated_at: "2026-08-15T00:55:48.958Z"
 ---
 
 ## 0550. Watermark live sessions and report refresh coverage honestly
@@ -166,17 +166,48 @@ in-progress sessions from token totals. This task defines the state; 0547 choose
 - [ ] Add tests: growing-session watermark, in-progress filtering, supersede-not-duplicate, coverage reporting (R1-R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+Last-complete-turn watermark + honest coverage on the refresh result. No schema change.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | What / why |
+| --- | --- |
+| `packages/domain/src/analytics/forensic-query.ts:97-102` | Clip aggregates to last assistant `seq`. |
+| `packages/domain/src/analytics/forensic-query.ts:174-187` | Unclipped `sessionCompleteness`. |
+| `packages/domain/src/analytics/artifact.ts:106` | Additive `sessionState` on `SessionStat`. |
+| `packages/app/src/services/history-service.ts:154-171` | `RefreshCoverage` on `DailyResult`. |
+| `packages/app/src/services/history-service.ts:367` | Stamp `sessionState` onto `bySession`. |
+| `packages/app/src/services/history-refresh-service.ts:125` | Triggered `daily` reports skipped unsupported sources + burst window. |
+| `docs/04_DESIGN.md:568-570` | T3 surface. |
+| `packages/domain/tests/analytics/forensic-query.test.ts:481` | Growing-session clip + complete-state. |
+| `packages/app/tests/services/history-service.test.ts:236` | In-progress + re-analyze still one row. |
 ### Testing
+**Verify 2026-08-15.**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Trailing user tokens excluded from `messageRollup` (`packages/domain/tests/analytics/forensic-query.test.ts` watermark describe). |
+| R2 | MET | `bySession[].sessionState` is `in-progress` vs `complete` (`packages/app/tests/services/history-service.test.ts`). |
+| R3 | MET | `refreshCoverage.skipped` lists gemini/opencode/antigravity-ide/openclaw/hermes. |
+| R4 | MET | `refreshCoverage.window` is the burst `{ since, until }`. |
+| R5 | MET | Re-analyze of a growing session still has one `bySession` row. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R4 — A still-appending session is not analyzed as complete | MET | test | `sessionCompleteness` + analyze tests: trailing user → `in-progress`, tokens clipped to last assistant turn. |
+| R5 — A refresh reports its coverage | MET | test | `HistoryRefreshService.run` asserts `refreshed` / `skipped` / `window`. |
+
+**Design conformance:** DONE — last complete turn, `sessionState`, coverage object, no schema change.
+
+**SECUA:** P4 — clip is conservative (exclude trailing incomplete turn).
+
+Targeted: `bun test packages/domain/tests/analytics/forensic-query.test.ts packages/app/tests/services/history-service.test.ts packages/app/tests/services/history-refresh-service.test.ts` — pass.
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | Correctness | `packages/domain/src/analytics/forensic-query.ts:97` | Watermark excludes the trailing incomplete turn rather than guessing its contents. |
 ### References
 - **Import resumption already verified (do not re-verify):** `history_import_checkpoint` /
   `history_import_ledger`, feature E1 § In — "Incremental correctness … verified against real
@@ -190,3 +221,6 @@ in-progress sessions from token totals. This task defines the state; 0547 choose
 - **Upstream dependency:** task 0549 (the trigger whose firing makes mid-session analysis routine)
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`
 ### History
+- 2026-08-15T00:55:21.048Z todo → wip (system)
+- 2026-08-15T00:55:21.549Z wip → testing (system)
+- 2026-08-15T00:55:48.958Z testing → done (system)

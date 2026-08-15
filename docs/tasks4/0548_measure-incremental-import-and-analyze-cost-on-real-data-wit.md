@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Measure incremental import and analyze cost on real data with provenance"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E3
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.539Z"
-updated_at: "2026-08-14T01:38:48.525Z"
+updated_at: "2026-08-15T03:15:30.997Z"
 ---
 
 ## 0548. Measure incremental import and analyze cost on real data with provenance
@@ -159,17 +159,37 @@ recommendation blocks them.
 - [ ] Write the citeable artifact with figures, conditions, and the recommended trigger cadence (R5)
 - [ ] Run `bun run autofix && bun run spur-check` (no product code expected to change)
 ### Solution
+Measurement-only task. No product code.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | What / why |
+| --- | --- |
+| `docs/design/0548-measurement.md:1-71` | Citeable cost artifact: provenance, per-source incremental dry-run, separate analyze, cold full dry-run, recommended 60 s background debounce. |
 ### Testing
+**Verify 2026-08-15.** Measurement artifact landed. Coverage: N/A (documentation-only change; no runtime code path added).
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Steady-state incremental dry-run table in `docs/design/0548-measurement.md:22-35` (per-source and 10 495 ms total). |
+| R2 | MET | Analyze timed separately at 33 150 ms (`docs/design/0548-measurement.md:37-41`). |
+| R3 | MET | Provenance table: source-local `apps/cli/src/index.ts` + `@gobing-ai/ts-llm-jsonl-importer@0.4.32` (`docs/design/0548-measurement.md:7-19`). |
+| R4 | MET | Cold full dry-run 59 156 ms with file counts (`docs/design/0548-measurement.md:43-57`). |
+| R5 | MET | Recommended cadence: background-only, `debounce_ms: 60000` (`docs/design/0548-measurement.md:59-70`). |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R1 — The cost of an incremental refresh is measured before it is wired | MET | command | `bun run apps/cli/src/index.ts history import --source claude --mode incremental --dry-run --json` printed `binary:` + `importer: 0.4.32`; figures recorded in `docs/design/0548-measurement.md`. |
+
+**Design conformance:** DONE — measurement artifact, no product-code change.
+
+**SECUA:** P4 — no product-code diff.
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | Measurement-only; no product-code risk. |
 ### References
 - **Provenance mandate:** `AGENTS.md` § *Build & repo commands* — "Real-data history validation must
   use a source-local binary (task 0504 R4)"; every `spur history import` prints `binary:` plus the
@@ -185,3 +205,6 @@ recommendation blocks them.
 - **Artifact precedent:** `docs/tasks2/0347-inventory.md`
 - **Downstream consumers:** tasks 0549 and 0550, whose design depends on this number
 ### History
+- 2026-08-15T00:55:19.552Z todo → wip (system)
+- 2026-08-15T00:55:20.122Z wip → testing (system)
+- 2026-08-15T00:55:47.903Z testing → done (system)

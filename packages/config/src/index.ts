@@ -488,6 +488,32 @@ export const RedactionConfigSchema = z.object({
     enabled: z.boolean().optional(),
 });
 
+/** Default coalescing window for operation-triggered history refresh (feature E3). */
+export const DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS = 60_000;
+
+/**
+ * Operation-triggered history refresh (feature E3 / task 0549).
+ * Opt-in: a refresh that fires with the key unset is hidden automation.
+ */
+export const HistoryRefreshConfigSchema = z.object({
+    on_completion: z.boolean().default(false),
+    debounce_ms: z.number().int().nonnegative().default(DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS),
+});
+
+/** Schema for the `history` section. */
+export const HistoryConfigSchema = z.object({
+    refresh: HistoryRefreshConfigSchema.default({
+        on_completion: false,
+        debounce_ms: DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS,
+    }),
+});
+
+/** Inferred type for the `history.refresh` config block. */
+export type HistoryRefreshConfig = z.infer<typeof HistoryRefreshConfigSchema>;
+
+/** Inferred type for the `history` config section. */
+export type HistoryConfig = z.infer<typeof HistoryConfigSchema>;
+
 // ---- Unified Spur project config (top-level) ----
 
 /**
@@ -510,6 +536,7 @@ export const spurConfigSchema = z.object({
     workflows: WorkflowsConfigSchema.optional(),
     workflow: WorkflowConfigSchema.optional(),
     redaction: RedactionConfigSchema.optional(),
+    history: HistoryConfigSchema.optional(),
     tasks: tasksConfigSchema.optional(),
     features: featuresConfigSchema.optional(),
 });

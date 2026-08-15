@@ -321,6 +321,11 @@ export interface TaskServiceContext {
      */
     getDb?: () => Promise<DbAdapter>;
     /**
+     * Called after a successful transition to `done` (feature E3). Must not throw
+     * into the status write — the completion hook is best-effort.
+     */
+    onTaskReachedDone?: (wbs: string) => Promise<void>;
+    /**
      * Section-Status-Matrix. Drives which sections a newly created task carries
      * for its creation status (§3.2). When absent, a built-in default is used so
      * creation never hard-depends on a loadable matrix.
@@ -725,7 +730,15 @@ export class TaskService {
     async updateStatus(wbs: string, toStatus: string, actor?: string): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        return this.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
+        const result = await this.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
+        if (toStatus === 'done' && result.toStatus === 'done') {
+            try {
+                await this.ctx.onTaskReachedDone?.(wbs);
+            } catch {
+                // Refresh enqueue must not fail a completed status transition.
+            }
+        }
+        return result;
     }
 
     // ── updateField (scalar frontmatter write) ──

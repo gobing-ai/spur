@@ -10,10 +10,13 @@ export {
     type DatabaseConfig,
     type DbAdapter,
     dbHealthCheck,
+    findPendingQueueJob,
     type JobQueue,
+    type PendingQueueJob,
     type QueueConsumer,
     type QueueConsumerConfig,
     type ServerQueueConsumer,
+    updatePendingQueueJob,
 } from './db';
 export * from './envelope';
 export {

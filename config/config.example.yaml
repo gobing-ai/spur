@@ -107,6 +107,15 @@ workflows:
 redaction:
   enabled: false
 
+# Operation-triggered history refresh (feature E3). Off by default — a refresh
+# nobody can disable without a code edit is the hidden automation the
+# constitution rules out. Cadence (debounce_ms) should follow the 0548
+# measurement artifact, not a guess.
+# history:
+#   refresh:
+#     on_completion: false
+#     debounce_ms: 60000
+
 # ── Planning (design §2.1 / §9) ──
 tasks:
   active: docs/tasks

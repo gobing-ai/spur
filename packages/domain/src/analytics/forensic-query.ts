@@ -56,6 +56,9 @@ export interface ToolStatRow {
     resultBytes: number | null;
 }
 
+/** Completeness of an analyzed session (task 0550). */
+export type SessionCompletenessState = 'in-progress' | 'complete';
+
 /** Per-session leaderboard entry — Q5. */
 export interface SessionRow {
     sessionId: string;
@@ -70,6 +73,36 @@ export interface SessionRow {
     assistantDurationMs: number | null;
     /** role='assistant' rows in this session whose `duration_ms` was NULL. */
     assistantDurationUnmeasured: number;
+}
+
+/**
+ * Unclipped session completeness (task 0550). `watermarkSeq` is the last complete
+ * turn (last `role='assistant'` seq). A session whose last message is not an
+ * assistant turn is still in progress.
+ */
+export interface SessionCompletenessRow {
+    sessionId: string;
+    source: string;
+    lastSeq: number;
+    watermarkSeq: number | null;
+    sessionState: SessionCompletenessState;
+}
+
+/**
+ * Last complete turn: the last assistant message in the session. Trailing
+ * user/tool-only rows after that seq are excluded from derived aggregates.
+ * A session with NO assistant turn has no complete turn — it is all
+ * in-progress (task 0550), so nothing is clipped: every stored row counts
+ * (with `sessionState: 'in-progress'` reported by sessionCompleteness).
+ * Regular string (not a template) so the R2 backtick scanner does not treat
+ * the subquery as an unbounded corpus query.
+ */
+const COMPLETE_TURN_PREDICATE =
+    "m.seq <= COALESCE((SELECT MAX(a.seq) FROM history_message a WHERE a.session_id = m.session_id AND a.source = m.source AND a.role = 'assistant'), m.seq)";
+
+/** Append the last-complete-turn clip to a `buildMessageWhere` result. */
+function clipToCompleteTurns(where: string): string {
+    return where.length > 0 ? `${where} AND ${COMPLETE_TURN_PREDICATE}` : `WHERE ${COMPLETE_TURN_PREDICATE}`;
 }
 
 /** Repeated-call loop finding — Q4 (`args_digest` repeated >= 3 times). */
@@ -137,9 +170,33 @@ export function buildMessageWhere(sel: ArtifactSelector): { where: string; param
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
+/**
+ * Unclipped completeness per session (task 0550). Does not apply the last-complete-turn
+ * clip — that would hide the trailing incomplete turn this query exists to detect.
+ */
+export async function sessionCompleteness(db: DbAdapter, sel: ArtifactSelector): Promise<SessionCompletenessRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    return db.queryAll<SessionCompletenessRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source,
+                MAX(m.seq) AS lastSeq,
+                MAX(CASE WHEN m.role = 'assistant' THEN m.seq END) AS watermarkSeq,
+                CASE
+                    WHEN MAX(m.seq) = MAX(CASE WHEN m.role = 'assistant' THEN m.seq END)
+                    THEN 'complete'
+                    ELSE 'in-progress'
+                END AS sessionState
+         FROM history_message m
+         ${where}
+         GROUP BY m.session_id, m.source`,
+        ...params,
+    );
+}
+
 /** Message-side spend rollup (Q8) grouped by source, model, and day. */
 export async function messageRollup(db: DbAdapter, sel: ArtifactSelector): Promise<MessageRollupRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<MessageRollupRow>(
         `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
                 COUNT(*) AS messages,
@@ -160,7 +217,9 @@ export async function messageRollup(db: DbAdapter, sel: ArtifactSelector): Promi
 
 /** Tool-call rollup per (source, model, day) — the duration/toolCall side of the buckets. */
 export async function toolRollup(db: DbAdapter, sel: ArtifactSelector): Promise<ToolRollupRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<ToolRollupRow>(
         `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
                 COUNT(*) AS toolCalls,
@@ -176,7 +235,9 @@ export async function toolRollup(db: DbAdapter, sel: ArtifactSelector): Promise<
 
 /** Per-tool forensic stats (Q1 time + Q3/Q6 calls/errors), bounded by `top`. */
 export async function byTool(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<ToolStatRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<ToolStatRow>(
         `SELECT tc.tool_name AS toolName,
                 COUNT(*) AS calls,
@@ -199,7 +260,9 @@ export async function byTool(db: DbAdapter, sel: ArtifactSelector, top: number):
 
 /** Per-session leaderboard (Q5), bounded by `top`. */
 export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<SessionRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
 
     // Message-side stats per session, selector-scoped (Q5).
     const msgRows = await db.queryAll<{
@@ -291,7 +354,9 @@ export async function bySession(db: DbAdapter, sel: ArtifactSelector, top: numbe
 
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */
 export async function loops(db: DbAdapter, sel: ArtifactSelector): Promise<LoopRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     const extra = where === '' ? 'WHERE tc.args_digest IS NOT NULL' : `${where} AND tc.args_digest IS NOT NULL`;
     return db.queryAll<LoopRow>(
         `SELECT tc.session_id AS sessionId, tc.tool_name AS toolName,
@@ -311,7 +376,9 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector): Promise<LoopR
 
 /** Unknown-disposition drift counts (Q10) per source and record_type. */
 export async function drift(db: DbAdapter, sel: ArtifactSelector): Promise<DriftRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     const extra = where === '' ? "WHERE m.disposition = 'unknown'" : `${where} AND m.disposition = 'unknown'`;
     return db.queryAll<DriftRow>(
         `SELECT m.source AS source, m.record_type AS recordType, COUNT(*) AS n
@@ -325,7 +392,9 @@ export async function drift(db: DbAdapter, sel: ArtifactSelector): Promise<Drift
 
 /** Per-source coverage fodder: files, message count, last import time. */
 export async function sourceSummary(db: DbAdapter, sel: ArtifactSelector): Promise<SourceSummaryRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<SourceSummaryRow>(
         `SELECT m.source AS source,
                 COUNT(DISTINCT m.source_file) AS files,
@@ -355,7 +424,9 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
 
 /** Per-session timing span: MIN/MAX ts + assistant duration sums (derived metric input). */
 export async function sessionSpans(db: DbAdapter, sel: ArtifactSelector): Promise<SessionSpanRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<SessionSpanRow>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 MIN(m.ts) AS firstTs,
@@ -371,7 +442,9 @@ export async function sessionSpans(db: DbAdapter, sel: ArtifactSelector): Promis
 
 /** Per-session tool-call duration sums (derived metric input). */
 export async function sessionToolDurations(db: DbAdapter, sel: ArtifactSelector): Promise<SessionToolDurationRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     return db.queryAll<SessionToolDurationRow>(
         `SELECT m.session_id AS sessionId, m.source AS source,
                 SUM(tc.duration_ms) AS toolDurationMs,
@@ -389,7 +462,9 @@ export async function sessionToolDurations(db: DbAdapter, sel: ArtifactSelector)
  * `LIMIT ?` satisfies the R2 structural invariant (no unbounded corpus materialization).
  */
 export async function todoToolCalls(db: DbAdapter, sel: ArtifactSelector, limit = 5000): Promise<TodoToolCallRow[]> {
-    const { where, params } = buildMessageWhere(sel);
+    const built = buildMessageWhere(sel);
+    const where = clipToCompleteTurns(built.where);
+    const params = built.params;
     // Built outside the SQL template: a nested backtick expression inside the literal
     // would break the R2 source scan (which treats backticks as query boundaries).
     const whereClause = where ? `${where} AND tc.args_raw IS NOT NULL` : 'WHERE tc.args_raw IS NOT NULL';

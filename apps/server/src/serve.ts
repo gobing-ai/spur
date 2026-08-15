@@ -3,6 +3,10 @@ import {
     AgentService,
     configuredSecretValues,
     type FeatureActionJob,
+    HISTORY_REFRESH_JOB,
+    type HistoryRefreshPayload,
+    HistoryRefreshService,
+    HistoryService,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
@@ -35,6 +39,10 @@ export const TASK_ACTION_JOB = 'task-action';
 
 /** Built-in queue job kind for board-triggered feature workflow actions. */
 export const FEATURE_ACTION_JOB = 'feature-action';
+
+// Re-exported so server tests can exercise the refresh handler (task 0549 /
+// feature E3); the job kind itself is owned by the app service.
+export { HISTORY_REFRESH_JOB } from '@gobing-ai/spur-app';
 
 const SYSTEM_EVENTS_PRUNE_CRON = '300000';
 const SMOKE_CRON = '600000';
@@ -268,6 +276,32 @@ export async function handleFeatureActionJob(
 }
 
 /**
+ * Execute the coalesced history-refresh job (task 0549 / feature E3): run the
+ * daily import+analyze pipeline over the full-fidelity sources and report
+ * coverage. The queue worker runs this off the completion critical path.
+ *
+ * `root` bounds the import scan — the daily pipeline's `run` accepts an
+ * explicit root, which the server passes as the process cwd (the project's
+ * history roots live under it).
+ */
+export async function runHistoryRefreshJob(
+    ctx: ServerContext,
+    job: { payload: unknown },
+    root?: string,
+): Promise<void> {
+    const db = await ctx.getDb();
+    const getDb = async () => db;
+    const history = new HistoryService({ getDb });
+    const refresh = new HistoryRefreshService({
+        getDb,
+        cwd: process.cwd(),
+    });
+    await refresh.run(job.payload as HistoryRefreshPayload, history, {
+        ...(root !== undefined ? { root } : {}),
+    });
+}
+
+/**
  * Resolve the directory that holds the built Spur Board (Astro) static assets.
  *
  * Search order when no explicit path is configured:
@@ -410,6 +444,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 registry.register(SMOKE_JOB, async () => {});
                 registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
                 registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
+                registry.register(HISTORY_REFRESH_JOB, (job) => runHistoryRefreshJob(ctx, job));
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
                     registry,

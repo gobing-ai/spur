@@ -10,6 +10,7 @@ import {
     createTaskActionAgentService,
     defaultDeps,
     FEATURE_ACTION_JOB,
+    HISTORY_REFRESH_JOB,
     handleFeatureActionJob,
     handleTaskActionJob,
     parseFeatureActionJob,
@@ -17,6 +18,7 @@ import {
     registerSchedulerEntries,
     resolveWebDistPath,
     runFeatureActionJob,
+    runHistoryRefreshJob,
     runTaskActionJob,
     type StartServerDeps,
     startServer,
@@ -547,6 +549,7 @@ describe('startServer', () => {
             createServerContext: (() =>
                 ({
                     queueConsumer: async () => queueConsumer,
+                    getDb: async () => ({}),
                     systemEventDao: async () => ({
                         pruneQuotas: async () => {
                             pruneCallCount = 10_000;
@@ -577,6 +580,32 @@ describe('startServer', () => {
         );
         expect(registeredHandlers[FEATURE_ACTION_JOB]).toBeDefined();
         await expect(registeredHandlers[FEATURE_ACTION_JOB]?.({})).rejects.toThrow();
+        expect(registeredHandlers[HISTORY_REFRESH_JOB]).toBeDefined();
+        const { HistoryRefreshService } = await import('@gobing-ai/spur-app');
+        const origRefreshRun = HistoryRefreshService.prototype.run;
+        let refreshPayload: unknown;
+        HistoryRefreshService.prototype.run = async function run(payload: unknown) {
+            refreshPayload = payload;
+            return {
+                refreshCoverage: { refreshed: [], skipped: [], window: { since: null, until: '' } },
+            };
+        };
+        try {
+            await registeredHandlers[HISTORY_REFRESH_JOB]?.({
+                payload: {
+                    windowSince: '2026-08-14T12:00:00.000Z',
+                    windowUntil: '2026-08-14T12:00:01.000Z',
+                    events: [],
+                },
+            } as never);
+        } finally {
+            HistoryRefreshService.prototype.run = origRefreshRun;
+        }
+        expect(refreshPayload).toEqual({
+            windowSince: '2026-08-14T12:00:00.000Z',
+            windowUntil: '2026-08-14T12:00:01.000Z',
+            events: [],
+        });
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
         sigint();
@@ -954,6 +983,40 @@ describe('startServer', () => {
         } finally {
             ProjectRegistry.prototype.upsert = origUpsert;
             ProjectRegistry.prototype.setPort = origSetPort;
+        }
+    });
+
+    test('keepAlive parks the start callback on an unresolved promise', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+        let startSettled = false;
+        const deps = makeDeps({
+            runNodeApplication: (async (opts: { start: (rt: ApplicationRuntime) => Promise<void> }) => {
+                const inner = opts.start(fakeRuntime());
+                void inner.then(() => {
+                    startSettled = true;
+                });
+                await Promise.race([inner, new Promise<void>((resolve) => setTimeout(resolve, 40))]);
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+        await startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps);
+        expect(startSettled).toBe(false);
+    });
+
+    test('runHistoryRefreshJob runs daily over an empty history root', async () => {
+        const { createMigratedDb } = await import('@gobing-ai/spur-domain');
+        const db = await createMigratedDb({ url: ':memory:' });
+        const ctx = { getDb: async () => db } as unknown as ServerContext;
+        const emptyRoot = mkdtempSync(join(tmpdir(), 'e3-hist-root-'));
+        const payload = {
+            windowSince: '2026-08-14T12:00:00.000Z',
+            windowUntil: '2026-08-14T12:00:10.000Z',
+            events: [{ trigger: 'task-done', at: '2026-08-14T12:00:00.000Z' }],
+        };
+        try {
+            await expect(runHistoryRefreshJob(ctx, { payload }, emptyRoot)).resolves.toBeUndefined();
+        } finally {
+            rmSync(emptyRoot, { recursive: true, force: true });
         }
     });
 

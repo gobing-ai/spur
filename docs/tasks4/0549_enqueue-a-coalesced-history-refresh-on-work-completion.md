@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Enqueue a coalesced history refresh on work completion"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E3
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0548"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.758Z"
-updated_at: "2026-08-14T01:38:48.953Z"
+updated_at: "2026-08-15T03:16:45.053Z"
 ---
 
 ## 0549. Enqueue a coalesced history refresh on work completion
@@ -179,17 +179,55 @@ enabled-by-default until 0550 is done.
 - [ ] Add tests: non-blocking enqueue, burst coalescing, disabled path, single-source failure isolation (R1-R3, R5)
 - [ ] Update `docs/04_DESIGN.md` and `config/config.example.yaml` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+Opt-in coalesced refresh on work completion. Cadence from `docs/design/0548-measurement.md` (60 s).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | What / why |
+| --- | --- |
+| `packages/config/src/index.ts:490-515` | `history.refresh.on_completion` (default false) + `debounce_ms` (default 60000). |
+| `apps/cli/schemas/spur-config.schema.json:259-280` | JSON-schema twin of the config block. |
+| `config/config.example.yaml:110-118` | Documented opt-in example. |
+| `packages/app/src/services/history-refresh-service.ts:14-211` | Enqueue/coalesce + `daily` runner. Job kind `history.refresh`. |
+| `packages/app/src/services/task-service.ts:327-327` `packages/app/src/services/task-service.ts:729-736` | Hook after `done`. |
+| `packages/app/src/services/workflow-service.ts:374` `packages/app/src/services/workflow-service.ts:594` | Hook after non-dry pipeline `status: done`. |
+| `apps/cli/src/commands/task.ts:1248-1258` | CLI wires the task hook. |
+| `apps/cli/src/commands/workflow.ts:172` | CLI wires the pipeline hook. |
+| `apps/server/src/context.ts:373` | Server wires the same hooks. |
+| `apps/server/src/serve.ts:417` | Worker handler for `HISTORY_REFRESH_JOB`. |
+| `packages/app/src/services/event-names.ts:376` | `history.refresh.enqueued` / `completed` / `skipped`. |
+| `docs/04_DESIGN.md:568-570` | T3 surface. |
+| `packages/app/tests/services/history-refresh-service.test.ts:1` | Disabled / coalesce / coverage run. |
 ### Testing
+**Verify 2026-08-15.**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `HistoryRefreshService.enqueue` writes a `history.refresh` job; `TaskService.updateStatus` / pipeline `done` call it. Tests: `packages/app/tests/services/history-refresh-service.test.ts`. |
+| R2 | MET | Second enqueue inside the window updates the same pending row and stretches `windowUntil` (coalesce test). |
+| R3 | MET | Default `on_completion: false`; disabled test asserts zero jobs; `history.refresh.skipped` is catalogued. |
+| R4 | MET | Default `debounce_ms: 60000` cites `docs/design/0548-measurement.md:59-70`. |
+| R5 | MET | `run()` calls `HistoryService.daily` with full-fidelity sources only (per-source isolation unchanged). |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R2 — Completing work enqueues a refresh without blocking it | MET | test | `HistoryRefreshService.enqueue` returns after the job write; `enqueueHistoryRefreshSafe` swallows errors. `bun test packages/app/tests/services/history-refresh-service.test.ts` — 4 pass. |
+| R3 — A burst of operations produces one refresh | MET | test | Same file: burst of two enqueues → one pending row, window spans both timestamps. |
+| R6 — A failing source does not fail the refresh | MET | test | `run()` reuses `daily` fan-out; isolation already covered by `history-service` importAll tests; refresh test asserts remaining sources still listed in `refreshed`. |
+
+**Design conformance:** DONE — config key, enqueue, coalesce, no new CLI noun.
+
+**SECUA:** P4 — opt-in default off; hook is best-effort and cannot fail the completion.
+
+Targeted: `bun test packages/app/tests/services/history-refresh-service.test.ts` — 4 pass.
+
+Coverage: N/A (hook + config + queue; behavior covered by unit tests above).
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | Security | `packages/app/src/services/history-refresh-service.ts:60` | Trigger is opt-in (default off); enqueue failures cannot fail the completion hook. |
 ### References
 - **Pipeline to reuse:** `apps/cli/src/commands/history.ts:203-217` (`daily` — import-all fan-out with
   per-source isolation → analyze → artifact), `:230` (`svc.daily`), `:246` + `:296`
@@ -204,3 +242,6 @@ enabled-by-default until 0550 is done.
 - **Consent boundary:** ADR-051 — no new CLI noun
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`, `config/config.example.yaml`
 ### History
+- 2026-08-15T00:55:20.345Z todo → wip (system)
+- 2026-08-15T00:55:20.836Z wip → testing (system)
+- 2026-08-15T00:55:48.416Z testing → done (system)

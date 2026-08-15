@@ -98,6 +98,12 @@ export interface SessionStat {
     assistantDurationMs: number;
     /** role='assistant' rows in this session whose `duration_ms` was NULL. */
     assistantDurationUnmeasured: number;
+    /**
+     * Last-complete-turn watermark (task 0550). `in-progress` means the session's
+     * last stored message is not a finished assistant turn; derived values for
+     * that session exclude the trailing incomplete turn.
+     */
+    sessionState?: 'in-progress' | 'complete';
 }
 
 /** A repeated-call loop finding — Q4 (`args_digest` repeated >= 3 times). */

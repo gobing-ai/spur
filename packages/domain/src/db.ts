@@ -111,4 +111,70 @@ export async function createQueueConsumer<T = unknown>(
     return new DBQueueConsumer<T>(new QueueJobDao(db), config) as ServerQueueConsumer<T>;
 }
 
+/** A pending queue job read back for coalescing (task 0549 / feature E3). */
+export interface PendingQueueJob<T = unknown> {
+    id: string;
+    payload: T;
+}
+
+/**
+ * Find the single pending job of a type — any retry state, oldest first —
+ * without claiming it (task 0549 / feature E3).
+ *
+ * The coalescing writer needs "is there already a pending refresh for this
+ * type?" regardless of `nextRetryAt`: a job still inside its debounce delay is
+ * precisely the one a burst should join. `findPending(batchSize)` on
+ * `QueueJobDao` is the wrong tool (it filters ready-for-processing); this
+ * helper predicates on `(type, status)` via the DAO's structured list spec,
+ * so the app layer never sees raw SQL or ts-db (ADR-011). Same lazy-import
+ * discipline as {@link createJobQueue}.
+ *
+ * @returns the oldest pending job's id + parsed payload, or `undefined`.
+ */
+export async function findPendingQueueJob<T = unknown>(
+    db: DbAdapter,
+    type: string,
+): Promise<PendingQueueJob<T> | undefined> {
+    const { QueueJobDao } = await import('@gobing-ai/ts-db');
+    const { queueJobs } = await import('@gobing-ai/ts-db/schema');
+    const dao = new QueueJobDao(db);
+    const row = await dao.list({
+        where: {
+            and: [
+                { col: queueJobs.type, op: 'eq', value: type },
+                { col: queueJobs.status, op: 'eq', value: 'pending' },
+            ],
+        },
+        orderBy: [{ col: queueJobs.createdAt, dir: 'asc' }],
+        limit: 1,
+    });
+    const first = row[0];
+    if (first === undefined) return undefined;
+    let payload: T;
+    try {
+        payload = JSON.parse(first.payload) as T;
+    } catch {
+        return undefined;
+    }
+    return { id: first.id, payload };
+}
+
+/**
+ * Coalesce-update a pending queue job in place: replace its payload and push
+ * its retry window out (task 0549 / feature E3). The debounce restart is what
+ * makes a burst collapse into one row. Returns the updated row id, or
+ * `undefined` when the job is gone.
+ */
+export async function updatePendingQueueJob<T = unknown>(
+    db: DbAdapter,
+    id: string,
+    payload: T,
+    nextRetryAt: number,
+): Promise<string | undefined> {
+    const { QueueJobDao } = await import('@gobing-ai/ts-db');
+    const dao = new QueueJobDao(db);
+    const updated = await dao.update(id, { payload: JSON.stringify(payload), nextRetryAt });
+    return updated?.id;
+}
+
 export type { JobQueue, QueueConsumer, QueueConsumerConfig } from '@gobing-ai/ts-infra';

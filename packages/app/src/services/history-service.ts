@@ -34,6 +34,7 @@ import {
     resolveReportMode,
     type SourceSummaryRow,
     selectorDigest,
+    sessionCompleteness,
     sessionSpans,
     sessionToolDurations,
     sourceSummary,
@@ -138,6 +139,22 @@ export interface DailyOptions {
      * the import fan-out runs. Absent → no sidecar; daily's composition is otherwise untouched.
      */
     mode?: string;
+    /**
+     * Covered window reported on {@link DailyResult.refreshCoverage} (task 0550).
+     * Independent of analyze `since`/`until` — a triggered burst records the
+     * operations it spans here without narrowing the SQL selector.
+     */
+    coverageWindow?: { since: string | null; until: string };
+}
+
+/**
+ * Honest coverage of a refresh (task 0550 R3/R4). Names sources that ran and
+ * sources skipped as unsupported, plus the window the refresh covers.
+ */
+export interface RefreshCoverage {
+    refreshed: string[];
+    skipped: string[];
+    window: { since: string | null; until: string };
 }
 
 /** Result of {@link HistoryService.daily}. */
@@ -150,6 +167,8 @@ export interface DailyResult {
     pruned: string[];
     /** Path of the mode-rendered `.md` sidecar (present only when `mode` was passed, 0555 R4). */
     reportPath?: string;
+    /** Coverage honesty for a triggered refresh (task 0550). Present on live `daily`. */
+    refreshCoverage?: RefreshCoverage;
 }
 
 /** Context injected into HistoryService. */
@@ -175,6 +194,16 @@ const SOURCES: readonly LlmJsonlSource[] = [
     'grok',
     'agy',
 ];
+
+/** Full-fidelity sources the E3 trigger imports (feature E1 § In). */
+export const FULL_FIDELITY_HISTORY_SOURCES = ['claude', 'codex', 'pi', 'omp', 'agy', 'grok'] as const;
+
+/** Sources the operator ruled unsupported (2026-08-06). Reported as skipped, not imported. */
+export const UNSUPPORTED_HISTORY_SOURCES = ['gemini', 'opencode', 'antigravity-ide', 'openclaw', 'hermes'] as const;
+
+function normalizeUnsupportedAlias(source: string): string {
+    return source === 'antigravity-ide' ? 'antigravity' : source;
+}
 const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 const MAX_ERROR_SAMPLES = 20;
 /** Per-source import timeout default (10 minutes, task 0470 R5). */
@@ -242,19 +271,34 @@ export class HistoryService {
         const top = opts.top ?? 20;
         const db = await this.ctx.getDb();
 
-        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows, spanRows, toolDurRows, todoRows] =
-            await Promise.all([
-                messageRollup(db, selector),
-                toolRollup(db, selector),
-                byTool(db, selector, top),
-                bySession(db, selector, top),
-                loops(db, selector),
-                drift(db, selector),
-                sourceSummary(db, selector),
-                sessionSpans(db, selector),
-                sessionToolDurations(db, selector),
-                todoToolCalls(db, selector),
-            ]);
+        const [
+            mRows,
+            tRows,
+            toolRows,
+            sessionRows,
+            loopRows,
+            driftRows,
+            sourceRows,
+            spanRows,
+            toolDurRows,
+            todoRows,
+            completenessRows,
+        ] = await Promise.all([
+            messageRollup(db, selector),
+            toolRollup(db, selector),
+            byTool(db, selector, top),
+            bySession(db, selector, top),
+            loops(db, selector),
+            drift(db, selector),
+            sourceSummary(db, selector),
+            sessionSpans(db, selector),
+            sessionToolDurations(db, selector),
+            todoToolCalls(db, selector),
+            sessionCompleteness(db, selector),
+        ]);
+        const completenessByKey = new Map(
+            completenessRows.map((row) => [`${row.sessionId}\0${row.source}`, row.sessionState] as const),
+        );
 
         const totals = foldTotals(mRows, tRows);
         const bySource = foldGrouped(
@@ -314,6 +358,7 @@ export class HistoryService {
                 topTool: r.topTool,
                 assistantDurationMs: r.assistantDurationMs ?? 0,
                 assistantDurationUnmeasured: r.assistantDurationUnmeasured,
+                sessionState: completenessByKey.get(`${r.sessionId}\0${r.source}`) ?? 'complete',
             })),
             loops: loopRows,
             warnings: [
@@ -396,8 +441,18 @@ export class HistoryService {
         }
 
         const pruned = pruneReports(cwd, REPORT_RETENTION_DAYS);
+        const nowIso = new Date().toISOString();
+        const attempted = new Set(fanOut.entries.map((e) => e.source));
+        const refreshCoverage: RefreshCoverage = {
+            refreshed: fanOut.entries.map((e) => e.source),
+            skipped: UNSUPPORTED_HISTORY_SOURCES.filter((s) => !attempted.has(normalizeUnsupportedAlias(s))),
+            window: opts.coverageWindow ?? {
+                since: opts.since ?? null,
+                until: opts.until ?? nowIso,
+            },
+        };
 
-        return { fanOut, artifact, pruned, ...(reportPath !== undefined ? { reportPath } : {}) };
+        return { fanOut, artifact, pruned, refreshCoverage, ...(reportPath !== undefined ? { reportPath } : {}) };
     }
 
     /**

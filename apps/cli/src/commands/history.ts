@@ -371,6 +371,13 @@ function formatDailyResult(r: DailyResult): string {
     if (r.reportPath !== undefined) {
         lines.push(`report: ${r.reportPath}`);
     }
+    if (r.refreshCoverage !== undefined) {
+        lines.push(
+            `coverage: refreshed=${r.refreshCoverage.refreshed.join(',') || '-'} ` +
+                `skipped=${r.refreshCoverage.skipped.join(',') || '-'} ` +
+                `window=${r.refreshCoverage.window.since ?? '-'}..${r.refreshCoverage.window.until}`,
+        );
+    }
     lines.push(`pruned: ${r.pruned.length} report dir(s) older than 90 days`);
     lines.push(`exit_code: ${r.fanOut.exitCode}`);
     return lines.join('\n');
