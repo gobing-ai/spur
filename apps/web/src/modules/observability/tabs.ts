@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import JobsTab from './JobsTab';
+import RoutingTab from './RoutingTab';
 import SystemEventsTab from './SystemEventsTab';
 import TasksTab from './TasksTab';
 import ToolUsingTab from './ToolUsingTab';
@@ -32,4 +33,5 @@ export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'jobs', label: 'Jobs', component: JobsTab },
     { id: 'tasks', label: 'Tasks', component: TasksTab },
     { id: 'tool-using', label: 'Tool Using', component: ToolUsingTab },
+    { id: 'routing', label: 'Routing', component: RoutingTab },
 ];

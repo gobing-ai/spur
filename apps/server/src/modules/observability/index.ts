@@ -1,4 +1,5 @@
 import type { ToolUseEvent } from '@gobing-ai/spur-app';
+import { type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
@@ -184,11 +185,54 @@ function handleToolUseStream(ctx: ServerContext) {
 }
 
 /**
- * Observability HTTP surfaces (tasks 0243, 0245–0247).
+ * Routing + token aggregates for the Board (task 0552).
+ *
+ * Composes the two J6 queries — `SystemEventDao.routingSummary` (0546) and
+ * `roleTokenSummary` (0547) — with no query of its own. `since`/`until` are
+ * forwarded as-is; the domain surfaces apply their own bounded defaults, so
+ * the route holds no window logic to drift.
+ *
+ * ADR-005 §4 type seam (mirrors `setFetchForTesting` in the web rpc-client):
+ * the indirection lets the module tests stub the domain fold instead of
+ * running it against a scratch DB — the fold itself is already covered by the
+ * domain package's suite.
+ */
+let loadRoleTokenSummary: typeof roleTokenSummary = roleTokenSummary;
+
+/** Test seam: replace the role-token fold (ADR-005 §4). */
+export function setRoleTokenSummaryForTesting(fn: typeof roleTokenSummary): void {
+    loadRoleTokenSummary = fn;
+}
+
+/** Resets the seam to the production domain surface. */
+export function resetRoleTokenSummaryForTesting(): void {
+    loadRoleTokenSummary = roleTokenSummary;
+}
+
+function handleRoutingSummary(ctx: ServerContext) {
+    return async (c: Context) => {
+        try {
+            const since = c.req.query('since') ?? undefined;
+            const until = c.req.query('until') ?? undefined;
+            const spec: RoutingSummaryQuery = { since, until };
+            const dao = await ctx.systemEventDao();
+            const db = await ctx.getDb();
+            const [routing, tokens] = await Promise.all([dao.routingSummary(spec), loadRoleTokenSummary(db, spec)]);
+            return c.json({ routing, tokens });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return c.json({ error: message }, 500);
+        }
+    };
+}
+
+/**
+ * Observability HTTP surfaces (tasks 0243, 0245–0247, 0552).
  *
  * - GET /api/observability/processes — serve-rooted process inventory
  * - GET /api/observability/tool-use — token-ledger tail (+ cursor `before`)
  * - GET /api/observability/tool-use/stream — SSE live appends (fs.watch)
+ * - GET /api/observability/routing-summary — routing aggregate + per-role token totals (0552)
  */
 export const observabilityModule: ServerModule = {
     name: 'observability',
@@ -199,5 +243,6 @@ export const observabilityModule: ServerModule = {
         app.get('/api/observability/processes', handleProcesses(ctx));
         app.get('/api/observability/tool-use', handleToolUseGet(ctx));
         app.get('/api/observability/tool-use/stream', handleToolUseStream(ctx));
+        app.get('/api/observability/routing-summary', handleRoutingSummary(ctx));
     },
 };

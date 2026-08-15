@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.18.0
+version: 1.19.0
 owner: Robin Min
-updated_at: 2026-08-14
+updated_at: 2026-08-15
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -527,7 +527,7 @@ Accepted (design) → Accepted.
 
 ## ADR-056: Enrich System Events at the Spur Catalog and Sink Boundary
 
-- **Status:** Accepted (design) · **Date:** 2026-08-12 · **Feature:** J5
+- **Status:** Accepted · **Date:** 2026-08-12 · **Feature:** J5
 - **Decision:** Keep upstream `@gobing-ai/ts-*` event maps domain-local; Spur wraps cataloged events
   at its shared tap/emitter boundary in a versioned actionable envelope carrying project, producer,
   correlation, presentation, and bounded redacted data. Existing trace JSON contracts may gain
@@ -535,6 +535,11 @@ Accepted (design) → Accepted.
 - **Why:** One Spur-owned projection makes every Board and CLI consumer consistent without coupling
   the generic upstream EventBus or duplicating policy across emit sites.
 - **Detail:** `03 §16`; `docs/design/actionable-observability-context.md`; feature J5.
+
+> **Amendment (2026-08-15).** Built: the J5 envelope foundation (0526), routing attribution (0545),
+> and the role/token aggregates (0546/0547) all shipped; the Board render (0552) is the terminal
+> consumer. Status moves from `Accepted (design)` to `Accepted`. Shapes: `04 §7.9`; mechanism:
+> `03 §16` / `03 §7`.
 
 ## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
 

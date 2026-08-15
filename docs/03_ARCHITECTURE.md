@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.22.0
+version: 1.23.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-15
@@ -359,7 +359,11 @@ envelope in one indexed round trip (composite `idx_system_events_name_occurred` 
 `run_id`), never by sifting a client-side window. `roleTokenSummary` (0547) joins the same
 attributed rows through `history_run_session` (ADR-059) and folds `history_message`'s typed
 token columns per (role, exactness) — exact and estimated kept apart, never summed, never
-priced (ADR-060). Shapes: `04 §7.9`; render consumers: task 0552.
+priced (ADR-060). Shapes: `04 §7.9`. Board render (0552): the observability server module
+exposes `GET /api/observability/routing-summary`, a thin transport (ADR-021) that forwards
+`since`/`until` to both domain surfaces and adds no query of its own; the Board's
+`observability` Routing tab renders the pair table and per-role token totals with the
+honest-state contract (unmeasured / estimated / exact / no-data-yet kept apart, never priced).
 
 ## 8. Data & Storage (ADR-007/008)
 

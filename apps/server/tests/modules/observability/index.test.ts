@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import {
     getLedgerWatcher,
     observabilityModule,
     resetLedgerWatcherForTests,
+    resetRoleTokenSummaryForTesting,
+    setRoleTokenSummaryForTesting,
     toolUseSsePayload,
 } from '../../../src/modules/observability';
 
@@ -331,5 +333,123 @@ describe('observability module', () => {
         expect(res.status).toBe(500);
         const body = (await res.json()) as { error?: string };
         expect(body.error).toContain('EACCES');
+    });
+});
+
+describe('observability routing-summary (task 0552)', () => {
+    const routingResult = {
+        window: { since: '2026-08-08T00:00:00.000Z', until: '2026-08-15T00:00:00.000Z' },
+        pairs: [
+            { role: 'scribe', executor: 'cheap-exec', source: 'role', runs: 4, escalations: 1 },
+            { role: 'scribe', executor: 'cheap-exec', source: 'explicit', runs: 2, escalations: 0 },
+        ],
+    };
+    const tokensResult = {
+        window: { since: '2026-08-08T00:00:00.000Z', until: '2026-08-15T00:00:00.000Z' },
+        roles: [
+            {
+                role: 'scribe',
+                totalRuns: 6,
+                matchedRuns: 4,
+                exact: {
+                    inputTokens: 1250,
+                    outputTokens: 300,
+                    cacheReadTokens: 200,
+                    cacheCreationTokens: 50,
+                    records: 4,
+                    recordsWithUsage: 4,
+                },
+                estimated: null,
+                unmeasured: false,
+            },
+        ],
+    };
+
+    function mountWithRoutingStubs(opts?: {
+        routing?: unknown;
+        tokens?: unknown;
+        onRoutingSpec?: (spec: unknown) => void;
+    }): Hono {
+        const app = new Hono();
+        const ctx = {
+            systemEventDao: async () => ({
+                routingSummary: async (spec: unknown) => {
+                    opts?.onRoutingSpec?.(spec);
+                    return opts?.routing ?? routingResult;
+                },
+            }),
+            getDb: async () => ({}),
+        } as unknown as ServerContext;
+        observabilityModule.mount(app, ctx);
+        return app;
+    }
+
+    afterEach(() => {
+        resetRoleTokenSummaryForTesting();
+    });
+
+    test('returns both aggregates in one envelope with no query of its own', async () => {
+        setRoleTokenSummaryForTesting(async () => tokensResult);
+        const app = mountWithRoutingStubs();
+        const res = await app.request('/api/observability/routing-summary');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { routing: typeof routingResult; tokens: typeof tokensResult };
+        expect(body.routing).toEqual(routingResult);
+        expect(body.tokens).toEqual(tokensResult);
+        // No currency field rides the envelope (0547 R2).
+        expect(JSON.stringify(body)).not.toMatch(/costUsd|cost_usd|price|\$|usd/i);
+    });
+
+    test('forwards since/until to both domain surfaces and defaults otherwise', async () => {
+        const routingSpecs: unknown[] = [];
+        const tokenSpecs: unknown[] = [];
+        setRoleTokenSummaryForTesting(async (_db, spec) => {
+            tokenSpecs.push(spec);
+            return tokensResult;
+        });
+        const app = mountWithRoutingStubs({
+            onRoutingSpec: (spec) => routingSpecs.push(spec),
+        });
+
+        const withBounds = await app.request(
+            '/api/observability/routing-summary?since=2026-08-01T00:00:00.000Z&until=2026-08-02T00:00:00.000Z',
+        );
+        expect(withBounds.status).toBe(200);
+        expect(routingSpecs[0]).toEqual({ since: '2026-08-01T00:00:00.000Z', until: '2026-08-02T00:00:00.000Z' });
+        expect(tokenSpecs[0]).toEqual({ since: '2026-08-01T00:00:00.000Z', until: '2026-08-02T00:00:00.000Z' });
+
+        // No params → undefined forwarded; the domain surfaces apply their bounded defaults.
+        await app.request('/api/observability/routing-summary');
+        expect(routingSpecs[1]).toEqual({ since: undefined, until: undefined });
+        expect(tokenSpecs[1]).toEqual({ since: undefined, until: undefined });
+    });
+
+    test('surfaces an empty dataset as empty, never as zeros', async () => {
+        const empty = {
+            window: { since: '2026-08-08T00:00:00.000Z', until: '2026-08-15T00:00:00.000Z' },
+            pairs: [],
+        };
+        const emptyTokens = {
+            window: { since: '2026-08-08T00:00:00.000Z', until: '2026-08-15T00:00:00.000Z' },
+            roles: [],
+        };
+        setRoleTokenSummaryForTesting(async () => emptyTokens);
+        const app = mountWithRoutingStubs({ routing: empty, tokens: emptyTokens });
+        const res = await app.request('/api/observability/routing-summary');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { routing: { pairs: unknown[] }; tokens: { roles: unknown[] } };
+        expect(body.routing.pairs).toEqual([]);
+        expect(body.tokens.roles).toEqual([]);
+    });
+
+    test('a failing domain surface returns a 500 with the cause surfaced', async () => {
+        setRoleTokenSummaryForTesting(async () => {
+            throw new Error('ledger unavailable');
+        });
+        const app = mountWithRoutingStubs();
+        const res = await app.request('/api/observability/routing-summary');
+        expect(res.status).toBe(500);
+        const body = (await res.json()) as { error?: string };
+        expect(body.error).toContain('ledger unavailable');
     });
 });
