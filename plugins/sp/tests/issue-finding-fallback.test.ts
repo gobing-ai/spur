@@ -52,7 +52,10 @@ function parseToolCalls(lines: string[]): ToolCall[] {
         const content = (message?.content ?? []) as Array<Record<string, unknown>>;
         for (const block of content) {
             if (block.type !== 'toolCall') continue;
-            const input = (block.input ?? {}) as Record<string, unknown>;
+            // Task 0564 R4: live omp emits `arguments`; legacy emits `input`. Mirror the
+            // importer's precedence exactly (mappers.ts normalizeOmpToolCall read:
+            // `call.input ?? call.arguments`) so the two can never disagree.
+            const input = (block.input ?? block.arguments ?? {}) as Record<string, unknown>;
             calls.push({ toolName: String(block.name), command: String(input.command ?? '') });
         }
     }
@@ -175,5 +178,61 @@ describe('(0556 R5) documented flags / modes / --json tied to real command defin
     test('live CLI surface: history report exposes --mode (forensics renderer)', () => {
         const surface = captureCliSurface(['history', 'report']);
         expect(surface.flags.some((f) => f.startsWith('--mode'))).toBe(true);
+    });
+});
+
+// ─── Task 0564 R4: the fallback fixture reads the live omp tool-call shape ───
+//
+// The 0556 fixture (`session-test-loop.jsonl`) predates the current flat omp
+// `arguments` shape, so it cannot catch a parser that only reads `input`. This
+// regression set runs the SAME parser over a committed anonymized live-captured
+// snippet (`tests/fixtures/omp-live-tool-calls.jsonl`) whose toolCall blocks
+// carry `arguments.command`, plus a legacy-key equivalence case.
+
+describe('(0564 R4) fallback parser reads the live omp arguments shape', () => {
+    const liveFixture = readFileSync(join(import.meta.dir, 'fixtures', 'omp-live-tool-calls.jsonl'), 'utf8');
+    const liveLines = liveFixture.split('\n');
+    const liveCommands = parseToolCalls(liveLines).map((c) => c.command);
+    const liveOutputs = parseToolResults(liveLines).map((r) => r.output);
+    const liveFindings = categorize(liveCommands, liveOutputs, 0);
+
+    test('the committed snippet is the live flat shape (arguments.command), not legacy input', () => {
+        // Structure guard: the fixture must exercise the shape this regression exists for.
+        expect(liveFixture).toContain('"type":"toolCall"');
+        expect(liveFixture).toContain('"arguments":{"command":');
+        expect(liveFixture).toContain('"role":"toolResult"');
+        expect(liveFixture).toContain('"toolCallId"');
+    });
+
+    test('extracts non-empty commands and non-zero categorization counts from the live shape', () => {
+        expect(liveCommands.length).toBeGreaterThan(0);
+        expect(liveCommands.every((c) => c.length > 0)).toBe(true);
+        // guard: 3 identical `spur task check` runs; git-red-herring: git status.
+        // (guard-denied needs the toolResult output, which lives in content[].text on the
+        // live shape — reading it is out of 0564 R4's parseToolCalls scope.)
+        expect(liveFindings.get('guard')).toBeGreaterThanOrEqual(3);
+        expect(liveFindings.get('git-red-herring')).toBeGreaterThanOrEqual(1);
+    });
+
+    test('legacy input.command extracts identically to arguments.command', () => {
+        const argumentsLine = JSON.stringify({
+            type: 'message',
+            message: {
+                role: 'assistant',
+                content: [{ type: 'toolCall', id: 'call-a', name: 'bash', arguments: { command: 'git diff HEAD' } }],
+            },
+        });
+        const inputLine = JSON.stringify({
+            type: 'message',
+            message: {
+                role: 'assistant',
+                content: [{ type: 'toolCall', id: 'call-b', name: 'bash', input: { command: 'git diff HEAD' } }],
+            },
+        });
+
+        const argsCommand = parseToolCalls([argumentsLine]).map((c) => c.command);
+        const inputCommand = parseToolCalls([inputLine]).map((c) => c.command);
+        expect(argsCommand).toEqual(['git diff HEAD']);
+        expect(inputCommand).toEqual(argsCommand);
     });
 });
