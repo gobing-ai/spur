@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0538"]
 ac_numbering: task-local
 created_at: "2026-08-13T23:28:17.604Z"
-updated_at: "2026-08-15T07:13:55.294Z"
+updated_at: "2026-08-15T15:13:42.946Z"
 ---
 
 ## 0539. Inventory and repair plugins/sp and workflow YAML drift against the live spur CLI
@@ -39,17 +39,17 @@ workflow still assumes `--agent` takes an executor name.
 `I2` (spur-dev/spur-cli parity-first drift audit and harness refinement, done) is the previous pass of
 this sweep. Read its findings and method before re-deriving one.
 ### Requirements
-- [ ] **R1.** Produce a reproducible inventory of every `spur` flag, verb, and `--json` shape that
+- [x] **R1.** Produce a reproducible inventory of every `spur` flag, verb, and `--json` shape that
       `plugins/sp` asserts (commands, skills, references, scripts, hooks), checked against the live
       CLI surface. Record each mismatch with file, line, asserted form, and actual form; record an
       assertion that cannot be checked mechanically as **unverified**, never as passing. Run after
       task 0538 so the inventory reflects the post-migration tree. Measurable: the inventory names
       its check method per entry and is re-runnable.
-- [ ] **R2.** Extend the same inventory to `config/workflows/*.yaml` — step kinds, action inputs,
+- [x] **R2.** Extend the same inventory to `config/workflows/*.yaml` — step kinds, action inputs,
       and vars contracts against the live engine — and confirm `.spur/workflows` resolves to the
       tracked `config/workflows` tree. Measurable: all ten workflow definitions are covered, each
       divergence names the workflow and step, and the symlink target is stated.
-- [ ] **R3.** Every confirmed mismatch ends the task either fixed or carrying the WBS of the task
+- [x] **R3.** Every confirmed mismatch ends the task either fixed or carrying the WBS of the task
       that owns it. Repairs correct the plugin or the workflow; changing a CLI noun or verb is out
       of scope under ADR-051 and is filed for operator consent instead. Measurable: no confirmed
       inventory entry is left in neither state.
@@ -131,16 +131,34 @@ Implemented by sp-super-coder subagent (inline pipeline, run 22CB59EB-3226-4E60-
 
 Unverified items (8) are host-owned or mutating-command assertions with no mechanical check — recorded in the inventory, never marked passing.
 ### Testing
-**Pipeline verify results**
+**Re-verify (--force, focus all) 2026-08-15 — Verdict: PASS**
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Re-runnable inventory script `plugins/sp/scripts/surface-drift-inventory.ts` + artifact `docs/tasks2/0539-inventory.md`: 278 ok / 0 mismatch / 8 unverified, exit 0, reproduced at implement and again independently at review. Every entry carries file:line + check method; non-mechanically-checkable assertions recorded unverified with reason, never passing. Post-review fix removed the 16 `undefined:undefined` occurrence cells (arg-order defect). |
-| R2 | MET | All ten workflow definitions validated + dry-run walked by the live engine (`workflow-validate` / `workflow-dry-run` rows in artifact); `.spur/workflows` symlink realpath resolves to the tracked SSOT tree (`symlink-realpath` row ok; independently re-confirmed by review). |
-| R3 | MET | Final inventory: 0 confirmed mismatches remain — none recorded-and-ignored. Two confirmed drifts fixed in-task: dispatch-surface.md:116 `--stage` prose corrected (engine-internal only); plugin scripts' spur CLI resolution repaired to source-local repo-root with regression tests. No CLI-surface change made (ADR-051 consent gate respected); no entry was too large to fix here, so no WBS filing was needed. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Re-runnable inventory script `plugins/sp/scripts/surface-drift-inventory.ts` re-executed this run: `bun plugins/sp/scripts/surface-drift-inventory.ts --out docs/tasks2/0539-inventory.md` exit 0, "No confirmed mismatches", totals 278 ok / 0 mismatch / 8 unverified — reproduces the Solution-recorded totals. Artifact `docs/tasks2/0539-inventory.md` carries per-entry check method + file:line occurrences; the 8 unverified carry reasons, none marked passing. |
+| R2 | MET | All ten `config/workflows/*.yaml` covered by `workflow-validate` / `workflow-dry-run` rows in the refreshed inventory (exit 0). Symlink independently re-confirmed this run: `readlink .spur/workflows` → `../config/workflows`, realpath → repo `config/workflows`; `ls config/workflows/*.yaml` = 10. |
+| R3 | MET | Fresh inventory run: 0 confirmed mismatches remain — none recorded-and-ignored. In-task repairs re-verified in commit 4dd0cc54: `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:114` re-read — "stage context is engine-internal … with no `--stage` CLI flag" (anchor names the subject); `defaultSpurBin()` source-local resolution chain in `plugins/sp/scripts/feature-sync-bounded.ts:248` and `plugins/sp/scripts/task-size-precheck.ts:73`; tests `bun test plugins/sp/tests/feature-sync-bounded.test.ts plugins/sp/tests/task-size-precheck.test.ts` → 68 pass / 0 fail this run. No CLI-surface change in the diff (ADR-051 respected); no entry needed WBS filing. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — Plugin assertions are inventoried against the live CLI | MET | command | Inventory script re-run exit 0; rows carry asserted/actual/method/occurrences; 8 unverified recorded with reasons, never passing |
+| Scenario: R2 — Workflow YAML is inventoried against the live engine | MET | command | `workflow validate`+dry-run rows for all 10 definitions in refreshed artifact; `.spur/workflows` → `config/workflows` realpath confirmed |
+| Scenario: R3 — Confirmed drift is repaired or filed, never left recorded-and-ignored | MET | test | 0 mismatch on re-run; two fixes covered by 68 passing tests across `plugins/sp/tests/feature-sync-bounded.test.ts` / `plugins/sp/tests/task-size-precheck.test.ts` |
+
+**Design conformance:** 5/5 claims DONE — ran after 0538 (dependency, history 2026-08-15); mechanical-first method (help-capture/json-exec/script-exec, host-contract unverified); all five named surfaces swept; repair boundary held (no CLI change); inventory landed as citeable artifact.
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | security/correctness | `plugins/sp/scripts/surface-drift-inventory.ts` | No blocker/major/minor findings — exec sites use `execFileSync` with array argv (no shell); fake-bin probes use mkdtemp + finally-rm; writes only to `--out`. |
+
+Coverage: N/A (inventory/verification task; targeted script tests 68/68 pass — no runtime coverage measured).
+Fix-pass writes: `.spur/run/0539-verdict.json` (regenerated this run); `docs/tasks2/0539-inventory.md` refreshed against HEAD this run (committed snapshot now matches: 278 ok / 8 unverified).
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

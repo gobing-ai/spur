@@ -827,7 +827,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict } = await import('@gobing-ai/spur-app');
+            const { deriveVerdict, verdictRowsMatchScenarios } = await import('@gobing-ai/spur-app');
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
@@ -843,6 +843,31 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // answer text is the sole input here.
             const taskCheckPassed = true; // Pipeline runs its own check guard
             const result = deriveVerdict(answerText, taskCheckPassed);
+
+            // Dogfood 2026-08-15 (feature I3): rows keyed by bare R1-style ids
+            // parse and derive a verdict but are credited by NO feature scenario
+            // at the L4 verifying→done gate — surfacing only as opaque
+            // L4.scenario-unverified findings there. Warn early and actionable.
+            try {
+                const svc = await makeService(context, options.folder);
+                const task = await svc.show(wbs);
+                const featureId = task.frontmatter.feature_id;
+                if (typeof featureId === 'string' && featureId.length > 0) {
+                    const resolved = await resolvePlanningFolders(context.fs);
+                    const names = await context.fs.readDir(context.fs.resolve(resolved.featuresDir));
+                    const name = names.find((n) => n.startsWith(`${featureId}_`) && n.endsWith('.md'));
+                    if (name !== undefined) {
+                        const raw = await context.fs.readFile(context.fs.resolve(`${resolved.featuresDir}/${name}`));
+                        if (!verdictRowsMatchScenarios(result.requirements, raw)) {
+                            context.output.error(
+                                `warning: no verdict row matches any scenario in feature ${featureId} — key rows by scenario title or AC-N alias, or the feature done gate reports L4.scenario-unverified`,
+                            );
+                        }
+                    }
+                }
+            } catch {
+                // Diagnostic only — never fail the verdict on lookup problems.
+            }
 
             // Emit verdict artifact.
             const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);

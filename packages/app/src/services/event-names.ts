@@ -351,6 +351,13 @@ export const SYSTEM_EVENT_CATALOG = [
         package: 'spur',
         subsystem: 'agent-runner',
     }),
+    // Exhaustion record (0540 review follow-up): structured twin of the
+    // `Escalation chain exhausted` stderr diagnostic so --json runs are not
+    // silent — stage, tiers attempted, executors tried, attempt count.
+    event('agent.invoke.exhausted', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'agent-runner',
+    }),
     event('agent.started', 'agent', 'agent'),
     event('agent.stopped', 'agent', 'agent'),
     event('agent.message.sent', 'agent', 'agent'),

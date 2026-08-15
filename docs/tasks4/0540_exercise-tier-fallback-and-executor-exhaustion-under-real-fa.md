@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T23:28:17.816Z"
-updated_at: "2026-08-15T07:33:54.725Z"
+updated_at: "2026-08-15T15:14:49.337Z"
 ---
 
 ## 0540. Exercise tier fallback and executor exhaustion under real failure
@@ -31,16 +31,16 @@ branch and becomes the routine response to a stage failing on its cheapest eligi
 Escalation itself is unchanged by B2 — `getNextFallback` stays in the domain package per 0348. This
 task exercises it; it does not redesign it.
 ### Requirements
-- [ ] **R1.** Exercise tier fallback under real failure rather than asserting it. Drive a stage
+- [x] **R1.** Exercise tier fallback under real failure rather than asserting it. Drive a stage
       whose starting-tier executor fails on an objective signal (`gate-fail`, `timeout`,
       `insufficient-evidence`, `retry-exhausted`) and confirm the next eligible executor by the
       declared chain runs, with the transition and its trigger observable in the run record.
       Measurable: a test or recorded run shows the escalation and names the trigger.
-- [ ] **R2.** Executor exhaustion fails loudly. When every eligible executor for a stage has failed
+- [x] **R2.** Executor exhaustion fails loudly. When every eligible executor for a stage has failed
       and no fallback target remains, the run exits non-zero naming the stage, the tiers attempted,
       and the executors tried — never falling through to `agent.default` or a bare binary.
       Measurable: an exhaustion run's exit code is non-zero and its message carries all three.
-- [ ] **R3.** An unreachable fallback target is distinguished from a failed one. When escalation
+- [x] **R3.** An unreachable fallback target is distinguished from a failed one. When escalation
       reaches a tier for which no executor is configured, the run reports it as unreachable naming
       the tier and continues to the next reachable tier rather than terminating as exhausted.
       Measurable: a config with a gap in the tier ladder produces the unreachable report and the run
@@ -102,49 +102,72 @@ transition; if the trigger is not there, adding it is in scope.
 
 **Not in scope:** changing the fallback chain, the tier vocabulary, or where escalation lives.
 ### Plan
-- [ ] Read 0407, 0482, and 0485 to establish what is already covered and avoid re-testing it (R1)
-- [ ] Build a fixture where the starting-tier executor fails on an objective signal (R1)
-- [ ] Verify the next eligible executor runs and the run record carries the transition and trigger (R1)
-- [ ] Add the trigger to the run record if escalation is not currently observable (R1)
-- [ ] Drive an exhaustion run and assert non-zero exit naming stage, tiers attempted, executors tried (R2)
-- [ ] Assert no fall-through to `agent.default` or a bare binary on exhaustion (R2)
-- [ ] Use the live `capable-2` ladder gap as a fixture; assert unreachable is reported and the run continues (R3)
-- [ ] Run `bun run autofix && bun run spur-check`
+- [x] Read 0407, 0482, and 0485 to establish what is already covered and avoid re-testing it (R1)
+- [x] Build a fixture where the starting-tier executor fails on an objective signal (R1)
+- [x] Verify the next eligible executor runs and the run record carries the transition and trigger (R1)
+- [x] Add the trigger to the run record if escalation is not currently observable (R1)
+- [x] Drive an exhaustion run and assert non-zero exit naming stage, tiers attempted, executors tried (R2)
+- [x] Assert no fall-through to `agent.default` or a bare binary on exhaustion (R2)
+- [x] Use the live `capable-2` ladder gap as a fixture; assert unreachable is reported and the run continues (R3)
+- [x] Run `bun run autofix && bun run spur-check`
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Change-map (corrected 2026-08-15 — replaces the auto-generated map that had swept 0539's plugin
+files from a dirty implement tree; commit 05cdcab5 touches exactly two files).
 
-| Change (`file:line`) |
-|----------------------|
-| `packages/app/src/services/agent-service.ts:1034` |
-| `packages/app/src/services/agent-service.ts:1386` |
-| `packages/app/src/services/agent-service.ts:709` |
-| `packages/app/src/services/agent-service.ts:985` |
-| `packages/app/src/services/agent-service.ts:991` |
-| `packages/app/tests/services/agent-service.test.ts:3210` |
-| `plugins/sp/scripts/feature-sync-bounded.ts:23` |
-| `plugins/sp/scripts/feature-sync-bounded.ts:244` |
-| `plugins/sp/scripts/feature-sync-bounded.ts:260` |
-| `plugins/sp/scripts/feature-sync-bounded.ts:429` |
-| `plugins/sp/scripts/task-size-precheck.ts:100` |
-| `plugins/sp/scripts/task-size-precheck.ts:69` |
-| `plugins/sp/scripts/task-size-precheck.ts:90` |
-| `plugins/sp/tests/feature-sync-bounded.test.ts:11` |
-| `plugins/sp/tests/feature-sync-bounded.test.ts:21` |
-| `plugins/sp/tests/feature-sync-bounded.test.ts:337` |
-| `plugins/sp/tests/feature-sync-bounded.test.ts:636` |
-| `plugins/sp/tests/task-size-precheck.test.ts:48` |
+- `packages/app/src/services/agent-service.ts` (+23):
+  - `packages/app/src/services/agent-service.ts:709` — `tiersAttempted` set created alongside
+    `attemptedExecutors` (R2: the exhaustion report must say how far the ladder climbed, not just
+    which executors died).
+  - `packages/app/src/services/agent-service.ts:988` — exhaustion message extended to name the
+    stage, the tiers attempted, and the executors tried; run still ends non-zero, never falling
+    through to `agent.default` (R2).
+  - `packages/app/src/services/agent-service.ts:1034` — each escalated tier is added to
+    `tiersAttempted` on the hop (R2).
+  - `packages/app/src/services/agent-service.ts:1386` — a fallback tier with no configured executor
+    is reported unreachable by name and the eligible `>=`-walk continues from the next reachable
+    tier instead of terminating as exhausted (R3).
+- `packages/app/tests/services/agent-service.test.ts` (+165):
+  - `packages/app/tests/services/agent-service.test.ts:3221` — describe block "AgentService tier
+    fallback under real failure (0540)" with four tests:
+    `packages/app/tests/services/agent-service.test.ts:3266` (R1 — SIGKILL→timeout through the
+    production classifier, declared-chain escalation, stderr + `agent.invoke.escalated` record
+    carry the trigger), `packages/app/tests/services/agent-service.test.ts:3295` (R2 — exhaustion
+    non-zero naming stage/tiers/executors, `agent.default` configured and never dispatched),
+    `packages/app/tests/services/agent-service.test.ts:3320` and
+    `packages/app/tests/services/agent-service.test.ts:3352` (R3 — both gap variants:
+    fallback-reaches-gap and starting-tier `min_tier` gap).
+
+Not changed (design boundary): the fallback chain, the tier vocabulary, and where escalation lives
+(`getNextFallback` stays in `packages/domain/src/stage-registry/schema.ts`).
 ### Testing
-**Pipeline verify results**
+**Re-verify (--force, focus all) 2026-08-15 — Verdict: PASS**
 
-- Verdict: PASS (from verdict artifact)
+**Per-Requirement Traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `agent-service.test.ts:3266` drives a real `executeRun` stage whose starting-tier executor dies by SIGKILL → classified `timeout` (`failure-classification.ts:84`); escalation to the declared next tier (standard→capable-1) observed on stderr and as structured `agent.invoke.escalated` record (`agent-service.ts:1003-1024`). Mutation check: severing the timeout classifier fails the test. |
-| R2 | MET | Exhaustion run exits non-zero; message names stage + tiers attempted + executors tried (`agent-service.ts:991`, `tiersAttempted` :712/:1034; test :3295). With `agent.default` configured, exactly 2 dispatches occur — no fall-through. |
-| R3 | MET | Both gap variants covered: fallback-reaches-gap (`verify`, test :3320) and starting-tier/min_tier gap (`plan`, test :3352). Unreachable report names the tier (:1393); eligible `>=`-walk continues to the next reachable tier instead of terminating exhausted. Fixture mirrors the live `.spur/config.yaml` capable-2 gap. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Real resolution path driven this run: `bun test packages/app/tests/services/agent-service.test.ts --test-name-pattern "0540"` → 4 pass / 0 fail. R1 test (`packages/app/tests/services/agent-service.test.ts:3266`) feeds a signal-terminated (SIGKILL) dispatch through the production classifier — `classifyDispatch` maps signal → `timeout` (`packages/app/src/services/failure-classification.ts:84`, re-read) — escalation runs the declared chain (dispatch order `['pi','claude']`), stderr names the trigger, and the structured `agent.invoke.escalated` row carries trigger + from/to tier (emit at `packages/app/src/services/agent-service.ts:1009`, re-read). |
+| R2 | MET | Exhaustion message names stage + tiers attempted + executors tried — `packages/app/src/services/agent-service.ts:988-992` (re-read: `stage=${currentStage.stageId}; tiers attempted: …; executors tried: …`); `tiersAttempted` tracked at `packages/app/src/services/agent-service.ts:711` and fed at `:1034`. Test `packages/app/tests/services/agent-service.test.ts:3295` configures `agent.default` and asserts exactly the declared-chain dispatches occur — no fall-through; run ends non-zero. |
+| R3 | MET | Unreachable report names the tier and the walk continues — `packages/app/src/services/agent-service.ts:1390-1393` (re-read: "tier ${targetTier} is unreachable — no executor configured at this tier; continuing from the next reachable tier"). Both gap variants pass this run: fallback-reaches-gap (test `packages/app/tests/services/agent-service.test.ts:3320`) and starting-tier `min_tier` gap (test `:3352`). Live fixture claim confirmed: `.spur/config.yaml:115` has `tier: capable-2` commented out. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R4 — Tier fallback is exercised under real failure, not asserted | MET | test | `packages/app/tests/services/agent-service.test.ts:3266` pass this run — SIGKILL through production `classifyDispatch`, declared-chain escalation, stderr + `agent.invoke.escalated` record both carry the trigger |
+| Scenario: R5 — Executor exhaustion fails loudly | MET | test | `packages/app/tests/services/agent-service.test.ts:3295` pass this run — non-zero exit; message carries stage/tiers/executors; `agent.default` configured and never dispatched |
+| Scenario: R6 — An unreachable fallback target is distinguished from a failed one | MET | test | `packages/app/tests/services/agent-service.test.ts:3320` + `:3352` pass this run — unreachable named by tier, continuation to next reachable tier asserted |
+
+**Design conformance:** 4/4 claims DONE — driven not asserted (integration harness on the real resolution path, spawn boundary only mocked); three outcomes distinct in tests; observability in the run record (escalation row existed from 0545, this task proves the trigger rides it — no addition needed); scope held (no chain/vocabulary/location change; +23 LOC observability only).
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | correctness | `packages/app/src/services/agent-service.ts:988-992` | No blocker/major/minor findings — error-path messaging only, Set-based attempt tracking, no secrets/IO. |
+
+Coverage: N/A (verdict-based; targeted behavior tests 4/4 pass — no runtime coverage measured).
+Fix-pass writes: `.spur/run/0540-verdict.json` (regenerated this run); Solution change-map corrected this run (auto-generated map had swept 0539 plugin files from a dirty tree).
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

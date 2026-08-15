@@ -125,7 +125,7 @@ Feature: Role routing attribution
 | --- | ---- | ------ |
 | 0545 | Emit the routing decision on agent run events via the J5 envelope | done |
 | 0546 | Make role-to-executor routing queryable in one indexed round trip | done |
-| 0547 | Attribute token totals to roles by joining run attribution to the history plane | todo |
+| 0547 | Attribute token totals to roles by joining run attribution to the history plane | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

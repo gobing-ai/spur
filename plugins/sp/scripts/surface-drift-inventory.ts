@@ -753,8 +753,7 @@ function sweepWorkflows(): void {
         const rp = realpathSync(link);
         const tracked = realpathSync(wfDir);
         status = rp === tracked ? 'ok' : 'mismatch';
-        actual =
-            `resolves to ${rel(rp)}` + (status === 'ok' ? ' (== tracked SSOT target)' : ` — expected ${rel(tracked)}`);
+        actual = `resolves to ${rel(rp)}${status === 'ok' ? ' (== tracked SSOT target)' : ` — expected ${rel(tracked)}`}`;
     } catch (e) {
         actual = `cannot resolve .spur/workflows: ${String(e).slice(0, 120)}`;
     }

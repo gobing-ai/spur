@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T04:48:31.368Z"
-updated_at: "2026-08-13T06:44:17.278Z"
+updated_at: "2026-08-15T15:27:26.023Z"
 done_forced: "true"
 done_reason: "All gates green 2026-08-13: lint+typecheck clean, test 4940 pass/0 fail, build green, corpus-check OK. spur task check PASS. Review P1-P4 table populated (no P1; P2/P3 deferred to 0530, documented). Inline run; provenance override recorded."
 ---
@@ -117,18 +117,35 @@ Wave-1 inter-agent control plane (ADR-057 / G4 R1–R3). No wait verb, no new no
 
 **Deferred (handoff 0530, documented in design satellite §2):** `agent wait` / `send --wait` verbs; process-generation-shared generation; `processId` threading; verdict artifact refs.
 ### Testing
-All gates green (2026-08-13):
-- `bun run lint` — biome clean + typecheck across all 7 workspaces (0 errors).
-- `bun run test` — **4940 pass, 0 fail** (16493 assertions), full monorepo + plugins/sp.
-- `bun run build` — green.
-- `bun run corpus-check` — OK (2 baselined, 0 new/stale).
+**Re-verify (--force, focus all) 2026-08-15 — Verdict: PASS**
 
-New coverage:
-- `packages/domain/tests/dao/coordination-run-dao.test.ts` (5 tests) — insert/get/update, null lookup, `maxGeneration` monotonicity + per-spec independence, latest-by-spec ordering, deleteAll.
-- `packages/app/tests/services/agent-service.test.ts` — `coordination (G4 / ADR-057 wave 1)` block (5 tests): R1 spec-id persists occupant (specId/agentKind/generation); R1 kind-only lookup rejected; R1 bare run (no spec-id) creates no occupant; R2 `--json` adds `occupant`+`run` keeping existing keys; R2 failed run → `errored` status.
-- `packages/app/tests/services/supervisor-service.test.ts` — `start (caller env — R3)` block (4 tests): SPUR_SPEC_ID + SPUR_RUN_ID injected; SPUR_TEAM_ID on team: tag; omitted without tag + SPUR_SERVE_URL from constructor; SPUR_SERVE_URL env fallback.
-- `apps/cli/tests/commands/agent-team.test.ts` — R1 drain-keeps-spec-id → occupant persisted end-to-end.
-- `packages/domain/tests/dao/migrations.test.ts` — updated count assertions for `0010` (11 migrations; incremental-applied counts +1 each).
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Occupant insert in `executeRun` re-read at `packages/app/src/services/agent-service.ts:748-778` (spec-id present + `getDb` → `OccupantRef{specId, agentKind, processId, runId, generation}`; persistence non-fatal). Spec-id threading re-read at `apps/cli/src/commands/agent.ts:446` (`'spec-id': spec.id` carried in the same rewrite object as `agent`, so the id survives the agent rewrite; `--spec` canonical + legacy `--agent <spec-id>` shim per 0542). Kind-only lookup throws `occupant_lookup_kind_rejected` at `packages/app/src/services/agent-service.ts:1745`. Bare-run-no-occupant covered by test. Suites this run: `bun test packages/app/tests/services/agent-service.test.ts --test-name-pattern coordination` → 5 ran / 0 fail; `bun test apps/cli/tests/commands/agent-team.test.ts` → 28 pass / 0 fail (drain-keeps-spec-id end-to-end). |
+| R2 | MET | `CoordinationRunDao` at `packages/domain/src/dao/coordination-run-dao.ts:66` (exact anchor match); migration `0010_spur_cli_coordination_runs` at `packages/domain/src/migrations.ts:340` (SQL const `:116`; path-only `artifact_refs_json` column, parameterized queries throughout — re-read). `getCoordinationRun` at `packages/app/src/services/agent-service.ts:1765`; additive `--json` `occupant`/`run` keys at `:469-472` keeping `exitCode`/`stdout`/`stderr`/`durationMs`. `bun test packages/domain/tests/dao/coordination-run-dao.test.ts` → 5 pass / 0 fail this run. |
+| R3 | MET | Env injection re-read at `packages/app/src/services/supervisor-service.ts:211-217` — `SPUR_SPEC_ID: agentId`, `SPUR_TEAM_ID` gated on team tag, `SPUR_RUN_ID: crypto.randomUUID()` per start (process-generation id), `SPUR_SERVE_URL` from constructor/env. `bun test packages/app/tests/services/supervisor-service.test.ts --test-name-pattern "caller env"` → 4 ran / 0 fail this run. Generation monotonicity covered by DAO `maxGeneration` tests. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — Occupant identity distinguishes spec, kind, process, and run | MET | test | coordination block 5/5 (spec persists occupant w/ specId+agentKind+runId+generation; kind-only rejected; bare run no occupant) + agent-team 28/28 drain end-to-end |
+| Scenario: R2 — Another agent can address a sibling run artifact | MET | test | coordination-run-dao 5/5 (insert/get/update, refs shape) + `--json` additive-keys test; no stdout bodies in row — `artifact_refs_json` is `{kind, path}` only |
+| Scenario: R3 — Supervised spawn injects caller identity env | MET | test | supervisor-service caller-env block 4/4 (SPEC_ID+RUN_ID injected; TEAM_ID gated on tag; SERVE_URL constructor + env fallback) |
+
+**Design conformance:** claims DONE — frozen names all present (`OccupantRef`, `CoordinationRun`, `coordination_runs` columns, `0010_spur_cli_coordination_runs`, four env vars, both service methods); WHERE list matches the commit c6eb4e10 scope; anti-patterns held (no new noun, no wait verb, no stdout in DAO, no PTY reads). One noted evolution: the `flags.agent` rewrite now goes through `drainAgentSelector` (0542, role-aware) instead of literal `spec.type` — a later task's documented change on top of a preserved 0529 contract (spec-id still set before/with the rewrite), not a 0529 deviation. Deferred-to-0530 items (wait verb, processId threading, verdict-kind refs) remain deferred and documented.
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | correctness | `packages/app/src/services/agent-service.ts` | Solution-section line anchors drifted (e.g. getOccupant now :1743, cited :1341) — later tasks (0536/0540/0542/0545/0547) extended the same file; subjects all re-read and present. No code defect. |
+| P4 | security/correctness | `packages/domain/src/dao/coordination-run-dao.ts` | Parameterized queries only; path-only artifact refs; no secrets, no injection surface. No blocker/major/minor findings. |
+
+Coverage: targeted suites re-run this turn (5+5+4+28 tests, 0 fail); full-suite numbers from the original run stand in history.
+Fix-pass writes: `.spur/run/0529-verdict.json` (regenerated this run).
 ### Review
 **SECUA + traceability review (2026-08-13). Verdict: PASS — ship.**
 

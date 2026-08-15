@@ -933,3 +933,21 @@ function rowMatchesScenario(id: string, sc: { title: string; normalized: string;
         stripped === sc.alias
     );
 }
+
+/**
+ * True when at least one verdict row id names a scenario in the given AC body — by normalized title,
+ * `Scenario:` prefix, bracket tag, or `AC-N` ordinal.
+ *
+ * `task verdict` warns when this returns false for the linked feature's AC: rows keyed by bare `R1`-style
+ * ids parse and derive a verdict but are credited by NO scenario at the feature `verifying → done` gate,
+ * surfacing only as opaque `L4.scenario-unverified` findings there (dogfood 2026-08-15, feature I3).
+ */
+export function verdictRowsMatchScenarios(rows: Array<{ id: string }>, ac: string): boolean {
+    const scenarios = [...ac.matchAll(/^[ \t]*Scenario:[ \t]*(.+)$/gm)].map((m, i) => ({
+        title: (m[1] ?? '').trim(),
+        normalized: normalizeTitle((m[1] ?? '').trim()),
+        alias: `AC-${i + 1}`,
+    }));
+    if (scenarios.length === 0 || rows.length === 0) return true;
+    return rows.some((row) => scenarios.some((sc) => rowMatchesScenario(row.id, sc)));
+}

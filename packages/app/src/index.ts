@@ -101,7 +101,7 @@ export type {
     FeatureMatrixEntry,
     FeatureSectionMatrix,
 } from './services/feature-check';
-export { DEFAULT_FEATURE_MATRIX, FeatureCheckService } from './services/feature-check';
+export { DEFAULT_FEATURE_MATRIX, FeatureCheckService, verdictRowsMatchScenarios } from './services/feature-check';
 export type {
     FeatureActionJob,
     FeatureActionName,

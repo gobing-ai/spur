@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { type CheckFeatureResult, FeatureCheckService } from '../../src/services/feature-check';
+import {
+    type CheckFeatureResult,
+    FeatureCheckService,
+    verdictRowsMatchScenarios,
+} from '../../src/services/feature-check';
 
 function seedFile(content: string): { fs: ReturnType<typeof createNodeFileSystem>; path: string; cleanup(): void } {
     const dir = mkdtempSync(join(tmpdir(), 'spur-feature-check-'));
@@ -2947,5 +2951,40 @@ describe('R6 — multi-folder feature check (task 0451)', () => {
         expect(malformed).toHaveLength(0);
 
         rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+describe('verdictRowsMatchScenarios (dogfood 2026-08-15, feature I3)', () => {
+    const ac = [
+        'Feature: inventory',
+        '  Scenario: Harness surface drift is inventoried against the live CLI',
+        '    Given the plugins/sp corpus',
+        '  Scenario: [doc-only] Workflow YAML matches the live verb surface',
+        '    Given the workflow YAML corpus',
+    ].join('\n');
+
+    test('false for bare R1-style row ids — they credit no scenario at the feature done gate', () => {
+        // The exact shape that surfaced as opaque L4.scenario-unverified findings.
+        expect(verdictRowsMatchScenarios([{ id: 'R1' }, { id: 'R2' }], ac)).toBe(false);
+    });
+
+    test('true by scenario title (with prefix and bracket tag) and AC-N alias', () => {
+        expect(
+            verdictRowsMatchScenarios(
+                [{ id: 'Scenario: Harness surface drift is inventoried against the live CLI' }],
+                ac,
+            ),
+        ).toBe(true);
+        expect(verdictRowsMatchScenarios([{ id: '[doc-only] Workflow YAML matches the live verb surface' }], ac)).toBe(
+            true,
+        );
+        expect(verdictRowsMatchScenarios([{ id: 'AC-2' }], ac)).toBe(true);
+        // Mixed tables: one scenario-keyed row is enough.
+        expect(verdictRowsMatchScenarios([{ id: 'R1' }, { id: 'AC-1' }], ac)).toBe(true);
+    });
+
+    test('no scenarios or no rows — vacuously true (nothing to warn about)', () => {
+        expect(verdictRowsMatchScenarios([{ id: 'R1' }], 'Feature: x')).toBe(true);
+        expect(verdictRowsMatchScenarios([], ac)).toBe(true);
     });
 });

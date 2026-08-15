@@ -80,7 +80,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus."
+          input: 'Skill(skill="sp:doc-evolve", args="wrapup tasks=${vars.tasks}"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: coder
           timeoutMs: ${vars.stepTimeoutMs}
@@ -137,6 +137,9 @@ states:
     description: >
       If vars.feature is set, sync feature status via bounded feature-sync-bounded
       (0411). Soft shell — blocked/failed sync must not abort wrap-up after metrics.
+      Empty vars.feature is NOT a blocked sync but a mis-invocation (the engine only
+      enters this state when vars.feature is set) and fails loud (dogfood 2026-08-15,
+      feature I3: a silent exit 0 made the wrap look complete with no transition).
     onEnter:
       # Genuinely soft: the terminating `exit 0` must be reached on BOTH branches, so
       # the sync is chained with `;` — with `&&` a non-zero sync skipped `exit 0` and
@@ -148,6 +151,10 @@ states:
       - kind: shell
         options:
           command: >-
+            if [ -z "$feature" ]; then
+              echo "feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)" >&2;
+              exit 1;
+            fi;
             if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
               bun plugins/sp/scripts/feature-sync-bounded.ts "$feature" --spur-bin "$spurBin" --json;
             else

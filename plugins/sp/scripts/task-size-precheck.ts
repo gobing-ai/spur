@@ -26,6 +26,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { STAGE_FLOOR_TIER, TIER_ORDER } from './stage-registry-adapter';
 
 // ─── Regex (sync with packages/app/src/services/task-size-precheck.ts) ───────
@@ -74,8 +75,9 @@ function usage(): never {
  */
 function defaultSpurBin(): string {
     if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
-    // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts
-    const local = new URL('../../../apps/cli/src/index.ts', import.meta.url).pathname;
+    // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts (fileURLToPath — raw pathname breaks
+    // on %-encoded paths, e.g. spaces in the checkout directory)
+    const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';
 }

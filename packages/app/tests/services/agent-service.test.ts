@@ -3248,10 +3248,12 @@ describe('AgentService tier fallback under real failure (0540)', () => {
     function escalationHarness(agentConfig: AgentConfig) {
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
         const escalations: Array<Record<string, unknown>> = [];
+        const exhaustions: Array<Record<string, unknown>> = [];
         bus.on('agent.invoke.escalated', (event) => escalations.push(event as Record<string, unknown>));
+        bus.on('agent.invoke.exhausted', (event) => exhaustions.push(event as Record<string, unknown>));
         const { errors, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig, events: bus });
-        return { escalations, errors, svc };
+        return { escalations, exhaustions, errors, svc };
     }
 
     // std-exec (pi, standard) → capable-exec (claude, capable-1); stage
@@ -3294,7 +3296,7 @@ describe('AgentService tier fallback under real failure (0540)', () => {
 
     test('R2: exhaustion exits non-zero naming stage, tiers attempted, and executors tried — no fall-through to agent.default', async () => {
         // A configured agent.default must never receive the exhausted dispatch.
-        const { escalations, errors, svc } = escalationHarness({ ...ladderConfig, default: 'std-exec' });
+        const { escalations, exhaustions, errors, svc } = escalationHarness({ ...ladderConfig, default: 'std-exec' });
         const { deps, runPromptCommand } = sequentialDispatchDeps([
             makeRunResult({ exitCode: 1, stderr: 'Error: 429 Too Many Requests' }),
         ]);
@@ -3315,6 +3317,15 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         expect(exhausted).toContain('executors tried: std-exec, capable-exec');
         // One escalation happened before exhaustion; nothing further.
         expect(escalations).toHaveLength(1);
+        // The exhaustion is also a structured event (--json parity with the stderr
+        // diagnostic — review 0540 minor): stage, tiers, executors, attempt count.
+        expect(exhaustions).toHaveLength(1);
+        const exhaustedEvent = exhaustions[0] as Record<string, unknown>;
+        expect(exhaustedEvent.stage).toBe('implement');
+        expect(exhaustedEvent.tiersAttempted).toEqual(['standard', 'capable-1']);
+        expect(exhaustedEvent.executorsTried).toEqual(['std-exec', 'capable-exec']);
+        expect(exhaustedEvent.attempts).toBe(2);
+        expect(exhaustedEvent.severity).toBe('error');
     });
 
     test('R3: escalation into an unconfigured fallback tier is reported unreachable and continues to the next reachable tier', async () => {

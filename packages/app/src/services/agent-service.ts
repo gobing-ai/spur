@@ -349,6 +349,7 @@ export class AgentService {
      * (R3) and neither writes an exact mapping.
      */
     private readonly sessionRootRegistry: RunSessionOverlapRegistry = { active: new Map(), overlapped: new Set() };
+    private readonly unreachableTierWarnings = new Set<string>();
 
     constructor(ctx: AgentServiceContext) {
         this.ctx = ctx;
@@ -991,6 +992,23 @@ export class AgentService {
                             `Escalation chain exhausted after ${attempt + 1} attempt(s); stage=${currentStage.stageId}; tiers attempted: ${[...tiersAttempted].join(', ')}; executors tried: ${[...attemptedExecutors].join(', ')}`,
                         );
                     }
+                    // Structured twin of the human diagnostic so --json runs are
+                    // not silent about exhaustion (review 0540 minor: the stderr
+                    // line was json-suppressed with no event equivalent).
+                    if (this.ctx.events !== undefined) {
+                        void this.ctx.events.emit('agent.invoke.exhausted', {
+                            runId: lifecycle.identity.runId,
+                            executionId: lifecycle.identity.executionId,
+                            ...(lifecycle.identity.actionId !== undefined
+                                ? { actionId: lifecycle.identity.actionId }
+                                : {}),
+                            stage: currentStage.stageId,
+                            tiersAttempted: [...tiersAttempted],
+                            executorsTried: [...attemptedExecutors],
+                            attempts: attempt + 1,
+                            severity: 'error',
+                        });
+                    }
                     break;
                 }
 
@@ -1389,9 +1407,16 @@ export class AgentService {
         // walk below continues from the next reachable tier (>= targetTier), so
         // the run proceeds instead of terminating as exhausted.
         if (!executors.some((e) => getExecutorTier(e) === targetTier)) {
-            this.ctx.output.error(
-                `Stage '${stageRecord.id}': tier ${targetTier} is unreachable — no executor configured at this tier; continuing from the next reachable tier`,
-            );
+            // Once per stage+tier per service instance (review 0540 minor:
+            // the per-dispatch repetition made every run through a gap noisy
+            // without adding information — the first warning carries it all).
+            const warnKey = `${stageRecord.id}:${targetTier}`;
+            if (!this.unreachableTierWarnings.has(warnKey)) {
+                this.unreachableTierWarnings.add(warnKey);
+                this.ctx.output.error(
+                    `Stage '${stageRecord.id}': tier ${targetTier} is unreachable — no executor configured at this tier; continuing from the next reachable tier`,
+                );
+            }
         }
 
         // Filter candidate executors whose capability meets targetTier (R3: never
