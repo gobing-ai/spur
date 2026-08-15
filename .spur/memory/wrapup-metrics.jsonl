@@ -5,21 +5,12 @@
 {"wbs":"0170","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
 {"wbs":"0171","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
 {"wbs":"0172","feature_id":"I","status":"done","verdict":null,"timestamp":"2026-07-01T23:10:00.000Z"}
-Captured to `.spur/run/wrapup-metrics.jsonl`:
-
 {"wbs":"0425","feature_id":"F5","status":"done","verdict":"PASS","timestamp":"2026-08-04T17:57:43Z"}
-
-Source notes: `feature_id` = `F5` from the `0425-verify-answer.txt` footer ("Feature: F5"); `status` = `done` (terminal lifecycle state after PASS verdict + Shippable PASS); `timestamp` = the verify-answer mtime `2026-08-04T10:57:43-07:00` → UTC `17:57:43Z`, the closest recorded point where the task reached its verified/done state. `wbs`/`verdict` taken directly from `0425-verdict.json`.Write declined at the permission prompt — the file capture is pending your approval. The deliverable, raw (no fences):
-
 {"wbs":"0426","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T21:52:19Z"}
 {"wbs":"0427","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T22:38:30Z"}
 {"wbs":"0428","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T22:59:12Z"}
 {"wbs":"0429","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-04T23:26:58Z"}
 {"wbs":"0430","feature_id":"D2","status":"done","verdict":"PASS","timestamp":"2026-08-05T00:11:15Z"}
-
-Sources: `wbs`/`verdict` from each `<wbs>-verdict.json` (all PASS); `feature_id` = `D2` from task frontmatter; `status` = `done` from task frontmatter (terminal state, all five); `timestamp` = frontmatter `updated_at`, the last corpus write recording the done state (0430 crossed midnight into 2026-08-05).
-
-Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry, same format) still needs your approval.{"wbs":"0455","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0457","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0463","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0464","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
@@ -31,59 +22,22 @@ Appending to `.spur/run/wrapup-metrics.jsonl` (after the existing 0425/F5 entry,
 {"wbs":"0470","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0471","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0474","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
-Appended two JSONL lines to `.spur/run/wrapup-metrics.jsonl`:
-
-```
 {"wbs":"0480","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
 {"wbs":"0482","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
-```
-
-Both `status=done` (task show) and `verdict=PASS` (verdict files). `feature_id=H1` from frontmatter. Timestamps = capture time.Appended. `.spur/run/wrapup-metrics.jsonl` now:
-
-```
 {"wbs":"0480","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
 {"wbs":"0482","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
 {"wbs":"0487","feature_id":"N","status":"done","verdict":"PASS","timestamp":"2026-08-09T19:50:49Z"}
-```
-
-- `wbs` 0487; `feature_id` N (frontmatter); `status` done (`spur task show`); `verdict` PASS (`0487-verdict.json`).`{"wbs":"0502","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-10T23:30:43Z"}`
-
-Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0502 --json` (wbs, feature_id=null, status=done, updated_at) + `.spur/run/0502-verdict.json` (PASS). Also repaired the file — a prior botched append had baked the command's annotation text into the JSONL; rewrote clean.```
 {"wbs":"0505","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T05:04:37Z"}
-```
-
-Captured to `.spur/run/wrapup-metrics.jsonl` — file now two valid JSONL records (0502 + 0505), both parse clean. Fields sourced from the task file: wbs 0505, feature_id E, status done, verdict PASS (Testing section), timestamp = done transition (2026-08-11T05:04:37.408Z).
-
-Also repaired the pre-existing botched state: the 0502 record was stored as literal tool-output text (backtick-wrapped JSON + "Appended to…" annotation), not JSONL — rewrote the file clean rather than leaving the new line adjacent to garbage.Captured to `.spur/run/wrapup-metrics.jsonl` (3 lines, one per task, from `spur task show --json` — status/verdict verified against the task corpus, feature E from Traceability):
-
-```jsonl
 {"wbs":"0506","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
 {"wbs":"0507","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
 {"wbs":"0508","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
-```{"wbs":"0510","feature_id":"H","status":"done","verdict":"PASS","timestamp":"2026-08-11T17:00:00Z"}
-Appended to `.spur/run/wrapup-metrics.jsonl`:
-
-```jsonl
 {"wbs":"0532","feature_id":"G2","status":"done","verdict":"PASS","timestamp":"2026-08-13T18:36:49Z"}
-```
-
-Source: `spur task show 0532 --json` (status `done`, feature_id `G2`) + `.spur/run/0532-verdict.json` (verdict PASS).Line appended to `.spur/run/wrapup-metrics.jsonl`:
-
-```jsonl
 {"wbs":"0534","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-13T22:03:06Z"}
-```
-
-Source: `spur task show 0534 --json` (status `done`, `feature_id: null`) + task file line 266 (`Verdict: PASS`).{"wbs":"0541","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T00:42:30Z"}
-
-Appended to `.spur/run/wrapup-metrics.jsonl`. Source: `spur task show 0541 --json` (status `done`, feature_id `B2`) + task verify verdict `PASS`.```jsonl
 {"wbs":"0535","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T01:35:58.010Z"}
 {"wbs":"0536","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T02:51:39.574Z"}
 {"wbs":"0537","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T02:05:20.287Z"}
 {"wbs":"0538","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T04:10:25.933Z"}
 {"wbs":"0542","feature_id":"B2","status":"done","verdict":"PASS","timestamp":"2026-08-14T03:37:21.133Z"}
-```
-
-Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{wbs}-verdict.json` files (all PASS); timestamp from each task's `frontmatter.updated_at`.{"wbs":"0557","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T06:04:47.588Z"}
 {"wbs":"0558","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T07:21:03.308Z"}
 {"wbs":"0559","feature_id":"E6","status":"done","verdict":"PASS","timestamp":"2026-08-14T17:16:35.987Z"}
 {"wbs":"0548","feature_id":"E3","status":"done","verdict":"PASS","timestamp":"2026-08-14T21:18:22.766Z"}
@@ -93,9 +47,5 @@ Captured to `.spur/run/wrapup-metrics.jsonl`. Verdicts sourced from the five `{w
 {"feature":"I3","wbs":"0540","verdict":"PASS","targeted":"272 pass/0 fail","gate":"rc=0","review":"PASS(2 minor,2 advisory; notes)"}
 {"wbs":"0543","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
 {"wbs":"0544","feature_id":"M5","status":"done","verdict":"PASS","timestamp":"2026-08-15T06:50:00Z"}
-`{"wbs":"0547","feature_id":"J6","status":"done","verdict":"PASS","timestamp":"2026-08-15T07:35:40Z"}`
-
-Appended to `.spur/run/wrapup-metrics.jsonl`. The input list `[""]` was an empty render; line reflects the run's actual task (0547, done, PASS per `0547-verdict.json`, feature J6). No other tasks.
-```jsonl
 {"wbs":"0552","feature_id":"J7","status":"done","verdict":"PASS","timestamp":"2026-08-15T15:47:40.856Z"}
-
+{"wbs":"0561","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-15T16:36:35.551Z"}

@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.3.1
+version: 1.3.2
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-08-14T00:00:00.000Z
+updated_at: 2026-08-15T00:00:00.000Z
 ---
 
 # Project Constitution — How to Organize the Project
@@ -487,6 +487,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/04_DESIGN.md`
 
+- [2026-08-15] spur-new: An E6 verify answer embedded Gherkin bodies in AC row ids (`Scenario: R4 — … (Given … / Then …)`), which `spur task verdict --from-answer` preserved verbatim — the scenario gate flagged `L4.scenario-unverified` despite a PASS verdict and needed post-hoc surgery on the answer artifact (0561). The gate now strips a trailing parenthetical as a backstop, but the authoring contract stays: AC row id = exactly the scenario title, body lives in the task's Acceptance Criteria block (ac-style-guide).
 - [2026-08-13] spur-new: The 0538 R2 wrapup text claimed the JSON workflow schemas reject a role-less `agent.run` step — the schemas contain no `role` key; the gate is `WorkflowService.validate`'s post-schema walk plus `AgentRunActionRunner`'s dispatch guard. A 04 edit that names an enforcement surface must be checked against the actual file (the JSON schema) before writing — "the schema fails" is a factual claim about a specific artifact, not a summary of the code comment.
 - [2026-06-11] spur-new: The same-commit sync rule was honored only when "doc sync" was made an
   explicit scheduled item in the batch plan. Discipline-by-memory fails; schedule it (§5 last

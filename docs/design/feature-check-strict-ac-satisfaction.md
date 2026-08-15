@@ -2,7 +2,7 @@
 
 **Status:** implemented  
 **Date:** 2026-07-26  
-**Updated:** 2026-08-01 (task 0410)
+**Updated:** 2026-08-15 (task 0561)
 **Authority:** design satellite for tasks 0340 and 0410 (constitution: surface/design decisions live under `docs/design/`; process remains in `docs/99`)
 
 ## Decision
@@ -24,8 +24,12 @@ normalizes it to `id`. When both keys are present, equal string values are accep
 authoritative; differing or non-string values reject the row.
 
 A scenario is **linked-and-verified** when **any** covering task is `done`, its artifact has
-`verdict: PASS`, and either coverage array contains a matching `MET` row. Matching remains exact
-after normalized scenario-title handling and the `AC-N` ordinal alias (1-based).
+`verdict: PASS`, and either coverage array contains a matching `MET` row. Matching is exact after
+normalized scenario-title handling and the `AC-N` ordinal alias (1-based); a row id carrying a
+trailing parenthetical — an embedded Gherkin body, any nesting, line breaks included — is
+additionally evaluated with the parenthetical greedily stripped (additive backstop, 0561). The raw
+and stripped forms are always evaluated first, so a title that legitimately ends in `(...)` still
+matches unmodified. Verdict artifacts preserve row ids verbatim.
 
 Missing/unreadable artifacts, malformed JSON or non-object roots, a missing required
 `requirements` array, non-array coverage fields, and rejected rows emit one bounded
