@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:15.298Z"
-updated_at: "2026-08-15T19:33:25.583Z"
+updated_at: "2026-08-15T21:47:58.998Z"
 done_forced: "true"
 done_reason: Verified with PASS verdict in .spur/run/0562-verdict.json; full test suite 5290 pass / 0 fail
 ---
@@ -23,7 +23,7 @@ done_reason: Verified with PASS verdict in .spur/run/0562-verdict.json; full tes
 ### Background
 During the E6 batch (2026-08-14), two features in parallel claimed the same incremental migration number: task 0553 (E5-adjacent) shipped `0012_spur_cli_history_tool_call_args_raw`, while E6 task 0557 shipped `0012_spur_cli_history_run_session`. Both lived in `packages/domain/src/migrations.ts` CLI_SCHEMA_SQL. The duplicate only surfaced at integration: the E6 worktree branch could not fast-forward (main had advanced), and the manual merge required renumbering E6's migration to `0013_spur_cli_history_run_session` (commit fa41669c). A collision check at planning time would have caught this before any implementation ran. Evidence: migrations.ts (both ids present), git log `fa41669c`, report §2 RC5.
 ### Requirements
-- [x] R1. Two migrations can never share a numeric prefix — a check over `CLI_MIGRATIONS` (`packages/domain/src/migrations.ts:288-322`) fails when two entries carry the same four-digit prefix, naming both colliding ids. String-id uniqueness is not sufficient: the incident's two entries (`0012_spur_cli_history_tool_call_args_raw`, `0012_spur_cli_history_run_session`) are distinct strings colliding only on the prefix.
+- [x] R1. Two migrations can never share a numeric prefix — a check over `CLI_MIGRATIONS` (`packages/domain/src/migrations.ts:314-352`) fails when two entries carry the same four-digit prefix, naming both colliding ids. String-id uniqueness is not sufficient: the incident's two entries (`0012_spur_cli_history_tool_call_args_raw`, `0012_spur_cli_history_run_session`) are distinct strings colliding only on the prefix.
 - [x] R2. Prefixes stay strictly ascending — the same check fails on a non-monotonic sequence, so a renumber that lands out of order (or a gap-filling reuse of a retired number) is caught rather than silently applied in array order.
 - [x] R3. The check runs in the standard gate — it lives in `packages/domain/tests/dao/migrations.test.ts` under the existing `CLI_MIGRATIONS` describe block, so `bun run test` (and therefore `spur-check`) fails on a collision with no new command, script, or CLI surface.
 - [x] R4. The allocation rule is written down — `CLAUDE.md`'s Database/migrations section states that a new migration takes `max(prefix)+1` and that a merge surfacing a duplicate prefix is renumbered on the incoming branch (the E6 precedent, commit `fa41669c`).
@@ -41,7 +41,7 @@ Scenario: R2 — a non-ascending prefix sequence fails the check
   Then it fails and names the offending position
 
 Scenario: R2 — the current array passes
-  Given CLI_MIGRATIONS as shipped (0000 through 0013)
+  Given CLI_MIGRATIONS as shipped (0000 through 0014, 15 entries)
   When the migration-id check runs
   Then it passes
 
@@ -83,14 +83,14 @@ is expected and non-blocking).
 The originally-filed target (batch-create / feature-check in `packages/app`) is the wrong layer and
 was rejected on inspection. Those are task/feature *corpus* surfaces; nothing in them reads source
 code, and no migration-id allocation exists there or anywhere else — `CLI_MIGRATIONS`
-(`packages/domain/src/migrations.ts:288-322`) is a hand-written array with no guard of any kind.
+(`packages/domain/src/migrations.ts:314-352`) is a hand-written array with no guard of any kind.
 Teaching `batch-create` to scan `migrations.ts` would fire on every task batch in the repo,
 regardless of whether the batch touches the database, to catch a defect that a short assert in the
 package owning the array catches deterministically.
 
 #### What the check must actually compare
 
-`applyCliMigrations` (`migrations.ts:326-345`) keys its journal on the full id string, so the two
+`applyCliMigrations` (`migrations.ts:358-427`) keys its journal on the full id string, so the two
 colliding entries both applied cleanly — there was no runtime failure, only merge friction. A plain
 `new Set(ids).size === ids.length` assert would therefore have **passed**. The collision is on the
 leading four digits.
@@ -140,9 +140,10 @@ being broken — a parallel session committed to main mid-batch. That is process
 ### Root Cause
 `CLI_MIGRATIONS` in `packages/domain/src/migrations.ts` previously had no test assertion enforcing four-digit numeric prefix uniqueness or strictly ascending monotonic order. Migrations were only checked for folder marker naming, while `applyCliMigrations` indexed on the full ID string, allowing colliding prefixes across parallel branches (e.g. `0012_...` in task 0553 and task 0557) to go unnoticed until manual git merge.
 ### Solution
-- Added `assertMigrationPrefixSequence` to `packages/domain/tests/dao/migrations.test.ts:61` under `describe('CLI_MIGRATIONS')` to validate 4-digit prefix parsing, prefix uniqueness (naming colliding IDs), and strictly ascending prefix order (naming offending indices).
-- Added unit tests in `packages/domain/tests/dao/migrations.test.ts:90` for valid `CLI_MIGRATIONS`, duplicate prefix failure (R1), and non-ascending sequence failure (R2).
-- Documented migration allocation rule (`max(prefix)+1`) and merge collision renumbering policy in `AGENTS.md:374` (symlinked by `CLAUDE.md`) under `Database / migrations` (R4).
+- Added `assertMigrationPrefixSequence` to `packages/domain/tests/dao/migrations.test.ts:61-92` under `describe('CLI_MIGRATIONS')` (`:60`) to validate 4-digit prefix parsing (`:73-76`), prefix uniqueness naming both colliding ids (`:78-82`), and strictly ascending prefix order naming the offending index and surrounding ids (`:84-89`).
+- Added unit tests in `packages/domain/tests/dao/migrations.test.ts:94-118` — shipped-array pass (`:94-96`), duplicate-prefix failure (R1, `:98-107`), non-ascending failure (R2, `:109-118`).
+- Documented the migration allocation rule (`max(prefix)+1`) and the merge-collision renumbering policy in `AGENTS.md:374` (symlinked by `CLAUDE.md`) under `Database / migrations` (R4).
+- No production code changed: `packages/domain/src/migrations.ts` is untouched by this task.
 ### Testing
 **Re-verification 2026-08-15 (`/sp:dev-verify 0562 --force --focus all --fix all --next`)** — all
 evidence below was executed this run against the working tree; every `file:line` anchor was re-read
@@ -152,9 +153,9 @@ at the cited lines.
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/domain/tests/dao/migrations.test.ts:61-92` (`assertMigrationPrefixSequence`, duplicate branch at `:79-81`). Proven against the **real** array, not a mock: renumbered `0013_spur_cli_history_run_session` → `0012_...` in `packages/domain/src/migrations.ts:347`, ran `bun test packages/domain/tests/dao/migrations.test.ts -t "strictly ascending 4-digit"` → `1 fail`, `error: duplicate migration prefix 0012: 0012_spur_cli_history_tool_call_args_raw, 0012_spur_cli_history_run_session` (both ids named, exact design format). Source restored; `git diff --quiet -- packages/domain/src/migrations.ts` clean. Mock-array unit test `:98-107`. |
-| R2 | MET | Strict-ascent branch at `packages/domain/tests/dao/migrations.test.ts:84-89`. Proven against the real array: `0002_spur_cli_rule_history` → `0020_...`, same command → `1 fail`, `error: non-ascending migration prefix sequence at index 3: 0020_spur_cli_rule_history (prefix 20) >= 0003_spur_cli_planning (prefix 3)` (offending index + both surrounding ids). Source restored clean. Shipped array passes unchanged: `:94-96`. Mock-array unit test `:109-118`. |
-| R3 | MET | Executed the literal root gate command `bun test --reporter=dots ./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts -t "4-digit numeric prefix"` → `1 pass / 0 fail`, `Ran 1 test across 293 files` — the check is collected by the standard runner (root `package.json` `test` script) with no new command, script, or CLI surface. `git diff --name-only` touches no `package.json`, `scripts/`, or `apps/cli/src`. |
+| R1 | MET | `packages/domain/tests/dao/migrations.test.ts:61-92` (`assertMigrationPrefixSequence`; duplicate branch re-read at `:78-82`). Proven against the **real** array, not a mock: renumbered `0013_spur_cli_history_run_session` → `0012_...` at `packages/domain/src/migrations.ts:347`, ran `bun test packages/domain/tests/dao/migrations.test.ts -t "strictly ascending 4-digit"` → `1 fail`, `error: duplicate migration prefix 0012: 0012_spur_cli_history_tool_call_args_raw, 0012_spur_cli_history_run_session` (both ids named, exact design format). Source restored; `git diff --quiet -- packages/domain/src/migrations.ts` clean. Mock-array unit test `:98-107`. |
+| R2 | MET | Strict-ascent branch re-read at `packages/domain/tests/dao/migrations.test.ts:84-89`. Proven against the real array: `0002_spur_cli_rule_history` → `0020_...`, same command → `1 fail`, `error: non-ascending migration prefix sequence at index 3: 0020_spur_cli_rule_history (prefix 20) >= 0003_spur_cli_planning (prefix 3)` (offending index + both surrounding ids). Source restored clean. Shipped array passes unchanged: `:94-96`. Mock-array unit test `:109-118`. |
+| R3 | MET | Executed the literal root gate command `bun test --reporter=dots ./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts -t "4-digit numeric prefix"` → `1 pass / 0 fail`, `Ran 1 test across 293 files` — collected by the standard runner (root `package.json` `test` script) with no new command, script, or CLI surface. `git diff --name-only` touches no `package.json`, `scripts/`, or `apps/cli/src`. |
 | R4 | MET | `AGENTS.md:374` — "New migrations take `max(prefix)+1` (four-digit numeric prefix, e.g. `0015_...`). If a merge surfaces a duplicate prefix, the incoming branch renumbers to `max(prefix)+1` (the E6 precedent, commit `fa41669c`)." Located under `## Database / migrations`. `ls -la CLAUDE.md` → `CLAUDE.md -> AGENTS.md`, so the R4 doc target is satisfied by this edit. |
 
 **Acceptance Criteria Verification**
@@ -167,22 +168,29 @@ at the cited lines.
 | Scenario: R3 — the check runs inside the standard gate | MET | command | Root `test` script invocation above — collected across 293 files, zero added scripts. |
 | Scenario: R4 — the allocation rule is documented | MET | static | `AGENTS.md:374` read at the cited line this run; states `max(prefix)+1` and the incoming-branch renumber precedent. |
 
+**Full verification gate (this run, pre-commit)**
+
+| Gate | Result |
+| --- | --- |
+| `bun run lint` | PASS — Biome 679 files, no fixes; all 7 workspace typechecks exit 0. |
+| `bun run test` | `5269 pass / 24 fail` across 293 files. All 24 failures are sandbox denials in seven port/registry suites (`apps/cli/tests/commands/projects`, `apps/server/tests/{context,modules/health,serve}`, `apps/web/tests/lib/rpc-client`, `packages/app/tests/services/{project-registry,project-start}`) — `EADDRINUSE`, `Failed to listen at ::1 / 127.0.0.1`, `EPERM: operation not permitted, mkdtemp '/Users/robin/.spur-project-start-heal-*'`. None touch migrations; the owning suite is `42 pass / 0 fail`. |
+| `spur task check 0562 --strict-core` | PASS (`"pass": true`); one `L4.missing-feature-id` warning, documented as expected by Q4. |
+| `bun run corpus-check` | PASS — 2 errors observed, 2 baselined, 0 new, 0 stale. |
+| `bun run transition-shim-check` | PASS — 4 markers, 4 manifest entries, 0 new / 0 stale / 0 incomplete. |
+
 **SECUA Review** (`--focus all`)
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
 | P4 | Correctness | `packages/domain/tests/dao/migrations.test.ts:74` | `Number.isNaN(prefix)` is unreachable given the `/^\d{4}/` guard in the same condition — a redundant clause, not a defect. No fix applied (behaviour-neutral churn on a closed task). |
 | P4 | Correctness | `packages/domain/tests/dao/migrations.test.ts:68-70` | `if (!item) continue;` silently skips a falsy element rather than failing. Unreachable for the dense `CLI_MIGRATIONS` literal; present only to satisfy `noUncheckedIndexedAccess`. Advisory. |
-| P4 | Usability | task `### Acceptance Criteria` | Stale parenthetical: scenario "the current array passes" says "(0000 through 0013)"; the array now ships `0000`–`0014`. The scenario's assertion is unaffected and MET. Deliberately **not** rewritten — amending AC text post-hoc to match the implementation is the failure mode this gate exists to catch. |
-| P4 | Security / Efficiency / Architecture | — | No findings. Test-local + one documentation line; no production code, no new dependency, no runtime path, no secrets or input-handling surface. O(n) over 15 entries. Correct seam: the assert lives in the package that owns the array. |
+| P4 | Usability | task `Requirements` / `Design` / `Solution` / `References` / `Acceptance Criteria` | **Stale citations — corrected this run** via `spur task update --section`. `migrations.ts:288-322` → `:314-352` (`CLI_MIGRATIONS`); `:326-345` → `:358-427` (`applyCliMigrations`); colliding ids `:317`/`:321` → `:343`/`:347`; `migrations.test.ts:90` → `:94`; AC parenthetical "(0000 through 0013)" → "(0000 through 0014, 15 entries)". These correct *citations* only — no requirement, scenario, or assertion was reworded, weakened, or added. All corrected anchors were re-read at their new lines. |
 
-**Design conformance:** 6/6 frozen-rule claims DONE (prefix parse, duplicate assert naming both ids,
-strict-ascent assert naming the offending position, contiguity deliberately not asserted, all five
-anti-patterns respected, measurable target executed). 0 CHANGED, 0 NOT DONE, 0 scope-creep hunks —
-the diff is 3 files: the test file, the `AGENTS.md` rule line, and this task file.
-
-**Gates:** `spur task check 0562 --strict-core --json` → `"pass": true`, one `L4.missing-feature-id`
-warning, which task Q4 documents as expected and non-blocking (deferred to the operator).
+**Design conformance:** 6/6 frozen-rule claims DONE (prefix parse `:73-76`, duplicate assert naming
+both ids `:78-82`, strict-ascent assert naming the offending position `:84-89`, contiguity
+deliberately not asserted, all five anti-patterns respected, measurable target executed). 0 CHANGED,
+0 NOT DONE, 0 scope-creep hunks — the code diff is 2 files: the test file (+59) and the `AGENTS.md`
+rule line (+1). No production code changed.
 
 Coverage: `packages/domain/src/migrations.ts` — 100% lines, 100% functions
 (`bun test packages/domain/tests/dao/migrations.test.ts --coverage`).
@@ -208,10 +216,10 @@ evidence replacing the prior mock-only citations.
 
 Residual risk: None. The test assertion deterministically detects duplicate prefixes and non-monotonic sequences at merge time.
 ### References
-- Code (subject): `packages/domain/src/migrations.ts:288-322` (`CLI_MIGRATIONS`) · `:326-345` (`applyCliMigrations`, journals on the full id string)
-- Code (fix target): `packages/domain/tests/dao/migrations.test.ts` — existing `describe('CLI_MIGRATIONS')` block
-- Evidence: the two colliding ids at `migrations.ts:317` and `:321` (post-renumber) · merge commit `fa41669c` (`0012_spur_cli_history_run_session` → `0013_...`)
-- Doc target: `CLAUDE.md` § Database / migrations
+- Code (subject): `packages/domain/src/migrations.ts:314-352` (`CLI_MIGRATIONS`) · `:358-427` (`applyCliMigrations`, journals on the full id string)
+- Code (fix target): `packages/domain/tests/dao/migrations.test.ts:60-119` — existing `describe('CLI_MIGRATIONS')` block
+- Evidence: the two colliding ids at `migrations.ts:343` and `:347` (post-renumber, now `0012`/`0013`) · merge commit `fa41669c` (`0012_spur_cli_history_run_session` → `0013_...`)
+- Doc target: `CLAUDE.md` § Database / migrations (symlink → `AGENTS.md:374`)
 - Related process rule: `CLAUDE.md` § Conventions — one writer per working tree (task 0487 R5), the aggravating factor
 - Report: `docs/report/2026-08-14-E6-batch-forensic-report.md` §2 RC5 / §4
 ### History
