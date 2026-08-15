@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.21.0
+version: 1.22.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-14
+updated_at: 2026-08-15
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -349,6 +349,17 @@ run windows (`RetroCorrelator`, `packages/domain/src/analytics/retro-correlation
 provenance authority: `history_message.provenance` (`spur-run` vs `ambient`) is aligned to it
 after import (`RunSessionDao.alignMessageProvenance`), replacing the cwd-substring
 `detectProvenance` heuristic deleted in `@gobing-ai/ts-llm-jsonl-importer@0.4.33`.
+
+**Routing attribution & token aggregates (0545–0547).** The agent invoke bridge in
+`AgentService.executeRun` merges the resolution funnel's outcome — the only place that knows
+role, tier, executor, and source together — into the `agent.invoke.*` event payloads;
+escalations are separate `agent.invoke.escalated` records so a re-dispatch counts as its own
+serve. `routingSummary` (0546) aggregates those rows in SQL over `json_extract` of the routing
+envelope in one indexed round trip (composite `idx_system_events_name_occurred` + indexed
+`run_id`), never by sifting a client-side window. `roleTokenSummary` (0547) joins the same
+attributed rows through `history_run_session` (ADR-059) and folds `history_message`'s typed
+token columns per (role, exactness) — exact and estimated kept apart, never summed, never
+priced (ADR-060). Shapes: `04 §7.9`; render consumers: task 0552.
 
 ## 8. Data & Storage (ADR-007/008)
 

@@ -76,6 +76,13 @@ export {
     RetroCorrelator,
 } from './retro-correlation';
 export {
+    type RoleTokenAttribution,
+    type RoleTokenSummaryQuery,
+    type RoleTokenSummaryResult,
+    type RoleTokenTotals,
+    roleTokenSummary,
+} from './role-tokens';
+export {
     type ActionCost,
     type ActionCostAttribution,
     type ActionRunCostRow,

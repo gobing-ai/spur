@@ -559,6 +559,12 @@ if it recurs, a new rule in §6.
   amendment, a `03` §6.3 projection, and three `04` surface notes — all verify-PASSed, none bumping
   the §4.3 frontmatter `version`/`updated_at`; the wrapup contract-verify caught it. Frontmatter
   bookkeeping is part of the same edit as the body change, not a follow-up pass.
+- [2026-08-15] spur-new: An E3 wrapup placed a real-data measurement record (`0548-measurement.md`)
+  in the `docs/design/` satellite layer with no `04 §0` index row — §4.5 orphan drift, and a
+  classification error: measurements/evidence records are dated working documents (`docs/plans/`),
+  not surface-area designs. The 2026-06-18 orphan lesson covered naming anchors, not layer
+  classification. When a wrapup produces an evidence record, route it to `docs/plans/YYYY-MM-DD-*`,
+  never the satellite layer.
 
 ## 9. Bootstrapping a new project
 

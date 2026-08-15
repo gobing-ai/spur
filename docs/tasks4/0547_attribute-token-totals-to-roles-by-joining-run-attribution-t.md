@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Attribute token totals to roles by joining run attribution to the history plane"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J6
@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0545", "0546", "0557", "0558"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:31:56.915Z"
-updated_at: "2026-08-14T02:46:27.758Z"
+updated_at: "2026-08-15T07:29:22.212Z"
 ---
 
 ## 0547. Attribute token totals to roles by joining run attribution to the history plane
@@ -247,17 +247,91 @@ would discover it after building the query.
 - [ ] Add tests: known-usage totals, unmeasured vs observed-zero, exact vs estimated, partial coverage (R1-R5)
 - [ ] Update `docs/04_DESIGN.md` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
+**New surface — `roleTokenSummary` (R1/R4/R5).** `packages/domain/src/analytics/role-tokens.ts:99`
+adds the role dimension to the J6 routing plane: same bounded-window surface and source rows as
+`routingSummary` (`agent.invoke.start` rows carrying a routing block on `system_events`), joined
+to the history plane through the `history_run_session` run→session mapping (tasks 0557/0558) and
+folded from `history_message`'s typed token columns. Exact and estimated mappings fold into
+separate buckets per role and are never summed (R4), mirroring `attributeActionCost`'s split.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**No second extractor, no prices (R1/R2).** The typed columns are summed in SQL exactly as
+`run-cost.ts`'s `foldMappedSessions` does (`inputTokens` = fresh + cache-read + cache-write);
+the ETL `usage`-object extractor (`extractClaudeTokens`) is the dead path per the task's
+premise correction (0559 retired it) and is not called. `history_message.cost_usd` and the
+pricing tables stay unread; the result type (`RoleTokenTotals`,
+`packages/domain/src/analytics/role-tokens.ts:14`) carries no currency field.
 
+**Never-fabricate (R3).** A bucket is populated only when its matched rows carried usage
+(`recordsWithUsage > 0`); a role with no matched rows — or rows without a provider `usage`
+object — reports `unmeasured: true` with `matchedRuns`, never zero tokens as an observed fact.
+Coverage (R5) is reported as `matchedRuns` of `totalRuns` per role
+(`RoleTokenAttribution`, `packages/domain/src/analytics/role-tokens.ts:40`).
+
+**Files:**
+- `packages/domain/src/analytics/role-tokens.ts:99` — `roleTokenSummary(db, { since?, until? })`;
+  per-role attribution via two indexed SQL passes (attributed runs, then folds grouped by
+  `(role, exactness)`); missing ledger/history tables read as empty, never throw.
+- `packages/domain/src/analytics/index.ts:83` — exports the new surface.
+- `packages/domain/tests/analytics/role-tokens.test.ts:124` — 11 tests covering R1 (known-usage
+  totals per role, window bounds), R2 (no currency field, asserted by regex + key check), R3
+  (unmeasured ≠ observed zero), R4 (exact/estimated separate), R5 (partial coverage +
+  distinct-run regression), and missing-table safety (unmigrated DB; ledger without history
+  plane).
+- `docs/04_DESIGN.md` — "Role token aggregate (task 0547)" paragraph beside the 0546 routing
+  aggregate read path (T3 same commit).
+
+**Not in scope:** server/CLI exposure (0552 renders via the typed client; J6 rides existing
+surfaces), Board rendering (J4), history ETL repair (E1).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `roleTokenSummary` joins `agent.invoke.start` routing rows → `history_run_session` by indexed `run_id` → `history_message` typed columns (`packages/domain/src/analytics/role-tokens.ts:99`); tests "R1: a known dataset yields the expected four token totals per role" (input 1250 = fresh 1000 + cache-read 200 + cache-write 50), "R1: the bounded window excludes runs outside it" |
+| R2 | MET | Result type `RoleTokenTotals` has no currency field; SQL never reads `cost_usd`; test "R2: the output contains no currency field" asserts serialized output matches no `/costUsd |
+| R3 | MET | Bucket populated only when `recordsWithUsage > 0`; `unmeasured` flag + matched-run count; tests "R3: a role with no matched rows reads as unmeasured", "R3: a role whose rows carry no usage reports unmeasured, distinct from observed zero" (ghost unmeasured vs zero measured with 0 tokens) |
+| R4 | MET | Separate `exact`/`estimated` buckets per role; tests "R4: a mixed dataset reports exact and estimated totals separately" (1000 exact vs 300 estimated) |
+| R5 | MET | `matchedRuns`/`totalRuns` per role; distinct-run CTE counts a run once across classes; tests "R5: partial coverage reports matched and total run counts" (2/3), "R5: a run mapped in both exactness classes counts once" |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R7 | MET | test | "R1: a known dataset yields the expected four token totals per role"; "R2: the output contains no currency field" |
+| R8 | MET | test | "R3: a role whose rows carry no usage reports unmeasured, distinct from observed zero"; "R3: a role with no matched rows reads as unmeasured" |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Three-dimensional review (functional traceability + SECUA + architecture depth).**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**P1 — none.**
 
+**P2 — none.**
+
+**P3 (fixed during review):**
+
+1. **`matchedRuns` double-count risk (R5).** The first fold implementation summed
+   per-exactness `matchedRuns`, so a run with mappings in both exactness classes counted twice
+   in coverage. Fixed with a `matched_runs` CTE that counts `DISTINCT run_id` per role across
+   both classes (`packages/domain/src/analytics/role-tokens.ts:96-105`); assignment, not
+   accumulation, in the assembly loop. Regression test: "a run mapped in both exactness classes
+   counts once in coverage".
+
+**P4 (notes, no change):**
+
+1. **Time-window narrowing absent (accepted).** `foldMappedSessions` narrows figures to an
+   action's `[started_at, completed_at]` when both bounds exist; `roleTokenSummary` folds whole
+   mapped sessions. Deliberate and documented in the function's `ponytail:` comment — per-message
+   run stamps are the stated upgrade path, matching the existing `attributeActionCost` ceiling.
+2. **Per-message attribution inside a shared session** (two runs mapping one session) attributes
+   the session's tokens to both runs. Same documented ceiling as run-cost; out of scope.
+3. **`role` null group** (pure pins) is included, mirroring `routingSummary` parity (0546 R4
+   separates pinned from role-resolved). 0552 must render the null-role group distinctly.
+
+**Residual risk:** low. The join path, never-fabricate invariant, exact/estimated split, and
+coverage semantics are each asserted by a dedicated test; missing-table behavior (unmigrated DB,
+dead history plane per E1) is tested.
+
+**Disposition:** pass — all R1–R5 verified against tests; T3 doc updated in the same commit.
 ### References
 - **Token extractor to reuse (R1):** `packages/domain/src/analytics/query.ts:57-67` (`TokenCounts`
   shape), `:71-98` (`extractClaudeTokens`; note `inputTokens` = fresh + cache-read + cache-write)
@@ -276,3 +350,6 @@ would discover it after building the query.
   `TokenTotals` stays untouched
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`
 ### History
+- 2026-08-15T07:23:25.906Z todo → wip (system)
+- 2026-08-15T07:28:33.648Z wip → testing (system)
+- 2026-08-15T07:29:22.212Z testing → done (system)

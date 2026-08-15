@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.32.0
+version: 1.33.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-14
+updated_at: 2026-08-15
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -1836,6 +1836,24 @@ covered `window` is reported on the result; `since`/`until` default to a bounded
 range. No new CLI noun or verb — this rides the observability read API (ADR-051 gates noun
 additions). Task 0547 joins the same rows to the history plane over `run_id` for the token
 dimension; task 0552 renders this aggregate.
+
+**Role token aggregate (task 0547).** `roleTokenSummary({ since?, until? })`
+(`packages/domain/src/analytics/role-tokens.ts`) attributes token consumption to the role each
+attributed run served, over the same bounded window and source rows as `routingSummary`. The
+join is attribution → run→session mapping → typed columns: `agent.invoke.start` rows carrying a
+routing block join `history_run_session` by the indexed `run_id` (task 0557 boundary observation /
+task 0558 retroactive correlation), and each mapped session's `history_message` typed token
+columns (`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`) are folded
+per role. Per role it reports `{ inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens }`
+plus coverage (`totalRuns`, `matchedRuns` — matched of attributed, R5) and the never-fabricate
+state (R3): a bucket is present only when its matched rows carried usage
+(`recordsWithUsage > 0`), so a role with no matched rows — or rows without a provider `usage`
+object — reports **unmeasured** with the matched-run count, never zero tokens as an observed
+fact. Exact and estimated mappings are folded into separate buckets and never summed (R4,
+mirroring `attributeActionCost`'s split). No dollar figure is computed, stored, or displayed
+(R2): `history_message.cost_usd` and the pricing tables stay unread, and the result type carries
+no currency field. Missing tables (unmigrated DB / dead history plane per feature E1) read as
+empty — best-effort like the rest of the trace path. Task 0552 renders these totals.
 
 **Board projection (task 0527).** The web client narrows envelope v2 once in its history/SSE parser.
 Desktop renders `Time | Severity | Event | Summary | Producer | Correlation | Outcome |
