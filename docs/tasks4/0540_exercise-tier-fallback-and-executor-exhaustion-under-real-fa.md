@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Exercise tier fallback and executor exhaustion under real failure"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: I3
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T23:28:17.816Z"
-updated_at: "2026-08-14T00:07:32.541Z"
+updated_at: "2026-08-15T07:33:54.725Z"
 ---
 
 ## 0540. Exercise tier fallback and executor exhaustion under real failure
@@ -111,17 +111,46 @@ transition; if the trigger is not there, adding it is in scope.
 - [ ] Use the live `capable-2` ladder gap as a fixture; assert unreachable is reported and the run continues (R3)
 - [ ] Run `bun run autofix && bun run spur-check`
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/agent-service.ts:1034` |
+| `packages/app/src/services/agent-service.ts:1386` |
+| `packages/app/src/services/agent-service.ts:709` |
+| `packages/app/src/services/agent-service.ts:985` |
+| `packages/app/src/services/agent-service.ts:991` |
+| `packages/app/tests/services/agent-service.test.ts:3210` |
+| `plugins/sp/scripts/feature-sync-bounded.ts:23` |
+| `plugins/sp/scripts/feature-sync-bounded.ts:244` |
+| `plugins/sp/scripts/feature-sync-bounded.ts:260` |
+| `plugins/sp/scripts/feature-sync-bounded.ts:429` |
+| `plugins/sp/scripts/task-size-precheck.ts:100` |
+| `plugins/sp/scripts/task-size-precheck.ts:69` |
+| `plugins/sp/scripts/task-size-precheck.ts:90` |
+| `plugins/sp/tests/feature-sync-bounded.test.ts:11` |
+| `plugins/sp/tests/feature-sync-bounded.test.ts:21` |
+| `plugins/sp/tests/feature-sync-bounded.test.ts:337` |
+| `plugins/sp/tests/feature-sync-bounded.test.ts:636` |
+| `plugins/sp/tests/task-size-precheck.test.ts:48` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `agent-service.test.ts:3266` drives a real `executeRun` stage whose starting-tier executor dies by SIGKILL → classified `timeout` (`failure-classification.ts:84`); escalation to the declared next tier (standard→capable-1) observed on stderr and as structured `agent.invoke.escalated` record (`agent-service.ts:1003-1024`). Mutation check: severing the timeout classifier fails the test. |
+| R2 | MET | Exhaustion run exits non-zero; message names stage + tiers attempted + executors tried (`agent-service.ts:991`, `tiersAttempted` :712/:1034; test :3295). With `agent.default` configured, exactly 2 dispatches occur — no fall-through. |
+| R3 | MET | Both gap variants covered: fallback-reaches-gap (`verify`, test :3320) and starting-tier/min_tier gap (`plan`, test :3352). Unreachable report names the tier (:1393); eligible `>=`-walk continues to the next reachable tier instead of terminating exhausted. Fixture mirrors the live `.spur/config.yaml` capable-2 gap. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 - **Mechanism under test (do not change):** `packages/domain/src/stage-registry/schema.ts:432-444`
   (`getNextFallback`), `:425-427` (`isTierEligible`), `:314-410` (model policy / trigger vocabulary),
@@ -136,3 +165,6 @@ transition; if the trigger is not there, adding it is in scope.
 - **Observability surface:** run record + `system_events` v2 envelope
   (`docs/design/actionable-observability-context.md`, `docs/04_DESIGN.md §7.9`)
 ### History
+- 2026-08-15T07:15:49.809Z todo → wip (system)
+- 2026-08-15T07:33:53.550Z wip → testing (system)
+- 2026-08-15T07:33:54.725Z testing → done (system)

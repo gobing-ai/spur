@@ -3207,3 +3207,168 @@ describe('AgentService routing decision attribution (0545)', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — tier fallback and executor exhaustion under real failure (0540)
+// ---------------------------------------------------------------------------
+// R1–R3 drive the escalation ladder end-to-end through executeRun with real
+// failing dispatches — not getNextFallback in isolation (that proof lives in
+// the domain schema tests). 0407/0482/0485 covered the resource-exhaustion and
+// auth ladders; these add a frozen-four objective signal (timeout), the full
+// exhaustion naming (stage + tiers attempted + executors tried), and the
+// unreachable-tier distinction for a gap in the tier ladder.
+
+describe('AgentService tier fallback under real failure (0540)', () => {
+    /** Deps whose runner returns results[i] for dispatch i+1 (the last repeats). */
+    function sequentialDispatchDeps(results: AgentRunResult[]): {
+        deps: AgentRunDeps;
+        runPromptCommand: ReturnType<typeof mock>;
+    } {
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ usable: true })])),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        return {
+            deps: { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner },
+            runPromptCommand,
+        };
+    }
+
+    /** Service + bus collecting escalation records — the run-record surface for transitions. */
+    function escalationHarness(agentConfig: AgentConfig) {
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const escalations: Array<Record<string, unknown>> = [];
+        bus.on('agent.invoke.escalated', (event) => escalations.push(event as Record<string, unknown>));
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig, events: bus });
+        return { escalations, errors, svc };
+    }
+
+    // std-exec (pi, standard) → capable-exec (claude, capable-1); stage
+    // `implement` declares min_tier standard with a timeout → capable-1 entry.
+    const ladderConfig: AgentConfig = {
+        executors: [
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    test('R1: a timeout on the starting tier escalates by the declared chain and records the transition + trigger', async () => {
+        const { escalations, errors, svc } = escalationHarness(ladderConfig);
+        // First dispatch exceeds its time budget — killed by signal, which
+        // classifyDispatch maps to `timeout` (a frozen-four objective signal);
+        // the escalated dispatch succeeds.
+        const { deps, runPromptCommand } = sequentialDispatchDeps([
+            makeRunResult({ exitCode: null, signal: 'SIGKILL', stderr: '' }),
+            makeRunResult({ exitCode: 0 }),
+        ]);
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        // The next eligible executor by the declared chain ran and succeeded.
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi', 'claude']);
+        // Transition observable on stderr with the trigger that caused it.
+        expect(errors.some((e) => e.includes('Escalating: std-exec (tier standard) failed with timeout'))).toBe(true);
+        expect(errors.some((e) => e.includes('retrying on capable-exec (tier capable-1)'))).toBe(true);
+        // ... and in the run record: the escalation row carries both ends of the
+        // transition and the trigger.
+        expect(escalations).toHaveLength(1);
+        const escalation = escalations[0] as Record<string, unknown>;
+        expect(escalation.trigger).toBe('timeout');
+        expect(escalation.fromExecutor).toBe('std-exec');
+        expect(escalation.fromTier).toBe('standard');
+        expect(escalation.toExecutor).toBe('capable-exec');
+        expect(escalation.toTier).toBe('capable-1');
+    });
+
+    test('R2: exhaustion exits non-zero naming stage, tiers attempted, and executors tried — no fall-through to agent.default', async () => {
+        // A configured agent.default must never receive the exhausted dispatch.
+        const { escalations, errors, svc } = escalationHarness({ ...ladderConfig, default: 'std-exec' });
+        const { deps, runPromptCommand } = sequentialDispatchDeps([
+            makeRunResult({ exitCode: 1, stderr: 'Error: 429 Too Many Requests' }),
+        ]);
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        // Fails loudly — non-zero exit, never a silent give-up.
+        expect(code).not.toBe(0);
+        // Exactly the two ladder executors were dispatched — the agent.default
+        // fall-through never spawned a dispatch.
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi', 'claude']);
+        // The report carries all three: stage, tiers attempted, executors tried.
+        const exhausted = errors.find((e) => e.includes('Escalation chain exhausted'));
+        expect(exhausted).toBeDefined();
+        expect(exhausted).toContain('stage=implement');
+        expect(exhausted).toContain('tiers attempted: standard, capable-1');
+        expect(exhausted).toContain('executors tried: std-exec, capable-exec');
+        // One escalation happened before exhaustion; nothing further.
+        expect(escalations).toHaveLength(1);
+    });
+
+    test('R3: escalation into an unconfigured fallback tier is reported unreachable and continues to the next reachable tier', async () => {
+        // The live `.spur/config.yaml` gap as a fixture: capable-2 is
+        // unconfigured while capable-1 and capable-3 are live. Stage `verify`
+        // (min_tier capable-1) declares resource-exhaustion → capable-2 — the
+        // ladder must walk past the gap to capable-3 instead of terminating
+        // as exhausted.
+        const gapConfig: AgentConfig = {
+            executors: [
+                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1' },
+                { name: 'codex-sol', agent: 'codex', tier: 'capable-3' },
+            ],
+        };
+        const { escalations, errors, svc } = escalationHarness(gapConfig);
+        const { deps, runPromptCommand } = sequentialDispatchDeps([
+            makeRunResult({ exitCode: 1, stderr: '429 Usage limit reached for 5 hour' }),
+            makeRunResult({ exitCode: 0 }),
+        ]);
+
+        const code = await svc.run('Verify the task', { agent: 'auto', stage: 'verify', json: false }, deps);
+
+        // The run continued past the gap and succeeded — not exhaustion.
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['omp', 'codex']);
+        // The gap is reported as unreachable, naming the tier.
+        const unreachable = errors.find((e) => e.includes('unreachable'));
+        expect(unreachable).toBeDefined();
+        expect(unreachable).toContain('capable-2');
+        // ...and it is distinguishable from a failed rung: no chain-exhausted report.
+        expect(errors.some((e) => e.includes('Escalation chain exhausted'))).toBe(false);
+        expect(escalations).toHaveLength(1);
+    });
+
+    test('R3: an unreachable starting tier (min_tier gap) also reports and continues', async () => {
+        // Stage `plan` floors at capable-2 — unconfigured in the same fixture.
+        const gapConfig: AgentConfig = {
+            executors: [
+                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1' },
+                { name: 'codex-sol', agent: 'codex', tier: 'capable-3' },
+            ],
+        };
+        const { errors, svc } = escalationHarness(gapConfig);
+        const { deps, runPromptCommand } = sequentialDispatchDeps([makeRunResult({ exitCode: 0 })]);
+
+        const code = await svc.run('Plan the task', { agent: 'auto', stage: 'plan', json: false }, deps);
+
+        // The run continues from the next reachable tier (capable-3 → codex).
+        expect(code).toBe(0);
+        expect(runPromptCommand).toHaveBeenCalledTimes(1);
+        expect(resolvedAgent({ runPromptCommand })).toBe('codex');
+        const unreachable = errors.find((e) => e.includes('unreachable'));
+        expect(unreachable).toBeDefined();
+        expect(unreachable).toContain("Stage 'plan'");
+        expect(unreachable).toContain('capable-2');
+    });
+});

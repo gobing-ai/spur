@@ -706,6 +706,10 @@ export class AgentService {
         let currentTier = resolved.tier;
         let currentExecutor = resolved.executor;
         const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
+        // 0540 R2: the tiers in play ride the exhaustion report alongside the
+        // executors tried — a bare executor list cannot say how far the ladder
+        // climbed.
+        const tiersAttempted = new Set<string>(currentStage ? [currentStage.executorTier] : []);
 
         // Tier-2 warning (suppressed in json/silent mode) — first agent only.
         if (!jsonOutput && TIER2_AGENTS.has(currentAgent)) {
@@ -978,10 +982,13 @@ export class AgentService {
                     nextResolved.stage === undefined ||
                     attemptedExecutors.has(nextResolved.stage.executorName)
                 ) {
-                    // Chain exhausted (R4) — report executors attempted.
+                    // Chain exhausted (R4 / 0540 R2) — name the stage, the
+                    // tiers attempted, and the executors tried. The run then
+                    // ends non-zero with the last result; it never falls
+                    // through to agent.default or a bare binary.
                     if (!jsonOutput) {
                         this.ctx.output.error(
-                            `Escalation chain exhausted after ${attempt + 1} attempt(s); executors tried: ${[...attemptedExecutors].join(', ')}`,
+                            `Escalation chain exhausted after ${attempt + 1} attempt(s); stage=${currentStage.stageId}; tiers attempted: ${[...tiersAttempted].join(', ')}; executors tried: ${[...attemptedExecutors].join(', ')}`,
                         );
                     }
                     break;
@@ -1024,6 +1031,7 @@ export class AgentService {
                 // `agent.invoke.*` payloads carry the escalated decision.
                 routing = buildRoutingAttribution(nextResolved);
                 attemptedExecutors.add(nextResolved.stage.executorName);
+                tiersAttempted.add(nextResolved.stage.executorTier);
             }
         } finally {
             process.off('SIGTERM', onTerminate);
@@ -1373,6 +1381,17 @@ export class AgentService {
                     );
                 }
             }
+        }
+
+        // 0540 R3 — a tier with no configured executor is unreachable, not a
+        // failed rung: a gap in the operator's tier ladder (e.g. `capable-2`
+        // commented out) must be distinguished from exhaustion. The eligible
+        // walk below continues from the next reachable tier (>= targetTier), so
+        // the run proceeds instead of terminating as exhausted.
+        if (!executors.some((e) => getExecutorTier(e) === targetTier)) {
+            this.ctx.output.error(
+                `Stage '${stageRecord.id}': tier ${targetTier} is unreachable — no executor configured at this tier; continuing from the next reachable tier`,
+            );
         }
 
         // Filter candidate executors whose capability meets targetTier (R3: never
