@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0545", "0546", "0557", "0558"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:31:56.915Z"
-updated_at: "2026-08-15T07:29:22.212Z"
+updated_at: "2026-08-15T21:43:40.974Z"
 ---
 
 ## 0547. Attribute token totals to roles by joining run attribution to the history plane
@@ -303,29 +303,14 @@ surfaces), Board rendering (J4), history ETL repair (E1).
 ### Review
 **Three-dimensional review (functional traceability + SECUA + architecture depth).**
 
-**P1 — none.**
-
-**P2 — none.**
-
-**P3 (fixed during review):**
-
-1. **`matchedRuns` double-count risk (R5).** The first fold implementation summed
-   per-exactness `matchedRuns`, so a run with mappings in both exactness classes counted twice
-   in coverage. Fixed with a `matched_runs` CTE that counts `DISTINCT run_id` per role across
-   both classes (`packages/domain/src/analytics/role-tokens.ts:96-105`); assignment, not
-   accumulation, in the assembly loop. Regression test: "a run mapped in both exactness classes
-   counts once in coverage".
-
-**P4 (notes, no change):**
-
-1. **Time-window narrowing absent (accepted).** `foldMappedSessions` narrows figures to an
-   action's `[started_at, completed_at]` when both bounds exist; `roleTokenSummary` folds whole
-   mapped sessions. Deliberate and documented in the function's `ponytail:` comment — per-message
-   run stamps are the stated upgrade path, matching the existing `attributeActionCost` ceiling.
-2. **Per-message attribution inside a shared session** (two runs mapping one session) attributes
-   the session's tokens to both runs. Same documented ceiling as run-cost; out of scope.
-3. **`role` null group** (pure pins) is included, mirroring `routingSummary` parity (0546 R4
-   separates pinned from role-resolved). 0552 must render the null-role group distinctly.
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | — | — | None. |
+| P2 | — | — | None. |
+| P3 | Correctness | `packages/domain/src/analytics/role-tokens.ts:96-105` | `matchedRuns` double-count risk (R5) — **fixed during review**. The first fold summed per-exactness `matchedRuns`, so a run with mappings in both exactness classes counted twice in coverage. Replaced with a `matched_runs` CTE counting `DISTINCT run_id` per role across both classes; assignment, not accumulation, in the assembly loop. Regression test: "a run mapped in both exactness classes counts once in coverage". |
+| P4 | Architecture | `packages/domain/src/analytics/role-tokens.ts` (`roleTokenSummary`) | Time-window narrowing absent (accepted). `foldMappedSessions` narrows figures to an action's `[started_at, completed_at]` when both bounds exist; `roleTokenSummary` folds whole mapped sessions. Deliberate and documented in the function's `ponytail:` comment — per-message run stamps are the stated upgrade path, matching the existing `attributeActionCost` ceiling. |
+| P4 | Correctness | `packages/domain/src/analytics/role-tokens.ts` | Per-message attribution inside a shared session (two runs mapping one session) attributes the session's tokens to both runs. Same documented ceiling as run-cost; out of scope. |
+| P4 | Usability | `packages/domain/src/analytics/role-tokens.ts` | The `role` null group (pure pins) is included, mirroring `routingSummary` parity (0546 R4 separates pinned from role-resolved). 0552 must render the null-role group distinctly. |
 
 **Residual risk:** low. The join path, never-fabricate invariant, exact/estimated split, and
 coverage semantics are each asserted by a dedicated test; missing-table behavior (unmigrated DB,
