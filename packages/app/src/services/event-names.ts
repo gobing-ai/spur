@@ -215,11 +215,11 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
             field('detail', 'Detail'),
             field('cwd', 'Project root'),
             field('artifactPath', 'Artifact'),
-            field('jobId', 'Job'),
-            field('coalesced', 'Coalesced'),
             field('trigger', 'Trigger'),
-            field('windowSince', 'Window since'),
-            field('windowUntil', 'Window until'),
+            field('jobId', 'Queue job'),
+            field('windowStart', 'Window start'),
+            field('windowEnd', 'Window end'),
+            field('coalesced', 'Coalesced'),
             field('refreshed', 'Refreshed'),
             field('skipped', 'Skipped'),
             field('reason', 'Reason'),
@@ -373,9 +373,10 @@ export const SYSTEM_EVENT_CATALOG = [
     event('history.import.completed', 'history', 'history-import'),
     event('history.analyze.completed', 'history', 'history-analyze'),
     event('history.daily.failed', 'history', 'history-daily'),
+    // Completion-triggered refresh (task 0549 R3): the trigger's firing must be
+    // observable, not hidden automation — one row per enqueue/join with the
+    // trigger point, queue job id, and covered window.
     event('history.refresh.enqueued', 'history', 'history-refresh'),
-    event('history.refresh.completed', 'history', 'history-refresh'),
-    event('history.refresh.skipped', 'history', 'history-refresh'),
 
     // ── rule.* (task 0221 R2/R3) ──────────────────────────────────────────
     event('rule.run.start', 'rule', 'rule'),

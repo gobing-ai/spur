@@ -556,8 +556,14 @@ resident (a resident schedule belongs to 0471's launchd agent, not Spur's embedd
 checkpoint resume (R7): a missed night self-heals on the next run with no gap and no double-count.
 Only the **analyze** step scopes the report via `--since`/`--until`. `--root <path>` overrides the
 per-source history roots (test seam; default is each source's platform dir). `--json` emits the
-structured `DailyResult` (`{ fanOut, artifact, pruned }`). Exit code follows the fan-out import
-outcome (0/1/2), so `history.daily.failed` and the exit agree.
+structured `DailyResult` (`{ fanOut, artifact, pruned, coverage }`). Exit code follows the fan-out import
+outcome (0/1/2), so `history.daily.failed` and the exit agree. `coverage` (task 0550, R3/R4) is the honest
+coverage report `{ refreshed, skipped, window }`: `refreshed` names the full-fidelity sources this refresh
+imported (claude, codex, pi, omp, agy, grok), `skipped` names the unsupported sources deferred by the
+2026-08-06 operator ruling (gemini, opencode, antigravity-ide, openclaw, hermes), and `window` carries the
+MIN/MAX message `ts` the analyze covered (`{ since, until }`) so a reader can tell current data from stale
+without inspecting the database. A failed full-fidelity source drops out of `refreshed` (surfaced via
+`fanOut`/exit code) rather than being silently counted as refreshed.
 
 **`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
 `.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
@@ -591,6 +597,15 @@ full detail streamed to `analyze-<digest>.errors.jsonl` (R6). `recordsWithUsage`
 `durationUnmeasured` carry the never-fabricate invariant — a consumer renders `n/a`, never a
 fabricated `0`. No artifact flags ⇒ human stdout summary (rendered from the artifact); `--json` ⇒ the
 artifact shape.
+
+**Watermark policy (task 0550, R1/R2):** a session still being written is analyzed only up to its **last
+complete turn** — an assistant (non-meta) message with no open tool call closes a turn, and everything
+after it is a possibly-incomplete trailing turn excluded from derived values. Each `bySession[]` row
+carries an additive `sessionState: 'in-progress' | 'complete'` (absent ⇒ unknown for artifacts written
+before 0550) so a consumer can filter to finished sessions; the state is output, never a new column.
+Where "complete" is ambiguous for a source (no tool-call rows to inspect), the rule degrades to "last
+message is assistant-like" — including `role='unknown'`/role-less rows, so imported role-less messages are
+analyzed rather than zeroed. Pre-0550 behavior for complete sessions is unchanged — no data is excluded.
 
 **Assistant response duration (task 0507 R2):** totals (`assistantDurationMs`,
 `assistantDurationUnmeasured`) and per-session stats (`bySession[].assistantDurationMs` /
@@ -730,6 +745,60 @@ not exist in either case.
 the `.spur/reports/history/latest.json` pointer and emits a `## History Report` section carrying the
 newest artifact path — so a completed nightly run reaches the operator through the summary they already
 open, with no new notification channel.
+
+#### History completion-triggered refresh — coalesced enqueue on work completion (task 0549)
+
+`spur history daily` is bound to a clock; this trigger binds a refresh to **work completing** so the
+history DB reflects the burst of session activity a task pipeline just produced, without waiting for
+the 02:00 nightly loop.
+
+**Trigger points (exhaustive).** Exactly two, both terminal — never "every CLI invocation":
+
+1. `spur task update <wbs> --status done` (task completion) — `apps/cli/src/commands/task.ts`.
+2. `spur workflow run` / `continue` reaching a terminal status (pipeline-run completion) —
+   `apps/cli/src/commands/workflow.ts`, at the sync completion path, the main sync run path, and the
+   `continue` path. The `--async` launcher itself does **not** trigger — its worker does when the run
+   completes.
+
+**Config (`config/config.example.yaml`, `packages/config/src/index.ts`)** — explicit/opt-in, disable-able
+with no code edits:
+
+```yaml
+history:
+  refresh:
+    on_completion: false   # default; set true to enable
+    debounce_ms: 600000    # coalescing window, floor 1000 ms
+```
+
+The debounce default (600 000 ms = 10 min) follows task 0548's measured figures
+(`docs/tasks4/0548-import-cost-measurement.md`: steady-state all-fanout import ≈ 20.6 s, recommended
+coalescing window 10 min, floor 5 min) — the window must dwarf the import cost so a burst pays one
+import, not N.
+
+**Coalescing semantics (R2).** `enqueueCoalesced` (`packages/domain/src/db.ts`) joins the newest
+**pending** job of the type instead of inserting a second: merged payload keeps the earliest
+`windowStart` and extends `windowEnd` to the latest completion, and `nextRetryAt` slides to
+`now + debounce_ms`. A burst of N completions inside the window therefore yields **exactly one**
+refresh whose covered window spans all N. Once a job is claimed (`processing`), the next completion
+starts a fresh job — a refresh already in flight is never starved by further joining.
+
+**Never inline (R1).** The trigger (`apps/cli/src/history-refresh.ts`, `packages/app/src/services/history-refresh-service.ts`)
+is two queue-table statements — one lookup, one insert/update — and returns; the firing operation's
+elapsed time is unaffected. The refresh itself runs as queue job kind `history.refresh` inside
+`spur serve`'s job worker (`apps/server/src/serve.ts`), reusing `HistoryService.daily` — the same
+import-all fan-out with **per-source isolation** (R5: one source failing never aborts the others),
+analyze, and artifact write the nightly loop uses.
+
+**Failure policy.** A degraded fan-out (per-source failures) emits `history.daily.failed` and does
+**not** rethrow — the refresh is idempotent (checkpoint resume) and the next completion re-triggers
+it. An exception from `daily` itself emits and rethrows so the queue records the job failed.
+
+**Observability (R3).** Enqueue is observable through the ledger: the trigger emits
+`history.refresh.enqueued` (renderer `history-refresh`, `default` tier) carrying
+`trigger`/`jobId`/`windowStart`/`windowEnd`; the job body emits the existing
+`history.import.completed` / `history.analyze.completed` (with the coalesced window fields) /
+`history.daily.failed` catalog events. Enqueue failures degrade to a stderr warning and never change
+the firing operation's exit code.
 
 #### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
 

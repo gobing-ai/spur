@@ -488,31 +488,45 @@ export const RedactionConfigSchema = z.object({
     enabled: z.boolean().optional(),
 });
 
-/** Default coalescing window for operation-triggered history refresh (feature E3). */
-export const DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS = 60_000;
-
 /**
- * Operation-triggered history refresh (feature E3 / task 0549).
- * Opt-in: a refresh that fires with the key unset is hidden automation.
+ * Schema for the `history.refresh` section (task 0549 — completion-triggered refresh).
+ *
+ * - `on_completion` — opt-in trigger: enqueue a coalesced history refresh when work
+ *   completes (task → done, workflow run reaching terminal status). Default `false`:
+ *   the constitution rules out hidden automation, and task 0550's watermark is the
+ *   gate for enabling it by default.
+ * - `debounce_ms` — coalescing window. Default 600000 (10 min) is not a guess: it
+ *   follows task 0548's measured figures (`docs/tasks4/0548-import-cost-measurement.md`),
+ *   where the steady-state all-fanout import is ~20.6 s and scan-bound — a 10-minute
+ *   window bounds import duty to ≈3.4 % of wall clock with ≤10 min staleness.
  */
 export const HistoryRefreshConfigSchema = z.object({
     on_completion: z.boolean().default(false),
-    debounce_ms: z.number().int().nonnegative().default(DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS),
+    debounce_ms: z.number().int().min(1000).default(600_000),
 });
 
 /** Schema for the `history` section. */
 export const HistoryConfigSchema = z.object({
-    refresh: HistoryRefreshConfigSchema.default({
-        on_completion: false,
-        debounce_ms: DEFAULT_HISTORY_REFRESH_DEBOUNCE_MS,
-    }),
+    refresh: HistoryRefreshConfigSchema.optional(),
 });
 
-/** Inferred type for the `history.refresh` config block. */
-export type HistoryRefreshConfig = z.infer<typeof HistoryRefreshConfigSchema>;
+/** Effective history-refresh trigger configuration after schema defaults apply. */
+export interface HistoryRefreshTriggerConfig {
+    onCompletion: boolean;
+    debounceMs: number;
+}
 
-/** Inferred type for the `history` config section. */
-export type HistoryConfig = z.infer<typeof HistoryConfigSchema>;
+/**
+ * Resolve the effective `history.refresh` trigger config from a (possibly absent or
+ * partial) config. The zod defaults above are the single source; a missing `history`
+ * section parses to `on_completion: false`, `debounce_ms: 600000`.
+ */
+export function resolveHistoryRefreshTrigger(
+    config: Pick<SpurConfig, 'history'> | null | undefined,
+): HistoryRefreshTriggerConfig {
+    const parsed = HistoryRefreshConfigSchema.parse(config?.history?.refresh ?? {});
+    return { onCompletion: parsed.on_completion, debounceMs: parsed.debounce_ms };
+}
 
 // ---- Unified Spur project config (top-level) ----
 
@@ -552,6 +566,12 @@ export type AgentOutputConfig = z.infer<typeof AgentOutputConfigSchema>;
 
 /** Inferred type for the `workflow` config section (run-log retention policy, task 0429). */
 export type WorkflowConfig = z.infer<typeof WorkflowConfigSchema>;
+
+/** Inferred type for the `history` config section (task 0549). */
+export type HistoryConfig = z.infer<typeof HistoryConfigSchema>;
+
+/** Inferred type for the `history.refresh` config section (task 0549). */
+export type HistoryRefreshConfig = z.infer<typeof HistoryRefreshConfigSchema>;
 
 /**
  * Back-compat type for the app-layer (non-planning) section of the config.

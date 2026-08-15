@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -301,11 +301,172 @@ describe('HistoryService', () => {
                 status: 'success',
                 duration_ms: null,
             });
+            // Task 0550: the watermark treats an assistant message with an open tool call as
+            // a mid-turn message — a session ending on one is `in-progress` and its data is
+            // excluded. Add a closing assistant response so this fixture stays a complete
+            // session and the test keeps asserting the durationUnmeasured semantics it was
+            // written for (R5: never a fabricated zero total).
+            await insertMessage(db, {
+                record_hash: 'm2',
+                session_id: 'sess-1',
+                seq: 2,
+                ts: '2026-05-30T10:01:00Z',
+                model: 'claude-opus-5',
+                input: 50,
+                output: 20,
+            });
             const svc = new HistoryService(ctx);
             const artifact = await svc.analyze(ALL);
             expect(artifact.totals.toolCalls).toBe(1);
             expect(artifact.totals.durationUnmeasured).toBe(1);
             expect(artifact.totals.durationMs).toBe(0);
+        });
+
+        // Task 0550 R1/R2: watermark — an in-progress session (trailing partial turn) is
+        // marked `in-progress` and its partial turn is excluded from every derived total.
+        test('0550 R1/R2 — an in-progress session is marked and its partial turn excluded from totals', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            // Complete turn 1: user + assistant (no tool call) → closes the turn.
+            await insertMessage(db, {
+                record_hash: 'w1',
+                session_id: 'sess-w',
+                seq: 1,
+                ts: '2026-06-01T00:00:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 100,
+                output: 0,
+            });
+            await insertMessage(db, {
+                record_hash: 'w2',
+                session_id: 'sess-w',
+                seq: 2,
+                ts: '2026-06-01T00:01:00Z',
+                model: 'claude-opus-5',
+                input: 200,
+                output: 100,
+            });
+            // Partial turn 2: user message only — no assistant response yet (still appending).
+            await insertMessage(db, {
+                record_hash: 'w3',
+                session_id: 'sess-w',
+                seq: 3,
+                ts: '2026-06-01T00:02:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 500,
+                output: 0,
+            });
+            const svc = new HistoryService(ctx);
+            const artifact = await svc.analyze(ALL);
+            expect(artifact.bySession[0]?.sessionState).toBe('in-progress');
+            // Totals exclude the trailing partial turn: 2 messages, 300 input (not 800).
+            expect(artifact.totals.messages).toBe(2);
+            expect(artifact.totals.inputTokens).toBe(300);
+        });
+
+        // Task 0550 R2: a complete session is marked complete and its data counted in full.
+        test('0550 R2 — a complete session is marked complete and its data counted in full', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await insertMessage(db, {
+                record_hash: 'c1',
+                session_id: 'sess-c',
+                seq: 1,
+                ts: '2026-06-01T00:00:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 100,
+                output: 0,
+            });
+            await insertMessage(db, {
+                record_hash: 'c2',
+                session_id: 'sess-c',
+                seq: 2,
+                ts: '2026-06-01T00:01:00Z',
+                model: 'claude-opus-5',
+                input: 200,
+                output: 100,
+            });
+            const svc = new HistoryService(ctx);
+            const artifact = await svc.analyze(ALL);
+            expect(artifact.bySession[0]?.sessionState).toBe('complete');
+            expect(artifact.totals.messages).toBe(2);
+            expect(artifact.totals.inputTokens).toBe(300);
+        });
+
+        // Task 0550 R5: supersede, do not accumulate. Re-analyzing a growing session leaves
+        // exactly ONE bySession record per analyze — the watermark excludes the partial turn
+        // while it is live, and the completed re-analysis supersedes the in-progress result
+        // instead of stacking a second record. Three analyses while running + one after =
+        // one final record, never four.
+        test('0550 R5 — re-analyzing a growing session supersedes the in-progress result, never duplicates it', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            // Turn 1 complete: user + assistant (no tool call).
+            await insertMessage(db, {
+                record_hash: 's1',
+                session_id: 'sess-s',
+                seq: 1,
+                ts: '2026-06-01T00:00:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 100,
+                output: 0,
+            });
+            await insertMessage(db, {
+                record_hash: 's2',
+                session_id: 'sess-s',
+                seq: 2,
+                ts: '2026-06-01T00:01:00Z',
+                model: 'claude-opus-5',
+                input: 200,
+                output: 100,
+            });
+            // Partial turn 2: user message only — the agent is still writing.
+            await insertMessage(db, {
+                record_hash: 's3',
+                session_id: 'sess-s',
+                seq: 3,
+                ts: '2026-06-01T00:02:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 500,
+                output: 0,
+            });
+            const svc = new HistoryService(ctx);
+
+            // First refresh while running: one in-progress record, partial turn excluded.
+            const first = await svc.analyze(ALL);
+            expect(first.bySession).toHaveLength(1);
+            expect(first.bySession[0]?.sessionState).toBe('in-progress');
+            expect(first.bySession[0]?.messages).toBe(2);
+
+            // Second refresh while still running: still exactly one record, still in-progress.
+            const second = await svc.analyze(ALL);
+            expect(second.bySession).toHaveLength(1);
+            expect(second.bySession[0]?.sessionState).toBe('in-progress');
+
+            // The session completes: assistant response closes turn 2.
+            await insertMessage(db, {
+                record_hash: 's4',
+                session_id: 'sess-s',
+                seq: 4,
+                ts: '2026-06-01T00:03:00Z',
+                model: 'claude-opus-5',
+                input: 50,
+                output: 20,
+            });
+
+            // Final refresh after completion: ONE complete record supersedes the partials.
+            const final = await svc.analyze(ALL);
+            expect(final.bySession).toHaveLength(1);
+            expect(final.bySession[0]?.sessionState).toBe('complete');
+            // Full final data, not four partial records — 4 messages, 850 input tokens.
+            expect(final.bySession[0]?.messages).toBe(4);
+            expect(final.totals.messages).toBe(4);
+            expect(final.totals.inputTokens).toBe(850);
         });
 
         test('R4 — the same selector twice resolves to the same artifact path', async () => {
@@ -659,6 +820,114 @@ describe('HistoryService', () => {
                 expect(incremental.entries.find((e) => e.source === 'antigravity')?.reconciliation).toBeUndefined();
             } finally {
                 rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    });
+
+    // Task 0550 R3/R4: honest coverage — a refresh reports which sources it refreshed,
+    // which it skipped as unsupported, and the window covered. Never bare success.
+    describe('daily coverage (0550 R3/R4)', () => {
+        test('reports refreshed + skipped sources by name and the covered window', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            // Seed messages so the covered window is non-null. The daily analyze reads
+            // whatever is in the DB; the import fan-out over the empty root adds nothing.
+            await insertMessage(db, {
+                record_hash: 'd1',
+                session_id: 'sess-d',
+                seq: 1,
+                ts: '2026-06-01T00:00:00Z',
+                model: 'claude-opus-5',
+                role: 'user',
+                input: 100,
+                output: 0,
+            });
+            await insertMessage(db, {
+                record_hash: 'd2',
+                session_id: 'sess-d',
+                seq: 2,
+                ts: '2026-06-01T00:01:00Z',
+                model: 'claude-opus-5',
+                input: 200,
+                output: 100,
+            });
+            const cwd = mkdtempSync(join(tmpdir(), 'spur-daily-cov-'));
+            const svc = new HistoryService(ctx);
+            try {
+                const result = await svc.daily({ cwd, root: emptyRoot(), sourceTimeout: 500 });
+                // Refreshed = the six full-fidelity sources that did not fail. Under an empty
+                // root every source is `empty` (not failed), so all six qualify.
+                expect(result.coverage.refreshed.sort()).toEqual(['agy', 'claude', 'codex', 'grok', 'omp', 'pi']);
+                // Skipped = the five unsupported sources (operator ruling 2026-08-06).
+                expect(result.coverage.skipped.sort()).toEqual([
+                    'antigravity-ide',
+                    'gemini',
+                    'hermes',
+                    'openclaw',
+                    'opencode',
+                ]);
+                // Window = MIN/MAX message ts the analyze covered (recency without the DB).
+                expect(result.coverage.window).toEqual({
+                    since: '2026-06-01T00:00:00Z',
+                    until: '2026-06-01T00:01:00Z',
+                });
+                // The coverage is carried on the daily result — never bare success.
+                expect(result.coverage).toBeDefined();
+            } finally {
+                rmSync(cwd, { recursive: true, force: true });
+            }
+        });
+
+        test('a failed full-fidelity source is excluded from refreshed (still named in the fan-out)', async () => {
+            const ctx = makeCtx();
+            const cwd = mkdtempSync(join(tmpdir(), 'spur-daily-cov-fail-'));
+            // Mock the import fan-out so `claude` fails while every other source is ok.
+            // daily → buildRefreshCoverage then filters FULL_FIDELITY_SOURCES against the
+            // entries, so a failed full-fidelity source drops out of `refreshed`.
+            const entry = (source: string, status: 'ok' | 'failed' | 'empty') => ({
+                source,
+                status,
+                files: 0,
+                messages: 0,
+                toolCalls: 0,
+                unknownRecords: 0,
+                lastImportedAt: null,
+                parseErrors: 0,
+                validationErrors: 0,
+                parseErrorSamples: [],
+                validationErrorSamples: [],
+            });
+            const spy = spyOn(HistoryService.prototype, 'importAll').mockResolvedValueOnce({
+                entries: [
+                    entry('claude', 'failed'),
+                    entry('codex', 'ok'),
+                    entry('pi', 'ok'),
+                    entry('omp', 'ok'),
+                    entry('agy', 'ok'),
+                    entry('grok', 'ok'),
+                    entry('gemini', 'empty'),
+                ],
+                exitCode: 2,
+                warnings: [{ code: 'source-failed', source: 'claude', detail: 'forced' }],
+            });
+            const svc = new HistoryService(ctx);
+            try {
+                const result = await svc.daily({ cwd, root: emptyRoot(), sourceTimeout: 500 });
+                // claude failed → dropped; the other five full-fidelity sources refreshed.
+                expect(result.coverage.refreshed.sort()).toEqual(['agy', 'codex', 'grok', 'omp', 'pi']);
+                // Skipped is a static ruling — still the five unsupported sources.
+                expect(result.coverage.skipped.sort()).toEqual([
+                    'antigravity-ide',
+                    'gemini',
+                    'hermes',
+                    'openclaw',
+                    'opencode',
+                ]);
+                // Nothing was analyzed, so the window is empty.
+                expect(result.coverage.window).toEqual({ since: null, until: null });
+            } finally {
+                spy.mockRestore();
+                rmSync(cwd, { recursive: true, force: true });
             }
         });
     });

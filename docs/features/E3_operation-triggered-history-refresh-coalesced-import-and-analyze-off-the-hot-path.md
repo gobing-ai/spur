@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E3"
 name: "Operation-triggered history refresh: coalesced import and analyze off the hot path"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T00:47:15.855Z"
-updated_at: "2026-08-14T00:48:38.674Z"
+updated_at: "2026-08-15T00:07:07.350Z"
 ---
 
 # E3: Operation-triggered history refresh: coalesced import and analyze off the hot path
@@ -151,3 +151,6 @@ everything.
 - **Task 0547** (batch 2) joins tokens to roles over `run_id` and reports *unmeasured* when history
   is stale. This feature is what makes those numbers real.
 ## History
+- 2026-08-14T21:18:22.427Z backlog → active (system)
+- 2026-08-15T00:07:07.087Z active → verifying (system)
+- 2026-08-15T00:07:07.350Z verifying → done (system)

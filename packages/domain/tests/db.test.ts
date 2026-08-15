@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import {
     createJobQueue,
@@ -6,6 +9,7 @@ import {
     createMigratedDbViaRuntime,
     createQueueConsumer,
     dbHealthCheck,
+    enqueueCoalesced,
 } from '../src/db';
 
 /**
@@ -115,6 +119,151 @@ describe('createJobQueue / createQueueConsumer', () => {
             expect(seen).toEqual([7]);
             const stats = await queue.stats();
             expect(stats.completed).toBe(1);
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('enqueueCoalesced (task 0549 R2)', () => {
+    interface Window {
+        start: number;
+        end: number;
+    }
+    const mergeWindow = (existing: unknown, incoming: unknown): Window => {
+        const a = (typeof existing === 'string' ? JSON.parse(existing) : existing) as Window;
+        const b = (typeof incoming === 'string' ? JSON.parse(incoming) : incoming) as Window;
+        return { start: Math.min(a.start, b.start), end: Math.max(a.end, b.end) };
+    };
+
+    async function rows(
+        db: DbAdapter,
+    ): Promise<Array<{ id: string; payload: string; status: string; next_retry_at: number | null }>> {
+        return db.queryAll('SELECT id, payload, status, next_retry_at FROM queue_jobs ORDER BY created_at ASC, id ASC');
+    }
+
+    test('fresh enqueue: one pending job delayed by debounceMs', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            const result = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                now: () => t0,
+            });
+            expect(result.status).toBe('enqueued');
+            const all = await rows(db);
+            expect(all.length).toBe(1);
+            expect(all[0]?.status).toBe('pending');
+            expect(all[0]?.next_retry_at).toBe(t0 + 60_000);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('burst joins the pending job: same row, merged window, next_retry_at slides', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            const t1 = t0 + 30_000;
+            const first = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                mergePayload: mergeWindow,
+                now: () => t0,
+            });
+            const second = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t1, end: t1 },
+                debounceMs: 60_000,
+                mergePayload: mergeWindow,
+                now: () => t1,
+            });
+            expect(first.status).toBe('enqueued');
+            expect(second.status).toBe('coalesced');
+            expect(second.jobId).toBe(first.jobId);
+
+            // P3: the returned payload is the POST-merge window, not just the incoming one.
+            expect(second.payload).toEqual({ start: t0, end: t1 });
+
+            const all = await rows(db);
+            expect(all.length).toBe(1); // exactly one job after a burst of two
+            const merged = JSON.parse(all[0]?.payload ?? '{}') as Window;
+            expect(merged).toEqual({ start: t0, end: t1 }); // covered window spans both
+            expect(all[0]?.next_retry_at).toBe(t1 + 60_000); // debounce from the LAST join
+        } finally {
+            db.close();
+        }
+    });
+
+    test('concurrent enqueues from two connections coalesce to ONE pending job (cross-process R2)', async () => {
+        // Two adapters on the same file DB simulate two processes (parallel agents in
+        // runall, sharing .spur/spur.db). The partial unique index
+        // (queue_jobs_history_refresh_pending_unique) makes the lookup-then-insert
+        // atomic: one INSERT wins, the other conflicts and joins — exactly one job for
+        // the burst, never two (P2 review fix).
+        const dir = mkdtempSync(join(tmpdir(), 'spur-coalesce-'));
+        const file = join(dir, 'spur.db');
+        try {
+            const dbA = await createMigratedDb({ url: file });
+            const dbB = await createMigratedDb({ url: file });
+            try {
+                const t0 = 1_000_000;
+                const [rA, rB] = await Promise.all([
+                    enqueueCoalesced(dbA, {
+                        type: 'history.refresh',
+                        payload: { start: t0, end: t0 },
+                        debounceMs: 60_000,
+                        mergePayload: mergeWindow,
+                        now: () => t0,
+                    }),
+                    enqueueCoalesced(dbB, {
+                        type: 'history.refresh',
+                        payload: { start: t0 + 30_000, end: t0 + 30_000 },
+                        debounceMs: 60_000,
+                        mergePayload: mergeWindow,
+                        now: () => t0 + 30_000,
+                    }),
+                ]);
+                // Exactly one enqueued + one coalesced join onto the SAME job id.
+                expect([rA.status, rB.status].sort()).toEqual(['coalesced', 'enqueued']);
+                expect(rA.jobId).toBe(rB.jobId);
+                const all = await rows(dbA);
+                expect(all.length).toBe(1); // single pending job for the burst
+                const merged = JSON.parse(all[0]?.payload ?? '{}') as Window;
+                expect(merged).toEqual({ start: t0, end: t0 + 30_000 }); // spans both completions
+            } finally {
+                dbA.close();
+                dbB.close();
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a claimed (processing) job is invisible to the join — next completion enqueues fresh', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                now: () => t0,
+            });
+            // Simulate the worker claiming the pending job.
+            await db.run("UPDATE queue_jobs SET status = 'processing' WHERE type = 'history.refresh'");
+
+            const after = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0 + 5, end: t0 + 5 },
+                debounceMs: 60_000,
+                now: () => t0 + 5,
+            });
+            expect(after.status).toBe('enqueued');
+            expect((await rows(db)).length).toBe(2);
         } finally {
             db.close();
         }

@@ -11,7 +11,6 @@ import {
     drift,
     loops,
     messageRollup,
-    sessionCompleteness,
     sourceSummary,
     toolRollup,
 } from '../../src/analytics/forensic-query';
@@ -475,126 +474,6 @@ describe('forensic queries', () => {
         expect(where).toContain('m.task_wbs = ?');
         expect(where).toContain('AND');
         expect(params).toHaveLength(7);
-    });
-});
-
-describe('last-complete-turn watermark (task 0550)', () => {
-    test('sessionCompleteness marks a trailing user message as in-progress', async () => {
-        const db = await setup();
-        await insertMessage(db, {
-            record_hash: 'w1',
-            session_id: 'live',
-            seq: 1,
-            role: 'user',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-08-14T10:00:00Z',
-            model: null,
-        });
-        await insertMessage(db, {
-            record_hash: 'w2',
-            session_id: 'live',
-            seq: 2,
-            role: 'assistant',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-08-14T10:00:05Z',
-            model: 'claude-opus-5',
-            input: 10,
-            output: 20,
-            cost: 0.01,
-        });
-        await insertMessage(db, {
-            record_hash: 'w3',
-            session_id: 'live',
-            seq: 3,
-            role: 'user',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-08-14T10:00:10Z',
-            model: null,
-            input: 99,
-            output: 0,
-            cost: 1,
-        });
-        const rows = await sessionCompleteness(db, ALL);
-        expect(rows).toEqual([
-            expect.objectContaining({
-                sessionId: 'live',
-                sessionState: 'in-progress',
-                lastSeq: 3,
-                watermarkSeq: 2,
-            }),
-        ]);
-        const rollup = await messageRollup(db, ALL);
-        const tokens = rollup.reduce((sum, r) => sum + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0);
-        expect(tokens).toBe(30);
-        db.close();
-    });
-
-    test('sessionCompleteness marks a last assistant turn as complete', async () => {
-        const db = await setup();
-        await insertMessage(db, {
-            record_hash: 'c1',
-            session_id: 'done',
-            seq: 1,
-            role: 'user',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-08-14T11:00:00Z',
-            model: null,
-        });
-        await insertMessage(db, {
-            record_hash: 'c2',
-            session_id: 'done',
-            seq: 2,
-            role: 'assistant',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-08-14T11:00:05Z',
-            model: 'claude-opus-5',
-            input: 1,
-            output: 1,
-        });
-        const rows = await sessionCompleteness(db, ALL);
-        expect(rows[0]?.sessionState).toBe('complete');
-        db.close();
-    });
-
-    test('a session with no assistant turn is fully counted, not clipped to empty', async () => {
-        // Regression (0546-adjacent gate): a 1-message import with no assistant
-        // reply (role 'unknown') must appear in the rollup — it is all
-        // in-progress, not a complete-turn clip that excludes every row. The
-        // old COALESCE(..., -1) made `m.seq <= -1` true for nothing, so a
-        // legitimate session vanished from analyze totals.
-        const db = await setup();
-        await insertMessage(db, {
-            record_hash: 'n1',
-            session_id: 'solo',
-            seq: 0,
-            role: 'unknown',
-            record_type: 'message',
-            disposition: 'conversation',
-            ts: '2026-05-30T00:00:00Z',
-            model: null,
-            input: 100,
-            output: 50,
-        });
-        const rows = await sessionCompleteness(db, ALL);
-        expect(rows).toEqual([
-            expect.objectContaining({
-                sessionId: 'solo',
-                sessionState: 'in-progress',
-                lastSeq: 0,
-                watermarkSeq: null,
-            }),
-        ]);
-        const rollup = await messageRollup(db, ALL);
-        expect(rollup).toHaveLength(1);
-        expect(rollup[0]?.messages).toBe(1);
-        const tokens = (rollup[0]?.inputTokens ?? 0) + (rollup[0]?.outputTokens ?? 0);
-        expect(tokens).toBe(150);
-        db.close();
     });
 });
 

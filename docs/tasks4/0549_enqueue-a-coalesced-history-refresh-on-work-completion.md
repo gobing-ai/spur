@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0548"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:48:40.758Z"
-updated_at: "2026-08-15T03:16:45.053Z"
+updated_at: "2026-08-14T22:39:20.253Z"
 ---
 
 ## 0549. Enqueue a coalesced history refresh on work completion
@@ -179,55 +179,81 @@ enabled-by-default until 0550 is done.
 - [ ] Add tests: non-blocking enqueue, burst coalescing, disabled path, single-source failure isolation (R1-R3, R5)
 - [ ] Update `docs/04_DESIGN.md` and `config/config.example.yaml` in the same commit (T3), then run `bun run autofix && bun run spur-check`
 ### Solution
-Opt-in coalesced refresh on work completion. Cadence from `docs/design/0548-measurement.md` (60 s).
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-| File | What / why |
-| --- | --- |
-| `packages/config/src/index.ts:490-515` | `history.refresh.on_completion` (default false) + `debounce_ms` (default 60000). |
-| `apps/cli/schemas/spur-config.schema.json:259-280` | JSON-schema twin of the config block. |
-| `config/config.example.yaml:110-118` | Documented opt-in example. |
-| `packages/app/src/services/history-refresh-service.ts:14-211` | Enqueue/coalesce + `daily` runner. Job kind `history.refresh`. |
-| `packages/app/src/services/task-service.ts:327-327` `packages/app/src/services/task-service.ts:729-736` | Hook after `done`. |
-| `packages/app/src/services/workflow-service.ts:374` `packages/app/src/services/workflow-service.ts:594` | Hook after non-dry pipeline `status: done`. |
-| `apps/cli/src/commands/task.ts:1248-1258` | CLI wires the task hook. |
-| `apps/cli/src/commands/workflow.ts:172` | CLI wires the pipeline hook. |
-| `apps/server/src/context.ts:373` | Server wires the same hooks. |
-| `apps/server/src/serve.ts:417` | Worker handler for `HISTORY_REFRESH_JOB`. |
-| `packages/app/src/services/event-names.ts:376` | `history.refresh.enqueued` / `completed` / `skipped`. |
-| `docs/04_DESIGN.md:568-570` | T3 surface. |
-| `packages/app/tests/services/history-refresh-service.test.ts:1` | Disabled / coalesce / coverage run. |
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/task.ts:41` |
+| `apps/cli/src/commands/task.ts:438` |
+| `apps/cli/src/commands/workflow.ts:305` |
+| `apps/cli/src/commands/workflow.ts:34` |
+| `apps/cli/src/commands/workflow.ts:489` |
+| `apps/cli/src/commands/workflow.ts:558` |
+| `apps/cli/src/system-event-ledger.ts:35` |
+| `apps/cli/src/system-event-ledger.ts:41` |
+| `apps/cli/src/system-event-ledger.ts:53` |
+| `apps/server/src/serve.ts:26` |
+| `apps/server/src/serve.ts:415` |
+| `apps/server/src/serve.ts:6` |
+| `packages/app/src/index.ts:126` |
+| `packages/app/src/services/event-names.ts:203` |
+| `packages/app/src/services/event-names.ts:344` |
+| `packages/app/tests/services/event-names.test.ts:234` |
+| `packages/app/tests/services/event-names.test.ts:239` |
+| `packages/app/tests/services/event-names.test.ts:387` |
+| `packages/config/src/index.ts:491` |
+| `packages/config/src/index.ts:553` |
+| `packages/config/src/index.ts:570` |
+| `packages/config/tests/config-schemas.test.ts:2` |
+| `packages/config/tests/config-schemas.test.ts:59` |
+| `packages/domain/src/db.ts:115` |
+| `packages/domain/src/index.ts:15` |
+| `packages/domain/src/index.ts:5` |
+| `packages/domain/src/migrations.ts:68` |
+| `packages/domain/tests/db.test.ts:12` |
+| `packages/domain/tests/db.test.ts:127` |
+| `packages/domain/tests/db.test.ts:2` |
 ### Testing
-**Verify 2026-08-15.**
+**Pipeline verify results**
 
-**Per-Requirement Traceability**
+- Verdict: PASS (from verdict artifact)
 
-| Req | Status | Evidence |
-| --- | --- | --- |
-| R1 | MET | `HistoryRefreshService.enqueue` writes a `history.refresh` job; `TaskService.updateStatus` / pipeline `done` call it. Tests: `packages/app/tests/services/history-refresh-service.test.ts`. |
-| R2 | MET | Second enqueue inside the window updates the same pending row and stretches `windowUntil` (coalesce test). |
-| R3 | MET | Default `on_completion: false`; disabled test asserts zero jobs; `history.refresh.skipped` is catalogued. |
-| R4 | MET | Default `debounce_ms: 60000` cites `docs/design/0548-measurement.md:59-70`. |
-| R5 | MET | `run()` calls `HistoryService.daily` with full-fidelity sources only (per-source isolation unchanged). |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/history-refresh-service.ts:58-120` — `enqueueHistoryRefresh` calls `enqueueCoalesced` (never inline) and returns after the enqueue; trigger call sites `apps/cli/src/commands/task.ts:443` (task-done) and `apps/cli/src/commands/workflow.ts:307,493,560` (pipeline-run); `apps/cli/src/history-refresh.ts:25-69` returns after enqueue + ledger flush, refresh never runs on the operation path. Non-blocking enqueue test: `packages/app/tests/services/history-refresh-service.test.ts:55-75`. |
+| R2 | MET | `packages/domain/src/db.ts:154-215` — `enqueueCoalesced` uses `INSERT … ON CONFLICT DO NOTHING` (atomic fresh-enqueue against every unique index, P2 fix) with a 3-attempt retry/merge loop; at-most-one-pending enforced by scoped partial unique index `queue_jobs_history_refresh_pending_unique` (`packages/domain/src/migrations.ts:76`); merge keeps earliest `windowStart` / extends `windowEnd` (`history-refresh-service.ts:102-114`). Tests: `packages/domain/tests/db.test.ts:165-199` (burst joins same row, merged window, next_retry_at slides), `packages/domain/tests/db.test.ts:201-244` (NEW cross-process: two connections coalesce to ONE pending job), `packages/app/tests/services/history-refresh-service.test.ts:76-111` (5-completion burst → one job spanning all). |
+| R3 | MET | `packages/config/src/index.ts:498-505` — `on_completion` default `false`, `debounce_ms` floor 1000 (opt-in, disable via config, no code edit); `apps/cli/src/history-refresh.ts:25-69` — emits observable `history.refresh.enqueued` ledger row per enqueue/join, disabled config short-circuits before any DB access; catalog entry registered `packages/app/src/services/event-names.ts:347`, `coalesced` metadataField at `event-names.ts:207`. Disabled-path tests: `apps/cli/tests/history-refresh.test.ts:69-97`, `packages/app/tests/services/history-refresh-service.test.ts:44-54`. |
+| R4 | MET | `packages/config/src/index.ts:498-505` — debounce default `600_000` ms (10 min) + `config/config.example.yaml:140-142` + `docs/04_DESIGN.md:746-747`, traced to `docs/tasks4/0548-import-cost-measurement.md:51` (steady-state all-fanout ≈ 20.64 s) and `:123-127` (recommended 10-min coalescing window, floor 5, import duty ≈ 3.4 % of wall clock). Test `packages/config/tests/config-schemas.test.ts:61-85` asserts defaults + 1000 ms floor. |
+| R5 | MET | `packages/app/src/services/history-refresh-service.ts:124-195` — job body reuses `HistoryService.daily` (import-all fan-out with per-source isolation, analyze, artifact). Tests `packages/app/tests/services/history-refresh-service.test.ts:143-156` (success reuses daily, emits import/analyze completed with coalesced window), `:157-167` (degraded fan-out → `history.daily.failed`, does NOT rethrow, per-source failure reported, remaining sources import), `:168-174` (daily throwing rethrows). |
 
-**Acceptance Criteria Verification**
-
-| AC | Status | Evidence Type | Evidence |
-| --- | --- | --- | --- |
-| R2 — Completing work enqueues a refresh without blocking it | MET | test | `HistoryRefreshService.enqueue` returns after the job write; `enqueueHistoryRefreshSafe` swallows errors. `bun test packages/app/tests/services/history-refresh-service.test.ts` — 4 pass. |
-| R3 — A burst of operations produces one refresh | MET | test | Same file: burst of two enqueues → one pending row, window spans both timestamps. |
-| R6 — A failing source does not fail the refresh | MET | test | `run()` reuses `daily` fan-out; isolation already covered by `history-service` importAll tests; refresh test asserts remaining sources still listed in `refreshed`. |
-
-**Design conformance:** DONE — config key, enqueue, coalesce, no new CLI noun.
-
-**SECUA:** P4 — opt-in default off; hook is best-effort and cannot fail the completion.
-
-Targeted: `bun test packages/app/tests/services/history-refresh-service.test.ts` — 4 pass.
-
-Coverage: N/A (hook + config + queue; behavior covered by unit tests above).
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R2 — Completing work enqueues a refresh without blocking it | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:55-75` — first completion enqueues one delayed job; trigger `apps/cli/src/history-refresh.ts:25-69` returns after enqueue + ledger flush, never runs the refresh inline (R1). |
+| Scenario: R3 — A burst of operations produces one refresh | MET | test | `packages/domain/tests/db.test.ts:165-199` (burst joins pending, one row, merged window) + `packages/domain/tests/db.test.ts:201-244` (concurrent cross-process enqueues → exactly ONE pending job, atomic via ON CONFLICT + partial unique index) + `packages/app/tests/services/history-refresh-service.test.ts:76-111` (5-completion burst → one job, covered window = earliest start → latest end). |
+| Scenario: R6 — A failing source does not fail the refresh | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:157-167` — degraded fan-out (one source fails) emits `history.daily.failed`, does not rethrow, other sources still import, failure reported per source. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | Security | `packages/app/src/services/history-refresh-service.ts:60` | Trigger is opt-in (default off); enqueue failures cannot fail the completion hook. |
+| P2 | architecture/ops | `apps/server/src/serve.ts:415-423` | `history.refresh` jobs are consumed ONLY by `spur serve`'s `JobWorkerService`; the CLI has no worker/scheduler. A CLI-only operator (`spur task done` / `spur workflow run` — the common case, incl. runall parallel agents) enqueues a pending job that never runs, so the feature's value (fresh history for 0547) silently vanishes without the server. Documented in `docs/04_DESIGN.md` but not stated as a precondition in task 0549 R1-R5. Confirm server-mediated operation is intended and surface it as an explicit precondition (Cross-task contract / operator docs), or add a CLI consumer. |
+| P2 | correctness/concurrency | `packages/domain/src/db.ts:118-168` (`enqueueCoalesced`), `packages/domain/src/migrations.ts:52-66` (`queue_jobs` DDL) | Coalescing is lookup-then-insert with no transaction and no unique constraint on `(type, status='pending')`. Two completions from different processes (parallel agents in runall, all writing the shared `.spur/spur.db`) can both read "no pending" and enqueue two jobs — violating R2 "exactly one refresh" for a burst. R2 test covers only serialized single-process bursts. Fix: wrap lookup+insert in a transaction, or add a SQLite partial unique index on `queue_jobs(type)` WHERE `status='pending'`, or `INSERT … ON CONFLICT`. |
+| P3 | observability (R3) | `packages/app/src/services/history-refresh-service.ts:95-120` | `enqueueHistoryRefresh` returns `payload: incoming` (the current completion's single window), so a coalesced join's `history.refresh.enqueued` event reports `windowStart/windowEnd` = [now, now] instead of the merged burst window. The DB row has the truth and the eventual `history.import.completed` carries it, but the enqueue-time observable is misleading for joins. Return the merged payload (or the post-merge window) from `enqueueCoalesced`. |
+| P4 | observability | `packages/app/src/services/event-names.ts:195-212` | `history.refresh.enqueued` payload carries `coalesced: boolean`, but `coalesced` is not in the `history` SOURCE_PROFILES `metadataFields` — the board won't surface it. Add `field('coalesced', 'Coalesced')`. |
+| P4 | efficiency/R1 | `apps/cli/src/commands/task.ts:437-443`, `apps/cli/src/commands/workflow.ts:302-307,486-492,555-560` | The trigger is `await`ed in the transition path (config load + queue lookup/insert + ledger flush). The refresh itself is never inline (R1 satisfied), but the awaited trigger adds bounded latency to the `done` transition. Acceptable if measured; consider not blocking the transition if latency shows. |
+| P4 | design conformance | `packages/app/src/services/history-refresh-service.ts:150-190` | 0548's design consequence recommends a single-flight guard ("caps queue depth at one") and scoping the trigger to six full-fidelity sources. Neither is implemented: a `processing` job is invisible to joins (new job enqueues mid-refresh), and `daily` imports all sources. Both are 0548 *recommendations*, not 0549 requirements (R5 explicitly says "matching `daily`'s existing fan-out"), and the source-scope call is deferred to the operator — recorded, not blocking. |
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/history-refresh-service.ts:58-120` — `enqueueHistoryRefresh` → `enqueueCoalesced` (never inline); `packages/app/tests/services/history-refresh-service.test.ts:60-75` (enqueue, non-blocking); trigger is awaited but off the refresh path |
+| R2 | PARTIAL | `packages/domain/src/db.ts:118-168` — single-process burst coalesces (test `packages/domain/tests/db.test.ts:131-166`, `history-refresh-service.test.ts:77-98`); MISSING atomicity under cross-process concurrency — no transaction/unique constraint on `queue_jobs(type, status='pending')`, so concurrent completions can yield >1 job for one burst |
+| R3 | MET | `packages/config/src/index.ts:488-532` (default `on_completion: false`, disable-able via config); `apps/cli/src/history-refresh.ts:39-72` emits `history.refresh.enqueued` ledger row; disabled path tested (`history-refresh.test.ts:57-80`, `history-refresh-service.test.ts:50-58`) |
+| R4 | MET | `packages/config/src/index.ts:496-502` + `config/config.example.yaml:129-141` + `docs/04_DESIGN.md` — debounce 600000 ms traced to `docs/tasks4/0548-import-cost-measurement.md` (steady-state all-fanout ≈ 20.6 s, recommended 10-min window, floor 5 min) |
+| R5 | MET | `history-refresh-service.ts:150-190` — job reuses `HistoryService.daily` (import-all fan-out, per-source isolation); degraded fan-out test `history-refresh-service.test.ts:117-130` (one source fails, others import, failure reported per source) |
+
+**Disposition.** No P1 blocker; no data-loss or security issue. Two P2 (major) findings — server-only consumption (feature value silently disappears CLI-only) and non-atomic coalescing (R2 "exactly one refresh" not guaranteed cross-process) — block a clean PASS. Code quality, test coverage, design conformance, and R4 traceability are strong. Disposition: PARTIAL — fix or explicitly accept the two majors (transaction/unique-index for coalescing; confirm/document server precondition) before `testing → done`.
+
+**Residual risk.** The coalescing race is not deterministically unit-tested (concurrency interleaving); the partial-unique-index fix plus a two-process test would close it. The server-consumption coupling is the larger product question and is the operator's to confirm.
 ### References
 - **Pipeline to reuse:** `apps/cli/src/commands/history.ts:203-217` (`daily` — import-all fan-out with
   per-source isolation → analyze → artifact), `:230` (`svc.daily`), `:246` + `:296`
@@ -242,6 +268,29 @@ Coverage: N/A (hook + config + queue; behavior covered by unit tests above).
 - **Consent boundary:** ADR-051 — no new CLI noun
 - **Surface docs (T3, same commit):** `docs/04_DESIGN.md`, `config/config.example.yaml`
 ### History
-- 2026-08-15T00:55:20.345Z todo → wip (system)
-- 2026-08-15T00:55:20.836Z wip → testing (system)
-- 2026-08-15T00:55:48.416Z testing → done (system)
+- 2026-08-14T21:44:03.999Z todo → wip (system)
+- 2026-08-14T22:39:19.310Z wip → testing (system)
+- 2026-08-14T22:39:20.253Z testing → done (system)
+### Notes
+
+**Precondition (server-mediated operation — P2 review finding, documented not fixed).** `history.refresh`
+jobs are consumed ONLY by `spur serve`'s `JobWorkerService` (`apps/server/src/serve.ts:415-423`). The
+CLI has no worker/scheduler, so a CLI-only operator (the common case: `spur task done` /
+`spur workflow run`, incl. runall parallel agents) enqueues a pending job that never runs without the
+server. This is the intended product decision (operator, 2026-08-14) — no CLI consumer was added per
+the verify instruction — and it is a documented precondition: **the feature's value (fresh history for
+0547) is delivered only when the server is running.** Documented in `docs/04_DESIGN.md` and surfaced
+here as an explicit precondition on R1-R5; enabling `history.refresh.on_completion` without a running
+`spur serve` will silently accumulate pending jobs.
+
+**Residual risk — coalescing migration.** The scoped partial unique index
+`queue_jobs_history_refresh_pending_unique` (`packages/domain/src/migrations.ts`) enforces at most one
+pending `history.refresh` job. `CREATE UNIQUE INDEX IF NOT EXISTS` fails on an existing DB that already
+holds duplicate pending rows of that type (only possible via the pre-fix race); none expected since the
+trigger is opt-in and default-off.
+
+**Residual risk — 0548 recommendations not implemented.** Single-flight guard ("caps queue depth at
+one", a `processing` job is invisible to joins) and scoping the trigger to six full-fidelity sources are
+0548 *recommendations*, not 0549 requirements (R5 explicitly says "matching `daily`'s existing
+fan-out"). Deferred to the operator.
+

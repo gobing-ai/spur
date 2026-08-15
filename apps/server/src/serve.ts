@@ -4,9 +4,7 @@ import {
     configuredSecretValues,
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
-    type HistoryRefreshPayload,
-    HistoryRefreshService,
-    HistoryService,
+    handleHistoryRefreshJob,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
@@ -25,7 +23,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
-import { registerSystemEventTap } from './modules/events/system-event-tap';
+import { registerSystemEventTap, type SystemEventBus } from './modules/events/system-event-tap';
 import { openUrl } from './open-url';
 
 /** Built-in queue job kind for scheduled system_events retention pruning. */
@@ -276,32 +274,6 @@ export async function handleFeatureActionJob(
 }
 
 /**
- * Execute the coalesced history-refresh job (task 0549 / feature E3): run the
- * daily import+analyze pipeline over the full-fidelity sources and report
- * coverage. The queue worker runs this off the completion critical path.
- *
- * `root` bounds the import scan — the daily pipeline's `run` accepts an
- * explicit root, which the server passes as the process cwd (the project's
- * history roots live under it).
- */
-export async function runHistoryRefreshJob(
-    ctx: ServerContext,
-    job: { payload: unknown },
-    root?: string,
-): Promise<void> {
-    const db = await ctx.getDb();
-    const getDb = async () => db;
-    const history = new HistoryService({ getDb });
-    const refresh = new HistoryRefreshService({
-        getDb,
-        cwd: process.cwd(),
-    });
-    await refresh.run(job.payload as HistoryRefreshPayload, history, {
-        ...(root !== undefined ? { root } : {}),
-    });
-}
-
-/**
  * Resolve the directory that holds the built Spur Board (Astro) static assets.
  *
  * Search order when no explicit path is configured:
@@ -444,7 +416,18 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 registry.register(SMOKE_JOB, async () => {});
                 registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
                 registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
-                registry.register(HISTORY_REFRESH_JOB, (job) => runHistoryRefreshJob(ctx, job));
+                // Completion-triggered history refresh (task 0549): enqueued (coalesced)
+                // by CLI trigger points; consumed here.
+                registry.register(HISTORY_REFRESH_JOB, (payload) =>
+                    handleHistoryRefreshJob(
+                        {
+                            getDb: () => ctx.getDb(),
+                            cwd: ctx.cwd,
+                            bus: ctx.eventBus() as unknown as SystemEventBus,
+                        },
+                        payload,
+                    ),
+                );
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
                     registry,

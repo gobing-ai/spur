@@ -212,8 +212,8 @@ describe('app-section schemas', () => {
         });
         expect(result.success).toBe(true);
         if (result.success) {
-            expect(result.data.history?.refresh.on_completion).toBe(true);
-            expect(result.data.history?.refresh.debounce_ms).toBe(15_000);
+            expect(result.data.history?.refresh?.on_completion).toBe(true);
+            expect(result.data.history?.refresh?.debounce_ms).toBe(15_000);
         }
     });
 

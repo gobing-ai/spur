@@ -65,6 +65,15 @@ CREATE TABLE IF NOT EXISTS queue_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retry_at, created_at);
+
+-- At most one pending job per coalesced type (task 0549 R2): a partial unique
+-- index scoped to history.refresh + status='pending' makes the coalescing
+-- lookup-then-insert atomic under cross-process concurrency — a second process's
+-- INSERT conflicts (ON CONFLICT DO NOTHING) instead of enqueuing a duplicate.
+-- Scoped to ONE type on purpose: the queue also holds task-action/feature-action
+-- jobs that legitimately have multiple pending rows concurrently, so a global
+-- (type, status='pending') unique index would break them.
+CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_pending_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status = 'pending';
 `;
 
 /**

@@ -558,6 +558,7 @@ describe('history command', () => {
             },
             artifact: makeArtifact(),
             pruned: [],
+            coverage: { refreshed: ['claude'], skipped: ['gemini'], window: { since: null, until: null } },
         });
 
         try {
@@ -594,6 +595,7 @@ describe('history command', () => {
             },
             artifact: makeArtifact(),
             pruned: [],
+            coverage: { refreshed: ['claude'], skipped: ['gemini'], window: { since: null, until: null } },
         });
 
         try {

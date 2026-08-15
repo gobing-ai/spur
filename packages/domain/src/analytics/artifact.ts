@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { DerivedVariables } from './derived';
 import type { TokenTotals } from './types';
+import type { SessionState } from './watermark';
 
 /**
  * Version of the history analyze artifact schema (0464 R2). Additive fields do
@@ -99,11 +100,10 @@ export interface SessionStat {
     /** role='assistant' rows in this session whose `duration_ms` was NULL. */
     assistantDurationUnmeasured: number;
     /**
-     * Last-complete-turn watermark (task 0550). `in-progress` means the session's
-     * last stored message is not a finished assistant turn; derived values for
-     * that session exclude the trailing incomplete turn.
+     * Watermark completeness state (task 0550, R2) — new, additive. Analyze always sets
+     * it; artifacts written before 0550 lack it, so consumers treat absence as unknown.
      */
-    sessionState?: 'in-progress' | 'complete';
+    sessionState?: SessionState;
 }
 
 /** A repeated-call loop finding — Q4 (`args_digest` repeated >= 3 times). */

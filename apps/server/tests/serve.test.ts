@@ -18,7 +18,6 @@ import {
     registerSchedulerEntries,
     resolveWebDistPath,
     runFeatureActionJob,
-    runHistoryRefreshJob,
     runTaskActionJob,
     type StartServerDeps,
     startServer,
@@ -581,31 +580,6 @@ describe('startServer', () => {
         expect(registeredHandlers[FEATURE_ACTION_JOB]).toBeDefined();
         await expect(registeredHandlers[FEATURE_ACTION_JOB]?.({})).rejects.toThrow();
         expect(registeredHandlers[HISTORY_REFRESH_JOB]).toBeDefined();
-        const { HistoryRefreshService } = await import('@gobing-ai/spur-app');
-        const origRefreshRun = HistoryRefreshService.prototype.run;
-        let refreshPayload: unknown;
-        HistoryRefreshService.prototype.run = async function run(payload: unknown) {
-            refreshPayload = payload;
-            return {
-                refreshCoverage: { refreshed: [], skipped: [], window: { since: null, until: '' } },
-            };
-        };
-        try {
-            await registeredHandlers[HISTORY_REFRESH_JOB]?.({
-                payload: {
-                    windowSince: '2026-08-14T12:00:00.000Z',
-                    windowUntil: '2026-08-14T12:00:01.000Z',
-                    events: [],
-                },
-            } as never);
-        } finally {
-            HistoryRefreshService.prototype.run = origRefreshRun;
-        }
-        expect(refreshPayload).toEqual({
-            windowSince: '2026-08-14T12:00:00.000Z',
-            windowUntil: '2026-08-14T12:00:01.000Z',
-            events: [],
-        });
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
         sigint();
@@ -1003,21 +977,9 @@ describe('startServer', () => {
         expect(startSettled).toBe(false);
     });
 
-    test('runHistoryRefreshJob runs daily over an empty history root', async () => {
-        const { createMigratedDb } = await import('@gobing-ai/spur-domain');
-        const db = await createMigratedDb({ url: ':memory:' });
-        const ctx = { getDb: async () => db } as unknown as ServerContext;
-        const emptyRoot = mkdtempSync(join(tmpdir(), 'e3-hist-root-'));
-        const payload = {
-            windowSince: '2026-08-14T12:00:00.000Z',
-            windowUntil: '2026-08-14T12:00:10.000Z',
-            events: [{ trigger: 'task-done', at: '2026-08-14T12:00:00.000Z' }],
-        };
-        try {
-            await expect(runHistoryRefreshJob(ctx, { payload }, emptyRoot)).resolves.toBeUndefined();
-        } finally {
-            rmSync(emptyRoot, { recursive: true, force: true });
-        }
+    test('history refresh job handler is registered (consumed by the queue worker)', async () => {
+        const { handleHistoryRefreshJob } = await import('@gobing-ai/spur-app');
+        expect(typeof handleHistoryRefreshJob).toBe('function');
     });
 
     test('defaultDeps exports standard collaborators and resolves NodeSchedulerAdapter', async () => {

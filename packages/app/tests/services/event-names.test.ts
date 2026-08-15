@@ -231,14 +231,12 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(requireEntry('api.request.error').severity).toBe('error');
     });
 
-    test('registers history.* catalog entries (task 0471 R1)', () => {
+    test('registers history.* catalog entries (task 0471 R1, 0549 R3)', () => {
         const cases = [
             { name: 'history.import.completed', renderer: 'history-import' },
             { name: 'history.analyze.completed', renderer: 'history-analyze' },
             { name: 'history.daily.failed', renderer: 'history-daily' },
             { name: 'history.refresh.enqueued', renderer: 'history-refresh' },
-            { name: 'history.refresh.completed', renderer: 'history-refresh' },
-            { name: 'history.refresh.skipped', renderer: 'history-refresh' },
         ] as const;
         for (const { name, renderer } of cases) {
             const entry = requireEntry(name);
@@ -416,7 +414,7 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         const payload = { kind: 'output', reason: longText };
         const result = normalizeSystemEventPayload(rawSafeEntry, payload);
         expect(result).not.toBeNull();
-        expect((result?.reason as string).length).toBeLessThanOrEqual(257); // 256 + ellipsis
+        expect(String(result?.reason ?? '').length).toBeLessThanOrEqual(257); // 256 + ellipsis
     });
 
     test('returns null for null/undefined payloads', () => {

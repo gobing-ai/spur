@@ -32,10 +32,13 @@ export interface CliSystemEventLedger {
     flush: () => Promise<void>;
 }
 
+/** Structural subset of {@link CliContext} the ledger bridge needs (task 0549). */
+export type SystemEventLedgerContext = Pick<CliContext, 'cwd' | 'env' | 'getDb' | 'output'>;
+
 /**
  * Attach a durable system-event tap to a CLI-local bus.
  *
- * Opens the shared SQLite ledger via {@link CliContext.getDb}, registers the
+ * Opens the shared SQLite ledger via {@link SystemEventLedgerContext.getDb}, registers the
  * catalog tap (default tier always; diagnostic tier only when
  * `diagnosticEnabled` is true), and routes sink failures to the CLI error
  * stream without throwing — a ledger outage must never abort a workflow or
@@ -47,7 +50,7 @@ export interface CliSystemEventLedger {
  */
 export async function attachSystemEventLedger(
     bus: SystemEventBus,
-    context: CliContext,
+    context: SystemEventLedgerContext,
     options: { diagnosticEnabled?: boolean } = {},
 ): Promise<CliSystemEventLedger> {
     // CLI has no debug sink; cast so we only implement `warn` (persist failures
