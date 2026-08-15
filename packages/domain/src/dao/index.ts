@@ -24,6 +24,11 @@ export {
 } from './run-session-dao';
 export {
     type CreateSystemEventInput,
+    ROUTING_SUMMARY_DEFAULT_WINDOW_MS,
+    type RoutingSummaryPair,
+    type RoutingSummaryQuery,
+    type RoutingSummaryResult,
+    type RoutingSummaryWindow,
     SystemEventDao,
     type SystemEventQuery,
     type SystemEventQueryCursor,

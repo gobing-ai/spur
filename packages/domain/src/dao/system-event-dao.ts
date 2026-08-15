@@ -99,6 +99,61 @@ export interface SystemEventRetentionQuota {
 /** Ordered set of per-prefix retention quotas consumed by {@link SystemEventDao.pruneQuotas}. */
 export type SystemEventRetentionQuotas = ReadonlyArray<SystemEventRetentionQuota>;
 
+/** Window bounds for {@link SystemEventDao.routingSummary}. Inclusive on both ends. */
+export interface RoutingSummaryWindow {
+    /** Inclusive lower bound (ISO timestamp). */
+    since: string;
+    /** Inclusive upper bound (ISO timestamp). */
+    until: string;
+}
+
+/**
+ * One (role, executor) pair aggregated over a window (task 0546 R1).
+ * `role` is null for dispatches that carried no role (a pure pin); the
+ * `source` field keeps pinned (`explicit`) runs separate from role-resolved
+ * (`role` / `default`) evidence (R4). Both are nullable because a routing
+ * block admits an executor without role or source — `json_extract` of an
+ * absent key yields NULL (0546 review P3).
+ */
+export interface RoutingSummaryPair {
+    /** Role the run was serving; null when the dispatch recorded no role. */
+    role: string | null;
+    /** Executor that served the role. */
+    executor: string;
+    /** Selection source recorded on the dispatch (`role` | `explicit` | `default` | `phase` | `stage` | `priority`); null when absent. */
+    source: string | null;
+    /** Number of dispatches (`agent.invoke.start` rows with attribution) for the pair. */
+    runs: number;
+    /**
+     * Number of escalations that started from this pair's executor on runs of
+     * this role, joined by `run_id` (task 0546 R1). Zero when the pair never
+     * escalated — absence, not a null.
+     */
+    escalations: number;
+}
+
+/** Result of {@link SystemEventDao.routingSummary}: pairs plus the window actually covered (R5). */
+export interface RoutingSummaryResult {
+    /** The inclusive window the counts cover — reported, never implied. */
+    window: RoutingSummaryWindow;
+    /** Aggregated pairs, highest run count first. */
+    pairs: RoutingSummaryPair[];
+}
+
+/** Options for {@link SystemEventDao.routingSummary}. */
+export interface RoutingSummaryQuery {
+    /** Inclusive lower bound (ISO); defaults to {@link ROUTING_SUMMARY_DEFAULT_WINDOW_MS} before `until`. */
+    since?: string;
+    /** Inclusive upper bound (ISO); defaults to now. */
+    until?: string;
+}
+
+/**
+ * Default "bounded recent" window for {@link SystemEventDao.routingSummary}
+ * (task 0546 frozen names — "no unbounded scan"). One week of ledger.
+ */
+export const ROUTING_SUMMARY_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Column list every {@link SystemEventDao.query} projection returns, in row order. */
 const SYSTEM_EVENT_COLUMNS =
     'id, event_name, occurred_at, actor, payload_json, run_id, entity_kind, entity_id, sequence';
@@ -294,6 +349,102 @@ export class SystemEventDao {
         } catch (error) {
             if (error instanceof Error && error.message.includes('no such table: system_events')) {
                 return [];
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Aggregate role→executor routing over a bounded window in one indexed
+     * round trip (task 0546 R1/R2).
+     *
+     * The answer to "which executor served which role, how often, and how often
+     * did it escalate" is computed in SQL — never by sifting a fixed row window
+     * client-side (the failure mode feature J3 fixed on this ledger). The
+     * `event_name` + window predicates are served by the composite
+     * `idx_system_events_name_occurred` index (task 0546 R2); the escalation
+     * join uses the indexed `run_id` column, so work is bounded to the
+     * attribution families and result size does not depend on unrelated event
+     * families.
+     *
+     * Counts:
+     * - `runs` — `agent.invoke.start` rows carrying a routing block, grouped by
+     *   (role, executor, source). Start (not exit) is the dispatch moment, so a
+     *   run is never double-counted, and an escalated re-dispatch is its own
+     *   serve on the executor it landed on.
+     * - `escalations` — `agent.invoke.escalated` rows whose `fromExecutor` and
+     *   `run_id` match the pair's dispatch: "this pairing started too cheap and
+     *   had to escalate", not "this pairing was escalated to".
+     *
+     * Pre-attribution rows (no routing metadata — `data.routing.executor` is
+     * NULL) and malformed payloads (non-JSON) are excluded from counts rather
+     * than imputed as an unknown role (R5); the covered window is reported on
+     * the result. Rows with a NULL `role` (pure pins) group under `role: null`.
+     *
+     * Mirrors {@link query}'s safety pattern: a missing table returns an empty
+     * result rather than throwing.
+     */
+    async routingSummary(spec: RoutingSummaryQuery = {}): Promise<RoutingSummaryResult> {
+        const until = spec.until ?? new Date().toISOString();
+        const since = spec.since ?? new Date(Date.parse(until) - ROUTING_SUMMARY_DEFAULT_WINDOW_MS).toISOString();
+        try {
+            const rows = await this.db.queryAll<RoutingSummaryPair>(
+                `WITH routed AS (
+                     SELECT id, run_id, occurred_at,
+                            json_extract(payload_json, '$.data.routing.role') AS role,
+                            json_extract(payload_json, '$.data.routing.executor') AS executor,
+                            json_extract(payload_json, '$.data.routing.source') AS source
+                     FROM system_events
+                     WHERE event_name = 'agent.invoke.start'
+                       AND occurred_at >= ?1 AND occurred_at <= ?2
+                       AND json_valid(payload_json) = 1
+                       AND json_extract(payload_json, '$.data.routing.executor') IS NOT NULL
+                 ),
+                 esc AS (
+                     SELECT id, run_id,
+                            json_extract(payload_json, '$.data.fromExecutor') AS from_executor
+                     FROM system_events
+                     WHERE event_name = 'agent.invoke.escalated'
+                       AND occurred_at >= ?1 AND occurred_at <= ?2
+                       AND json_valid(payload_json) = 1
+                       AND json_extract(payload_json, '$.data.fromExecutor') IS NOT NULL
+                 ),
+                 -- One dispatch row per (run_id, executor): the earliest. An
+                 -- escalation record names only run_id + fromExecutor, so it is
+                 -- attributed to a single dispatch — the one that started the
+                 -- run on that executor — never fanned out to every (role,
+                 -- source) group sharing the pair (0546 review P3).
+                 first_routed AS (
+                     SELECT r.*
+                     FROM routed r
+                     WHERE r.id = (
+                         SELECT r2.id
+                         FROM routed r2
+                         WHERE r2.run_id = r.run_id AND r2.executor = r.executor
+                         ORDER BY r2.occurred_at, r2.id
+                         LIMIT 1
+                     )
+                 )
+                 SELECT r.role AS role,
+                        r.executor AS executor,
+                        r.source AS source,
+                        COUNT(DISTINCT r.id) AS runs,
+                        COUNT(DISTINCT e.id) AS escalations
+                 FROM routed r
+                 LEFT JOIN first_routed fr ON fr.id = r.id
+                 LEFT JOIN esc e ON e.run_id = fr.run_id AND e.from_executor = fr.executor
+                 GROUP BY r.role, r.executor, r.source
+                 -- Deterministic tie order: runs DESC, executor ASC, then the
+                 -- group keys (SQLite NULLs sort first on ASC) — equal-count
+                 -- pairs must not come back in optimizer-dependent order.
+                 ORDER BY runs DESC, executor ASC, role ASC, source ASC`,
+                since,
+                until,
+            );
+            return { window: { since, until }, pairs: rows };
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return { window: { since, until }, pairs: [] };
             }
             throw error;
         }

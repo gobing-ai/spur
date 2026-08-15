@@ -728,3 +728,436 @@ describe('SystemEventDao', () => {
         adapter.close();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: routingSummary — role→executor aggregate (task 0546 R1/R2/R4/R5)
+// ---------------------------------------------------------------------------
+// Rows are shaped exactly as the J5 tap persists them: payload_json is the v2
+// envelope, routing rides `data.routing.{role,tier,executor,source}` on
+// `agent.invoke.start`, escalations ride `data.fromExecutor` on
+// `agent.invoke.escalated`, and `run_id` is the indexed join column.
+
+/** Envelope wrapper matching buildSystemEventEnvelope's persisted shape. */
+function envelope(data: Record<string, unknown>): string {
+    return JSON.stringify({ schemaVersion: 2, data, context: {}, presentation: {} });
+}
+
+/** Start payload with (optional) routing attribution, as the invoke bridge stamps it. */
+function startPayload(role: string | undefined, executor: string, source: string): string {
+    const routing: Record<string, unknown> = { tier: 'standard', executor, source };
+    if (role !== undefined) routing.role = role;
+    return envelope({ agent: 'pi', operation: 'prompt', routing });
+}
+
+/** Escalation payload with fromExecutor, as the agent-service bridge emits it. */
+function escalatedPayload(fromExecutor: string, trigger = 'gate-fail'): string {
+    return envelope({
+        runId: 'r',
+        fromExecutor,
+        fromTier: 'standard',
+        toExecutor: 'capable-exec',
+        toTier: 'capable-1',
+        trigger,
+    });
+}
+
+async function insertInvokeRow(
+    dao: SystemEventDao,
+    id: string,
+    eventName: string,
+    at: string,
+    payload: string,
+    runId: string | null,
+): Promise<void> {
+    await dao.insert({ id, event_name: eventName, occurred_at: at, payload_json: payload, run_id: runId });
+}
+
+describe('SystemEventDao.routingSummary (task 0546)', () => {
+    test('R1: a known dataset yields expected per-pair run and escalation counts', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // (scribe, cheap-exec, role): 2 runs, 1 escalation (run-2 escalated away).
+        await insertInvokeRow(
+            dao,
+            's1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-1',
+        );
+        await insertInvokeRow(
+            dao,
+            's2',
+            'agent.invoke.start',
+            '2026-08-13T02:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-2',
+        );
+        await insertInvokeRow(
+            dao,
+            'e2',
+            'agent.invoke.escalated',
+            '2026-08-13T02:01:00.000Z',
+            escalatedPayload('cheap-exec'),
+            'run-2',
+        );
+        // (scribe, capable-3, explicit): 1 pinned run, never escalated.
+        await insertInvokeRow(
+            dao,
+            's3',
+            'agent.invoke.start',
+            '2026-08-13T03:00:00.000Z',
+            startPayload('scribe', 'capable-3', 'explicit'),
+            'run-3',
+        );
+        // (null, std-exec, explicit): 1 pure pin (no role).
+        await insertInvokeRow(
+            dao,
+            's4',
+            'agent.invoke.start',
+            '2026-08-13T04:00:00.000Z',
+            startPayload(undefined, 'std-exec', 'explicit'),
+            'run-4',
+        );
+        // (planner, std-exec, default): 1 run, 1 escalation.
+        await insertInvokeRow(
+            dao,
+            's6',
+            'agent.invoke.start',
+            '2026-08-13T06:00:00.000Z',
+            startPayload('planner', 'std-exec', 'default'),
+            'run-6',
+        );
+        await insertInvokeRow(
+            dao,
+            'e6',
+            'agent.invoke.escalated',
+            '2026-08-13T06:01:00.000Z',
+            escalatedPayload('std-exec', 'timeout'),
+            'run-6',
+        );
+        // Outside the window: must not appear.
+        await insertInvokeRow(
+            dao,
+            's7',
+            'agent.invoke.start',
+            '2026-07-01T00:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-7',
+        );
+        await insertInvokeRow(
+            dao,
+            'e7',
+            'agent.invoke.escalated',
+            '2026-07-01T00:01:00.000Z',
+            escalatedPayload('cheap-exec'),
+            'run-7',
+        );
+        // Unrelated event family inside the window: must not appear.
+        await insertInvokeRow(dao, 't1', 'task.created', '2026-08-13T07:00:00.000Z', envelope({}), null);
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        expect(result.window).toEqual({ since: '2026-08-12T00:00:00.000Z', until: '2026-08-14T00:00:00.000Z' });
+        expect(result.pairs).toEqual([
+            { role: 'scribe', executor: 'cheap-exec', source: 'role', runs: 2, escalations: 1 },
+            { role: 'scribe', executor: 'capable-3', source: 'explicit', runs: 1, escalations: 0 },
+            { role: null, executor: 'std-exec', source: 'explicit', runs: 1, escalations: 0 },
+            { role: 'planner', executor: 'std-exec', source: 'default', runs: 1, escalations: 1 },
+        ]);
+
+        adapter.close();
+    });
+
+    test('R4: pinned and role-resolved runs to the same executor report separately', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // Same executor, two sources: role-routed vs pinned.
+        await insertInvokeRow(
+            dao,
+            'a1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('coder', 'claude-exec', 'role'),
+            'run-a',
+        );
+        await insertInvokeRow(
+            dao,
+            'a2',
+            'agent.invoke.start',
+            '2026-08-13T02:00:00.000Z',
+            startPayload('coder', 'claude-exec', 'explicit'),
+            'run-b',
+        );
+        await insertInvokeRow(
+            dao,
+            'a3',
+            'agent.invoke.start',
+            '2026-08-13T03:00:00.000Z',
+            startPayload('coder', 'claude-exec', 'explicit'),
+            'run-c',
+        );
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        expect(result.pairs).toEqual([
+            { role: 'coder', executor: 'claude-exec', source: 'explicit', runs: 2, escalations: 0 },
+            { role: 'coder', executor: 'claude-exec', source: 'role', runs: 1, escalations: 0 },
+        ]);
+
+        adapter.close();
+    });
+
+    test('R5: pre-attribution rows are excluded and the covered window is reported', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // Attributed row (post-0545).
+        await insertInvokeRow(
+            dao,
+            'b1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-x',
+        );
+        // Pre-attribution row: no routing metadata, same event name, in window.
+        await insertInvokeRow(
+            dao,
+            'b2',
+            'agent.invoke.start',
+            '2026-08-13T02:00:00.000Z',
+            envelope({ agent: 'pi', operation: 'prompt' }),
+            'run-y',
+        );
+        // Legacy raw payload (not even an envelope): still excluded, no throw.
+        await insertInvokeRow(dao, 'b3', 'agent.invoke.start', '2026-08-13T03:00:00.000Z', '{not json', 'run-z');
+        // Escalation row without fromExecutor: excluded from the escalation count.
+        await insertInvokeRow(
+            dao,
+            'b4',
+            'agent.invoke.escalated',
+            '2026-08-13T03:01:00.000Z',
+            envelope({ runId: 'run-x' }),
+            'run-x',
+        );
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        expect(result.window).toEqual({ since: '2026-08-12T00:00:00.000Z', until: '2026-08-14T00:00:00.000Z' });
+        expect(result.pairs).toEqual([
+            { role: 'scribe', executor: 'cheap-exec', source: 'role', runs: 1, escalations: 0 },
+        ]);
+
+        adapter.close();
+    });
+
+    test('R5: omitted window defaults to a bounded recent range ending now', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        const before = Date.now();
+        await insertInvokeRow(
+            dao,
+            'c1',
+            'agent.invoke.start',
+            new Date().toISOString(),
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-now',
+        );
+        // Far outside the default 7-day window.
+        await insertInvokeRow(
+            dao,
+            'c2',
+            'agent.invoke.start',
+            '2026-01-01T00:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-old',
+        );
+
+        const result = await dao.routingSummary();
+        const after = Date.now();
+        expect(result.window.until).toBeDefined();
+        expect(new Date(result.window.since).getTime()).toBeGreaterThanOrEqual(before - 7 * 24 * 60 * 60 * 1000);
+        expect(new Date(result.window.until).getTime()).toBeLessThanOrEqual(after);
+        expect(result.pairs).toEqual([
+            { role: 'scribe', executor: 'cheap-exec', source: 'role', runs: 1, escalations: 0 },
+        ]);
+
+        adapter.close();
+    });
+
+    test('R2: the query filters on the indexed event_name column in SQL — no client sifting', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+        await insertInvokeRow(
+            dao,
+            'd1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-1',
+        );
+        await insertInvokeRow(dao, 'd2', 'task.created', '2026-08-13T02:00:00.000Z', envelope({}), null);
+
+        // Capture the SQL the DAO sends — the aggregate must be shaped in SQL
+        // against the indexed correlation column, never fetched-then-sifted.
+        const captured: string[] = [];
+        const originalQueryAll = adapter.queryAll.bind(adapter);
+        adapter.queryAll = (async (sql: string, ...params: unknown[]) => {
+            captured.push(sql);
+            return originalQueryAll(sql, ...params);
+        }) as typeof adapter.queryAll;
+
+        await dao.routingSummary({ since: '2026-08-12T00:00:00.000Z', until: '2026-08-14T00:00:00.000Z' });
+
+        expect(captured).toHaveLength(1); // one round trip
+        const sql = captured[0];
+        expect(sql).toContain("event_name = 'agent.invoke.start'");
+        expect(sql).toContain("event_name = 'agent.invoke.escalated'");
+        expect(sql).toContain('occurred_at >= ?1 AND occurred_at <= ?2');
+        expect(sql).toContain('GROUP BY');
+
+        adapter.close();
+    });
+
+    test('P3: an escalation is attributed to a single dispatch, never fanned across pairs', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // One run, same executor dispatched twice with different sources
+        // (role-routed then pinned — re-pin / re-dispatch pattern), plus one
+        // escalation from that executor. The escalation names only
+        // (run_id, fromExecutor); it must count once, on the earliest
+        // dispatch's pair, not on every pair sharing the executor.
+        await insertInvokeRow(
+            dao,
+            'p1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('coder', 'std-exec', 'role'),
+            'run-p',
+        );
+        await insertInvokeRow(
+            dao,
+            'p2',
+            'agent.invoke.start',
+            '2026-08-13T02:00:00.000Z',
+            startPayload('coder', 'std-exec', 'explicit'),
+            'run-p',
+        );
+        await insertInvokeRow(
+            dao,
+            'p3',
+            'agent.invoke.escalated',
+            '2026-08-13T02:30:00.000Z',
+            escalatedPayload('std-exec'),
+            'run-p',
+        );
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        // Escalation attributed to the earliest dispatch (role source); the
+        // later pinned dispatch carries zero escalations — no double-count.
+        // Order is deterministic: runs DESC, executor ASC, role ASC, source ASC
+        // → 'explicit' precedes 'role'.
+        expect(result.pairs).toEqual([
+            { role: 'coder', executor: 'std-exec', source: 'explicit', runs: 1, escalations: 0 },
+            { role: 'coder', executor: 'std-exec', source: 'role', runs: 1, escalations: 1 },
+        ]);
+
+        adapter.close();
+    });
+
+    test('P3: a routing block without source groups under source null, typed not string', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // A routing block may carry executor + tier but omit source (or role):
+        // json_extract yields NULL, which must group cleanly rather than
+        // violate the pair's declared type.
+        await insertInvokeRow(
+            dao,
+            'q1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            envelope({ agent: 'pi', operation: 'prompt', routing: { tier: 'standard', executor: 'no-src-exec' } }),
+            'run-q',
+        );
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        expect(result.pairs).toEqual([{ role: null, executor: 'no-src-exec', source: null, runs: 1, escalations: 0 }]);
+
+        adapter.close();
+    });
+
+    test('R2: the routing query plan drives from the composite (event_name, occurred_at) index', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+        // Seed enough rows that the optimizer has to choose an access path.
+        await insertInvokeRow(
+            dao,
+            'i1',
+            'agent.invoke.start',
+            '2026-08-13T01:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-1',
+        );
+        await insertInvokeRow(
+            dao,
+            'i2',
+            'agent.invoke.start',
+            '2026-08-13T02:00:00.000Z',
+            startPayload('scribe', 'cheap-exec', 'role'),
+            'run-2',
+        );
+        await insertInvokeRow(dao, 'i3', 'heartbeat', '2026-08-13T03:00:00.000Z', envelope({}), null);
+
+        const captured: string[] = [];
+        const originalQueryAll = adapter.queryAll.bind(adapter);
+        adapter.queryAll = (async (sql: string, ...params: unknown[]) => {
+            captured.push(sql);
+            return originalQueryAll(sql, ...params);
+        }) as typeof adapter.queryAll;
+
+        const result = await dao.routingSummary({
+            since: '2026-08-12T00:00:00.000Z',
+            until: '2026-08-14T00:00:00.000Z',
+        });
+        expect(result.pairs).toHaveLength(1);
+
+        // EXPLAIN QUERY PLAN must name the composite index for the routed CTE —
+        // the family filter drives the access path, not the window walk (task
+        // 0546 R2; 0546 review P2).
+        const explain = await adapter.queryAll<{ detail: string }>(
+            `EXPLAIN QUERY PLAN ${captured[0] as string}`,
+            '2026-08-12T00:00:00.000Z',
+            '2026-08-14T00:00:00.000Z',
+        );
+        const plan = explain.map((row) => row.detail).join('\n');
+        expect(plan).toContain('idx_system_events_name_occurred');
+
+        adapter.close();
+    });
+});

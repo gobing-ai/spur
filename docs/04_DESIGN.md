@@ -1728,6 +1728,26 @@ not-recorded are distinguishable (R2). Attribution carries identifiers, tiers, a
 prompt text, command lines, and configured secrets are excluded by the J5 bounds and recursive
 redaction before persistence (R4).
 
+**Routing aggregate read path (task 0546).** `SystemEventDao.routingSummary({ since?, until? })`
+answers "which executor served which role, how often, and how often did it escalate" in **one
+indexed round trip** — the aggregate is computed in SQL (`GROUP BY` over `json_extract` of the
+routing envelope), never by sifting a fixed row window client-side (the failure mode feature J3
+fixed on this ledger). The `event_name` + window predicates ride the composite
+`idx_system_events_name_occurred (event_name, occurred_at)` index and the escalation join rides
+the indexed `run_id` column, so work is bounded to the attribution families (measured via
+EXPLAIN QUERY PLAN: every family-filtered scan is served by the composite index).
+Per pair it reports `{ role, executor, source, runs, escalations }`: `runs` counts
+`agent.invoke.start` dispatches (start, not exit, is the dispatch moment; an escalated re-dispatch
+is its own serve on the executor it landed on), and `escalations` counts
+`agent.invoke.escalated` rows whose `fromExecutor` matches the pair — "this pairing started too
+cheap", not "was escalated to". Selection sources stay separate (R4): a pinned (`source:
+'explicit'`) run is not counted as evidence that role routing chose that executor. Pre-attribution
+rows and malformed payloads are excluded rather than imputed as an unknown role (R5), and the
+covered `window` is reported on the result; `since`/`until` default to a bounded recent 7-day
+range. No new CLI noun or verb — this rides the observability read API (ADR-051 gates noun
+additions). Task 0547 joins the same rows to the history plane over `run_id` for the token
+dimension; task 0552 renders this aggregate.
+
 **Board projection (task 0527).** The web client narrows envelope v2 once in its history/SSE parser.
 Desktop renders `Time | Severity | Event | Summary | Producer | Correlation | Outcome |
 Action`; below 640 px it keeps `Time | Event` and stacks the semantic fields. The Producer

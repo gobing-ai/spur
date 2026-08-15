@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS system_events (
 
 CREATE INDEX IF NOT EXISTS idx_system_events_occurred_at ON system_events (occurred_at);
 CREATE INDEX IF NOT EXISTS idx_system_events_event_name ON system_events (event_name);
+CREATE INDEX IF NOT EXISTS idx_system_events_name_occurred ON system_events (event_name, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_system_events_run_id ON system_events (run_id);
 CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kind, entity_id);
 CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence);
@@ -251,6 +252,22 @@ CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence
 `;
 
 /**
+ * Composite `(event_name, occurred_at)` index for the routing aggregate (task
+ * 0546 R2). `routingSummary` filters by `event_name` over a `since`/`until`
+ * window; the single-column indexes let SQLite pick either the family filter
+ * (then window-prune) or the window walk (then family-prune) — measured on
+ * bun:sqlite 3.51 the optimizer chose the `occurred_at` window walk, which
+ * traverses every event family (heartbeats included) before the residual
+ * `event_name` filter. The composite drives the access path from the family,
+ * bounding scan width to attribution rows. Fresh databases get the index from
+ * `SYSTEM_EVENTS_SCHEMA_SQL`; this migration covers ledgers created before it
+ * (idempotent, `0011` precedent).
+ */
+export const SYSTEM_EVENTS_NAME_OCCURRED_INDEX_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_system_events_name_occurred ON system_events (event_name, occurred_at);
+`;
+
+/**
  * Add the `args_raw` column to the forensic `history_tool_call` table (task 0553,
  * feature E5). Stores the full JSON arguments for allowlisted planning tools
  * (TodoWrite, todo_write, update_plan, etc.); other tools keep only
@@ -319,6 +336,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         addColumnIfMissing: { table: 'history_tool_call', column: 'args_raw' },
     },
     { id: '0013_spur_cli_history_run_session', sql: HISTORY_RUN_SESSION_SCHEMA_SQL },
+    {
+        id: '0014_spur_cli_system_events_name_occurred_idx',
+        sql: SYSTEM_EVENTS_NAME_OCCURRED_INDEX_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -372,7 +393,16 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0012_spur_cli_history_tool_call_args_raw' &&
             !(await tableExists(adapter, 'history_tool_call'));
 
-        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip) {
+        // Migration 0014 indexes (event_name, occurred_at) on system_events —
+        // same ledger-absence shape as 0011. Journal without executing when the
+        // table is missing; the index lands on any DB where the ledger exists
+        // (fresh DBs get it from SYSTEM_EVENTS_SCHEMA_SQL, 0006 restores the
+        // table for older ledgers).
+        const nameOccurredIndexSkip =
+            migration.id === '0014_spur_cli_system_events_name_occurred_idx' &&
+            !(await tableExists(adapter, 'system_events'));
+
+        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip && !nameOccurredIndexSkip) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }
