@@ -3109,4 +3109,9 @@ describe('verdictRowsMatchScenarios (dogfood 2026-08-15, feature I3)', () => {
             false,
         );
     });
+
+    test('0561 R1: an alias row id with a trailing Gherkin body matches via bodyStripped === alias', () => {
+        // Pins the alias side of the additive change (`AC-N (Given …)` → bodyStripped === sc.alias).
+        expect(verdictRowsMatchScenarios([{ id: 'AC-1 (Given x / When y / Then z)' }], ac)).toBe(true);
+    });
 });

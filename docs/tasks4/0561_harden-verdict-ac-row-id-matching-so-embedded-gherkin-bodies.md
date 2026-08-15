@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:14.986Z"
-updated_at: "2026-08-15T16:44:41.552Z"
+updated_at: "2026-08-15T16:47:33.569Z"
 ---
 
 ## 0561. Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate
@@ -21,9 +21,9 @@ updated_at: "2026-08-15T16:44:41.552Z"
 ### Background
 During the E6 batch (2026-08-14), task 0558's verify answer embedded the full Gherkin body in the AC row id — `Scenario: R4 — ... (Given ... / When ... / Then ... / And ...)` — and `spur task verdict --from-answer` preserved that id verbatim in the verdict artifact. The feature scenario gate matches AC rows by exact normalized scenario title (feature-check.ts `isScenarioVerified`), so R4 was flagged `L4.scenario-unverified` despite a PASS verdict with a MET row. This required post-hoc surgery: hand-editing the answer file and re-deriving the verdict before the E6 feature could transition to done. Evidence: `.spur/run/0558-verify-answer.txt` (row 15), `.spur/run/0558-verdict.json` (AC id), feature-check finding at 17:23.
 ### Requirements
-- [ ] R1. An AC row id carrying a trailing Gherkin body still matches its feature scenario — `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) accepts the id with a trailing parenthetical group removed as an additional candidate form, so a PASS verdict with a MET row can never be reported `L4.scenario-unverified` for that reason alone. Existing verdict artifacts on disk are repaired by the same change (no re-derivation required).
-- [ ] R2. Additive matching does not regress a legitimately parenthesized title — a feature scenario whose own title ends in `(...)` still matches its unmodified AC row id, because the raw and prefix-stripped forms are still compared.
-- [ ] R3. The answer-file contract states the rule — `plugins/sp/skills/spur-dev/references/ac-style-guide.md` says an AC row id is exactly the scenario title with no Gherkin body appended.
+- [x] R1. An AC row id carrying a trailing Gherkin body still matches its feature scenario — `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) accepts the id with a trailing parenthetical group removed as an additional candidate form, so a PASS verdict with a MET row can never be reported `L4.scenario-unverified` for that reason alone. Existing verdict artifacts on disk are repaired by the same change (no re-derivation required).
+- [x] R2. Additive matching does not regress a legitimately parenthesized title — a feature scenario whose own title ends in `(...)` still matches its unmodified AC row id, because the raw and prefix-stripped forms are still compared.
+- [x] R3. The answer-file contract states the rule — `plugins/sp/skills/spur-dev/references/ac-style-guide.md` says an AC row id is exactly the scenario title with no Gherkin body appended.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R1 — an AC row id with an embedded Gherkin body still verifies its scenario
@@ -127,10 +127,10 @@ and still produced the bad row — so it is the prevention half and the matcher 
 `.spur/run/0558-verdict.json` `acceptanceCriteria[].id` preserving the parenthetical; feature-check
 finding at 17:23.
 ### Plan
-- [ ] 1. Add the trailing-parenthetical candidate form to `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) alongside the existing raw/stripped/alias comparisons (R1, R2)
-- [ ] 2. Unit test in the feature-check suite: MET row id with a trailing Gherkin body verifies; parenthesized-title row still matches; unrelated title still fails (R1, R2)
-- [ ] 3. Regression check against the real artifact — restore the pre-surgery `.spur/run/0558-verdict.json` into a fixture and assert the E6 scenario verifies (R1)
-- [ ] 4. Add the row-id rule to `plugins/sp/skills/spur-dev/references/ac-style-guide.md` (R3)
+- [x] 1. Add the trailing-parenthetical candidate form to `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) alongside the existing raw/stripped/alias comparisons (R1, R2)
+- [x] 2. Unit test in the feature-check suite: MET row id with a trailing Gherkin body verifies; parenthesized-title row still matches; unrelated title still fails (R1, R2)
+- [x] 3. Regression check against the real artifact — restore the pre-surgery `.spur/run/0558-verdict.json` into a fixture and assert the E6 scenario verifies (R1)
+- [x] 4. Add the row-id rule to `plugins/sp/skills/spur-dev/references/ac-style-guide.md` (R3)
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
@@ -150,8 +150,8 @@ Change map (0561):
   - No parser change (`task-verdict.ts` `extractAcceptanceCriteria` still takes `cells[0]` verbatim):
     the matcher-side fix repairs every verdict artifact already on disk without re-derivation (R1).
 
-- `packages/app/tests/services/feature-check.test.ts` — six new tests:
-  - `verdictRowsMatchScenarios` (direct matcher): trailing-Gherkin-body row matches (incl. `Scenario:` prefix + bracket tag + multi-line nested body); legitimately parenthesized title matches unmodified; body naming a DIFFERENT scenario still fails (no over-matching).
+- `packages/app/tests/services/feature-check.test.ts` — nine new tests:
+  - `verdictRowsMatchScenarios` (direct matcher): trailing-Gherkin-body row matches (incl. `Scenario:` prefix + bracket tag + multi-line nested body); legitimately parenthesized title matches unmodified; body naming a DIFFERENT scenario still fails (no over-matching); alias row id with a trailing body matches via `bodyStripped === sc.alias`.
   - `setupScenarioSatisfaction` (end-to-end gate): trailing-body MET row verifies; bracket-tagged multi-line body verifies; parenthesized title verifies; different-scenario body still emits `L4.scenario-unverified`; E6/0558 regression — reconstructed pre-surgery `R4` AC row id (title + embedded Gherkin body) verifies via the acceptanceCriteria path without any answer-file edit.
 
 - `plugins/sp/skills/spur-dev/references/ac-style-guide.md` — new subsection under "Four accepted id forms": an AC row id is exactly the scenario title (no Gherkin body appended); the verifier preserves ids verbatim and the gate's trailing-parenthetical strip is a backstop for existing artifacts, not a license to append bodies (R3).
