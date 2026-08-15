@@ -113,6 +113,23 @@ Any of the four may additionally carry a **bracket tag** in any position — `[d
 `Scenario: [advisory] Foo`. Tags are stripped before matching (0398 R7), so tagging never breaks
 the linkage.
 
+### The id is exactly the scenario title — no Gherkin body appended
+
+An AC row id must be **exactly** the scenario title (plus any of the four forms above), with the
+Gherkin body left in the task's `### Acceptance Criteria` block. Never append the scenario's
+`Given … / When … / Then …` steps to the row id:
+
+```markdown
+| R3 — Foo | MET | test | `tests/foo.test.ts:12` |        ← correct
+| Scenario: R3 — Foo (Given … / When … / Then …) | MET | test | … |  ← never
+```
+
+The verifier preserves row ids verbatim in the verdict artifact (evidence is not rewritten), and
+the feature scenario gate strips a trailing parenthetical only as a *backstop* for artifacts that
+already carry one (0561). Appending the body is still a contract violation and makes the row
+unmatchable in edge cases (a title that legitimately ends in `(...)` plus a body), so keep ids
+clean at authoring time.
+
 ### Which tags exempt a row from executable evidence
 
 A `MET` row is silently demoted to `PARTIAL` unless it carries `test` or `command` evidence — the

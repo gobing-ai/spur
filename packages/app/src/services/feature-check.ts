@@ -926,11 +926,20 @@ function rowMatchesScenario(id: string, sc: { title: string; normalized: string;
         .replace(/^Scenario:\s*/i, '')
         .replace(/^\[[^\]]*\]\s*/, '')
         .trim();
+    // 0561 R1: a verdict row id may carry a trailing Gherkin body in parentheses
+    // (e.g. `Scenario: R4 — <title> (Given … / Then …)`). Strip the whole greedy
+    // trailing parenthetical — including any nested pairs and line breaks — as an
+    // additional candidate form, so an embedded body cannot fail the scenario gate.
+    // Additive only: the raw/stripped forms above are still evaluated, so a title
+    // that legitimately ends in `(...)` still matches (R2).
+    const bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim();
     return (
         normalizeTitle(id) === sc.normalized ||
         normalizeTitle(stripped) === sc.normalized ||
+        normalizeTitle(bodyStripped) === sc.normalized ||
         id === sc.alias ||
-        stripped === sc.alias
+        stripped === sc.alias ||
+        bodyStripped === sc.alias
     );
 }
 

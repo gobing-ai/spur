@@ -2004,7 +2004,11 @@ describe('FeatureCheckService', () => {
      */
     async function setupScenarioSatisfaction(opts: {
         taskStatus: string;
-        verdict?: { verdict: string; requirements: Array<{ id: string; status: string }> };
+        verdict?: {
+            verdict: string;
+            requirements?: Array<{ id: string; status: string }>;
+            acceptanceCriteria?: Array<{ id: string; status: string }>;
+        };
         scenarioTitle?: string;
     }): Promise<{ result: CheckFeatureResult; cleanup: () => void }> {
         const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0340-'));
@@ -2113,6 +2117,83 @@ describe('FeatureCheckService', () => {
             verdict: { verdict: 'PASS', requirements: [{ id: '[doc-only] beta', status: 'MET' }] },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified').length).toBeGreaterThan(0);
+        cleanup();
+    });
+
+    // ── 0561 R1/R2: trailing Gherkin bodies in verdict row ids ────────────────
+    // An AC row id that embeds the full Gherkin body in a trailing parenthetical
+    // must still verify its feature scenario (no L4.scenario-unverified), while a
+    // title that legitimately ends in `(...)` must still match unmodified (R2).
+
+    test('0561 R1: MET row id with a trailing Gherkin body verifies the scenario', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: {
+                verdict: 'PASS',
+                requirements: [{ id: 'Scenario: alpha (Given x / When y / Then z)', status: 'MET' }],
+            },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0561 R1: bracket-tagged id with a multi-line nested-parenthetical body verifies', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: {
+                verdict: 'PASS',
+                requirements: [{ id: '[doc-only] alpha (Given x (nested) / When y\n  / Then z)', status: 'MET' }],
+            },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0561 R2: a title that legitimately ends in a parenthetical still matches unmodified', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            scenarioTitle: 'alpha handles (nested) cases',
+            verdict: {
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha handles (nested) cases', status: 'MET' }],
+            },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0561 R1: a row whose body names a DIFFERENT scenario still does not verify', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: {
+                verdict: 'PASS',
+                requirements: [{ id: 'Scenario: beta (Given x / When y / Then z)', status: 'MET' }],
+            },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        cleanup();
+    });
+
+    test('0561 R1 regression (E6/0558): the pre-surgery R4 AC row id verifies without re-derivation', async () => {
+        // Reconstructed from the E6 forensic report: 0558's verify answer embedded the
+        // full Gherkin body in the R4 AC row id and `spur task verdict --from-answer`
+        // preserved it verbatim in the artifact. The matcher must accept the artifact
+        // as-is — the bodyStripped form is evaluated without touching the file.
+        const r4 = 'R4 — Already-imported history is correlated retroactively and marked estimated';
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            scenarioTitle: r4,
+            verdict: {
+                verdict: 'PASS',
+                acceptanceCriteria: [
+                    {
+                        id: `Scenario: ${r4} (Given history rows imported before correlation existed / When retroactive correlation runs over a bounded window / Then matched rows carry a run id marked estimated)`,
+                        status: 'MET',
+                    },
+                ],
+            },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
         cleanup();
     });
 
@@ -2986,5 +3067,46 @@ describe('verdictRowsMatchScenarios (dogfood 2026-08-15, feature I3)', () => {
     test('no scenarios or no rows — vacuously true (nothing to warn about)', () => {
         expect(verdictRowsMatchScenarios([{ id: 'R1' }], 'Feature: x')).toBe(true);
         expect(verdictRowsMatchScenarios([], ac)).toBe(true);
+    });
+
+    test('0561 R1: a row id with a trailing Gherkin body still matches the scenario title', () => {
+        expect(
+            verdictRowsMatchScenarios(
+                [{ id: 'Harness surface drift is inventoried against the live CLI (Given x / When y / Then z)' }],
+                ac,
+            ),
+        ).toBe(true);
+        // `Scenario:` prefix + bracket tag + multi-line nested-parenthetical body (greedy strip).
+        expect(
+            verdictRowsMatchScenarios(
+                [
+                    {
+                        id: '[doc-only] Scenario: Workflow YAML matches the live verb surface (Given x (nested) / When y\n  / Then z)',
+                    },
+                ],
+                ac,
+            ),
+        ).toBe(true);
+    });
+
+    test('0561 R2: a title that legitimately ends in a parenthetical still matches unmodified', () => {
+        const parenAc = [
+            'Feature: inventory',
+            '  Scenario: Harness surface drift is inventoried against the live CLI (via the live CLI)',
+            '    Given x',
+        ].join('\n');
+        expect(
+            verdictRowsMatchScenarios(
+                [{ id: 'Harness surface drift is inventoried against the live CLI (via the live CLI)' }],
+                parenAc,
+            ),
+        ).toBe(true);
+    });
+
+    test('0561 R1: a row id naming a DIFFERENT scenario still fails even with a body stripped', () => {
+        // Guard against over-matching: the greedy strip must not make every row match.
+        expect(verdictRowsMatchScenarios([{ id: 'Unrelated scenario title (Given x / When y / Then z)' }], ac)).toBe(
+            false,
+        );
     });
 });

@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate"
 description: ""
-status: backlog
+status: done
 type: issue
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:14.986Z"
-updated_at: "2026-08-14T19:33:55.707Z"
+updated_at: "2026-08-15T16:44:41.552Z"
 ---
 
 ## 0561. Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate
@@ -136,17 +136,81 @@ finding at 17:23.
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+Change map (0561):
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/feature-check.ts:923` (`rowMatchesScenario`) — added a third derived id form `bodyStripped` next to `id`/`stripped`:
+  `const bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim();`
+  and two new comparisons `normalizeTitle(bodyStripped) === sc.normalized || bodyStripped === sc.alias`.
+  - Applied to `stripped` only — prefix stripping (`[tag]`, `Scenario:`) runs first, exactly as before.
+  - Greedy `[\s\S]*` anchored from the first `(` to the string-final `)` removes a whole trailing
+    parenthetical group including nested pairs and line breaks (a Gherkin step may itself contain parentheses).
+  - **Additive only** — the four existing comparisons are untouched and still evaluated, so a title
+    that legitimately ends in `(...)` still matches on its raw form (R2); an id that is *only* a
+    parenthetical strips to empty and matches nothing, as before.
+  - No parser change (`task-verdict.ts` `extractAcceptanceCriteria` still takes `cells[0]` verbatim):
+    the matcher-side fix repairs every verdict artifact already on disk without re-derivation (R1).
 
+- `packages/app/tests/services/feature-check.test.ts` — six new tests:
+  - `verdictRowsMatchScenarios` (direct matcher): trailing-Gherkin-body row matches (incl. `Scenario:` prefix + bracket tag + multi-line nested body); legitimately parenthesized title matches unmodified; body naming a DIFFERENT scenario still fails (no over-matching).
+  - `setupScenarioSatisfaction` (end-to-end gate): trailing-body MET row verifies; bracket-tagged multi-line body verifies; parenthesized title verifies; different-scenario body still emits `L4.scenario-unverified`; E6/0558 regression — reconstructed pre-surgery `R4` AC row id (title + embedded Gherkin body) verifies via the acceptanceCriteria path without any answer-file edit.
+
+- `plugins/sp/skills/spur-dev/references/ac-style-guide.md` — new subsection under "Four accepted id forms": an AC row id is exactly the scenario title (no Gherkin body appended); the verifier preserves ids verbatim and the gate's trailing-parenthetical strip is a backstop for existing artifacts, not a license to append bodies (R3).
+
+Rationale: the mismatch lived in the matcher, not the parser — verdict artifacts are evidence and must not be rewritten at parse time. Fixing `rowMatchesScenario` (the single matcher every caller routes through: `isScenarioVerified`, `verdictRowsMatchScenarios`) repairs existing artifacts for free. No new API, no exported symbol, no new file, no shared normalization helper (one call site).
 ### Testing
+**Re-verify (--force, focus all) 2026-08-15 — Verdict: PASS**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
 
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons (`:935-941`), additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:200-207` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 8 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression). |
+| R2 | MET | Additive-only design confirmed by re-read: the four pre-existing comparisons are intact and evaluated; legitimately parenthesized titles match on the raw form — asserted by the 0561 R2 tests in both the e2e and direct-matcher blocks (pass this run). |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116` — subsection "The id is exactly the scenario title — no Gherkin body appended" present (re-read this run): id = scenario title exactly, body never appended, verifier-verbatim + gate-backstop rationale. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R1 — an AC row id with an embedded Gherkin body still verifies its scenario | MET | test | 0561-block e2e + direct-matcher tests pass this run (8/8); 0 `L4.scenario-unverified` asserted |
+| Scenario: R1 — the repair applies to artifacts already on disk | MET | test | E6/0558 regression test (verbatim-faithful reconstructed R4 row id) passes this run — shape-equivalent per the documented deleted-worktree caveat |
+| Scenario: R2 — a legitimately parenthesized scenario title still matches | MET | test | R2 tests in both blocks pass this run |
+| Scenario: R3 — the answer-file contract names the rule | MET | static-ref | `ac-style-guide.md:116` subsection re-read this run |
+
+**Design conformance:** frozen shape implemented exactly (`bodyStripped` on `stripped` only, greedy `[\s\S]*`, additive, no new API/exported symbol/file, no shared helper); anti-patterns all held (no parser normalization, non-additive replacement, interior stripping, or helper abstraction); the Q2 accepted ceiling (interior-parenthetical + appended body still unverified) is documented and unchanged. Full suite this run: 96 pass / 0 fail / 352 assertions.
+
+**SECUA Review**
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | efficiency | `packages/app/src/services/feature-check.ts:935` | Greedy `[\s\S]*` is O(n²)-worst-case on adversarial ids without a trailing `)`; row ids are short sentences — negligible, as the original review noted. No blocker/major/minor findings. |
+
+Coverage: N/A (verdict-based; targeted 8/8 + suite 96/96 re-run this turn).
+Fix-pass writes: `.spur/run/0561-verdict.json` (regenerated this run).
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Evidence | Disposition |
+|----------|---------|----------|-------------|
+| P1 | None | — | — |
+| P2 | None | — | — |
+| P3 | None | — | — |
+| P4 | Solution doc count drift: "six new tests" vs 8 actually added (5 in `setupScenarioSatisfaction` e2e block, 3 in `verdictRowsMatchScenarios` direct-matcher block) | `feature-check.test.ts` diff | Fix doc count on next touch |
+| P4 | E6/0558 regression AC is verified by a *reconstructed* fixture, not the literal pre-surgery `.spur/run/0558-verdict.json` — the artifact lived in the deleted sibling worktree `spur-new-runall-e6-e91f`. Reconstruction is verbatim-faithful (R4 title + Given/When/Then copied from `docs/features/E6_run-to-session-correlation-and-cost-path-repair.md:87-90`), so "repair applies to artifacts already on disk" holds by shape-equivalence; a byte-for-byte artifact test would need the run dir restored | `feature-check.test.ts` "0561 R1 regression (E6/0558)" | Accept (fixture is the only viable path in this repo) |
+| P4 | No test pins the new alias+trailing-body path (`AC-1 (Given …)` → `bodyStripped === sc.alias`). This alias comparison is behavior newly introduced by the additive change; a one-line direct-matcher assertion would guard it. Over-match safety for the title path is already covered by the different-scenario tests | `feature-check.ts:936` (`bodyStripped === sc.alias`); `feature-check.test.ts` 0561 R1 different-scenario tests | Recommend adding on next touch (low value, cheap) |
 
+
+- `bun test tests/services/feature-check.test.ts` in `packages/app` → **96 pass / 0 fail** (includes all 8 new 0561 tests).
+- `bun run typecheck` in `packages/app` → clean.
+- Implementation matches the frozen design shape exactly: `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()`, applied to `stripped` (prefix stripping first), greedy `[\s\S]*` handles nested pairs + line breaks, **additive** (four existing comparisons untouched, two added) — R2 (legitimately parenthesized title matches on raw form) and the no-over-match guard (different-scenario body still fails) are both asserted by tests in both suites.
+- R3: `ac-style-guide.md` new subsection accurately states the id contract, the verbatim-preservation rationale, and the backstop nature of the gate's strip; consistent with the "Four accepted id forms" section above it.
+
+
+- **Q2 accepted ceiling** (documented in task Q&A): a title that legitimately ends in `(...)` *and* has a body appended (`handles (a) and (b) cases (Given …)`) strips from the first `(`, so neither raw nor stripped form matches → still reported `L4.scenario-unverified`, same as before the fix. Accepted — never observed; R3 guidance is the prevention half. Not a regression.
+- Regex cost is O(n²)-worst-case per row on ids without a trailing `)` (greedy backtracking), but row ids are short sentences; negligible.
+- No parser change to `task-verdict.ts` — verdict artifacts remain evidence; matcher-side fix repairs on-disk artifacts without re-derivation, as required by R1.
+
+
+**PASS** — approve. All three requirements (R1, R2, R3) are implemented, tested (8 new tests, all green), and consistent with the task's frozen design and anti-pattern constraints. Remaining items are P4 documentation/test-polish notes only.
 ### References
 - Code (fix target): `packages/app/src/services/feature-check.ts:923-935` (`rowMatchesScenario`) · `:681-696` (`isScenarioVerified`)
 - Code (parser, intentionally unchanged): `packages/app/src/services/task-verdict.ts:200-207` (`extractAcceptanceCriteria` — row id taken verbatim from `cells[0]`)
@@ -156,3 +220,7 @@ finding at 17:23.
 - Session log: `~/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-08-14T05-07-58-417Z_*.jsonl` (17:23:32-17:26:24)
 - Prior art: task 0340 (feature check strict AC satisfaction) · `docs/design/feature-check-strict-ac-satisfaction.md`
 ### History
+- 2026-08-15T16:24:48.789Z backlog → todo (system)
+- 2026-08-15T16:29:34.771Z todo → wip (system)
+- 2026-08-15T16:36:10.964Z wip → testing (system)
+- 2026-08-15T16:36:15.756Z testing → done (system)
