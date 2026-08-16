@@ -49,7 +49,7 @@ roles:
     stages: [implement, test, wrap]
   - id: reviewer
     tier: capable-1
-    commands: [dev-verify, dev-verifyall, dev-review, dev-dogfood, rule-scan, dev-find-conflict, dev-find-issue]
+    commands: [dev-verify, dev-verifyall, dev-review, dev-pr-review, dev-dogfood, rule-scan, dev-find-conflict, dev-find-issue]
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
@@ -81,11 +81,13 @@ must not sit below the highest `min_tier` among its folded stages.
   `refine`, `brainstorm`.
 
 **Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands;
-the live `plugins/sp/commands/` directory has 37. The six additional commands were placed by the
+the live `plugins/sp/commands/` directory has 39. The six additional commands were placed by the
 same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is planning-side
 frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`
-are audits/analysis → reviewer (same reasoning as `rule-scan`).
+are audits/analysis → reviewer (same reasoning as `rule-scan`). Later additions: `dev-history-load`
+is mechanical load+analyze orchestration → scribe; `dev-pr-review` is review orchestration —
+driving the external PR review and triaging its findings folds the `review` stage → reviewer.
 
 **Consistency is a test, not a convention.** `plugins/sp/tests/roles.test.ts` parses this YAML and
 asserts the tier-distinctness, command closure, stage-floor, and boundary invariants against the

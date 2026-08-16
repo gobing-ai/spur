@@ -44,8 +44,8 @@ describe('scaffold-manifest', () => {
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
         // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates
-        // + 1 brainstorm task template + 1 AGENTS.md (root) = 35
-        expect(SCAFFOLD_MANIFEST.length).toBe(35);
+        // + 1 brainstorm task template + 1 AGENTS.md (root) + 1 pr-review workflow = 36
+        expect(SCAFFOLD_MANIFEST.length).toBe(36);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {

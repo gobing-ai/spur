@@ -1082,6 +1082,7 @@ config/
     feature-lifecycle.yaml          # feature status state-machine (ADR-022)
     task-pipeline.yaml              # task execution pipeline with guards
     planning-pipeline.yaml          # front-half planning pipeline (task 0088); companions sp:spur-plan
+    pr-review.yaml                  # GitHub Codex PR-review spine (/sp:dev-pr-review; skill sp:pr-reviewing)
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
   corpus-baseline.json              # accepted errors for `spur task check --corpus` / `bun run corpus-check` (ADR-050)

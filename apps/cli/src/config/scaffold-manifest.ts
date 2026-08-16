@@ -51,6 +51,8 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     // Idea + wrap-up pipelines (task 0167) — backing workflows for /sp:dev-idea, /sp:dev-wrap, /sp:dev-wrapall
     { source: 'workflows/idea-pipeline.yaml', target: 'workflows/idea-pipeline.yaml' },
     { source: 'workflows/wrapup-pipeline.yaml', target: 'workflows/wrapup-pipeline.yaml' },
+    // PR-review spine — backing workflow for /sp:dev-pr-review (skill sp:pr-reviewing)
+    { source: 'workflows/pr-review.yaml', target: 'workflows/pr-review.yaml' },
     // Section matrix under .spur/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
     // Task templates under .spur/templates/task/

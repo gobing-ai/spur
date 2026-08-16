@@ -345,11 +345,11 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('38 command files exist with unique basenames', () => {
+    test('39 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(38);
+        expect(files.length).toBe(39);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(38);
+        expect(names.size).toBe(39);
     });
 });
 
@@ -430,9 +430,9 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 38 commands', () => {
+    test('validate() reports zero violations across all 39 commands', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(38);
+        expect(result.fileCount).toBe(39);
         expect(result.violations).toEqual([]);
     });
 });

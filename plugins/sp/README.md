@@ -103,6 +103,7 @@ list this README is checked against.
 | `dev-next`          | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
 | `dev-run`           | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)                               |
 | `dev-review`        | Multi-dimensional review for a task or path — functional requirements traceability, SECUA framework, and architectural depth                    |
+| `dev-pr-review`     | GitHub Codex PR review — prepare/reuse a PR, request `@codex review`, collect findings, validate/fix/re-review (fix mode); workflow-backed spine |
 | `dev-verify`        | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence         |
 | `dev-unit`          | Generate or extend tests until the unit target is met                                                                                           |
 | `dev-wrap`          | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup                                  |
@@ -314,6 +315,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-find-issue`                                                                                        |
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
+| `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 
 Each skill directory contains:
@@ -336,11 +338,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**37 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**39 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `dev-*`      | 31    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*`      | 33    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
 | `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
 | `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
@@ -350,7 +352,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 37 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 39 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -358,7 +360,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 37 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 39 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 

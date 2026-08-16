@@ -1,0 +1,324 @@
+# PR-review workflow: deterministic spine for /sp:dev-pr-review (skill sp:pr-reviewing).
+# Authored for the @gobing-ai/ts-dual-workflow-engine state-machine schema
+# (initialState / states[].id / onEnter / top-level transitions), same family as
+# basic.yaml / task-pipeline.yaml. Seeded into projects by `spur init` (scaffold manifest).
+#
+# Shape: preflight → hygiene → precheck → push → ensure-pr → request → wait → collect → done
+#        (soft probes everywhere: red gates route to `failed`/`pending` via transitions,
+#         never a raw lifecycle abort — same reliability contract as basic.yaml)
+#
+# This YAML is the SSOT for the review spine's state order and guards. Every state shells
+# out to plugins/sp/scripts/pr-reviewing.ts (the tested deterministic core); no gh/git
+# logic lives in this file. All model-bearing work — finding triage, `fix` mode, `rules`
+# mode — stays in the sp:pr-reviewing skill and never enters this machine.
+#
+# Non-negotiable: the external review goes through the GitHub PR + an `@codex review`
+# comment. Never substitute a local Codex review mechanism.
+#
+# Vars (override per run: --vars '{"mode":"submit","focus":"migration safety"}'):
+#   mode             — full (default) | submit | rerun
+#                        full:   dedupe an up-to-date Codex review, else request + wait + collect
+#                        submit: request and stop at `pending` (no wait)
+#                        rerun:  request with --force even when HEAD is already reviewed
+#   baseBranch       — base for a newly created PR (default: existing PR base, else repo default)
+#   focus            — extra review focus appended to the @codex request
+#   noWait           — "true" returns pending right after the request instead of polling
+#   waitTimeoutSec   — poll budget for Codex output (default 600)
+#   waitIntervalSec  — poll interval (default 30; do not poll aggressively)
+#   preReviewCmd     — project fast check run before requesting (empty = skipped).
+#                      TRUSTED CONFIG ONLY — executed via `sh -c` (task 0436 SECUA residual).
+#                      Never interpolate untrusted operator/LLM input into it.
+#   __runId          — injected by WorkflowAppService.run(); scopes .spur/run artifacts.
+
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+name: pr-review
+kind: state-machine
+description: GitHub Codex PR-review spine — preflight → hygiene → precheck → push → ensure-pr → request → wait → collect
+iterationBound: 16
+initialState: preflight
+terminalStates:
+  - done
+  - pending
+  - failed
+failureStates:
+  - failed
+vars:
+  mode: 'full'
+  baseBranch: ''
+  focus: ''
+  noWait: 'false'
+  waitTimeoutSec: '600'
+  waitIntervalSec: '30'
+  preReviewCmd: ''
+  __runId: ''
+
+states:
+  - id: preflight
+    description: >
+      Soft probe: git/gh/repo checks (detached HEAD, dirty tree, gh auth, GitHub remote).
+      Writes PASS|FAIL to .spur/run/${vars.__runId}-pr-preflight.status; always exit 0.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-preflight.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts preflight --json > ".spur/run/$__runId-pr-context.json";
+            rc=$?; set -e &&
+            if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: hygiene
+    description: >
+      Submission sanity scan of base...HEAD: secrets/.env/conflict markers BLOCK the run;
+      debug residue only WARNs. Not a replacement for the independent Codex review.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-hygiene.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts hygiene --base "$baseBranch" --json
+            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-hygiene.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: precheck
+    description: >
+      Optional project fast check (vars.preReviewCmd) before spending a review request.
+      Empty command records SKIP; a red check stops the run before request (fail loud).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-precheck.status" &&
+            if [ -z "$preReviewCmd" ]; then
+              printf 'SKIP\n' > "$STATUS_FILE";
+            else
+              set +e; ( $preReviewCmd ); rc=$?; set -e;
+              if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi;
+            fi &&
+            exit 0
+
+  - id: push
+    description: >
+      Publish the branch (normal push only, never force; sets upstream when missing).
+      A PR reviews pushed commits only.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-push.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts push --json --status-file "$STATUS_FILE"
+            > ".spur/run/$__runId-pr-push.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: ensure-pr
+    description: Find or create the GitHub PR for the current branch — never a duplicate.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-ensure.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts ensure-pr --base "$baseBranch" --json
+            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: request
+    description: >
+      Post the `@codex review` request (per-HEAD dedupe unless mode=rerun forces).
+      Records the request under .spur/run/${vars.__runId}-pr-request.json.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-request.status" &&
+            FORCE_FLAG="" &&
+            if [ "$mode" = "rerun" ]; then FORCE_FLAG="--force"; fi &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts request --focus "$focus" $FORCE_FLAG --json
+            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-request.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: wait
+    description: >
+      Bounded poll for Codex output on the current pushed HEAD. Timeout records TIMEOUT
+      and routes to `pending` — never a failure (collect later with /sp:dev-pr-review collect).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-wait.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts wait --timeout "$waitTimeoutSec" --interval "$waitIntervalSec"
+            --json --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-wait.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            exit 0
+
+  - id: collect
+    description: Normalize and report the latest Codex findings for the current HEAD.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-pr-collect.status" &&
+            set +e &&
+            bun plugins/sp/scripts/pr-reviewing.ts collect --json
+            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-findings.json";
+            rc=$?; set -e &&
+            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
+            cat ".spur/run/$__runId-pr-findings.json" &&
+            exit 0
+
+  - id: done
+    description: Terminal — review collected; findings artifact at .spur/run/${vars.__runId}-pr-findings.json
+  - id: pending
+    description: Terminal — review requested (or timed out) but not yet collected; run /sp:dev-pr-review collect later
+  - id: failed
+    description: Terminal — a gate went red; the stage .status/.json artifacts under .spur/run name the blocker
+
+transitions:
+  - from: preflight
+    to: hygiene
+    description: Repo, gh auth, and clean tree verified
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-preflight.status 2>/dev/null)" = PASS'
+  - from: preflight
+    to: failed
+    description: Preflight red (detached HEAD, dirty tree, gh auth, no GitHub remote) — stop before any publishing
+    guard:
+      kind: always
+
+  - from: hygiene
+    to: precheck
+    description: Clean or warn-only — warnings ride along to the report
+    guard:
+      kind: shell
+      options:
+        command: 'grep -qE "^(PASS|WARN)$" .spur/run/$__runId-pr-hygiene.status 2>/dev/null'
+  - from: hygiene
+    to: failed
+    description: BLOCK (secrets/.env/conflict markers) or probe failure — never submit a tainted diff
+    guard:
+      kind: always
+
+  - from: precheck
+    to: push
+    description: Project fast check passed or was skipped
+    guard:
+      kind: shell
+      options:
+        command: 'grep -qE "^(PASS|SKIP)$" .spur/run/$__runId-pr-precheck.status 2>/dev/null'
+  - from: precheck
+    to: failed
+    description: Project checks red — do not spend a review request on code that fails its own gate
+    guard:
+      kind: always
+
+  - from: push
+    to: ensure-pr
+    description: Branch published (or already up to date)
+    guard:
+      kind: shell
+      options:
+        command: 'grep -qE "^(PUSHED|UP_TO_DATE)$" .spur/run/$__runId-pr-push.status 2>/dev/null'
+  - from: push
+    to: failed
+    description: Push rejected (e.g. non-fast-forward) — report; never force-push as a workaround
+    guard:
+      kind: always
+
+  - from: ensure-pr
+    to: request
+    description: PR found or created
+    guard:
+      kind: shell
+      options:
+        command: 'grep -qE "^(FOUND|CREATED)$" .spur/run/$__runId-pr-ensure.status 2>/dev/null'
+  - from: ensure-pr
+    to: failed
+    description: No reviewable delta or PR creation failed — report the actual git/GitHub state
+    guard:
+      kind: always
+
+  # Declaration order matters: ALREADY_REVIEWED routes straight to collect (full mode dedupe);
+  # submit/noWait stop at pending; everything else waits.
+  - from: request
+    to: collect
+    description: Current HEAD already carries a Codex review — collect instead of duplicating
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = ALREADY_REVIEWED'
+  - from: request
+    to: pending
+    description: mode=submit or --no-wait — request posted, return immediately
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = REQUESTED && { test "$mode" = "submit" || test "$noWait" = "true"; }'
+  - from: request
+    to: wait
+    description: Request posted — poll for the result
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = REQUESTED'
+  - from: request
+    to: failed
+    description: Request failed (no PR, gh error) — report the preserved error
+    guard:
+      kind: always
+
+  - from: wait
+    to: collect
+    description: Codex output on the current HEAD found
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-wait.status 2>/dev/null)" = FOUND'
+  - from: wait
+    to: pending
+    description: Poll budget exhausted — pending, not failed
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-pr-wait.status 2>/dev/null)" = TIMEOUT'
+  - from: wait
+    to: failed
+    description: Poll probe itself failed
+    guard:
+      kind: always
+
+  - from: collect
+    to: done
+    description: Findings collected (CLEAN/NONE/FINDINGS all complete the run)
+    guard:
+      kind: shell
+      options:
+        command: 'grep -qE "^(FINDINGS|NONE|CLEAN)$" .spur/run/$__runId-pr-collect.status 2>/dev/null'
+  - from: collect
+    to: failed
+    description: Collect probe failed
+    guard:
+      kind: always
