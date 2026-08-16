@@ -41,7 +41,7 @@ version: 1
 roles:
   - id: scribe
     tier: cheap
-    commands: [dev-gitmsg, dev-handover, dev-daily, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
+    commands: [dev-gitmsg, dev-handover, dev-daily, dev-history-load, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
     stages: [changelog]
   - id: coder
     tier: standard
@@ -53,7 +53,7 @@ roles:
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
-    commands: [dev-plan, dev-refine, dev-brainstorm, dev-idea, dev-runall, dev-parallel, dev-next, dev-arch, dev-refineall, dev-find-next, dev-featurechange]
+    commands: [dev-plan, dev-refine, dev-brainstorm, dev-idea, dev-runall, dev-parallel, dev-next, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
     stages: [plan, refine, brainstorm]
 ```
 
@@ -83,7 +83,7 @@ must not sit below the highest `min_tier` among its folded stages.
 **Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands;
 the live `plugins/sp/commands/` directory has 37. The six additional commands were placed by the
 same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is planning-side
-frontier work → planner; `dev-featurechange` is planning-half corpus surgery on the feature tree →
+frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`
 are audits/analysis → reviewer (same reasoning as `rule-scan`).
 

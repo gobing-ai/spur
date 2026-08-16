@@ -204,13 +204,13 @@ Select an execution mode: `full|implement` on `dev-run` (full pipeline vs implem
 `briefing|structure|architecture|design|full` on `dev-reverse`. Mode selection is explicit and orthogonal
 to `--next`.
 
-### `--task [<feature-id>]` — seed a task from the current result
+### `--task <wbs>` — task work or task narrowing
 
 **Anchor:** `#flag-task`.
 
-Connect the current command's result to task work (`dev-brainstorm`, `dev-debug`, `dev-dogfood`,
-`dev-find-next`). The optional value and the effect are per-command — this flag is a family, not one
-behavior:
+Connect the current command's result to task work, or narrow a history analysis to one task
+(`dev-brainstorm`, `dev-debug`, `dev-dogfood`, `dev-find-next`, `dev-history-load`). The value and
+the effect are per-command — this flag is a family, not one behavior:
 
 - `dev-brainstorm` `[<feature-id>]` — **creates** one task from the chosen approach, landing at
   `todo` ready for refine. Optional feature id scopes it.
@@ -221,6 +221,7 @@ behavior:
   id names the target instead of offering rank 1.
 - `dev-debug` `[<wbs>]` — **attaches** findings to an existing task. Optional WBS names it.
 - `dev-dogfood` (no value) — **records** run outcomes against the task under test.
+- `dev-history-load` `<wbs>` — narrows the `analyze` step to that task's messages.
 
 ### `--since <ref>` — lower bound on a range
 
@@ -244,6 +245,15 @@ Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`):
 
 Upper bound on a range: a git ref on `dev-changelog` (defaults to `HEAD`), or an ISO date on
 `dev-find-issue` (defaults to now).
+
+### `--source <source>` — agent source to scope the operation
+
+**Anchor:** `#flag-source`.
+
+Scope the operation to one agent source (`dev-find-issue`, `dev-history-load`): one of
+`pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy` (or `all`). On
+`dev-history-load` the value is forwarded to **both** `spur history import` and
+`spur history analyze`; on `dev-find-issue` it narrows the report scan to that source's sessions.
 
 ### `--status <s>` — filter by task status
 

@@ -302,11 +302,54 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('37 command files exist with unique basenames', () => {
+    // Regression for the dev-feature-change defect: `description: >-` with the next
+    // keys unindented folds `role:` into the block scalar, so a real YAML consumer
+    // (superskill install → pi) sees an empty description while the regex gate saw
+    // ">-". Gate (b) now re-parses with a real YAML parser.
+    test('frontmatter whose block scalar swallows following keys is rejected', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const dir = join(tmp, 'plugins', 'sp', 'commands');
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(
+                join(dir, 'bad-yaml.md'),
+                [
+                    '---',
+                    'description: >-',
+                    'role: planner',
+                    '  Folded text that YAML attaches to role, not description',
+                    'argument-hint: "[--dry-run]"',
+                    'allowed-tools: ["Bash"]',
+                    '---',
+                    '',
+                    '# Bad Yaml',
+                    '',
+                    '## Usage',
+                    '',
+                    '/sp:bad-yaml',
+                    '',
+                    '## Implementation',
+                    '',
+                    '- run it',
+                    '',
+                ].join('\n'),
+            );
+            const result = validate(tmp);
+            expect(
+                result.violations.some(
+                    (v) => v.gate === 'b' && /description is empty after YAML parsing/.test(v.message),
+                ),
+            ).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('38 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(37);
+        expect(files.length).toBe(38);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(37);
+        expect(names.size).toBe(38);
     });
 });
 
@@ -387,9 +430,9 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 37 commands', () => {
+    test('validate() reports zero violations across all 38 commands', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(37);
+        expect(result.fileCount).toBe(38);
         expect(result.violations).toEqual([]);
     });
 });

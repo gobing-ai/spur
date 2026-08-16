@@ -107,7 +107,7 @@ list this README is checked against.
 | `dev-unit`          | Generate or extend tests until the unit target is met                                                                                           |
 | `dev-wrap`          | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup                                  |
 | `dev-refresh`       | Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync                                                            |
-| `dev-featurechange` | Restructure feature tree from a mapping file — dry-run/apply via `spur feature move`, task edges, root `docs/*.md` only                         |
+| `dev-feature-change` | Restructure feature tree from a mapping file — dry-run/apply via `spur feature move`, task edges, root `docs/*.md` only                         |
 
 #### Lifecycle — batch and parallel
 
@@ -126,6 +126,7 @@ list this README is checked against.
 | `dev-handover`      | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps                                                                      |
 | `dev-debug`         | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests                                                                      |
 | `dev-daily`         | Generate a daily summary report from agent usage data, git history, and notes                                                                                                                     |
+| `dev-history-load`  | On-demand cumulative history load + narrowed analyze — import (checkpoint-resume) then analyze, optionally by session/task/window, with optional forensics render                                     |
 | `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |
 | `dev-find-issue`    | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes                                                 |
 | `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
