@@ -49,6 +49,18 @@ agent:
   # naming both accepted sets.
   default: coder
 
+  # Role → tier map (SSOT: plugins/sp/references/roles.md, bundled with the CLI
+  # — it is NOT a config key; a second map here would drift). Resolution:
+  # role → tier → cheapest USABLE executor whose tier >= the role's tier,
+  # climbing the ladder across gaps. Declare at least one usable executor at or
+  # above each rung or that role fails loudly at dispatch:
+  #   scribe=cheap · coder=standard · reviewer=capable-1 · planner=capable-2
+  # Stage floors (stage-registry model_policy): changelog=cheap;
+  # implement/test/wrap/review/refine/brainstorm=standard; verify/dogfood=capable-1;
+  # plan=capable-2. A stage's fallback ladder (auth / resource-exhaustion /
+  # gate-fail) only advances when a higher rung has a usable executor — an empty
+  # rung turns a quota failure into a hang.
+
   # Canonical coding-agent ids (ts-ai-runner DISPLAY_ORDER, 0.4.8+):
   #   claude, codex, gemini, pi, omp, opencode, antigravity-cli,
   #   openclaw, hermes, grok
@@ -56,32 +68,49 @@ agent:
   # auth-status verb).
 
   # Named executor profiles (ADR-033 / 0343). Each pairs a canonical agent with
-  # an optional opaque model override and an explicit capability tier.
+  # an explicit model override and an explicit capability tier.
+  # `model` is pinned on every entry: omitting it defers to the agent CLI's own
+  # default, which drifts with CLI upgrades and account state — pin what your
+  # CLI would resolve today (`grok models`, omp config.yml modelRoles.default,
+  # ~/.codex/config.toml, ~/.claude.json). The ids below are working examples,
+  # not vendor defaults — re-pin for your accounts.
   # Live tiers: cheap | standard | capable-1 | capable-2 | capable-3
   # (1=low quality within capable, 3=high). DECLARE tier — inference never
   # invents capable-2/3. Stage routing starts on the cheapest executor whose
   # tier >= min_tier; same exact tier ties break by array order.
   # Legacy bare `capable` is accepted at runtime as synonym for capable-1.
   executors:
+    # cheap rung is optional: with none declared, scribe-role work starts one
+    # rung up at the cheapest standard executor. Add one when transcript-heavy
+    # mechanical commands (changelog/gitmsg/handover) get noisy on cost.
+    # - name: minimax
+    #   agent: omp
+    #   model: minimax/MiniMax-M3
+    #   tier: cheap
     - name: omp
       agent: omp
+      model: opencode/deepseek-v4-flash
       tier: standard
     # - name: omp-zai
     #   agent: omp
     #   model: zai/glm-5.2
     #   tier: standard
+    - name: pi
+      agent: pi
+      model: "k3"
+      tier: capable-1
     - name: grok
       agent: grok
+      model: grok-4.6
       tier: capable-2
     - name: claude
       agent: claude
+      model: k3
       tier: capable-3
     - name: codex
       agent: codex
+      model: gpt-5.6
       tier: capable-3
-    # - name: pi
-    #   agent: pi
-    #   tier: capable-1
 
   # `default-by-phase` is a REMOVED (0452). Prefer
   # executor `tier` + stage-registry model_policy. When present, a matching

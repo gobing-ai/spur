@@ -29,7 +29,22 @@ bootstrap:
 
 # ── Spur app section (validated by spurConfigSchema in @gobing-ai/spur-config) ──
 agent:
-  default: omp-dsv4-flash-opencode
+  # Role-based default (0542): a role id selects its tier's cheapest eligible
+  # executor. An executor name here only works through the agent-default-executor
+  # transition shim (warns once; removal condition is this file naming no executor).
+  default: coder
+
+  # Role → tier map (SSOT: plugins/sp/references/roles.md, bundled with the CLI —
+  # it is NOT a config key; a second map here would drift). Resolution:
+  # role → tier → cheapest USABLE executor whose tier >= the role's tier,
+  # climbing the ladder across gaps. Keep at least one usable executor at or
+  # above each rung or that role fails loudly at dispatch:
+  #   scribe=cheap · coder=standard · reviewer=capable-1 · planner=capable-2
+  # Stage floors (stage-registry model_policy): changelog=cheap;
+  # implement/test/wrap/review/refine/brainstorm=standard; verify/dogfood=capable-1;
+  # plan=capable-2. A stage's fallback ladder (auth / resource-exhaustion /
+  # gate-fail) only advances when a higher rung has a usable executor — an empty
+  # rung turns a quota failure into a hang.
 
   # ── Executors (ADR-033 adaptive model routing) ──
   # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a
@@ -37,6 +52,12 @@ agent:
   # `deepseek-v4-pro` matched `\bpro\b` and became the only `capable` executor,
   # while `claude`/`codex`/`grok` fell to `standard` and were excluded from every
   # capable-tier stage.
+  #
+  # `model` is pinned on every entry. Omitting it defers to the agent CLI's own
+  # default, which drifts with CLI upgrades and account state — an unpinned
+  # executor silently changes behavior when the vendor changes the default.
+  # Pin what the CLI would resolve today (`grok models`, omp config.yml
+  # modelRoles.default, ~/.codex/config.toml, ~/.claude.json).
   #
   # Selection: a stage takes the CHEAPEST executor whose tier >= its `min_tier`
   # (cheap=1 < standard=2 < capable-1=3 < capable-2=4 < capable-3=5). Sub-tiers
@@ -52,6 +73,7 @@ agent:
     # standard — implementation, tests, wrap-up (omp first: the working default)
     - name: omp
       agent: omp
+      model: opencode/deepseek-v4-flash
       tier: standard
     # - name: omp-zai
     #   agent: omp
@@ -102,23 +124,25 @@ agent:
     # capable-1/2/3 — planning, verification, dogfooding (0343)
     # 1 = low output quality within the capable band, 3 = high. Declare
     # explicitly — inference never invents capable-2/3.
-    # - name: pi-k3
-    #   agent: pi
-    #   model: "k3[1m]"
-    #   tier: capable-1
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-flash
       tier: capable-1
-    # - name: grok
-    #   agent: grok
-    #   tier: capable-2
-    # - name: claude
-    #   agent: claude
-    #   tier: capable-3
+    - name: pi-k3
+      agent: pi
+      model: "k3"
+      tier: capable-1
+    - name: grok
+      agent: grok
+      model: grok-4.6
+      tier: capable-2
     - name: codex-sol
       agent: codex
       model: gpt-5.6-sol
+      tier: capable-3
+    - name: claude
+      agent: claude
+      model: k3
       tier: capable-3
 
   # `default-by-phase` removed from schema (0452). Was a
