@@ -137,7 +137,7 @@ list this README is checked against.
 | `dev-arch`          | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors                   |
 | `dev-reverse`       | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation                                              |
 | `dev-gitmsg`        | Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit                                                                                         |
-| `dev-gtd`           | Get things done — quality gate (auto-fix) → act CI simulation → conventional commit → push → gh verify in one flow                                                                                |
+| `dev-gtd`           | Get things done — quality gate (auto-fix) → conventional commit → push → gh verify in one flow; optional act CI simulation via `--act`                                                          |
 | `dev-changelog`     | Generate changelog from git commits                                                                                                                                                               |
 
 #### Rule authoring

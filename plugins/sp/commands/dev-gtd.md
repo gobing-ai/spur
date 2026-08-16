@@ -1,15 +1,15 @@
 ---
-description: Get things done — quality gate → fix → act CI simulation → commit → push → gh verify in one flow
+description: Get things done — quality gate → fix → commit → push → gh verify in one flow (optional act CI simulation via --act)
 role: coder
-argument-hint: "[<quality-gate-command>] [--dry-run] [--skip-act] [--no-push] [--no-verify] [--scope <path>] [--max-retry <n>]"
+argument-hint: "[<quality-gate-command>] [--dry-run] [--act] [--no-push] [--no-verify] [--scope <path>] [--max-retry <n>]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
 # Dev GTD
 
 Self-contained end-to-end delivery command: local quality gate (auto-fix via `/sp:dev-fixall`),
-local CI/CD simulation via `act`, conventional commit message generation, commit, push, and
-GitHub push-success verification via `gh`. Designed to stand alone (no backing skill); once mature
+optional local CI/CD simulation via `act` (`--act` only), conventional commit message generation,
+commit, push, and GitHub push-success verification via `gh`. Designed to stand alone (no backing skill); once mature
 it supersedes `/sp:dev-gitmsg` and is absorbed into the shared command structure.
 
 ## Argument Flags
@@ -18,7 +18,7 @@ it supersedes `/sp:dev-gitmsg` and is absorbed into the shared command structure
 | --- | --- | --- |
 | `<quality-gate-command>` | Local quality gate to run first; on failure, invoke `/sp:dev-fixall "<cmd>"` to fix all issues automatically. | `bun run check` |
 | `--dry-run` | Generate the git message and plan only — no commit, push, or gh verify. | off |
-| `--skip-act` | Skip the local `act` CI/CD simulation step. | off |
+| `--act` | Run local `act` CI/CD simulation before commit (heavy: launches Docker). Default off — stage 6 `gh` verify covers real CI post-push. Reach for it on workflow edits, dependency bumps, infra changes. Independent of `--dry-run`: `--dry-run --act` still runs the simulation. | off |
 | `--no-push` | Commit but do not git push or gh-verify. | off |
 | `--no-verify` | Push but skip the `gh` push-success verification. | off |
 | `--scope <path>` | Scope the commit-message diff analysis to a path. | all staged changes |
@@ -28,7 +28,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-gtd [<quality-gate-command>] [--dry-run] [--skip-act] [--no-push] [--no-verify] [--scope <path>] [--max-retry <n>]
+/sp:dev-gtd [<quality-gate-command>] [--dry-run] [--act] [--no-push] [--no-verify] [--scope <path>] [--max-retry <n>]
 
 ## Implementation
 
@@ -41,8 +41,9 @@ default `bun run check`. Run it. If it exits non-zero, invoke `/sp:dev-fixall "<
 re-run the gate. Loop until the gate is clean or `--max-retry` is exhausted. Report what was fixed
 per file.
 
-**2 — Local CI/CD simulation via `act`.** Confirm Docker is running (`docker info`). On macOS the
-repo uses OrbStack — if the default context is not ready, use
+**2 — Local CI/CD simulation via `act` (opt-in).** Skip this stage entirely unless `--act` is
+given. When `--act` is given: confirm Docker is running (`docker info`). On macOS the repo uses
+OrbStack — if the default context is not ready, use
 `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`. Run
 `act -W .github/workflows/ci.yml -j verify` (or the repo's `bun run verify-gha-ci`); prefer
 `--container-architecture` matching your host when the runner pulls a foreign platform. If a step
@@ -57,10 +58,8 @@ If the build failure includes `TS2307: Cannot find module` on a workspace packag
 resolve Bun workspace packages because Bun does not create `node_modules/@scope/` symlinks.
 The real GitHub CI runner passes. **Do not** modify the build infrastructure to work around this
 `act`-specific issue. Instead, emit a clear message:
-`⚠ act CI simulation failed on workspace resolution — this is a container-environment artifact. Re-run with --skip-act to skip this step.`
-Then stop the run (this stage failed). The operator can use `--skip-act` to proceed.
-
-Skip this stage entirely when `--skip-act` is given.
+`⚠ act CI simulation failed on workspace resolution — this is a container-environment artifact. Re-run without --act to skip this step (it is opt-in).`
+Then stop the run (this stage failed). The operator can proceed by re-running without `--act`.
 
 **3 — Generate a conventional commit message.** Follow the gitmsg procedure (the same one
 `/sp:dev-gitmsg` runs). Run `git diff --cached --stat` (add `-- <path>` when `--scope` is given) for
