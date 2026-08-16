@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T17:40:22.860Z"
-updated_at: "2026-08-16T20:22:25.838Z"
+updated_at: "2026-08-16T21:02:06.902Z"
 ---
 
 ## 0571. workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates
@@ -98,15 +98,50 @@ Scenario: R3 — idea-pipeline feature-create completes end to end
 - Spur-side proof: probe test `apps/cli/tests/workflow/setvars-probe.test.ts` (same-state child env + next-state `${vars.X}` template + guard visibility) and idea-pipeline e2e run `63d57a3e` reaching `done` with real `$featureId=D3` interpolation (durable log `.spur/run/63d57a3e-3fdc-4fd4-ae1c-353a2545ad71.log`).
 - Reviewer note: all 7 catalog `@gobing-ai` entries bumped rather than engine-only — justified by the family's lockstep release.
 ### Testing
-- Engine regression suite (ts-libs): 4 cases — non-final setVars reach next state's template + `context.vars` (state-machine.test.ts:589), mid-sequence same-state visibility (:641), accumulated map survives continued-failure (:677), pause-resume-vars.test.ts stays green. Suite re-run during review AND verify: 394/394 across 23 files.
-- Probe test: `bun test apps/cli/tests/workflow/setvars-probe.test.ts` — 1/1 pass (re-run live during review and verify).
-- Monorepo gate `bun run format && bun run spur-check` (inline run `inline-E22B54C3`): 5571/5573 pass. Only failures are R42/R43 skill-structure tests keyed exclusively to `pr-reviewing`/`dev-pr-review` files owned by a concurrent operator-delegated agent session — operator-approved exclusion recorded in the run log; no 0571-related failure.
-- e2e: idea-pipeline run `63d57a3e` — file.read.into-var (seq=15) → shell writes "Updated section 'Goal' in feature D3" with real interpolated id (seq=17–19) → terminal `done`.
+**Pipeline verify results** (implementation run, 2026-08-16):
+
+- Verdict: PASS (from verdict artifact)
+- Engine regression suite (ts-libs): 4 new cases — non-final setVars reach next state (state-machine.test.ts:589), mid-sequence same-state visibility (:641), accumulated map survives continued-failure (:677), pause-resume green. Suite: 394/394 across 23 files.
+- Probe test: `apps/cli/tests/workflow/setvars-probe.test.ts` — 1/1.
+- Monorepo gate at implementation time: 5571/5573 (2 excluded = concurrent pr-reviewing session's R42/R43).
+- e2e: idea-pipeline run `63d57a3e` terminal `done` — feature-create's into-var → both shell writes exit 0 with the real interpolated id.
+
+**Re-audit (--force, second session, 2026-08-16 ~14:00 PST): verdict re-confirmed PASS. All evidence re-run fresh, none inherited.**
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | engine `action-step.ts` lines 136-153 (ts-libs repo, outside this tree) — accumulator + forward threading + `setVars` on all three exit branches; `state-machine.ts:112,173` merge the sequence-level map; comment rewritten to the imperative-read contract. Conforms to all five frozen Design edit points |
+| R2 | MET | ts-libs suite re-run this session: **394 pass / 0 fail, 23 files**; the four new cases at `state-machine.test.ts:589,641,677` + pause-resume green; engine released at 0.4.35, spur-new `package.json`/bun.lock at 0.4.35 (commit bbbd66b0) |
+| R3 | MET | Probe test re-run: 1/1 pass (4 expects: same-state shell env, next-state template, guard); e2e run `63d57a3e-3fdc-4fd4-ae1c-353a2545ad71` traced: feature-create/file.read.into-var ✓ → both feature-create/shell exit 0 (pre-fix the first exited 1) → run terminal `done` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — A var set by file.read.into-var is visible to a shell step in the same state | MET | test | `apps/cli/tests/workflow/setvars-probe.test.ts` (same-state `$myId` assertion) re-run pass |
+| Scenario: R2 — The var is visible in the next state and in templates | MET | test | same probe, next-state `${vars.myId}` template + guard assertions, re-run pass |
+| Scenario: R3 — idea-pipeline feature-create completes end to end | MET | command | run 63d57a3e trace: into-var done → Goal/Scope shells exit 0 → `done`; "Updated section 'Goal' in feature D3" in run log |
+
+**Design-conformance:** 5/5 frozen edit points DONE (`ActionStepResult.setVars`, accumulation+forward-thread, both state-machine merge points, comment rewrite, comment-retired contract); anti-patterns all absent (no YAML workaround, no opt-in flag, transition-flow untouched, no bun link — bun.lock at released 0.4.35).
+
+**Full-gate triage (re-audit `bun run spur-check`: 5578 pass / 26 fail — zero failures touch 0571's surface):** 23 = known sandbox port-binding/registry denials (project-start, spur projects, ProjectRegistry, startServer, healthModule, rpc client, createServerContext — environmental, pre-existing); 2 = R42/R43 skill-structure keyed to the concurrent session's untracked pr-reviewing files (operator-approved exclusion from the implementation run); 1 = `scaffold-manifest` count 36-vs-35 — **pre-existing drift at HEAD** (last manifest-touching commits are a780ab42/bcf309d7/eaa02365, all pre-0571; no 0571 file is a scaffold). Note, not fixed here — out of 0571's scope.
+
+**Corpus side effects of the e2e proof (disclosed):** the run updated D3's Goal/Scope/AC sections and batch-created a throwaway task (0575) which was cleaned up post-run; D3's current sections are coherent with its defect family and the tree is clean at HEAD.
+
+Coverage: N/A (engine-side change; engine suite 394/394 is the coverage).
 ### Review
-- Review (subagent run `11070d93`): verdict PASS — no blockers, no P1–P3. SECUA: fold-then-merge is associative under last-write-wins (no double-merge); `ActionStepResult` additive-optional, zero consumers in spur-new (non-breaking); string-only defensive filter in `mergeSetVars` preserved; transition-flow verified still correct.
-- Findings: P4 advisory (out of scope) — `ts-llm-jsonl-importer` catalog floor `^0.4.31`/lockfile 0.4.33 lags the 0.4.35 family; fold into a future lockstep bump.
-- Verify (subagent run `0a4005d2`): verdict PASS — all three requirements and all three AC scenarios satisfied with live re-run evidence.
-- Residual risk (accepted in task contract): intra-sequence setVars visibility changes from never → always; task Q&A established no legitimate consumer of snapshot isolation; full suites green; documented in CHANGELOG.
+Review (subagent run `11070d93`): verdict PASS — no blockers, no P1–P3.
+
+| Priority | Location | Finding |
+| --- | --- | --- |
+| P1 | — | None — no blockers found |
+| P2 | — | None |
+| P3 | — | None |
+| P4 (advisory, out of scope) | ts-libs `packages/llm-jsonl-importer` | catalog floor `^0.4.31` / lockfile 0.4.33 lags the 0.4.35 family; fold into a future lockstep bump |
+
+SECUA: fold-then-merge is associative under last-write-wins (no double-merge); `ActionStepResult` additive-optional, zero consumers in spur-new (non-breaking); string-only defensive filter in `mergeSetVars` preserved; transition-flow verified still correct.
+
+Verify (subagent run `0a4005d2`): verdict PASS — all three requirements and all three AC scenarios satisfied with live re-run evidence. Re-audit (second session, 2026-08-16): re-confirmed PASS — engine suite 394/394, probe test 1/1, e2e run 63d57a3e traced; details in Testing.
+
+Residual risk (accepted in task contract): intra-sequence setVars visibility changes from never → always; task Q&A established no legitimate consumer of snapshot isolation; full suites green; documented in CHANGELOG.
 ### References
 
 D3
