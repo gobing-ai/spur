@@ -74,6 +74,15 @@ agent:
   # CLI would resolve today (`grok models`, omp config.yml modelRoles.default,
   # ~/.codex/config.toml, ~/.claude.json). The ids below are working examples,
   # not vendor defaults — re-pin for your accounts.
+  #
+  # Pairing philosophy (operator guidance, 2026-08): a `native` pair — a vendor's
+  # model served by that vendor's own CLI (gpt-5.6-* via codex, claude-*-5 via
+  # claude, grok-4.6 via grok, gemini-3.x via agy) — consistently outperforms the
+  # same model routed through a third-party CLI, and belongs at the capable rungs.
+  # `portable` models (glm-5.x, deepseek-v4-*, …) are provider-agnostic and best
+  # carried by omp or pi at the cheap/standard rungs. The ladder below mixes both
+  # classes on purpose; measure pairings with the history plane before promoting
+  # a portable model into a capable rung.
   # Live tiers: cheap | standard | capable-1 | capable-2 | capable-3
   # (1=low quality within capable, 3=high). DECLARE tier — inference never
   # invents capable-2/3. Stage routing starts on the cheapest executor whose
