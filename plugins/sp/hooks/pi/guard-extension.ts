@@ -29,9 +29,12 @@ import { couldBeTaskFile } from '../task-file-policy';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
-const SPUR_CONTEXT_DIR = join(process.cwd(), '.spur', 'context');
-const SESSION_FILE = join(SPUR_CONTEXT_DIR, '.session.json');
-const LEDGER_FILE = join(SPUR_CONTEXT_DIR, 'token-ledger.jsonl');
+// Resolved per call, not cached at module load: Pi's cwd is fixed for the
+// process lifetime, and lazy resolution keeps the extension testable (tests
+// chdir into a temp project before driving handlers).
+const spurContextDir = (): string => join(process.cwd(), '.spur', 'context');
+const sessionFilePath = (): string => join(spurContextDir(), '.session.json');
+const ledgerFilePath = (): string => join(spurContextDir(), 'token-ledger.jsonl');
 const REDACTION_CAP = 4096;
 const SUMMARY_MAX_CHARS = 200;
 
@@ -153,7 +156,7 @@ function redactText(text: string): string {
 
 function appendToLedger(event: ToolEvent, command: string | undefined): void {
     try {
-        if (!existsSync(SPUR_CONTEXT_DIR)) return;
+        if (!existsSync(spurContextDir())) return;
         const sessionId = readSessionId();
         if (!sessionId) return;
 
@@ -170,7 +173,7 @@ function appendToLedger(event: ToolEvent, command: string | undefined): void {
             timestamp: new Date().toISOString(),
         });
 
-        appendFileSync(LEDGER_FILE, `${ledgerEntry}\n`);
+        appendFileSync(ledgerFilePath(), `${ledgerEntry}\n`);
     } catch {
         // fail-open: skip ledger writes on error
     }
@@ -178,8 +181,8 @@ function appendToLedger(event: ToolEvent, command: string | undefined): void {
 
 function readSessionId(): string | undefined {
     try {
-        if (!existsSync(SESSION_FILE)) return undefined;
-        const data = JSON.parse(readFileSync(SESSION_FILE, 'utf-8')) as { session_id?: string };
+        if (!existsSync(sessionFilePath())) return undefined;
+        const data = JSON.parse(readFileSync(sessionFilePath(), 'utf-8')) as { session_id?: string };
         return data.session_id;
     } catch {
         return undefined;
@@ -196,7 +199,7 @@ function generateSessionId(): string {
 
 function initSession(): void {
     try {
-        mkdirSync(SPUR_CONTEXT_DIR, { recursive: true });
+        mkdirSync(spurContextDir(), { recursive: true });
         const sessionId = generateSessionId();
         const session = {
             session_id: sessionId,
@@ -204,7 +207,7 @@ function initSession(): void {
             model: resolveModelHintShared(process.env),
             started_at: new Date().toISOString(),
         };
-        writeFileSync(SESSION_FILE, `${JSON.stringify(session, null, 2)}\n`);
+        writeFileSync(sessionFilePath(), `${JSON.stringify(session, null, 2)}\n`);
 
         // Append session_start event to ledger
         const startEntry = JSON.stringify({
@@ -214,7 +217,7 @@ function initSession(): void {
             model: session.model,
             timestamp: session.started_at,
         });
-        appendFileSync(LEDGER_FILE, `${startEntry}\n`);
+        appendFileSync(ledgerFilePath(), `${startEntry}\n`);
     } catch {
         // fail-open
     }
@@ -222,16 +225,16 @@ function initSession(): void {
 
 function cleanupSession(): void {
     try {
-        if (!existsSync(SESSION_FILE)) return;
-        const session = JSON.parse(readFileSync(SESSION_FILE, 'utf-8')) as { session_id?: string };
+        if (!existsSync(sessionFilePath())) return;
+        const session = JSON.parse(readFileSync(sessionFilePath(), 'utf-8')) as { session_id?: string };
         const sessionId = session.session_id;
 
         // Compute rollup totals from ledger
         let reads = 0;
         let writes = 0;
         let tokens = 0;
-        if (sessionId && existsSync(LEDGER_FILE)) {
-            for (const line of readFileSync(LEDGER_FILE, 'utf-8').split('\n')) {
+        if (sessionId && existsSync(ledgerFilePath())) {
+            for (const line of readFileSync(ledgerFilePath(), 'utf-8').split('\n')) {
                 if (!line.trim()) continue;
                 try {
                     const evt = JSON.parse(line) as { session?: string; type?: string; tokens?: number };
@@ -254,10 +257,10 @@ function cleanupSession(): void {
             tokens,
             timestamp: new Date().toISOString(),
         });
-        appendFileSync(LEDGER_FILE, `${endEntry}\n`);
+        appendFileSync(ledgerFilePath(), `${endEntry}\n`);
 
         // Cleanup session file
-        rmSync(SESSION_FILE, { force: true });
+        rmSync(sessionFilePath(), { force: true });
     } catch {
         // fail-open
     }

@@ -144,8 +144,3 @@ export function classifyCommand(command: string): string | null {
     }
     return null;
 }
-
-/** Convenience predicate for adapters that only need the boolean. */
-export function isDestructiveCommand(command: string): boolean {
-    return classifyCommand(command) !== null;
-}
