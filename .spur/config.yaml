@@ -80,10 +80,14 @@ agent:
       agent: omp
       model: opencode/deepseek-v4-flash
       tier: standard
-    # - name: omp-zai
-    #   agent: omp
-    #   model: zai/glm-5.2
-    #   tier: standard
+    - name: omp-zai
+      agent: omp
+      model: zai/glm-5.3
+      tier: standard
+    - name: omp-zai-cn
+      agent: omp
+      model: zai-cn/glm-5.3
+      tier: standard
     - name: omp-zai-nvidia
       agent: omp
       model: nvidia/z-ai/glm-5.2
@@ -96,10 +100,10 @@ agent:
       agent: omp
       model: opencode/deepseek-v4-flash
       tier: standard
-    # - name: omp-zai-volc
-    #   agent: omp
-    #   model: volc/glm-5.2
-    #   tier: standard
+    - name: omp-zai-volc
+      agent: omp
+      model: volc/glm-5.2
+      tier: standard
     - name: omp-dsv4-flash-volc
       agent: omp
       model: volc/deepseek-v4-flash-ga-260731
