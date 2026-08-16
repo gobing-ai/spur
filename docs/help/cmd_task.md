@@ -44,6 +44,8 @@ spur task create [options] <title>
 | `--parent <wbs>` | Parent WBS for sub-task grouping |
 | `--template <variant>` | Template variant: `standard · feature-impl · issue · review · meta · brainstorm` (default: `feature-impl` when `--feature` is given, else `standard`; unknown variant → exit 2) |
 | `--folder <path>` | Custom tasks folder |
+| `--dedupe-within <seconds>` | Override the default dedup window (seconds); guard is on (300s) by default when `--feature` is set |
+| `--allow-duplicate-name` | Disable the dedup guard entirely (creates anyway) |
 | `--json` | Output machine-readable JSON |
 
 ### Example
@@ -115,7 +117,11 @@ spur task update [options] <wbs> --priority <P0..P3>
 | `--from-file <path>` | File to read section body from (requires `--section`) |
 | `--feature <id>` | Set the `feature_id` frontmatter field (allow-listed post-create path) |
 | `--priority <p>` | Set the `priority` frontmatter field (`P0`–`P3`) |
+| `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
 | `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
+| `--force-done` | Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292) |
+| `--reason <text>` | Rationale for a forced-done override (paired with `--force-done`; persisted as `done_reason`) |
+| `--verdict-dir <path>` | Directory holding `<wbs>-verdict.json` artifacts |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
 
@@ -271,6 +277,8 @@ spur task check [options] [wbs]
 |---|---|
 | `--strict` | Elevate ALL warnings to failures |
 | `--strict-core` | Gate variant: fail only on hard-core errors (the `testing → done` guard) |
+| `--corpus` | Sweep every task and feature against `config/corpus-baseline.json` |
+| `--since <ref>` | Scope the corpus fog check to changes since a git ref |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
 
@@ -389,7 +397,8 @@ spur task run-link [options] <wbs>
 
 | Flag | Description |
 |---|---|
-| (see `--help`) | Provenance source / run-id flags for pipeline linkage |
+| `--source <source>` | Link source identifier (e.g. `next-auto`) (default `chain`) |
+| `--run-id <id>` | Explicit `run_id` (auto-generated when omitted) |
 | `--json` | Output machine-readable JSON |
 
 Record a pipeline provenance link used by `--next` auto chains so the testing→done guard can

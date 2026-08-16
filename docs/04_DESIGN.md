@@ -384,7 +384,7 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 - `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
   `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
 
-#### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
+#### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
 
 Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve`). There is no
 `spur team attach` verb: attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
@@ -426,7 +426,7 @@ seeds the global layer. A run that resolves **zero rules** exits 1. Setting `SPU
 overrides the global root and suppresses the bundled fallback for a hermetic run. Backed by
 `ts-rule-engine`.
 
-#### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]` · `spur rule trace [run-id] [--preset <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
+#### `spur rule validate [--file <path>|--preset <name>|<path>] [--kind <type>] [--no-schema] [--json]` · `spur rule list [--preset <name>] [--json]` · `spur rule trace [run-id] [--preset <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 
 - `validate` — load and normalize a rule file or preset without evaluating it.
 - `list` — list the effective rule-file inventory grouped by source layer and category (`local`, `global`,
@@ -444,7 +444,7 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   explicit unavailable data without failing the command. Existing JSON keys remain present.
   Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
@@ -784,7 +784,7 @@ the 02:00 nightly loop.
 
 **Trigger points (exhaustive).** Exactly two, both terminal — never "every CLI invocation":
 
-1. `spur task update <wbs> --status done` (task completion) — `apps/cli/src/commands/task.ts`.
+1. `spur task update <wbs> done` (task completion) — `apps/cli/src/commands/task.ts`.
 2. `spur workflow run` / `continue` reaching a terminal status (pipeline-run completion) —
    `apps/cli/src/commands/workflow.ts`, at the sync completion path, the main sync run path, and the
    `continue` path. The `--async` launcher itself does **not** trigger — its worker does when the run
@@ -830,7 +830,7 @@ it. An exception from `daily` itself emits and rethrows so the queue records the
 `history.daily.failed` catalog events. Enqueue failures degrade to a stderr warning and never change
 the firing operation's exit code.
 
-#### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
+#### `spur feature sync [id] [--all] [--dry-run] [--force] [--folder <path>] [--json]`
 
 Sync feature status with linked task states via conservative forward-only derivation rules (ADR-0322).
 

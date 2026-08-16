@@ -266,6 +266,7 @@ spur feature check [options] [id]
 | Flag | Description |
 |---|---|
 | `--strict` | Elevate warnings to failures |
+| `--as <status>` | Evaluate the one-active-goal rule as if the feature were in `<status>` (0418: lifecycle FSM guards pass the transition target) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 

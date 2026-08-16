@@ -156,7 +156,7 @@ spur rule           trace [run-id] [--preset <name>] [--status <s>] [--since <is
 
 # Workflow orchestration
 spur workflow       validate <workflow.yaml> [--no-schema] [--json]
-spur workflow       run     <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <quiet|normal|verbose|debug>] [--json]
+spur workflow       run     <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--json]
 spur workflow       continue [run-id] [--yes] [--json]
 spur workflow       list    [--json]
 spur workflow       trace   [run-id] [--workflow <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
@@ -173,10 +173,10 @@ spur task           refresh-roster <wbs> [--folder <path>] [--json]
 spur task           batch-create --file <json> [--folder <path>] [--json]
 spur task           record  <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--folder <path>] [--json]
 spur task           verdict <wbs> [--from-answer <path>] [--folder <path>] [--json]
-spur task           check   [<wbs>] [--strict] [--strict-core] [--folder <path>] [--json]
+spur task           check   [<wbs>] [--strict] [--strict-core] [--corpus] [--since <ref>] [--folder <path>] [--json]
 spur task           resolve <file-path> [--strict] [--folder <path>] [--json]
 spur task           path    <wbs> [--folder <path>] [--json]
-spur task           deps    <wbs> [--depth <n>] [--folder <path>] [--json]
+spur task           deps    <wbs> [--folder <path>] [--json]
 spur task           sections <wbs> [--folder <path>] [--json]
 spur task           run-link <wbs> [--source <id>] [--run-id <id>] [--json]   # pipeline provenance link (--next auto chains)
 spur task           migrate [--dry-run] [--folder <path>] [--json]            # A17 corpus normalization (now wired)
@@ -188,7 +188,7 @@ spur feature        update  <id> [status] [--field <k> --value <v>] [--section <
 spur feature        advance <id> [--to <status>] [--folder <path>] [--json]   # walk the legal forward lifecycle path
 spur feature        list    [--status <s>] [--priority <p>] [--folder <path>] [--json]
 spur feature        move    <id> [--parent <id>] [--dry-run] [--folder <path>] [--json]
-spur feature        sync    [<id>|--task <wbs>|--all] [--dry-run] [--apply] [--json]   # derive/sync feature status from task states
+spur feature        sync    [<id>|--all] [--dry-run] [--force] [--folder <path>] [--json]   # derive/sync feature status from task states
 spur feature        refresh [--folder <path>] [--json]
 spur feature        check   [<id>] [--strict] [--folder <path>] [--json]
 
@@ -814,7 +814,7 @@ bootstrap:
     enabled: false
 
 agent:
-  default: omp            # executor selector first, then legacy agent name
+  default: omp            # default role recommended (`coder`); an executor name still resolves with a one-time shim warning
   # ADR-033 / 0343: cheap | standard | capable-1 | capable-2 | capable-3
   # Stage registry picks cheapest eligible; same-tier order = preference
   executors:
@@ -824,7 +824,7 @@ agent:
     - name: claude
       agent: claude
       tier: capable-3
-  # default-by-phase is a deprecated shim — prefer executor tier + stage routing
+  # default-by-phase was REMOVED (0452) — routing is role + stage-registry model_policy
 
 rules:
   paths:

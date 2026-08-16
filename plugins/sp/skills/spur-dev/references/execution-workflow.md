@@ -245,12 +245,13 @@ an executor failed — the executor is swappable via config, the pipeline is not
 **When an `agent.run` step fails (timeout, non-zero exit, empty output):**
 
 1. **Diagnose, don't bypass.** Check `spur agent doctor <executor>` — is the agent
-   installed? Is auth present? Then check `.spur/config.yaml` → which executor does the
-   phase resolve to? Which model does that executor use? Could that model be out of tokens,
-   rate-limited, or deprecated?
+   installed? Is auth present? Then check `.spur/config.yaml` → which role/executor does the
+   run resolve to (`agent.default` role → stage-registry tier ladder)? Which model does that
+   executor use? Could that model be out of tokens, rate-limited, or deprecated?
 2. **Switch executors, don't abandon the pipeline.** Override the agent for the run:
-   `spur workflow run ... --vars '{"wbs":"<wbs>","agent":"<alt-executor>"}'` or re-run with
-   a different `default-by-phase` mapping. The operator can also update config in-flight.
+   `spur workflow run ... --vars '{"wbs":"<wbs>","agent":"<alt-executor-or-role>"}'`, or change
+   the `agent.default` role / stage-registry tier floor in config. The operator can also update
+   config in-flight.
 3. **Surface to the operator.** If you cannot determine the cause, ask. Do NOT silently
    fall back to direct implementation. A pipeline step failure is a recoverable event; a
    bypass is an irrecoverable provenance loss.
