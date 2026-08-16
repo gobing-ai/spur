@@ -80,8 +80,8 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
 
             const dao = new RunSessionDao(await fx.getDb());
             const rows = await dao.getByRunId('run-1');
-            expect(rows).toHaveLength(1);
-            expect(rows[0]).toMatchObject({
+            expect(rows, `warnings: ${fx.warnings.join(' | ')}`).toHaveLength(1);
+            expect(rows[0], `warnings: ${fx.warnings.join(' | ')}`).toMatchObject({
                 run_id: 'run-1',
                 source: 'pi',
                 session_id: '11111111-2222-3333-4444-555555555555',
@@ -108,8 +108,10 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
 
             const dao = new RunSessionDao(await fx.getDb());
             const rows = await dao.getByRunId('run-2');
-            expect(rows).toHaveLength(1);
-            expect(rows[0]?.session_id).toBe('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+            expect(rows, `warnings: ${fx.warnings.join(' | ')}`).toHaveLength(1);
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe(
+                'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            );
             expect(rows[0]?.exactness).toBe('exact');
         } finally {
             rmSync(fx.home, { recursive: true, force: true });
@@ -129,7 +131,9 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
 
             const dao = new RunSessionDao(await fx.getDb());
             const rows = await dao.getByRunId('run-3');
-            expect(rows[0]?.session_id).toBe('c0dec0de-0000-0000-0000-000000000000');
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe(
+                'c0dec0de-0000-0000-0000-000000000000',
+            );
             expect(rows[0]?.exactness).toBe('exact');
         } finally {
             rmSync(fx.home, { recursive: true, force: true });
@@ -196,6 +200,33 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
             const rowsC = await dao.getByRunId('run-c');
             expect(rowsC[0]?.exactness).toBe('exact');
             expect(rowsC[0]?.session_id).toBe('third');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
+
+    test('a session file stamped just before the watermark still resolves (filesystem clock skew)', async () => {
+        // Linux stamps inodes from a coarse cached clock that lags the precise
+        // clock by up to one kernel tick, so a file written microseconds AFTER
+        // the watermark can carry an mtime just BEFORE it. Without slack in the
+        // watermark the run's own session file drops out of the candidate set
+        // and an exact mapping degrades to unresolved — green on macOS, red on
+        // Linux CI (2026-08-16 run 31918417004).
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-skew');
+            await obs.watermark('pi');
+            const path = join(fx.home, '.pi', 'agent', 'sessions', 'skewed-session.jsonl');
+            await writeSessionFile(path, '{"id":"skewed-session"}\n');
+            const fsp = await import('node:fs/promises');
+            const skewed = new Date(Date.now() - 50);
+            await fsp.utimes(path, skewed, skewed);
+            await obs.resolve();
+
+            const dao = new RunSessionDao(await fx.getDb());
+            const rows = await dao.getByRunId('run-skew');
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe('skewed-session');
+            expect(rows[0]?.exactness).toBe('exact');
         } finally {
             rmSync(fx.home, { recursive: true, force: true });
         }
@@ -283,7 +314,7 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
 
             const dao = new RunSessionDao(await fx.getDb());
             const rows = await dao.getByRunId('run-wf');
-            expect(rows[0]?.session_id).toBe('wf-session-1');
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe('wf-session-1');
             expect(rows[0]?.exactness).toBe('exact');
         } finally {
             rmSync(fx.home, { recursive: true, force: true });

@@ -1973,6 +1973,17 @@ function warnAgentDefaultExecutorOnce(selector: string, output: AgentServiceOutp
     );
 }
 
+/**
+ * Reset the process-global warn-once markers. Test seam: `bun test` batches
+ * several test files per worker process, so a marker consumed by one file is
+ * invisible to another on some platforms/schedules — assertions on first-warn
+ * behavior must reset first.
+ */
+export function _resetAgentServiceShimsForTest(): void {
+    warnedBareBinary.clear();
+    warnedAgentDefaultExecutor.clear();
+}
+
 /** Compact tri-state auth label for the doctor text table (display-only). */
 function renderAuth(authenticated: AuthState): string {
     if (authenticated === 'authenticated') return 'yes';

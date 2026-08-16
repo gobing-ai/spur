@@ -49,6 +49,24 @@ export interface RunSessionObserverOptions {
     now?: () => number;
 }
 
+/**
+ * Slack subtracted from the watermark to absorb filesystem timestamp skew.
+ *
+ * A file's mtime and `Date.now()` do not come from the same clock: Linux stamps
+ * inodes from a coarse cached clock that lags the precise clock by up to one
+ * kernel tick, and some filesystems store whole-second mtimes. A session file
+ * written microseconds *after* the watermark can therefore carry an mtime
+ * *before* it, which drops the run's own file from the candidate set and
+ * degrades an exact mapping to `unresolved` (macOS/APFS never shows this;
+ * Linux CI does, systematically, for fast runs).
+ *
+ * One second covers tick lag and whole-second granularity while staying far
+ * below the multi-second separation that marks a genuinely pre-existing file.
+ * Widening the window can only add candidates — and extra candidates degrade to
+ * `unresolved` (safe), never to a wrong exact mapping.
+ */
+const MTIME_SKEW_TOLERANCE_MS = 1_000;
+
 /** Timestamp watermark captured before dispatch (R1/R5: a cheap stat, nothing more). */
 export interface RunSessionWatermark {
     source: string;
@@ -110,7 +128,7 @@ export class RunSessionObserver {
         const active = this.options.registry.active.get(root) ?? 0;
         this.options.registry.active.set(root, active + 1);
         if (active > 0) this.options.registry.overlapped.add(root);
-        this.watermark_ = { source, root, at: this.now() };
+        this.watermark_ = { source, root, at: this.now() - MTIME_SKEW_TOLERANCE_MS };
         return this.watermark_;
     }
 
@@ -189,14 +207,27 @@ export class RunSessionObserver {
         const fs = createNodeFileSystem();
         const files = await walkDir(wm.root, fs);
         const candidates: string[] = [];
+        let newest = 0;
         for (const rel of files) {
             const full = resolve(wm.root, rel);
             const st = await fs.stat(full);
             if (st === null || !st.isFile()) continue;
-            // A file touched during the window has mtime >= the watermark;
-            // mtime skew can only drop a candidate (→ unresolved, safe), never
-            // fabricate an exact mapping.
+            if (st.mtimeMs > newest) newest = st.mtimeMs;
+            // A file touched during the window has mtime >= the watermark, which
+            // already carries MTIME_SKEW_TOLERANCE_MS of slack for filesystem
+            // timestamp skew. Residual skew can only drop a candidate
+            // (→ unresolved, safe), never fabricate an exact mapping.
             if (st.mtimeMs >= wm.at) candidates.push(full);
+        }
+        // Zero-candidate resolutions are recorded `unresolved` either way; the
+        // walk summary makes "nothing written" vs "everything older than the
+        // watermark" distinguishable in logs.
+        if (candidates.length === 0) {
+            this.warn(
+                `run-session resolve for ${wm.source} (${wm.root}): no candidate session files ` +
+                    `(walked ${files.length}, newest mtime ${newest === 0 ? 'n/a' : new Date(newest).toISOString()}, ` +
+                    `watermark ${new Date(wm.at).toISOString()})`,
+            );
         }
         return candidates.sort();
     }

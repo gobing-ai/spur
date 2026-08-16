@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_INLINE_HEADLESS_MESSAGE, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
+import {
+    _resetAgentServiceShimsForTest,
+    AGENT_INLINE_HEADLESS_MESSAGE,
+    type AgentConfig,
+    type AgentRunDeps,
+    TeamService,
+} from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
@@ -27,6 +33,12 @@ function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] }
         },
     };
 }
+
+// Warn-once shim markers are process-global; bun batches test files per worker
+// process, so never inherit another file's marker state.
+beforeEach(() => {
+    _resetAgentServiceShimsForTest();
+});
 
 describe('agent command (main)', () => {
     test('unknown subcommand returns 1', async () => {

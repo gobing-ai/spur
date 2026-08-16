@@ -509,6 +509,16 @@ function warnAgentSpecIdOnce(context: CliContext): void {
     );
 }
 
+/**
+ * Reset the process-global warn-once markers. Test seam: `bun test` batches
+ * several test files per worker process, so a marker consumed by one file is
+ * invisible to another on some platforms/schedules — assertions on first-warn
+ * behavior must reset first.
+ */
+export function _resetAgentFlagShimsForTest(): void {
+    warnedAgentSpecId.clear();
+}
+
 /** Default idle poll interval for `spur agent loop` (ms). */
 const DEFAULT_LOOP_POLL_MS = 2000;
 

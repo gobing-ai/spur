@@ -1,20 +1,22 @@
 /**
- * `--spec <id>` occupant addressing (0542 R1) — fresh process file.
+ * `--spec <id>` occupant addressing (0542 R1).
  *
- * Lives in its own file on purpose: `warnAgentSpecIdOnce` is a process-global
- * warn-once set, and the legacy `--agent <spec-id>` drain tests in agent.test.ts
- * run before any 0542 describe in the same process, so the first-warning
- * assertion would be unobservable there. A fresh test process keeps the set
- * cold and makes "warns once, second call silent" deterministic.
+ * Lives in its own file so the legacy `--agent <spec-id>` drain tests in
+ * agent.test.ts cannot consume the first warning before this file asserts on it.
+ * A separate file is NOT a separate process, though — `bun test` batches several
+ * files into one worker, so the process-global `warnAgentSpecIdOnce` set can
+ * arrive warm (green on macOS, red on Linux CI where batching differs). The
+ * `beforeEach` reset below is what actually makes "warns once, second call
+ * silent" deterministic.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentConfig, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { runAgentRun } from '../../src/commands/agent';
+import { _resetAgentFlagShimsForTest, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
 
@@ -34,6 +36,10 @@ function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] }
 }
 
 describe('runAgentRun --spec occupant addressing (0542 R1)', () => {
+    // The warn-once marker is process-global and bun batches test files per
+    // worker process — never inherit another file's marker state.
+    beforeEach(() => _resetAgentFlagShimsForTest());
+
     async function setupSpecCtx(): Promise<{
         tempDir: string;
         output: CommandOutput & { stdout: string[]; stderr: string[] };

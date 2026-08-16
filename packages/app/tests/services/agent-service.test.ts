@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
+    _resetAgentServiceShimsForTest,
     AGENT_INLINE_HEADLESS_MESSAGE,
     type AgentConfig,
     type AgentExecutionEvent,
@@ -18,6 +19,12 @@ import {
     RunSessionObserver,
 } from '../../src/index';
 import { RolePropagatingProcessExecutor } from '../../src/services/agent-service';
+
+// Warn-once shim markers are process-global; bun batches test files per worker
+// process, so never inherit another file's marker state.
+beforeEach(() => {
+    _resetAgentServiceShimsForTest();
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1334,7 +1341,11 @@ describe('AgentService.runCapture', () => {
 
     test('suppresses all output — no diagnostics, no errors', async () => {
         const { lines, errors, output } = captureOutput();
-        const svc = makeService({}, output);
+        // Pin `pi` as a configured executor so no bare-binary transition warning is
+        // warranted — silence must come from runCapture, not from a warm warn-once marker.
+        const svc = makeService({}, output, {
+            executors: [{ name: 'pi', agent: 'pi', tier: 'standard' }],
+        } as AgentConfig);
         const { deps } = mockDeps(makeRunResult({ stdout: 'answer' }));
         await svc.runCapture('hello', { agent: 'pi' }, deps);
         expect(lines.length).toBe(0);
@@ -2956,6 +2967,7 @@ describe('AgentService run→session mapping (E6 / task 0557)', () => {
                 output: nullOutput(),
                 getDb: async () => adapter,
             });
+            const observerWarnings: string[] = [];
             const deps = sessionWritingDeps(
                 home,
                 join('.pi', 'agent', 'sessions', '11111111-2222-3333-4444-555555555555.jsonl'),
@@ -2965,7 +2977,7 @@ describe('AgentService run→session mapping (E6 / task 0557)', () => {
                 new RunSessionObserver({
                     runId,
                     getDb: async () => adapter,
-                    output: nullOutput(),
+                    output: { error: (m: string) => observerWarnings.push(m) },
                     registry: { active: new Map(), overlapped: new Set() },
                     home,
                 });
@@ -2975,7 +2987,7 @@ describe('AgentService run→session mapping (E6 / task 0557)', () => {
 
             const dao = new RunSessionDao(adapter);
             const rows = await dao.getBySession('pi', '11111111-2222-3333-4444-555555555555');
-            expect(rows).toHaveLength(1);
+            expect(rows, `observer warnings: ${observerWarnings.join(' | ')}`).toHaveLength(1);
             const row = rows[0];
             expect(row?.exactness).toBe('exact');
             expect(row?.mechanism).toBe('observed');

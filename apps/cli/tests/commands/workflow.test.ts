@@ -2,11 +2,16 @@
  * Thin-wrapper integration tests for apps/cli/src/commands/workflow.ts.
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
-import { describe, expect, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type TimelineEvent, WorkflowSteeringController, type WorkflowTraceTimeline } from '@gobing-ai/spur-app';
+import {
+    _resetAgentServiceShimsForTest,
+    type TimelineEvent,
+    WorkflowSteeringController,
+    type WorkflowTraceTimeline,
+} from '@gobing-ai/spur-app';
 import type { ActionCost, ActionCostAttribution } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -21,6 +26,12 @@ import {
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject, runCli } from '../helpers';
+
+// Warn-once shim markers (bare-binary, legacy executor) are process-global; bun
+// batches test files per worker process — never inherit another file's state.
+beforeEach(() => {
+    _resetAgentServiceShimsForTest();
+});
 
 const MINIMAL_WORKFLOW_YAML = `name: cli-test-flow
 kind: state-machine
