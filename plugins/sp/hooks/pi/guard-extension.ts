@@ -24,6 +24,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
+import { classifyCommand } from '../destructive-policy';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -101,33 +102,12 @@ function resolveSpurTaskOwnership(filePath: string): TaskOwnership {
     return 'unknown';
 }
 
-// Destructive command patterns (mirrors careful-guard.ts)
-const DESTRUCTIVE_PATTERNS: RegExp[] = [
-    /\brm\s+(?:-[rRf]*[rf]+\s*|\s*--recursive\s*)/,
-    /\bDROP\s+(?:TABLE|DATABASE)\b/i,
-    /\bTRUNCATE\b/i,
-    /\bgit\s+push\s+--force\b/,
-    /\bgit\s+reset\s+--hard\b/,
-    /\bgit\s+checkout\s+\.\b/,
-    /\bgit\s+restore\s+\.\b/,
-    /\bkubectl\s+delete\b/,
-    /\bdocker\s+system\s+prune\b/,
-];
-
-// Safe destructive paths (rm -rf of build caches is routine)
-const SAFE_CACHE_PATTERNS = [/node_modules/, /dist\b/, /\.next\b/, /coverage\b/, /build\b/, /\.turbo\b/, /\.cache\b/];
-
-function isDestructiveCommand(command: string): boolean {
-    return DESTRUCTIVE_PATTERNS.some((p) => p.test(command));
-}
-
-function isSafeDestructivePath(command: string): boolean {
-    // Check if rm -rf targets a known safe cache directory
-    const rmMatch = command.match(/\brm\s+(?:-[rRf]*[rf]+\s*|\s*--recursive\s*)(.+)/);
-    if (!rmMatch) return false;
-    const target = rmMatch[1] ?? '';
-    return SAFE_CACHE_PATTERNS.some((p) => p.test(target));
-}
+// Destructive-command classification is imported from `../destructive-policy`, the
+// single cross-platform policy. This file previously carried its own regex copy; it
+// diverged from the Claude matrix on 7 of 10 pinned cases (it allowed
+// `rm -rf node_modules /etc/nginx`, `rm -R --force /var/data`, `git push -f` and
+// `git push origin +main`, and warned on `git push --force-with-lease`). Do not
+// re-introduce a local copy — add cases to `destructive-policy.test.ts` instead.
 
 // ─── Token ledger helpers (mirrors context-post-tool.ts) ──────────────────
 
@@ -303,8 +283,9 @@ export default function (pi: ExtensionAPI): void {
         if (event.toolName === 'bash') {
             const input = event.input as Record<string, unknown> | undefined;
             const command = typeof input?.command === 'string' ? input.command : '';
-            if (command && isDestructiveCommand(command) && !isSafeDestructivePath(command)) {
-                const msg = `Warning: destructive command: ${command.slice(0, 120)}`;
+            const hit = command ? classifyCommand(command) : null;
+            if (hit !== null) {
+                const msg = `Warning: destructive command — ${hit}: ${command.slice(0, 120)}`;
                 ctx.ui.notify(msg, 'warning');
                 // Ask for confirmation
                 const ok = await ctx.ui.confirm('Destructive command', msg);

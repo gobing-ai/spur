@@ -125,14 +125,24 @@ interface Parsed {
 const PLACEHOLDER = /^([<[{($#"'`]|…|\.\.\.)/;
 
 /** Normalize an asserted invocation span into nouns / verbs / flags. Null when it asserts nothing. */
-function parseInvocation(spanRaw: string): Parsed | null {
+export function parseInvocation(spanRaw: string): Parsed | null {
     let s = spanRaw.trim().replace(/[.,;:]+$/, '');
     s = s.replace(/^(?:bun|bunx|npx)\s+(?:run\s+)?/, '');
+    // The monorepo dev form (`bun run apps/cli/src/index.ts <noun> <verb>`) names no
+    // `spur` binary once the entry path is stripped, so the `^spur` gate below must not
+    // apply to it — it used to, which dropped every claim written in the form AGENTS.md
+    // mandates for local development.
+    const viaEntryPath = /^apps\/cli\/src\/index\.ts\s*/.test(s);
     s = s.replace(/^apps\/cli\/src\/index\.ts\s*/, '');
-    if (!/^spur\b/.test(s) || s === 'spur') return null;
-    s = s.replace(/^spur\s+/, '');
+    if (!viaEntryPath) {
+        if (!/^spur\b/.test(s) || s === 'spur') return null;
+        s = s.replace(/^spur\s+/, '');
+    }
     if (!s) return null;
-    s = (s.split(/[;&|>]/)[0] ?? s).trim();
+    // Split on shell separators only. `>` is deliberately excluded: it appears inside
+    // the `<wbs>` / `<path>` placeholders this corpus documents flags with, and
+    // truncating there silently discarded every flag after the first placeholder.
+    s = (s.split(/[;&|]/)[0] ?? s).trim();
     if (!s) return null;
     const tokens = s
         .split(/\s+/)
@@ -170,12 +180,12 @@ function parseInvocation(spanRaw: string): Parsed | null {
 }
 
 /** All backticked spans in one line. */
-function backticks(line: string): string[] {
+export function backticks(line: string): string[] {
     return [...line.matchAll(/`([^`\n]+)`/g)].map((m) => m[1] ?? '');
 }
 
 /** Candidate invocation spans from one line: backticked + bare shell-style matches. */
-function lineInvocationSpans(line: string): string[] {
+export function lineInvocationSpans(line: string): string[] {
     const spans = backticks(line).filter((s) => /(?:^|\s)(?:spur|apps\/cli\/src\/index\.ts)\s/.test(s));
     const bare = [
         ...line.matchAll(
@@ -186,12 +196,12 @@ function lineInvocationSpans(line: string): string[] {
 }
 
 /** A pure flag list (backticked "--from-answer <path> --folder" spans). */
-function isFlagSpan(span: string): boolean {
+export function isFlagSpan(span: string): boolean {
     const toks = span.trim().split(/\s+/);
     return toks.length > 0 && toks.every((t) => /^-{1,2}[A-Za-z][A-Za-z0-9-]*/.test(t) || PLACEHOLDER.test(t));
 }
 
-function flagNames(span: string): string[] {
+export function flagNames(span: string): string[] {
     return [...span.matchAll(/-{1,2}[A-Za-z][A-Za-z0-9-]*/g)].map((m) => m[0] ?? '');
 }
 
@@ -211,7 +221,7 @@ function walk(dir: string, exts: string[], out: string[] = []): string[] {
 }
 
 /** Noun mapped from a spur-cli reference path (references/tasks.md, references/tasks/x.md -> task). */
-function nounOfReference(file: string): string | null {
+export function nounOfReference(file: string): string | null {
     const map: Record<string, string> = {
         tasks: 'task',
         features: 'feature',
@@ -862,25 +872,34 @@ function render(): string {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-const outIdx = process.argv.indexOf('--out');
-sweepPluginTrees();
-sweepScriptArgv();
-executeScripts();
-sweepHooks();
-probeJsonShapes();
-sweepWorkflows();
-const report = render();
-if (outIdx !== -1 && process.argv[outIdx + 1]) {
-    const outPath = resolve(process.argv[outIdx + 1] ?? '.');
-    mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, report);
-    process.stderr.write(`wrote ${rel(outPath)}\n`);
+/**
+ * Entry point. Guarded by `import.meta.main` so the pure span/flag parsers above
+ * can be imported and unit-tested without running the full multi-minute sweep
+ * (which shells the live CLI and writes files).
+ */
+function main(): void {
+    const outIdx = process.argv.indexOf('--out');
+    sweepPluginTrees();
+    sweepScriptArgv();
+    executeScripts();
+    sweepHooks();
+    probeJsonShapes();
+    sweepWorkflows();
+    const report = render();
+    if (outIdx !== -1 && process.argv[outIdx + 1]) {
+        const outPath = resolve(process.argv[outIdx + 1] ?? '.');
+        mkdirSync(dirname(outPath), { recursive: true });
+        writeFileSync(outPath, report);
+        process.stderr.write(`wrote ${rel(outPath)}\n`);
+    }
+    const mismatches = rows.filter((r) => r.status === 'mismatch');
+    if (mismatches.length > 0) {
+        process.stderr.write(`\nCONFIRMED MISMATCHES (${mismatches.length}):\n`);
+        for (const m of mismatches) process.stderr.write(`  - ${m.asserted} [${m.method}] ${m.actual}\n`);
+        process.exitCode = 1;
+    } else {
+        process.stderr.write('\nNo confirmed mismatches.\n');
+    }
 }
-const mismatches = rows.filter((r) => r.status === 'mismatch');
-if (mismatches.length > 0) {
-    process.stderr.write(`\nCONFIRMED MISMATCHES (${mismatches.length}):\n`);
-    for (const m of mismatches) process.stderr.write(`  - ${m.asserted} [${m.method}] ${m.actual}\n`);
-    process.exitCode = 1;
-} else {
-    process.stderr.write('\nNo confirmed mismatches.\n');
-}
+
+if (import.meta.main) main();
