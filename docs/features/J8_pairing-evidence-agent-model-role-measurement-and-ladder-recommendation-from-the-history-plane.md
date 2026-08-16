@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-08-16T18:46:30.987Z"
-updated_at: "2026-08-16T18:53:31.948Z"
+updated_at: "2026-08-16T23:33:24.449Z"
 ---
 
 # J8: Pairing evidence: agent×model×role measurement and ladder recommendation from the history plane
@@ -66,12 +66,6 @@ Feature: Pairing evidence — measure agent×model×role and recommend ladder or
     And each suggestion cites the underlying numbers (dispatch count, rates, cost)
     And a rung with fewer than the documented minimum dispatches is marked insufficient-evidence, never suggested
 
-  @deprecated
-  Scenario: R4 — The artifact schema version bumps and old artifacts degrade gracefully
-    Given an artifact written before the pairings section existed
-    When the pairings report renders it
-    Then it reports the section as unavailable (naming the analyze version needed) instead of failing or fabricating rows
-
   @core
   Scenario: R6 — The pairings section is additive and old artifacts degrade gracefully
     Given the artifact contract is additive-only (HISTORY_ARTIFACT_SCHEMA_VERSION stays 1)
@@ -95,5 +89,16 @@ Feature: Pairing evidence — measure agent×model×role and recommend ladder or
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+**Scenario R4 removed 2026-08-16 (task 0568 planning sweep).** It read "The artifact schema version
+bumps and old artifacts degrade gracefully" — a premise that directly contradicted R6
+(`HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1) and task 0573's Design anti-pattern ("do NOT bump
+`HISTORY_ARTIFACT_SCHEMA_VERSION`"). Its behavioural clause — a pre-pairings artifact reports the
+section as unavailable instead of failing or fabricating rows — is already asserted verbatim by R6
+and implemented by task 0574 R3. The scenario was already tagged `@deprecated`, but the L4 gate does
+not honour that tag, so it surfaced as `L4.uncovered-feature-scenario`: no task could cover it
+without violating R6. Removing the duplicate resolves the contradiction and the finding together.
 
+Scenario ids R1–R3, R5, R6 deliberately keep their original numbers rather than closing the R4 gap —
+tasks 0573 and 0574 cite them by id (`(feature J8 R1)`, `(feature J8 R6)`), so renumbering would
+silently repoint every task-to-scenario edge.
 ## History
