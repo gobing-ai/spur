@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:37:16.435Z"
-updated_at: "2026-08-16T16:38:42.686Z"
+updated_at: "2026-08-16T18:56:36.678Z"
 ---
 
 ## 0568. Fix 0567-run process bottlenecks: plan-time size gate, verdict/record contract docs, stale spur PATH, dogfood discipline
@@ -60,12 +60,12 @@ Scope discipline: this is a meta fix task — each requirement is a standalone, 
 verifiable fix with its own acceptance criteria. No requirement changes task 0567's shipped
 behavior.
 ### Requirements
-- [ ] R1. Add a plan-time size precheck that runs at task creation/refinement (not first at pipeline precheck): evaluate R-item and Plan-item counts against `maxImplementReqs` / `maxImplementPlanItems` caps and surface a warning at authoring time. Trigger: `spur task create` / `spur task update --section` emits a visible warning when `## Plan` checklist items > 8 or R-items > 5. Target: `packages/app/src/services/task-size-precheck.ts` shared caps + a CLI surface (e.g. `spur task check --size` or an authoring-time hook). Acceptance: a task authored with 9 Plan items produces the warning before any pipeline run; zero false positives on a conforming 8-item task.
-- [ ] R2. Extend `normalizeEvidenceType` in `packages/app/src/services/task-verdict.ts` to accept compound evidence types (`test + command`, `command + dogfood`, `test + static-ref`, …) as the union of their parts, OR emit a loud dropped-rows warning at derivation time instead of a silent count. Acceptance: a verdict answer with `test + command` evidence types yields 10/10 parsed AC rows (or an explicit warning naming the dropped rows); existing single-token behavior unchanged.
-- [ ] R3. Document the record-step source-of-truth in `sp-code-verification` SKILL.md: `## Testing` is transcribed from the verdict artifact at `spur task record`, so verify-time anchor fixes must be applied to the answer file followed by `spur task verdict --from-answer` + re-record — never to the task section directly. Acceptance: the skill's Step 10 contains the note; a reviewer following the skill fixes stale anchors in one pass (answer file → re-derive → re-record) with no second guard denial.
-- [ ] R4. Make the issue-finding skill's Phase-1 snippet resolve `spur` monorepo-safely (SPUR_BIN env > monorepo-local CLI > PATH) instead of bare `spur`, mirroring `defaultSpurBin()` in `plugins/sp/scripts/task-size-precheck.ts`. Acceptance: running the Phase-1 commands from the skill in a monorepo checkout uses the local CLI (provenance `binary: …/apps/cli/src/index.ts`, `importer: 0.4.x`), not a stale PATH install.
-- [ ] R5. Add a targeted-test-first / dogfood-discipline note to `sp-code-implementation` SKILL.md: run the narrow test before any full suite (`bun test <file> --test-name-pattern`), run the full plugin suite at most twice per task (task 0436 R2), and consolidate repeated real-data dogfood invocations (single combined run instead of N near-identical `--dry-run`/real runs). Acceptance: a follow-on task run shows ≤2 full-suite invocations and no repeated identical dogfood commands (loop detector reports zero 3× repeats).
-- [ ] R6. Audit pipeline/skill shell-outs for bare `spur` usage and route them through the monorepo-safe resolver (same as R4) so no skill command depends on PATH freshness. Acceptance: `grep -rn "spur history\|spur task" plugins/sp/skills apps/cli/src --include="*.md" --include="*.ts"` shows no bare `spur` first-command that can hit a stale install; each shell-out either uses `$spurBin`/`SPUR_BIN` or is documented as PATH-dependent.
+- [ ] R1. Add a plan-time size warning at authoring time (not first at pipeline precheck): `spur task create` and `spur task update --section Plan|Requirements` emit a visible non-blocking stderr warning when R-item count > 5 or Plan checklist items > 8, reusing `evaluateTaskSize` / `countRItems` / `countPlanItems` and `DEFAULT_TASK_SIZE_LIMITS` from `packages/app/src/services/task-size-precheck.ts`. Acceptance: a task authored with 9 Plan items produces the warning before any pipeline run; zero false positives on a conforming 8-item task; the plugin parity test (`plugins/sp/tests/task-size-precheck.test.ts:76`) still passes. Surface-change note: this touches the public CLI and requires operator consent per ADR-051 + `docs/04_DESIGN.md` in the same commit (T3).
+- [ ] R2. Extend `normalizeEvidenceType` in `packages/app/src/services/task-verdict.ts:232` to accept compound evidence types (`test + command`, `command + dogfood`, …) as the union of their parts: split on `+`/`,`/`/` and accept when every component is a known token. Acceptance: a verdict answer with `test + command` evidence types yields 10/10 parsed AC rows; single-token behavior and the existing `ac-row-dropped` fail check (0398 R6) are unchanged for genuinely unknown tokens. (The loud-warning half of the original requirement already landed in 0398 R6 — `task-verdict.ts:320-330` names each dropped row; do not re-implement it.)
+- [ ] R3. Document the record-step source-of-truth in `plugins/sp/skills/code-verification/SKILL.md` Step 10: `## Testing` is transcribed from the verdict artifact at `spur task record`, so verify-time anchor fixes must be applied to the answer file followed by `spur task verdict --from-answer` + re-record — never to the task section directly. The current Step 10 leads with a direct `spur task update --section Testing` write; make the answer-file workflow authoritative for corrections. Acceptance: Step 10 contains the note; a reviewer following the skill fixes stale anchors in one pass (answer file → re-derive → re-record) with no second guard denial.
+- [ ] R4. Make the issue-finding skill's Phase-1 snippet (`plugins/sp/skills/issue-finding/SKILL.md:142-145`) resolve `spur` monorepo-safely (SPUR_BIN env > monorepo-local CLI > PATH), mirroring `defaultSpurBin()` at `plugins/sp/scripts/task-size-precheck.ts:76`. Acceptance: running the Phase-1 commands from the skill in a monorepo checkout uses the local CLI (provenance `binary: …/apps/cli/src/index.ts`, `importer: 0.4.x`), not a stale PATH install.
+- [ ] R5. Extend the test-discipline guidance in `plugins/sp/skills/code-implementation/SKILL.md` (targeted-probe guidance already exists at lines 88-89 — do not duplicate it): add the "full plugin suite at most twice per task" cap (task 0436 R2) and a dogfood-consolidation note (single combined real-data run instead of N near-identical `--dry-run`/real runs). Acceptance: a follow-on task run shows ≤2 full-suite invocations and no repeated identical dogfood commands (loop detector reports zero 3× repeats).
+- [ ] R6. Audit executable procedure snippets in `plugins/sp/skills` (Phase/Step command blocks an agent would run verbatim, e.g. issue-finding Phase 1, next-feature signal-derivation) for bare first-command `spur` shell-outs and route them through the monorepo-safe resolver (same as R4). Out of scope: `plugins/sp/skills/spur-cli/references/*` and other CLI-reference documentation that documents the public `spur` surface itself — those intentionally name the `spur` command. Acceptance: every executable skill shell-out either uses the resolver/`SPUR_BIN` or carries an explicit "PATH-dependent by design" note; CLI-reference docs are untouched.
 ### Acceptance Criteria
 ```gherkin
 Feature: Fix 0567-run process bottlenecks
@@ -78,11 +78,12 @@ Feature: Fix 0567-run process bottlenecks
     And no pipeline precheck run is needed to discover the violation
 
   @core
-  Scenario: R2 — Compound evidence types parse or fail loudly
+  Scenario: R2 — Compound evidence types parse as the union of their parts
     Given a verify answer with AC evidence type "test + command"
     When spur task verdict derives the verdict
-    Then all 10 AC rows are parsed (or a warning names every dropped row)
+    Then all 10 AC rows are parsed
     And no row is silently discarded
+    And an unknown component (e.g. "bogus + test") still triggers the ac-row-dropped fail check
 
   @core
   Scenario: R3 — Record-step source-of-truth documented
@@ -106,11 +107,12 @@ Feature: Fix 0567-run process bottlenecks
     And the full plugin suite runs at most twice per task
 
   @core
-  Scenario: R6 — No bare spur shell-outs in skills/CLI docs
-    Given the grep across plugins/sp/skills and apps/cli/src
+  Scenario: R6 — No bare spur shell-outs in executable skill snippets
+    Given the audit across executable procedure snippets in plugins/sp/skills
     When scanning for first-command spur invocations
     Then every shell-out resolves via SPUR_BIN or the monorepo-local CLI
     And none depend on PATH freshness
+    And CLI-reference documentation (spur-cli references) is untouched
 ```
 ### Q&A
 **Q1: Why documentation/guidance-first instead of code fixes?** The harness guards are correct —
@@ -149,51 +151,46 @@ full-suite runs and consolidated dogfood.
 related (same resolver pattern, two surfaces) and could pair in one implement pass. R1 is the
 highest-leverage item (prevents a full failed pipeline run). No requirement depends on another's
 output; safe to run in any order.
+**Q7 (added at ready-refine): Does R2 still need the loud-warning half?** No — verified against
+the current tree: task 0398 R6 already emits a failing `ac-row-dropped` check naming each dropped
+row and its token (`packages/app/src/services/task-verdict.ts:320-330`), with row reasons recorded
+in `dropped[]` since the same change (`:209-214`). R2 is narrowed to compound-token union
+acceptance only; the requirement text and AC were corrected in this refine.
+
+**Q8 (added at ready-refine): New CLI flag or warning on existing verbs for R1?** Warning on
+`task create` / `task update --section` — no new flag, no new noun (ADR-051 noun discipline). The
+change still touches the public CLI surface, so operator consent + `docs/04_DESIGN.md` in the same
+commit (T3) are required. Caps and counting logic are reused from the app service, never duplicated
+in the CLI layer (ADR-021).
+
+**Q9 (added at ready-refine): Is R5 a fresh add?** No — targeted-test-first guidance already exists
+(`code-implementation/SKILL.md:88-89`). R5 extends it with the ≤2 full-suite cap (0436 R2) and
+dogfood consolidation. Stale anchors corrected at refine: `defaultSpurBin` is
+`task-size-precheck.ts:76` (not :96-100); the parity test is `task-size-precheck.test.ts:76` (not
+:173-179); `normalizeEvidenceType` starts at `task-verdict.ts:232` (not :230).
 ### Design
-**R1 — Plan-time size precheck.** Add `--size` mode (or authoring warning) to `spur task check`
-reusing `packages/app/src/services/task-size-precheck.ts` caps (R-items > 5, Plan items > 8). The
-check runs against the task body's `## Requirements` / `## Plan` sections exactly as the pipeline
-precheck does (`R_ITEM_RE`, `CHECKLIST_ITEM_RE`), but surfaces as a warning at `task create` /
-`task update --section Plan` time. Parity test already pins plugin vs app caps
-(`plugins/sp/tests/task-size-precheck.test.ts:173-179`). Evidence: 0567 run 1 FAIL
-(`.spur/run/0567-precheck-size.status`), 9 Plan items vs cap 8.
+Six independent fixes (R4+R6 pair naturally in one pass). Premises re-verified against the current tree during ready-refine; corrections from the original Background are called out per item. No requirement changes task 0567's shipped behavior.
 
-**R2 — Compound evidence types.** `packages/app/src/services/task-verdict.ts:230-250` —
-`normalizeEvidenceType` currently returns null for any value outside the single-token whitelist.
-Change to split on `+`/`,`/`/` and accept if any component is a known type (union semantics), or
-emit `L4` warning naming dropped rows at derivation. Evidence: first 0567 verdict artifact had
-`acceptanceCriteria.length = 2` with 10 rows authored (`test + command` values); `dropped[]`
-carried the rest invisibly.
+**R1 — Plan-time size warning.** WHERE: `apps/cli/src/commands/task.ts` (thin wiring; ADR-021) calling `evaluateTaskSize` / `countRItems` / `countPlanItems` + `DEFAULT_TASK_SIZE_LIMITS` from `packages/app/src/services/task-size-precheck.ts:112` (currently no CLI consumer — the pipeline precheck shells the plugin script's own copy). WHAT: after a successful `spur task create` and `spur task update --section Plan|Requirements`, count R-items/Plan items in the resulting task body and print a non-blocking stderr warning naming the count vs cap. WHY warning-not-block: Q4 — hooks blocking writes risk false positives in legitimate multi-edit workflows; the pipeline precheck remains the hard gate. GATES: public-CLI surface change → operator consent per ADR-051 + `docs/04_DESIGN.md` same commit (T3). Parity test to keep green: `plugins/sp/tests/task-size-precheck.test.ts:76` ("plugin large-task thresholds stay aligned"). Anti-pattern: do NOT duplicate the caps in the CLI layer, and do NOT add a new noun/verb.
 
-**R3 — Record-step source-of-truth doc.** `sp-code-verification` SKILL.md Step 10 — add explicit
-note: "`## Testing` is transcribed from the verdict artifact at `spur task record`; fix anchors in
-the answer file, re-run `spur task verdict --from-answer`, then re-record. Direct section edits are
-overwritten." Evidence: 0567 record denied twice; Testing anchors fixed in the section reappeared
-via transcription.
+**R2 — Compound evidence types.** WHERE: `normalizeEvidenceType` at `packages/app/src/services/task-verdict.ts:232`. CORRECTION: the loud-dropped-rows half already exists — 0398 R6 emits a failing `ac-row-dropped` check naming each dropped row and its unrecognized token (`task-verdict.ts:320-330`). Only the union-parse half remains. WHAT: split the raw value on `+`/`,`/`/`, trim, and accept when every component normalizes to a known token; map the union to the existing single `evidenceType` field with precedence `test > command > static-ref > manual-review > llm-judge > n/a` (the field is single-valued — the strongest executable evidence wins, matching `applyAcceptanceCriteriaEvidenceRule`'s test/command preference). Unknown component → return null as today (the existing dropped-row check then names it). Tests: `packages/app/tests/` verdict suite — `test + command` parses 10/10; `bogus + test` still drops loudly. Anti-pattern: do NOT widen the whitelist with new tokens (`dogfood` etc.) and do NOT touch the 0398 R6 check.
 
-**R4 — Issue-finding skill spur resolution.** `sp-issue-finding` SKILL.md Phase 1 — replace bare
-`spur history import/analyze/report` with the resolver pattern from
-`plugins/sp/scripts/task-size-precheck.ts:96-100` (SPUR_BIN > monorepo-local CLI > PATH). Evidence:
-bare `spur history import --source omp --json` exited 1 with `provenance.binary =
-/Users/robin/node_modules/@gobing-ai/spur/spur.js`, `importer: unknown`; local CLI succeeded with
-`importer: 0.4.32`.
+**R3 — Record-step source-of-truth doc.** WHERE: `plugins/sp/skills/code-verification/SKILL.md` Step 10 (line 232). CORRECTION: the transcription caveat exists only as a side note (line 297) while Step 10's procedure still leads with a direct `spur task update <wbs> --section Testing` write — the trap. WHAT: add an explicit note that `## Testing` is re-transcribed from the verdict artifact at `spur task record`, so anchor/evidence corrections go: fix answer file → `spur task verdict --from-answer` → re-record; direct section edits are overwritten. Doc-only. Anti-pattern: do NOT restructure Step 10's happy path (initial Testing authorship still goes through `--section`); the note governs corrections.
 
-**R5 — Test discipline doc.** `sp-code-implementation` SKILL.md — add targeted-test-first + "full
-suite ≤2× per task" (task 0436 R2) + dogfood consolidation note. Evidence: 0567 ran 16 `bun test`
-invocations (4× full plugin suite, 6× history-load suite) and 29 history-load script executions
-(10 real-data dogfood runs incl. 5 dry-run variants).
+**R4 — Issue-finding spur resolution.** WHERE: `plugins/sp/skills/issue-finding/SKILL.md:142-145` (Phase 1 fallback commands). WHAT: replace bare `spur history import/analyze/report` with the resolver pattern from `defaultSpurBin()` at `plugins/sp/scripts/task-size-precheck.ts:76` (SPUR_BIN env > monorepo-local `apps/cli/src/index.ts` via Bun > PATH). In a markdown skill the resolver is expressed as a short shell prelude the snippet defines once and reuses (`SPUR_BIN` override preserved). Anti-pattern: do NOT hardcode the monorepo path — non-monorepo installs must fall back to PATH.
 
-**R6 — Bare-spur audit.** Sweep `plugins/sp/skills` + `apps/cli/src` for first-command `spur`
-shell-outs; route through `$spurBin`/SPUR_BIN resolver. Evidence: the 0567 run's own find-issue
-snippet (`spur history import --source omp`) hit the stale PATH binary and failed.
+**R5 — Test discipline doc.** WHERE: `plugins/sp/skills/code-implementation/SKILL.md`. CORRECTION: targeted-test-first guidance already exists (lines 88-89, "Run only targeted probes … `bun test <file> --test-name-pattern`") — do not duplicate. WHAT: extend with (a) the full-plugin-suite ≤2× per task cap (task 0436 R2, also enforced in AGENTS.md verification gate) and (b) dogfood consolidation — one combined real-data run instead of N near-identical invocations. Doc-only.
+
+**R6 — Bare-spur audit.** WHERE: executable procedure snippets under `plugins/sp/skills` (Phase/Step fenced command blocks an agent would run verbatim). SCOPE FROZEN: `plugins/sp/skills/spur-cli/references/*` documents the public CLI surface and intentionally names bare `spur` — excluded. Known hits to triage: `issue-finding/SKILL.md:142-145` (R4 covers), `next-feature/references/signal-derivation.md:10,37`, `code-verification/SKILL.md:378`. Each in-scope hit gets the resolver prelude or an explicit "PATH-dependent by design" note. Anti-pattern: do NOT blanket-rewrite reference docs; the acceptance criterion is about executable shell-outs, not grep-zero.
+
+**Cross-cutting:** R2 is the only code change; R1 is the only CLI-surface change (consent + T3 doc); R3–R6 are doc/skill edits. No `dependencies[]`; no feature_id, so the DD-09 feature-subset rule does not apply. Handoff: none — six standalone fixes, R4/R6 share the resolver pattern and pair in one implement pass.
 ### Plan
-- [ ] R1: add `spur task check --size` (or authoring-time warning) reusing shared caps; verify parity test still passes (R1)
-- [ ] R2: extend `normalizeEvidenceType` to compound tokens or loud dropped-rows warning; add unit tests for `test + command` (R2)
-- [ ] R3: add record-step source-of-truth note to sp-code-verification SKILL.md Step 10 (R3)
-- [ ] R4: switch sp-issue-finding Phase-1 snippets to the monorepo-safe spur resolver (R4)
-- [ ] R5: add targeted-test-first + ≤2 full-suite + dogfood-consolidation guidance to sp-code-implementation SKILL.md (R5)
-- [ ] R6: grep-and-fix bare `spur` shell-outs across plugins/sp/skills and apps/cli/src; route through SPUR_BIN resolver (R6)
-- [ ] Verify: `bun test` targeted suites (task-verdict, task-size-precheck, plugin suites), `bun run lint`, `spur task check 0568` (all)
+- [ ] R2 first (only code change): extend `normalizeEvidenceType` (`packages/app/src/services/task-verdict.ts:232`) with compound-token union parsing + precedence; add unit tests for `test + command` (parses 10/10) and `bogus + test` (still dropped loudly). Targeted: `bun test packages/app/tests --test-name-pattern verdict` (or the verdict suite file) before any full run.
+- [ ] R1: wire the authoring-time size warning into `apps/cli/src/commands/task.ts` (`create` + `update --section`) over the app-service helpers; confirm operator consent for the CLI surface change (ADR-051) and update `docs/04_DESIGN.md` in the same commit (T3); keep `plugins/sp/tests/task-size-precheck.test.ts:76` parity green.
+- [ ] R3: add the answer-file-as-source correction note to `plugins/sp/skills/code-verification/SKILL.md` Step 10.
+- [ ] R4+R6 in one pass (shared resolver pattern): fix `issue-finding/SKILL.md:142-145`, then triage the remaining executable snippets (`next-feature/references/signal-derivation.md:10,37`, `code-verification/SKILL.md:378`); leave `spur-cli/references/*` untouched.
+- [ ] R5: extend `code-implementation/SKILL.md` with the ≤2 full-suite cap + dogfood consolidation (append near the existing targeted-probe note at lines 88-89).
+- [ ] Verify: targeted verdict + size-precheck suites green, `bun run lint`, `spur task check 0568`; AC lens — 9-item task warns at authoring (R1), compound evidence parses (R2), Step 10 note present (R3), Phase-1 snippet resolves local CLI (R4), discipline note present (R5), no unresolved executable bare-spur shell-outs (R6).
 ### Solution
 
 <!-- Filled during implementation: changed files/sections and concise rationale. -->
