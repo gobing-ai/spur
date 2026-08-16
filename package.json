@@ -29,14 +29,14 @@
             "packages/*"
         ],
         "catalog": {
-            "@gobing-ai/ts-ai-runner": "^0.4.32",
-            "@gobing-ai/ts-db": "^0.4.31",
-            "@gobing-ai/ts-dual-workflow-engine": "^0.4.31",
-            "@gobing-ai/ts-infra": "^0.4.31",
+            "@gobing-ai/ts-ai-runner": "^0.4.35",
+            "@gobing-ai/ts-db": "^0.4.35",
+            "@gobing-ai/ts-dual-workflow-engine": "^0.4.35",
+            "@gobing-ai/ts-infra": "^0.4.35",
             "@gobing-ai/ts-llm-jsonl-importer": "^0.4.31",
-            "@gobing-ai/ts-rule-engine": "^0.4.31",
-            "@gobing-ai/ts-runtime": "^0.4.31",
-            "@gobing-ai/ts-utils": "^0.4.31",
+            "@gobing-ai/ts-rule-engine": "^0.4.35",
+            "@gobing-ai/ts-runtime": "^0.4.35",
+            "@gobing-ai/ts-utils": "^0.4.35",
             "@orpc/client": "1.14.4",
             "@orpc/contract": "1.14.4",
             "@orpc/openapi": "1.14.4",
@@ -89,7 +89,12 @@
         "link-check": "bun scripts/spur-dev.ts link-check"
     },
     "dependencies": {
+        "@gobing-ai/ts-ai-runner": "catalog:",
+        "@gobing-ai/ts-db": "catalog:",
+        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-llm-jsonl-importer": "0.4.33",
+        "@gobing-ai/ts-rule-engine": "catalog:",
+        "@gobing-ai/ts-runtime": "catalog:",
         "@gobing-ai/ts-utils": "catalog:"
     },
     "devDependencies": {

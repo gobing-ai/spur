@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: D3
@@ -13,12 +13,13 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T17:40:22.860Z"
-updated_at: "2026-08-16T19:05:08.014Z"
+updated_at: "2026-08-16T20:22:25.838Z"
 ---
 
 ## 0571. workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates
 
 ### Background
+
 Root cause CONFIRMED at source level 2026-08-16 (supersedes the symptom-level background): the state-machine dialect drops `ActionResult.setVars` at TWO points in `runActionSequence` (`~/xprojects/ts-libs/packages/dual-workflow-engine/src/action-step.ts:121`):
 
 - **Drop 1 (intra-state):** every action in an onEnter sequence receives the SAME `vars` snapshot; a setVars from action N is invisible to action N+1 (the file's own comment documents the snapshot as caller-owned — "setVars does not affect later actions within the same sequence").
@@ -29,11 +30,13 @@ The transition-flow dialect is unaffected (one action per node + immediate per-s
 Version facts: spur-new resolves engine **0.4.32** (catalog); ts-libs source is at 0.4.34 with the bug present in both — the 0.4.33/0.4.34 bumps were release chores, no functional change to this path. The fix therefore lands in ts-libs as 0.4.35, then spur-new updates the catalog (the repo protocol: released semver + `bun update`, never `bun link` for this).
 
 Also verified during root-cause: Spur's `StreamingShellActionRunner` (packages/app/src/workflow/actions/shell.ts:52) exports `context.vars` into the child env — correct; the drop is upstream of it. `FileReadIntoVarActionRunner` returns setVars correctly (packages/app/src/workflow/actions/file-read-into-var.ts:69).
+
 ### Requirements
-- [ ] R1. Engine fix in `~/xprojects/ts-libs` (dual-workflow-engine): `runActionSequence` accumulates setVars from EVERY action result and threads them forward — action N+1's template resolution and `context.vars` include all prior same-sequence setVars — and the sequence result carries the accumulated map (`ActionStepResult.setVars`); `state-machine.ts` merges the accumulated map (both the onEnter merge at :112 and the onExit merge at :173). Update the stale "same snapshot" comment to the new contract. Behavior change is deliberate: the YAML reads imperatively, and the snapshot isolation was the trap.
-- [ ] R2. Engine regression tests (state-machine.test.ts): (a) non-final action's setVars reach the NEXT state's template resolution AND `context.vars`; (b) a mid-sequence setVars is visible to a later action IN THE SAME state; (c) accumulated map survives a continued-failure action (the transition-flow.test.ts:375 precedent); (d) pause/resume still restores merged vars (pause-resume-vars.test.ts must stay green). Then release 0.4.35 and `bun update` the catalog in spur-new.
-- [ ] R3. Spur-side proof: with 0.4.35 installed, the probe workflow (file.read.into-var in s1 followed by a shell echo in s1 and a `${vars.X}` template in s2) resolves the value in all three positions, and the idea-pipeline `feature-create` state's `$featureId` consumers interpolate the captured id — run idea-pipeline end-to-end on a throwaway idea to prove the guard chain evaluates the real id.
+[x] R1. Engine fix in `~/xprojects/ts-libs` (dual-workflow-engine): `runActionSequence` accumulates setVars from EVERY action result and threads them forward — action N+1's template resolution and `context.vars` include all prior same-sequence setVars — and the sequence result carries the accumulated map (`ActionStepResult.setVars`); `state-machine.ts` merges the accumulated map (both the onEnter merge at :112 and the onExit merge at :173). Update the stale "same snapshot" comment to the new contract. Behavior change is deliberate: the YAML reads imperatively, and the snapshot isolation was the trap.
+[x] R2. Engine regression tests (state-machine.test.ts): (a) non-final action's setVars reach the NEXT state's template resolution AND `context.vars`; (b) a mid-sequence setVars is visible to a later action IN THE SAME state; (c) accumulated map survives a continued-failure action (the transition-flow.test.ts:375 precedent); (d) pause/resume still restores merged vars (pause-resume-vars.test.ts must stay green). Then release 0.4.35 and `bun update` the catalog in spur-new.
+[x] R3. Spur-side proof: with 0.4.35 installed, the probe workflow (file.read.into-var in s1 followed by a shell echo in s1 and a `${vars.X}` template in s2) resolves the value in all three positions, and the idea-pipeline `feature-create` state's `$featureId` consumers interpolate the captured id — run idea-pipeline end-to-end on a throwaway idea to prove the guard chain evaluates the real id.
 ### Acceptance Criteria
+
 ```gherkin
 Scenario: R1 — A var set by file.read.into-var is visible to a shell step in the same state
   Given a workflow whose state s1 reads a file containing "L" into var myId
@@ -51,11 +54,15 @@ Scenario: R3 — idea-pipeline feature-create completes end to end
   Then the feature-create state's Goal/Scope shell writes interpolate the captured featureId
   And the feature check transition guards evaluate against the real id
 ```
+
 ### Q&A
+
 **Closed during --depth ready refinement (2026-08-16).** Root cause is confirmed at source level, not inferred: two distinct drops in runActionSequence (intra-state stale snapshot; inter-state last-result-only merge). Transition-flow is correct by construction — its test suite passing never covered the multi-action state case, which is why the bug survived. Engine version math: spur-new pins 0.4.32 via catalog, ts-libs source at 0.4.34, bug in both — fix releases as 0.4.35, then `bun update` here (never `bun link`). Contract change accepted: intra-sequence visibility changes from never to always — no legitimate consumer exists (every working usage has its setter alone/last in its state).
 
 **Why no YAML workaround was kept on the table:** splitting idea-pipeline's feature-create into more states would route around Drop 2 but leaves Drop 1 armed for the next author; the engine fix is the smaller total diff.
+
 ### Design
+
 **WHAT.** A ~20-line engine change plus its test matrix, then the Spur-side version bump. No Spur production code changes.
 
 **WHY this shape.** The transition-flow dialect already proves the correct semantics (per-step immediate merge); the state-machine dialect's `runActionSequence` is the only broken path. Fixing the shared sequence runner fixes both dialects' call patterns without touching control loops (ADR-006 §7 keeps loops dialect-specific; the per-action mechanism is shared — this edit stays inside that seam).
@@ -78,24 +85,28 @@ Scenario: R3 — idea-pipeline feature-create completes end to end
 - Do not `bun link` the engine — released semver + `bun update` per the repo's ts-libs protocol.
 
 **Handoff.** None in-repo after R3; idea-pipeline resumes working without YAML edits. Note for 0572 (B3): none — independent surfaces.
+
 ### Plan
-- [ ] Implement the engine change (action-step.ts accumulation + ActionStepResult.setVars + state-machine.ts two merge points + comment rewrite) in ~/xprojects/ts-libs (R1)
-- [ ] Add the four engine regression tests; run the engine suite green (R2)
-- [ ] Release 0.4.35; in spur-new `bun update` the catalog and confirm `node_modules` resolves 0.4.35 (R2)
-- [ ] Add the Spur-side probe test (same-state shell env + next-state template + guard visibility) and run `bun test apps/cli` (R3)
-- [ ] End-to-end proof: run idea-pipeline on a throwaway idea; feature-create completes with real `$featureId` interpolation; then `bun run lint` + full `bun run test` (R3)
+[x] Implement the engine change (action-step.ts accumulation + ActionStepResult.setVars + state-machine.ts two merge points + comment rewrite) in ~/xprojects/ts-libs (R1)
+[x] Add the four engine regression tests; run the engine suite green (R2)
+[x] Release 0.4.35; in spur-new `bun update` the catalog and confirm `node_modules` resolves 0.4.35 (R2)
+[x] Add the Spur-side probe test (same-state shell env + next-state template + guard visibility) and run `bun test apps/cli` (R3)
+[x] End-to-end proof: run idea-pipeline on a throwaway idea; feature-create completes with real `$featureId` interpolation; then `bun run lint` + full `bun run test` (R3)
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- Engine fix (ts-libs `b4184bb`): `runActionSequence` (action-step.ts) now folds every action's setVars into an accumulator AND threads it into `vars` before the next iteration; `ActionStepResult.setVars` carries the accumulated map on all three exit branches (completed/terminal/fail). `state-machine.ts:112`/`:173` merge the accumulated map (onEnter + onExit); stale "same snapshot" comment rewritten to the imperative contract. Transition-flow dialect untouched (uses `runActionStep` directly with its own immediate merge).
+- Released as family `0.4.35` (`7fd1643`), live on npm; spur-new catalog bumped to `^0.4.35` (7 entries, lockstep family), lockfile resolves 0.4.35.
+- Spur-side proof: probe test `apps/cli/tests/workflow/setvars-probe.test.ts` (same-state child env + next-state `${vars.X}` template + guard visibility) and idea-pipeline e2e run `63d57a3e` reaching `done` with real `$featureId=D3` interpolation (durable log `.spur/run/63d57a3e-3fdc-4fd4-ae1c-353a2545ad71.log`).
+- Reviewer note: all 7 catalog `@gobing-ai` entries bumped rather than engine-only — justified by the family's lockstep release.
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- Engine regression suite (ts-libs): 4 cases — non-final setVars reach next state's template + `context.vars` (state-machine.test.ts:589), mid-sequence same-state visibility (:641), accumulated map survives continued-failure (:677), pause-resume-vars.test.ts stays green. Suite re-run during review AND verify: 394/394 across 23 files.
+- Probe test: `bun test apps/cli/tests/workflow/setvars-probe.test.ts` — 1/1 pass (re-run live during review and verify).
+- Monorepo gate `bun run format && bun run spur-check` (inline run `inline-E22B54C3`): 5571/5573 pass. Only failures are R42/R43 skill-structure tests keyed exclusively to `pr-reviewing`/`dev-pr-review` files owned by a concurrent operator-delegated agent session — operator-approved exclusion recorded in the run log; no 0571-related failure.
+- e2e: idea-pipeline run `63d57a3e` — file.read.into-var (seq=15) → shell writes "Updated section 'Goal' in feature D3" with real interpolated id (seq=17–19) → terminal `done`.
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+- Review (subagent run `11070d93`): verdict PASS — no blockers, no P1–P3. SECUA: fold-then-merge is associative under last-write-wins (no double-merge); `ActionStepResult` additive-optional, zero consumers in spur-new (non-breaking); string-only defensive filter in `mergeSetVars` preserved; transition-flow verified still correct.
+- Findings: P4 advisory (out of scope) — `ts-llm-jsonl-importer` catalog floor `^0.4.31`/lockfile 0.4.33 lags the 0.4.35 family; fold into a future lockstep bump.
+- Verify (subagent run `0a4005d2`): verdict PASS — all three requirements and all three AC scenarios satisfied with live re-run evidence.
+- Residual risk (accepted in task contract): intra-sequence setVars visibility changes from never → always; task Q&A established no legitimate consumer of snapshot isolation; full suites green; documented in CHANGELOG.
 ### References
 
 D3
@@ -103,3 +114,7 @@ D3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-16T19:44:57.286Z todo → wip (system)
+- 2026-08-16T20:21:54.374Z wip → testing (system)
+- 2026-08-16T20:22:25.838Z testing → done (system)
