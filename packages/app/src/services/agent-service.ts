@@ -256,6 +256,21 @@ export interface AgentServiceOutput {
     error(message: string): void;
 }
 
+/**
+ * A Layer-1 role as declared in `plugins/sp/references/roles.md` (task 0535).
+ *
+ * `stages` lists the canonical stage ids the role folds. It is not decoration:
+ * it is how a dispatch that declares only a role still reaches the stage
+ * registry's `model_policy`, and with it the escalation/fallback ladder. The
+ * role's `tier` may not sit below the highest `min_tier` among these stages —
+ * `plugins/sp/tests/roles.test.ts` R4 enforces that, which is what makes
+ * deriving a stage from a role safe (it can never start cheaper than the role).
+ */
+export interface AgentRoleDefinition {
+    tier: CapabilityTier;
+    stages: readonly string[];
+}
+
 /** Context injected into AgentService. */
 export interface AgentServiceContext {
     cwd: string;
@@ -268,11 +283,11 @@ export interface AgentServiceContext {
      */
     agentConfig?: AgentConfig;
     /**
-     * Layer-1 role → tier map parsed from `plugins/sp/references/roles.md`
-     * (task 0535) at the CLI boundary (0536 R1). Absent → role selectors are
-     * not recognized and fall through to the executor / binary lookup.
+     * Layer-1 role map parsed from `plugins/sp/references/roles.md` (task 0535)
+     * at the CLI boundary (0536 R1). Absent → role selectors are not recognized
+     * and fall through to the executor / binary lookup.
      */
-    roles?: ReadonlyMap<string, CapabilityTier>;
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
     /**
      * Optional canonical server EventBus. When provided, every `agent.invoke.*`
      * and `agent.*` event emitted by the underlying AiRunner/TeamOrchestrator
@@ -1230,15 +1245,49 @@ export class AgentService {
     }
 
     /**
-     * Resolve the canonical stage from the explicit `--stage` flag. Prompt-text
-     * phase derivation was removed in task 0536 (R4) — `extractPhase` is gone, so
-     * a stage is never inferred from the prompt; undeclared callers land on the
-     * default role visibly.
+     * Resolve the canonical stage for this dispatch: an explicit `stage` flag when
+     * one is supplied, otherwise the stage folded by the **declared role**.
+     *
+     * The role fallback is what makes stage routing reachable at all. Prompt-text
+     * phase derivation was removed in 0536 R4 and `default-by-phase` in 0452, which
+     * left the explicit flag as the only input — and no caller sets it: not the CLI
+     * (`spur agent run` has no such option), not the workflow `agent.run` action,
+     * not the server. So `model_policy`, the fallback tier chain, and
+     * resource-exhaustion failover were unreachable outside tests, including the
+     * 0482 R1 repair of exactly that condition. Roles are the input production
+     * actually carries: every pipeline `agent.run` step declares one (0538 R2) and
+     * the action forwards it as `flags.role`.
+     *
+     * Picking the role's highest-`min_tier` stage (ties → declaration order) keeps
+     * the starting executor identical to plain role routing — roles.md R4 pins the
+     * role's tier at that same floor — so this widens what the ladder can do
+     * without moving where a run begins.
      */
     private resolveCanonicalStage(flags: Record<string, string | boolean>): StageRecord | undefined {
         const stageFlag = stringFlag(flags, 'stage', '');
-        if (stageFlag === '') return undefined;
-        return getCanonicalStage(stageFlag);
+        if (stageFlag !== '') return getCanonicalStage(stageFlag);
+
+        const declared = stringFlag(flags, 'role', '') || this.inheritedRole() || '';
+        if (declared === '') return undefined;
+        return this.stageForRole(declared);
+    }
+
+    /**
+     * The stage a role routes through: the folded stage with the highest
+     * `min_tier`, ties broken by declaration order. Undefined when the role is
+     * unknown, folds no stage, or names a stage absent from the registry.
+     */
+    private stageForRole(role: string): StageRecord | undefined {
+        const stages = this.ctx.roles?.get(role)?.stages ?? [];
+        let best: StageRecord | undefined;
+        for (const id of stages) {
+            const record = getCanonicalStage(id);
+            if (record === undefined) continue;
+            if (best === undefined || TIER_RANK[record.model_policy.min_tier] > TIER_RANK[best.model_policy.min_tier]) {
+                best = record;
+            }
+        }
+        return best;
     }
 
     /**
@@ -1257,6 +1306,20 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
 
+        // Escalation hop (`signal` present): the role already chose the executor that
+        // failed, so re-resolving through the role would return it again and the loop
+        // would read that as an exhausted chain. Route through the stage's
+        // `model_policy` instead so the fallback tier can advance — the same carve-out
+        // `resolvePinned` makes for pins (0482 R1). Initial dispatches carry no signal
+        // and are unaffected.
+        if (stringFlag(flags, 'signal', '') !== '') {
+            const hopStage = this.resolveCanonicalStage(flags);
+            if (hopStage !== undefined) {
+                const hopRes = await this.resolveStageModelPolicy(hopStage, flags, doctorRunner, exclude);
+                if (hopRes !== undefined) return hopRes;
+            }
+        }
+
         // Declared role (0538 R1/R2): `--agent auto` means "use the role the caller
         // declared" (command frontmatter or workflow step). The declared role picks
         // the starting tier; with nothing declared it falls to `agent.default`
@@ -1264,7 +1327,7 @@ export class AgentService {
         // declaration must not silently route as a bare binary name.
         const declaredRole = stringFlag(flags, 'role', '');
         if (declaredRole !== '') {
-            const roleTier = this.ctx.roles?.get(declaredRole);
+            const roleTier = this.ctx.roles?.get(declaredRole)?.tier;
             if (roleTier === undefined) {
                 return {
                     ok: false,
@@ -1275,8 +1338,11 @@ export class AgentService {
             return this.resolveRole(declaredRole, roleTier, doctorRunner, 'declared');
         }
 
-        // Stage-registry adaptive model routing (R1/R2/R3)
-        const stageRecord = this.resolveCanonicalStage(flags);
+        // Stage-registry adaptive model routing (R1/R2/R3). Explicit flag only:
+        // a role-derived stage must not preempt the inherited-role branch below,
+        // which owns `roleOrigin: 'inherited'` attribution (0551 R2). Role
+        // dispatches still carry stage context — `resolveRole` attaches it.
+        const stageRecord = stringFlag(flags, 'stage', '') !== '' ? this.resolveCanonicalStage(flags) : undefined;
         if (stageRecord !== undefined) {
             const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner, exclude);
             if (stageRes !== undefined) {
@@ -1291,7 +1357,7 @@ export class AgentService {
         // must never hard-fail a dispatch.
         const inherited = this.inheritedRole();
         if (inherited !== undefined) {
-            const inheritedTier = this.ctx.roles?.get(inherited);
+            const inheritedTier = this.ctx.roles?.get(inherited)?.tier;
             if (inheritedTier === undefined) {
                 this.ctx.output.error(
                     `Warning: ignoring inherited role '${inherited}' — not in ${this.roleVocabulary()}`,
@@ -1517,7 +1583,7 @@ export class AgentService {
         // Role branch (0536 R1): a role selects the *starting* tier and resolution
         // starts from that tier's cheapest eligible executor. Role-first match —
         // 0537's collision guard proves roles and executor names pairwise disjoint.
-        const roleTier = this.ctx.roles?.get(selector);
+        const roleTier = this.ctx.roles?.get(selector)?.tier;
         if (roleTier !== undefined) {
             return this.resolveRole(
                 selector,
@@ -1671,6 +1737,12 @@ export class AgentService {
             }
             const usable = await this.checkUsable(canonical, doctorRunner);
             if (usable.ok) {
+                // Attach the role's stage context (0482 R1 did the same for pins):
+                // without it `executeRun` sees no `currentStage`, `maxEscalations`
+                // is 0, and the fallback ladder cannot run. The stage only supplies
+                // the policy — the executor and tier above are already chosen, so
+                // this widens what a failure can do without moving where the run starts.
+                const stageRecord = this.stageForRole(role);
                 return {
                     ok: true,
                     agent: canonical,
@@ -1680,6 +1752,16 @@ export class AgentService {
                     ...(origin !== undefined ? { roleOrigin: origin } : {}),
                     tier: roleTier,
                     executor: executor.name,
+                    ...(stageRecord !== undefined
+                        ? {
+                              stage: {
+                                  stageId: stageRecord.id,
+                                  policy: stageRecord.model_policy,
+                                  executorName: executor.name,
+                                  executorTier: roleTier,
+                              },
+                          }
+                        : {}),
                 };
             }
         }

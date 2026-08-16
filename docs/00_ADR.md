@@ -244,6 +244,21 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 - **Why:** Prompt-regex phase routing could not express capability floors or evidence-based escalation.
 - **Detail:** `04 §2.1`; stage registry; `AgentService`.
 
+**Amendment (2026-08-16).** The canonical `stage_id` is **derived from the declared role** — the
+folded stage with the highest `min_tier` in `plugins/sp/references/roles.md` (ties → declaration
+order). That floor equals the role's tier by the roles.md R4 invariant, so derivation does not
+change where a run starts.
+
+**Why.** After `default-by-phase` was removed (0452) and prompt-regex phase derivation retired
+(0536 R4), the only remaining input was an internal `stage` flag that no production caller set —
+not the CLI, not the workflow `agent.run` action, not the server. `model_policy`, the fallback tier
+chain, and resource-exhaustion failover were therefore unreachable outside tests, including the
+0482 R1 repair of exactly that condition, which re-introduced it one level up. Roles are the input
+production already carries: every pipeline `agent.run` step declares one (0538 R2).
+
+**Detail:** `04 §2.1`; `AgentService.resolveCanonicalStage` / `stageForRole`; the role-driven
+escalation test in `packages/app/tests/services/agent-service.test.ts`.
+
 > **Amendment (task 0348, applied with task 0536).** Stage-registry `model_policy` is a *default
 > seed*, overridable per-stage via config (deep-replace). The routing key stays `stage_id`; the
 > registry is demoted from sole source to default, not removed.

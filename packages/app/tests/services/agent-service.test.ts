@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyCliMigrations, type CapabilityTier, RunSessionDao } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
@@ -13,6 +13,7 @@ import {
     type AgentConfig,
     type AgentExecutionEvent,
     type AgentExecutionStartedEvent,
+    type AgentRoleDefinition,
     type AgentRunDeps,
     AgentService,
     type AgentServiceOutput,
@@ -1686,19 +1687,19 @@ describe('AgentService.resolve', () => {
 function makeConfiguredService(
     agentConfig: AgentConfig,
     env: Record<string, string | undefined> = {},
-    roles?: ReadonlyMap<string, CapabilityTier>,
+    roles?: ReadonlyMap<string, AgentRoleDefinition>,
     output: AgentServiceOutput = nullOutput(),
 ) {
     return new AgentService({ cwd: process.cwd(), env, output, agentConfig, ...(roles ? { roles } : {}) });
 }
 
-/** Layer-1 role → tier map matching `plugins/sp/references/roles.md` (0535). */
-function roleMap(): Map<string, CapabilityTier> {
-    return new Map([
-        ['scribe', 'cheap'],
-        ['coder', 'standard'],
-        ['reviewer', 'capable-1'],
-        ['planner', 'capable-2'],
+/** Layer-1 role map mirroring `plugins/sp/references/roles.md` (0535), stages included. */
+function roleMap(): Map<string, AgentRoleDefinition> {
+    return new Map<string, AgentRoleDefinition>([
+        ['scribe', { tier: 'cheap', stages: ['changelog'] }],
+        ['coder', { tier: 'standard', stages: ['implement', 'test', 'wrap'] }],
+        ['reviewer', { tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] }],
+        ['planner', { tier: 'capable-2', stages: ['plan', 'refine', 'brainstorm'] }],
     ]);
 }
 
@@ -2009,6 +2010,20 @@ describe('AgentService role routing (0536)', () => {
         expect(resolved.executor).toBe('cap1-exec');
         expect(resolved.agent).toBe('claude');
         expect(resolved.source).toBe('role');
+    });
+
+    test('a role whose folded stages span tiers routes through the highest floor, never a cheaper one', async () => {
+        // coder folds implement/test/wrap — all `standard`. Picking the max min_tier
+        // (not stages[0]) is what guarantees a reordered roles.md cannot silently
+        // downgrade a role's starting tier.
+        const { lines, errors, output } = captureOutput();
+        const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
+        const { deps } = mockResolutionDeps();
+
+        await svc.run('plain prompt', { agent: 'auto', role: 'coder', json: true }, deps);
+
+        const resolved = envelopeJson({ lines, errors }).resolved as Record<string, unknown>;
+        expect(resolved.tier).toBe('standard');
     });
 
     test('R1: --agent coder floors at standard — the cheap executor is not eligible', async () => {
@@ -2553,6 +2568,45 @@ describe('AgentService automatic tier escalation (0407)', () => {
         // R3: escalation is observable — the message names what failed and why.
         expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
         expect(errors.some((e) => e.includes('resource-exhaustion'))).toBe(true);
+        expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
+    });
+
+    test('a DECLARED ROLE escalates — the ladder no longer needs a flag nothing sets', async () => {
+        // Every test above drives escalation with `stage: 'implement'`. No production
+        // caller sets that flag: `spur agent run` has no such option, the workflow
+        // `agent.run` action forwards agent/role/model/mode/cwd/session/timeout, and
+        // the server never sets it. So the ladder was green in tests and inert in
+        // production. `role` is what the pipeline actually declares (0538 R2), and
+        // `coder` folds implement/test/wrap — all `standard`, the same floor
+        // `stage: 'implement'` supplied above.
+        const { errors, output } = captureOutput();
+        const svc = makeConfiguredService(escalationConfig, {}, roleMap(), output);
+
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: 'Error: rate limit exceeded (429)' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        // No `stage` flag anywhere — only the role a real dispatch carries.
+        const code = await svc.run('Implement the task', { agent: 'auto', role: 'coder', json: false }, deps);
+
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi', 'claude']);
+        expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
         expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
     });
 

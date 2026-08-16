@@ -10,7 +10,6 @@ import {
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
-    type CapabilityTier,
     type DbAdapter,
     InboxMessageDao,
     InboxRecentDao,
@@ -29,7 +28,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
-import { cheapestEligibleExecutors } from './agent-service';
+import { type AgentRoleDefinition, cheapestEligibleExecutors } from './agent-service';
 import { TaskLocator } from './task-locator';
 
 // ---------------------------------------------------------------------------
@@ -76,7 +75,7 @@ export interface TeamServiceContext {
      * Absent → a role-only member fails materialization loudly (the CLI threads
      * it from `agentRoles`; the server path does not resolve roles).
      */
-    roles?: ReadonlyMap<string, CapabilityTier>;
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
 }
 
 /**
@@ -722,7 +721,7 @@ export class TeamService {
                         `Team "${teamId}" member at index ${index} declares neither role nor executor — at least one is required`,
                     );
                 }
-                const roleTier = this.ctx.roles?.get(role);
+                const roleTier = this.ctx.roles?.get(role)?.tier;
                 if (roleTier === undefined) {
                     throw new Error(
                         `Team "${teamId}" member at index ${index} declares role "${role}" but no Layer-1 role table is available — run spur team up from the CLI (roles.md not resolved)`,

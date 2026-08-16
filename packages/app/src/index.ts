@@ -36,6 +36,7 @@ export type {
     AgentExecutorConfig,
     AgentResolveResult,
     AgentResolveSource,
+    AgentRoleDefinition,
     AgentRunCaptureResult,
     AgentRunDeps,
     AgentServiceContext,

@@ -220,9 +220,15 @@ namespaces — role names (`scribe`/`coder`/`reviewer`/`planner`, task 0535), ex
 spec ids — are proven pairwise disjoint at config load (0537 R4), so one `--agent` value can never
 mean two things; a config that collides them (executor named `coder`, member id shadowing an
 executor, composed spec id equal to an executor name) fails to load naming both colliding names.
-**Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` from the
-stage context the dispatching layer supplies (the prompt text never derives one, 0536 R4; there
-is no CLI `--stage` flag): the stage's
+**Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` **derived from
+the declared role** — each Layer-1 role folds a stage set in `plugins/sp/references/roles.md`, and
+the dispatch routes through the folded stage carrying the highest `min_tier` (ties → declaration
+order). That floor equals the role's own tier (`roles.md` R4 pins it), so derivation never moves
+where a run starts; it supplies the `model_policy` the escalation ladder needs. The prompt text
+never derives a stage (0536 R4) and there is no CLI `--stage` flag — the role every pipeline
+`agent.run` step declares (0538 R2) is the input. Before this, the stage was reachable only through
+an internal flag no caller set, which left `model_policy`, the fallback chain, and
+resource-exhaustion failover inert outside tests. The stage's
 `model_policy` starts on the cheapest eligible executor at its `min_tier`
 (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`, matched against each executor's `tier`
 field; 0343 split bare `capable` into quality sub-tiers) and escalates along the ordered `fallback`

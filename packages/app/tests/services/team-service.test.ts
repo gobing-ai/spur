@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { type CapabilityTier, createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentProcessOptions,
@@ -15,6 +15,7 @@ import {
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
+    type AgentRoleDefinition,
     type MessageEventBus,
     type MessageEventPayload,
     type TeamLifecycleEventPayload,
@@ -36,7 +37,7 @@ function nullOutput() {
 async function makeService(
     bus?: MessageEventBus | TeamServiceEventBus,
     events?: EventBus<AgentEvents>,
-    roles?: ReadonlyMap<string, CapabilityTier>,
+    roles?: ReadonlyMap<string, AgentRoleDefinition>,
 ): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
@@ -484,7 +485,7 @@ describe('TeamService status & assignment', () => {
         const { svc, cwd, cleanup } = await makeService(
             undefined,
             undefined,
-            new Map<string, CapabilityTier>([['reviewer', 'capable-1']]),
+            new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]),
         );
         try {
             await writeConfig(
@@ -1044,9 +1045,9 @@ describe('TeamService team management (0258)', () => {
             const { svc, cwd, cleanup } = await makeService(
                 undefined,
                 undefined,
-                new Map<string, CapabilityTier>([
-                    ['coder', 'standard'],
-                    ['reviewer', 'capable-1'],
+                new Map<string, AgentRoleDefinition>([
+                    ['coder', { tier: 'standard', stages: ['implement'] }],
+                    ['reviewer', { tier: 'capable-1', stages: ['verify'] }],
                 ]),
             );
             try {
@@ -1088,7 +1089,7 @@ describe('TeamService team management (0258)', () => {
             const { svc, cwd, cleanup } = await makeService(
                 undefined,
                 undefined,
-                new Map<string, CapabilityTier>([['coder', 'standard']]),
+                new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
             );
             try {
                 await writeConfig(
@@ -1127,7 +1128,9 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('0543 R3: purpose is annotation — the same role-only member resolves identically without it', async () => {
-            const roles = new Map<string, CapabilityTier>([['reviewer', 'capable-1']]);
+            const roles = new Map<string, AgentRoleDefinition>([
+                ['reviewer', { tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] }],
+            ]);
             const {
                 svc: svcWithPurpose,
                 cwd: cwdWithPurpose,
@@ -1179,7 +1182,7 @@ ${purposeLine}
             const { svc, cwd, cleanup } = await makeService(
                 undefined,
                 undefined,
-                new Map<string, CapabilityTier>([['coder', 'standard']]),
+                new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
             );
             try {
                 await writeConfig(

@@ -1,6 +1,12 @@
 import { dirname, join, resolve } from 'node:path';
 import { isatty } from 'node:tty';
-import { type AgentConfig, AgentService, type AgentServiceContext, RuleService } from '@gobing-ai/spur-app';
+import {
+    type AgentConfig,
+    type AgentRoleDefinition,
+    AgentService,
+    type AgentServiceContext,
+    RuleService,
+} from '@gobing-ai/spur-app';
 import {
     buildConfigFromEnv,
     DEFAULT_DATABASE_URL,
@@ -49,25 +55,34 @@ export function bundledRolesFile(): string | null {
 }
 
 /**
- * Parse the Layer-1 role → tier map from `roles.md`'s fenced YAML block (0536 R1).
- * The block shape (`version: 1`, `roles[].id` / `roles[].tier`) is frozen by
+ * Parse the Layer-1 role map from `roles.md`'s fenced YAML block (0536 R1).
+ * The block shape (`version: 1`, `roles[].id` / `.tier` / `.stages`) is frozen by
  * `plugins/sp/tests/roles.test.ts`; a shape change is a 0535 regression, not
  * handled here. Regex parse keeps the CLI dependency-free — the vocabulary is
  * closed (four roles, five tiers).
+ *
+ * `stages` is carried through, not dropped: it is the only production input that
+ * reaches the stage registry's `model_policy`, so dropping it left the escalation
+ * ladder unreachable (see `AgentService.resolveCanonicalStage`).
  */
-export function parseAgentRoles(source: string): Map<string, ExecutorCapabilityTier> {
+export function parseAgentRoles(source: string): Map<string, AgentRoleDefinition> {
     const block = source.match(/```yaml\n([\s\S]*?)\n```/)?.[1] ?? source;
-    const roles = new Map<string, ExecutorCapabilityTier>();
-    for (const m of block.matchAll(/- id: (\w+)\s*\n\s*tier: ([\w-]+)/g)) {
+    const roles = new Map<string, AgentRoleDefinition>();
+    for (const m of block.matchAll(/- id: (\w+)\s*\n\s*tier: ([\w-]+)(?:[\s\S]*?\n\s*stages: \[([^\]]*)\])?/g)) {
         const id = m[1];
         const tier = m[2];
-        if (id !== undefined && tier !== undefined) roles.set(id, tier as ExecutorCapabilityTier);
+        if (id === undefined || tier === undefined) continue;
+        const stages = (m[3] ?? '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        roles.set(id, { tier: tier as ExecutorCapabilityTier, stages });
     }
     return roles;
 }
 
-/** Load the bundled role → tier map, or undefined when the file is unreachable or unparseable. */
-export function loadAgentRoles(): Map<string, ExecutorCapabilityTier> | undefined {
+/** Load the bundled role map, or undefined when the file is unreachable or unparseable. */
+export function loadAgentRoles(): Map<string, AgentRoleDefinition> | undefined {
     const file = bundledRolesFile();
     if (file === null) return undefined;
     try {
@@ -102,7 +117,7 @@ export interface CliContext {
      * {@link agentService} construction so `--agent <role>` resolves; absent
      * when the file is unreachable (role selectors then fall through).
      */
-    agentRoles?: ReadonlyMap<string, ExecutorCapabilityTier>;
+    agentRoles?: ReadonlyMap<string, AgentRoleDefinition>;
     /**
      * Build an {@link AgentService}. Optional overrides let the direct
      * `spur agent run` path attach a CLI EventBus for the system_events ledger
@@ -136,7 +151,7 @@ export function createCliContext(options: {
      * Layer-1 role → tier map (0536 R1). Defaults to parsing
      * `plugins/sp/references/roles.md` from the bundled plugin tree.
      */
-    agentRoles?: ReadonlyMap<string, ExecutorCapabilityTier>;
+    agentRoles?: ReadonlyMap<string, AgentRoleDefinition>;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;

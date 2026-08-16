@@ -863,10 +863,10 @@ describe('runAgentRun role boundary (0536)', () => {
         expect(file).not.toBeNull();
         const parsed = parseAgentRoles(readFileSync(file ?? '', 'utf8'));
         expect([...parsed.keys()].sort()).toEqual(['coder', 'planner', 'reviewer', 'scribe']);
-        expect(parsed.get('scribe')).toBe('cheap');
-        expect(parsed.get('coder')).toBe('standard');
-        expect(parsed.get('reviewer')).toBe('capable-1');
-        expect(parsed.get('planner')).toBe('capable-2');
+        expect(parsed.get('scribe')?.tier).toBe('cheap');
+        expect(parsed.get('coder')?.tier).toBe('standard');
+        expect(parsed.get('reviewer')?.tier).toBe('capable-1');
+        expect(parsed.get('planner')?.tier).toBe('capable-2');
     });
 
     test('R3: an unknown --agent value is rejected at the boundary, before any spawn', async () => {
