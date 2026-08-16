@@ -1,5 +1,84 @@
 # Changelog
 
+## [0.3.48] — 2026-08-15
+
+### Added
+
+- feat(cli): narrow history report by task and top at render time (0564 R3) (7f4e4d44)
+- feat(domain): fold tool-call durations into cost attribution (0564 R2) (bf2d729a)
+- feat(domain): add call_id column to history_tool_call (0564 R1) (efcdc349)
+- feat(app): restore inline --agent with host-session-only semantics (G5 0565/0566) (a30e622b)
+- feat(server,web): render role routing and token consumption on the Board (0552) (9d770a0f)
+- feat(app): exercise tier fallback and executor exhaustion under real failure (0540) (05cdcab5)
+- feat(sp): inventory and repair plugins/sp drift against live CLI (0539) (4dd0cc54)
+- feat(analytics): attribute token totals to roles via run-to-session mapping (0547) (33a1f2d1)
+- feat(teams): role is the primary axis of a team member (0543, 0544) (62283aa8)
+- feat(history): merge E3 history refresh worktree (0548-0550) (088b85cc)
+- feat(app): operation-triggered history refresh across config, CLI, server (0549/0550, E3) (9b792f37)
+- feat(domain): routingSummary one indexed round trip + composite index (0546, J6) (b63b1ad5)
+- feat(app): add coalesced opt-in history refresh off the completion path (0549/0550) (0182337d)
+- feat(history): watermark live sessions and report refresh coverage honestly (0550) (9e6b858e)
+- feat(observability): emit routing decision on agent run events via J5 envelope (task 0545) (01efaa3e)
+- feat(history): enqueue coalesced history refresh on work completion (0549) (acc1f6f6)
+- feat(agent): propagate declared subagent role across fan-out, inheriting when absent (task 0551) (8d2d0336)
+- feat(history): measure incremental import and analyze cost on real data (0548) (3d285c35)
+- feat(issue-finding): rewrite dev-find-issue as report-first over the data plane (task 0556, E5) (99fc4072)
+- feat(history): report mode registry + forensics renderer (task 0555, E5) (19a5d8e8)
+- feat(e6): run-to-session correlation and cost-path repair (0557/0558/0559) (4a10fa12)
+- feat(domain): compute derived variables in analyze via MetricRegistry (0554) (492983d3)
+- feat(domain): migration 0012 args_raw + reduce session-formats.md (task 0553) (6df7c1a4)
+- feat(agent): role-based executor selection (feature B2: 0535-0542) (13d01195)
+- feat(cli): gate transition shims behind a two-sided manifest (0541) (65465826)
+
+### Fixed
+
+- fix(workflows,sp): announce empty wrap-up captures, pin capture paths (0563) (c90bf074)
+- fix(app): harden verdict AC-row id matching against embedded Gherkin bodies (0561) (33be5021)
+- fix(app,cli,sp): harness surface reconciliation and agent exhaustion eventing (0539/0540) (94619e12)
+
+### Changed
+
+- docs(cli): sync help and design docs to live agent/task/feature/workflow surface (0159a559)
+- docs(cli): sync projections to live agent/team/history surface (find-conflict) (0a28cd8f)
+- docs(tasks): record 0564 done — E5 forensic-report fixes landed (5d9c8a08)
+- docs(plugins): record omp tool-call block shapes in session-format reference (0564 R5) (36eaf07a)
+- test(plugins): parse live omp arguments shape in fallback fixture (0564 R4) (2ebc40b9)
+- docs(tasks): update task status after implementation (4c8b917c)
+- docs(tasks): finalize 0547 review record with P3 fixes disposition (d3d52dbb)
+- docs(tasks): tick G5 0565/0566 requirement boxes and backfill change-maps (post-verify record) (56bff0f5)
+- docs(tasks): record 0562 done — migration-collision prevention verified (2071adda)
+- docs: state migration max(prefix)+1 allocation and merge-renumber rule (0562 R4) (c03119a9)
+- test(domain): enforce unique, strictly ascending migration prefixes (0562) (57592904)
+- docs(dogfood): add G5 inline --agent host-session dogfood report (203572ca)
+- docs(tasks): link G5 R5 AC scenario to task 0565 (traceability gate) (d74b8dd8)
+- docs(tasks): update task status after implementation (d2035b18)
+- test(app): pin alias row id with trailing Gherkin body (0561 R1) (86442e8e)
+- docs(tasks): refine 0565/0566 to implement-ready (G5 inline host-session) (27fc4998)
+- chore: 0561 wrap learnings, metrics, and doc-sync (9956ead4)
+- chore: 0552 wrap learnings and metrics (c306df13)
+- docs: G5 inline host-session design, tasks 0565/0566 (backlog) (40f5c496)
+- chore(feature): close I3 — verifying→done, dogfood artifact, wrap memory (d1aa1fed)
+- chore(memory): record 0547 wrap learnings and metrics (8881a1b5)
+- docs(corpus): roll up M5 status and record verification evidence (3751c069)
+- chore(history): finalize E3 merge reconciliation (0548-0550) (90bae29b)
+- chore(memory): note 0559 ts-libs lockstep release delivery (a9ac1d37)
+- chore(drizzle): index (event_name, occurred_at) for the routing aggregate (0546) (b5c59419)
+- docs(design): record incremental import/analyze cost measurements (0548) (70eaf3f7)
+- docs(history): sync E3 wrap-up docs (0548-0550 batch) (daa55348)
+- docs(features): mark J6 routing attribution active (task 0545) (eaf523b5)
+- docs(tasks): deepen findings tasks 0561-0564 with verified anchors and R-numbered ACs (ba5355f2)
+- docs(report): add E5/E6 batch forensic reports and follow-up findings tasks (9d472393)
+- chore(e6): merge main into runall-e6 and renumber history_run_session to 0013 (fa41669c)
+- docs(e6): record verifyall write-back and ship E6 status (14bbd8ae)
+- chore(task): 0554 verify PASS, transition done (32da928b)
+- chore(task): 0554 verify PASS, transition done (8b42f2a2)
+- docs(tasks): mark B2 completion bookkeeping (checkboxes, task table, feature done) (e91f59c0)
+- chore(sp): record B2 wrap artifacts, dogfood report, and feature completion (99a9925e)
+- docs(tasks): append 0535 superseding note to 0344 role vocabulary (99b46497)
+- docs(tasks): record B2 batch execution (0535-0538, 0541-0542 done) (1df121aa)
+- chore(sp): record wrapup artifacts for 0541 (841a53a4)
+- docs(tasks): plan feature B2 wayfind batch (0535-0552) (ba0a6a9a)
+
 ## [0.3.47] — 2026-08-13
 
 ### Added
