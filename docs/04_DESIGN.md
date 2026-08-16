@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.34.0
+version: 1.35.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-15
+updated_at: 2026-08-16
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -173,8 +173,9 @@ and appends `stage <id> executed inline in session <session-id>` provenance. Dir
 `spur agent run`, headless `spur workflow run`, explicit executor selection, and parallel batches
 remain subprocess surfaces.
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) takes a **role**
-from the Layer-1 role table `plugins/sp/references/roles.md` (task 0535: `scribe`·cheap,
-`coder`·standard, `reviewer`·capable-1, `planner`·capable-2, parsed at the CLI boundary — 0536 R1),
+from the Layer-1 role table — `DEFAULT_AGENT_ROLES` in `packages/config` (ADR-061 / 0572:
+`scribe`·cheap, `coder`·standard, `reviewer`·capable-1, `planner`·capable-2; `plugins/sp/references/roles.md`
+is a parity-gated projection), optionally re-tiered/re-staged per-project via `agent.roles` (§2.1) —
 a configured executor name, a coding-agent binary name, or `auto`. A **role** selects the _starting
 tier_ and resolution begins at that tier's cheapest eligible executor (R1); the resolved role, tier,
 and executor ride the `--json` envelope. An **executor name** is a permanent pin that beats role
@@ -221,10 +222,10 @@ spec ids — are proven pairwise disjoint at config load (0537 R4), so one `--ag
 mean two things; a config that collides them (executor named `coder`, member id shadowing an
 executor, composed spec id equal to an executor name) fails to load naming both colliding names.
 **Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` **derived from
-the declared role** — each Layer-1 role folds a stage set in `plugins/sp/references/roles.md`, and
-the dispatch routes through the folded stage carrying the highest `min_tier` (ties → declaration
-order). That floor equals the role's own tier (`roles.md` R4 pins it), so derivation never moves
-where a run starts; it supplies the `model_policy` the escalation ladder needs. The prompt text
+the declared role** — each Layer-1 role folds its declared `stages` (the resolved role map:
+`DEFAULT_AGENT_ROLES` merged per-field with any `agent.roles` override), and the dispatch routes
+through the folded stage carrying the highest `min_tier` (ties → declaration order). That floor
+equals the role's own tier, so derivation never moves where a run starts; it supplies the `model_policy` the escalation ladder needs. The prompt text
 never derives a stage (0536 R4) and there is no CLI `--stage` flag — the role every pipeline
 `agent.run` step declares (0538 R2) is the input. Before this, the stage was reachable only through
 an internal flag no caller set, which left `model_policy`, the fallback chain, and
@@ -248,7 +249,7 @@ to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets th
 (`{ exitCode: number|null, stdout, stderr, signal?, durationMs, resolved }`), where `resolved`
 (`{ role?, roleOrigin?, tier?, executor?, agent, source }`, tasks 0536 R1/R2 + 0551) reports the
 resolution decision:
-the role selector and its `roles.md` tier and the executor entry that won for role routing, the
+the role selector and its resolved tier and the executor entry that won for role routing, the
 executor pin for an explicit executor, the canonical agent, and the resolution source
 (`role`/`explicit`/`default`/`stage`/`priority`). `roleOrigin` (`'declared' | 'inherited'`, task
 0551) records whether the effective role was declared by the caller (a role selector, workflow
@@ -349,8 +350,8 @@ and the app-layer `TeamService`).
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
   optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
   (`@transition-shim(spec-without-executor-field)`). **Role is the primary axis (0543).** A member
-  may declare `role: <scribe|coder|reviewer|planner>` (the Layer-1 vocabulary of
-  `plugins/sp/references/roles.md`, task 0535) with or without an executor; `purpose` stays human
+  may declare `role: <scribe|coder|reviewer|planner>` (the Layer-1 role vocabulary —
+  `DEFAULT_AGENT_ROLES` in `packages/config`, task 0535) with or without an executor; `purpose` stays human
   annotation. A member declaring a role **and** an executor pins the executor (R2, pin beats policy);
   a member declaring a role **alone** resolves at materialization through the shared tier ladder —
   cheapest executor eligible for the role's tier, the same funnel `--agent <role>` uses (0543 R1) —
@@ -987,7 +988,9 @@ Two top-level concerns:
   `spurConfigSchema` in `@gobing-ai/spur-config` (ADR-027; the former CLI-local `SpurAppConfigSchema`
   was folded in). Keys are agent/rules/workflows/redaction/version/name, plus the planning-layer
   `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`, `tasks.severity` (finding code → `error` | `warning` | `off`),
-  `features.dir`. Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts`. `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
+  `features.dir`. Under `agent`: `default` (default role), `executors` (tier → executor profiles), and
+  `roles` (ADR-061 / 0572 — optional closed-vocabulary per-role tier/stage overrides merged per-field
+  over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts`. `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
   the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
   mirrors it for editor/CI validation.
 
@@ -1025,6 +1028,9 @@ agent:
     - name: claude
       agent: claude
       tier: capable-3
+  # roles: # ADR-061 / 0572 — optional per-role override on the closed vocabulary (scribe|coder|reviewer|planner);
+  #   reviewer: # per-field merge over DEFAULT_AGENT_ROLES (re-tier/re-stage, never invent); unknown role ids fail config load
+  #     tier: capable-2
   # default-by-phase:     # REMOVED 0452 — use executor tier + stage model_policy
   #   dev-run: omp
 rules:
@@ -1603,7 +1609,7 @@ agent's transcript instead of re-deriving it (task 0482 R4). Overridable per run
 `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`.
 
 **Declared step role (0538 R2).** Every `agent.run` step declares `role: <scribe|coder|reviewer|planner>`
-beside its `agent:` pin — the Layer-1 vocabulary of `plugins/sp/references/roles.md` (task 0535).
+beside its `agent:` pin — the Layer-1 role vocabulary (`DEFAULT_AGENT_ROLES`, `packages/config`).
 `spur workflow validate` fails a step with no or an unknown role via the post-schema walk
 (`collectAgentRunRoleViolations` — `packages/app/src/services/workflow-service.ts`; the JSON schema
 validator is a keyword subset, so the walk is the enforcement surface). `spur workflow run` rejects

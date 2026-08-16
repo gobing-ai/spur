@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.23.0
+version: 1.24.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-15
+updated_at: 2026-08-16
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -774,16 +774,23 @@ present and every marker registered; 1 on any violation.
 
 Shapes: `04 §2.5`; `config/transition-shims.json`.
 
-## 19. Agent Executor Selection — Two-Layer Contract (feature B2, tasks 0535–0542)
+## 19. Agent Executor Selection — Two-Layer Contract (features B2/B3, tasks 0535–0542, 0572)
 
-Executor selection is a two-layer contract. **Layer 1** maps _role → tier_ and is owned by the `sp`
-plugin: `plugins/sp/references/roles.md` (task 0535) declares four roles — `scribe`·cheap,
-`coder`·standard, `reviewer`·capable-1, `planner`·capable-2 — with a closed command→role mapping
-over `plugins/sp/commands/`, asserted by `plugins/sp/tests/roles.test.ts`. Layer 1 never names an
-executor, model, or vendor. **Layer 2** maps _tier → executor_ and is owned by the operator in
-`.spur/config.yaml` (`agent.executors` entries carrying a `tier` field). `packages/config` exposes
-the four-id `AGENT_ROLE_NAMES` literal; the CLI parses `roles.md` at the boundary (`context.ts`,
-0536 R1) so `--agent <role>` resolves before any spawn.
+Executor selection is a two-layer contract. **Layer 1** maps _role → tier/stages_ and its SSOT is
+code: `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts` (ADR-061 / task 0572) declares the
+four roles — `scribe`·cheap, `coder`·standard, `reviewer`·capable-1, `planner`·capable-2 — with an
+optional closed-vocabulary `agent.roles` overlay (per-field merge, validated at config load) that
+wins over the constant; a project re-tiers/re-stages a known role, never invents one. Layer 1 never
+names an executor, model, or vendor. **Layer 2** maps _tier → executor_ and is owned by the operator
+in `.spur/config.yaml` (`agent.executors` entries carrying a `tier` field). `packages/config`
+exposes the four-id `AGENT_ROLE_NAMES` literal beside the SSOT. The CLI resolves roles in
+`apps/cli/src/context.ts` (`resolveAgentRoles`) so `--agent <role>` resolves before any spawn; the
+runtime regex parse of `plugins/sp/references/roles.md` is deleted outright (no shim — values are
+byte-identical), and roles.md survives as a parity-gated projection: its tier/stages half is
+asserted equal to `DEFAULT_AGENT_ROLES` by `plugins/sp/tests/roles.test.ts` (R9) and its
+command→role half stays plugin-owned. Plugin-internal stage floors read the projection
+(`plugins/sp/scripts/stage-registry-adapter.ts`, 0538 R4) and degrade to the `standard` floor when
+it is unreachable.
 
 Resolution (`AgentService.resolveAgent`): an explicit role starts at its tier's cheapest eligible
 executor; an explicit executor name is a permanent pin (0536 R2, beats role routing); a bare binary
@@ -809,4 +816,5 @@ dangling executor reference fails loudly at drain, spawning nothing.
 4. The prompt text never derives a stage or role (`extractPhase` retired); undeclared callers land
    on the default role visibly.
 
-Shapes: `04 §2.1`; `config/config.example.yaml`; `plugins/sp/references/roles.md`.
+Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
+`AgentRoleConfigSchema`); `config/config.example.yaml`; `plugins/sp/references/roles.md` (projection).

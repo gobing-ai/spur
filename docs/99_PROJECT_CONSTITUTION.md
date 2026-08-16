@@ -466,7 +466,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/03_ARCHITECTURE.md`
 
-- [2026-08-13] spur-new: The B2 role→tier→executor two-layer contract (0535–0542) shipped with the mechanism documented only in `04 §2.1` (surface) — 03 had no executor-selection section at all until the wrapup added §19. A surface rewrite that changes *how resolution works* is a §6.4 rule 4 mechanism replacement, not just a T3 flag list: schedule the 03 mechanism block in the same change.
+- [2026-08-16] spur-new: The B2 role→tier→executor two-layer contract (0535–0542) shipped with the mechanism documented only in `04 §2.1` (surface) — 03 had no executor-selection section at all until the wrapup added §19. Recurred on B3/0572: §19 existed but kept asserting the **deleted** `roles.md` regex parse — ADR-061 (SSOT moved to `DEFAULT_AGENT_ROLES`) landed with no 03 mechanism sync, so the wrapup had to rewrite Layer 1. A surface rewrite that changes *how resolution works* is a §6.4 rule 4 mechanism replacement, not just a T3 flag list: schedule the 03 mechanism block in the same change — and when the mechanism section already exists, re-read it against the diff, not just "add a section".
 - [2026-06-11] spur-new: The module list still described a hand-rolled parser two ADRs after it
   was replaced — stale module descriptions survive migrations silently (§6.4 rule 4).
 - [2026-06-12] spur-new: A wildcard dependency edge (`apps/* ──► packages/{…}`) hid three real
@@ -486,6 +486,8 @@ if it recurs, a new rule in §6.
   before writing a MET row (filed as task 0299, P2).
 
 ### Lessons for `docs/04_DESIGN.md`
+
+- [2026-08-16] spur-new: Task 0572 (B3) scheduled a doc-sync item (R4) that covered ADR-061 + the config-file comments but shipped **no `04` edits**: the new `agent.roles` config key had no surface row (T3), five `04` passages kept asserting the deleted roles.md CLI parse, and ADR-061's `Detail:` pointer "`04` `agent.roles`" resolved to nothing until the wrapup. A doc-sync item that names only the ADR + config files misses the derived surface: enumerate `04` (and `03`, `AGENTS.md`) in the item; when a synced `04` section exists, diff its mechanism claims against the change, not just "add a row".
 
 - [2026-08-15] spur-new: An E6 verify answer embedded Gherkin bodies in AC row ids (`Scenario: R4 — … (Given … / Then …)`), which `spur task verdict --from-answer` preserved verbatim — the scenario gate flagged `L4.scenario-unverified` despite a PASS verdict and needed post-hoc surgery on the answer artifact (0561). The gate now strips a trailing parenthetical as a backstop, but the authoring contract stays: AC row id = exactly the scenario title, body lives in the task's Acceptance Criteria block (ac-style-guide).
 - [2026-08-13] spur-new: The 0538 R2 wrapup text claimed the JSON workflow schemas reject a role-less `agent.run` step — the schemas contain no `role` key; the gate is `WorkflowService.validate`'s post-schema walk plus `AgentRunActionRunner`'s dispatch guard. A 04 edit that names an enforcement surface must be checked against the actual file (the JSON schema) before writing — "the schema fails" is a factual claim about a specific artifact, not a summary of the code comment.
@@ -556,10 +558,11 @@ if it recurs, a new rule in §6.
   pointers (which raw edits may not touch). Index existing files under their current names; apply the
   `<slug>.md` convention to **new** satellites only. Retroactive renames need a tool-driven migration,
   not raw rewrites.
-- [2026-08-11] spur-new: Three wrapup tasks (0506–0508) landed substantive doc edits — an ADR-047
+- [2026-08-16] spur-new: Three wrapup tasks (0506–0508) landed substantive doc edits — an ADR-047
   amendment, a `03` §6.3 projection, and three `04` surface notes — all verify-PASSed, none bumping
-  the §4.3 frontmatter `version`/`updated_at`; the wrapup contract-verify caught it. Frontmatter
-  bookkeeping is part of the same edit as the body change, not a follow-up pass.
+  the §4.3 frontmatter `version`/`updated_at`; the wrapup contract-verify caught it. Recurred on
+  0572: ADR-061 landed in-tree with `00` still at `version 1.19.0` / `updated_at 2026-08-15`.
+  Frontmatter bookkeeping is part of the same edit as the body change, not a follow-up pass.
 - [2026-08-15] spur-new: An E3 wrapup placed a real-data measurement record (`0548-measurement.md`)
   in the `docs/design/` satellite layer with no `04 §0` index row — §4.5 orphan drift, and a
   classification error: measurements/evidence records are dated working documents (`docs/plans/`),
