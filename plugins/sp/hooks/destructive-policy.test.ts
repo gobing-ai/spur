@@ -47,6 +47,24 @@ const MATRIX: Array<{ command: string; expected: Expected; divergedOnPi?: true }
     // Cache *name* as a path prefix is not a cache directory.
     { command: 'rm -rf /important/build-backup', expected: 'ask', divergedOnPi: true },
 
+    // ── recursive deletes that leave the project ─────────────────────────
+    // A cache *basename* outside the project is not a project cache.
+    { command: 'rm -rf /Users/me/dist', expected: 'ask' },
+    { command: 'rm -rf ../../../node_modules', expected: 'ask' },
+    { command: 'rm -rf ~/dist', expected: 'ask' },
+    // `rm -r` without --force still deletes every writable file in the tree.
+    { command: 'rm -r /Users/me/photos', expected: 'ask' },
+    { command: 'rm -r ../sibling-project', expected: 'ask' },
+    { command: 'rm --recursive /var/data', expected: 'ask' },
+    { command: 'rm -rf "$HOME"/projects', expected: 'ask' },
+
+    // ── git clean: destroys untracked files (unrecoverable) ──────────────
+    { command: 'git clean -fdx', expected: 'ask' },
+    { command: 'git clean -f', expected: 'ask' },
+    { command: 'git clean --force -d', expected: 'ask' },
+    { command: 'git clean -n', expected: 'allow' }, // dry run lists only
+    { command: 'git clean --dry-run', expected: 'allow' },
+
     // ── routine: must not prompt ──────────────────────────────────────────
     { command: 'rm -rf node_modules', expected: 'allow' },
     { command: 'rm -rf dist', expected: 'allow' },

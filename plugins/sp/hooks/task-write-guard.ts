@@ -20,6 +20,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { couldBeTaskFile } from './task-file-policy';
 
 interface ToolPayload {
     tool_name?: string;
@@ -68,6 +69,9 @@ async function main(): Promise<void> {
 
     const filePath = payload.tool_input?.file_path ?? '';
     if (filePath === '') preToolUseDecision('allow');
+    // Skip the `spur task resolve` subprocess (~120ms) for paths whose basename
+    // cannot name a task file — that is every ordinary source edit.
+    if (!couldBeTaskFile(filePath)) preToolUseDecision('allow');
 
     const ownership = resolveSpurTaskOwnership(filePath, process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
     if (ownership === 'owned') {

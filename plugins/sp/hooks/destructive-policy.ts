@@ -16,9 +16,33 @@
  * re-derive classification.
  */
 
-/** Well-known rebuildable caches a `rm -rf` may target without a warning. */
+/**
+ * Well-known rebuildable caches a `rm -rf` may target without a warning.
+ *
+ * Project-relative only — the leading `/` this used to accept made the exception
+ * match by *basename anywhere on the filesystem*, so `rm -rf /Users/me/dist` was
+ * treated as routine. Escaping targets are rejected by {@link escapesProject}
+ * before this is consulted; keeping the anchor tight is belt-and-braces.
+ */
 const SAFE_RM_TARGET =
-    /^(?:\.?\/)?(?:[\w.@-]+\/)*(?:node_modules|dist|\.next|coverage|build|\.turbo|\.cache|\.parcel-cache|out)\/?\*?$/;
+    /^(?:\.\/)?(?:[\w.@-]+\/)*(?:node_modules|dist|\.next|coverage|build|\.turbo|\.cache|\.parcel-cache|out)\/?\*?$/;
+
+/**
+ * True when a target points outside the project tree: an absolute path, a `~`
+ * home path, or one that walks out via `..`.
+ *
+ * Recursive deletion inside the project is routine (build caches, scratch dirs) and
+ * recoverable from git; recursive deletion *outside* it is neither, whatever the
+ * directory happens to be named. This is the axis that decides a bare `rm -r`,
+ * which is otherwise unguarded — `rm -r ./tmpdir` stays routine while
+ * `rm -r /Users/me/photos` prompts.
+ */
+function escapesProject(target: string): boolean {
+    const t = target.replace(/^['"]|['"]$/g, '');
+    if (t.startsWith('/') || t.startsWith('~')) return true;
+    if (t.startsWith('$')) return true; // `$HOME/...`, `"$HOME"/...` — unknown expansion
+    return t.split('/').includes('..');
+}
 
 /**
  * Expand an argument string into the set of flags it sets, splitting short-flag
@@ -58,12 +82,17 @@ export function isRecursiveForceRm(args: string): boolean {
  * cache path whitelist every other target in the same command.
  */
 export function rmTargetsAllSafe(args: string): boolean {
-    const targets = args
+    const targets = rmTargets(args);
+    if (targets.length === 0) return false;
+    return targets.every((t) => SAFE_RM_TARGET.test(t));
+}
+
+/** Non-flag targets of a `rm` invocation. */
+function rmTargets(args: string): string[] {
+    return args
         .trim()
         .split(/\s+/)
         .filter((t) => t.length > 0 && !t.startsWith('-'));
-    if (targets.length === 0) return false;
-    return targets.every((t) => SAFE_RM_TARGET.test(t));
 }
 
 /** Always-warn destructive patterns (no safe exception). */
@@ -83,6 +112,13 @@ const DESTRUCTIVE: Array<{ label: string; re: RegExp }> = [
         label: 'a working-tree discard (git checkout . / git restore .)',
         re: /\bgit\s+(?:checkout|restore)\s+(?:--\s+)?\.(?:\s|$)/i,
     },
+    {
+        // `git clean` destroys UNTRACKED files — nothing in git to recover them from,
+        // which makes it the least recoverable command in this family. `-n`/`--dry-run`
+        // only lists, so the prompt is gated on the force flag git itself requires.
+        label: 'an untracked-file delete (git clean -f)',
+        re: /\bgit\s+clean\b[^\n]*(?:\s-[a-zA-Z]*f|\s--force\b)/i,
+    },
     { label: 'a cluster delete (kubectl delete)', re: /\bkubectl\s+delete\b/i },
     { label: 'a docker prune (docker system prune)', re: /\bdocker\s+system\s+prune\b/i },
 ];
@@ -91,6 +127,14 @@ const DESTRUCTIVE: Array<{ label: string; re: RegExp }> = [
 export function classifyCommand(command: string): string | null {
     for (const rmMatch of command.matchAll(/\brm\b([^\n&|;]*)/g)) {
         const args = rmMatch[1] ?? '';
+        const flags = parseFlags(args);
+        const recursive = flags.has('r') || flags.has('R') || flags.has('--recursive');
+        // A recursive delete reaching outside the project prompts whether or not
+        // `--force` was passed: `rm -r` deletes a whole tree without prompting for
+        // any writable file, and nothing outside the project is recoverable from git.
+        if (recursive && rmTargets(args).some(escapesProject)) {
+            return 'a recursive remove outside the project (rm -r on an absolute, ~, or ../ path)';
+        }
         if (isRecursiveForceRm(args) && !rmTargetsAllSafe(args)) {
             return 'a recursive force remove (rm -rf)';
         }

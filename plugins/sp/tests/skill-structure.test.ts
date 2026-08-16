@@ -754,6 +754,54 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         ).toBeLessThanOrEqual(AGGREGATE_BUDGET);
     });
 
+    test('R44 — skill BODY budgets: a SKILL.md is a dispatcher, not the whole procedure', () => {
+        // The description budget above caps discovery-time cost; this caps INVOCATION-time
+        // cost, which is ~100x larger and was previously unguarded. `spur-cli` (8.5KB body /
+        // 211KB references) and `spur-dev` (13.6KB / 294KB) are the shape: the body routes,
+        // `references/` carries the procedure.
+        //
+        // Two-sided, like config/corpus-baseline.json and config/transition-shims.json:
+        // an unlisted skill over budget fails, AND a listed skill that grew fails, AND a
+        // listed skill that has come back under budget fails so the entry is removed. The
+        // baseline only exists to stop new drift while the four listed bodies are split into
+        // references; it is not a permanent exemption.
+        const BODY_BUDGET = 20_000;
+        const BASELINE: Record<string, number> = {
+            'dogfood-testing': 37_452,
+            'code-verification': 29_670,
+            wayfinder: 26_264,
+            'issue-finding': 26_139,
+        };
+
+        const overBudget: string[] = [];
+        const grew: string[] = [];
+        for (const skill of skillDirs) {
+            const bytes = statSync(join(SKILLS_DIR, skill, 'SKILL.md')).size;
+            const baselined = BASELINE[skill];
+            if (baselined === undefined) {
+                if (bytes > BODY_BUDGET) {
+                    overBudget.push(`${skill}: ${bytes} bytes (budget ${BODY_BUDGET})`);
+                }
+                continue;
+            }
+            if (bytes > baselined) {
+                grew.push(`${skill}: ${bytes} bytes, baselined at ${baselined} — split it, don't grow it`);
+            }
+        }
+        expect(overBudget, 'skill bodies over budget and not baselined').toEqual([]);
+        expect(grew, 'baselined skill bodies that grew').toEqual([]);
+
+        // Ratchet: a baselined skill now under budget must drop out of BASELINE.
+        const graduated = Object.keys(BASELINE).filter(
+            (skill) => skillDirs.includes(skill) && statSync(join(SKILLS_DIR, skill, 'SKILL.md')).size <= BODY_BUDGET,
+        );
+        expect(graduated, 'baselined skills now under budget — remove them from BASELINE').toEqual([]);
+
+        // A baseline entry for a skill that no longer exists is dead weight.
+        const unknown = Object.keys(BASELINE).filter((skill) => !skillDirs.includes(skill));
+        expect(unknown, 'BASELINE entries naming no shipped skill').toEqual([]);
+    });
+
     test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {
         const readmePath = join(PLUGIN_ROOT, 'README.md');
         statSync(readmePath);

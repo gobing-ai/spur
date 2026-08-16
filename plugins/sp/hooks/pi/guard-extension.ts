@@ -25,6 +25,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
 import { classifyCommand } from '../destructive-policy';
+import { couldBeTaskFile } from '../task-file-policy';
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -272,7 +273,9 @@ export default function (pi: ExtensionAPI): void {
             const input = event.input as Record<string, unknown> | undefined;
             // Pi's write/edit tools use `path` (not Claude Code's `file_path`)
             const filePath = resolveInputPath(input);
-            if (filePath && resolveSpurTaskOwnership(filePath) === 'owned') {
+            // Skip the `spur task resolve` subprocess for paths that cannot name a
+            // task file (shared predicate — see task-file-policy.ts).
+            if (filePath && couldBeTaskFile(filePath) && resolveSpurTaskOwnership(filePath) === 'owned') {
                 const msg = `Denied: ${filePath} is a Spur task file. Use 'spur task update' instead.`;
                 ctx.ui.notify(msg, 'error');
                 return { block: true, reason: msg };

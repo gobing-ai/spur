@@ -777,6 +777,33 @@ describe('history report render-time narrowing (0564 R3)', () => {
         expect(joined).not.toContain('t2');
     });
 
+    test('an unusable --top exits 1 instead of silently rendering the full artifact', async () => {
+        // Coercing a bad value to `undefined` produced a FULL report with no banner
+        // and no diagnostic — a typo (`--top l0`) was indistinguishable from a
+        // deliberate unfiltered render, which 0564 R3 forbids.
+        for (const bad of ['abc', '0', '-5', '2.5']) {
+            const cwd = makeTmpCwd();
+            const artifact = makeArtifact({
+                byTool: [makeToolStat('t0', 5), makeToolStat('t1', 4)],
+                bySession: [makeSessionStat('s0'), makeSessionStat('s1')],
+            });
+            const artifactPath = writeArtifactFile(cwd, 'bad-top.json', artifact);
+            const { output, lines } = capturingOutput();
+
+            const exitCode = await main(['history', 'report', artifactPath, '--top', bad], {
+                output,
+                cwd,
+                db: noDbSpy(),
+            });
+
+            const joined = lines.join('');
+            expect(exitCode, `--top ${bad}`).toBe(1);
+            expect(joined, `--top ${bad}`).toContain('--top must be a positive integer');
+            // The unfiltered report must not have been emitted as a consolation prize.
+            expect(joined, `--top ${bad}`).not.toContain('Session leaderboard');
+        }
+    });
+
     test('--task on an artifact with no task dimension exits 1 naming artifact id and missing dimension', async () => {
         const cwd = makeTmpCwd();
         const artifact = makeArtifact(); // selector.taskWbs === null

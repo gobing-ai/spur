@@ -177,14 +177,18 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--top <n>', 'Leaderboard depth for byTool/bySession (re-slices the artifact)')
         .action(async (pathArg, options) => {
             try {
-                const topRaw = options.top !== undefined ? Number.parseInt(options.top, 10) : undefined;
+                // An unusable `--top` is an error, not a silently-ignored filter: coercing it
+                // to `undefined` rendered the FULL artifact with no banner and no diagnostic,
+                // so a typo (`--top l0`) read as a deliberate unfiltered report. `--task`
+                // fails loud on a dimension it cannot satisfy; `--top` matches that contract.
+                const top = parseTopOrThrow(options.top);
                 const { report, artifactPath, resolution, artifact, banner } = runHistoryReport({
                     path: pathArg,
                     cwd: context.cwd,
                     now: new Date(),
                     mode: options.mode,
                     task: options.task,
-                    top: topRaw !== undefined && Number.isFinite(topRaw) && topRaw > 0 ? topRaw : undefined,
+                    top,
                 });
                 if (options.json) {
                     context.output.write(toJson(artifact));
@@ -347,6 +351,23 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             }
             context.output.write(options.json ? toJson(result) : formatDailyResult(result));
         });
+}
+
+/**
+ * Parse `--top <n>`: a positive integer, or `undefined` when the flag is absent.
+ *
+ * Throws on anything else. Silently dropping an unparseable value rendered the
+ * whole artifact as if no narrowing had been asked for — indistinguishable, in the
+ * output, from a deliberate full report (task 0564 R3: "never a silent unfiltered
+ * render"). Exported as a test seam.
+ */
+export function parseTopOrThrow(raw: string | undefined): number | undefined {
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`--top must be a positive integer (got "${raw}")`);
+    }
+    return n;
 }
 
 function formatFanOutResult(r: FanOutResult): string {
