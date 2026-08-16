@@ -99,10 +99,17 @@ export interface AgentExecutorConfig {
  * The `agent` config block consumed by resolution. Structurally compatible with
  * the CLI's validated `agent` section; threaded in via {@link AgentServiceContext}.
  * Absent → resolution behaves exactly as the legacy Tier-1 priority path.
+ *
+ * `roles` (0572): optional per-role tier/stage overrides over the
+ * `DEFAULT_AGENT_ROLES` SSOT (packages/config); the CLI boundary merges them
+ * before threading {@link AgentServiceContext.roles}, so resolution never
+ * reads this field — it rides here only so the validated section passes through
+ * the CLI context unchanged.
  */
 export interface AgentConfig {
     default?: string;
     executors?: AgentExecutorConfig[];
+    roles?: Record<string, { tier?: CapabilityTier; stages?: string[] }>;
     sessionAffinity?: boolean;
 }
 

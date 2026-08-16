@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.19.0
+version: 1.20.0
 owner: Robin Min
-updated_at: 2026-08-15
+updated_at: 2026-08-16
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -638,3 +638,25 @@ never priced — no currency value is computed or emitted.
 fact, and mixing observed with inferred figures hides the confidence of each.
 
 **Detail:** `03 §7`; `04` `spur workflow trace`; task 0559.
+
+## ADR-061: The Role→Tier SSOT Is Code in packages/config, Not the Plugin Markdown
+
+**Status:** Accepted · **Date:** 2026-08-16 · **Feature:** B3
+
+**Decision.** The Layer-1 role → tier/stages map's single source of truth is
+`DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts`, with an optional, closed-vocabulary
+`agent.roles` project override (per-field merge: re-tier/re-stage a known role; never invent
+roles) validated at config load. The CLI resolves roles as `DEFAULT_AGENT_ROLES ← agent.roles
+override` — the runtime regex parse of `plugins/sp/references/roles.md` is deleted outright,
+with no transition shim: code defaults are byte-identical to the last parsed values, so a
+fallback could only reintroduce drift. `roles.md` survives as an agent/human-facing projection
+whose tier/stages half is parity-gated by `plugins/sp/tests/roles.test.ts` (R9) against the
+constant; its command→role mapping half stays plugin-owned (command frontmatter is its SSOT).
+
+**Why.** The map is a CLI routing contract (it defines the `--agent` selector domain and drives
+`AgentService` resolution), yet its SSOT was plugin content the core regex-parsed at runtime —
+two inversions: a missing/stale plugin tree hard-failed every role dispatch, and the parse's
+shape was frozen by a test inside the plugin, i.e. the plugin tested the CLI's dependency.
+
+**Detail:** `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`, `AgentRoleConfigSchema`);
+`apps/cli/src/context.ts` (`resolveAgentRoles`); `04` `agent.roles`; task 0572.

@@ -2,7 +2,7 @@
  * Comprehensive tests for apps/cli/src/commands/agent.ts.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,7 +15,7 @@ import {
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
-import { bundledRolesFile, type CliContext, createCliContext, parseAgentRoles } from '../../src/context';
+import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 
@@ -858,10 +858,8 @@ describe('runAgentRun role boundary (0536)', () => {
         return { runner, detector, doctorRunner };
     }
 
-    test('R1: the bundled roles map parses four roles with their roles.md tiers', () => {
-        const file = bundledRolesFile();
-        expect(file).not.toBeNull();
-        const parsed = parseAgentRoles(readFileSync(file ?? '', 'utf8'));
+    test('R1: the bundled roles map resolves four roles at their DEFAULT_AGENT_ROLES tiers (0572)', () => {
+        const parsed = resolveAgentRoles();
         expect([...parsed.keys()].sort()).toEqual(['coder', 'planner', 'reviewer', 'scribe']);
         expect(parsed.get('scribe')?.tier).toBe('cheap');
         expect(parsed.get('coder')?.tier).toBe('standard');
@@ -895,7 +893,7 @@ describe('runAgentRun role boundary (0536)', () => {
         }
     });
 
-    test('R1/R3: a role passes the boundary and resolves through the real roles.md map', async () => {
+    test('R1/R3: a role passes the boundary and resolves through the DEFAULT_AGENT_ROLES map', async () => {
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-boundary-role-'));
         const db = await createMigratedDb({ url: ':memory:' });
         try {

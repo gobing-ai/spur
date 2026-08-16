@@ -306,3 +306,56 @@ describe('roles — R8: stage-registry-adapter floors read from Layer 1 (0538 R4
         expect(unfolded.map((s) => s.id)).toEqual([]);
     });
 });
+
+describe('roles — R9: roles.md is a projection of DEFAULT_AGENT_ROLES (0572)', () => {
+    // The plugin tree cannot resolve @gobing-ai/spur-config (it installs into
+    // foreign repos — same discipline as stage-registry-parity.test.ts), so the
+    // SSOT constant is read as text and its Map literal parsed, exactly like the
+    // AGENT_ROLE_NAMES parity test in R1 above.
+    const configSource = readFileSync(join(REPO_ROOT, 'packages', 'config', 'src', 'index.ts'), 'utf8');
+
+    function defaultRoles(): Map<string, { tier: string; stages: string[] }> {
+        const table = new Map<string, { tier: string; stages: string[] }>();
+        const re = /\[\s*'(\w+)'\s*,\s*\{\s*tier:\s*'([\w-]+)'\s*,\s*stages:\s*\[([^\]]*)\]\s*\}\s*\]/g;
+        for (const m of configSource.matchAll(re)) {
+            const id = m[1];
+            const tier = m[2];
+            const stages = (m[3] ?? '')
+                .split(',')
+                .map((s) => s.trim().replace(/^'|'$/g, ''))
+                .filter((s) => s.length > 0);
+            expect(id && tier, 'DEFAULT_AGENT_ROLES literal must carry id and tier').toBeTruthy();
+            table.set(id as string, { tier: tier as string, stages });
+        }
+        expect(table.size, 'DEFAULT_AGENT_ROLES literal must parse to exactly four rows').toBe(4);
+        return table;
+    }
+
+    test('every role id/tier/stages in roles.md equals DEFAULT_AGENT_ROLES', () => {
+        const defaults = defaultRoles();
+        const roles = parseRoles();
+        expect(roles, 'roles.md must carry exactly the four default roles').toHaveLength(defaults.size);
+        for (const row of roles) {
+            const def = defaults.get(row.id);
+            expect(def, `role ${row.id} missing from DEFAULT_AGENT_ROLES`).toBeDefined();
+            expect(row.tier, `role ${row.id} tier drifted from DEFAULT_AGENT_ROLES`).toBe(def?.tier);
+            expect(row.stages, `role ${row.id} stages drifted from DEFAULT_AGENT_ROLES`).toEqual(def?.stages);
+        }
+    });
+
+    test('a hand-edit to roles.md tiers without a constant change fails (gate is real)', () => {
+        // Same parser, run over a mutated copy of roles.md: flipping one tier
+        // must produce a mismatch — proves the assertion above has teeth.
+        const mutated = yamlBlock(rolesSource).replace('tier: cheap', 'tier: standard');
+        const rows = (YAML.parse(mutated) as { roles: RoleRow[] }).roles;
+        const defaults = defaultRoles();
+        const drifted = rows.some((r) => r.tier !== defaults.get(r.id)?.tier);
+        expect(drifted, 'mutated fixture must drift — parity assertion is vacuous otherwise').toBe(true);
+    });
+
+    test('roles.md carries the projection banner naming the code SSOT', () => {
+        expect(rolesSource).toContain('DEFAULT_AGENT_ROLES');
+        expect(rolesSource).toContain('packages/config/src/index.ts');
+        expect(rolesSource).toContain('generated view');
+    });
+});

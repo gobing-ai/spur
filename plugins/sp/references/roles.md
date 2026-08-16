@@ -9,10 +9,12 @@ see_also:
 
 # Roles — the Layer-1 role-to-tier table
 
-The executor-selection contract is two layers. **Layer 1 (this file)** maps *role → tier* and is
-owned by plugin `sp`; **Layer 2** maps *tier → executor* and is owned by the operator in
-`.spur/config.yaml`. This file never names an executor, a model, or a vendor — it declares only
-what tier a role's work needs, and the operator's config decides which executor serves that tier.
+The executor-selection contract is two layers. **Layer 1 (this file)** projects *role → tier*;
+its SSOT is `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts` (task 0572 / ADR-061) — this
+file is the agent/human-facing view plus the plugin-owned command→role mapping. **Layer 2** maps
+*tier → executor* and is owned by the operator in `.spur/config.yaml`. This file never names an
+executor, a model, or a vendor — it declares only what tier a role's work needs, and the
+operator's config decides which executor serves that tier.
 
 The vocabulary is four roles, one per tier:
 
@@ -35,6 +37,11 @@ standard) — four of the eight names had no routing consequence. The four roles
 collapse, named as people so they stay addressable in `--agent`.
 
 ## The table
+
+<!-- PROJECTION (task 0572 / ADR-061): the tier/stages half of the block below is a generated view
+     of DEFAULT_AGENT_ROLES in packages/config/src/index.ts — edit that constant, not this file.
+     plugins/sp/tests/roles.test.ts (R9) fails the suite on any drift between the two. The
+     `commands:` half is plugin data (command frontmatter is its SSOT). -->
 
 ```yaml
 version: 1
@@ -91,5 +98,9 @@ driving the external PR review and triaging its findings folds the `review` stag
 
 **Consistency is a test, not a convention.** `plugins/sp/tests/roles.test.ts` parses this YAML and
 asserts the tier-distinctness, command closure, stage-floor, and boundary invariants against the
-real command directory, the real stage registry, and the real operator config. When the table and
-the registry disagree, fix the table or the registry — never the test.
+real command directory, the real stage registry, and the real operator config — plus parity with
+`DEFAULT_AGENT_ROLES` (R9, 0572): the table above must equal the code SSOT byte-for-byte on
+id/tier/stages. When the table and the registry disagree, fix the table or the registry — never the
+test. When the table and `DEFAULT_AGENT_ROLES` disagree, fix the constant (or regenerate this view).
+A project may re-tier/re-stage a role at config time via `agent.roles` (closed vocabulary) — that
+override never flows back into this file.

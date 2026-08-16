@@ -142,16 +142,52 @@ export const executorCapabilityTierSchema = z.preprocess((value) => {
 }, z.enum(EXECUTOR_CAPABILITY_TIERS).optional());
 
 /**
- * Layer-1 role ids from `plugins/sp/references/roles.md` (task 0535) — the
- * closed `--agent` role vocabulary (0536). Kept here as a CF-safe literal so
- * the config-load collision guard (0537 R4) can prove the role / executor /
- * spec-id selector namespaces pairwise disjoint; `plugins/sp/tests/roles.test.ts`
- * asserts parity with the reference file so the two cannot drift.
+ * Layer-1 role ids (task 0535) — the closed `--agent` role vocabulary (0536).
+ * The role table's SSOT lives here too (`DEFAULT_AGENT_ROLES`, 0572/ADR-061);
+ * `plugins/sp/references/roles.md` is a parity-gated projection
+ * (`plugins/sp/tests/roles.test.ts` R9) so the two cannot drift. Kept as a
+ * CF-safe literal so the config-load collision guard (0537 R4) can prove the
+ * role / executor / spec-id selector namespaces pairwise disjoint.
  */
 export const AGENT_ROLE_NAMES = ['scribe', 'coder', 'reviewer', 'planner'] as const;
 
 /** A Layer-1 role id (`--agent` role selector vocabulary). */
 export type AgentRoleName = (typeof AGENT_ROLE_NAMES)[number];
+
+/** A role's tier + folded canonical stages — the Layer-1 SSOT row shape (0572). */
+export interface AgentRoleSpec {
+    tier: ExecutorCapabilityTier;
+    stages: readonly string[];
+}
+
+/**
+ * The Layer-1 role table SSOT (task 0572 / ADR-061): role → tier + folded
+ * stages. Values are byte-identical to the pre-0572
+ * `plugins/sp/references/roles.md` table (zero-behavior-change move), which
+ * survives as a parity-gated projection — edit this constant, not the
+ * markdown. `stages` is load-bearing: it is how a role-only dispatch reaches
+ * the stage registry's `model_policy` (`AgentService.resolveCanonicalStage`);
+ * a role's `tier` must not sit below the highest `min_tier` among its folded
+ * stages (enforced against the projection by `plugins/sp/tests/roles.test.ts` R4).
+ */
+export const DEFAULT_AGENT_ROLES: ReadonlyMap<AgentRoleName, AgentRoleSpec> = new Map([
+    ['scribe', { tier: 'cheap', stages: ['changelog'] }],
+    ['coder', { tier: 'standard', stages: ['implement', 'test', 'wrap'] }],
+    ['reviewer', { tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] }],
+    ['planner', { tier: 'capable-2', stages: ['plan', 'refine', 'brainstorm'] }],
+]);
+
+/**
+ * Per-field override for a role under `agent.roles` (0572): a present field
+ * replaces the `DEFAULT_AGENT_ROLES` value for that role; an omitted field
+ * keeps the default. A role absent from the override map uses the default
+ * wholesale. The vocabulary is closed — re-tier/re-stage only, never invent
+ * roles (0536).
+ */
+export interface AgentRoleOverride {
+    tier?: ExecutorCapabilityTier;
+    stages?: readonly string[];
+}
 
 /**
  * Schema for a single named executor profile under `agent.executors`.
@@ -174,6 +210,21 @@ export const AgentExecutorConfigSchema = z.object({
 
 /** A single executor profile entry. */
 export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
+
+/**
+ * Schema for one role's override under `agent.roles.<roleId>` (task 0572).
+ * Per-field merge over `DEFAULT_AGENT_ROLES` — an omitted field keeps the
+ * default. The record key is validated to the closed role vocabulary on the
+ * `roles` field of {@link AgentConfigSchema}; unknown role ids fail config
+ * load naming the accepted four.
+ */
+export const AgentRoleConfigSchema = z.object({
+    tier: z.enum(EXECUTOR_CAPABILITY_TIERS).optional(),
+    stages: z.array(z.string().min(1)).optional(),
+});
+
+/** Inferred type for one role override — mirrors {@link AgentRoleOverride}. */
+export type AgentRoleConfig = z.infer<typeof AgentRoleConfigSchema>;
 
 // ---- Team config (feature M) ----
 
@@ -366,6 +417,8 @@ export const AgentOutputConfigSchema = z.object({
  *
  * - `default` — executor selector first, legacy direct agent name second.
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
+ * - `roles` — optional per-role tier/stage overrides over `DEFAULT_AGENT_ROLES`
+ *   (0572); keys are the closed role vocabulary, values merge per-field.
  * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
  * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
  */
@@ -374,11 +427,27 @@ export const AgentConfigSchema = z
         default: z.string().optional(),
         executors: z.array(AgentExecutorConfigSchema).optional(),
         // default-by-phase removed (0452 / ADR-033 retirement) — use stage model_policy
+        // `roles` keys are validated to the closed vocabulary in the superRefine
+        // below (naming the offending value + accepted four — the record schema
+        // itself only shapes values, so the key diagnostic stays actionable).
+        roles: z.record(z.string(), AgentRoleConfigSchema).optional(),
         team: z.record(z.string(), TeamConfigSchema).optional(),
         output: AgentOutputConfigSchema.optional(),
         sessionAffinity: z.boolean().optional(),
     })
     .superRefine((value, ctx) => {
+        // agent.roles key closure (0572): the vocabulary is closed (0536) — an
+        // override may re-tier/re-stage a known role but never invent one.
+        // Message names the offending key and the accepted four (0543 R5 shape).
+        for (const key of Object.keys(value.roles ?? {})) {
+            if (!(AGENT_ROLE_NAMES as readonly string[]).includes(key)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['roles', key],
+                    message: `Unknown role "${key}" — expected one of: ${AGENT_ROLE_NAMES.join(', ')}`,
+                });
+            }
+        }
         const executors = value.executors;
         const executorNames = new Set<string>();
         if (executors !== undefined) {

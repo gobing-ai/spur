@@ -34,17 +34,18 @@ agent:
   # transition shim (warns once; removal condition is this file naming no executor).
   default: coder
 
-  # Role → tier map (SSOT: plugins/sp/references/roles.md, bundled with the CLI —
-  # it is NOT a config key; a second map here would drift). Resolution:
-  # role → tier → cheapest USABLE executor whose tier >= the role's tier,
-  # climbing the ladder across gaps. Keep at least one usable executor at or
-  # above each rung or that role fails loudly at dispatch:
+  # Role → tier map (SSOT: DEFAULT_AGENT_ROLES in packages/config, task 0572 /
+  # ADR-061; plugins/sp/references/roles.md is a parity-gated projection — it is
+  # NOT a config key). Resolution: role → tier → cheapest USABLE executor whose
+  # tier >= the role's tier, climbing the ladder across gaps. Keep at least one
+  # usable executor at or above each rung or that role fails loudly at dispatch:
   #   scribe=cheap · coder=standard · reviewer=capable-1 · planner=capable-2
   # Stage floors (stage-registry model_policy): changelog=cheap;
-  # implement/test/wrap/review/refine/brainstorm=standard; verify/dogfood=capable-1;
-  # plan=capable-2. A stage's fallback ladder (auth / resource-exhaustion /
-  # gate-fail) only advances when a higher rung has a usable executor — an empty
-  # rung turns a quota failure into a hang.
+  # implement/test/wrap/review/refine/brainstorm=standard;
+  # verify/dogfood=capable-1; plan=capable-2. A stage's fallback ladder
+  # (auth / resource-exhaustion / gate-fail) only advances when a higher rung
+  # has a usable executor — an empty rung turns a quota failure into a hang.
+  # Optional per-project override (`roles:`) mirrors config.example.yaml (0572).
 
   # ── Executors (ADR-033 adaptive model routing) ──
   # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a

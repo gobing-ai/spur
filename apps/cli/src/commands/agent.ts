@@ -172,13 +172,10 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
     const raw = typeof flags.agent === 'string' ? flags.agent : undefined;
     if (raw === undefined || raw === 'auto') return null;
     if (raw === 'inline') return AGENT_INLINE_HEADLESS_MESSAGE;
-    if (context.agentRoles?.has(raw) === true) return null;
+    if (context.agentRoles.has(raw)) return null;
     if ((context.agentConfig?.executors ?? []).some((e) => e.name === raw)) return null;
     if (isAgentName(raw)) return null;
-    const roleList =
-        context.agentRoles !== undefined
-            ? [...context.agentRoles.keys()].join(', ')
-            : 'scribe, coder, reviewer, planner';
+    const roleList = [...context.agentRoles.keys()].join(', ');
     const executors = (context.agentConfig?.executors ?? []).map((e) => e.name);
     const executorList = executors.length > 0 ? executors.join(', ') : '(none configured)';
     return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), or 'auto'.`;

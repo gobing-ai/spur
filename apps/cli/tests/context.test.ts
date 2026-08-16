@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createCliContext } from '../src/context';
+import { createCliContext, resolveAgentRoles } from '../src/context';
 import type { CommandOutput } from '../src/output';
 
 function nullOutput(): CommandOutput {
@@ -41,5 +41,37 @@ describe('context', () => {
         const internal = svc as unknown as { ctx: { events?: unknown; agentConfig?: unknown } };
         expect(internal.ctx.events).toBe(sentinel);
         expect(internal.ctx.agentConfig).toBe(agentConfig);
+    });
+
+    // ---- Layer-1 role resolution (task 0572): code defaults + agent.roles merge ----
+
+    test('resolveAgentRoles without config returns DEFAULT_AGENT_ROLES wholesale (0572 R1)', () => {
+        const roles = resolveAgentRoles();
+        expect([...roles.keys()].sort()).toEqual(['coder', 'planner', 'reviewer', 'scribe']);
+        expect(roles.get('scribe')).toEqual({ tier: 'cheap', stages: ['changelog'] });
+        expect(roles.get('reviewer')).toEqual({ tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] });
+    });
+
+    test('resolveAgentRoles merges agent.roles per-field: override wins, omitted fields keep defaults (0572 R2)', () => {
+        const roles = resolveAgentRoles({
+            roles: { reviewer: { tier: 'capable-2' }, coder: { stages: ['implement'] } },
+        });
+        // Re-tier without restating stages → stages stay default, tier overridden.
+        expect(roles.get('reviewer')).toEqual({ tier: 'capable-2', stages: ['verify', 'review', 'dogfood'] });
+        // Re-stage without restating tier → tier stays default, stages overridden.
+        expect(roles.get('coder')).toEqual({ tier: 'standard', stages: ['implement'] });
+        // A role absent from the override map uses the default wholesale.
+        expect(roles.get('scribe')).toEqual({ tier: 'cheap', stages: ['changelog'] });
+        expect(roles.get('planner')).toEqual({ tier: 'capable-2', stages: ['plan', 'refine', 'brainstorm'] });
+    });
+
+    test('createCliContext threads the merged role map so --agent <role> resolves without the plugin tree (0572 R1)', () => {
+        const ctx = createCliContext({ output: nullOutput() });
+        expect(ctx.agentRoles?.get('planner')?.tier).toBe('capable-2');
+        const overridden = createCliContext({
+            output: nullOutput(),
+            agentConfig: { roles: { reviewer: { tier: 'capable-2' } } },
+        });
+        expect(overridden.agentRoles?.get('reviewer')?.tier).toBe('capable-2');
     });
 });

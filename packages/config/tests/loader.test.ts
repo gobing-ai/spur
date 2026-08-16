@@ -4,7 +4,9 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
+    AGENT_ROLE_NAMES,
     AgentConfigSchema,
+    DEFAULT_AGENT_ROLES,
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
     RedactionConfigSchema,
@@ -146,6 +148,51 @@ describe('app-section schemas', () => {
             ).toBe(true);
             expect(result.error.issues.some((i) => i.path.join('.') === 'executors.0.name')).toBe(true);
         }
+    });
+
+    // ---- agent.roles (task 0572): closed-vocabulary overrides over DEFAULT_AGENT_ROLES ----
+
+    test('DEFAULT_AGENT_ROLES carries the four roles at the frozen 0535 tiers/stages (0572 R1)', () => {
+        expect([...DEFAULT_AGENT_ROLES.keys()].sort()).toEqual([...AGENT_ROLE_NAMES].sort());
+        expect(DEFAULT_AGENT_ROLES.get('scribe')).toEqual({ tier: 'cheap', stages: ['changelog'] });
+        expect(DEFAULT_AGENT_ROLES.get('coder')).toEqual({
+            tier: 'standard',
+            stages: ['implement', 'test', 'wrap'],
+        });
+        expect(DEFAULT_AGENT_ROLES.get('reviewer')).toEqual({
+            tier: 'capable-1',
+            stages: ['verify', 'review', 'dogfood'],
+        });
+        expect(DEFAULT_AGENT_ROLES.get('planner')).toEqual({
+            tier: 'capable-2',
+            stages: ['plan', 'refine', 'brainstorm'],
+        });
+    });
+
+    test('AgentConfigSchema accepts a partial agent.roles override (0572 R1)', () => {
+        const result = AgentConfigSchema.safeParse({
+            roles: { reviewer: { tier: 'capable-2' }, coder: { stages: ['implement'] } },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.roles?.reviewer).toEqual({ tier: 'capable-2' });
+            expect(result.data.roles?.coder).toEqual({ stages: ['implement'] });
+        }
+    });
+
+    test('AgentConfigSchema rejects an agent.roles key outside the closed vocabulary, naming the accepted four (0572 R1)', () => {
+        const result = AgentConfigSchema.safeParse({ roles: { auditor: { tier: 'cheap' } } });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.path.join('.') === 'roles.auditor');
+            expect(issue).toBeDefined();
+            expect(issue?.message).toBe(`Unknown role "auditor" — expected one of: ${AGENT_ROLE_NAMES.join(', ')}`);
+        }
+    });
+
+    test('AgentConfigSchema rejects an out-of-vocabulary tier in agent.roles (0572 R1)', () => {
+        const result = AgentConfigSchema.safeParse({ roles: { scribe: { tier: 'ultra' } } });
+        expect(result.success).toBe(false);
     });
 
     test('AgentConfigSchema rejects an executor named "auto" (task 0413 R4)', () => {
