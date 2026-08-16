@@ -4,7 +4,7 @@ description: >-
   Explicit rules for creating new feature nodes or extending existing ones —
   MECE roots, cautious root creation, reparent vs merge, depth limits.
   Consumed by spur feature authoring, /sp:dev-plan, /sp:dev-idea, and
-  /sp:dev-featurechange.
+  /sp:dev-feature-change.
 see_also:
   - spur-cli
   - feature-verbs
@@ -15,7 +15,7 @@ see_also:
 # Feature hierarchy: MECE roots and extension rules
 
 This is the **normative checklist** before `spur feature create` or any restructure
-(`/sp:dev-featurechange`, `spur feature move`). CLI enforces ID shape (DD-14) and
+(`/sp:dev-feature-change`, `spur feature move`). CLI enforces ID shape (DD-14) and
 ≤9 children; **judgment** here keeps the tree neat for humans and agents.
 
 ## Goals of a good tree
@@ -86,7 +86,7 @@ If any check fails → **child of best parent** or **task under existing feature
 | **Create child** | New deliverable under clear parent | `spur feature create "…" --parent <id>` |
 | **Reparent / move** | Node lives under wrong parent; Goal still valid | `spur feature move <id> --parent <new>` (cascade rename) |
 | **Rename-only** | Goal OK; title misleading | Prefer `update --field name` if supported, or document + move only if ID depth must change |
-| **Merge (absorb)** | Two nodes share one Goal; bodies should be one | Prefer: move children under survivor → fold Scope/AC into survivor → cancel or archive source. **Not** a casual `move`. Use mapping + `/sp:dev-featurechange` when batching. |
+| **Merge (absorb)** | Two nodes share one Goal; bodies should be one | Prefer: move children under survivor → fold Scope/AC into survivor → cancel or archive source. **Not** a casual `move`. Use mapping + `/sp:dev-feature-change` when batching. |
 | **Archive** | Capability retired | `cancelled` or leave `done`; do not delete history |
 
 ---
@@ -160,7 +160,7 @@ work under H.
 - [ ] Will attach tasks with `--feature <new-id>` (or parent if intentionally epic-only).
 - [ ] After create: `spur feature refresh` if INDEX must update; `spur feature check <id>`.
 
-## Checklist: before restructure / `/sp:dev-featurechange`
+## Checklist: before restructure / `/sp:dev-feature-change`
 
 - [ ] Mapping file lists disposition per node (`keep` / `reparent-under` / `merge-into` / `rename-only` / `archive`).
 - [ ] False merges rejected (name overlap ≠ one Goal).
@@ -177,6 +177,6 @@ work under H.
 | **This reference** | Agent/human judgment — MECE, root gate, merge vs reparent |
 | **`spur feature create/move/check`** | Deterministic DD-14, children limit, lifecycle |
 | **`/sp:dev-plan` / `/sp:dev-idea`** | Must run the decision procedure before allocate |
-| **`/sp:dev-featurechange`** | Batch restructure against a mapping; must not invent roots |
+| **`/sp:dev-feature-change`** | Batch restructure against a mapping; must not invent roots |
 
 Agents authoring features **must load this file** (via `sp:spur-cli` features references) before creating a root or proposing merges.

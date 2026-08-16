@@ -1,4 +1,4 @@
-# Handoff routing — featurechange handoff, next-router seam, conditional dispatch
+# Handoff routing — feature-change handoff, next-router seam, conditional dispatch
 
 ## The seam with `/sp:dev-next` (next-router)
 
@@ -8,7 +8,7 @@
 - When the operator picks a winner from the ranked report, the printed handoff line is:
   `/sp:dev-next <feature-id>`.
 
-## The handoff to `/sp:dev-featurechange` (feature F31)
+## The handoff to `/sp:dev-feature-change` (feature F31)
 
 Defect proposals follow the 0495 Artifact C boundary, traced end to end:
 
@@ -16,9 +16,9 @@ Defect proposals follow the 0495 Artifact C boundary, traced end to end:
 | --- | --- | --- |
 | 1. Detect + emit proposal rows | this skill | No |
 | 2. Handoff | printed inline in the report (report reading of OQ1) | No |
-| 3. `--dry-run` | `/sp:dev-featurechange` | No |
+| 3. `--dry-run` | `/sp:dev-feature-change` | No |
 | 4. Confirm | operator | — |
-| 5. `--apply` (`spur feature move`) | `/sp:dev-featurechange` only | **Yes — sole writer** |
+| 5. `--apply` (`spur feature move`) | `/sp:dev-feature-change` only | **Yes — sole writer** |
 
 There is no path from this skill to a mutated tree that bypasses step 4. Proposal rows are printed
 inline in the default report; writing them into `docs/plans/feature-tree-restructure-map.md` as new
@@ -83,7 +83,7 @@ inside dispatched children remain governed by their own contracts (`--approve-ta
 ### What `--task` does not change
 
 The defect half is untouched: still no `spur feature move`, still nothing written under
-`docs/features/**`, still `/sp:dev-featurechange` as the sole applier of structure proposals. `--task`
+`docs/features/**`, still `/sp:dev-feature-change` as the sole applier of structure proposals. `--task`
 adds one gated path to `docs/tasks*/`, through commands that own their own gates.
 
 ## Where outputs go

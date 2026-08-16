@@ -955,7 +955,7 @@ is degenerate and never used as an ordering). (5) Defect pass — rank-distortin
 are emitted as proposals conforming to `docs/plans/feature-tree-restructure-map.md`'s schema, each
 clearing the `sp:conflict-finding` evidence bar (`false_positive_check` mandatory); silence is a
 valid outcome. (6) Report — the command performs no `spur feature move` and writes nothing under
-`docs/features/**`; `/sp:dev-featurechange` (dry-run → confirm → apply) is the sole path from a
+`docs/features/**`; `/sp:dev-feature-change` (dry-run → confirm → apply) is the sole path from a
 structure proposal to a changed tree. (7) **`--task` only (task 0498, resolving OQ1 toward the
 planning half):** offer the rank-1 candidate (or the id passed to `--task`), then route on the tier
 step 4 assigned — T3 with valid AC and zero tasks → `/sp:dev-plan --feature <id>` then

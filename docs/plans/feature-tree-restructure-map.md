@@ -1,7 +1,7 @@
 # Feature tree restructure map
 
 **Status:** applied historical map from audit **0356** (2026-07-28); do not reapply
-**Consumer:** `/sp:dev-featurechange` (dry-run / apply)  
+**Consumer:** `/sp:dev-feature-change` (dry-run / apply)  
 **Hierarchy rules:** `plugins/sp/skills/spur-cli/references/features/hierarchy-mece.md`  
 **Map feature:** F31 (under F3 Feature management CLI)
 

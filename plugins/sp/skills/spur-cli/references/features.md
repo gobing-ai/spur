@@ -64,7 +64,7 @@ subtree and **cascade-renames** every descendant; omit `--parent` to lift it to 
 **Before create or restructure (judgment, not CLI):** load
 [features/hierarchy-mece.md](features/hierarchy-mece.md) — MECE sibling sets, **sparse cautious
 roots**, extend-vs-create decision procedure, merge vs reparent, depth/width limits. `/sp:dev-plan`,
-`/sp:dev-idea`, and `/sp:dev-featurechange` must follow that checklist so new work prefers an
+`/sp:dev-idea`, and `/sp:dev-feature-change` must follow that checklist so new work prefers an
 existing parent over a new letter.
 
 ## Editing a feature: status, fields, and sections

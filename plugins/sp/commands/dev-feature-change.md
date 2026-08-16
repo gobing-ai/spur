@@ -1,14 +1,11 @@
 ---
-description: >-
+description: "Restructure the feature tree from a mapping file — dry-run then apply via spur feature move / task feature_id edges / root docs/*.md reference rewrites (CLI-gated; no raw Write on docs/features or docs/tasks). Triggers: feature restructure, feature tree move, reparent features, apply mapping file"
 role: planner
-  Restructure the feature tree from a mapping file — dry-run then apply via
-  spur feature move / task feature_id edges / root docs/*.md reference rewrites
-  (CLI-gated; no raw Write on docs/features or docs/tasks)
 argument-hint: "[--map <path>] [--dry-run] [--apply] [--limit <old-id>] [--wave <1|2|3|all>] [--yes]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion", "Skill"]
 ---
 
-# Dev Featurechange
+# Dev Feature Change
 
 CLI-gated feature-tree restructure orchestrator. Executes dispositions from a mapping file; does not invent hierarchy.
 
@@ -28,7 +25,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Usage
 
 ```
-/sp:dev-featurechange [--map <path>] [--dry-run] [--apply] [--limit <old-id>] [--wave <1|2|3|all>] [--yes]
+/sp:dev-feature-change [--map <path>] [--dry-run] [--apply] [--limit <old-id>] [--wave <1|2|3|all>] [--yes]
 ```
 
 ## Implementation
@@ -43,7 +40,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 - Read `--map`. Collect rows where disposition is not `keep` (typically `reparent-under:<parent>`).
 - Filter by `--limit` / `--wave` if set.
-- Wave defaults from map: **1** = K→J, L→J · **2** = N→H, O→H · **3** = P→D, Q→F, R→F8.
+- Wave membership comes from the map itself (its wave column/section is the SSOT). Never hard-code letter sets here — the tree moves under the command and literals go stale.
 
 **Free-digit preflight (mandatory before dry-run report)**
 
@@ -53,7 +50,7 @@ Group selected reparent rows by `new_parent`. For each parent:
 spur feature list --json
 ```
 
-Count current children (ids where `id` starts with parent and length = parent.length+1, digit 1–9).  
+Count current children (ids where `id` starts with parent and length = parent.length+1, digit 1–9).
 `free = 9 - childCount`. If `rowsUnderParent.length > free`, **abort the plan** with a clear error naming the parent, free slots, and competing old_ids. Do not apply a partial wave.
 
 **Dry-run plan (always) — sequential prediction**
@@ -102,10 +99,10 @@ spur feature refresh --json
 spur feature check --json
 ```
 
-Task edges: `feature move` rewrites `feature_id` across **all** configured task folders (via `foldersConfig`). Safety check:
+Task edges: `feature move` rewrites `feature_id` across **all** configured task folders (via `foldersConfig`). Safety check (the glob covers every tasks folder, present and future):
 
 ```bash
-rg -n '^feature_id: <old_id>$' docs/tasks docs/tasks2 docs/tasks3
+rg -n '^feature_id: <old_id>$' docs/tasks*/
 ```
 
 If any stale edges remain, fix with:

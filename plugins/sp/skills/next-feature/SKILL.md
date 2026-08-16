@@ -1,6 +1,6 @@
 ---
 name: next-feature
-description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' by deriving importance/urgency from corpus, git, and authority-doc evidence, and emits rank-distorting tree defects as proposals /sp:dev-featurechange consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
+description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' by deriving importance/urgency from corpus, git, and authority-doc evidence, and emits rank-distorting tree defects as proposals /sp:dev-feature-change consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -30,7 +30,7 @@ A prompt-first prioritizer that answers **"which feature should we work on now?"
 `sp:next-router` deliberately does not answer (`routing-table.md` §0 step 1c: target omitted → not
 v1). It derives importance and urgency from evidence already in the corpus, ranks the actionable
 frontier in **tiers with per-candidate evidence**, and emits rank-distorting tree defects as
-**proposals** `/sp:dev-featurechange` consumes.
+**proposals** `/sp:dev-feature-change` consumes.
 
 **Honesty contract:** prompt-first. The model applies the rubric; existing deterministic tools
 (`spur feature|task … --json`, `git`, `rg`) gather facts. No TypeScript analyzer, no numeric scores,
@@ -39,7 +39,7 @@ in this corpus it is 76% one value (0493 measurement).
 
 **Propose, never apply.** This skill performs no `spur feature move` and writes nothing under
 `docs/features/**`. The only path from a structure proposal to a changed tree is
-`/sp:dev-featurechange` (dry-run → confirm → apply). Ranking runs are read-only; the sole exception is
+`/sp:dev-feature-change` (dry-run → confirm → apply). Ranking runs are read-only; the sole exception is
 `--task`, which after an **operator confirm** (interactive, or auto-accepted under `--auto`)
 dispatches `/sp:dev-plan` and `/sp:dev-refineall` — commands that write `docs/tasks*/` through their
 own gates. This skill still creates no tasks itself.
@@ -52,7 +52,7 @@ own gates. This skill still creates no tasks itself.
 **Do NOT use for:**
 
 - Advancing an already-chosen task or feature — that is `/sp:dev-next` (`sp:next-router`).
-- Applying tree changes — that is `/sp:dev-featurechange` (feature F31).
+- Applying tree changes — that is `/sp:dev-feature-change` (feature F31).
 - Task-level ordering inside a feature — next-router's TABLE A owns that.
 
 ## Protocol
@@ -106,7 +106,7 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
 - Ranking a feature whose actionability gate fails. Gate first, rank second.
 - Emitting a numeric score (WSJF/RICE arithmetic) from absent value/effort estimates.
 - Copying the B3 predicate into this skill. Cite it; read it at runtime.
-- Any `spur feature move`, or writing proposals anywhere `docs/features/**` — featurechange owns apply.
+- Any `spur feature move`, or writing proposals anywhere `docs/features/**` — feature-change owns apply.
 - Decomposing a feature here, or calling `spur task create` / `spur task batch-create` under `--task`.
   Dispatch `/sp:dev-plan`; it owns decomposition and the batch-create schema gate. Equally:
   dispatching under `--auto` without `--task` (there is no confirm to skip), auto-accepting a target
@@ -123,7 +123,7 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
 | [references/signal-derivation.md](references/signal-derivation.md) | Sync precondition, B3 runtime citation, per-signal derivation commands, degenerate-spread rejection |
 | [references/ranking-rubric.md](references/ranking-rubric.md) | Tier definitions, tie-breaks, evidence-per-candidate output contract |
 | [references/proposal-contract.md](references/proposal-contract.md) | D1–D4 defect set, evidence bar, mapping-schema conformance, silence |
-| [references/handoff-routing.md](references/handoff-routing.md) | featurechange handoff, next-router seam, the `--task` tier→hop routing table and its confirm contract |
+| [references/handoff-routing.md](references/handoff-routing.md) | feature-change handoff, next-router seam, the `--task` tier→hop routing table and its confirm contract |
 
 Grounding: tickets 0493 (measured signals), 0494 (reuse ledger), 0495 (defect contract) under
 feature H12.

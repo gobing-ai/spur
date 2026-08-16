@@ -8,7 +8,8 @@
  *
  * Gates:
  *  (a) heading whitelist — H1 title + the per-contract ordered section headings
- *  (b) frontmatter schema — description, argument-hint, allowed-tools; dev-only extras
+ *  (b) frontmatter schema — description, argument-hint, allowed-tools; dev-only extras;
+ *      real-YAML re-parse so malformed blocks cannot ship an empty description
  *  (c) target resolution — sp:<skill> refs, workflow files, procedure anchors
  *  (d) allowed-tools coherence — Skill present iff body contains Skill() call
  *  (e) dev-command argument contract — syntax-only hint, Argument Flags table columns,
@@ -19,6 +20,7 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,8 @@ interface ParsedCommand {
     readonly description: string | undefined;
     readonly argumentHint: string | undefined;
     readonly allowedTools: string[] | undefined;
+    /** Set when the frontmatter fails a real YAML parse or yields an empty description. */
+    readonly frontmatterYamlProblem: string | undefined;
     readonly body: string;
 }
 
@@ -67,6 +71,30 @@ function parseCommand(filePath: string, name: string): ParsedCommand {
     const description = extractYamlField(fm, 'description');
     const argumentHint = extractYamlField(fm, 'argument-hint');
     const allowedTools = extractYamlList(fm, 'allowed-tools');
+
+    // The regex extractions above feed the per-field gates, but they cannot see
+    // malformed YAML: `description: >-` followed by unindented keys reads as a
+    // present description to the regex while a real YAML parser folds the next
+    // keys into the block scalar — the bug that shipped an empty description to
+    // superskill install for dev-feature-change. Gate (b) re-checks with a real
+    // parse so that class cannot regress.
+    let frontmatterYamlProblem: string | undefined;
+    if (fm.trim() !== '') {
+        try {
+            const parsed: unknown = parseYaml(fm);
+            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                frontmatterYamlProblem = 'frontmatter is not a YAML mapping';
+            } else {
+                const parsedDescription = (parsed as Record<string, unknown>).description;
+                if (typeof parsedDescription !== 'string' || parsedDescription.trim() === '') {
+                    frontmatterYamlProblem = 'frontmatter description is empty after YAML parsing';
+                }
+            }
+        } catch (error) {
+            const detail = error instanceof Error ? error.message.split('\n')[0] : String(error);
+            frontmatterYamlProblem = `frontmatter is not valid YAML: ${detail}`;
+        }
+    }
 
     const lines = body.split('\n');
     const title = lines[0]?.startsWith('# ') ? lines[0].slice(2).trim() : '';
@@ -90,7 +118,7 @@ function parseCommand(filePath: string, name: string): ParsedCommand {
         }
     }
 
-    return { name, title, headings, description, argumentHint, allowedTools, body };
+    return { name, title, headings, description, argumentHint, allowedTools, frontmatterYamlProblem, body };
 }
 
 /** Extract a plain YAML string field (handles quoted and unquoted). */
@@ -212,6 +240,9 @@ function checkHeadingWhitelist(cmd: ParsedCommand): readonly Violation[] {
 
 function checkFrontmatterSchema(cmd: ParsedCommand): readonly Violation[] {
     const violations: Violation[] = [];
+    if (cmd.frontmatterYamlProblem) {
+        violations.push({ command: cmd.name, gate: 'b', message: cmd.frontmatterYamlProblem });
+    }
     if (!cmd.description) {
         violations.push({ command: cmd.name, gate: 'b', message: 'missing frontmatter description' });
     }

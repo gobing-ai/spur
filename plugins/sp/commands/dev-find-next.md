@@ -1,5 +1,5 @@
 ---
-description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' with a ranked, evidence-carrying frontier, and emits rank-distorting tree defects as proposals /sp:dev-featurechange consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
+description: "Prompt-first feature frontier prioritizer — answers 'which feature should we work on now?' with a ranked, evidence-carrying frontier, and emits rank-distorting tree defects as proposals /sp:dev-feature-change consumes. Triggers: find next, which feature, feature ranking, frontier priority, what should I work on."
 role: planner
 argument-hint: "[--task [<feature-id>]] [--agent <inline|auto|name>] [--auto] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
@@ -13,7 +13,7 @@ instead of ranking them, and emits tree structure defects as proposals only.
 
 Answers *"which X"* — the question `/sp:dev-next` deliberately does not (next-router routing-table
 §0 step 1c). Advancing a chosen target remains `/sp:dev-next`'s job; applying tree changes remains
-`/sp:dev-featurechange`'s job.
+`/sp:dev-feature-change`'s job.
 
 ## Argument Flags
 
@@ -55,7 +55,7 @@ Without `--task` the command is read-only with respect to the corpus and docs. U
 only mutation is the one the dispatched commands perform on `docs/tasks*/` after confirm (or
 auto-accept) — the command still performs no `spur feature move`, no sync apply, and no write under
 `docs/features/**`. Defect proposals conform to the `docs/plans/feature-tree-restructure-map.md`
-schema and are applied only through `/sp:dev-featurechange` (dry-run → confirm → apply).
+schema and are applied only through `/sp:dev-feature-change` (dry-run → confirm → apply).
 
 **See also:** skill `sp:next-feature` (SSOT), `sp:next-router` (`/sp:dev-next`),
 `sp:conflict-finding` (the prompt-first template), `sp:spur-cli`.
