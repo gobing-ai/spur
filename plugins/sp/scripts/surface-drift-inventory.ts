@@ -58,9 +58,9 @@ interface Row {
     occurrences: { file: string; line: number }[];
 }
 
-const rows: Row[] = [];
+export const rows: Row[] = [];
 
-function record(
+export function record(
     asserted: string,
     method: string,
     status: Row['status'],
@@ -84,7 +84,8 @@ function record(
 
 // ─── Live surface captures (cached) ─────────────────────────────────────────
 
-const surfaceCache = new Map<string, { commands: string[]; flags: string[] }>();
+/** Exported so unit tests can seed a fake live surface and keep the verdict logic hermetic. */
+export const surfaceCache = new Map<string, { commands: string[]; flags: string[] }>();
 
 function surface(path: string[]): { commands: string[]; flags: string[] } {
     const key = path.join(' ');
@@ -97,7 +98,10 @@ function surface(path: string[]): { commands: string[]; flags: string[] } {
     return s;
 }
 
-function runCli(args: string[], timeoutMs = 30_000): { exit: number; out: string; err: string } {
+/** How the live-CLI sweeps below reach the CLI. Injectable so unit tests can drive them hermetically. */
+export type CliRunner = (args: string[], timeoutMs?: number) => { exit: number; out: string; err: string };
+
+export function runCli(args: string[], timeoutMs = 30_000): { exit: number; out: string; err: string } {
     try {
         const out = execFileSync(process.execPath, ['run', CLI_ENTRY, ...args], {
             cwd: REPO_ROOT,
@@ -107,9 +111,12 @@ function runCli(args: string[], timeoutMs = 30_000): { exit: number; out: string
         });
         return { exit: 0, out, err: '' };
     } catch (e) {
-        const err = e as { status?: number; stdout?: string; stderr?: string; killed?: boolean };
+        const err = e as { status?: number; stdout?: string; stderr?: string; killed?: boolean; code?: string };
         return {
-            exit: err.killed ? 124 : (err.status ?? 1),
+            // A timeout must map to 124 — sweepWorkflows reads that as "did not terminate"
+            // (unverified) rather than reporting a hung dry-run as a clean walk. Bun signals it
+            // as code ETIMEDOUT with `killed` undefined and a null status; Node sets `killed`.
+            exit: err.killed || err.code === 'ETIMEDOUT' ? 124 : (err.status ?? 1),
             out: err.stdout ?? '',
             err: (err.stderr ?? '').slice(0, 400),
         };
@@ -206,7 +213,7 @@ export function flagNames(span: string): string[] {
 }
 
 /** Files in the R1 surfaces: commands/, skills/ (incl. references), scripts/, hooks/. */
-function walk(dir: string, exts: string[], out: string[] = []): string[] {
+export function walk(dir: string, exts: string[], out: string[] = []): string[] {
     if (!existsSync(dir)) return out;
     for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = join(dir, e.name);
@@ -243,7 +250,7 @@ export function nounOfReference(file: string): string | null {
 
 // ─── A. Plugin assertion checks ─────────────────────────────────────────────
 
-function checkNounVerbFlags(
+export function checkNounVerbFlags(
     nouns: string[],
     verbs: string[],
     flags: string[],
@@ -314,12 +321,12 @@ function checkNounVerbFlags(
     }
 }
 
-function sweepPluginTrees(): void {
+export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
     const files = [
-        ...walk(join(PLUGIN_ROOT, 'commands'), ['.md']),
-        ...walk(join(PLUGIN_ROOT, 'skills'), ['.md']),
-        ...walk(join(PLUGIN_ROOT, 'scripts'), ['.ts']),
-        ...walk(join(PLUGIN_ROOT, 'hooks'), ['.ts', '.json']),
+        ...walk(join(root, 'commands'), ['.md']),
+        ...walk(join(root, 'skills'), ['.md']),
+        ...walk(join(root, 'scripts'), ['.ts']),
+        ...walk(join(root, 'hooks'), ['.ts', '.json']),
     ];
     for (const file of files) {
         const text = readFileSync(file, 'utf8');
@@ -404,8 +411,8 @@ function sweepPluginTrees(): void {
 
 // ─── B. Scripts: argv extraction + execution ────────────────────────────────
 
-function sweepScriptArgv(): void {
-    for (const file of walk(join(PLUGIN_ROOT, 'scripts'), ['.ts'])) {
+export function sweepScriptArgv(root: string = PLUGIN_ROOT): void {
+    for (const file of walk(join(root, 'scripts'), ['.ts'])) {
         readFileSync(file, 'utf8')
             .split(/\r?\n/)
             .forEach((line: string, i: number) => {
@@ -426,7 +433,7 @@ function sweepScriptArgv(): void {
     }
 }
 
-function executeScripts(): void {
+export function executeScripts(root: string = PLUGIN_ROOT): void {
     const dir = mkdtempSync(join(tmpdir(), 'spur-drift-'));
     try {
         // task-size-precheck against a fake bin — argument construction under execution.
@@ -446,14 +453,7 @@ fi
         try {
             execFileSync(
                 process.execPath,
-                [
-                    join(PLUGIN_ROOT, 'scripts', 'task-size-precheck.ts'),
-                    '0487',
-                    '--spur-bin',
-                    fake,
-                    '--executor',
-                    'standard',
-                ],
+                [join(root, 'scripts', 'task-size-precheck.ts'), '0487', '--spur-bin', fake, '--executor', 'standard'],
                 { cwd: dir, encoding: 'utf8', timeout: 30_000, stdio: 'pipe' },
             );
             const content = readFileSync(statusPath, 'utf8');
@@ -490,7 +490,7 @@ fi
             execFileSync(
                 process.execPath,
                 [
-                    join(PLUGIN_ROOT, 'scripts', 'feature-sync-bounded.ts'),
+                    join(root, 'scripts', 'feature-sync-bounded.ts'),
                     '--feature',
                     'I3',
                     '--spur-bin',
@@ -523,8 +523,8 @@ fi
 
 // ─── C. Hook contract ───────────────────────────────────────────────────────
 
-function sweepHooks(): void {
-    const hooksJsonPath = join(PLUGIN_ROOT, 'hooks', 'hooks.json');
+export function sweepHooks(root: string = PLUGIN_ROOT): void {
+    const hooksJsonPath = join(root, 'hooks', 'hooks.json');
     let parsed: {
         hooks?: Record<string, Array<{ matcher?: string; hooks?: Array<{ type?: string; command?: string }> }>>;
     };
@@ -571,7 +571,7 @@ function sweepHooks(): void {
                     );
                     continue;
                 }
-                const script = join(PLUGIN_ROOT, 'hooks', `${m[1]}.ts`);
+                const script = join(root, 'hooks', `${m[1]}.ts`);
                 record(
                     `hook ${m[1]} script exists`,
                     'file-resolution',
@@ -582,11 +582,12 @@ function sweepHooks(): void {
             }
         }
     }
-    const plugin = JSON.parse(readFileSync(join(PLUGIN_ROOT, 'plugin.json'), 'utf8')) as {
+    // pi-lens-ignore: unchecked-throwing-call
+    const plugin = JSON.parse(readFileSync(join(root, 'plugin.json'), 'utf8')) as {
         extensions?: { pi?: string[] };
     };
     for (const ext of plugin.extensions?.pi ?? []) {
-        const p = join(PLUGIN_ROOT, ext.replace(/^\.\//, ''));
+        const p = join(root, ext.replace(/^\.\//, ''));
         record(
             `pi extension ${ext}`,
             'file-resolution',
@@ -616,7 +617,7 @@ const JSON_PROBES: string[][] = [
     ['projects', 'list', '--json'],
 ];
 
-function flattenKeys(v: unknown, prefix = ''): string[] {
+export function flattenKeys(v: unknown, prefix = ''): string[] {
     if (Array.isArray(v)) {
         const inner = [...new Set(v.flatMap((x) => flattenKeys(x, '[]')))];
         return inner.map((k) => (prefix ? `${prefix}.${k}` : k));
@@ -632,9 +633,9 @@ function flattenKeys(v: unknown, prefix = ''): string[] {
 
 const jsonEnvelopeShapes: Record<string, { exit: number; keys: string[] }> = {};
 
-function probeJsonShapes(): void {
+export function probeJsonShapes(run: CliRunner = runCli): void {
     for (const args of JSON_PROBES) {
-        const r = runCli(args);
+        const r = run(args);
         let keys: string[] = [];
         try {
             keys = flattenKeys(JSON.parse(r.out)).sort();
@@ -713,14 +714,15 @@ function probeJsonShapes(): void {
 
 // ─── E. Workflows + symlink ─────────────────────────────────────────────────
 
-function sweepWorkflows(): void {
-    const wfDir = join(REPO_ROOT, 'config', 'workflows');
+export function sweepWorkflows(opts: { run?: CliRunner; wfDir?: string; link?: string } = {}): void {
+    const run = opts.run ?? runCli;
+    const wfDir = opts.wfDir ?? join(REPO_ROOT, 'config', 'workflows');
     const files = readdirSync(wfDir)
         .filter((f) => f.endsWith('.yaml'))
         .sort();
     for (const f of files) {
         const path = rel(join(wfDir, f));
-        const v = runCli(['workflow', 'validate', path]);
+        const v = run(['workflow', 'validate', path]);
         record(
             `workflow validate ${f}`,
             'workflow-validate(live engine)',
@@ -729,7 +731,7 @@ function sweepWorkflows(): void {
             { file: path, line: 1 },
         );
         const dryVars = f === 'task-pipeline.yaml' ? ['--vars', JSON.stringify({ wbs: '0539', profile: 'auto' })] : [];
-        const d = runCli(['workflow', 'run', path, '--dry-run', ...dryVars, '--quiet'], 45_000);
+        const d = run(['workflow', 'run', path, '--dry-run', ...dryVars, '--quiet'], 45_000);
         const tail = (d.out.trim().split('\n').pop() ?? d.err.trim().split('\n').pop() ?? '').slice(0, 160);
         // A dry-run that terminates (any exit) proves the engine walks the definition; schema
         // divergence is validate's job. Only a timeout is unverified.
@@ -756,7 +758,7 @@ function sweepWorkflows(): void {
                 }
             });
     }
-    const link = join(REPO_ROOT, '.spur', 'workflows');
+    const link = opts.link ?? join(REPO_ROOT, '.spur', 'workflows');
     let status: Row['status'] = 'mismatch';
     let actual = '';
     try {
@@ -772,7 +774,7 @@ function sweepWorkflows(): void {
 
 // ─── Report ─────────────────────────────────────────────────────────────────
 
-function render(): string {
+export function render(): string {
     const prov = surface([]);
     const byMethod = new Map<string, Row[]>();
     for (const r of rows) {
@@ -791,6 +793,7 @@ function render(): string {
     L.push(
         'Generated by `bun plugins/sp/scripts/surface-drift-inventory.ts` — re-runnable; every entry names its check method.',
     );
+    // pi-lens-ignore: unchecked-throwing-call
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'apps', 'cli', 'package.json'), 'utf8')) as { version: string };
     L.push(`CLI provenance: source-local \`apps/cli/src/index.ts\` @ ${pkg.version} (never a PATH \`spur\`).`);
     L.push(`Root nouns: ${prov.commands.join(', ')}.`);
