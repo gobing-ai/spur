@@ -108,8 +108,9 @@ cleared the A17 cutover gate. The legacy `kanban.md` generator is removed.
 
 Turn detection into execution with a captured run model.
 
-- [~] `spur agent run <task>` — single-shot execution via `AiRunner` shipped early (incl. team-mode
-  identity/drain flags, pending verification); artifact capture into the run model still pending.
+- [x] `spur agent run <prompt>` — execution via `AiRunner` shipped (team-mode `--spec`/`--drain`
+  occupant addressing, identity-pinned `agent wait`, role-based executor selection, G5 inline
+  host-session semantics).
 - [ ] Run model: persist runs, phases, events, artifacts through the workflow engine's persistence.
 - [~] Run inspection — partially delivered as `spur workflow trace [run-id]` and
   `spur rule trace [run-id]` (engine-persisted run history, tasks 0038/0040); events/gates/artifact

@@ -19,8 +19,9 @@ spur migrate [--json]
 History-import and workflow-engine tables ship as static SQL composed by
 `packages/domain/src/migrations.ts` and run as part of the same set.
 
-> **Reserved migrations:** the per-task CLI verb `spur task migrate` is also reserved (A17) —
-> a one-time corpus normalization gate, gated on the board cutover. Not yet wired.
+> **Corpus migration:** the per-task CLI verb `spur task migrate` runs the one-time **A17**
+> task-corpus normalization pass (`--dry-run` previews, `--folder` scopes, `--json` for machines).
+> Run it once when adopting the A17 layout on an older corpus.
 
 ## Example
 

@@ -21,8 +21,8 @@ that before using `run` for fan-out dispatch.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
-| `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--agent <id>` `--poll <ms>` |
+| `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
+| `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--spec <id>` `--agent <id>` `--poll <ms>` |
 | `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) | `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or team agent specs with `--specs` | `--specs` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` |
@@ -48,7 +48,7 @@ through a coding agent as an external process, producing a persisted run record 
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--agent <name>` | Role, executor, agent binary, or `auto`. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. |
+| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. **`inline` is host-session-only** (G5 / ADR-047 amendment): `agent run` is a headless subprocess surface, so explicit `inline` is rejected with exit 2 and a stable error message — it never normalizes to `agent.default`. |
 | `--model <name>` | Agent model argument (e.g. `o3`, `sonnet`). Passed through to the agent's model flag. |
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
 | `--continue` | Resume the previous agent session instead of starting fresh. |

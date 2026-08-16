@@ -148,7 +148,7 @@ clobbering a configured project. `--json` emits
 (`standard·feature-impl·issue·review·brainstorm·meta`); enforced by
 `apps/cli/tests/commands/init.test.ts` to prevent template/manifest drift.
 
-#### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--stage <id>] [--signal <sig>] [--drain] [--json]`
+#### `spur agent run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 
 **The subprocess LLM execution surface.** Every out-of-process model invocation in Spur routes
 through this verb: workflow `agent.run` actions, explicit `/sp:dev-* --agent auto|--agent <name>`
@@ -220,14 +220,15 @@ namespaces — role names (`scribe`/`coder`/`reviewer`/`planner`, task 0535), ex
 spec ids — are proven pairwise disjoint at config load (0537 R4), so one `--agent` value can never
 mean two things; a config that collides them (executor named `coder`, member id shadowing an
 executor, composed spec id equal to an executor name) fails to load naming both colliding names.
-**Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` (from the
-explicit `--stage <id>` flag only — the prompt text no longer derives one, 0536 R4): the stage's
+**Stage-registry routing (ADR-033).** `auto` resolves on the canonical `stage_id` from the
+stage context the dispatching layer supplies (the prompt text never derives one, 0536 R4; there
+is no CLI `--stage` flag): the stage's
 `model_policy` starts on the cheapest eligible executor at its `min_tier`
 (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`, matched against each executor's `tier`
 field; 0343 split bare `capable` into quality sub-tiers) and escalates along the ordered `fallback`
-chain when an objective `--signal`
-(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`/`auth`) is supplied (with
-`--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
+chain on an objective failure signal
+(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`/`auth`),
+with the escalation record naming the current executor and tier. Legacy bare `capable` normalizes to `capable-1` during
 the deprecation window. The stage-registry schema version is 1.2 (`auth` is an additive enum value).
 **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback

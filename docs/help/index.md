@@ -143,6 +143,7 @@ mechanics; the CLI guide points here for the 26-step view.
 | `spur status`   | [cmd_status.md](./cmd_status.md)     |
 | `spur migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
 | `spur serve`    | [cmd_serve.md](./cmd_serve.md)       |
+| `spur projects` | [cmd_projects.md](./cmd_projects.md) |
 
 ### References
 

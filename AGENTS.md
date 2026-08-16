@@ -274,9 +274,10 @@ legitimately public; all other spur-dev commands are correctly internal.
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
 
-**Outside spur-cli:** Nouns not fully documented in `sp:spur-cli` (`agent`, `history`, `message`,
-`team`, `status`, `migrate`, `serve`, `init`, …) — use only `spur <noun> --help` and
-`docs/04_DESIGN.md`. Never guess flags.
+**Outside spur-cli:** Nouns without a `sp:spur-cli` reference file (`history`, `projects`,
+`status`, `migrate`) — use only `spur <noun> --help` and `docs/04_DESIGN.md`. Never guess flags.
+(`agent`, `message`, `team`, `serve`, `init` have parity-gated references:
+`plugins/sp/skills/spur-cli/references/{agent,message,team,serve,init}.md`.)
 
 Full shapes: `docs/04_DESIGN.md` (T3 same-commit). Planning depth: ADR-020–023 / ADR-028,
 `docs/03_ARCHITECTURE.md §12`, `docs/05_FEATURES.md §9`. Board: web Task Kanban (not `kanban.md`).

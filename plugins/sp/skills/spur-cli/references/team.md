@@ -49,7 +49,8 @@ spur team status --json             # machine-readable
 
 Lists agent specs and their live run status. When `spur serve` is reachable, enriches each spec with
 the supervisor's process status (`running` / `stopped` / etc.); otherwise falls back to local spec
-metadata. `--by-team` groups specs by their `agent.team.<id>` tag.
+metadata. Each row carries the member's declared `role` (rendered `unset` when undeclared, 0544)
+and the spec's `executor`. `--by-team` groups specs by their `agent.team.<id>` tag.
 
 ### Flags
 
@@ -67,8 +68,14 @@ spur team up alpha --check          # dry-run: show add/prune diff, no writes
 spur team up alpha --json
 ```
 
-Materializes a team roster (defined by specs sharing `agent.team.<team>`) into `.spur/agents/`
-specs - adding missing specs and pruning stale `spur:generated` ones. When `spur serve` is
+Materializes the roster declared under `agent.team` in the project config for `<team>` into
+`.spur/agents/` specs - adding missing specs and pruning stale `spur:generated` ones. **Role is
+the primary axis (0543):** a member declares `role` (`scribe`/`coder`/`reviewer`/`planner`,
+from `plugins/sp/references/roles.md`) and/or `executor`; a role-only member resolves an executor
+through the shared tier ladder at materialization, and the written spec records both `role` and
+the resolved `executor` so the decision is inspectable. A member declaring neither fails config
+load naming the team and position. Local id stays `id ?? executor`; role-only members derive
+`<role>-<n>` by declaration order. Generated specs carry the `agent.team.<team>` tag. When `spur serve` is
 reachable, best-effort starts each member. `--check` is a dry-run that shows the add/prune diff
 without writing.
 

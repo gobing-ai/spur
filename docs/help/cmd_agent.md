@@ -26,12 +26,13 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 |---|---|
-| `--agent <name>` | Agent name, `auto`, or `inline` (default: `auto`). `inline` resolves like omitting the flag to `agent.default` (ADR-047); `auto` tier-resolves an executor; a name pins that executor. `spur agent run` always starts a subprocess. |
+| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` is host-session-only — this surface is headless, so it is rejected with exit 2 and a stable error message (G5 / ADR-047 amendment; it never normalizes to `agent.default`). `spur agent run` always starts a subprocess. |
+| `--spec <id>` | Team agent spec id (occupant addressing); pairs with `--drain` |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
 | `--mode <mode>` | Agent output mode: `text` \| `json` (default: `text`) |
 | `--cwd <path>` | Working directory for agent execution |
-| `--drain` | Prepend pending inbox messages for the `--agent <spec-id>` |
+| `--drain` | Prepend pending inbox messages for the `--spec <id>` occupant |
 | `--json` | Output machine-readable envelope |
 
 ### Exit codes
@@ -40,7 +41,7 @@ spur agent run [options] <prompt>
 |---|---|
 | 0 | Success |
 | 1 | Agent-not-found (or known-but-unusable per phase config) |
-| 2 | Invalid arguments (unknown executor per phase config) |
+| 2 | Invalid arguments (unknown selector; explicit `inline` on this headless surface) |
 | 3 | Agent execution failure |
 
 ### `--agent` resolution
@@ -51,24 +52,25 @@ SSOT in
 [cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The resolution steps below are specific to `spur agent run` (the subprocess surface):
 
-1. The prompt's slash command yields a **phase** — recognized in every per-agent surface form
-   (`/sp:dev-run` claude, `/sp-dev-run` opencode/gemini/hermes/grok, `/skill:sp-dev-run` pi/omp,
-   `$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`).
-2. A configured `agent.default-by-phase[phase]` selects a named `agent.executors` profile
-   (`{ name, agent, model? }`) — its `model` becomes the run's model **unless** the user
-   passed an explicit `--model` (explicit wins).
-3. A configured phase mapping is **authoritative**: an unknown executor exits 2, a
-   known-but-unusable executor exits 1, and neither falls back.
-4. With no phase match, `agent.default` is resolved as an executor selector (then a legacy
-   agent name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1
-   agent — the legacy behavior preserved when no `agent` config is present.
-5. An explicit name resolves directly and never consults phase config.
+1. An explicit `--agent` value wins: **role** first (the closed Layer-1 vocabulary), then
+   configured **executor**, then a bare coding-agent binary (one-time shim warning). Unknown
+   values are rejected with exit 2 at the flag boundary, before any process spawns.
+2. Omitted / `auto` resolves `agent.default` as the **default role** (recommended `coder`; a
+   configured executor name still resolves during the transition with a one-time warning), and
+   the stage registry's `model_policy` starts on the cheapest eligible executor at that tier.
+3. On miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the
+   legacy behavior preserved when no `agent` config is present.
+4. An explicit `--model` always wins over the resolved executor's configured model.
+
+(Phase-based routing is retired: `default-by-phase` was removed in task 0452 and prompt-regex
+phase detection in 0536 R4.)
 
 ### `--drain` (team mode)
 
-`--drain` resolves the addressed `--agent <id>` as an **agent spec id** (a different namespace
-from the coding-agent type), folds that spec's pending inbox messages into the prompt, and
-rewrites `--agent` to the spec's underlying type before dispatch. Phase 1-3 has no live stdin,
+`--drain` resolves the addressed `--spec <id>` as an **agent spec id** (a different namespace
+from the coding-agent type; a legacy `--agent <spec-id>` still works during the transition with a
+one-time warning), folds that spec's pending inbox messages into the prompt, and
+rewrites the selector to the spec's executor before dispatch. Phase 1-3 has no live stdin,
 so prepending is how deferred messages reach the agent.
 
 ### Examples

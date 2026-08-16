@@ -66,6 +66,7 @@ Invoke `sp:spur-cli` for verb guidance and per-noun conventions:
 
 - [ ] Delegate verb guidance to `sp:spur-cli`; use the `spur` CLI for all mutations.
 - [ ] Run the noun's `check`/`validate` verb before and after editing (e.g. `spur task check <wbs> --json`).
+- [ ] Run the corpus-wide sweep after batch edits: `spur task check --corpus --json` (fails on structural errors outside `config/corpus-baseline.json`).
 - [ ] Use `spur task update --section --from-file` for all task section edits.
 - [ ] Run the noun's `refresh` after batch operations where one exists (`spur task refresh`, `spur feature refresh`).
 

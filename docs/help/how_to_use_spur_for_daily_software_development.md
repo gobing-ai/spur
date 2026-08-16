@@ -194,8 +194,9 @@ spur feature        check   [<id>] [--strict] [--folder <path>] [--json]
 
 # History analytics
 spur history        import  --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]
-spur history        analyze [--since <iso-date>] [--json]
-spur history        report  [--json]   # reserved — currently prints a TODO marker
+spur history        analyze [--since <iso>] [--until <iso>] [--task <wbs>] [--top <n>] [--json]
+spur history        report  [<path>] [--mode default|forensics] [--task <wbs>] [--top <n>] [--json]
+spur history        daily   [--since <iso>] [--until <iso>] [--json]
 
 # Team coordination
 spur message        send    <body> --to <id> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]
@@ -203,7 +204,7 @@ spur message        inbox   --agent <id> [--json]
 spur message        reply   <msg-id> <body> [--json]
 spur team           assign  <task-id> <agent-id>
 spur team           status  [--json]
-spur team           start | stop                # Phase-4 daemon stubs (exit 0)
+spur team           start | stop  <agent-id> [--server <url>] [--json]   # supervised processes; requires spur serve
 ```
 
 Every command supports `--json` for machine-readable output.
@@ -536,8 +537,9 @@ spur history import --source pi --root ~/pi/logs/ --dry-run
 spur history analyze
 spur history analyze --since 2026-06-01 --json
 
-# Report (reserved — currently prints a TODO marker)
+# Report (renders the latest analyze artifact; never opens the DB)
 spur history report
+spur history report --mode forensics --task 0564 --top 10
 ```
 
 ### 5.6 Team Coordination
@@ -563,9 +565,10 @@ spur message inbox --agent reviewer
 spur message reply msg-001 "Looks good, merging"
 ```
 
-> **Team mode (Phase 1–3):** `team assign` + `message send` + `agent run --drain <spec-id>`
-> folds the spec's inbox into the prompt and maps spec-id → coding-agent type.
-> `team start/stop` are deferred daemon stubs that point users at `--drain`.
+> **Team mode:** `team assign` + `message send` + `agent run --spec <id> --drain`
+> folds the spec's inbox into the prompt and resolves the spec's executor before dispatch.
+> `team start/stop` manage supervised agent processes through `spur serve` (the supervisor
+> runs each member's persistent `spur agent loop`).
 
 ### 5.7 Serving the Web UI
 
@@ -861,10 +864,11 @@ features:
 
 ## 10. Known Limitations and Notes
 
-- **`spur history report`** is a reserved surface that currently prints a TODO marker. The
-  full flag grammar is registered; implementation is deferred.
-- **`spur team start|stop`** are deferred daemon stubs that print the daemon-not-available
-  message and exit 0. Team mode uses `--drain` (prepend-on-drain) rather than live daemons.
+- **`spur history report`** renders the artifact written by `spur history analyze` (or
+  `history daily`); it never touches the database. `--mode forensics`, `--task <wbs>`, and
+  `--top <n>` narrow the already-loaded artifact.
+- **`spur team start|stop`** manage supervised agent processes and require a reachable
+  `spur serve`; without it, use `agent run --spec <id> --drain` for store-and-forward runs.
 - **`spur task migrate`** now runs the one-time **A17** task-corpus normalization pass
   (`--dry-run` previews, `--folder` scopes, `--json` for machine output). Run it once when
   adopting the A17 layout on an older corpus; it is not part of the daily loop.

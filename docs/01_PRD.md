@@ -94,9 +94,9 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
 | Actionable local observability context                     | Spur Board System Events + existing trace commands | system-event ledger + engine persistence   |
 | Workflow validate / run / list                             | `spur workflow ...`                                | `ts-dual-workflow-engine`                  |
-| History import (7 sources)                                 | `spur history import`                              | `ts-llm-jsonl-importer`                    |
+| History import (10 sources)                                | `spur history import`                              | `ts-llm-jsonl-importer`                    |
 | History cost analytics                                     | `spur history analyze`                             | local analytics consumer                   |
-| History report surface                                     | `spur history report`                              | reserved (TODO marker)                     |
+| History report surface                                     | `spur history report`                              | pure artifact renderer (`--mode default\|forensics`, `--task`/`--top`; E5) |
 | Task management (markdown CRUD, WBS, sections, check)      | `spur task ...`                                    | task domain in `packages/` (ADR-021)       |
 | Feature management (`docs/features/`, INDEX, traceability) | `spur feature ...`                                 | feature domain in `packages/` (ADR-021)    |
 | Spec-driven planning pipeline (fat skill)                  | `plugins/sp` skill → `spur agent run` + CLI verbs  | `ts-ai-runner` + task/feature domain       |
