@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T23:28:49.554Z"
-updated_at: "2026-08-17T04:41:29.877Z"
+updated_at: "2026-08-17T05:14:14.635Z"
 ---
 
 ## 0575. Authoring-time task size warning on spur task create / update --section (ADR-051 consent pending)
@@ -25,8 +25,8 @@ Split out of task 0568 (2026-08-16) so that task could clear its own size gate: 
 
 The underlying gap is real: the size gate today fires first at *pipeline precheck*, which is after a task has already been authored, refined, and queued. An authoring-time warning surfaces the same signal at the moment the oversize is created, when it is cheap to fix. 0568 itself is the worked example — it was authored at 6 R-items and nothing said so until it was picked up for execution.
 ### Requirements
-- [ ] R1. Emit a non-blocking size warning at authoring time from `TaskService.updateSection` (`packages/app/src/services/task-service.ts`) when the section written is `Requirements` or `Plan`: after the write succeeds, re-read the resulting task body, call `evaluateTaskSize(content)` (no `executor` argument), and when `report.ok === false` append `report.reasons` to the returned result's `warnings[]`. Acceptance: writing a Requirements section with 6 R-items prints `Task has 6 R-items (max 5). …` on stderr in human mode and carries the same string in `warnings[]` under `--json`; a conforming write (≤5 R-items, ≤8 Plan items) emits nothing; the write always succeeds and the exit code is unchanged. Out of scope: `spur task create` (unreachable — the standard template ships zero R-items), blocking behavior, new flags/nouns, duplicated thresholds, and the executor-tier branch — each stated as a frozen anti-pattern in Design.
-- [ ] R2. Update `docs/04_DESIGN.md` in the same commit (T3) to document the new authoring-time warning on `spur task update --section Requirements|Plan` — the trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract. Acceptance: the `spur task update` surface entry names the warning and its threshold source; `bun run lint` and `spur task check 0575` stay green.
+- [x] R1. Emit a non-blocking size warning at authoring time from `TaskService.updateSection` (`packages/app/src/services/task-service.ts`) when the section written is `Requirements` or `Plan`: after the write succeeds, re-read the resulting task body, call `evaluateTaskSize(content)` (no `executor` argument), and when `report.ok === false` append `report.reasons` to the returned result's `warnings[]`. Acceptance: writing a Requirements section with 6 R-items prints `Task has 6 R-items (max 5). …` on stderr in human mode and carries the same string in `warnings[]` under `--json`; a conforming write (≤5 R-items, ≤8 Plan items) emits nothing; the write always succeeds and the exit code is unchanged. Out of scope: `spur task create` (unreachable — the standard template ships zero R-items), blocking behavior, new flags/nouns, duplicated thresholds, and the executor-tier branch — each stated as a frozen anti-pattern in Design.
+- [x] R2. Update `docs/04_DESIGN.md` in the same commit (T3) to document the new authoring-time warning on `spur task update --section Requirements|Plan` — the trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract. Acceptance: the `spur task update` surface entry names the warning and its threshold source; `bun run lint` and `spur task check 0575` stay green.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R1 — An oversized Requirements write warns without blocking
@@ -162,12 +162,12 @@ rather than deferred, per the advisory's own second option.
 
 **Handoff.** No `dependencies[]` and no dependents. Split from task 0568 on 2026-08-16 (0568 kept R2–R6 and is unblocked); nothing in 0568 waits on this.
 ### Plan
-- [ ] Confirm ADR-051 consent is recorded before writing code — this task is parked; a recorded operator decision is the entry condition, not a formality (R1, R2)
-- [ ] Add the size evaluation to `TaskService.updateSection` mirroring `checkAcSubsetWarning` (`task-service.ts:1138-1145`): gate on `sectionName === 'Requirements' || sectionName === 'Plan'`, re-read the post-write body, `evaluateTaskSize(content)`, spread `report.reasons` into `warnings[]` when `!report.ok` (R1)
-- [ ] Unit tests in `packages/app/tests/services/`: a 6-R-item Requirements write returns the `Task has 6 R-items (max 5)` reason in `warnings[]`; a 5-R-item write returns no size warning; a 9-item Plan write warns on plan items; every case still returns a successful mutation result (R1)
-- [ ] Verify both output modes against a scratch task: human mode prints the reason on **stderr** via the existing `task.ts:315-317` loop, `--json` carries the identical string inside `warnings[]`, and the exit code is `0` in both (R1)
-- [ ] Document the surface in `docs/04_DESIGN.md` under `spur task update` — trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract — in the same commit as the code (T3) (R2)
-- [ ] Gates: `bun test packages/app/tests/services --test-name-pattern 'size|warning'` targeted first, then `bun run lint`, `bun test plugins/sp/tests/task-size-precheck.test.ts` (parity at `:76` must stay green), and `spur task check 0575` (R1, R2)
+- [x] Confirm ADR-051 consent is recorded before writing code — this task is parked; a recorded operator decision is the entry condition, not a formality (R1, R2)
+- [x] Add the size evaluation to `TaskService.updateSection` mirroring `checkAcSubsetWarning` (`task-service.ts:1138-1145`): gate on `sectionName === 'Requirements' || sectionName === 'Plan'`, re-read the post-write body, `evaluateTaskSize(content)`, spread `report.reasons` into `warnings[]` when `!report.ok` (R1)
+- [x] Unit tests in `packages/app/tests/services/`: a 6-R-item Requirements write returns the `Task has 6 R-items (max 5)` reason in `warnings[]`; a 5-R-item write returns no size warning; a 9-item Plan write warns on plan items; every case still returns a successful mutation result (R1)
+- [x] Verify both output modes against a scratch task: human mode prints the reason on **stderr** via the existing `task.ts:315-317` loop, `--json` carries the identical string inside `warnings[]`, and the exit code is `0` in both (R1)
+- [x] Document the surface in `docs/04_DESIGN.md` under `spur task update` — trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract — in the same commit as the code (T3) (R2)
+- [x] Gates: `bun test packages/app/tests/services --test-name-pattern 'size|warning'` targeted first, then `bun run lint`, `bun test plugins/sp/tests/task-size-precheck.test.ts` (parity at `:76` must stay green), and `spur task check 0575` (R1, R2)
 ### Solution
 Implemented R1 + R2 as a single write-seam change; no CLI, plugin, or precheck code touched.
 

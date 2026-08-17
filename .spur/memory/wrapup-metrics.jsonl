@@ -53,3 +53,11 @@
 {"wbs":"0566","feature_id":"G5","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:00.000Z"}
 {"wbs":"0572","feature_id":"B3","status":"done","verdict":"PASS","timestamp":"2026-08-16T22:45:39.492Z"}
 {"wbs":"0569","feature_id":"I5","status":"done","verdict":"PASS","timestamp":"2026-08-16T23:54:16.429Z"}
+Captured to `.spur/run/wrapup-metrics.jsonl` — jq-validated, 2 rows:
+
+```jsonl
+{"wbs":"0569","feature_id":"I5","status":"done","verdict":"PASS","timestamp":"2026-08-16T23:54:16.429Z"}
+{"wbs":"0575","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-17T04:59:14Z"}
+```
+
+0575: `feature_id` null (none assigned — noted in task file as deferred), status `done`, verdict `PASS` from the pipeline verdict artifact. Rebuilt the file strictly after finding leaked transcript prose from an earlier run merged into the previous row's line, which broke JSONL parsing.
