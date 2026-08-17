@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.49] — 2026-08-17
+
+### Added
+
+- feat(config): validate agent.roles stage overrides at schema + CLI boundary (0572 R10) (49fc378b)
+- feat(history): thread agentConfig through history analyze and refresh paths (J8 R2) (9b96f126)
+- feat(history): pairing evidence aggregation + pairings report mode (feature J8) (04b2d25b)
+- feat(app): authoring-time task size warning on task update --section (0575) (e4dc09eb)
+- feat(sp): tolerate degraded history sources in bare runs (task 0569) (21e61c3a)
+- feat(config): move role-tier SSOT into packages/config (task 0572) (c14dc3be)
+- feat(sp): make dev-gtd act CI simulation opt-in via --act (2be1e6d2)
+- feat(sp): add pr-review skill, dev-pr-review command, and workflow spine (60205044)
+- feat(history): feature I5 dev-history-load corpus — feature file, plan, task 0567 (bd21b2a3)
+- feat(plugin): add /sp:dev-history-load cumulative import+analyze command (3342a1a6)
+
+### Fixed
+
+- fix(app): parse compound evidence types + monorepo-safe spur resolver (7c8b9863)
+- fix(workflow): consume dual-workflow-engine 0.4.35 setVars fix (task 0571) (bbbd66b0)
+
+### Changed
+
+- docs(history): close out feature J8 — mark 0573/0574 requirements done, amend R5 AC (d37e1f6c)
+- docs(tasks): record 0575 evidence and wrap artifacts (9d97b58b)
+- docs(doc-evolve): wrapup doc sync for 0575 — ADR-051 amendment, 04 frontmatter bump (cf664a30)
+- docs(sp): align dev-find-issue docs with CLI and skill SSOT (task 0570) (a34c2acd)
+- docs(tasks): update task status after refinment (838a53b1)
+- docs(tasks): split 0568 R1 into 0575, drop duplicate J8 R4 scenario (de3c1a6e)
+- docs(tasks): record 0572 evidence and wrap doc-sync (812887e1)
+- docs(tasks): record 0571 verify re-audit evidence (37e8081e)
+- chore(config): update .spur/config.yaml (16422d6d)
+- docs(tasks4): ready-refine tasks 0568-0571 (c24e8c9c)
+- docs(features): register B3 and J8 in the feature index (5222c39b)
+- docs(config): annotate pairing philosophy in agent config comments (ffaef827)
+- docs: add J8 pairing-evidence feature spec and tasks 0573-0574 (adf945a2)
+- docs: add B3 feature spec and task 0572 for role-routing SSOT move (7ca24a9e)
+- docs(tasks): file 0569 degraded-source tolerance and 0571 workflow setVars tasks; sync feature INDEX (076983b6)
+- chore(config): role-based executor default with role->tier resolution docs (6caa9703)
+- refactor(plugin): rename dev-featurechange command to dev-feature-change (72e7bc2d)
+- docs(tasks): file 0568 process-bottleneck fixes and 0570 dev-find-issue doc conformance (2112af1b)
+- test(sp): assert pr-review.yaml ships in the scaffold manifest (88dad407)
+
 ## [0.3.48] — 2026-08-15
 
 ### Added
