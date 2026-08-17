@@ -1,4 +1,4 @@
-import type { DbAdapter } from '@gobing-ai/ts-db';
+import type { DbAdapter, DbBatchOp } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import { buildMessageWhereClauses } from './forensic-query';
 
@@ -17,6 +17,12 @@ import { buildMessageWhereClauses } from './forensic-query';
  * from analysis. Where "complete" is ambiguous for a source (no tool-call rows to
  * inspect), the source cannot see an open tool call, so the rule degrades to
  * "last message is an assistant message" — never a guess about turn structure.
+ *
+ * **Fail-open invariant (task 0576):** a session with no turn closer is evidence of
+ * nothing — the watermark must never exclude an entire session. Such a session keeps
+ * `state: 'in-progress'` and its watermark becomes the session's max seq (exclude
+ * nothing). 0550's purpose is to shave a trailing partial turn, never to drop a
+ * source from analytics.
  */
 
 /** Completeness state of a session on the analyze output (R2). */
@@ -31,8 +37,9 @@ export interface SessionWatermark {
      * Highest `seq` a consumer may include. Rows above this belong to a trailing
      * partial turn. For complete sessions this equals the session's max seq (nothing
      * is excluded, trailing meta records included — no behavior change). For
-     * in-progress sessions it is the last turn-closing message's seq, or -1 when the
-     * session has no complete turn at all (everything is the trailing turn).
+     * in-progress sessions it is the last turn-closing message's seq; when the session
+     * has no turn closer at all, it is the session's max seq — no evidence of where a
+     * trailing partial turn begins, so nothing is excluded (fail-open, task 0576).
      */
     watermarkSeq: number;
 }
@@ -150,7 +157,10 @@ export async function sessionWatermarks(db: DbAdapter, sel: ArtifactSelector): P
                 last.role === null ||
                 last.role === '' ||
                 last.role === 'unknown');
-        const watermarkSeq = complete ? row.maxSeq : (closerByKey.get(key) ?? -1);
+        // Fail-open (task 0576): a session with no turn closer gives no evidence of
+        // where a trailing partial turn begins — exclude nothing. 0550's purpose is
+        // to shave a trailing partial turn, never to drop a source from analytics.
+        const watermarkSeq = complete ? row.maxSeq : (closerByKey.get(key) ?? row.maxSeq);
         result.push({
             sessionId: row.sessionId,
             source: row.source,
@@ -165,17 +175,70 @@ export async function sessionWatermarks(db: DbAdapter, sel: ArtifactSelector): P
  * Turn the watermark results into a SQL filter that excludes the trailing partial
  * turn of in-progress sessions. Applies to every query that reads messages (alias `m`).
  * Complete sessions contribute no condition — their data is untouched.
+ *
+ * The filter is a `NOT EXISTS` anti-join against the temp table backed by
+ * {@link materializeWatermarkExclude}. It deliberately is NOT a per-session OR chain:
+ * SQLite parses `NOT (a OR b OR …)` left-deep, so expression depth grows ~1 per
+ * in-progress session and crosses `SQLITE_MAX_EXPRESSION_DEPTH` (1000) past ~1000
+ * sessions — the pi source has 176k in-progress sessions (task 0550), which crashed
+ * every message query. The anti-join keeps expression depth and bound-param count
+ * constant regardless of how many sessions are in-progress.
  */
 export function buildWatermarkFilter(watermarks: readonly SessionWatermark[]): WatermarkFilter {
     const inProgress = watermarks.filter((w) => w.state === 'in-progress');
     if (inProgress.length === 0) return { sql: '', params: [] };
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    for (const w of inProgress) {
-        conditions.push('(m.session_id = ? AND m.source = ? AND m.seq > ?)');
-        params.push(w.sessionId, w.source, w.watermarkSeq);
+    return {
+        sql: `NOT EXISTS (
+            SELECT 1 FROM spur_wm_exclude w
+            WHERE w.session_id = m.session_id AND w.source = m.source
+              AND m.seq > w.watermark_seq
+        )`,
+        params: [],
+    };
+}
+
+/** Multi-row INSERT chunk — bounds per-statement bound params well under SQLite's limit. */
+const WM_EXCLUDE_CHUNK = 500;
+
+/**
+ * Materialize the in-progress watermark set into a temp table so the anti-join filter
+ * from {@link buildWatermarkFilter} has constant expression depth and a constant,
+ * small bound-param count. Must be called before the query batch; callers invoke the
+ * returned cleanup after it (drops the table). No-op when there are no in-progress
+ * sessions. A prior run that crashed mid-batch self-heals: `CREATE … IF NOT EXISTS`
+ * plus a `DELETE` reset on the next call.
+ */
+export async function materializeWatermarkExclude(
+    db: DbAdapter,
+    watermarks: readonly SessionWatermark[],
+): Promise<() => Promise<void>> {
+    const inProgress = watermarks.filter((w) => w.state === 'in-progress');
+    if (inProgress.length === 0) return async () => {};
+    await db.exec(
+        `CREATE TEMP TABLE IF NOT EXISTS spur_wm_exclude (
+            session_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            watermark_seq INTEGER NOT NULL
+        )`,
+    );
+    // One row per (session, source), so an index on the pair makes the per-message
+    // anti-join lookup log-time instead of a full scan of the exclusion set (pi: 176k
+    // rows × every message would stall the batch for minutes).
+    await db.exec(`CREATE INDEX IF NOT EXISTS spur_wm_exclude_idx ON spur_wm_exclude (session_id, source)`);
+    await db.exec(`DELETE FROM spur_wm_exclude`);
+    const ops: DbBatchOp[] = [];
+    for (let i = 0; i < inProgress.length; i += WM_EXCLUDE_CHUNK) {
+        const slice = inProgress.slice(i, i + WM_EXCLUDE_CHUNK);
+        const placeholders = slice.map(() => '(?, ?, ?)').join(', ');
+        ops.push({
+            sql: `INSERT INTO spur_wm_exclude (session_id, source, watermark_seq) VALUES ${placeholders}`,
+            params: slice.flatMap((w) => [w.sessionId, w.source, w.watermarkSeq]),
+        });
     }
-    return { sql: `NOT (${conditions.join(' OR ')})`, params };
+    await db.batch(ops);
+    return async () => {
+        await db.exec(`DROP TABLE IF EXISTS spur_wm_exclude`);
+    };
 }
 
 /**

@@ -105,6 +105,7 @@ export {
     applyWatermarkToWhere,
     buildWatermarkFilter,
     dataWindow,
+    materializeWatermarkExclude,
     type SessionState,
     type SessionWatermark,
     sessionWatermarks,

@@ -32,6 +32,7 @@ import {
     type LadderEntry,
     loops,
     type MessageRollupRow,
+    materializeWatermarkExclude,
     messageRollup,
     narrowArtifact,
     pairingSummary,
@@ -312,6 +313,13 @@ export class HistoryService {
         const watermarks = await sessionWatermarks(db, selector);
         const wm = buildWatermarkFilter(watermarks);
         const queryOpts = wm.sql === '' ? undefined : { watermark: wm };
+        // Materialize the in-progress exclusion set into a temp table before the batch and
+        // drop it after: buildWatermarkFilter emits a NOT EXISTS anti-join against it. A
+        // per-session OR chain would grow SQLite expression depth ~1 per in-progress
+        // session and blow SQLITE_MAX_EXPRESSION_DEPTH (1000) — pi has 176k in-progress
+        // sessions (task 0550), which crashed every message query. A crashed mid-batch
+        // run self-heals: the next materialize resets via CREATE IF NOT EXISTS + DELETE.
+        const dropWatermarkExclude = await materializeWatermarkExclude(db, watermarks);
 
         const [
             mRows,
@@ -341,6 +349,7 @@ export class HistoryService {
             // selector window (system_events plane, not the message plane).
             pairingSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
         ]);
+        await dropWatermarkExclude();
 
         const totals = foldTotals(mRows, tRows);
         const bySource = foldGrouped(

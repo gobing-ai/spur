@@ -21,6 +21,7 @@ done_reason: "0491 wayfinder investigation complete. Forensics-mode renderer spi
 ## 0491. Report mode spike: reproduce the omp forensics report through report --mode forensics
 
 ### Background
+
 **Type:** `wayfinder:prototype` · **Map:** E2 · **Depends on:** 0490
 
 `spur history report` is today a pure renderer of the analyze artifact — it never opens the database
@@ -42,20 +43,24 @@ resolves to a TS renderer, no template engine, no variable-binding contract, no 
   between two verbs from the start, not a `report`-local switch retrofitted later.
 
 The question this ticket answers is whether a renderer can actually produce the sample report.
-`.spur/run/sp-dev-findissue-20260806.md` is 423 lines of narrative: fifteen named phases with prose
+`.spur/run/sp-dev-find-issue-20260806.md` is 423 lines of narrative: fifteen named phases with prose
 characterizations, a bottleneck ranking presented two ways (wall time and LLM round-trips), and P1–P3
 issues with diagnoses. Some of that is arithmetic over derived variables; some is judgment a model
 wrote. **The split matters more than the renderer does** — it decides how much of the forensics report
 the CLI can emit unaided and how much still needs a model, which decides what the rewritten command is
 for at all.
+
 ### Requirements
-- R1 — Render a real forensics report from real artifact data through a `--mode forensics` renderer spike, and diff it section by section against the sample at `.spur/run/sp-dev-findissue-20260806.md`.
+
+- R1 — Render a real forensics report from real artifact data through a `--mode forensics` renderer spike, and diff it section by section against the sample at `.spur/run/sp-dev-find-issue-20260806.md`.
 - R2 — Classify every section of the sample as mechanically derivable, partially derivable, or model-authored, so the CLI/model boundary is drawn from the actual output rather than from intent.
 - R3 — Define the mode registry: how a mode is named, where it is registered, how `report` and `daily` both resolve one, and what happens on an unknown mode name.
 - R4 — State the contract between a mode and the artifact: which derived variables a mode requires, and how a mode fails when the artifact predates them or the source lacks the primitive.
 - R5 — Confirm the existing default behavior survives — `report` with no `--mode` renders what it renders today, and `assertArtifactVersion` staleness banners still fire.
 - R6 — Assess whether the markdown and human renderers stay separate functions or collapse into the mode registry, since three near-identical renderers is the shape this ticket could accidentally create.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: 0491 wayfinder investigation
 
@@ -95,22 +100,26 @@ Feature: 0491 wayfinder investigation
     Then their fate is stated as kept separate or collapsed
     And the reasoning names the duplication risk
 ```
+
 ### Q&A
+
 **Closed during refine (2026-08-09):**
 
-- *Template engine or built-in renderers?* Built-in, per the operator's ruling on the map. File
+- _Template engine or built-in renderers?_ Built-in, per the operator's ruling on the map. File
   templates are deferred, not rejected — they return if a second template author appears.
-- *Is `--mode` report-local?* No. The map's `daily` decision puts `--mode` on both verbs, so the
+- _Is `--mode` report-local?_ No. The map's `daily` decision puts `--mode` on both verbs, so the
   registry is shared surface from the first commit rather than a retrofit.
-- *How many renderers exist today?* Three, not one — `artifactToSummary`, `renderReport`,
+- _How many renderers exist today?_ Three, not one — `artifactToSummary`, `renderReport`,
   `renderMarkdown` (`packages/domain/src/analytics/render-report.ts:75`, `:165`, `:193`). R6 was
   added so the registry does not silently become a fourth.
-- *Default mode?* `spend` — today's behavior, so omitting `--mode` changes nothing for existing
+- _Default mode?_ `spend` — today's behavior, so omitting `--mode` changes nothing for existing
   callers.
 
 **No open operator decisions.** The mode-registry shape follows from the ruling already made; the
 classification is empirical.
+
 ### Design
+
 **WHAT** — a throwaway `--mode forensics` renderer run against real artifact data, a section-by-section
 diff against the omp sample, a three-way classification of every sample section, and a specified mode
 registry shared by `report` and `daily`.
@@ -140,13 +149,15 @@ directory — the operator ruled that out and deferred it. Do not add a fourth t
 beside the existing three without R6's explicit verdict; the plausible outcome is that the registry
 subsumes `renderReport` and `renderMarkdown` rather than joining them. Do not let the mode open the
 database — `report` reads an artifact, and a mode that needs a query is a signal the variable belongs
-upstream in analyze. Do not classify a section as `derivable` because it *could* be derived in
+upstream in analyze. Do not classify a section as `derivable` because it _could_ be derived in
 principle; classify against what the spike actually rendered.
 
 **Cross-task assumptions.** Consumes the mechanism and artifact path settled upstream — this ticket
 does not re-open where derived variables come from. Leaves the command-rewrite ticket a finished
 classification table; that ticket reads the table and does not re-derive it.
+
 ### Plan
+
 - [x] Build or reuse an analyze artifact carrying the derived variables the upstream ticket settled (R1)
 - [x] Write the throwaway forensics renderer against that artifact under the spike dir (R1)
 - [x] Diff its output section by section against the omp sample and record what came out blank (R1)
@@ -159,10 +170,11 @@ classification table; that ticket reads the table and does not re-derive it.
 - [x] Rule on whether the registry subsumes the existing render functions or sits beside them (R6)
 - [x] Record the spike location and throwaway status, then close via the map's investigation-ticket recipe (R1)
 
-**Verification intent:** the section-by-section diff against `.spur/run/sp-dev-findissue-20260806.md`
+**Verification intent:** the section-by-section diff against `.spur/run/sp-dev-find-issue-20260806.md`
 is the check — a section the spike cannot fill is the finding, not a bug. R5's no-regression claim is
 verified by rendering a pre-existing artifact both ways and comparing. Testing records `N/A` with
 per-claim confidence, per the map's close recipe.
+
 ### Solution
 
 **R1 — Spike rendered.** `.spur/run/0491-spike/forensics-renderer.ts` (177 lines) implements the
@@ -174,11 +186,11 @@ arithmetic is identical because it comes from the same data shape.
 
 **R2 — CLI/model boundary (16 sections classified):**
 
-| Classification | Count | Sections |
-|----------------|-------|----------|
-| **derivable** | 8 | Session Data Summary, Tool Breakdown, Token Profile, Time Decomposition headline, Per-Phase table, Per-Tool Execution Time, Bottleneck Ranking, Raw Data appendix |
-| **partial** | 2 | Overview (session ID derivable, model/trigger not), Phase-by-Phase Analysis (headers+counts derivable, verdicts+root-cause prose model-authored) |
-| **model-authored** | 6 | Purpose, Latency Implications, Issues Found (P1–P3 diagnoses), Analysis Process, Lessons for Future Tool Development, Task Created |
+| Classification     | Count | Sections                                                                                                                                                          |
+| ------------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **derivable**      | 8     | Session Data Summary, Tool Breakdown, Token Profile, Time Decomposition headline, Per-Phase table, Per-Tool Execution Time, Bottleneck Ranking, Raw Data appendix |
+| **partial**        | 2     | Overview (session ID derivable, model/trigger not), Phase-by-Phase Analysis (headers+counts derivable, verdicts+root-cause prose model-authored)                  |
+| **model-authored** | 6     | Purpose, Latency Implications, Issues Found (P1–P3 diagnoses), Analysis Process, Lessons for Future Tool Development, Task Created                                |
 
 The boundary: **the CLI can mechanically produce every quantitative section** (8/16). It cannot
 produce issue diagnoses, root-cause analysis, or recommendations (6/16). Two sections are hybrid —
@@ -209,6 +221,7 @@ Staleness banners wrap whatever mode rendered — they are mode-independent. The
 byte-identical to current behavior.
 
 **R6 — Renderer duplication verdict: registry subsumes.** The three existing renderers resolve as:
+
 - `renderReport` → becomes `spend` mode's `render()` body
 - `renderMarkdown` → stays as a thin wrapper: resolves the mode, calls `render()`, wraps in fence
 - `artifactToSummary` → survives (produces a typed `AnalyticsSummary`, not a string — different
@@ -244,23 +257,26 @@ Spike artifacts (throwaway): `.spur/run/0491-spike/forensics-renderer.ts`,
 
 ### Review
 
-| Severity | Finding | Detail |
-|----------|---------|--------|
-| P1 | — | — |
-| P2 | Synthetic artifact, not real DB data | Fixture mirrors sample numbers but is hand-constructed. Real artifact shape depends on 0490 mechanism landing in analyze. Verify against real artifact when 0490 ships. |
-| P3 | TTFT/Generation split deferred | The sample's intra-LLM latency split (88% TTFT / 10% Generation) is not derivable — `message.usage` has no wall-clock fields. Marked out of scope for v1 forensics mode. |
-| P4 | `UnknownModeError` test message | The spike's R3 test caught the error but the `instanceof` check printed the class name instead of the message — cosmetic, the error IS thrown correctly. |
+| Severity | Finding                              | Detail                                                                                                                                                                   |
+| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1       | —                                    | —                                                                                                                                                                        |
+| P2       | Synthetic artifact, not real DB data | Fixture mirrors sample numbers but is hand-constructed. Real artifact shape depends on 0490 mechanism landing in analyze. Verify against real artifact when 0490 ships.  |
+| P3       | TTFT/Generation split deferred       | The sample's intra-LLM latency split (88% TTFT / 10% Generation) is not derivable — `message.usage` has no wall-clock fields. Marked out of scope for v1 forensics mode. |
+| P4       | `UnknownModeError` test message      | The spike's R3 test caught the error but the `instanceof` check printed the class name instead of the message — cosmetic, the error IS thrown correctly.                 |
 
 ### References
+
 - Map: `docs/features/E2_session-forensics-extension-of-the-history-plane-forensic-primitives-derived-variable-analyze-multi-mode-report-rewritten-find-issue.md`
 - Upstream ticket (mechanism + artifact path): 0490
 - Renderer surface: `packages/domain/src/analytics/render-report.ts` — `artifactToSummary:75`, `renderReport:165`, `renderMarkdown:193`
 - Version assertion + staleness: `packages/domain/src/analytics/render-report.ts:34`, `:45`, `:203`, `:213`
 - CLI wiring for report and daily: `apps/cli/src/commands/history.ts:115-158`, prune at `:306`
-- Output to reproduce: `.spur/run/sp-dev-findissue-20260806.md`
+- Output to reproduce: `.spur/run/sp-dev-find-issue-20260806.md`
 - Methodology §Step 10 (report assembly): `docs/session-forensics-report-generation.md`
 - Surface-doc obligation (T3, same commit as surface code): `docs/04_DESIGN.md`
+
 ### History
+
 - 2026-08-10T00:37:08.480Z todo → wip (system)
 - 2026-08-10T00:40:20.030Z wip → testing (system)
 - 2026-08-10T00:40:25.818Z testing → done (system)

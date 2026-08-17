@@ -7,6 +7,7 @@ import {
     applyWatermarkToWhere,
     buildWatermarkFilter,
     dataWindow,
+    materializeWatermarkExclude,
     sessionWatermarks,
 } from '../../src/analytics/watermark';
 
@@ -163,7 +164,7 @@ describe('sessionWatermarks (task 0550 R1/R2)', () => {
         db.close();
     });
 
-    test('a session with no assistant message at all (only a user prompt) is in-progress with watermark -1', async () => {
+    test('a session with no assistant message at all (only a user prompt) is in-progress with watermark = max seq (fail-open, 0576)', async () => {
         const db = await setup();
         await insertMessage(db, {
             record_hash: 'sess-d-u1',
@@ -174,7 +175,14 @@ describe('sessionWatermarks (task 0550 R1/R2)', () => {
         });
         const rows = await sessionWatermarks(db, ALL);
         expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({ sessionId: 'sess-d', state: 'in-progress', watermarkSeq: -1 });
+        // No turn closer → no evidence of a trailing partial turn → exclude nothing:
+        // state stays in-progress, watermark is the session's max seq, never -1.
+        expect(rows[0]).toMatchObject({ sessionId: 'sess-d', state: 'in-progress', watermarkSeq: 1 });
+        const wm = buildWatermarkFilter(rows);
+        const dropWm = await materializeWatermarkExclude(db, rows);
+        const rollup = await messageRollup(db, ALL, { watermark: wm });
+        expect(rollup.reduce((n, r) => n + r.messages, 0)).toBe(1);
+        await dropWm();
         db.close();
     });
 
@@ -231,15 +239,19 @@ describe('buildWatermarkFilter (task 0550 R1)', () => {
         expect(filter.params).toEqual([]);
     });
 
-    test('in-progress sessions produce one NOT condition each with ordered params', () => {
+    test('in-progress sessions produce a constant-depth NOT EXISTS anti-join with no params', () => {
         const filter = buildWatermarkFilter([
             { sessionId: 's1', source: 'claude', state: 'in-progress', watermarkSeq: 4 },
             { sessionId: 's2', source: 'pi', state: 'in-progress', watermarkSeq: 9 },
         ]);
+        // References the temp table materialized by materializeWatermarkExclude.
+        // Expression depth stays constant regardless of in-progress count — a per-session
+        // OR chain grows SQLite expression depth ~1/session and blows
+        // SQLITE_MAX_EXPRESSION_DEPTH (1000) past ~1000 sessions (pi has 176k).
         expect(filter.sql).toBe(
-            'NOT ((m.session_id = ? AND m.source = ? AND m.seq > ?) OR (m.session_id = ? AND m.source = ? AND m.seq > ?))',
+            'NOT EXISTS (\n            SELECT 1 FROM spur_wm_exclude w\n            WHERE w.session_id = m.session_id AND w.source = m.source\n              AND m.seq > w.watermark_seq\n        )',
         );
-        expect(filter.params).toEqual(['s1', 'claude', 4, 's2', 'pi', 9]);
+        expect(filter.params).toEqual([]);
     });
 });
 
@@ -297,6 +309,7 @@ describe('watermark filter effect on queries (task 0550 R1)', () => {
         const watermarks = await sessionWatermarks(db, ALL);
         expect(watermarks[0]).toMatchObject({ sessionId: 'sess-g', state: 'in-progress', watermarkSeq: 2 });
         const wm = buildWatermarkFilter(watermarks);
+        const dropWm = await materializeWatermarkExclude(db, watermarks);
         const opts = { watermark: wm };
 
         // Without the filter the partial turn is counted (3 messages, 80 tokens).
@@ -307,6 +320,7 @@ describe('watermark filter effect on queries (task 0550 R1)', () => {
         const wmRows = await messageRollup(db, ALL, opts);
         expect(wmRows.reduce((n, r) => n + r.messages, 0)).toBe(2);
         expect(wmRows.reduce((n, r) => n + (r.inputTokens ?? 0), 0)).toBe(30);
+        await dropWm();
         db.close();
     });
 
@@ -315,8 +329,10 @@ describe('watermark filter effect on queries (task 0550 R1)', () => {
         await insertCompleteTurn(db, 'sess-h', 1, '2026-08-01T00:00:00Z');
         const watermarks = await sessionWatermarks(db, ALL);
         const wm = buildWatermarkFilter(watermarks);
+        const dropWm = await materializeWatermarkExclude(db, watermarks);
         const rows = await messageRollup(db, ALL, { watermark: wm });
         expect(rows.reduce((n, r) => n + r.messages, 0)).toBe(2);
+        await dropWm();
         db.close();
     });
 
@@ -333,8 +349,88 @@ describe('watermark filter effect on queries (task 0550 R1)', () => {
         });
         const watermarks = await sessionWatermarks(db, ALL);
         const wm = buildWatermarkFilter(watermarks);
+        const dropWm = await materializeWatermarkExclude(db, watermarks);
         const spans = await sessionSpans(db, ALL, { watermark: wm });
         expect(spans[0]?.lastTs).toBe('2026-08-01T00:00:00Z');
+        await dropWm();
+        db.close();
+    });
+
+    // Regression (dogfood 2026-08-17): a per-session OR chain grows SQLite expression
+    // depth ~1 per in-progress session and blows SQLITE_MAX_EXPRESSION_DEPTH (1000)
+    // past ~1000 sessions. The anti-join keeps depth constant, so >1000 in-progress
+    // sessions must prepare and run without 'Expression tree is too large (maximum
+    // depth 1000)' — the crash that broke `spur history analyze --source pi` (pi has
+    // 176k in-progress sessions).
+    test('more than 1000 in-progress sessions prepare and run via the anti-join (depth regression)', async () => {
+        const db = await setup();
+        // One complete session the watermark must keep.
+        await insertCompleteTurn(db, 'sess-keep', 1, '2026-08-01T00:00:00Z');
+        // 1200 in-progress sessions (a single user message each → no turn closer →
+        // fail-open watermark = max seq, nothing excluded).
+        for (let i = 0; i < 1200; i++) {
+            await insertMessage(db, {
+                record_hash: `sess-big-${i}-u1`,
+                session_id: `sess-big-${i}`,
+                seq: 1,
+                role: 'user',
+                ts: '2026-08-01T00:00:00Z',
+            });
+        }
+        const watermarks = await sessionWatermarks(db, ALL);
+        const inProgress = watermarks.filter((w) => w.state === 'in-progress');
+        expect(inProgress.length).toBe(1200);
+        const wm = buildWatermarkFilter(watermarks);
+        const dropWm = await materializeWatermarkExclude(db, watermarks);
+        // Must not throw 'Expression tree is too large (maximum depth 1000)'.
+        const rows = await messageRollup(db, ALL, { watermark: wm });
+        // Fail-open (0576): the 1200 no-closer sessions contribute their messages
+        // (watermark = max seq, nothing excluded); the complete session adds its 2.
+        expect(rows.reduce((n, r) => n + r.messages, 0)).toBe(1202);
+        await dropWm();
+        db.close();
+    });
+
+    // Task 0576 R3: the pi shape — a source with zero history_tool_call rows whose
+    // sessions end on a non-assistant role (pi's last rows are record types like
+    // 'toolresult'/'message', never assistant closers). Before 0576 every such
+    // session got watermark -1 and vanished from analytics entirely.
+    test('a tool-call-less source whose sessions end on a non-assistant role survives the watermark (pi shape)', async () => {
+        const db = await setup();
+        // Two pi-like sessions: user prompt, then a toolresult-role record as the last
+        // message. Zero history_tool_call rows — the degrade rule cannot see closers.
+        for (const session of ['pi-s1', 'pi-s2']) {
+            await insertMessage(db, {
+                record_hash: `${session}-u1`,
+                session_id: session,
+                seq: 0,
+                role: 'user',
+                ts: '2026-08-01T00:00:00Z',
+                input: 10,
+            });
+            await insertMessage(db, {
+                record_hash: `${session}-tr2`,
+                session_id: session,
+                seq: 1,
+                role: 'toolresult',
+                record_type: 'toolresult',
+                ts: '2026-08-01T00:01:00Z',
+                input: 5,
+            });
+        }
+        const watermarks = await sessionWatermarks(db, ALL);
+        expect(watermarks).toHaveLength(2);
+        for (const w of watermarks) {
+            // No turn closer → fail-open: in-progress with watermark = max seq (1).
+            expect(w.state).toBe('in-progress');
+            expect(w.watermarkSeq).toBe(1);
+        }
+        const wm = buildWatermarkFilter(watermarks);
+        const dropWm = await materializeWatermarkExclude(db, watermarks);
+        const rollup = await messageRollup(db, ALL, { watermark: wm });
+        // All 4 messages survive the anti-join — the source does not vanish.
+        expect(rollup.reduce((n, r) => n + r.messages, 0)).toBe(4);
+        await dropWm();
         db.close();
     });
 });
