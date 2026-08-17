@@ -7,7 +7,10 @@ cannot be derived is reported as **unavailable**, never fabricated.
 ## §0 — Sync-first precondition (step zero)
 
 ```bash
-spur feature sync --all --dry-run --json
+# Monorepo-safe spur resolution (0568 R6): SPUR_BIN env > monorepo-local CLI > PATH.
+# Defined once here; §1+ reuse $SPUR_BIN — §0 runs first by construction.
+SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
+$SPUR_BIN feature sync --all --dry-run --json
 ```
 
 Feature `status` is manual bookkeeping and drifts (0493: 24 of 25 rankable features would change
@@ -34,7 +37,7 @@ renamed, the fallback key is its content: "frontier = open ∧ unblocked".)
 Inputs per candidate feature:
 
 ```bash
-spur task list --feature <id> --json
+$SPUR_BIN task list --feature <id> --json
 ```
 
 `task list --feature` is **active-folder-only**: it enumerates tasks in the active task folder
@@ -52,9 +55,11 @@ is not authoritative — a frontier task may be archived outside it. Run the fal
    the feature's row as an **anomaly hint** only: it may flag the feature without naming a WBS. The
    sync reason is never treated as a WBS source — no WBS is ever inferred from sync prose.
 2. Scan the whole corpus for linked tasks:
+
    ```bash
    rg -l '^feature_id: "?<id>"?$' docs/tasks*/
    ```
+
    Corpus ids are `[A-Z][0-9]+`-shaped, so `<id>` is regex-safe as-is; escape metacharacters if a
    non-conforming id ever appears.
 3. Parse the leading WBS from each matched basename; resolve every corpus-only WBS (not present in

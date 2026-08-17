@@ -341,6 +341,48 @@ describe('AC evidence-type vocabulary (task 0398 R6)', () => {
         expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
     });
 
+    test('compound evidence types parse as the union of their parts (0568 R2)', () => {
+        for (const [compound, expected] of [
+            ['test + command', 'test'],
+            ['command + test', 'test'],
+            ['command / static', 'command'],
+            ['doc, manual-review', 'static-ref'],
+            ['manual-review + llm-judge', 'manual-review'],
+        ] as const) {
+            const result = deriveVerdict(answer(compound), true);
+            expect(result.acceptanceCriteria).toHaveLength(1);
+            expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe(expected);
+        }
+    });
+
+    test('an unknown compound component still drops the row loudly', () => {
+        const result = deriveVerdict(answer('bogus + test'), true);
+        expect(result.acceptanceCriteria).toHaveLength(0);
+        const dropped = result.checks.find((c) => c.name === 'ac-row-dropped');
+        expect(dropped).toBeDefined();
+        expect(dropped?.status).toBe('fail');
+        expect(dropped?.evidence).toContain('bogus + test');
+    });
+
+    test('a 10-row answer with compound evidence types parses 10/10', () => {
+        const rows = Array.from(
+            { length: 10 },
+            (_, i) => `| [R2] Row ${i + 1} | MET | test + command | \`src/f${i}.ts:1\` |`,
+        );
+        const full = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            ...rows,
+        ].join('\n');
+        const result = deriveVerdict(full, true);
+        expect(result.acceptanceCriteria).toHaveLength(10);
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+    });
+
     test('an unrecognised evidence type is reported, not silently dropped', () => {
         const result = deriveVerdict(answer('vibes'), true);
         // The row is still omitted (it cannot be typed), but the omission is now visible.

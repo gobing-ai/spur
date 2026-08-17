@@ -239,6 +239,11 @@ printf '...' > /tmp/<wbs>-testing.md
 spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
 ```
 
+> **Corrections: the answer file is the source of truth.** `spur task record` re-transcribes
+> `## Testing` from the verdict artifact, overwriting `--section Testing` writes — direct section
+> fixes are futile. Fix `.spur/run/<wbs>-verify-answer.txt` → `spur task verdict <wbs>
+> --from-answer <file>` → re-record. `--section` is initial authorship only.
+
 > **Do not write `## Review` directly in verify mode.** The `## Review` section is owned by the
 > `review` step (`/sp:dev-review`), which dispatches `functional-review` + `code-verification`
 > review mode + `code-improvement`. The `record` step backfills `## Review` from the verdict
@@ -283,9 +288,7 @@ Verdict: PASS
 | P4 | — | — | No P1–P3 findings; verify verdict PASS |
 ```
 
-The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant, and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
-
-**MUST NOT:** use `| R# | ... |` as the sole id header without `Status` in column 2.
+The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
 **MUST NOT:** place a `Severity` column between `Req` and `Status` in the authoring contract.
 The parser is tolerant of these variants (defense-in-depth), but the authoring contract is
 canonical.
@@ -348,8 +351,7 @@ mutation is discoverable from the tracked task file alone, without diffing untra
 ### Step 13 — Shippable readiness gate (feature-level)
 
 Per-task PASS is **not** the same as “this feature is ready to ship.” After Steps 11–12, when the
-gate is **active**, evaluate feature AC satisfaction via the existing CLI (do not invent a second
-framework).
+gate is **active**, evaluate feature AC satisfaction via the existing CLI.
 
 **When active**
 
@@ -371,16 +373,17 @@ framework).
    `docs/.spur/run` or other nested `.spur` trees). Ephemeral scratch may use `/tmp` or
    `/private/tmp`. Requirement / AC row `id`s in the verdict MUST match feature scenario titles
    (or `AC-N` aliases) so satisfaction can mark MET.
-2. Run:
+2. Run (0568 R6 monorepo-safe: SPUR_BIN env > local CLI > PATH):
 
    ```bash
-   spur feature check <featureId> --json
-   spur task list --feature <featureId> --json
+   SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
+   $SPUR_BIN feature check <featureId> --json
+   $SPUR_BIN task list --feature <featureId> --json
    ```
 
 3. Classify **Shippable: PASS** only if **all** of:
    - No finding whose code/message indicates **linked but unverified** scenarios
-     (`L4_SCENARIO_UNVERIFIED` / “linked but unverified”).
+     (`L4_SCENARIO_UNVERIFIED`).
    - No **orphan / uncovered** feature scenarios (`L4_ORPHAN_SCENARIOS`,
      `L4_UNCOVERED_FEATURE_SCENARIO` / no covering task).
    - No **incomplete** linked tasks: every task with this `feature_id` is `done` or `cancelled`
@@ -424,16 +427,14 @@ Full flag matrix and ops notes: [spur-dev/references/dev-operations.md](../spur-
 
 ### Step 14 — Report
 
-Show the per-task verdict, the per-requirement table, the gate outcome (cleared / blocked), and the
-**Shippable:** line from Step 13 when applicable. Under the pipeline the task verdict is consumed by
-the done-gate; for a direct `/sp:dev-verify` invocation the full report is the operator's summary.
+Show the per-task verdict, per-requirement table, gate outcome (cleared/blocked), and the
+**Shippable:** line from Step 13 when applicable. Under the pipeline the done-gate consumes the
+verdict; for a direct `/sp:dev-verify` invocation the full report is the operator's summary.
 
-**`--next` on an already-terminal task (no-op surfacing).** When `--next` is invoked on a task
-already at `done` or `cancelled`, the transition cannot fire. The verify report line MUST state the
-no-op itself (e.g. `--next: no-op - task already terminal (<status>)`) rather than relying solely
-on the CLI print (documented in `dev-verify.md`'s `--next` chain section). The CLI print is the
-machine signal; the report line is the operator-visible summary - both must agree so a terminal-task
-re-audit cannot be misread as a successful `testing -> done` transition.
+**`--next` on a terminal task (no-op surfacing).** The transition cannot fire; the verify report
+line MUST state the no-op itself (e.g. `--next: no-op - task already terminal (<status>)`). The CLI
+print is the machine signal, the report line the operator summary — both must agree so a terminal
+re-audit is never misread as a successful `testing -> done` (dev-verify.md `--next` chain).
 
 ---
 
@@ -513,14 +514,12 @@ Do **not** use this skill for:
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
   for module depth, seam placement, locality, coupling, and testability.
-- **`sp:functional-review`** — a peer review skill for requirements traceability (R{n} → file:line
-  evidence, per-requirement MET/PARTIAL/UNMET, `FunctionalVerdict`). When the `review` dimension
-  needs functional traceability (not just SECUA), dispatch this skill; see
-  [../functional-review/SKILL.md](../functional-review/SKILL.md).
-- **`sp:code-improvement`** — a peer review skill for architectural deepening (5 signals: shallow
-  module, tight coupling, wrong seam, weak locality, poor test surface; severity
-  blocker/major/minor/advisory). When review findings expose structural friction rather than a
-  localized defect, dispatch this skill; see [../code-improvement/SKILL.md](../code-improvement/SKILL.md).
+- **`sp:functional-review`** — requirements-traceability peer review (R{n} → file:line,
+  per-requirement MET/PARTIAL/UNMET). Dispatch when the `review` dimension needs functional
+  traceability, not just SECUA: [../functional-review/SKILL.md](../functional-review/SKILL.md).
+- **`sp:code-improvement`** — architectural-deepening peer review (5 signals, severity
+  blocker/major/minor/advisory). Dispatch for structural friction rather than localized
+  defects: [../code-improvement/SKILL.md](../code-improvement/SKILL.md).
 
 ---
 
@@ -533,5 +532,5 @@ directly: `Skill(skill="sp:code-verification", args="verify <wbs> --fix all")`.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 
-Run `spur` CLI via Bash; parse `--json`. Invoke this skill directly for the verification logic — the
-skill is the SSOT; the commands are thin wrappers.
+Run `spur` CLI via Bash; parse `--json`. Invoke the skill directly — the skill is the SSOT; the
+commands are thin wrappers.

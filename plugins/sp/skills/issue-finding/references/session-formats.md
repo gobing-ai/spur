@@ -84,8 +84,10 @@ each file, the session key is the JSONL filename stem (importer `sessionIdFromCo
 analyze per key:
 
 ```bash
-spur history import --source omp --file <absolute-file> --mode force-file --json
-spur history analyze --session <filename-stem> --json
+# Monorepo-safe spur resolution (0568 R6): SPUR_BIN env > monorepo-local CLI > PATH.
+SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
+$SPUR_BIN history import --source omp --file <absolute-file> --mode force-file --json
+$SPUR_BIN history analyze --session <filename-stem> --json
 ```
 
 ETL owns token/cost/message/tool/loop/assistant-duration aggregates; raw JSONL stays authoritative

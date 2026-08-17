@@ -229,8 +229,7 @@ function normalizeAcceptanceCriteriaStatus(raw: string): VerdictAcceptanceCriter
     return null;
 }
 
-function normalizeEvidenceType(raw: string): VerdictAcceptanceCriteria['evidenceType'] | null {
-    const normalized = raw.toLowerCase().trim();
+function normalizeEvidenceTypeToken(normalized: string): VerdictAcceptanceCriteria['evidenceType'] | null {
     if (normalized === 'test') return 'test';
     if (normalized === 'command') return 'command';
     // `doc`/`docs`/`documentation` are the natural words an author reaches for on a
@@ -249,6 +248,26 @@ function normalizeEvidenceType(raw: string): VerdictAcceptanceCriteria['evidence
     if (normalized === 'llm-judge' || normalized === 'judge') return 'llm-judge';
     if (normalized === 'n/a' || normalized === 'na') return 'n/a';
     return null;
+}
+
+// Compound evidence types ("test + command", 0568 R2) parse as the union of their parts.
+// The field is single-valued, so the strongest executable evidence wins
+// (mirrors applyAcceptanceCriteriaEvidenceRule's test/command preference).
+const EVIDENCE_TYPE_PRECEDENCE = ['test', 'command', 'static-ref', 'manual-review', 'llm-judge', 'n/a'] as const;
+
+function normalizeEvidenceType(raw: string): VerdictAcceptanceCriteria['evidenceType'] | null {
+    const normalized = raw.toLowerCase().trim();
+    const single = normalizeEvidenceTypeToken(normalized);
+    if (single !== null) return single;
+    const tokens = normalized
+        .split(/[+,/]/)
+        .map((part) => normalizeEvidenceTypeToken(part.trim()))
+        .filter((token) => token !== null);
+    if (tokens.length < 2 || tokens.length !== normalized.split(/[+,/]/).filter((p) => p.trim()).length) {
+        // Some component is not a known token → drop loudly (0398 R6 ac-row-dropped check names it).
+        return null;
+    }
+    return EVIDENCE_TYPE_PRECEDENCE.find((candidate) => tokens.includes(candidate)) ?? null;
 }
 
 function applyAcceptanceCriteriaEvidenceRule(rows: VerdictAcceptanceCriteria[]): VerdictAcceptanceCriteria[] {

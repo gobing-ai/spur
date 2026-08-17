@@ -139,11 +139,12 @@ sessions (typed ETL via `spur history` — or raw JSONL under the three fallback
 **Primary path (typed sources):** `spur history report --mode forensics` (task 0555).
 
 ```bash
-spur history import --source <source> --json   # checkpoint resume makes re-runs cheap
-spur history analyze --json                    # writes the versioned artifact; derived
-                                               # variables are computed here (task 0554)
-spur history report --mode forensics           # pure renderer of the artifact; never opens
-                                               # the database; defaults to the latest pointer
+# 0568 R4: SPUR_BIN env > local CLI > PATH — stale PATH spur fails history import.
+SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
+
+$SPUR_BIN history import --source <source> --json   # checkpoint resume
+$SPUR_BIN history analyze --json                    # writes versioned artifact (0554)
+$SPUR_BIN history report --mode forensics           # pure renderer; latest artifact pointer
 ```
 
 The forensics renderer emits **8 CLI-derivable sections**: Session Data Summary, Tool Breakdown,

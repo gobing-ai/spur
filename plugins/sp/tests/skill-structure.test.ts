@@ -361,7 +361,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(skill).toContain('examples/session-test-loop.jsonl');
         expect(sessionFormats).toContain('~/.omp/agent/sessions/');
         expect(sessionFormats).toContain('~/.claude/projects/');
-        expect(sessionFormats).toContain('spur history import');
+        // 0568 R6: bridge shell-outs route through the monorepo-safe SPUR_BIN resolver.
+        expect(sessionFormats).toContain('$SPUR_BIN history import');
         // 0506 R3: schema-first history bridge — one introspection query, importer authority,
         // no copied column contract.
         expect(sessionFormats).toContain('sqlite_schema');

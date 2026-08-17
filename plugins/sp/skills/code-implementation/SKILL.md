@@ -89,6 +89,14 @@ only burns wall clock and context budget.
   `bun test <file> --test-name-pattern "<test>"`, or `bunx tsc --noEmit` on a single package.
 - **NEVER run** `bun run test`, `bun run spur-check`, `bun run check`, or any other full-suite /
   project-gate command from inside implement. These belong to the pipeline's `test` hop.
+- **Full-suite budget: at most 2 per task** (task 0436 R2) — counted across the whole task run
+  (implement probes + the pipeline `test` hop + verify/recheck), not per step. When a check fails,
+  run the narrow target (`bun test <file> --test-name-pattern <test>`) to green before any full
+  suite; reach for the second full run only when the narrow target cannot reproduce the failure.
+- **Consolidate dogfood runs**: one combined real-data execution that exercises all scenarios,
+  not N near-identical `--dry-run`/real invocations of the same script. If you find yourself
+  rerunning the same dogfood command with one flag changed, stop and fold the variants into a
+  single run — repeated identical commands are loop-detector findings and pure cost.
 - If a targeted probe reveals a failure you cannot fix within implement scope, note it in
   `## Solution` and let the `test` hop's fixall handle it — do not pre-empt the gate.
 
@@ -146,7 +154,7 @@ reproduce → isolate → minimal fix → regression guard.
 ## Common Rationalizations
 
 | Rationalization | Reality |
-|---|---|
+| --- | --- |
 | "The spec is clear — I don't need to read the callers." | Code that looks orthogonal is how regressions ship (R5). Read the exports you touch and their immediate callers before writing. |
 | "I'll add the tests in a follow-up." | Untested production code is unverified code. The task's test step is not optional; behavior ships with its test. |
 | "This abstraction will be useful later." | Speculative abstraction is complexity without a caller (R2). Build for the requirement in front of you; add the seam when the second use arrives. |

@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Fix 0567-run process bottlenecks: plan-time size gate, verdict/record contract docs, stale spur PATH, dogfood discipline"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:37:16.435Z"
-updated_at: "2026-08-16T23:32:03.555Z"
+updated_at: "2026-08-17T01:59:39.054Z"
 ---
 
 ## 0568. Fix 0567-run process bottlenecks: plan-time size gate, verdict/record contract docs, stale spur PATH, dogfood discipline
@@ -171,17 +171,77 @@ Five independent fixes (R4+R6 pair naturally in one pass). Premises re-verified 
 - [ ] R5: extend `code-implementation/SKILL.md` with the ≤2 full-suite cap + dogfood consolidation (append near the existing targeted-probe note at lines 88-89).
 - [ ] Verify: targeted verdict suite green, `bun run lint`, `spur task check 0568`; AC lens — compound evidence parses (R2), Step 10 note present (R3), Phase-1 snippet resolves local CLI (R4), discipline note present (R5), no unresolved executable bare-spur shell-outs (R6).
 ### Solution
-
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
-
+- **R2 — compound evidence types (only code change).** Split `normalizeEvidenceType` into a
+  single-token helper (`normalizeEvidenceTypeToken`,
+  `packages/app/src/services/task-verdict.ts:232`) plus a compound wrapper
+  (`packages/app/src/services/task-verdict.ts:258`) that splits on `+`/`,`/`/`, trims, and accepts
+  when every component normalizes to a known token; the union maps to the single-valued field via
+  `EVIDENCE_TYPE_PRECEDENCE` (`packages/app/src/services/task-verdict.ts:256`, test > command >
+  static-ref > manual-review > llm-judge > n/a — strongest executable evidence wins, mirroring
+  `applyAcceptanceCriteriaEvidenceRule`). Single-token behavior and the 0398 R6
+  `ac-row-dropped` check are untouched; an unknown component (`bogus + test`) still returns null so
+  the existing check names it. No new tokens were added to the whitelist (design anti-pattern).
+- **R3 — record-step source-of-truth note.** Step 10 of the verification skill now carries an
+  explicit correction-workflow note (`plugins/sp/skills/code-verification/SKILL.md:242`):
+  `spur task record` re-transcribes `## Testing` from the verdict artifact, so verify-time fixes go
+  answer file → `spur task verdict --from-answer` → re-record; the `--section` write remains for
+  standalone runs and initial authorship. Happy path unchanged.
+- **R4 — issue-finding Phase-1 resolver.** The Phase-1 snippet defines a monorepo-safe prelude
+  (`plugins/sp/skills/issue-finding/SKILL.md:142-150`): `SPUR_BIN` env > local
+  `bun apps/cli/src/index.ts` > PATH `spur`, mirroring `defaultSpurBin()`
+  (`plugins/sp/scripts/task-size-precheck.ts:76`). Smoke-tested from the repo root: provenance
+  `binary: /Users/robin/xprojects/spur-new/apps/cli/src/index.ts`, `importer: 0.4.33` (the stale
+  PATH install reports `importer: unknown` and exits 1).
+- **R6 — bare-spur audit, frozen scope.** Same prelude applied to the audited executable snippets:
+  `plugins/sp/skills/next-feature/references/signal-derivation.md:10-13` (§0 defines once, §1
+  reuses `$SPUR_BIN`), the standalone feature-satisfaction block in
+  `plugins/sp/skills/code-verification/SKILL.md:383-390`, and — added at the forced re-verify
+  (`/sp:dev-verify 0568 --force --fix all`, 2026-08-16) after its re-scan caught the miss — the
+  selected-file bridge block in `plugins/sp/skills/issue-finding/references/session-formats.md:86-91`;
+  the structural pin at `plugins/sp/tests/skill-structure.test.ts:364` was updated to the resolver
+  form (`$SPUR_BIN history import`), matching that test's own "source-local CLI" intent.
+  `spur-cli/references/*` untouched by design. Post-fix scan (first-command `spur history` in
+  fenced blocks across `plugins/sp/skills`, excluding `spur-cli/`): zero hits. Remaining
+  `spur task/feature/workflow …` first-commands in other SKILL.md bodies and reference docs are the
+  task-verb class, PATH-safe in practice, left per the no-blanket-rewrite anti-pattern; fixing
+  would grow R44-baselined skill bodies (3–7 bytes under baseline).
+- **R5 — test discipline.** The implement-scope section of the implementation skill gains the
+  ≤2 full-suite-per-task budget (`plugins/sp/skills/code-implementation/SKILL.md:92`, task 0436 R2)
+  and the dogfood-consolidation rule (`plugins/sp/skills/code-implementation/SKILL.md:96`): one
+  combined real-data run instead of N near-identical `--dry-run`/real invocations. Existing
+  targeted-probe guidance at `:88-89` is unchanged (no duplication).
 ### Testing
+**Forced re-verify results** (`/sp:dev-verify 0568 --force --focus all --fix all`, 2026-08-16)
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R2 | MET | `normalizeEvidenceTypeToken` (`packages/app/src/services/task-verdict.ts:232`) + compound wrapper (`:258`) splitting on `+`/`,`/`/` with `EVIDENCE_TYPE_PRECEDENCE` (`:256`) — re-read this run; unknown component → null so 0398 R6 `ac-row-dropped` names it. Tests `packages/app/tests/services/task-verdict.test.ts:344-381` (compound union, `bogus + test` drops loudly, 10/10 rows); `bun test packages/app/tests/services/task-verdict.test.ts` → 39 pass / 0 fail (this run). |
+| R3 | MET | `plugins/sp/skills/code-verification/SKILL.md:242-246` — "Corrections: the answer file is the source of truth" note (answer file → `spur task verdict --from-answer` → re-record; `--section` initial authorship only). Re-read this run; Step 10 happy path unchanged. |
+| R4 | MET | Resolver prelude at `plugins/sp/skills/issue-finding/SKILL.md:142-150` (SPUR_BIN env > local CLI > PATH) — re-read this run; resolver expression executed from repo root → `bun apps/cli/src/index.ts` (this run). |
+| R5 | MET | `plugins/sp/skills/code-implementation/SKILL.md` — "Full-suite budget: at most 2 per task (task 0436 R2)" and "Consolidate dogfood runs" bullets present (re-read `:85-100`); targeted-probe guidance at `:88-89` unchanged, no duplication. |
+| R6 | MET | Frozen-triage hits all resolver-routed (re-read): `issue-finding/SKILL.md:142`, `next-feature/references/signal-derivation.md:10-13` (§0 defines, §1 reuses `$SPUR_BIN`), `code-verification/SKILL.md:383-390`. **Fix pass (this run):** audit re-scan found one missed in-scope hit — the selected-file bridge block in `issue-finding/references/session-formats.md:87-88` (`spur history import/analyze` first-commands, PATH-fragile class); routed through the same `$SPUR_BIN` prelude. Pin updated: `plugins/sp/tests/skill-structure.test.ts:364` now asserts `$SPUR_BIN history import` (test's own intent comment said "source-local CLI"). Post-fix scan: zero bare `spur history` first-commands outside `spur-cli/`; `git diff -- plugins/sp/skills/spur-cli/` empty. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R2 — Compound evidence types parse as the union of their parts | MET | test | `bun test packages/app/tests/services/task-verdict.test.ts` (this run): 39 pass / 0 fail, incl. `:344-381` union-parse, loud-drop, and 10/10-row tests. |
+| Scenario: R3 — Record-step source-of-truth documented | MET | command | File re-read: `code-verification/SKILL.md:242-246` carries the correction-workflow note; happy path unchanged. |
+| Scenario: R4 — Issue-finding skill uses the monorepo-safe spur | MET | command | Resolver expression executed from repo root (this run) → `bun apps/cli/src/index.ts`; prelude at `issue-finding/SKILL.md:142-150`. |
+| Scenario: R5 — Test discipline documented and followed | MET | command | File re-read: `code-implementation/SKILL.md` ≤2-full-suite budget + dogfood-consolidation bullets; this verify used targeted probes only (`task-verdict.test.ts`, `skill-structure.test.ts`) — zero full-suite runs. |
+| Scenario: R6 — No bare spur shell-outs in executable skill snippets | MET | command | Post-fix scan (this run): `grep -rn '^\s*spur history' plugins/sp/skills --include='*.md'` excluding `spur-cli/` → 0 hits; `bun test plugins/sp/tests/skill-structure.test.ts` → 55 pass / 0 fail after pin update; `spur-cli/` diff empty. |
+
+- Design conformance: 5/5 claims DONE (R2 union-parse, R3 note, R4 prelude, R5 bullets, R6 audit+routing). One audit-completeness defect found and repaired under `--fix all` (session-formats bridge block); no scope creep — fix is the pattern the design prescribes.
+- SECUA: no P1–P3 findings. R2 change is additive (single-token behavior byte-identical); doc edits only elsewhere; test pin updated to match documented intent.
+- Fix-pass disclosure (gitignored-artifact rule): no `.spur/run/**` content was mutated by the fix pass; the fix touched tracked files `plugins/sp/skills/issue-finding/references/session-formats.md:86-91` and `plugins/sp/tests/skill-structure.test.ts:364-365`. Verdict artifact `.spur/run/0568-verdict.json` re-written last with post-fix evidence.
+- Coverage: N/A (doc/guidance-heavy meta task; R2 code path covered by the 39-test verdict suite, re-run green this session).
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Session: `/Users/robin/.omp/agent/sessions/-xprojects-spur-new/2026-08-16T06-27-49-101Z_01a00941-4aed-7000-898a-bc5626b893ba.jsonl` (omp, 06:58–07:39 UTC run window)
 - Forensics artifact: `.spur/reports/history/2026-08-16/analyze-acaf33b8.json` (session-scoped), `.spur/reports/history/2026-08-16/analyze-5648c805.json` (all-omp)
@@ -191,6 +251,9 @@ Five independent fixes (R4+R6 pair naturally in one pass). Premises re-verified 
 - Provenance: `/tmp/imp-find-issue.json` (global spur, failed) vs `/tmp/imp-find-issue2.json` (local CLI, ok)
 ### History
 - 2026-08-16T23:32:03.555Z backlog → todo (system)
+- 2026-08-17T01:02:39.995Z todo → wip (system)
+- 2026-08-17T01:25:25.809Z wip → testing (system)
+- 2026-08-17T01:25:51.018Z testing → done (system)
 ### Notes
 
 **RC1 — Plan-item count overlooked at authoring (S1, ~$0.064 + 5.6-min operator wait).** Task 0567
