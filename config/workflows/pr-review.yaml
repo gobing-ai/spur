@@ -8,7 +8,7 @@
 #         never a raw lifecycle abort — same reliability contract as basic.yaml)
 #
 # This YAML is the SSOT for the review spine's state order and guards. Every state shells
-# out to the staged pr-reviewing.mjs entrypoint (the tested deterministic core); no gh/git
+# out to the staged pr-reviewing.ts entrypoint (the tested deterministic core); no gh/git
 # logic lives in this file. All model-bearing work — finding triage, `fix` mode, `rules`
 # mode — stays in the sp:pr-reviewing skill and never enters this machine.
 #
@@ -64,7 +64,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-preflight.status" &&
             set +e &&
-            node "$(superskill script path sp pr-reviewing.mjs)" preflight --json > ".spur/run/$__runId-pr-context.json";
+            bun "$(superskill script path sp pr-reviewing.ts)" preflight --json > ".spur/run/$__runId-pr-context.json";
             rc=$?; set -e &&
             if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi &&
             exit 0
@@ -80,7 +80,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-hygiene.status" &&
             set +e &&
-            node "$(superskill script path sp pr-reviewing.mjs)" hygiene --base "$baseBranch" --json
+            bun "$(superskill script path sp pr-reviewing.ts)" hygiene --base "$baseBranch" --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-hygiene.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -115,7 +115,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-push.status" &&
             set +e &&
-            node "$(superskill script path sp pr-reviewing.mjs)" push --json --status-file "$STATUS_FILE"
+            bun "$(superskill script path sp pr-reviewing.ts)" push --json --status-file "$STATUS_FILE"
             > ".spur/run/$__runId-pr-push.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -130,7 +130,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-ensure.status" &&
             set +e &&
-            node "$(superskill script path sp pr-reviewing.mjs)" ensure-pr --base "$baseBranch" --json
+            bun "$(superskill script path sp pr-reviewing.ts)" ensure-pr --base "$baseBranch" --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -149,7 +149,7 @@ states:
             FORCE_FLAG="" &&
             if [ "$mode" = "rerun" ]; then FORCE_FLAG="--force"; fi &&
             set +e &&
-            node "$(superskill script path sp pr-reviewing.mjs)" request --focus "$focus" $FORCE_FLAG --json
+            bun "$(superskill script path sp pr-reviewing.ts)" request --focus "$focus" $FORCE_FLAG --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-request.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -166,9 +166,9 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-wait.status" &&
             set +e &&
-            SINCE="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).requestedAt;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
-            REQUEST_HEAD="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).head;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
-            node "$(superskill script path sp pr-reviewing.mjs)" wait --since "$SINCE" --head "$REQUEST_HEAD" --timeout "$waitTimeoutSec" --interval "$waitIntervalSec"
+            SINCE="$(bun -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).requestedAt;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
+            REQUEST_HEAD="$(bun -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).head;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
+            bun "$(superskill script path sp pr-reviewing.ts)" wait --since "$SINCE" --head "$REQUEST_HEAD" --timeout "$waitTimeoutSec" --interval "$waitIntervalSec"
             --json --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-wait.json";
             rc=$?; set -e &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
@@ -183,12 +183,12 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-collect.status" &&
             set +e &&
-            SINCE="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).requestedAt;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
-            REQUEST_HEAD="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).head;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
-            node "$(superskill script path sp pr-reviewing.mjs)" collect --since "$SINCE" --head "$REQUEST_HEAD" --json
+            SINCE="$(bun -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).requestedAt;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
+            REQUEST_HEAD="$(bun -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).head;process.stdout.write(value ?? "")' ".spur/run/$__runId-pr-request.json")" &&
+            bun "$(superskill script path sp pr-reviewing.ts)" collect --since "$SINCE" --head "$REQUEST_HEAD" --json
             --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-findings.json";
             collect_rc=$?;
-            node "$(superskill script path sp pr-reviewing.mjs)" status --since "$SINCE" --head "$REQUEST_HEAD" --json > ".spur/run/$__runId-pr-status.json";
+            bun "$(superskill script path sp pr-reviewing.ts)" status --since "$SINCE" --head "$REQUEST_HEAD" --json > ".spur/run/$__runId-pr-status.json";
             status_rc=$?; set -e &&
             if [ "$collect_rc" -ne 0 ] || [ "$status_rc" -ne 0 ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
             if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&

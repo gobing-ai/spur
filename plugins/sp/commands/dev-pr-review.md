@@ -32,7 +32,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Delegate everything: `Skill(skill="sp:pr-reviewing", args="$ARGUMENTS")`. The skill owns mode
   routing, finding triage, fix, and rules authoring; `.spur/workflows/pr-review.yaml` is the SSOT
-  for the review spine's state order and guards; the staged `pr-reviewing.mjs` is the portable
+  for the review spine's state order and guards; the staged `pr-reviewing.ts` is the
   deterministic git/gh core every spine step shells out to.
 - The external review goes through the GitHub PR and an `@codex review` comment only — never local
   Codex review commands. Never force-push, rewrite history, merge the PR, or discard unrelated

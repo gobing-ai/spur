@@ -44,12 +44,12 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['wait', '--timeout'])).toThrow('requires a value');
     });
 
-    test('portable generated entrypoint runs under Node', () => {
-        const result = spawnSync('node', [join(import.meta.dir, '..', 'scripts', 'pr-reviewing.mjs'), '--help'], {
+    test('staged TypeScript entrypoint runs under Bun', () => {
+        const result = spawnSync('bun', [join(import.meta.dir, '..', 'scripts', 'pr-reviewing.ts'), '--help'], {
             encoding: 'utf8',
         });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain('Installed usage: node');
+        expect(result.stdout).toContain('Installed usage: bun');
     });
 
     test('workflow carries request freshness through wait/collect and records composite status', () => {
@@ -59,7 +59,8 @@ describe('parseArgs', () => {
         );
         expect(workflow.match(/--since "\$SINCE"/g)?.length).toBe(3);
         expect(workflow.match(/--head "\$REQUEST_HEAD"/g)?.length).toBe(3);
-        expect(workflow).toContain('pr-reviewing.mjs)" status --since "$SINCE" --head "$REQUEST_HEAD" --json');
+        expect(workflow).toContain('pr-reviewing.ts)" status --since "$SINCE" --head "$REQUEST_HEAD" --json');
+        expect(workflow).not.toContain('node -e');
         expect(workflow).toContain('-pr-status.json');
         expect(workflow).toContain('sh -c "$preReviewCmd"');
     });

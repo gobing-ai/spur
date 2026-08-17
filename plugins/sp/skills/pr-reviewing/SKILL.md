@@ -42,7 +42,7 @@ sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
 .spur/workflows/pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
       │  every state resolves with `superskill script path` and shells out to:
       ▼
-staged pr-reviewing.mjs        ← portable entrypoint for the tested git/gh core
+staged pr-reviewing.ts         ← Bun entrypoint for the tested git/gh core
 ```
 
 - **State order and guards** are defined once, in the workflow YAML. Do not re-derive them in
@@ -124,16 +124,16 @@ root causes rather than wording, prefer the smallest coherent patch, avoid drive
 
 ## Workflow-backed spine (`full`, `submit`, `rerun`)
 
-Run the workflow YAML's declared states in order. Every deterministic state invokes the portable
+Run the workflow YAML's declared states in order. Every deterministic state invokes the
 staged entrypoint below, supports `--json`, and must be parsed. Stop at the first red gate and
 report its artifact. The canonical installed invocation is:
 
 ```sh
-node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
+bun "$(superskill script path sp pr-reviewing.ts)" <subcommand> [flags]
 ```
 
-Installed targets use the portable entrypoint; the repository-relative TypeScript source remains
-development-only.
+Installed targets resolve the staged TypeScript source and execute it with Bun, matching the rest
+of `plugins/sp/scripts`.
 
 1. **Preflight** — `<script> preflight --json`. Hard-fails on a
    detached HEAD, missing `gh` auth, no GitHub remote, or a dirty tree. On a dirty tree, triage
