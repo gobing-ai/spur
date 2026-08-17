@@ -105,6 +105,7 @@ Feature: Workflow run reliability defects
 | 0432 | Workflow var interpolation into shell action commands executes as shell | done |
 | 0433 | Headless HITL taste gates cannot be approved after the fact | done |
 | 0435 | Shell guard commands still interpolate vars into shell - same injection class as 0432 | done |
+| 0571 | workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

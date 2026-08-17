@@ -141,7 +141,7 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0567 | dev-history-load slash command: cumulative import then narrowed analyze | done |
-| 0569 | dev-history-load: degraded-source tolerance for bare runs (exit 2 proceeds with warning) | todo |
+| 0569 | dev-history-load: degraded-source tolerance for bare runs (exit 2 proceeds with warning) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

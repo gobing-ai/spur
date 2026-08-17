@@ -117,6 +117,13 @@ Feature: Session forensics implementation
 | 0554 | Compute derived variables in analyze via an in-analyze metric registry | done |
 | 0555 | Add the report mode registry and the forensics renderer | done |
 | 0556 | Rewrite dev-find-issue as report-first over the data plane | done |
+| 0564 | Fix E5 forensic-report findings: toolResult durations, report flag passthrough, omp arguments-shape drift | done |
+| 0576 | history-load dogfood follow-up findings (2026-08-17) | done |
+| 0577 | pi mapper: apply the omp event-envelope fix to piSplit and re-import pi | done |
+| 0578 | Close the release + re-import gap so landed mapper fixes reach the data plane | done |
+| 0579 | Sanitize sentinel timestamps out of the time-decomposition span math | done |
+| 0580 | Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel | done |
+| 0581 | Per-step token/time and cache-efficiency sections in the analyze artifact | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
