@@ -13,6 +13,7 @@ import {
     findPendingQueueJob,
     updatePendingQueueJob,
 } from '../src/db';
+import { applyCliMigrations } from '../src/migrations';
 
 /**
  * Minimal mock that throws on queryFirst to exercise the dbHealthCheck catch path.
@@ -86,6 +87,66 @@ describe('createMigratedDbViaRuntime', () => {
         } finally {
             direct.close();
             viaRuntime.close();
+        }
+    });
+});
+
+describe('migration 0016: history_message ts nullable', () => {
+    test('fresh DBs get a nullable ts column without a rebuild', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const ts = (
+                await db.queryAll<{ name: string; notnull: number }>('PRAGMA table_info(history_message)')
+            ).find((c) => c.name === 'ts');
+            expect(ts?.notnull).toBe(0);
+            expect(
+                await db.queryFirst<{ name: string }>(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='history_message_rebuild'",
+                ),
+            ).toBeNull();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('legacy NOT NULL ts is rebuilt: epoch-0 sentinel becomes NULL, index restored', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            // Rewind to the pre-0016 shape: sentinel rows under a NOT NULL ts.
+            await db.exec('DROP TABLE history_message');
+            await db.exec(`CREATE TABLE history_message (
+                record_hash TEXT PRIMARY KEY, source TEXT NOT NULL, source_file TEXT NOT NULL,
+                source_line INTEGER NOT NULL, session_id TEXT NOT NULL, seq INTEGER NOT NULL,
+                turn_index INTEGER, role TEXT NOT NULL, record_type TEXT NOT NULL,
+                disposition TEXT NOT NULL, ts TEXT NOT NULL, duration_ms INTEGER, model TEXT,
+                input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+                cache_write_tokens INTEGER, cost_usd REAL, content_text TEXT, cwd TEXT,
+                provenance TEXT NOT NULL, run_id TEXT, task_wbs TEXT, imported_at TEXT NOT NULL)`);
+            await db.exec(`INSERT INTO history_message (record_hash, source, source_file, source_line,
+                session_id, seq, role, record_type, disposition, ts, provenance, imported_at) VALUES
+                ('h1','codex','f',1,'s',1,'user','message','keep','1970-01-01T00:00:00.000Z','p','2026'),
+                ('h2','codex','f',2,'s',2,'assistant','message','keep','2026-08-01T00:00:00.000Z','p','2026')`);
+            await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE "0016%"');
+            await applyCliMigrations(db);
+
+            const ts = (
+                await db.queryAll<{ name: string; notnull: number }>('PRAGMA table_info(history_message)')
+            ).find((c) => c.name === 'ts');
+            expect(ts?.notnull).toBe(0);
+            const rows = await db.queryAll<{ record_hash: string; ts: string | null }>(
+                'SELECT record_hash, ts FROM history_message ORDER BY seq',
+            );
+            expect(rows).toEqual([
+                { record_hash: 'h1', ts: null },
+                { record_hash: 'h2', ts: '2026-08-01T00:00:00.000Z' },
+            ]);
+            expect(
+                await db.queryFirst<{ name: string }>(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_history_message_provenance_run'",
+                ),
+            ).toBeDefined();
+        } finally {
+            db.close();
         }
     });
 });

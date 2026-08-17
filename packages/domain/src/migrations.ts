@@ -297,6 +297,55 @@ ALTER TABLE history_tool_call ADD COLUMN call_id TEXT;
 `;
 
 /**
+ * Rebuild the forensic `history_message` table so `ts` is nullable (task 0580
+ * D4/R5). The importer used to coerce missing timestamps to the epoch-0
+ * sentinel `1970-01-01T00:00:00.000Z` because the column was `NOT NULL`;
+ * 0.4.38+ persists NULL instead. SQLite cannot `ALTER TABLE ... DROP NOT
+ * NULL`, so this is the standard 12-step rebuild: create shadow, copy, drop,
+ * rename, restore the `0009` provenance/run index (a dropped table takes its
+ * indexes with it). Guarded by `tsNotNullSkip` — fresh databases already get
+ * the nullable column from the importer DDL and journal without rebuilding.
+ */
+export const HISTORY_MESSAGE_TS_NULLABLE_SCHEMA_SQL = `
+CREATE TABLE history_message_rebuild (
+    record_hash        TEXT PRIMARY KEY,
+    source             TEXT NOT NULL,
+    source_file        TEXT NOT NULL,
+    source_line        INTEGER NOT NULL,
+    session_id         TEXT NOT NULL,
+    seq                INTEGER NOT NULL,
+    turn_index         INTEGER,
+    role               TEXT NOT NULL,
+    record_type        TEXT NOT NULL,
+    disposition        TEXT NOT NULL,
+    ts                 TEXT,
+    duration_ms        INTEGER,
+    model              TEXT,
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    cache_read_tokens  INTEGER,
+    cache_write_tokens INTEGER,
+    cost_usd           REAL,
+    content_text       TEXT,
+    cwd                TEXT,
+    provenance         TEXT NOT NULL,
+    run_id             TEXT,
+    task_wbs           TEXT,
+    imported_at        TEXT NOT NULL
+);
+INSERT INTO history_message_rebuild SELECT
+    record_hash, source, source_file, source_line, session_id, seq, turn_index, role,
+    record_type, disposition,
+    CASE WHEN ts = '1970-01-01T00:00:00.000Z' THEN NULL ELSE ts END,
+    duration_ms, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+    cost_usd, content_text, cwd, provenance, run_id, task_wbs, imported_at
+FROM history_message;
+DROP TABLE history_message;
+ALTER TABLE history_message_rebuild RENAME TO history_message;
+CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message (provenance, run_id);
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -368,6 +417,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: HISTORY_TOOL_CALL_CALL_ID_SCHEMA_SQL,
         addColumnIfMissing: { table: 'history_tool_call', column: 'call_id' },
     },
+    {
+        id: '0016_spur_cli_history_message_ts_nullable',
+        sql: HISTORY_MESSAGE_TS_NULLABLE_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -403,7 +456,13 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const shouldApplySql =
             addColumnGuard === undefined || !(await columnExists(adapter, addColumnGuard.table, addColumnGuard.column));
 
-        // Migration 0011 indexes system_events.sequence — it needs the ledger to
+        // Migration 0016 rebuilds history_message for a nullable ts — skip when the
+        // table is absent (legacy/foundation-only DBs, the 0012/0015 shape) or when
+        // ts is already nullable (fresh DBs created from the 0.4.38+ importer DDL).
+        const tsNullableSkip =
+            migration.id === '0016_spur_cli_history_message_ts_nullable' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnNotNull(adapter, 'history_message', 'ts')));
         // exist. A DB whose journal claims 0000–0008 but has no system_events
         // table (the 0009 simulation shape: foreign/legacy foundation) journals
         // 0011 without executing; the index lands on any DB where the ledger
@@ -436,8 +495,14 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const nameOccurredIndexSkip =
             migration.id === '0014_spur_cli_system_events_name_occurred_idx' &&
             !(await tableExists(adapter, 'system_events'));
-
-        if (shouldApplySql && !sequenceIndexSkip && !argsRawSkip && !nameOccurredIndexSkip && !callIdSkip) {
+        if (
+            shouldApplySql &&
+            !sequenceIndexSkip &&
+            !argsRawSkip &&
+            !nameOccurredIndexSkip &&
+            !callIdSkip &&
+            !tsNullableSkip
+        ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }
@@ -467,12 +532,18 @@ export async function loadSqlMigrations(folder: string): Promise<CliMigration[]>
             sql: await fs.readFile(join(folder, entry)),
         });
     }
+
     return migrations.length > 0 ? migrations : CLI_MIGRATIONS;
 }
 
 async function columnExists(adapter: DbAdapter, table: string, column: string): Promise<boolean> {
     const rows = await adapter.queryAll<{ name: string }>(`PRAGMA table_info("${table}")`);
     return rows.some((row) => row.name === column);
+}
+
+async function columnNotNull(adapter: DbAdapter, table: string, column: string): Promise<boolean> {
+    const rows = await adapter.queryAll<{ name: string; notnull: number }>(`PRAGMA table_info("${table}")`);
+    return rows.some((row) => row.name === column && row.notnull === 1);
 }
 
 async function tableExists(adapter: DbAdapter, table: string): Promise<boolean> {
