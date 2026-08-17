@@ -363,8 +363,9 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // Team process autostart (0195/0207 + 0258 R8): members whose effective
             // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
             // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
-            const autostartConfig = await loadSpurConfig(process.cwd()).catch(() => null);
-            const autostartIds = resolveAutostartSet(autostartConfig, env.SPUR_TEAM_AUTOSTART);
+            // The same loaded config threads `agent` into the history-refresh job (J8 R2).
+            const spurConfig = await loadSpurConfig(process.cwd()).catch(() => null);
+            const autostartIds = resolveAutostartSet(spurConfig, env.SPUR_TEAM_AUTOSTART);
             if (autostartIds.length > 0) {
                 try {
                     const supervisor = ctx.supervisor();
@@ -423,6 +424,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         {
                             getDb: () => ctx.getDb(),
                             cwd: ctx.cwd,
+                            ...(spurConfig?.agent !== undefined ? { agentConfig: spurConfig.agent } : {}),
                             bus: ctx.eventBus() as unknown as SystemEventBus,
                         },
                         payload,

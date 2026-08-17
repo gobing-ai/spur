@@ -1,4 +1,4 @@
-import type { SpurConfig } from '@gobing-ai/spur-config';
+import type { AgentConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { type HistoryRefreshTriggerConfig, resolveHistoryRefreshTrigger } from '@gobing-ai/spur-config';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { enqueueCoalesced } from '@gobing-ai/spur-domain';
@@ -121,6 +121,13 @@ export interface HistoryRefreshJobDeps {
     getDb(): Promise<DbAdapter>;
     /** Project root for the artifact write (passed through to `daily`). */
     cwd: string;
+    /**
+     * Validated `agent` config block (feature J8 R2): threaded into the constructed
+     * HistoryService so the refresh-written artifact embeds the same executor
+     * `ladderSnapshot` the interactive `spur history daily` path writes. Absent,
+     * the ladder degrades to `[]` — same contract as `HistoryServiceContext`.
+     */
+    agentConfig?: AgentConfig;
     /** When present, the refresh outcome is emitted as observable `history.*` events (R3). */
     bus?: SystemEventBus;
     /** Test seam — defaults to the real HistoryService. */
@@ -140,7 +147,12 @@ export interface HistoryRefreshJobDeps {
  */
 export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, payload: unknown): Promise<void> {
     const job = parsePayload(payload);
-    const svc = deps.service ?? new HistoryService({ getDb: deps.getDb });
+    const svc =
+        deps.service ??
+        new HistoryService({
+            getDb: deps.getDb,
+            ...(deps.agentConfig !== undefined ? { agentConfig: deps.agentConfig } : {}),
+        });
     const startMs = Date.now();
     let result: DailyResult;
     try {

@@ -45,6 +45,9 @@ function formatProvenance(provenance: { binary: string; importer: string }): str
 /** Register `spur history` commands. */
 export function registerHistoryCommand(program: Command, context: CliContext): void {
     const noun = program.command('history').summary('import and analyze coding-agent history');
+    // One construction site for the service context (J8 R2): `agentConfig` feeds the
+    // analyze artifact's executor ladderSnapshot; the import path never reads it.
+    const makeService = () => new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
     noun.command('import')
         .description(
             'Import agent conversation JSONL. `--source all` fans out across all sources with ' +
@@ -102,7 +105,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 return;
             }
 
-            const svc = new HistoryService({ getDb: () => context.getDb() });
+            const svc = makeService();
 
             const fanOut = await svc.importAll({
                 sources: source === 'all' ? undefined : [source],
@@ -137,7 +140,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--out <path>', 'Write the artifact to this path instead of the dated reports dir')
         .option('--json', 'Emit the artifact as JSON instead of the human summary')
         .action(async (options) => {
-            const svc = new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
+            const svc = makeService();
             const source = options.source ?? 'all';
             const selector = {
                 since: options.since || null,
@@ -231,7 +234,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--json', 'Emit the daily result as JSON')
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
-            const svc = new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
+            const svc = makeService();
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
             // System-event bus + ledger (task 0471 R2): per-invocation, flushed in finally.
