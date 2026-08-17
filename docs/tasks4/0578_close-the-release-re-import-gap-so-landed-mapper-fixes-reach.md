@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Close the release + re-import gap so landed mapper fixes reach the data plane"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: E5
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:21.856Z"
-updated_at: "2026-08-17T19:07:25.554Z"
+updated_at: "2026-08-17T20:22:11.079Z"
 ---
 
 ## 0578. Close the release + re-import gap so landed mapper fixes reach the data plane
@@ -94,9 +94,42 @@ mappers) unless the delivery path is closed first.
 
 - **AC9** — `bun run lint`, `bun run test`, and `bun run build` green after the dependency bump.
 ### Q&A
+#### Closed decisions
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+**Why not a SQL backfill instead of a re-import?** Rejected. `args_raw` and `duration_ms` are derived
+from the raw JSONL by mapper logic that keeps changing; a hand-written UPDATE would encode one
+version of that logic in a migration and rot immediately. The re-import path already exists, is
+already tested, and stays correct as mappers evolve.
 
+**Why not make `import` re-read everything by default?** Rejected. Checkpoint-resume is correct for
+steady-state — the corpus is ~1.6M rows and a full re-read on every invocation is not viable. The
+defect is the absence of an explicit backfill *step* in the mapper-change workflow, not the presence
+of resume. R5 adds the step to the contract instead of removing the optimization.
+
+**Do tasks 0553 and 0564 get re-opened?** No — their code is correct and their scope is complete.
+R5 requires annotating them with the measured post-re-import result so the corpus stops overstating
+what shipped. Re-opening a `done` task to record a delivery gap it did not own would misattribute
+the failure.
+
+#### Open — decide during implementation
+
+**Does the allowlist reconcile (R3) need its own ts-libs release?** Depends on whether
+`TODO_TOOL_ALLOWLIST` already covers the observed names. `todo_write` is listed for grok only and
+`todowrite` / `todoread` are listed nowhere, so a release is likely. **Owner:** implementer, at the
+R3 step — resolve before the re-import so the corpus is read once, not twice.
+
+**Which sources need `--mode full` vs incremental?** R2 says "every source whose mapper changed
+between 0.4.33 and the adopted version". Derive that from the ts-libs changelog between the two
+versions rather than re-importing all eight by default. **Owner:** implementer. If the diff is
+unclear, re-import all eight — over-importing is slow but correct; under-importing silently
+reproduces this task's own bug.
+
+#### Accepted risk
+
+Task **0576** is `wip` in this tree and its AC3 quotes pi baselines (209,393 imported / 16,424
+post-watermark / 1 session) that this re-import will move. Sequence around it or re-measure 0576's
+baseline afterwards. Flagged rather than blocked — 0576's fix is correct either way; only its
+evidence numbers shift.
 ### Design
 **No new API.** No new CLI noun, verb, or flag — `spur history import --mode full` already exists and
 is the delivery mechanism. The work is a dependency bump, an allowlist reconcile, one re-import, and
@@ -175,17 +208,52 @@ Neither gap is visible from inside either repo. ts-libs sees green tests; Spur s
 `spur-check`; only a query against `.spur/spur.db` shows the retention is absent — which is why R5
 changes what "done" means for this class of work.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/domain/src/analytics/derived.ts:160` |
+| `packages/domain/src/analytics/derived.ts:163` |
+| `packages/domain/src/analytics/derived.ts:175` |
+| `packages/domain/src/analytics/derived.ts:181` |
+| `packages/domain/src/analytics/derived.ts:184` |
+| `packages/domain/src/analytics/derived.ts:190` |
+| `packages/domain/tests/analytics/derived.test.ts:221` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Catalog + direct pins bumped to 0.4.37 across all 8 @gobing-ai/* deps; `bun install` resolved; `history import --dry-run` provenance header printed importer 0.4.37 for all sources (AC1 dry-run transcript). |
+| R2 | MET | `--mode full` re-import, exit 0, 0 errors: omp 921 files/103,147 msgs/101,785 stale-del; grok 430/399/146,608 (+84 checkpoints); opencode 1/2,621/2,621; pi 1,501/1,043/1,043. |
+| R3 | MET | ts-libs commit a589186, lockstep release 0.4.37 (publish workflow 32063847451): TODO_TOOL_ALLOWLIST extended (claude TodoWrite; opencode todowrite/todoread; codex update_plan; omp TodoWrite/todo/todo_write; grok todo_write; pi todo/manage_todo_list); maybeArgsRaw exported; opencode-importer wired to args_raw. mappers.test.ts 223 pass. |
+| R4 | MET | AC6 before/after: omp 267,969→268,986 (+1,017 new msgs); grok 758,572→625,826 (−132,746 stale sweep of vanished files, full-mode expected); pi 209,549, opencode 11,609 unchanged. No duplication. |
+| R5 | MET | Data-plane-evidence rule written into E5 feature Notes (prepended section) and docs/design/sqlite-forensics-token-time-per-step.md §5 note 5 (measured bullet); 0553 and 0564 annotated via `spur task update --section Notes` with dated measured results. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command-output | Dry-run provenance header named @gobing-ai/ts-llm-jsonl-importer@0.4.37 for omp/grok/pi/opencode; lockfile + catalog at 0.4.37. |
+| AC2 | MET | query | PRAGMA table_info(history_tool_call) includes call_id. |
+| AC3 | MET | query | omp tool calls: total 102,130; duration_ms 102,113; call_id 102,130 (100%); started_at/completed_at 61,866 — all from 0. |
+| AC4 | MET | query | args_raw non-null 6,919 vs ≈6,543 estimate (delta explained: estimate derived from pre-re-import DB; re-import reflects current JSONL — grok 257, omp todo 3,246 + todo_write 21, opencode 379+2, pi 1,043+1,971). |
+| AC5 | MET | command-output | history analyze --source omp --json: derived.phases.phaseSupport='supported', 1,720 phases. Parser gap fixed in packages/domain/src/analytics/derived.ts parseTodoItems (omp ops dialect + pi todoList hyphenated statuses); derived.test.ts 14/14. |
+| AC6 | MET | query | Before/after table recorded (R4 evidence). |
+| AC7 | MET | command-output | Dry-run previews recorded before write: omp 101,785 / grok 146,608 / pi 1,043 / opencode 2,621 stale rows. |
+| AC8 | MET | file | E5 feature Notes (data-plane-evidence rule + before/after table), design doc §5.5 measured bullet, dated annotations on 0553 and 0564. |
+| AC9 | MET | command-output | bun run lint clean; bun run test 5,681 pass / 0 fail (303 files); bun run build green; test-cf green. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | lint | — | bun run lint — all workspaces typecheck exit 0 |
+| P4 | test | — | bun run test — 5,681 pass / 0 fail / 18,658 expect() / 303 files |
+| P4 | build | — | bun run build exit 0 |
+| P4 | test-cf | — | bun run test-cf exit 0 |
 ### References
 - Source analysis: `docs/design/sqlite-forensics-token-time-per-step.md` § 3 (I0, I2, I3) and § 4 (F0).
 - Tasks whose effect this delivers: **0553** (todo-arg allowlist + per-call latency, `done`), **0564** (omp tool-call durations, `done`).
@@ -196,3 +264,6 @@ changes what "done" means for this class of work.
 - Upstream: `~/xprojects/ts-libs/packages/llm-jsonl-importer` — `src/mappers.ts:93-101` (allowlist), `:418` (`call_id`), `:489-491` (`wallTimeMs`).
 - Consumer that the empty `args_raw` disables: `packages/domain/src/analytics/forensic-query.ts:458` (`todoToolCalls`), `packages/domain/src/analytics/derived.ts:250` (`phaseSupport`).
 ### History
+- 2026-08-17T19:53:07.975Z todo → wip (system)
+- 2026-08-17T20:22:10.808Z wip → testing (system)
+- 2026-08-17T20:22:11.079Z testing → done (system)

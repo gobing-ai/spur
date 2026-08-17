@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.111Z"
-updated_at: "2026-08-14T19:20:49.530Z"
+updated_at: "2026-08-17T20:17:24.772Z"
 ---
 
 ## 0553. Retain forensic primitives at import: todo-arg allowlist and per-call latency
@@ -311,3 +311,8 @@ This run: `bun test packages/domain/tests/dao/migrations.test.ts` + analytics si
 - 2026-08-14T06:09:48.925Z todo → wip (system)
 - 2026-08-14T06:10:20.415Z wip → testing (system)
 - 2026-08-14T07:16:23.702Z testing → done (system)
+### Notes
+
+
+Task 0578 released importer 0.4.37 (todo `args_raw` allowlist: omp `todo`/`todo_write`, pi `todo`/`manage_todo_list`, opencode `todowrite`/`todoread`, grok `todo_write`, codex `update_plan`) and ran `--mode full` re-import. Measured on `.spur/spur.db`: `args_raw` non-null rose 1,977 → 6,919. This task's retention claim is now data-plane-verified, not source-read.
+

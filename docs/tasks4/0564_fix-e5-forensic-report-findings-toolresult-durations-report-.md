@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T19:04:08.987Z"
-updated_at: "2026-08-15T23:16:21.063Z"
+updated_at: "2026-08-17T20:17:29.446Z"
 ---
 
 ## 0564. Fix E5 forensic-report findings: toolResult durations, report flag passthrough, omp arguments-shape drift
@@ -387,3 +387,8 @@ Disposition: APPROVE.
 - 2026-08-15T22:47:16.831Z backlog → wip (system)
 - 2026-08-15T22:56:22.490Z wip → testing (system)
 - 2026-08-15T22:56:37.031Z testing → done (system)
+### Notes
+
+
+Task 0578 released importer 0.4.37 and re-imported omp `--mode full`. Measured on `.spur/spur.db`: omp tool calls with `duration_ms` 0 → 102,113 / 102,130; `call_id` 0 → 102,130 (100%); `started_at`/`completed_at` 0 → 61,866. This task's timing-retention claim is now data-plane-verified, not source-read.
+

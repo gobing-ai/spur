@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-08-17T19:05:22.219Z"
+updated_at: "2026-08-17T20:17:19.323Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -120,6 +120,19 @@ Feature: Session forensics implementation
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+### Data-plane-evidence rule (0578 R5, 2026-08-17)
+
+A mapper/retention fix is accepted only by its measured post-re-import effect on `.spur/spur.db` — importer provenance header (0.4.37) + before/after row counts, never a source-read verdict. Measured after `--mode full` re-import of omp/pi/grok/opencode:
+
+| Signal | Before | After |
+| --- | --- | --- |
+| omp tool calls with `duration_ms` | 0 / 101,785 | 102,113 / 102,130 |
+| omp tool calls with `call_id` | 0 | 102,130 (100%) |
+| `args_raw` non-null (all sources) | 1,977 | 6,919 |
+| omp `phaseSupport` | unsupported | supported (1,720 phases) |
+
+The phase flip needed one more fix than the re-import: `parseTodoItems` in `packages/domain/src/analytics/derived.ts` only knew `{todos}`/`{plan}` shapes; omp's ops dialect (`start`/`done`/`init`/`append`) and pi's `{todoList}` with hyphenated statuses were unparsed. Both added (task 0578 R3).
+
 ### Every decision is already made
 
 Feature E2's four tickets resolved the contract. Read `docs/features/E2_*.md` § *Decisions so far*

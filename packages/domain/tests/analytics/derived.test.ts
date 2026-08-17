@@ -218,6 +218,37 @@ describe('parseTodoItems', () => {
         );
         expect(items).toEqual([{ content: 'kept', status: 'pending' }]);
     });
+
+    test('parses the Pi {todoList:[{title,status}]} shape with hyphenated statuses (task 0578 R3)', () => {
+        const items = parseTodoItems('pi', JSON.stringify({ todoList: [{ title: 't1', status: 'in-progress' }] }));
+        expect(items).toEqual([{ content: 't1', status: 'in_progress' }]);
+    });
+
+    test('parses the OMP todo {ops:[...]} shape — start/done/init/append (task 0578 R3)', () => {
+        const items = parseTodoItems(
+            'omp',
+            JSON.stringify({
+                ops: [
+                    { op: 'init', list: [{ phase: 'Scout', items: ['a', 'b'] }] },
+                    { op: 'start', task: 'a' },
+                    { op: 'append', items: ['c'] },
+                    { op: 'done', task: 'a' },
+                ],
+            }),
+        );
+        expect(items).toEqual([
+            { content: 'a', status: 'pending' },
+            { content: 'b', status: 'pending' },
+            { content: 'a', status: 'in_progress' },
+            { content: 'c', status: 'pending' },
+            { content: 'a', status: 'completed' },
+        ]);
+    });
+
+    test('OMP todo_write still parses via the {todos} shape', () => {
+        const items = parseTodoItems('omp', JSON.stringify({ todos: [{ content: 'x', status: 'pending' }] }));
+        expect(items).toEqual([{ content: 'x', status: 'pending' }]);
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -157,11 +157,12 @@ interface TodoItem {
 }
 
 /**
- * Parse todo items from `args_raw` JSON. Handles the two shapes across sources:
- * - Claude / OMP / Pi / Grok: `{ todos: [{ content, status }] }`
+ * Parse todo items from `args_raw` JSON. Shapes per source (task 0578 R3):
+ * - Claude / OMP todo_write / Grok / OpenCode: `{ todos: [{ content, status }] }`
  * - Codex: `{ plan: [{ step, status }] }`
- *
- * `content` is the content key for non-codex sources; `step` for codex.
+ * - Pi: `{ todoList: [{ title, status }] }` (statuses use hyphens: `in-progress`)
+ * - OMP `todo`: `{ ops: [...] }` — `start`/`done` carry `task`; `init`/`append`
+ *   introduce items via `list:[{phase,items}]` / `items`.
  */
 export function parseTodoItems(source: string, argsRaw: string): TodoItem[] {
     let parsed: Record<string, unknown>;
@@ -171,18 +172,51 @@ export function parseTodoItems(source: string, argsRaw: string): TodoItem[] {
         return [];
     }
 
-    const nameKey = source === 'codex' ? 'step' : 'content';
-    const list = source === 'codex' ? parsed.plan : parsed.todos;
-    if (!Array.isArray(list)) return [];
+    if (source === 'codex') return itemsFromList(parsed.plan, 'step');
+    if (source === 'pi') return itemsFromList(parsed.todoList, 'title');
+    if (source === 'omp' && Array.isArray(parsed.ops)) return itemsFromOps(parsed.ops);
+    return itemsFromList(parsed.todos, 'content');
+}
 
+/** Normalize a `todos`/`plan`/`todoList` array; `in-progress` → `in_progress` for Pi. */
+function itemsFromList(list: unknown, nameKey: string): TodoItem[] {
     const items: TodoItem[] = [];
+    if (!Array.isArray(list)) return items;
     for (const entry of list) {
         if (typeof entry !== 'object' || entry === null) continue;
         const rec = entry as Record<string, unknown>;
         const content = rec[nameKey];
         if (typeof content !== 'string' || content.length === 0) continue;
-        const status = rec.status;
-        items.push({ content, status: typeof status === 'string' ? status : '' });
+        const status = typeof rec.status === 'string' ? rec.status.replaceAll('-', '_') : '';
+        items.push({ content, status });
+    }
+    return items;
+}
+
+/** Flatten OMP `todo` ops into items: `start`/`done` mutate one task, `init`/`append` introduce. */
+function itemsFromOps(ops: readonly unknown[]): TodoItem[] {
+    const items: TodoItem[] = [];
+    const push = (content: unknown, status: string): void => {
+        if (typeof content === 'string' && content.length > 0) items.push({ content, status });
+    };
+    const pushAll = (list: unknown): void => {
+        if (Array.isArray(list)) for (const item of list) push(item, 'pending');
+    };
+    for (const op of ops) {
+        if (typeof op !== 'object' || op === null) continue;
+        const rec = op as Record<string, unknown>;
+        if (rec.op === 'start') push(rec.task, 'in_progress');
+        else if (rec.op === 'done') push(rec.task, 'completed');
+        else if (rec.op === 'init' || rec.op === 'append') {
+            if (Array.isArray(rec.list)) {
+                for (const phase of rec.list) {
+                    if (typeof phase === 'object' && phase !== null) {
+                        pushAll((phase as Record<string, unknown>).items);
+                    }
+                }
+            }
+            pushAll(rec.items);
+        }
     }
     return items;
 }
