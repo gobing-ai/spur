@@ -13,7 +13,7 @@ tags: ["review"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T18:20:25.305Z"
-updated_at: "2026-08-17T19:08:26.040Z"
+updated_at: "2026-08-17T21:50:12.314Z"
 ---
 
 ## 0576. history-load dogfood follow-up findings (2026-08-17)
@@ -186,14 +186,14 @@ first, AC3's before-numbers will have moved; re-measure rather than assume them.
 
 The P1 anti-join (R4) is already implemented in the working tree and is not redesigned here.
 ### Plan
-- [ ] Re-measure the baseline before touching code — `history analyze --source pi --json`, recording `coverage[pi].messages`, `totals.messages`, and the `bySession` entry count (Background lists 209,393 / 16,424 / 1 as of 2026-08-17) (R1)
-- [ ] Replace the `?? -1` fail-closed operand with `row.maxSeq` in `sessionWatermarks` (`watermark.ts:153`) (R1)
-- [ ] Document the fail-open invariant in the `watermark.ts` policy docblock next to the degrade rule (R2)
-- [ ] Update the line-167 `-1` test and the line-358 anti-join regression test to the new invariant (R3)
-- [ ] Add a test for the tool-call-less source shape: zero `history_tool_call` rows, sessions ending on a non-assistant role, messages survive the filter (R3)
-- [ ] Re-run `history analyze --source pi --json` and confirm `totals.messages` approaches `coverage[pi].messages` and `bySession` returns more than one session (R1)
-- [ ] Confirm the anti-join, `materializeWatermarkExclude`, and the `analyze` materialize/drop pairing are intact and green (R4)
-- [ ] `bun run lint` clean; `packages/domain/tests/analytics/` and `packages/app/tests/services/history-service.test.ts` green; re-review the diff (R1, R2, R3, R4)
+- [x] Re-measure the baseline before touching code — `history analyze --source pi --json`, recording `coverage[pi].messages`, `totals.messages`, and the `bySession` entry count (Background lists 209,393 / 16,424 / 1 as of 2026-08-17) (R1)
+- [x] Replace the `?? -1` fail-closed operand with `row.maxSeq` in `sessionWatermarks` (`watermark.ts:153`) (R1)
+- [x] Document the fail-open invariant in the `watermark.ts` policy docblock next to the degrade rule (R2)
+- [x] Update the line-167 `-1` test and the line-358 anti-join regression test to the new invariant (R3)
+- [x] Add a test for the tool-call-less source shape: zero `history_tool_call` rows, sessions ending on a non-assistant role, messages survive the filter (R3)
+- [x] Re-run `history analyze --source pi --json` and confirm `totals.messages` approaches `coverage[pi].messages` and `bySession` returns more than one session (R1)
+- [x] Confirm the anti-join, `materializeWatermarkExclude`, and the `analyze` materialize/drop pairing are intact and green (R4)
+- [x] `bun run lint` clean; `packages/domain/tests/analytics/` and `packages/app/tests/services/history-service.test.ts` green; re-review the diff (R1, R2, R3, R4)
 ### Solution
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).

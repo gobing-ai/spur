@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:22.166Z"
-updated_at: "2026-08-17T21:00:13.877Z"
+updated_at: "2026-08-17T21:50:12.755Z"
 ---
 
 ## 0579. Sanitize sentinel timestamps out of the time-decomposition span math
@@ -201,15 +201,15 @@ Independent of **0578** (re-import) and **0581** (per-step sections); do not seq
 Complementary to **0580**, which stops the sentinel being written at all — after 0580 the omp
 `excluded` count should approach 0 while this guard stays as the invariant.
 ### Plan
-- [ ] Record the baseline: `analyze --source omp --json` → `derived.timeDecomposition` (spanMs ≈ 9.96e14) and the 558/917 poisoned-session split (R1)
-- [ ] Exclude the epoch-0 sentinel from the `MIN(ts)`/`MAX(ts)` bounds in `sessionSpans` (`forensic-query.ts:402`), keeping the session's real rows (R1)
-- [ ] Screen non-ISO `ts` values in the same query so they never reach `new Date(...)` (R2)
-- [ ] Replace the `if (ms <= 0) continue` guard at `derived.ts:277` with a finiteness check and count exclusions (R2, R3)
-- [ ] Surface the excluded-session count on the derived output alongside the existing unmeasured counters (R3)
-- [ ] Confirm `unattributedMs` semantics and the `derived.ts:354-361` finding are unchanged for valid-span sessions (R4)
-- [ ] Add the four tests: leading sentinel, all sentinel, epoch-millis string, clean session unchanged (R5)
-- [ ] Re-run `analyze --source omp --json` and record spanMs ≈ 2.98e9 ms / 827 h with the excluded count (R1, R2, R3)
-- [ ] `bun run lint` clean; domain-analytics and app-history suites green; re-review the diff (R5)
+- [x] Record the baseline: `analyze --source omp --json` → `derived.timeDecomposition` (spanMs ≈ 9.96e14) and the 558/917 poisoned-session split (R1)
+- [x] Exclude the epoch-0 sentinel from the `MIN(ts)`/`MAX(ts)` bounds in `sessionSpans` (`forensic-query.ts:402`), keeping the session's real rows (R1)
+- [x] Screen non-ISO `ts` values in the same query so they never reach `new Date(...)` (R2)
+- [x] Replace the `if (ms <= 0) continue` guard at `derived.ts:277` with a finiteness check and count exclusions (R2, R3)
+- [x] Surface the excluded-session count on the derived output alongside the existing unmeasured counters (R3)
+- [x] Confirm `unattributedMs` semantics and the `derived.ts:354-361` finding are unchanged for valid-span sessions (R4)
+- [x] Add the four tests: leading sentinel, all sentinel, epoch-millis string, clean session unchanged (R5)
+- [x] Re-run `analyze --source omp --json` and record spanMs ≈ 2.98e9 ms / 827 h with the excluded count (R1, R2, R3)
+- [x] `bun run lint` clean; domain-analytics and app-history suites green; re-review the diff (R5)
 ### Root Cause
 Verified 2026-08-17 against `.spur/spur.db` and the current tree.
 

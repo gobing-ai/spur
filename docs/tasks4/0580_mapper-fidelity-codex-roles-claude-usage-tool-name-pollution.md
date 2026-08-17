@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:22.428Z"
-updated_at: "2026-08-17T20:50:12.362Z"
+updated_at: "2026-08-17T21:50:12.980Z"
 ---
 
 ## 0580. Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel
@@ -251,21 +251,21 @@ analytics-side risk either way.
 - **0579** guards the analytics side of D4 and must not be treated as a substitute for R5, or vice
   versa: one stops bad data being written, the other stops bad data being consumed.
 ### Plan
-- [ ] Capture the pre-fix baseline queries for D1–D5 so every AC has a before number (R1–R7)
-- [ ] Read `ompSplit` end to end as the reference contract before editing any other mapper (R1, R3)
-- [ ] Fix `codexSplit` roles + meta collapsing against a real codex JSONL fixture (R1)
-- [ ] Populate codex usage columns, or record the evidence that codex JSONL carries none (R2)
-- [ ] Fix `claudeSplit`'s usage guard: read `message.usage`, not top-level `raw.usage` (`src/mappers.ts:173`), into the four token columns + `cost_usd`, NULL when absent (R3)
-- [ ] Fix `grokSplit`'s tool-name extraction so command text never reaches `tool_name` (R4)
-- [ ] Replace the `new Date(0).toISOString()` fallbacks with NULL, and audit every `ts` consumer listed in Design before landing it (R5)
-- [ ] Normalize pi's epoch-millis timestamps to ISO in `piSplit` — timestamp only, no other pi field (R6)
-- [ ] Reach a written verdict on grok's 87 % meta ratio; change `grokSplit` or document the ratio as correct (R7)
-- [ ] Add per-source mapper unit tests against real JSONL fixtures, mirroring the `ompSplit` tests (R8)
-- [ ] Release from ts-libs, coordinating a single release with task 0577 so one re-import serves both; record the version in Solution (R9)
-- [ ] `bun update` here and confirm the resolved importer version via the import provenance header (R9)
-- [ ] `--mode full` re-import codex, claude, grok, and pi from a source-local binary; record both dry-run and write-run provenance headers (R9)
-- [ ] Run every AC query against `.spur/spur.db` after the re-import and record before/after; only then claim the ACs (R1–R7, R9)
-- [ ] `bun run lint` / `bun run test` / `bun run build` green; re-review the diff (R8)
+- [x] Capture the pre-fix baseline queries for D1–D5 so every AC has a before number (R1–R7)
+- [x] Read `ompSplit` end to end as the reference contract before editing any other mapper (R1, R3)
+- [x] Fix `codexSplit` roles + meta collapsing against a real codex JSONL fixture (R1)
+- [x] Populate codex usage columns, or record the evidence that codex JSONL carries none (R2)
+- [x] Fix `claudeSplit`'s usage guard: read `message.usage`, not top-level `raw.usage` (`src/mappers.ts:173`), into the four token columns + `cost_usd`, NULL when absent (R3)
+- [x] Fix `grokSplit`'s tool-name extraction so command text never reaches `tool_name` (R4)
+- [x] Replace the `new Date(0).toISOString()` fallbacks with NULL, and audit every `ts` consumer listed in Design before landing it (R5)
+- [x] Normalize pi's epoch-millis timestamps to ISO in `piSplit` — timestamp only, no other pi field (R6)
+- [x] Reach a written verdict on grok's 87 % meta ratio; change `grokSplit` or document the ratio as correct (R7)
+- [x] Add per-source mapper unit tests against real JSONL fixtures, mirroring the `ompSplit` tests (R8)
+- [x] Release from ts-libs, coordinating a single release with task 0577 so one re-import serves both; record the version in Solution (R9)
+- [x] `bun update` here and confirm the resolved importer version via the import provenance header (R9)
+- [x] `--mode full` re-import codex, claude, grok, and pi from a source-local binary; record both dry-run and write-run provenance headers (R9)
+- [x] Run every AC query against `.spur/spur.db` after the re-import and record before/after; only then claim the ACs (R1–R7, R9)
+- [x] `bun run lint` / `bun run test` / `bun run build` green; re-review the diff (R8)
 ### Root Cause
 Verified 2026-08-17 against `.spur/spur.db` and
 `node_modules/@gobing-ai/ts-llm-jsonl-importer@0.4.33/dist/mappers.js` (source of record:

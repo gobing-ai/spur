@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:21.856Z"
-updated_at: "2026-08-17T20:22:11.079Z"
+updated_at: "2026-08-17T21:50:12.539Z"
 ---
 
 ## 0578. Close the release + re-import gap so landed mapper fixes reach the data plane
@@ -177,18 +177,18 @@ source. Task 0576 is `wip` in the same tree and reads those tables; its AC3 quot
   Solution which releases were folded in.
 - **0579** and **0581** are independent — do not block them on this.
 ### Plan
-- [ ] Record the before-state: per-source row counts, `args_raw` non-null (6), omp `duration_ms` non-null (0), `phaseSupport` for omp, installed importer version (R2, R4)
-- [ ] Reconcile `TODO_TOOL_ALLOWLIST` against the measured tool names (`todo`, `todo_write`, `todowrite`, `todoread`) in ts-libs; release if it changes (R3)
-- [ ] Coordinate the ts-libs release train with tasks 0577 and 0580 so one re-import serves all three; note which releases folded in (R1, R3)
-- [ ] Bump and `bun update` the importer to ≥ 0.4.35 in the dependent workspaces (R1)
-- [ ] Confirm the resolved version via the import provenance header, not the lockfile (R1)
-- [ ] Confirm the `call_id` column exists after migration (R1)
-- [ ] `spur history import --mode full --dry-run` from a source-local binary; record the output (R4)
-- [ ] `spur history import --mode full` write run from the same binary; record the provenance header (R2)
-- [ ] Re-run the before-state queries and diff them into a before/after table (R2, R4)
-- [ ] Confirm `analyze --source omp --json` reports `phaseSupport: 'supported'` (R3)
-- [ ] Write the data-plane-evidence rule into E5 notes + design doc § 5; annotate 0553 and 0564 with the measured result (R5)
-- [ ] `bun run lint` / `bun run test` / `bun run build` green; re-review the diff (R1)
+- [x] Record the before-state: per-source row counts, `args_raw` non-null (6), omp `duration_ms` non-null (0), `phaseSupport` for omp, installed importer version (R2, R4)
+- [x] Reconcile `TODO_TOOL_ALLOWLIST` against the measured tool names (`todo`, `todo_write`, `todowrite`, `todoread`) in ts-libs; release if it changes (R3)
+- [x] Coordinate the ts-libs release train with tasks 0577 and 0580 so one re-import serves all three; note which releases folded in (R1, R3)
+- [x] Bump and `bun update` the importer to ≥ 0.4.35 in the dependent workspaces (R1)
+- [x] Confirm the resolved version via the import provenance header, not the lockfile (R1)
+- [x] Confirm the `call_id` column exists after migration (R1)
+- [x] `spur history import --mode full --dry-run` from a source-local binary; record the output (R4)
+- [x] `spur history import --mode full` write run from the same binary; record the provenance header (R2)
+- [x] Re-run the before-state queries and diff them into a before/after table (R2, R4)
+- [x] Confirm `analyze --source omp --json` reports `phaseSupport: 'supported'` (R3)
+- [x] Write the data-plane-evidence rule into E5 notes + design doc § 5; annotate 0553 and 0564 with the measured result (R5)
+- [x] `bun run lint` / `bun run test` / `bun run build` green; re-review the diff (R1)
 ### Root Cause
 Two independent breaks in one delivery path, both verified 2026-08-17.
 

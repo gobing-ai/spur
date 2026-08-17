@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:22.674Z"
-updated_at: "2026-08-17T21:39:00.104Z"
+updated_at: "2026-08-17T21:50:13.195Z"
 ---
 
 ## 0581. Per-step token/time and cache-efficiency sections in the analyze artifact
@@ -213,18 +213,18 @@ tasks change *what the data says*; this task changes *what the artifact reports*
 correct before and after. When 0580 lands, the derived fidelity verdicts change on their own with no
 edit here — that is the test of whether R5 was implemented as derivation or as a hard-coded list.
 ### Plan
-- [ ] Read `bySession` (`forensic-query.ts:234`) and `SessionStat`/`ToolStat` (`artifact.ts`) as the shape precedent before writing anything (R1)
-- [ ] Add the step row type to `artifact.ts` alongside `SessionStat` (R1)
-- [ ] Add the top-by-tokens query: bounded by `LIMIT ?`, selector-scoped, watermark-aware (R1, R6)
-- [ ] Add the top-by-duration query, excluding `duration_ms IS NULL` rather than sorting it as 0 (R2, R6)
-- [ ] Add the cache-efficiency query plus the aggregate fresh-token total for the selector (R3, R6)
-- [ ] Thread the three results through `HistoryService.analyze` with the `top` bound (R1, R6)
-- [ ] Derive per-source section support from the data — never a hard-coded source list (R5)
-- [ ] Register the new sections in the task 0555 report-mode renderer (R4, R5)
-- [ ] Verify against the real corpus: omp top step ~590K tokens, top duration ~1,412 s, cache section 2,478 steps / 354,130,045 fresh tokens (R1, R2, R3)
-- [ ] Verify `--source claude` and `--source pi` render unsupported sections rather than zeros (R5)
-- [ ] Add the tests from R7 (R7)
-- [ ] Update `docs/04_DESIGN.md` for the artifact shape in the same commit (T3); `bun run lint` / `bun run test` green; re-review the diff (R1–R7)
+- [x] Read `bySession` (`forensic-query.ts:234`) and `SessionStat`/`ToolStat` (`artifact.ts`) as the shape precedent before writing anything (R1)
+- [x] Add the step row type to `artifact.ts` alongside `SessionStat` (R1)
+- [x] Add the top-by-tokens query: bounded by `LIMIT ?`, selector-scoped, watermark-aware (R1, R6)
+- [x] Add the top-by-duration query, excluding `duration_ms IS NULL` rather than sorting it as 0 (R2, R6)
+- [x] Add the cache-efficiency query plus the aggregate fresh-token total for the selector (R3, R6)
+- [x] Thread the three results through `HistoryService.analyze` with the `top` bound (R1, R6)
+- [x] Derive per-source section support from the data — never a hard-coded source list (R5)
+- [x] Register the new sections in the task 0555 report-mode renderer (R4, R5)
+- [x] Verify against the real corpus: omp top step ~590K tokens, top duration ~1,412 s, cache section 2,478 steps / 354,130,045 fresh tokens (R1, R2, R3)
+- [x] Verify `--source claude` and `--source pi` render unsupported sections rather than zeros (R5)
+- [x] Add the tests from R7 (R7)
+- [x] Update `docs/04_DESIGN.md` for the artifact shape in the same commit (T3); `bun run lint` / `bun run test` green; re-review the diff (R1–R7)
 ### Solution
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
