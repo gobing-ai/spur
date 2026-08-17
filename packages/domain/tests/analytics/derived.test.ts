@@ -405,6 +405,100 @@ describe('computeDerived via SQL', () => {
     });
 });
 
+describe('sessionSpans timestamp sanitization (0579)', () => {
+    const SENTINEL = '1970-01-01T00:00:00.000Z';
+
+    test('sentinel timestamps are excluded from span bounds; null ts rows too', async () => {
+        const db = await setup();
+        await insertMessage(db, { record_hash: 'm1', session_id: 's1', seq: 1, role: 'user', ts: SENTINEL });
+        await insertMessage(db, {
+            record_hash: 'm2',
+            session_id: 's1',
+            seq: 2,
+            role: 'assistant',
+            ts: SENTINEL,
+            duration_ms: 100,
+        });
+
+        const spans = await sessionSpans(db, ALL);
+        expect(spans).toHaveLength(1);
+        expect(spans[0].firstTs).toBeNull();
+        expect(spans[0].lastTs).toBeNull();
+        // Measured durations survive a fully sentinel session.
+        expect(spans[0].assistantDurationMs).toBe(100);
+    });
+
+    test('poisoned session: sentinel rows are ignored, real bounds win', async () => {
+        const db = await setup();
+        await insertMessage(db, { record_hash: 'm1', session_id: 's1', seq: 1, role: 'user', ts: SENTINEL });
+        await insertMessage(db, { record_hash: 'm2', session_id: 's1', seq: 2, role: 'user', ts: T0 });
+        await insertMessage(db, { record_hash: 'm3', session_id: 's1', seq: 3, role: 'user', ts: T110 });
+
+        const spans = await sessionSpans(db, ALL);
+        expect(spans).toHaveLength(1);
+        expect(spans[0].firstTs).toBe(T0);
+        expect(spans[0].lastTs).toBe(T110);
+    });
+
+    test('mixed session: sentinel rows shift no bound; real span kept', async () => {
+        const db = await setup();
+        // Sentinel predates all real ts here, so if the screen failed the bound would become SENTINEL.
+        await insertMessage(db, { record_hash: 'm1', session_id: 's1', seq: 1, role: 'user', ts: SENTINEL });
+        await insertMessage(db, { record_hash: 'm2', session_id: 's1', seq: 2, role: 'user', ts: T0 });
+        await insertMessage(db, { record_hash: 'm3', session_id: 's1', seq: 3, role: 'user', ts: T10 });
+
+        const derived = computeDerived(await sessionSpans(db, ALL), await sessionToolDurations(db, ALL), []);
+        expect(derived.timeDecomposition.spanMs).toBe(10_000);
+        expect(derived.timeDecomposition.spanExcludedSessions).toBe(0);
+    });
+
+    test('all-sentinel session: excluded from span, counted, durations preserved', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            record_hash: 'm1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            ts: SENTINEL,
+            duration_ms: 500,
+        });
+        // Unmeasured assistant in the excluded session must NOT leak into unattributedMs (AC6):
+        // a broken timestamp is not an unmeasured duration.
+        await insertMessage(db, { record_hash: 'm4', session_id: 's1', seq: 2, role: 'assistant', ts: SENTINEL });
+        await insertMessage(db, { record_hash: 'm2', session_id: 's2', seq: 1, role: 'user', ts: T0 });
+        await insertMessage(db, { record_hash: 'm5', session_id: 's2', seq: 3, role: 'assistant', ts: T10 });
+        await insertMessage(db, { record_hash: 'm3', session_id: 's2', seq: 2, role: 'user', ts: T10 });
+
+        const derived = computeDerived(await sessionSpans(db, ALL), await sessionToolDurations(db, ALL), []);
+        expect(derived.timeDecomposition.spanMs).toBe(10_000);
+        expect(derived.timeDecomposition.spanExcludedSessions).toBe(1);
+        // s2's assistant is unmeasured -> its whole remainder is unattributed, not idle.
+        expect(derived.timeDecomposition.unattributedMs).toBe(10_000);
+        expect(derived.timeDecomposition.idleMs).toBe(0);
+    });
+
+    test('epoch-millis string ts: excluded, no NaN leaks into any total (AC3)', async () => {
+        const db = await setup();
+        await insertMessage(db, { record_hash: 'm1', session_id: 's1', seq: 1, role: 'user', ts: '1786684271589' });
+        await insertMessage(db, { record_hash: 'm2', session_id: 's1', seq: 2, role: 'user', ts: '1786684273589' });
+
+        const derived = computeDerived(await sessionSpans(db, ALL), await sessionToolDurations(db, ALL), []);
+        // The LIKE '____-__-__T%' screen drops non-ISO ts from the bounds, so the session
+        // has NULL bounds -> excluded and counted, never parsed by new Date().
+        expect(derived.timeDecomposition.spanExcludedSessions).toBe(1);
+        for (const total of [
+            derived.timeDecomposition.spanMs,
+            derived.timeDecomposition.llmMs,
+            derived.timeDecomposition.toolMs,
+            derived.timeDecomposition.idleMs,
+            derived.timeDecomposition.unattributedMs,
+        ]) {
+            expect(Number.isFinite(total)).toBe(true);
+        }
+        expect(derived.timeDecomposition.spanMs).toBe(0);
+    });
+});
+
 // ---------------------------------------------------------------------------
 // Artifact compatibility (pre-0554 artifacts carry no `derived` block)
 // ---------------------------------------------------------------------------

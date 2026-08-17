@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Sanitize sentinel timestamps out of the time-decomposition span math"
 description: ""
-status: todo
+status: done
 type: issue
 profile: standard
 feature_id: E5
@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:22.166Z"
-updated_at: "2026-08-17T19:07:27.345Z"
+updated_at: "2026-08-17T21:00:13.877Z"
 ---
 
 ## 0579. Sanitize sentinel timestamps out of the time-decomposition span math
@@ -101,9 +101,46 @@ spans from their non-sentinel rows. The sessions are fine; two rows in each are 
 
 - **AC8** — `bun run lint` clean; `packages/domain/tests/analytics/` and `packages/app/tests/services/history-service.test.ts` green with no skipped tests.
 ### Q&A
+#### Closed decisions
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+**Why not clamp absurd spans, as the design doc first proposed?** Because the sessions are not
+absurd — two rows in each are. Clamping omp would discard 558 of 917 sessions (61 %) and keep a
+number invented by the ceiling. Excluding the sentinel from the bounds computes each session's real
+span from its real rows, which is both more correct and a smaller change.
 
+**Why not rebucket timestamp-invalid spans into `unattributedMs`?** `unattributedMs` already means
+one specific thing — "wall-clock we could not attribute because some *durations* were unmeasured" —
+and `derived.ts:354-361` raises an operator-facing finding off it. Folding a *timestamp* failure
+into the same bucket would make that finding lie about its own cause. R3 adds a separate counter.
+
+**Why fix this in Spur when task 0580 stops the sentinel being written?** Both are needed and
+neither substitutes for the other. 0580 stops today's known bad producers; this guard is what makes
+the metric safe against the next source, the next mapper regression, and the corpus as it exists
+right now (39,783 rows already written). After 0580 lands, this task's excluded-session count should
+approach zero on its own — that is the signal both worked.
+
+**Why screen non-ISO `ts` in SQL rather than JS?** `ts` is TEXT and `MIN`/`MAX` compare lexically,
+so a mixed-format session picks its bounds wrong *before* JS ever sees them. Screening after the
+aggregate is too late. Screening in SQL also keeps `new Date(...)` off values it silently mis-parses.
+
+#### Open — decide during implementation
+
+**What is the excluded-session counter called and where does it sit?** Design suggests
+`spanExcludedSessions` on the derived output, in the same register as the existing
+`assistantDurationUnmeasured`. **Owner:** implementer. Constraint: it must reach the forensics
+report, or R3's "observable, not silent" is not met — a field nobody renders is still silent.
+
+**Should a session excluded for timestamp reasons still contribute its `llmMs` / `toolMs`?** Its
+durations may be perfectly good even when its timestamps are not. Leaning yes — drop only the span
+and its derived remainder, keep measured durations. **Owner:** implementer; whichever way it goes,
+state it in Solution and cover it with a test, because it changes what `llmMs` means relative to
+`spanMs`.
+
+#### Not in scope, deliberately
+
+The `loops` query (`forensic-query.ts:334`) has no `LIMIT` and is the one forensic query that does
+not hold the bounded-result invariant. Noted while reading the file; unrelated to this task. Not
+fixed here — record it, ship the requested scope.
 ### Design
 Two edit sites, both in `packages/domain/src/analytics/`.
 
@@ -195,17 +232,51 @@ Both causes converge on the same two lines. Cause A also has an upstream half (s
 sentinel) which is task 0580; Cause B's upstream half is pi timestamp normalization, task 0580 with
 0577. Neither removes the need for this guard.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/domain/src/analytics/derived.ts:146` |
+| `packages/domain/src/analytics/derived.ts:310` |
+| `packages/domain/src/analytics/derived.ts:313` |
+| `packages/domain/src/analytics/derived.ts:322` |
+| `packages/domain/src/analytics/derived.ts:326` |
+| `packages/domain/src/analytics/derived.ts:342` |
+| `packages/domain/src/analytics/derived.ts:44` |
+| `packages/domain/src/analytics/forensic-query.ts:411` |
+| `packages/domain/src/analytics/render-forensics.ts:137` |
+| `packages/domain/tests/analytics/derived.test.ts:408` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | forensic-query.ts sessionSpans MIN/MAX wrapped in CASE WHEN m.ts <> '1970-01-01T00:00:00.000Z' AND m.ts LIKE '____-__-__T%' - sentinel rows excluded from bounds, session kept. derived.test.ts 'poisoned session' asserts bounds T0/T110 from real rows with a sentinel row present. |
+| R2 | MET | Non-ISO ts fails the LIKE screen -> NULL bounds; decompositionMetric guard now `!Number.isFinite(ms) \|\| ms <= 0` (old `ms <= 0` passed NaN since NaN <= 0 is false). 'epoch-millis string ts' test asserts all five totals Number.isFinite. |
+| R3 | MET | TimeDecomposition.spanExcludedSessions added (derived.ts:45); incremented per excluded session; renderTimeDecomposition emits '_Span excludes N session(s) with unusable timestamps..._' note (render-forensics.ts:137-139). Verified in real report output. |
+| R4 | MET | Excluded sessions skip the remainder branch entirely - unattributedMs keeps its unmeasured-duration meaning. Test: excluded session with unmeasured assistant contributes 0 to unattributedMs while a valid-span session with unmeasured assistant lands its full remainder in unattributedMs. |
+| R5 | MET | packages/domain/tests/analytics/derived.test.ts describe 'sessionSpans timestamp sanitization (0579)': 5 tests - sentinel-only bounds NULL with durations preserved, poisoned session real bounds win, mixed session exact spanMs 10_000 + 0 excluded, all-sentinel excluded+counted+durations kept+no unattributed pollution, epoch-millis strings finite totals. Clean-session behavior unchanged: pre-existing 'computeDerived via SQL' suite passes byte-identical. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET |  | poisoned-session test: sentinel row ignored, span = T110-T0 |
+| AC2 | MET |  | all-sentinel session: spanMs contribution 0, spanExcludedSessions 1 |
+| AC3 | MET |  | epoch-millis test: Number.isFinite asserted on spanMs/llmMs/toolMs/idleMs/unattributedMs |
+| AC4 | MET |  | Pre-0580 baseline spanMs 9.96e14 (~31,625y). Post-0580 + this fix: `history analyze --source omp` spanMs 16,429,884,041 (~190d), llmMs 1.0739e9, toolMs 3.4976e8, idleMs 1.0670e10, unattributedMs 4.3444e9 - byte-identical to the pre-change post-0580 baseline (guard is pure defense-in-depth on this corpus). |
+| AC5 | MET |  | omp spanExcludedSessions = 0; all-sources = 766 (sessions whose every ts is NULL/non-ISO). Count is exposed on derived output and rendered in the forensics report. |
+| AC6 | MET |  | unattributedMs test assertions: excluded session adds 0; valid-span unmeasured session adds full remainder |
+| AC7 | MET |  | Four R5 cases + AC6/AC3 variants covered in derived.test.ts; clean-session behavior unchanged (existing suite green) |
+| AC8 | MET |  | bun run lint exit 0; packages/domain/tests/analytics/ + packages/app/tests/services/history-service.test.ts: 231 tests, 755 expects, 0 fail, 0 skipped; bun run build exit 0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 ### References
 - Source analysis: `docs/design/sqlite-forensics-token-time-per-step.md` § 3 (I1) and § 4 (F1).
 - Edit sites: `packages/domain/src/analytics/derived.ts:259-298` (`decompositionMetric`), `:276-277` (the guard), `:301-308` (bottleneck ranking consumer), `:354-361` (the unattributed finding); `packages/domain/src/analytics/forensic-query.ts:402` (`sessionSpans`).
@@ -213,3 +284,6 @@ sentinel) which is task 0580; Cause B's upstream half is pi timestamp normalizat
 - Independent siblings: **0578** (release + re-import), **0581** (per-step artifact sections).
 - Derived-variable mechanism decision: task **0490**, task **0554** (in-analyze metric registry).
 ### History
+- 2026-08-17T20:50:36.920Z todo → wip (system)
+- 2026-08-17T21:00:13.600Z wip → testing (system)
+- 2026-08-17T21:00:13.877Z testing → done (system)

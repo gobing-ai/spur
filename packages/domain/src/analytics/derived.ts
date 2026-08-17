@@ -41,6 +41,8 @@ export interface TimeDecomposition {
     unattributedMs: number;
     /** Total wall-clock span across sessions: MAX(ts) - MIN(ts). */
     spanMs: number;
+    /** Sessions excluded from the span math (sentinel-only or non-ISO timestamps). */
+    spanExcludedSessions: number;
 }
 
 /** Ranked bottleneck entry. */
@@ -141,7 +143,7 @@ export class MetricRegistry {
 export function emptyDerived(): DerivedVariables {
     return {
         phases: { phaseSupport: 'unsupported', phases: [] },
-        timeDecomposition: { llmMs: 0, toolMs: 0, idleMs: 0, unattributedMs: 0, spanMs: 0 },
+        timeDecomposition: { llmMs: 0, toolMs: 0, idleMs: 0, unattributedMs: 0, spanMs: 0, spanExcludedSessions: 0 },
         bottlenecks: [],
     };
 }
@@ -305,11 +307,10 @@ function decompositionMetric(ctx: MetricContext): void {
     let unattributedMs = 0;
     let spanMs = 0;
 
+    let spanExcludedSessions = 0;
+
     for (const span of ctx.sessionSpans) {
-        if (span.firstTs == null || span.lastTs == null) continue;
-        const ms = new Date(span.lastTs).getTime() - new Date(span.firstTs).getTime();
-        if (ms <= 0) continue;
-        spanMs += ms;
+        const ms = new Date(span.lastTs ?? NaN).getTime() - new Date(span.firstTs ?? NaN).getTime();
 
         const llm = span.assistantDurationMs ?? 0;
         const llmUnmeasured = span.assistantDurationUnmeasured;
@@ -318,8 +319,17 @@ function decompositionMetric(ctx: MetricContext): void {
         const tool = toolRow?.toolDurationMs ?? 0;
         const toolUnmeasured = toolRow?.toolDurationUnmeasured ?? 0;
 
+        // Measured durations survive a broken span — only the span-derived remainder is dropped.
         llmMs += llm;
         toolMs += tool;
+
+        // Null bounds (sentinel-only session) or a non-finite/non-positive span (NaN <= 0 is false,
+        // so the old guard let it through): exclude from the span math, count it, move on.
+        if (!Number.isFinite(ms) || ms <= 0) {
+            spanExcludedSessions++;
+            continue;
+        }
+        spanMs += ms;
 
         const remainder = Math.max(0, ms - llm - tool);
         if (llmUnmeasured > 0 || toolUnmeasured > 0) {
@@ -329,7 +339,7 @@ function decompositionMetric(ctx: MetricContext): void {
         }
     }
 
-    ctx.results.timeDecomposition = { llmMs, toolMs, idleMs, unattributedMs, spanMs };
+    ctx.results.timeDecomposition = { llmMs, toolMs, idleMs, unattributedMs, spanMs, spanExcludedSessions };
 }
 
 /** Metric: rank bottlenecks by ms descending, computed from timeDecomposition. */

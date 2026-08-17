@@ -408,8 +408,8 @@ export async function sessionSpans(
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<SessionSpanRow>(
         `SELECT m.session_id AS sessionId, m.source AS source,
-                MIN(m.ts) AS firstTs,
-                MAX(m.ts) AS lastTs,
+                MIN(CASE WHEN m.ts <> '1970-01-01T00:00:00.000Z' AND m.ts LIKE '____-__-__T%' THEN m.ts END) AS firstTs,
+                MAX(CASE WHEN m.ts <> '1970-01-01T00:00:00.000Z' AND m.ts LIKE '____-__-__T%' THEN m.ts END) AS lastTs,
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
                 SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
          FROM history_message m

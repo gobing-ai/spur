@@ -134,6 +134,10 @@ function renderTimeDecomposition(derived: DerivedVariables | null): string[] {
         `| Unattributed (unmeasured durations) | ${fmtWall(d.unattributedMs)} | ${pct(d.unattributedMs)} |`,
         `| **Wall clock (span)** | **${fmtWall(d.spanMs)}** | 100% |`,
         '',
+        d.spanExcludedSessions > 0
+            ? `_Span excludes ${d.spanExcludedSessions} session(s) with unusable timestamps (sentinel-only or non-ISO); their measured durations still count above._`
+            : '',
+        '',
     );
     return lines;
 }
