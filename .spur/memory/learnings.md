@@ -750,3 +750,11 @@ Source: task file `docs/tasks4/0575_authoring-time-task-size-warning-on-spur-tas
 - **Gotchas** — the entry condition for a parked consent-gated task is the *recorded* decision, not a resume formality: approval came via the consent ask surfaced at the start of `/sp-dev-run 0575 --auto --next`. `spur task check 0575` PASS carries 3 pre-accepted L4 advisories: `missing-feature-id` deferred with owner (matches parent 0568; harness self-improvement has no home feature), `gate-language` accepted — the gate is a **human consent decision**, not an upstream task dependency, and the wording must stay visible (it is the whole reason the task was parked). Emit `report.reasons` verbatim — identical wording at authoring and precheck time is the point; never compose new message text or duplicate `5`/`8`. Cost: one extra file read + pure evaluation per Requirements/Plan write only, mirrors the `checkAcSubsetWarning` precedent. T3 doc row landed at `docs/04_DESIGN.md:1330` in the same commit; doc-evolve follow-up `cf664a30` (ADR-051 amendment + 04 frontmatter bump) came in a separate commit.
 
 Captured to `.spur/run/wrapup-learnings.md` (appended after the 0569 entry, same format).
+
+## 2026-08-17 — E5 batch (0576, 0577)
+
+- **0576**: pi watermark trip was upstream mapper symptom, not watermark bug — Spur-side fail-open guard added; root cause split to 0577. Lesson: when a guard fires on one source only, diff that source's mapper against its sibling (piSplit vs ompSplit) before touching the guard.
+- **0577**: ts-libs release is LOCKSTEP — per-package tags do NOT trigger Publish; only aggregate `@gobing-ai/ts-libs-v*` does. Correct flow: `bun run drop-tags <v> --remote` → `bun run bump-ver <v> --push`. Per-package tag attempt silently publishes nothing.
+- **0577**: spur-new deps: root `package.json` `workspaces.catalog` is the SSOT for `catalog:` refs; a `bun update <pkg>` alone re-resolves to the stale catalog pin (installed 0.4.33 while 0.4.36 was on npm). Bump the catalog entry + exact root pin, then `bun install`.
+- **0577**: `task update <wbs> done` provenance gate needs a `task_run_links` row — `spur task run-link <wbs> --run-id <batch-run> --source dev-runall` records it without SPUR_PROVENANCE_OVERRIDE.
+- **0577**: epoch-ms timestamps: verify expected ISO strings by computation, not intuition (test expected wrong date; mapper was right).
