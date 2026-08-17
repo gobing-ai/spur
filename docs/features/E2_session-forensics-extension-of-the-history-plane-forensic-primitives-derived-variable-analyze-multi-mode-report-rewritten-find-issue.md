@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E2"
 name: "Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue"
-status: backlog
+status: verifying
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-10T00:02:13.084Z"
-updated_at: "2026-08-10T02:50:17.781Z"
+updated_at: "2026-08-17T00:44:49.635Z"
 ---
 
 # E2: Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue
@@ -229,3 +229,5 @@ Consciously deferred past the destination (implementation-batch concerns, not ma
   this map instead routes forensics through `report --mode forensics`, keeping the noun's verb count
   flat.
 ## History
+- 2026-08-17T00:43:34.633Z backlog → active (system)
+- 2026-08-17T00:44:49.635Z active → verifying (system)

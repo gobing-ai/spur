@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Update dev-find-issue command docs: latest source list, template default parity, history-load preflight pointer"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E2
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:39:31.132Z"
-updated_at: "2026-08-16T19:01:58.501Z"
+updated_at: "2026-08-17T00:49:25.003Z"
 ---
 
 ## 0570. Update dev-find-issue command docs: latest source list, template default parity, history-load preflight pointer
@@ -50,10 +50,10 @@ command is a long-tail `Skill()` wrapper (no numbered `dev-operations.md` row), 
 command file itself plus verification against the plugin closure tests (`command-flag-parity`,
 `command-contract`, `roles`).
 ### Requirements
-- [ ] R1. Update the `--source` value list in `plugins/sp/commands/dev-find-issue.md` (argument-hint frontmatter + `## Argument Flags` table) to match the `spur history` CLI surface: `auto|pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all`. Keep `auto` as the skill-level default (the skill resolves it); add the CLI's `grok`, `agy`, and `all` values. Acceptance: the hint and table list the full source set; `command-flag-parity` and `command-contract` suites still pass (flag tokens unchanged — only the value vocabulary inside `<…>` changes, which the parity gates do not tokenize).
-- [ ] R2. Fix the `--template` default in the `## Argument Flags` table to `meta` (matching `sp-issue-finding` SSOT), with a clarifying note matching the skill: `issue` is the explicit single-finding override, `standard` the generic override. Acceptance: the table default cell reads `meta`; a reader cross-checking the skill sees no disagreement.
-- [ ] R3. Add an import-preflight pointer in the command's `## Usage` section: before forensics, direct operators to `/sp:dev-history-load` when the data plane may be stale/empty (the shipped on-demand cumulative import+analyze command, task 0567), mirroring the deferred-owner note in the 0567 Q&A. Acceptance: the Usage section names `/sp:dev-history-load` as the preflight and links its glossary/command context; no behavior change to the `Skill()` invocation.
-- [ ] R4. Re-verify the command against the current plugin closure after the doc edits: `bun test plugins/sp/tests/command-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/roles.test.ts plugins/sp/tests/flag-contract-parity.test.ts` green, and `validate-commands.ts` still reports 38/38 (invoke from the repo root: `bun plugins/sp/scripts/validate-commands.ts` — it resolves `plugins/sp/commands` from cwd and crashes with ENOENT from any other directory). Acceptance: all four suites pass with no count/parity drift; the edited file passes the 5 thin-wrapper gates.
+- [x] R1. Update the `--source` value list in `plugins/sp/commands/dev-find-issue.md` (argument-hint frontmatter + `## Argument Flags` table) to match the `spur history` CLI surface: `auto|pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all`. Keep `auto` as the skill-level default (the skill resolves it); add the CLI's `grok`, `agy`, and `all` values. Acceptance: the hint and table list the full source set; `command-flag-parity` and `command-contract` suites still pass (flag tokens unchanged — only the value vocabulary inside `<…>` changes, which the parity gates do not tokenize).
+- [x] R2. Fix the `--template` default in the `## Argument Flags` table to `meta` (matching `sp-issue-finding` SSOT), with a clarifying note matching the skill: `issue` is the explicit single-finding override, `standard` the generic override. Acceptance: the table default cell reads `meta`; a reader cross-checking the skill sees no disagreement.
+- [x] R3. Add an import-preflight pointer in the command's `## Usage` section: before forensics, direct operators to `/sp:dev-history-load` when the data plane may be stale/empty (the shipped on-demand cumulative import+analyze command, task 0567), mirroring the deferred-owner note in the 0567 Q&A. Acceptance: the Usage section names `/sp:dev-history-load` as the preflight and links its glossary/command context; no behavior change to the `Skill()` invocation.
+- [x] R4. Re-verify the command against the current plugin closure after the doc edits: `bun test plugins/sp/tests/command-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/roles.test.ts plugins/sp/tests/flag-contract-parity.test.ts` green, and `validate-commands.ts` still reports 38/38 (invoke from the repo root: `bun plugins/sp/scripts/validate-commands.ts` — it resolves `plugins/sp/commands` from cwd and crashes with ENOENT from any other directory). Acceptance: all four suites pass with no count/parity drift; the edited file passes the 5 thin-wrapper gates.
 ### Acceptance Criteria
 ```gherkin
 Feature: dev-find-issue command docs conformance
@@ -147,22 +147,47 @@ remains). No `dev-operations.md` row (long-tail command). The flag-parity R1 glo
 **Out of scope.** `sp-issue-finding` internals; the raw-JSONL fallback conditions; report rendering;
 task creation templates themselves.
 ### Plan
-- [ ] Edit `plugins/sp/commands/dev-find-issue.md` argument-hint: full `--source` value list (`auto|pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all`) (R1)
-- [ ] Edit the `## Argument Flags` table: `--source` row value list + `--template` Default cell `meta` with single-finding-override note (R1, R2)
-- [ ] Add `/sp:dev-history-load` preflight pointer to `## Usage` (R3)
-- [ ] Verify closure: `bun test plugins/sp/tests/command-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/roles.test.ts plugins/sp/tests/flag-contract-parity.test.ts` + `bun plugins/sp/scripts/validate-commands.ts` from the repo root → 38/38 (R4)
+- [x] Edit `plugins/sp/commands/dev-find-issue.md` argument-hint: full `--source` value list (`auto|pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all`) (R1)
+- [x] Edit the `## Argument Flags` table: `--source` row value list + `--template` Default cell `meta` with single-finding-override note (R1, R2)
+- [x] Add `/sp:dev-history-load` preflight pointer to `## Usage` (R3)
+- [x] Verify closure: `bun test plugins/sp/tests/command-contract.test.ts plugins/sp/tests/command-flag-parity.test.ts plugins/sp/tests/roles.test.ts plugins/sp/tests/flag-contract-parity.test.ts` + `bun plugins/sp/scripts/validate-commands.ts` from the repo root → 38/38 (R4)
 ### Solution
+**Single-file doc-conformance edit** to `plugins/sp/commands/dev-find-issue.md` (+24/−19 incl. table re-alignment):
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+1. **R1 — `--source` vocabulary** (`plugins/sp/commands/dev-find-issue.md:4` hint, `:21` table row): value list expanded to `auto|pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all`, matching `apps/cli/src/commands/history.ts:54` (import) and `:132` (analyze); `auto` stays the skill-level default, `all` documented as CLI fan-out.
+2. **R2 — `--template` default** (`plugins/sp/commands/dev-find-issue.md:23`): Default cell corrected `standard` → `meta` per SSOT `plugins/sp/skills/issue-finding/SKILL.md:71`; description notes `issue` = explicit single-finding override, `standard` = generic override (`plugins/sp/skills/issue-finding/SKILL.md:254`).
+3. **R3 — preflight pointer** (`plugins/sp/commands/dev-find-issue.md:56`): `## Usage` gains a "Data-plane preflight" paragraph naming `/sp:dev-history-load` (on-demand cumulative import + analyze, checkpoint resume, task 0567) for stale/empty findings, with the `spur history daily` cadence split. `Skill(skill="sp:issue-finding", args="$ARGUMENTS")` at `:68` untouched.
 
+Rationale: the command is a thin wrapper over `sp:issue-finding`; all three drifts were in the frozen surface docs, not behavior. Flag tokens byte-identical; no skill/CLI changes.
 ### Testing
+**Forced re-verify results** (`/sp:dev-verify 0570 --force --focus all --fix all`, 2026-08-16)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/commands/dev-find-issue.md:4` hint + `:21` Argument Flags `--source` row list `auto\|pi\|claude\|codex\|gemini\|opencode\|antigravity\|openclaw\|omp\|grok\|agy\|all`; re-read this run — matches CLI vocabulary `apps/cli/src/commands/history.ts:54` (import) and `:132` (analyze) plus skill-level `auto` |
+| R2 | MET | `plugins/sp/commands/dev-find-issue.md:23` `--template` Default cell = `meta`; description notes `issue` = explicit single-finding override, `standard` = generic override; matches SSOT `plugins/sp/skills/issue-finding/SKILL.md:71` (re-read: default `meta`) |
+| R3 | MET | `plugins/sp/commands/dev-find-issue.md:56` `## Usage` "Data-plane preflight" paragraph names `/sp:dev-history-load` (checkpoint resume, task 0567) for stale/empty findings; `Skill(skill="sp:issue-finding", args="$ARGUMENTS")` at `:68` unchanged (re-read) |
+| R4 | MET | `bun test plugins/sp/tests/command-contract.test.ts command-flag-parity.test.ts roles.test.ts flag-contract-parity.test.ts` (this run): 200 pass / 0 fail, 1128 expect() calls; `bun plugins/sp/scripts/validate-commands.ts` from repo root: 39 commands pass all 5 gates (AC's "38/38" is a stale count — `dev-gtd.md` landed the 39th command outside this task; zero drift from 0570) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — --source lists the full CLI source set | MET | command | File re-read this run: hint `:4` and table row `:21` carry the full 12-value list; no legacy list omits `grok`/`agy`/`all` (git diff confirms only value vocabulary changed) |
+| R2 — --template default matches the skill SSOT | MET | command | `grep -n template plugins/sp/skills/issue-finding/SKILL.md` → `:71` default `meta`; command table `:23` Default cell `meta` with override note |
+| R3 — Usage points at the history-load preflight | MET | command | File re-read: `## Usage` preflight paragraph names `/sp:dev-history-load`; Implementation `Skill()` invocation byte-identical |
+| R4 — Plugin closure suites stay green after the edits | MET | command | `bun test` 4 suites (this run): 200 pass / 0 fail; validator: 39/39 — AC count stale, not a drift from 0570 |
+
+- Design conformance: 4/4 claims DONE (hint list, table list, `--template` default + note, Usage preflight pointer); `Skill()` invocation untouched as designed; no scope creep (diff +24/−19, single file).
+- SECUA: no P1–P3 findings; doc-only diff, flag tokens byte-identical, no behavior change.
+- Coverage: N/A (documentation-only change; no runtime code path added).
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Command file: `plugins/sp/commands/dev-find-issue.md` (hint `:4`, `--source` table row, `--template` row `:23`, `## Usage` `:33-49`)
 - CLI surface: `apps/cli/src/commands/history.ts:54` (import `--source` values), `:132` (analyze `--source` values)
@@ -172,3 +197,6 @@ task creation templates themselves.
 - Feature: `docs/features/E2_session-forensics-extension-of-the-history-plane-forensic-primitives-derived-variable-analyze-multi-mode-report-rewritten-find-issue.md`
 - Closure tests: `plugins/sp/tests/command-contract.test.ts`, `plugins/sp/tests/command-flag-parity.test.ts`, `plugins/sp/tests/roles.test.ts`, `plugins/sp/tests/flag-contract-parity.test.ts`
 ### History
+- 2026-08-17T00:28:32.257Z todo → wip (system)
+- 2026-08-17T00:43:44.525Z wip → testing (system)
+- 2026-08-17T00:43:49.866Z testing → done (system)
