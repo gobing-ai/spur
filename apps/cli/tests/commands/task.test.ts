@@ -672,8 +672,21 @@ describe('spur task CLI', () => {
             const clean = createCapturedOutput();
             expect(await main(['task', 'check', '--corpus', '--json'], { cwd: isoCwd, output: clean })).toBe(0);
             const result = JSON.parse(lastMessage(clean));
-            expect(Object.keys(result)).toEqual(['observed', 'baselined', 'newErrors', 'staleEntries', 'ok']);
-            expect(result).toMatchObject({ observed: 0, baselined: 0, newErrors: [], staleEntries: [], ok: true });
+            expect(Object.keys(result).sort()).toEqual(
+                ['observed', 'baselined', 'newErrors', 'newWarnings', 'staleEntries', 'bySeverity', 'ok'].sort(),
+            );
+            expect(result).toMatchObject({
+                observed: 0,
+                baselined: 0,
+                newErrors: [],
+                newWarnings: [],
+                staleEntries: [],
+                bySeverity: {
+                    error: { observed: 0, baselined: 0, newCount: 0, staleCount: 0 },
+                    warning: { observed: 0, baselined: 0, newCount: 0, staleCount: 0 },
+                },
+                ok: true,
+            });
 
             const since = createCapturedOutput();
             expect(

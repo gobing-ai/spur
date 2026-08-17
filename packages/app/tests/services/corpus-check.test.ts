@@ -14,7 +14,7 @@
  *      is branch-scoped, and the narrow-range control below shows what happens without it.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { key, resolveFogRange, runCorpusCheck, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
@@ -35,7 +35,60 @@ function writeBaseline(root: string, entries: unknown[]): void {
     writeFileSync(join(root, 'config', 'corpus-baseline.json'), JSON.stringify({ entries }));
 }
 
+/**
+ * A schema-valid `todo` task without `feature_id` — the shape that emits only
+ * warning-severity findings (L4.missing-feature-id) so the ratchet tests can
+ * exercise the warning half of the reconciliation without error noise.
+ */
+function validTaskMd(wbs = '0001'): string {
+    return [
+        '---',
+        'template: standard',
+        'schema_version: 1',
+        `name: "Fixture ${wbs}"`,
+        'description: "fixture"',
+        'status: todo',
+        'type: task',
+        'profile: standard',
+        'parent_wbs: null',
+        'priority: P3',
+        'tags: []',
+        'dependencies: []',
+        'created_at: "2026-08-10T00:00:00.000Z"',
+        'updated_at: "2026-08-10T00:00:00.000Z"',
+        '---',
+        '',
+        `## ${wbs}. Fixture ${wbs}`,
+        '',
+        '### Background',
+        'fixture',
+        '',
+        '### Acceptance Criteria',
+        'Acceptance criteria fixture.',
+        '',
+        '### Design',
+        'Design fixture.',
+        '',
+        '### Plan',
+        '- [x] done fixture item',
+        '',
+    ].join('\n');
+}
+
 describe('runCorpusCheck', () => {
+    /** Unique-identity baseline entries from the observed findings (identity = kind:id:code:severity). */
+    function uniqueBaseline(first: Awaited<ReturnType<typeof runCorpusCheck>>): unknown[] {
+        const seen = new Set<string>();
+        return [...first.newErrors, ...first.newWarnings]
+            .filter((f) => {
+                const k = `${f.kind}:${f.id}:${f.code}:${f.severity}`;
+                if (seen.has(k)) return false;
+                seen.add(k);
+                return true;
+            })
+            .map((f) => ({ ...f, message: undefined, reason: 'fixture', since: '2026-08-10' }));
+    }
+
     test('reconciles a baselined finding and preserves the result contract', async () => {
         const root = corpusFixture();
         write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
@@ -44,21 +97,30 @@ describe('runCorpusCheck', () => {
         const finding = first.newErrors[0];
         expect(finding).toBeDefined();
         if (finding === undefined) throw new Error('expected malformed task finding');
+        const errorEntries = uniqueBaseline(first).filter((e) => (e as { severity: string }).severity === 'error');
+        const warningEntries = uniqueBaseline(first).filter((e) => (e as { severity: string }).severity === 'warning');
 
-        writeBaseline(root, [
-            {
-                kind: finding.kind,
-                id: finding.id,
-                code: finding.code,
-                reason: 'fixture',
-                since: '2026-08-10',
-            },
-        ]);
+        writeBaseline(root, uniqueBaseline(first));
         expect(await runCorpusCheck(root)).toEqual({
             observed: first.observed,
-            baselined: 1,
+            baselined: uniqueBaseline(first).length,
             newErrors: [],
+            newWarnings: [],
             staleEntries: [],
+            bySeverity: {
+                error: {
+                    observed: first.bySeverity.error.observed,
+                    baselined: errorEntries.length,
+                    newCount: 0,
+                    staleCount: 0,
+                },
+                warning: {
+                    observed: first.bySeverity.warning.observed,
+                    baselined: warningEntries.length,
+                    newCount: 0,
+                    staleCount: 0,
+                },
+            },
             ok: true,
         });
     });
@@ -75,6 +137,7 @@ describe('runCorpusCheck', () => {
             kind: 'task',
             id: '0999',
             code: 'L1.fixture',
+            severity: 'error',
             reason: 'fixture',
             since: '2026-08-10',
         };
@@ -83,6 +146,7 @@ describe('runCorpusCheck', () => {
             observed: 0,
             baselined: 1,
             newErrors: [],
+            newWarnings: [],
             staleEntries: [stale],
             ok: false,
         });
@@ -94,13 +158,82 @@ describe('runCorpusCheck', () => {
         await expect(runCorpusCheck(root)).rejects.toThrow('could not parse task section matrix');
     });
 
+    test('ratchets a warning outside the baseline as a new warning failure', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
+        const result = await runCorpusCheck(root);
+        expect(result.newWarnings.length).toBeGreaterThan(0);
+        expect(result.newWarnings.every((w) => w.severity === 'warning')).toBe(true);
+        expect(result.newErrors).toEqual([]);
+        expect(result.ok).toBe(false);
+        expect(result.bySeverity.warning.newCount).toBe(result.newWarnings.length);
+    });
+
+    test('a baselined warning that stops reproducing fails as stale', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
+        const observed = await runCorpusCheck(root);
+        const [warning] = observed.newWarnings;
+        expect(warning).toBeDefined();
+        if (warning === undefined) throw new Error('expected a warning finding');
+        writeBaseline(root, [
+            {
+                kind: warning.kind,
+                id: warning.id,
+                code: warning.code,
+                severity: 'warning',
+                reason: 'fixture',
+                since: '2026-08-10',
+            },
+        ]);
+        expect(await runCorpusCheck(root)).toMatchObject({
+            newErrors: [],
+            newWarnings: [],
+            staleEntries: [],
+            ok: true,
+        });
+
+        // Entry no longer reproduces → stale, even though it is a warning
+        write(root, 'docs/tasks/0002_clean.md', validTaskMd('0002'));
+        rmSync(join(root, 'docs/tasks/0001_warn.md'));
+        const staleResult = await runCorpusCheck(root);
+        expect(staleResult.staleEntries.map((e) => e.code)).toContain(warning.code);
+        expect(staleResult.ok).toBe(false);
+    });
+
+    test('severity is part of the acceptance contract: a baselined warning does not cover an error', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
+        // Baseline an error for the same key that actually reproduces as a warning
+        const observed = await runCorpusCheck(root);
+        const [warning] = observed.newWarnings;
+        expect(warning).toBeDefined();
+        if (warning === undefined) throw new Error('expected a warning finding');
+        writeBaseline(root, [
+            {
+                kind: warning.kind,
+                id: warning.id,
+                code: warning.code,
+                severity: 'error',
+                reason: 'fixture',
+                since: '2026-08-10',
+            },
+        ]);
+        const mismatched = await runCorpusCheck(root);
+        // Warning still reads as new (error entry does not cover it)
+        expect(mismatched.newWarnings.map((w) => w.code)).toContain(warning.code);
+        // And the error entry itself is stale (no error at that key reproduces)
+        expect(mismatched.staleEntries.map((e) => e.code)).toContain(warning.code);
+        expect(mismatched.ok).toBe(false);
+    });
+
     test('resolves the project baseline from a nested cwd', async () => {
         const root = corpusFixture();
         write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
-        const finding = (await runCorpusCheck(root)).newErrors[0];
-        expect(finding).toBeDefined();
-        if (finding === undefined) throw new Error('expected malformed task finding');
-        writeBaseline(root, [{ ...finding, message: undefined, reason: 'fixture', since: '2026-08-10' }]);
+        const first = await runCorpusCheck(root);
+        // Baseline every unique observed identity (errors AND warnings) so the nested run
+        // asserts pure path resolution, not this task's ratchet behaviour.
+        writeBaseline(root, uniqueBaseline(first));
         const nested = join(root, 'packages', 'nested');
         mkdirSync(nested, { recursive: true });
 

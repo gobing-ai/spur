@@ -1,6 +1,6 @@
 /**
  * corpus-check — sweep the whole task and feature corpus and fail on any
- * structural error that is not in the accepted baseline.
+ * structural finding that is not in the accepted baseline.
  *
  * WHY this exists: `spur task check <wbs>` runs once, at a transition, against
  * the rules that existed that day. Nothing re-validated afterwards, so two
@@ -13,9 +13,18 @@
  *      2026-08-01.)
  *
  * The baseline (`config/corpus-baseline.json`) is deliberately two-sided: a new
- * error fails the gate, AND a baseline entry that no longer reproduces fails it
- * too. Without the second half the file would rot into a permanent suppression
- * list — the exact invisible-debt pattern this command exists to end.
+ * finding fails the gate, AND a baseline entry that no longer reproduces fails
+ * it too. Without the second half the file would rot into a permanent
+ * suppression list — the exact invisible-debt pattern this command exists to
+ * end.
+ *
+ * Every severity is ratcheted (ADR-062, task 0582): both error- and
+ * warning-severity findings reconcile two-sided, and the gate report states
+ * observed / baselined / new / stale counts per severity so a growing warning
+ * class is distinguishable from a stable one. An entry's `severity` is part of
+ * its acceptance contract — a baselined warning does NOT cover the same
+ * finding promoted to error, and vice versa, so the promotion flow (task 0583)
+ * is a reconcile-the-entry event, not a silent widening.
  */
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -26,11 +35,19 @@ import type { SectionMatrix } from './planning-check-base';
 import { TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
 
-/** One accepted-error record from `config/corpus-baseline.json`. */
+/** Finding severity level — the gate ratchets every severity (ADR-062). */
+export type CorpusSeverity = 'error' | 'warning';
+
+/** One accepted-finding record from `config/corpus-baseline.json`. */
 export interface BaselineEntry {
     kind: 'task' | 'feature';
     id: string;
     code: string;
+    /**
+     * Severity of the accepted finding. Entries predating ADR-062 (no field)
+     * read as `error`; the regenerated baseline carries it on every entry.
+     */
+    severity?: CorpusSeverity;
     reason: string;
     since: string;
 }
@@ -40,21 +57,45 @@ interface Baseline {
     entries: BaselineEntry[];
 }
 
-/** A single error observed in the corpus sweep. */
+/** A single finding observed in the corpus sweep (errors and warnings alike). */
 export interface CorpusError {
     kind: 'task' | 'feature';
     id: string;
     code: string;
+    severity: CorpusSeverity;
     message: string;
 }
 
-/** Result of a full-corpus sweep: observed/baselined counts plus the two-sided findings. */
+/** Observed / baselined / new / stale counts for one severity class. */
+export interface SeverityCounts {
+    observed: number;
+    baselined: number;
+    newCount: number;
+    staleCount: number;
+}
+
+/**
+ * Result of a full-corpus sweep: totals plus per-severity two-sided findings
+ * (R6 — a reader can tell a growing warning class from a stable one).
+ */
 export interface CorpusCheckResult {
     observed: number;
     baselined: number;
     newErrors: CorpusError[];
+    newWarnings: CorpusError[];
     staleEntries: BaselineEntry[];
+    bySeverity: {
+        error: SeverityCounts;
+        warning: SeverityCounts;
+    };
     ok: boolean;
+}
+
+/**
+ * Severity of a baseline entry, defaulting legacy entries (pre-ADR-062) to error.
+ */
+export function baselineSeverity(e: Pick<BaselineEntry, 'severity'>): CorpusSeverity {
+    return e.severity ?? 'error';
 }
 
 /** `<kind>:<id>:<code>` — the identity a baseline entry and an observed error share. */
@@ -107,7 +148,7 @@ async function loadTaskMatrix(projectRoot: string): Promise<SectionMatrix> {
 }
 
 async function structuralSweep(projectRoot: string): Promise<{
-    errors: CorpusError[];
+    findings: CorpusError[];
     taskDirs: string[];
     featuresDir: string;
 }> {
@@ -123,27 +164,36 @@ async function structuralSweep(projectRoot: string): Promise<{
         foldersConfig: planning.foldersConfig,
     });
     const taskService = new TaskCheckService(fs, await loadTaskMatrix(projectRoot), locator);
-    const errors: CorpusError[] = [];
+    const findings: CorpusError[] = [];
 
-    // Sweep scope is frozen by Design ("no behavior change to the gate itself" —
-    // ADR-050/T10 semantics kept): the same corpus the `task check` no-WBS verb
-    // covers, i.e. the active task folder, plus every feature. The configured
-    // inactive folders are scanned only for cross-folder duplicate ids and fog
-    // graduation (taskDirs above). Broadening the per-file check to every
-    // configured folder is a gate-behavior change that surfaces the legacy
-    // corpora's ratchet drift (404 findings in docs/tasks{2,3} as of 2026-08-10)
-    // and would force a massive config/corpus-baseline.json reconciliation —
-    // out of scope for this promotion task (see Review P1 disposition).
-    if (await fs.exists(activeTasksDir)) {
-        for (const fileName of await fs.readDir(activeTasksDir)) {
+    // Sweep scope is EVERY configured task folder, not just the active one (ADR-062 §1,
+    // task 0582). It was frozen to the active folder through 2026-08-17 because widening
+    // it exposes the legacy corpora's accumulated drift — 404 errors across 180 `done`
+    // tasks in docs/tasks{,2,3} — and forced a large config/corpus-baseline.json
+    // reconciliation. That reconciliation is now done: the backlog is baselined, and
+    // because the baseline is two-sided, a baselined error that stops reproducing fails
+    // the gate as stale. Leaving 84% of the corpus ungated is what let that drift grow
+    // unobserved in the first place; do not re-narrow this loop.
+    for (const tasksDir of taskDirs) {
+        if (!(await fs.exists(tasksDir))) continue;
+        for (const fileName of await fs.readDir(tasksDir)) {
             const wbs = fileName.match(/^(\d{4})_.+\.md$/)?.[1];
             if (wbs === undefined) continue;
-            const result = await taskService.check(join(activeTasksDir, fileName), wbs, {
+            const result = await taskService.check(join(tasksDir, fileName), wbs, {
                 severityOverrides: planning.severityOverrides,
             });
+            // Capture EVERY severity — the ratchet reconciles warnings two-sided too
+            // (ADR-062 §3 / task 0582 R3); the old error-only filter is what let the
+            // 2289-warning backlog grow unobserved. Filtering happens at reconciliation,
+            // where severity is part of the acceptance contract.
             for (const finding of result.findings) {
-                if (finding.severity !== 'error') continue;
-                errors.push({ kind: 'task', id: wbs, code: finding.code, message: finding.message });
+                findings.push({
+                    kind: 'task',
+                    id: wbs,
+                    code: finding.code,
+                    severity: finding.severity,
+                    message: finding.message,
+                });
             }
         }
     }
@@ -161,13 +211,18 @@ async function structuralSweep(projectRoot: string): Promise<{
                 severityOverrides: planning.severityOverrides,
             });
             for (const finding of result.findings) {
-                if (finding.severity !== 'error') continue;
-                errors.push({ kind: 'feature', id, code: finding.code, message: finding.message });
+                findings.push({
+                    kind: 'feature',
+                    id,
+                    code: finding.code,
+                    severity: finding.severity,
+                    message: finding.message,
+                });
             }
         }
     }
 
-    return { errors, taskDirs, featuresDir };
+    return { findings, taskDirs, featuresDir };
 }
 
 /**
@@ -218,6 +273,7 @@ async function duplicateIds(cwd: string, taskDirs: string[], featuresDir: string
             kind,
             id,
             code: 'corpus.duplicate-id',
+            severity: 'error',
             message: `${files.length} files claim ${kind} ${id}: ${files.join(' | ')} — one shadows the other in every lookup; renumber the later one via \`spur ${kind} create\``,
         });
     }
@@ -476,6 +532,7 @@ export async function ungraduatedFog(
             kind: 'feature',
             id,
             code: 'corpus.ungraduated-fog',
+            severity: 'error',
             message:
                 `fog removed from \`### Not yet specified\` over ${spec} with no graduated ticket and no ` +
                 `recorded scope cut: ${removed.map((r) => `"${r}"`).join(', ')} — the work now exists nowhere. ` +
@@ -485,6 +542,68 @@ export async function ungraduatedFog(
     }
     report(`corpus-check: fog check evaluated ${spec} — ${maps} map(s) inspected.`);
     return errors;
+}
+
+/**
+ * Every observed finding (both severities) across tasks, features, duplicate
+ * ids, and the fog check — the exact observed set `runCorpusCheck` reconciles.
+ * Exported so baseline generation/reconciliation tooling (task 0582 R5) shares
+ * one code path with the gate instead of re-sweeping differently.
+ */
+export async function collectObservedFindings(projectRoot: string, since?: string): Promise<CorpusError[]> {
+    const sweep = await structuralSweep(projectRoot);
+    const fogErrors = await ungraduatedFog(projectRoot, { since, report: () => {} });
+    return [...sweep.findings, ...(await duplicateIds(projectRoot, sweep.taskDirs, sweep.featuresDir)), ...fogErrors];
+}
+
+/**
+ * The two-sided per-severity reconciliation — shared by the gate (`runCorpusCheck`)
+ * and by baseline generation/verification tooling (task 0582 R5), so a staged
+ * baseline is verified by the exact logic the gate will run against it.
+ *
+ * Severity is part of the acceptance contract: an observed finding is covered
+ * only by a baseline entry with the same key AND the same severity. A baselined
+ * warning does not cover the same key promoted to error (and vice versa) — that
+ * finding reads as new, and the entry reads as stale, forcing reconciliation
+ * exactly when a rule's severity changes (ADR-062, task 0583's promotion flow).
+ */
+export function reconcileBaseline(observed: CorpusError[], baseline: Baseline): CorpusCheckResult {
+    const accepted = new Map(baseline.entries.map((e) => [key(e), baselineSeverity(e)]));
+    const unexpected = observed.filter((e) => accepted.get(key(e)) !== e.severity);
+    const newErrors = unexpected.filter((e) => e.severity === 'error');
+    const newWarnings = unexpected.filter((e) => e.severity === 'warning');
+
+    const observedKeys = new Map(observed.map((o) => [key(o), o.severity as CorpusSeverity]));
+    const staleEntries = baseline.entries.filter((e) => {
+        // Compare against the normalized severity (legacy entries read as 'error');
+        // comparing the raw field would mark every pre-ADR-062 entry stale.
+        return observedKeys.get(key(e)) !== baselineSeverity(e);
+    });
+
+    const bySeverity = {
+        error: {
+            observed: observed.filter((o) => o.severity === 'error').length,
+            baselined: baseline.entries.filter((e) => baselineSeverity(e) === 'error').length,
+            newCount: newErrors.length,
+            staleCount: staleEntries.filter((e) => baselineSeverity(e) === 'error').length,
+        },
+        warning: {
+            observed: observed.filter((o) => o.severity === 'warning').length,
+            baselined: baseline.entries.filter((e) => baselineSeverity(e) === 'warning').length,
+            newCount: newWarnings.length,
+            staleCount: staleEntries.filter((e) => baselineSeverity(e) === 'warning').length,
+        },
+    };
+
+    return {
+        observed: observed.length,
+        baselined: baseline.entries.length,
+        newErrors,
+        newWarnings,
+        staleEntries,
+        bySeverity,
+        ok: unexpected.length === 0 && staleEntries.length === 0,
+    };
 }
 
 /** Sweep the corpus in-process and reconcile it against the two-sided baseline. */
@@ -498,33 +617,24 @@ export async function runCorpusCheck(cwd: string, since?: string): Promise<Corpu
     if (await Bun.file(baselineFile).exists()) {
         baseline = await Bun.file(baselineFile).json();
     }
-    const accepted = new Map(baseline.entries.map((e) => [key(e), e]));
 
-    const sweep = await structuralSweep(projectRoot);
-    const fogErrors = await ungraduatedFog(projectRoot, { since, report: () => {} });
-    const observed = [
-        ...sweep.errors,
-        ...(await duplicateIds(projectRoot, sweep.taskDirs, sweep.featuresDir)),
-        ...fogErrors,
-    ];
-    const observedKeys = new Set(observed.map(key));
+    const observed = await collectObservedFindings(projectRoot, since);
+    const result = reconcileBaseline(observed, baseline);
 
-    const unexpected = observed.filter((e) => !accepted.has(key(e)));
     // When the fog range was skipped (no divergence, shallow clone, etc.), baselined
     // corpus.ungraduated-fog entries were never evaluated — "not evaluated" is not "no
     // longer reproduces", so exclude them from the stale sweep to keep the gate green
-    // on main and CI without removing legitimate exemptions.
+    // on main and CI without removing legitimate exemptions. reconcileBaseline has no
+    // git context, so the fog-skip carve-out stays here at the gate boundary.
     const fogSkipped = await resolveFogRange(projectRoot, since);
-    const staleEntries = baseline.entries.filter((e) => {
-        if ('skip' in fogSkipped && e.code === 'corpus.ungraduated-fog') return false;
-        return !observedKeys.has(key(e));
-    });
+    if ('skip' in fogSkipped) {
+        const retained = result.staleEntries.filter((e) => e.code !== 'corpus.ungraduated-fog');
+        result.staleEntries.length = 0;
+        result.staleEntries.push(...retained);
+        result.bySeverity.error.staleCount = retained.filter((e) => baselineSeverity(e) === 'error').length;
+        result.bySeverity.warning.staleCount = retained.filter((e) => baselineSeverity(e) === 'warning').length;
+        result.ok = result.newErrors.length === 0 && result.newWarnings.length === 0 && retained.length === 0;
+    }
 
-    return {
-        observed: observed.length,
-        baselined: accepted.size,
-        newErrors: unexpected,
-        staleEntries,
-        ok: unexpected.length === 0 && staleEntries.length === 0,
-    };
+    return result;
 }

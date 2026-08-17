@@ -666,3 +666,80 @@ shape was frozen by a test inside the plugin, i.e. the plugin tested the CLI's d
 
 **Detail:** `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`, `AgentRoleConfigSchema`);
 `apps/cli/src/context.ts` (`resolveAgentRoles`); `04` `agent.roles`; task 0572.
+
+## ADR-062: Corpus Gates Verify Evidence Content, and Every Severity Is Ratcheted
+
+**Status:** Accepted · **Date:** 2026-08-17 · **Amends:** ADR-050 · **Feature:** F91
+
+**Decision.** Four changes to the task-corpus gates, landing in dependency order:
+
+1. **The corpus sweep covers every configured task folder**, not just the active one. The
+   backlog it exposes (404 errors across 180 `done` tasks in `docs/tasks{,2,3}`) is reconciled
+   into `config/corpus-baseline.json` in the same commit, per constitution T10.
+2. **The two-sided ratchet extends to warning severity.** A warning outside the baseline fails
+   the gate, and a baseline entry that no longer reproduces fails it too — the same
+   cannot-rot property errors already have (ADR-050) and tracked shims already have (ADR-058).
+3. **An evidence anchor must name its requirement's subject, not merely resolve.** Existence +
+   line bounds stop being sufficient. Ships as a warning; promotes to error once the
+   qualification migration (below) has landed.
+4. **Two notations replace one.** Evidence inside this repository is cited as a repo-relative
+   backtick `path:line` anchor; evidence outside it (external package sources, gitignored
+   `.spur/run/**` artifacts) is cited in a documented external form the checker recognizes as
+   external instead of scoring it a stale repo-root anchor. A `spur task migrate` rule
+   qualifies the 810 historical anchors whose basename resolves to exactly one repository path;
+   the 178 ambiguous ones are left to authors.
+
+**Also:** DD-09's subset rule applies only to tasks that graduate their feature's scenarios. A
+task whose acceptance criteria sit at a finer altitude than the feature's ship contract declares
+that altitude rather than being held to a rule it cannot satisfy.
+
+**Why.** The anchor gate's own source called content matching "an agent re-verify
+responsibility" — so the gate passed the dangerous case (an anchor drifted onto unrelated code,
+which reads as verified) and flagged only the harmless one (a path that fails to resolve). The
+2026-08-17 E5 re-audit found 18 such anchors across tasks 0553/0554/0555 while `spur task check`
+reported zero warnings on all three. That was survivable only because warnings had no ratchet
+and 84% of the corpus sat outside the error gate: 2,291 warnings and 404 ungated errors had
+accumulated against a 2-entry baseline. A gate nobody must reconcile is not a gate, and a
+citation form with no legal spelling for a third of its use cases guarantees the noise that
+hides the real findings.
+
+**Detail:** `packages/app/src/services/corpus-check.ts` (sweep scope, warning ratchet);
+`packages/app/src/services/task-check.ts` (`checkLineAnchors` subject matching, external form);
+`packages/domain/src/bdd/coverage.ts` (DD-09 altitude); `04 §7.1`; feature F91.
+
+## ADR-063: A New Top-Level Feature Node Requires Operator Consent
+
+**Status:** Accepted · **Date:** 2026-08-17 · **Complements:** ADR-051 · **Feature:** F91
+
+**Decision.** Feature IDs encode position (DD-14), so the single-letter root set is the project's
+coarsest and most durable map. Adding a letter to it is a structural claim about the shape of the
+product, not a filing convenience:
+
+1. **Nesting is the default.** New work is filed under the existing feature that already owns its
+   primary object — the module, surface, or contract the work changes. An agent must name that
+   owner, or state why no feature owns the object, before proposing a root node.
+2. **A new top-level node requires explicit operator consent**, requested with the candidate
+   parents that were considered and the reason each was rejected. This mirrors ADR-051's rule for
+   CLI nouns: the first layer is a small, stable vocabulary, and a new entry is justified only when
+   no existing entry can host the work.
+3. **The DD-14 nine-children cap is never a reason to add a root letter.** A full parent means
+   "nest one level deeper" or "you picked the wrong parent" — not "start a new tree". Reading the
+   cap as permission to go to the root inverts it: the cap exists to keep the tree legible, and
+   root sprawl is the exact illegibility it prevents.
+4. **Relocation is cheap; do not tolerate a bad placement.** `spur feature move <id> --parent <id>`
+   cascade-renames the node and its descendants and rewrites every task `feature_id` edge, with
+   `--dry-run` to preview. A misplaced feature is a two-command fix, so there is no cost argument
+   for leaving one where it landed.
+
+**Why.** On 2026-08-17 an agent created top-level feature `L` for corpus-gate-integrity work,
+reasoning that `F` (Planning) already held nine children and both semantically-adjacent parents
+(`F2` task-management CLI, `F6` corpus migration) were near-terminal. Every step of that was
+locally defensible and the conclusion was still wrong: `F9` — "make each task's Acceptance Criteria
+verifiable at the code level, and make the four-layer validation gate's severities tunable" —
+already owned `checkAcCoverage`, the stable finding codes, and the severity-override map, which are
+precisely the objects the new work changes. The feature was relocated to `F91`. The failure was not
+bad judgment about `F`; it was treating a root-node addition as a placement decision an agent makes
+alone, when it is the one placement decision that is effectively permanent.
+
+**Detail:** DD-14 ID rules and `spur feature move` in `04 §7.2`; ADR-051 noun discipline as the
+parallel rule for the CLI surface.

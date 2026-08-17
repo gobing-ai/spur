@@ -44,7 +44,13 @@ export type {
 } from './services/agent-service';
 export { _resetAgentServiceShimsForTest, AGENT_INLINE_HEADLESS_MESSAGE, AgentService } from './services/agent-service';
 export type { CorpusCheckResult } from './services/corpus-check';
-export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
+export {
+    baselineSeverity,
+    collectObservedFindings,
+    reconcileBaseline,
+    resolveFogRange,
+    runCorpusCheck,
+} from './services/corpus-check';
 export type {
     CorpusMigratorOptions,
     FileReport,

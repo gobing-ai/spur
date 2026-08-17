@@ -1004,14 +1004,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (json) {
                         context.output.write(toJson(result));
                     } else {
+                        const e = result.bySeverity.error;
+                        const w = result.bySeverity.warning;
                         context.output.write(
-                            `corpus-check: swept tasks + features — ${result.observed} error(s) observed, ` +
-                                `${result.baselined} baselined, ${result.newErrors.length} new, ` +
-                                `${result.staleEntries.length} stale.`,
+                            `corpus-check: swept tasks + features — errors ${e.observed} observed, ` +
+                                `${e.baselined} baselined, ${e.newCount} new, ${e.staleCount} stale; ` +
+                                `warnings ${w.observed} observed, ${w.baselined} baselined, ` +
+                                `${w.newCount} new, ${w.staleCount} stale.`,
                         );
                         for (const error of result.newErrors) {
                             context.output.error(
-                                `  NEW    ${error.kind} ${error.id}: ${error.code} — ${error.message}`,
+                                `  NEW    [error]   ${error.kind} ${error.id}: ${error.code} — ${error.message}`,
+                            );
+                        }
+                        for (const warning of result.newWarnings) {
+                            context.output.error(
+                                `  NEW    [warning] ${warning.kind} ${warning.id}: ${warning.code} — ${warning.message}`,
                             );
                         }
                         for (const entry of result.staleEntries) {
@@ -1021,7 +1029,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                         context.output.write(
                             result.ok
-                                ? 'corpus-check OK — no corpus errors outside the accepted baseline.'
+                                ? 'corpus-check OK — no corpus errors or warnings outside the accepted baseline.'
                                 : 'corpus-check FAILED — reconcile new and stale findings in config/corpus-baseline.json.',
                         );
                     }
