@@ -15,6 +15,7 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('workflows/planning-pipeline.yaml');
         expect(sources).toContain('workflows/idea-pipeline.yaml');
         expect(sources).toContain('workflows/wrapup-pipeline.yaml');
+        expect(sources).toContain('workflows/pr-review.yaml');
         // Section matrix
         expect(sources).toContain('tasks/section-matrix.yaml');
         // Task templates

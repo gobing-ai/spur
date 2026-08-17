@@ -181,3 +181,4 @@ docs/.ftree/
 .scratch/
 /.pi-subagents/
 /docs/session-forensics-report-generation.md
+!/plugins/sp/scripts/pr-reviewing.mjs

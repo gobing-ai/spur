@@ -36,14 +36,13 @@ that review effort happens on the PR, through Codex — not in the local session
 /sp:dev-pr-review (thin command)
       │  Skill(skill="sp:pr-reviewing", args=...)
       ▼
-sp:pr-reviewing (this skill — modes, triage, fix, rules)
+sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
       │  deterministic spine, state order + guards:
       ▼
-.spur/workflows/pr-review.yaml   ← workflow SSOT (seeded by spur init; project-tunable)
-      │  every state shells out to:
+.spur/workflows/pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
+      │  every state resolves with `superskill script path` and shells out to:
       ▼
-plugins/sp/scripts/pr-reviewing.ts  ← tested git/gh core (preflight, push, ensure-pr,
-                                        hygiene, request, wait, collect, status)
+staged pr-reviewing.mjs        ← portable entrypoint for the tested git/gh core
 ```
 
 - **State order and guards** are defined once, in the workflow YAML. Do not re-derive them in
@@ -52,6 +51,9 @@ plugins/sp/scripts/pr-reviewing.ts  ← tested git/gh core (preflight, push, ens
   hand-rolled `gh` invocations that drift from the tested core.
 - **Model-bearing work** (finding triage, `fix` edits, `rules` authoring) is this skill's job and
   never enters the workflow machine.
+- The workflow YAML exposes only its declared spine modes (`full`, `submit`, and `rerun`). The
+  direct-mode routes below own `collect`, `fix`, `status`, and `rules`; keep those modes outside
+  the workflow `mode` variable.
 
 ## Non-negotiable Codex routing
 
@@ -63,31 +65,36 @@ the setup/access problem; never silently fall back to a local review.
 Never claim a request consumed a specific billing/quota bucket unless the platform exposes that
 fact. The guarantee of this workflow is the route: GitHub Codex Code Review on the PR.
 
-## Modes
+## Modes and routing
 
 Parse the first positional argument as the mode; default `full`.
 
-| Mode | Behavior |
-| --- | --- |
-| `full` | Preflight → hygiene → precheck → push → ensure-pr → request (deduped) → wait → collect → report. No source edits. |
-| `submit` | Spine through `request` only; stop at pending (no wait). |
-| `collect` | No new request. Collect and report the latest Codex review for the current PR. |
-| `fix` | Collect → independently validate every finding → fix legitimate issues → verify → focused commit → push → re-request → collect. Authorizes relevant source/test edits and one focused fix commit — NOT force-push, history rewrite, merge, branch deletion, or discarding unrelated changes. |
-| `rerun` | Request a fresh review of the current pushed HEAD even if one exists (`--force`). No source edits. |
-| `status` | Read-only composite: repo, branch, HEAD, PR, base, local changes, CI, latest Codex state. |
-| `rules` | Create or improve the repo root `AGENTS.md` section `## Code Review Rules`. Never auto-committed. |
+| Mode | Route | Behavior |
+| --- | --- | --- |
+| `full` | Workflow YAML | Preflight → hygiene → precheck → push → ensure-pr → request (reviewed/in-flight HEAD dedupe) → wait → collect → report. No source edits. |
+| `submit` | Workflow YAML | Run the spine through `request`; return pending for a new request (`--no-wait` has the same effect). If the exact current HEAD was already reviewed, collect that result instead of requesting a duplicate. |
+| `rerun` | Workflow YAML | Run the spine and request a fresh review of the current pushed HEAD with `--force`. No source edits. |
+| `collect` | Direct script | Do not start the workflow or request a review. Collect the current PR's result and composite status; a missing current-HEAD result is **pending**, never clean. |
+| `fix` | Direct script + model work | Collect first, independently validate current-HEAD findings, fix legitimate issues, verify, make one focused commit, push, then force-request/review/collect the new HEAD. Do not pass `mode=fix` to the workflow. |
+| `status` | Direct script | Read-only composite: repository, branch, local HEAD, PR/base, local changes, CI, and Codex state for the current PR HEAD. Do not start the workflow. |
+| `rules` | Model work only | Create or improve the repo-root `AGENTS.md` section `## Code Review Rules`; do not invoke the workflow, request a review, commit, or push. |
 
 ## Arguments
 
 - `--base <branch>` — base for a newly created PR. Default: existing PR's base, else repo default.
 - `--no-wait` — after a successful request, return pending instead of polling.
-- `--agent <inline|auto|name>` — execution surface, per the
+- `--agent <inline|auto|name>` — names **who performs model-bearing work**, per the
   [inline-default execution-surface contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-  Omit/`inline`: the spine runs in this session by invoking the script subcommands in the workflow
-  YAML's state order. `auto`/name: dispatch the spine as a subprocess —
-  `spur workflow run .spur/workflows/pr-review.yaml --vars '{"mode":"...","baseBranch":"...","focus":"...","noWait":"..."}'`
-  (durable auditable run record, escalation trigger 3); `fix`-mode triage is dispatched to the
-  named executor via `spur agent run`.
+  Omit: the current agent is the default owner (eligible model stages may use one native subagent
+  under the shared contract). `inline` keeps all model work in the host session as the hard
+  zero-dispatch guarantee. `auto` resolves the command's declared role; a named executor pins that executor.
+  An alternate executor gets one `spur agent run --agent <value>` dispatch with the selector removed
+  from child args; that child owns model work. Current-agent selection stays inline.
+  Headless surfaces reject explicit `inline` with the shared stable error.
+- `--agent` describes the model owner only; it is independent of the deterministic git/GitHub spine
+  and the workflow/direct route. Run the selected route in that resolved skill context. A separate
+  workflow subprocess belongs to the caller's execution surface or an objective trigger (for example,
+  a required durable run record), not to `--agent auto` or a name by itself.
 - Remaining free text — extra review focus, appended to the Codex request without weakening
   repository-defined rules (e.g. `security and authorization boundaries`, `migration safety`).
 
@@ -103,56 +110,83 @@ before creating any commit outside `fix` mode. If safe separation is ambiguous, 
 In `fix` mode the user pre-authorized one focused fix commit for verified findings — still stop if
 unrelated uncommitted changes make safe editing or committing ambiguous.
 
+**Current-HEAD invariant.** Treat the PR's pushed `headRefOid` as the review identity. After every
+preflight, push, commit, and request, record the returned HEAD and require `wait`, `collect`, and
+the report to match that exact HEAD. A result for an older commit is stale; a result absent for the
+current HEAD is pending, not clean. Reject uncorrelated issue/conversation comments rather than
+using them to manufacture a current-HEAD result. In `fix` mode, discard the old result after the
+fix commit and judge only the forced re-review for the new pushed HEAD.
+
 **Reviewer authority.** Codex is an independent reviewer, not an authority. For every finding that
 may lead to a code change: inspect the referenced code, verify reachability and intended behavior,
 inspect callers/callees where needed, check existing tests, classify, reject false positives, fix
 root causes rather than wording, prefer the smallest coherent patch, avoid drive-by refactors.
 
-## Spine protocol (inline surface)
+## Workflow-backed spine (`full`, `submit`, `rerun`)
 
-Run the script subcommands in the workflow YAML's state order. Each supports `--json`; use it and
-parse the result. Stop at the first red gate and report its artifact.
+Run the workflow YAML's declared states in order. Every deterministic state invokes the portable
+staged entrypoint below, supports `--json`, and must be parsed. Stop at the first red gate and
+report its artifact. The canonical installed invocation is:
 
-1. **Preflight** — `bun plugins/sp/scripts/pr-reviewing.ts preflight --json`. Hard-fails on a
+```sh
+node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
+```
+
+Installed targets use the portable entrypoint; the repository-relative TypeScript source remains
+development-only.
+
+1. **Preflight** — `<script> preflight --json`. Hard-fails on a
    detached HEAD, missing `gh` auth, no GitHub remote, or a dirty tree. On a dirty tree, triage
    with the user (commit/stash/exclude) before continuing — the workflow refuses to guess.
-2. **Hygiene** — `... hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
+2. **Hygiene** — `<script> hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
    private keys) stops the run — never submit a tainted diff. `WARN` (debug residue) rides along
    into the report. This is a submission sanity check, not a second local review.
 3. **Precheck** — if the workflow YAML's `preReviewCmd` var is set, run it; a red check stops the
    run (do not spend a review request on code that fails its own gate). When unset, report that
    pre-review verification was not configured rather than inventing project commands.
-4. **Push** — `... push --json`. Normal push only; sets upstream when missing.
-5. **Ensure PR** — `... ensure-pr --base "$base" --json`. Reuses the branch's PR; creates with
+4. **Push** — `<script> push --json`. Normal push only; sets upstream when missing.
+5. **Ensure PR** — `<script> ensure-pr --base "$base" --json`. Reuses the branch's PR; creates with
    `gh pr create --fill` only when absent. Never a duplicate PR.
-6. **Request** — `... request --focus "<focus>" --json` (`--force` in `rerun` mode). Dedupes when
-   Codex already reviewed the exact pushed HEAD (`ALREADY_REVIEWED` → skip to collect). The request
-   body is concise when the repo has `## Code Review Rules`, else carries the default
+6. **Request** — `<script> request --focus "<focus>" --json` (`--force` in `rerun` mode). Dedupes when
+   Codex already reviewed the exact pushed HEAD (`ALREADY_REVIEWED` → skip to collect) or a marked
+   request by the current GitHub user is still in flight (`ALREADY_REQUESTED` → pending). The
+   request body is concise when the repo has `## Code Review Rules`, else carries the default
    actionable-issues focus. Records PR, URL, HEAD, and request time.
-7. **Wait** (full/fix/rerun unless `--no-wait`) — `... wait --json`. Polls every ~30s for up to
-   ~10 minutes across PR reviews, inline review comments, and conversation comments. Timeout is
-   **pending, not failed** — tell the user to run `/sp:dev-pr-review collect` later.
-8. **Collect** — `... collect --json`. Normalizes the latest Codex findings for the current HEAD.
+7. **Wait** (full/rerun unless `--no-wait`; submit stops before it) —
+   `<script> wait --since "$requestedAt" --head "$requestHead" --json`, using the request result so
+   a fast response is not missed, `rerun` cannot reuse the prior review, and a moved HEAD fails loud.
+   Polls every ~30s for up to
+   ~10 minutes across the current HEAD's PR review and inline comments. Uncorrelated conversation
+   comments are ignored. A current-HEAD clean review is a completed `CLEAN` outcome; findings are
+   `FOUND`; timeout or no current-HEAD result is **pending, not failed** — collect later.
+8. **Collect** — `<script> collect --since "$requestedAt" --head "$requestHead" --json`. Normalize
+   only the requested HEAD and request window; then invoke `status` with the same bounds for
+   PR/base/CI/local state. Never turn an absent, stale, or moved-HEAD result into `clean`.
 
 ## Fix mode
 
 Only in `fix` mode:
 
-1. **Validate each finding.** Open the referenced code; trace callers/callees; verify the problem
+1. **Collect before editing.** Invoke direct `collect --json` plus `status --json` and require a
+   completed result for the current pushed HEAD. If the result is pending, stale, or unavailable,
+   report it and stop without source edits. If it is explicitly clean, report no fixes and stop.
+2. **Validate each finding.** Open the referenced code; trace callers/callees; verify the problem
    is reachable; check intended behavior and existing tests. Classify: `Confirmed`,
    `Likely valid`, `Needs investigation`, `Likely false positive`. Never edit for a likely false
    positive; investigate further before editing a `Needs investigation`.
-2. **Fix legitimate issues** with the smallest coherent change. Preserve existing interfaces
+3. **Fix legitimate issues** with the smallest coherent change. Preserve existing interfaces
    unless the defect requires otherwise; no unrelated refactoring; add or update tests when they
    materially demonstrate the fix; follow repository conventions. Inspect `git diff` — the patch
    must contain only intended review fixes.
-3. **Verify** with repository-defined targeted tests/type checks/linters. Never claim a check
+4. **Verify** with repository-defined targeted tests/type checks/linters. Never claim a check
    passed unless it actually ran successfully.
-4. **Commit** one focused review-fix commit. The message describes the actual defect
+5. **Commit** one focused review-fix commit. The message describes the actual defect
    (`fix: prevent duplicate transaction retry`), never `fix codex comments`. No unrelated files.
-5. **Push** normally to the existing PR branch (never force), record the new HEAD.
-6. **Re-review:** `request --force`, then wait/collect as usual. The new review must correspond to
-   the new pushed HEAD — never present stale findings from the previous HEAD as the new result.
+6. **Push** normally to the existing PR branch (never force), record the new HEAD, and discard the
+   previous review identity.
+7. **Re-review:** invoke the staged `request --force`, then wait/collect as usual. The new review
+   must correspond to the new pushed HEAD — never present stale findings from the previous HEAD as
+   the new result. Include composite CI/status fields in the final report.
 
 ## Rules mode
 
@@ -198,6 +232,10 @@ CI
 Preserve filenames, line references, severity, and the important technical reasoning. Do not
 inflate suggestions into confirmed bugs. If the review completed without actionable findings, say
 so clearly.
+
+`wait` and `collect` must distinguish an explicit current-HEAD clean result from pending, stale, or
+unavailable data. `collect` and `fix` reports also include the composite PR/base/branch/HEAD/local/CI
+status; an unavailable CI signal remains `unavailable`, never an inferred pass.
 
 Always end with the compact summary:
 

@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +17,9 @@ import {
     buildRequestBody,
     extractSeverity,
     hasCodeReviewRules,
+    hasCurrentCleanReview,
     isCodexAuthor,
+    isExplicitCleanReview,
     isHeadReviewed,
     main,
     normalizeFindings,
@@ -40,6 +43,26 @@ describe('parseArgs', () => {
         expect(() => parseArgs(['wait', '--bogus'])).toThrow('unknown argument');
         expect(() => parseArgs(['wait', '--timeout'])).toThrow('requires a value');
     });
+
+    test('portable generated entrypoint runs under Node', () => {
+        const result = spawnSync('node', [join(import.meta.dir, '..', 'scripts', 'pr-reviewing.mjs'), '--help'], {
+            encoding: 'utf8',
+        });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('Installed usage: node');
+    });
+
+    test('workflow carries request freshness through wait/collect and records composite status', () => {
+        const workflow = readFileSync(
+            join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
+            'utf8',
+        );
+        expect(workflow.match(/--since "\$SINCE"/g)?.length).toBe(3);
+        expect(workflow.match(/--head "\$REQUEST_HEAD"/g)?.length).toBe(3);
+        expect(workflow).toContain('pr-reviewing.mjs)" status --since "$SINCE" --head "$REQUEST_HEAD" --json');
+        expect(workflow).toContain('-pr-status.json');
+        expect(workflow).toContain('sh -c "$preReviewCmd"');
+    });
 });
 
 // ─── Pure: Codex identity + dedupe ──────────────────────────────────────────
@@ -48,19 +71,46 @@ describe('Codex identity and per-HEAD dedupe', () => {
     test('matches any codex-containing bot login, not one hard-coded name', () => {
         expect(isCodexAuthor('chatgpt-codex-connector[bot]')).toBe(true);
         expect(isCodexAuthor('codex-review[bot]')).toBe(true);
+        expect(isCodexAuthor('codex-reviewer', 'Bot')).toBe(true);
+        expect(isCodexAuthor('codex-reviewer', 'User')).toBe(false);
+        expect(isCodexAuthor('codex-user')).toBe(false);
         expect(isCodexAuthor('Copilot')).toBe(false);
         expect(isCodexAuthor(undefined)).toBe(false);
     });
 
     test('isHeadReviewed requires a Codex review on the exact pushed HEAD', () => {
         const reviews = [
-            { user: { login: 'chatgpt-codex-connector[bot]' }, commit_id: 'aaa' },
+            {
+                user: { login: 'chatgpt-codex-connector[bot]' },
+                commit_id: 'aaa',
+                submitted_at: '2026-08-01T00:00:00Z',
+            },
             { user: { login: 'human-reviewer' }, commit_id: 'bbb' },
+            { user: { login: 'codex[bot]' }, commit_id: 'pending', state: 'PENDING' },
         ];
         expect(isHeadReviewed(reviews, 'aaa')).toBe(true);
         // A human review of the same commit does not count as a Codex review.
         expect(isHeadReviewed(reviews, 'bbb')).toBe(false);
         expect(isHeadReviewed(reviews, 'ccc')).toBe(false);
+        expect(isHeadReviewed(reviews, 'pending')).toBe(false);
+    });
+
+    test('recognizes only an explicit clean review for the current HEAD', () => {
+        const clean = {
+            user: { login: 'codex[bot]' },
+            commit_id: 'head',
+            submitted_at: '2026-08-02T00:00:00Z',
+            state: 'COMMENTED',
+            body: 'No actionable findings.',
+        };
+        expect(isExplicitCleanReview(clean, 'head')).toBe(true);
+        expect(hasCurrentCleanReview([clean], '2026-08-01T00:00:00Z', 'head')).toBe(true);
+        expect(hasCurrentCleanReview([clean], '2026-08-03T00:00:00Z', 'head')).toBe(false);
+        expect(isExplicitCleanReview({ ...clean, commit_id: 'old' }, 'head')).toBe(false);
+        expect(isExplicitCleanReview({ ...clean, body: '**P1** bug' }, 'head')).toBe(false);
+        expect(isExplicitCleanReview({ ...clean, state: 'COMMENTED', body: '' }, 'head')).toBe(false);
+        expect(isExplicitCleanReview({ ...clean, state: 'DISMISSED' }, 'head')).toBe(false);
+        expect(isExplicitCleanReview({ ...clean, submitted_at: undefined }, 'head')).toBe(false);
     });
 });
 
@@ -125,6 +175,14 @@ describe('scanHygiene', () => {
         expect(scanHygiene(added(['']), ['config/.env.example']).verdict).toBe('PASS');
     });
 
+    test('redacts matched secret material from the result', () => {
+        const secret = 'ghp_abcdefghij1234567890abcd';
+        const result = scanHygiene(added([`console.log("${secret}");`]), []);
+        expect(result.verdict).toBe('BLOCK');
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(JSON.stringify(result)).toContain('redacted');
+    });
+
     test('warns on debug residue without blocking', () => {
         const result = scanHygiene(added(['console.log("dbg");', 'debugger;']), []);
         expect(result.verdict).toBe('WARN');
@@ -176,7 +234,7 @@ describe('normalizeFindings + renderFindings', () => {
                     html_url: 'u1',
                 },
             ],
-            [{ user: { login: 'codex[bot]' }, created_at: '2026-08-04T00:00:00Z', body: 'overall' }],
+            [{ user: { login: 'codex[bot]' }, commit_id: head, created_at: '2026-08-04T00:00:00Z', body: 'overall' }],
             since,
             head,
         );
@@ -191,6 +249,24 @@ describe('normalizeFindings + renderFindings', () => {
     test('empty findings render as a clean review, never as a failure', () => {
         expect(normalizeFindings([], [], [], since, head)).toEqual([]);
         expect(renderFindings([])).toContain('without actionable findings');
+    });
+
+    test('treats GitHub second-precision timestamps as fresh within the request second', () => {
+        const findings = normalizeFindings(
+            [],
+            [
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: head,
+                    created_at: '2026-08-02T00:00:00Z',
+                    body: '**P1** fast response',
+                },
+            ],
+            [],
+            '2026-08-02T00:00:00.900Z',
+            head,
+        );
+        expect(findings).toHaveLength(1);
     });
 });
 
@@ -212,19 +288,28 @@ function writeStubBins(dir: string): void {
     const git = `#!/bin/sh
 FIX="${dir}"
 printf 'git %s\\n' "$*" >> "$FIX/calls.txt"
+[ -f "$FIX/git_fail" ] && { printf '%s\\n' 'git fixture failure' >&2; exit 1; }
 case "$*" in
   "rev-parse --show-toplevel") printf '%s\\n' "$FIX/repo" ;;
   "branch --show-current") cat "$FIX/branch" 2>/dev/null || true ;;
   "rev-parse HEAD") cat "$FIX/head" ;;
-  "status --porcelain") cat "$FIX/dirty" 2>/dev/null || true ;;
+  "status --porcelain")
+    if [ -f "$FIX/git_status_fail" ]; then printf '%s\\n' 'status failure' >&2; exit 1; fi
+    cat "$FIX/dirty" 2>/dev/null || true ;;
   "rev-parse --abbrev-ref --symbolic-full-name @{u}")
     if [ -f "$FIX/upstream" ]; then cat "$FIX/upstream"; else exit 1; fi ;;
   "rev-parse @{u}") cat "$FIX/remotehead" ;;
   "push -u origin HEAD") printf '%s\\n' HEAD > "$FIX/remotehead"; printf '%s\\n' 'origin/main' > "$FIX/upstream" ;;
   "push") cat "$FIX/head" > "$FIX/remotehead" ;;
-  "log --oneline "*) cat "$FIX/commits" 2>/dev/null || true ;;
-  "diff --name-only --diff-filter=A "*) cat "$FIX/diff_files" 2>/dev/null || true ;;
-  "diff "*) cat "$FIX/diff_text" 2>/dev/null || true ;;
+  "log --oneline "*)
+    if [ -f "$FIX/git_log_fail" ]; then printf '%s\\n' 'log failure' >&2; exit 1; fi
+    cat "$FIX/commits" 2>/dev/null || true ;;
+  "diff --name-only --diff-filter=AMCR "*)
+    if [ -f "$FIX/diff_files_fail" ]; then printf '%s\\n' 'diff files failure' >&2; exit 1; fi
+    cat "$FIX/diff_files" 2>/dev/null || true ;;
+  "diff "*)
+    if [ -f "$FIX/diff_text_fail" ]; then printf '%s\\n' 'diff text failure' >&2; exit 1; fi
+    cat "$FIX/diff_text" 2>/dev/null || true ;;
   *) exit 1 ;;
 esac
 `;
@@ -238,16 +323,22 @@ case "$*" in
   "repo view --json nameWithOwner,defaultBranchRef")
     printf '%s\\n' '{"nameWithOwner":"octo/repo","defaultBranchRef":{"name":"main"}}' ;;
   "pr view --json number,url,state,isDraft,headRefName,baseRefName,title,headRefOid")
-    if [ -f "$FIX/pr.json" ]; then cat "$FIX/pr.json"; else exit 1; fi ;;
+    if [ -f "$FIX/pr.json" ]; then cat "$FIX/pr.json"; else printf '%s\\n' 'no pull requests found for branch' >&2; exit 1; fi ;;
   "pr create --fill --base "*)
     cp "$FIX/pr_created.json" "$FIX/pr.json"
     printf '%s\\n' 'https://github.com/octo/repo/pull/7' ;;
   "pr comment "*)
     printf '%s\\n' "$*" >> "$FIX/comments_posted.txt" ;;
-  "pr checks "*) cat "$FIX/checks" 2>/dev/null || exit 1 ;;
-  "api --method GET repos/octo/repo/pulls/"*"/reviews") cat "$FIX/reviews.json" 2>/dev/null || printf '[]\\n' ;;
-  "api --method GET repos/octo/repo/pulls/"*"/comments") cat "$FIX/inline.json" 2>/dev/null || printf '[]\\n' ;;
-  "api --method GET repos/octo/repo/issues/"*"/comments") cat "$FIX/issue_comments.json" 2>/dev/null || printf '[]\\n' ;;
+  "pr checks "*)
+    cat "$FIX/checks" 2>/dev/null || exit 1
+    if [ -f "$FIX/checks_exit" ]; then exit "$(cat "$FIX/checks_exit")"; fi ;;
+  "api user --jq .login") printf '%s\n' 'robin' ;;
+  "api --method GET repos/octo/repo/pulls/"*"/reviews --paginate --slurp")
+    printf '['; cat "$FIX/reviews.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
+  "api --method GET repos/octo/repo/pulls/"*"/comments --paginate --slurp")
+    printf '['; cat "$FIX/inline.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
+  "api --method GET repos/octo/repo/issues/"*"/comments --paginate --slurp")
+    printf '['; cat "$FIX/issue_comments.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
   *) exit 1 ;;
 esac
 `;
@@ -342,6 +433,13 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(res.stderr).toContain('gh auth login');
     });
 
+    test('preflight fails closed when git status cannot be read', () => {
+        writeFileSync(join(fix, 'git_status_fail'), '');
+        const res = runScript(['preflight', '--json']);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout).error).toContain('git status failed');
+    });
+
     test('push is a no-op when the remote already carries HEAD', () => {
         const res = runScript(['push', '--json', '--status-file', join(fix, 'push.status')]);
         expect(res.code).toBe(0);
@@ -395,6 +493,14 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(res.stderr).toContain('nothing to review');
     });
 
+    test('ensure-pr reports a failed commit probe instead of treating it as no commits', () => {
+        rmSync(join(fix, 'pr.json'));
+        writeFileSync(join(fix, 'git_log_fail'), '');
+        const res = runScript(['ensure-pr', '--json']);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout).error).toContain('git log failed');
+    });
+
     test('hygiene exits 2 on blockers and writes the BLOCK verdict', () => {
         writeFileSync(join(fix, 'diff_text'), '+++ b/src/a.ts\n+<<<<<<< HEAD\n');
         const statusFile = join(fix, 'hygiene.status');
@@ -409,6 +515,41 @@ describe('CLI subcommands over stubbed git/gh', () => {
         const res = runScript(['hygiene', '--json']);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).verdict).toBe('PASS');
+    });
+
+    test('hygiene fails closed when either git diff probe fails', () => {
+        const filesStatus = join(fix, 'diff-files.status');
+        writeFileSync(join(fix, 'diff_files_fail'), '');
+        let res = runScript(['hygiene', '--json', '--status-file', filesStatus]);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout)).toMatchObject({ ok: false });
+        expect(readFileSync(filesStatus, 'utf8').trim()).toBe('FAIL');
+
+        rmSync(join(fix, 'diff_files_fail'));
+        const textStatus = join(fix, 'diff-text.status');
+        writeFileSync(join(fix, 'diff_text_fail'), '');
+        res = runScript(['hygiene', '--json', '--status-file', textStatus]);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout)).toMatchObject({ ok: false });
+        expect(readFileSync(textStatus, 'utf8').trim()).toBe('FAIL');
+    });
+
+    test('hygiene never echoes a matched secret in JSON output', () => {
+        const secret = 'ghp_abcdefghij1234567890abcd';
+        writeFileSync(join(fix, 'diff_text'), `+++ b/src/a.ts\n+token = "${secret}"\n`);
+        const res = runScript(['hygiene', '--json']);
+        expect(res.code).toBe(2);
+        expect(res.stdout).not.toContain(secret);
+        expect(res.stderr).not.toContain(secret);
+    });
+
+    test('external command failures under JSON emit an error and write FAIL', () => {
+        writeFileSync(join(fix, 'git_fail'), '');
+        const statusFile = join(fix, 'preflight.status');
+        const res = runScript(['preflight', '--json', '--status-file', statusFile]);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout)).toMatchObject({ ok: false });
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('FAIL');
     });
 
     test('request posts @codex review and records the request', () => {
@@ -443,6 +584,24 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(existsSync(join(fix, 'comments_posted.txt'))).toBe(true);
     });
 
+    test('request dedupes an in-flight request for the pushed HEAD', () => {
+        writeFileSync(
+            join(fix, 'issue_comments.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'robin' },
+                    body: '<!-- spur-pr-review head:aaaa1111bbbb2222cccc3333dddd4444eeee5555 -->',
+                },
+            ])}\n`,
+        );
+        const statusFile = join(fix, 'request.status');
+        const res = runScript(['request', '--json', '--status-file', statusFile]);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout)).toMatchObject({ requested: false, pending: true });
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('ALREADY_REQUESTED');
+        expect(existsSync(join(fix, 'comments_posted.txt'))).toBe(false);
+    });
+
     test('wait finds fresh Codex output and exits 0', () => {
         writeFileSync(
             join(fix, 'inline.json'),
@@ -474,10 +633,47 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(payload.findings[0].path).toBe('src/a.ts');
     });
 
+    test('wait completes on an explicit clean review for the current HEAD', () => {
+        writeFileSync(
+            join(fix, 'reviews.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'chatgpt-codex-connector[bot]' },
+                    commit_id: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+                    submitted_at: '2026-08-12T00:00:00Z',
+                    state: 'COMMENTED',
+                    body: 'No actionable findings.',
+                },
+            ])}\n`,
+        );
+        const statusFile = join(fix, 'wait.status');
+        const res = runScript([
+            'wait',
+            '--since',
+            '2026-08-01T00:00:00Z',
+            '--timeout',
+            '1',
+            '--interval',
+            '1',
+            '--json',
+            '--status-file',
+            statusFile,
+        ]);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout)).toMatchObject({ verdict: 'CLEAN', findings: [] });
+        expect(readFileSync(statusFile, 'utf8').trim()).toBe('CLEAN');
+    });
+
     test('wait timeout is pending (exit 3), never a failure', () => {
         const res = runScript(['wait', '--since', '2026-08-01T00:00:00Z', '--timeout', '1', '--interval', '1']);
         expect(res.code).toBe(3);
         expect(res.stdout).toContain('pending');
+    });
+
+    test('wait rejects invalid polling budgets instead of spinning', () => {
+        const res = runScript(['wait', '--timeout', 'not-a-number', '--json']);
+        expect(res.code).toBe(1);
+        expect(JSON.parse(res.stdout).error).toContain('--timeout');
     });
 
     test('collect normalizes the latest Codex findings for the current HEAD', () => {
@@ -501,14 +697,61 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(readFileSync(join(fix, 'collect.status'), 'utf8').trim()).toBe('FINDINGS');
     });
 
-    test('collect with no Codex output reports a clean/none verdict', () => {
+    test('collect with no current-HEAD Codex output reports pending', () => {
         const res = runScript(['collect', '--json']);
         expect(res.code).toBe(0);
-        expect(JSON.parse(res.stdout).verdict).toBe('NONE');
+        expect(JSON.parse(res.stdout).verdict).toBe('PENDING');
+    });
+
+    test('collect fails when the PR HEAD moved after the request', () => {
+        const res = runScript(['collect', '--head', 'old-head', '--json']);
+        expect(res.code).toBe(2);
+        expect(JSON.parse(res.stdout).error).toContain('PR HEAD moved');
+    });
+
+    test('collect reports clean only for an explicit current-HEAD review', () => {
+        writeFileSync(
+            join(fix, 'reviews.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+                    submitted_at: '2026-08-12T00:00:00Z',
+                    state: 'APPROVED',
+                    body: '',
+                },
+            ])}\n`,
+        );
+        const res = runScript(['collect', '--json', '--status-file', join(fix, 'collect.status')]);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout).verdict).toBe('CLEAN');
+        expect(readFileSync(join(fix, 'collect.status'), 'utf8').trim()).toBe('CLEAN');
+    });
+
+    test('collect excludes stale and uncorrelated conversation comments', () => {
+        writeFileSync(
+            join(fix, 'issue_comments.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'codex[bot]' },
+                    created_at: '2026-08-12T00:00:00Z',
+                    body: '**P1** stale conversation finding',
+                },
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: 'old',
+                    created_at: '2026-08-13T00:00:00Z',
+                    body: '**P1** wrong-head conversation finding',
+                },
+            ])}\n`,
+        );
+        const res = runScript(['collect', '--json']);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout)).toMatchObject({ verdict: 'PENDING', findings: [] });
     });
 
     test('status composes repo, PR, CI, and Codex state read-only', () => {
-        writeFileSync(join(fix, 'checks'), 'ci/build\tpass\n');
+        writeFileSync(join(fix, 'checks'), '[{"bucket":"pass"}]\n');
         writeFileSync(
             join(fix, 'reviews.json'),
             `${JSON.stringify([
@@ -516,6 +759,8 @@ describe('CLI subcommands over stubbed git/gh', () => {
                     user: { login: 'chatgpt-codex-connector[bot]' },
                     commit_id: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
                     submitted_at: '2026-08-12T00:00:00Z',
+                    state: 'COMMENTED',
+                    body: 'No actionable findings.',
                 },
             ])}\n`,
         );
@@ -532,6 +777,71 @@ describe('CLI subcommands over stubbed git/gh', () => {
         expect(payload.pr.number).toBe(7);
         // Read-only: no comments posted, no pushes.
         expect(existsSync(join(fix, 'comments_posted.txt'))).toBe(false);
+    });
+
+    test('status reports a current-HEAD review body as findings', () => {
+        writeFileSync(
+            join(fix, 'reviews.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+                    submitted_at: '2026-08-12T00:00:00Z',
+                    state: 'COMMENTED',
+                    body: '**P1** data loss',
+                },
+            ])}\n`,
+        );
+        const res = runScript(['status', '--json']);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout).codex).toBe('findings');
+    });
+
+    test('status applies the request window to same-HEAD Codex reviews', () => {
+        writeFileSync(
+            join(fix, 'reviews.json'),
+            `${JSON.stringify([
+                {
+                    user: { login: 'codex[bot]' },
+                    commit_id: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+                    submitted_at: '2026-08-12T00:00:00Z',
+                    state: 'COMMENTED',
+                    body: '**P1** old finding',
+                },
+            ])}\n`,
+        );
+        const res = runScript(['status', '--since', '2026-08-13T00:00:00Z', '--json']);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout).codex).toBe('pending');
+    });
+
+    test('status leaves CI unavailable when GitHub reports no checks', () => {
+        writeFileSync(join(fix, 'checks'), '[]\n');
+        const res = runScript(['status', '--json']);
+        expect(res.code).toBe(0);
+        expect(JSON.parse(res.stdout).ci).toBe('unavailable');
+    });
+
+    test('status parses failing and pending CI JSON even when gh uses nonzero semantic exits', () => {
+        for (const [bucket, exitCode, expected] of [
+            ['fail', '1', 'failing'],
+            ['pending', '8', 'pending'],
+        ] as const) {
+            writeFileSync(join(fix, 'checks'), `${JSON.stringify([{ bucket }])}\n`);
+            writeFileSync(join(fix, 'checks_exit'), exitCode);
+            const res = runScript(['status', '--json']);
+            expect(res.code).toBe(0);
+            expect(JSON.parse(res.stdout).ci).toBe(expected);
+        }
+    });
+
+    test('status never treats skipped or unknown CI buckets as passing', () => {
+        for (const bucket of ['skipping', 'mystery']) {
+            writeFileSync(join(fix, 'checks'), `${JSON.stringify([{ bucket }])}\n`);
+            const res = runScript(['status', '--json']);
+            expect(res.code).toBe(0);
+            expect(JSON.parse(res.stdout).ci).toBe('unavailable');
+        }
     });
 
     test('usage errors exit 1 and unknown subcommands are rejected', () => {
