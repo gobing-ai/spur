@@ -62,3 +62,7 @@ Captured to `.spur/run/wrapup-metrics.jsonl` — jq-validated, 2 rows:
 
 0575: `feature_id` null (none assigned — noted in task file as deferred), status `done`, verdict `PASS` from the pipeline verdict artifact. Rebuilt the file strictly after finding leaked transcript prose from an earlier run merged into the previous row's line, which broke JSONL parsing.{"wbs":"0576","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T19:40:00Z"}
 {"wbs":"0577","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T19:40:00Z"}
+{"wbs":"0578","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
+{"wbs":"0580","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
+{"wbs":"0579","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
+{"wbs":"0581","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}

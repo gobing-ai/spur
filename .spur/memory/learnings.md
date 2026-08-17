@@ -758,3 +758,13 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after the 0569 entry, same
 - **0577**: spur-new deps: root `package.json` `workspaces.catalog` is the SSOT for `catalog:` refs; a `bun update <pkg>` alone re-resolves to the stale catalog pin (installed 0.4.33 while 0.4.36 was on npm). Bump the catalog entry + exact root pin, then `bun install`.
 - **0577**: `task update <wbs> done` provenance gate needs a `task_run_links` row — `spur task run-link <wbs> --run-id <batch-run> --source dev-runall` records it without SPUR_PROVENANCE_OVERRIDE.
 - **0577**: epoch-ms timestamps: verify expected ISO strings by computation, not intuition (test expected wrong date; mapper was right).
+## 2026-08-17 — E5 batch (0578, 0580, 0579, 0581)
+
+- **0578**: importer release is a two-surface atomic: bump catalog pins (`workspaces.catalog`) AND the ts-libs dep versions in the same commit, then `bun install` — a catalog-only bump leaves `bun update` resolving stale.
+- **0578**: `history import` provenance header (`binary:` + resolved importer version) is the ground truth for which code ran — record it in the transcript before dry-run/write validation; a rebuilt CLI silently loses to a stale global `spur` on PATH.
+- **0580**: role mapper classification is per-source: codex lifecycle records → `meta`, `developer` → `user`; verify per-source `distinct role` counts after a mapper change, not just totals.
+- **0579**: a guard/metric change that touches an interface shape must update test fixtures in the SAME commit — 0579 added `spanExcludedSessions` to `TimeDecomposition` and left `derived.test.ts`/`render-forensics.test.ts`/`report-modes.test.ts` typecheck-broken on HEAD until 0581's gate run caught it. Pre-existing `noUncheckedIndexedAccess` failures (`spans[0]`) need the tuple-cast destructure (`as [SessionSpanRow]`), since Biome bans `!`.
+- **0581**: additive artifact fields are the right extension vector — no schemaVersion bump for `topStepsByTokens`/`cacheWaste`/`stepSupport`; consumers treat absence as unknown, never fabricate.
+- **0581**: the R2 structural scanner matches SQL by backtick-span, so a shared `STEP_SELECT` const (single-quoted!) still trips it when its `FROM history_message` text lands inside a span — inline projections per query, matching file convention.
+- **0581**: raw (non-watermarked) sqlite reproduces the AC4 baseline exactly (2,478 / 354,130,045); the analyze path applies watermark exclusion (task 0550) so rendered numbers drift — record which plane a baseline was measured on.
+- **0581**: edit-tool hazard repeated: `PUT N.=N` replaces, not inserts; and a replaced block leaves stale shifted lines below that must be CUT. Re-read the region after every batch edit.
