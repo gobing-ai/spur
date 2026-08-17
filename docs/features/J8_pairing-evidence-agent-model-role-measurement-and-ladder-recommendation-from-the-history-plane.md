@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-16T18:46:30.987Z"
-updated_at: "2026-08-17T06:03:38.071Z"
+updated_at: "2026-08-17T08:12:43.340Z"
 ---
 
 # J8: Pairing evidence: agent×model×role measurement and ladder recommendation from the history plane
@@ -77,7 +77,9 @@ Feature: Pairing evidence — measure agent×model×role and recommend ladder or
   Scenario: R5 — Real-data dogfood on this monorepo
     Given the real history DB (post-0567 import surface)
     When analyze and the pairings report run end to end
-    Then the report reflects the known ground truth (e.g. codex-sol's 2026-08 resource-exhaustion events visible in its escalation rate)
+    Then the report's dispatch counts match the raw system_events ground truth (codex-sol=2, grok=5, minimax=4, omp=3, omp-deepseek=3)
+  And below-floor rungs are marked insufficient-evidence on real data (codex-sol N=2<5)
+  And escalation counts reflect the event plane truthfully — zero when no agent.invoke.escalated rows exist, never fabricated (amended 2026-08-17: codex-sol's 2026-08 quota failures were role-routed with no fallback escalation taken, so no such rows were ever emitted and none can exist)
 ```
 ## Tasks
 

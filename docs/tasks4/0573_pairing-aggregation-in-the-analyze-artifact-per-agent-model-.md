@@ -13,7 +13,7 @@ tags: ["history", "analytics", "pairings"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T18:47:41.892Z"
-updated_at: "2026-08-17T03:49:37.388Z"
+updated_at: "2026-08-17T07:41:50.443Z"
 ---
 
 ## 0573. Pairing aggregation in the analyze artifact: per-(agent,model,role) stats
@@ -27,9 +27,9 @@ Feature J8 Layer 1. The history plane already persists everything needed — pre
 
 Two corrections from premise verification (supersede the batch-create background): (1) the artifact contract is ADDITIVE-ONLY — `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1, bumps reserved for removed/retyped fields (`packages/domain/src/analytics/artifact.ts:66`), so this task adds optional fields and bumps nothing; the graceful-degradation scenario moved to feature R6 (R4 deprecated). (2) The report-mode registry is pure `HistoryArtifact → string` renderers with no I/O (`packages/domain/src/analytics/report-modes.ts`), so the ladder cannot be read at render time — this task embeds a `ladderSnapshot` into the artifact at analyze time; 0574 renders the diff from that snapshot. Also dropped from scope: verdict pass rate — verdicts are not in the analytics plane (zero verdict references under `packages/domain/src/analytics/`).
 ### Requirements
-- [ ] R1. Add `pairingSummary` to `packages/domain/src/analytics/pairings.ts` (new file, mirroring `role-tokens.ts`): per pairing key (executor, role) — denormalized `agent` + nullable `model` — compute dispatch count, success rate (final-dispatch `outcome='done'` / dispatches), escalation counts split by `trigger`, total/mean duration, and cost/tokens folded through the same run→session mapping `roleTokenSummary` uses. Pairings with zero attributed dispatches are absent, never zero-valued. (feature J8 R1)
-- [ ] R2. Extend the analyze artifact (`packages/domain/src/analytics/artifact.ts`) with optional additive fields `pairings?: PairingStat[]` and `ladderSnapshot?: LadderEntry[]` — `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 (artifact.ts:66 contract). `ladderSnapshot` is the executor ladder (name/tier/array-order) read from project config by the app layer at analyze time and embedded; the domain layer stays config-free. (feature J8 R6)
-- [ ] R3. Wire both fields into the analyze path (`packages/app/src/services/history-service.ts` or its analyze delegate) so `spur history analyze` always writes them; unit coverage in `packages/domain/tests/analytics/pairings.test.ts` with in-memory SQLite fixtures: a two-role fixture with known outcomes proves rates/counts; an unattributed-runs fixture proves absence-not-zero; a fixture with `agent.invoke.escalated` rows proves per-trigger counts. (feature J8 R1)
+- [x] R1. Add `pairingSummary` to `packages/domain/src/analytics/pairings.ts` (new file, mirroring `role-tokens.ts`): per pairing key (executor, role) — denormalized `agent` + nullable `model` — compute dispatch count, success rate (final-dispatch `outcome='done'` / dispatches), escalation counts split by `trigger`, total/mean duration, and cost/tokens folded through the same run→session mapping `roleTokenSummary` uses. Pairings with zero attributed dispatches are absent, never zero-valued. (feature J8 R1)
+- [x] R2. Extend the analyze artifact (`packages/domain/src/analytics/artifact.ts`) with optional additive fields `pairings?: PairingStat[]` and `ladderSnapshot?: LadderEntry[]` — `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1 (artifact.ts:66 contract). `ladderSnapshot` is the executor ladder (name/tier/array-order) read from project config by the app layer at analyze time and embedded; the domain layer stays config-free. (feature J8 R6)
+- [x] R3. Wire both fields into the analyze path (`packages/app/src/services/history-service.ts` or its analyze delegate) so `spur history analyze` always writes them; unit coverage in `packages/domain/tests/analytics/pairings.test.ts` with in-memory SQLite fixtures: a two-role fixture with known outcomes proves rates/counts; an unattributed-runs fixture proves absence-not-zero; a fixture with `agent.invoke.escalated` rows proves per-trigger counts. (feature J8 R1)
 ### Acceptance Criteria
 ```gherkin
 Scenario: R1 — The analyze artifact carries per-pairing stats
@@ -74,11 +74,11 @@ Scenario: R6 — The pairings section is additive and old artifacts degrade grac
 
 **Handoff to 0574.** The artifact's `pairings` + `ladderSnapshot` fields are 0574's input contract: the pairings renderer ranks within each role and diffs against the snapshot's `order`. If this task changes field names, 0574's Design must be re-touched in the same commit.
 ### Plan
-- [ ] Write `packages/domain/src/analytics/pairings.ts` (PairingStat + pairingSummary SQL) following role-tokens.ts structure (R1)
-- [ ] Add `PairingStat[]`/`LadderEntry[]` optional fields + `LadderEntry` interface to artifact.ts (R2)
-- [ ] Embed the ladder snapshot in the analyze path in history-service.ts (R2)
-- [ ] Write `packages/domain/tests/analytics/pairings.test.ts` fixtures: known-outcomes rates, absence-not-zero, per-trigger escalation counts (R3)
-- [ ] Verify: `bun test packages/domain` green, then `bun run lint` (R3)
+- [x] Write `packages/domain/src/analytics/pairings.ts` (PairingStat + pairingSummary SQL) following role-tokens.ts structure (R1)
+- [x] Add `PairingStat[]`/`LadderEntry[]` optional fields + `LadderEntry` interface to artifact.ts (R2)
+- [x] Embed the ladder snapshot in the analyze path in history-service.ts (R2)
+- [x] Write `packages/domain/tests/analytics/pairings.test.ts` fixtures: known-outcomes rates, absence-not-zero, per-trigger escalation counts (R3)
+- [x] Verify: `bun test packages/domain` green, then `bun run lint` (R3)
 ### Solution
 **R1 — Pairing aggregation.** New `packages/domain/src/analytics/pairings.ts` defines `PairingStat` and `pairingSummary(db, opts)` over the `system_events` plane, mirroring `role-tokens.ts`:
 - Dispatches from `agent.invoke.start` rows keyed by `routing.executor × routing.role`, with `agent`/`model` denormalized (model nullable for pre-pin rows).
