@@ -712,6 +712,21 @@ from cache", `n/a` when `recordsWithUsage === 0`). Missing derived inputs render
 three derived-dependent sections, `phaseSupport: 'unsupported'` for phases (R5). The 8 partial /
 model-authored sections from 0491 are deliberately absent, not stubbed (task 0556).
 
+**Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
+(`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode
+consuming ONLY the additive `pairings` / `ladderSnapshot` fields (0573); never opens the
+database, never reads `.spur/config.yaml` at render time (the ladder arrives embedded in the
+artifact), and never compares schema versions. Two sections: `## Pairings` — one ranked table
+per role ordered success rate desc → total escalations asc → cost asc — and `## Ladder diff` —
+per tier, the snapshotted config order vs the measured order, with `suggest: promote <executor>
+above <executor> (dispatches=N, success=X% vs Y%, cost=$a vs $b)` lines for each adjacent
+inversion. A rung totalling fewer than `MIN_PAIRING_DISPATCHES = 5` dispatches is marked
+`insufficient-evidence (N<5)` and never suggested. Absence degradation mirrors the
+`SessionStat.sessionState` precedent: a pre-0573 artifact renders `section unavailable (artifact
+predates the pairings field; re-run spur history analyze)` in place of the missing section —
+never a throw, never a fabricated row. Registered in `REPORT_MODES` as `pairings`; unknown mode
+names keep failing with `UnknownReportModeError` naming the registered set.
+
 **Report-first surface (task 0556):** `/sp:dev-find-issue` defaults to rendering the report —
 the forensics renderer's 8 data sections plus model-authored IDENTIFY/PROPOSE analysis — and
 creates a task only behind `--create-task`. `--use-history`/`--no-task` are removed (rejected

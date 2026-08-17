@@ -2206,7 +2206,7 @@ function parseTagsFlag(flags: Record<string, string | boolean>): string[] | unde
  * Legacy bare `capable` (if still present on a raw config object) maps to
  * `capable-1`.
  */
-function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
+export function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
     if (executor.tier) {
         // Structural compat: configs that skip zod may still carry legacy `capable`.
         const declared = executor.tier as CapabilityTier | 'capable';

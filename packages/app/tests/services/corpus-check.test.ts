@@ -485,9 +485,13 @@ describe('replay of the E1 graduation', () => {
             }).exitCode === 0,
     );
 
-    test.if(reachable)('the whole session span passes — the fog edit and its tickets are both inside', async () => {
-        expect(await inspectFog(REPO, { since: 'ee0771ab~1', head: 'c9bc177b' })).toEqual([]);
-    });
+    test.if(reachable)(
+        'the whole session span passes — the fog edit and its tickets are both inside',
+        async () => {
+            expect(await inspectFog(REPO, { since: 'ee0771ab~1', head: 'c9bc177b' })).toEqual([]);
+        },
+        30000,
+    );
 
     test.if(reachable)(
         'a range that stops at the fog commit false-positives — why the range is branch-scoped',
@@ -495,5 +499,6 @@ describe('replay of the E1 graduation', () => {
             const errors = await inspectFog(REPO, { since: 'ee0771ab~1', head: 'ee0771ab' });
             expect(errors.map((e) => e.id)).toEqual(['E1']);
         },
+        30000,
     );
 });

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J8"
 name: "Pairing evidence: agent×model×role measurement and ladder recommendation from the history plane"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-16T18:46:30.987Z"
-updated_at: "2026-08-16T23:33:24.449Z"
+updated_at: "2026-08-17T06:03:38.071Z"
 ---
 
 # J8: Pairing evidence: agent×model×role measurement and ladder recommendation from the history plane
@@ -102,3 +102,6 @@ Scenario ids R1–R3, R5, R6 deliberately keep their original numbers rather tha
 tasks 0573 and 0574 cite them by id (`(feature J8 R1)`, `(feature J8 R6)`), so renumbering would
 silently repoint every task-to-scenario edge.
 ## History
+- 2026-08-17T03:48:41.935Z backlog → active (system)
+- 2026-08-17T05:18:49.566Z active → verifying (system)
+- 2026-08-17T06:03:38.071Z verifying → done (system)

@@ -10,6 +10,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { AgentConfig } from '@gobing-ai/spur-config';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ArtifactSelector,
@@ -28,10 +29,12 @@ import {
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
+    type LadderEntry,
     loops,
     type MessageRollupRow,
     messageRollup,
     narrowArtifact,
+    pairingSummary,
     RunSessionDao,
     renderMarkdown,
     resolveReportMode,
@@ -54,6 +57,7 @@ import {
     runJsonlImport,
     runOpenCodeImport,
 } from '@gobing-ai/ts-llm-jsonl-importer';
+import { getExecutorTier } from './agent-service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -181,6 +185,12 @@ export interface HistoryServiceContext {
     getDb(): Promise<DbAdapter>;
     /** Override OpenCode's SQLite path for hermetic composition/tests. */
     openCodeSourceDatabase?: string;
+    /**
+     * Validated `agent` config block from the project config (feature J8 R2).
+     * When present, analyze embeds its executor ladder as `ladderSnapshot`;
+     * absent (no `agent.executors`), the ladder is an empty array.
+     */
+    agentConfig?: AgentConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,20 +313,34 @@ export class HistoryService {
         const wm = buildWatermarkFilter(watermarks);
         const queryOpts = wm.sql === '' ? undefined : { watermark: wm };
 
-        const [mRows, tRows, toolRows, sessionRows, loopRows, driftRows, sourceRows, spanRows, toolDurRows, todoRows] =
-            await Promise.all([
-                messageRollup(db, selector, queryOpts),
-                toolRollup(db, selector, queryOpts),
-                byTool(db, selector, top, queryOpts),
-                bySession(db, selector, top, queryOpts),
-                loops(db, selector, queryOpts),
-                drift(db, selector, queryOpts),
-                // sourceSummary is import coverage — not watermarked, stays import-faithful.
-                sourceSummary(db, selector),
-                sessionSpans(db, selector, queryOpts),
-                sessionToolDurations(db, selector, queryOpts),
-                todoToolCalls(db, selector, undefined, queryOpts),
-            ]);
+        const [
+            mRows,
+            tRows,
+            toolRows,
+            sessionRows,
+            loopRows,
+            driftRows,
+            sourceRows,
+            spanRows,
+            toolDurRows,
+            todoRows,
+            pairings,
+        ] = await Promise.all([
+            messageRollup(db, selector, queryOpts),
+            toolRollup(db, selector, queryOpts),
+            byTool(db, selector, top, queryOpts),
+            bySession(db, selector, top, queryOpts),
+            loops(db, selector, queryOpts),
+            drift(db, selector, queryOpts),
+            // sourceSummary is import coverage — not watermarked, stays import-faithful.
+            sourceSummary(db, selector),
+            sessionSpans(db, selector, queryOpts),
+            sessionToolDurations(db, selector, queryOpts),
+            todoToolCalls(db, selector, undefined, queryOpts),
+            // feature J8 R1: per-(executor, role) pairing stats over the same
+            // selector window (system_events plane, not the message plane).
+            pairingSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
+        ]);
 
         const totals = foldTotals(mRows, tRows);
         const bySource = foldGrouped(
@@ -349,6 +373,11 @@ export class HistoryService {
         // sessions (task 0547). Analyze always writes it; the field stays additive.
         const stateByKey = new Map<string, SessionState>();
         for (const w of watermarks) stateByKey.set(`${w.sessionId}\0${w.source}`, w.state);
+
+        // feature J8 R2: snapshot the executor ladder from project config (executor
+        // name, resolved tier, array index as order). The report renderers are pure
+        // (no I/O), so the ladder is embedded at analyze time — never read at render.
+        const ladderSnapshot = buildLadderSnapshot(this.ctx.agentConfig);
 
         const artifact: HistoryArtifact = {
             schemaVersion: HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -389,6 +418,8 @@ export class HistoryService {
                 ...derivedWarnings(derived),
                 ...(opts.extraWarnings ?? []),
             ],
+            pairings,
+            ladderSnapshot,
             derived,
         };
 
@@ -759,6 +790,24 @@ function buildWarnings(
         }
     }
     return warnings;
+}
+
+/**
+ * Snapshot the executor capability ladder from the project's agent config
+ * (feature J8 R2). Each configured executor yields `{ name, tier, order }` with
+ * the resolved capability tier (declared or inferred — the same resolution the
+ * dispatch path uses) and the executor's array index as `order`. No `executors`
+ * block → an empty ladder (the pairings renderer degrades to absence, never a
+ * fabricated row).
+ */
+function buildLadderSnapshot(agentConfig: AgentConfig | undefined): LadderEntry[] {
+    const executors = agentConfig?.executors;
+    if (executors === undefined || executors.length === 0) return [];
+    return executors.map((executor, order) => ({
+        name: executor.name,
+        tier: getExecutorTier(executor),
+        order,
+    }));
 }
 
 // ---------------------------------------------------------------------------

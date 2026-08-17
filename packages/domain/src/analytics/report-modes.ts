@@ -1,5 +1,6 @@
 import type { HistoryArtifact } from './artifact';
 import { renderForensics } from './render-forensics';
+import { renderPairings } from './render-pairings';
 import { renderReport } from './render-report';
 
 /**
@@ -26,6 +27,7 @@ export class UnknownReportModeError extends Error {
 export const REPORT_MODES: Readonly<Record<string, ReportRenderer>> = {
     default: renderReport,
     forensics: renderForensics,
+    pairings: renderPairings,
 };
 
 /** Resolve `--mode <name>` to its renderer; unknown names fail naming the registered set. */

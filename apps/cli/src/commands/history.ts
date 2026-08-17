@@ -137,7 +137,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--out <path>', 'Write the artifact to this path instead of the dated reports dir')
         .option('--json', 'Emit the artifact as JSON instead of the human summary')
         .action(async (options) => {
-            const svc = new HistoryService({ getDb: () => context.getDb() });
+            const svc = new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
             const source = options.source ?? 'all';
             const selector = {
                 since: options.since || null,
@@ -231,7 +231,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--json', 'Emit the daily result as JSON')
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
-            const svc = new HistoryService({ getDb: () => context.getDb() });
+            const svc = new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
             // System-event bus + ledger (task 0471 R2): per-invocation, flushed in finally.

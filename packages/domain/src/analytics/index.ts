@@ -5,6 +5,7 @@ export {
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
+    type LadderEntry,
     type LoopFinding,
     type SessionStat,
     selectorDigest,
@@ -58,8 +59,10 @@ export {
     type ArtifactNarrowResult,
     narrowArtifact,
 } from './narrow-artifact';
+export { type PairingStat, type PairingSummaryOptions, pairingSummary } from './pairings';
 export { type ExtractedTokens, extractClaudeTokens } from './query';
 export { renderForensics } from './render-forensics';
+export { MIN_PAIRING_DISPATCHES, renderPairings } from './render-pairings';
 export {
     ArtifactVersionError,
     artifactToSummary,

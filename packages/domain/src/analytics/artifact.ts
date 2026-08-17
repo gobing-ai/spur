@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { DerivedVariables } from './derived';
+import type { PairingStat } from './pairings';
 import type { TokenTotals } from './types';
 import type { SessionState } from './watermark';
 
@@ -116,6 +117,23 @@ export interface LoopFinding {
     lastSeq: number;
 }
 
+/**
+ * One executor on the capability ladder, snapshotted at analyze time (feature J8 R2).
+ *
+ * Read from project config (`agent.executors`) by the app layer and embedded in
+ * the artifact so the pure report renderers (report-modes.ts) never read config.
+ * `order` is the executor's array index — the diff target for the pairings
+ * renderer (0574). `tier` is the resolved capability tier (declared or inferred).
+ */
+export interface LadderEntry {
+    /** Executor name (`agent.executors[].name`). */
+    name: string;
+    /** Resolved capability tier (cheap | standard | capable-1 | capable-2 | capable-3). */
+    tier: string;
+    /** Array index in the config's executor list — the ranking anchor. */
+    order: number;
+}
+
 /** An advisory note attached to the artifact (e.g. source-empty, drift alarm). */
 export interface ArtifactWarning {
     code: string;
@@ -138,6 +156,16 @@ export interface HistoryArtifact {
     bySession: SessionStat[];
     loops: LoopFinding[];
     warnings: ArtifactWarning[];
+    /**
+     * Per-(executor, role) pairing aggregation (feature J8 R1) — additive, absent
+     * on pre-0573 artifacts so consumers treat absence as unknown (never fabricate).
+     */
+    pairings?: PairingStat[];
+    /**
+     * Executor capability ladder snapshotted from config at analyze time (feature
+     * J8 R2) — additive, absent on pre-0573 artifacts.
+     */
+    ladderSnapshot?: LadderEntry[];
     /** Derived variables (phases, time decomposition, bottlenecks) from task 0554. Absent on pre-0554 artifacts. */
     derived?: DerivedVariables;
 }
