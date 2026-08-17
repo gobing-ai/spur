@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0554"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.605Z"
-updated_at: "2026-08-14T18:46:07.798Z"
+updated_at: "2026-08-17T21:55:37.807Z"
 ---
 
 ## 0555. Add the report mode registry and the forensics renderer
@@ -246,34 +246,33 @@ Task 0555 — report mode registry + forensics renderer. All changes same-commit
 Out of scope (unchanged, by design): model-authored forensics sections (task 0556); TTFT/generation split (0491 deferral); template engines.
 
 ### Testing
-
-Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). Requirements + Plan already `[x]`; no checkbox/anchor fix. Artifact: `.spur/run/0555-verdict.json`.
+Independent re-audit 2026-08-17 (`/sp:dev-verifyall --feature E5 --auto --next --force --focus all --fix all`). Every `file:line` below was re-read at the cited lines this run. `--fix all` corrected **five** anchors that drifted after tasks 0564/0581 grew `apps/cli/src/commands/history.ts`, `history-service.ts`, and `docs/04_DESIGN.md`; the registry and renderer are unchanged. Prior re-audit 2026-08-14 found Requirements + Plan already `[x]`. Artifacts: `.spur/run/0555-verdict.json`, `.spur/run/0555-verify-answer.txt`.
 
 **Per-Requirement Traceability**
 
-| Req | Status | Evidence                                                                                                                                                                                                                                                                                                                                                 |
-| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | MET    | `packages/domain/src/analytics/report-modes.ts:26-28` `REPORT_MODES`; `packages/domain/src/analytics/report-modes.ts:32-38` (`resolveReportMode`); `packages/domain/src/analytics/report-modes.ts:13-17` (`UnknownReportModeError`). `packages/app/src/services/history-service.ts:853` (`runHistoryReport`). CLI `apps/cli/src/commands/history.ts:174` |
-| R2  | MET    | `packages/domain/src/analytics/render-forensics.ts:20-37` (`renderForensics`; 8 derivable sections; model-authored not stubbed). This run: `packages/domain/tests/analytics/render-forensics.test.ts` 14 pass                                                                                                                                            |
-| R3  | MET    | Tokens-only documented at `packages/domain/src/analytics/render-forensics.ts:12-14`; `MODEL_PRICING` is referenced only in the comment (no new consumer). Test asserts no currency value                                                                                                                                                                 |
-| R4  | MET    | `daily` validates mode before import (`packages/app/src/services/history-service.ts:369`); CLI `apps/cli/src/commands/history.ts:219`. `docs/04_DESIGN.md:558-562`                                                                                                                                                                                       |
-| R5  | MET    | Honest `not available` / `n/a` (this run: render-forensics unavailability + empty-bucket tests)                                                                                                                                                                                                                                                          |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/domain/src/analytics/report-modes.ts:26-28` (`REPORT_MODES` — `default → renderReport`, `forensics → renderForensics`); `:32-38` (`resolveReportMode`, throws on unknown); `:13-17` (`UnknownReportModeError` — "Unknown report mode '<x>'. Registered modes: …", naming the registered set). Consumed at `packages/app/src/services/history-service.ts:1021` (`resolveReportMode(opts.mode ?? 'default')`) — the registry subsumes the former direct call. CLI `apps/cli/src/commands/history.ts:178`. Anchors corrected this run (history.ts 174 → 178, history-service.ts 853 → 1021) |
+| R2 | MET | `packages/domain/src/analytics/render-forensics.ts:20-37` (`renderForensics` — session summary, time decomposition, per-phase, per-tool, bottleneck, raw data). The model-authored sections are absent, not stubbed (0556 owns them) |
+| R3 | MET | `packages/domain/src/analytics/render-forensics.ts:12-14` — "Tokens, not prices (R3): renders provider-reported token counts and a cache-hit ratio. No currency value anywhere — `costUsd` fields are deliberately unread, and this module adds no [new consumer of MODEL_PRICING]." Asserted by test; `MODEL_PRICING` gains no call site |
+| R4 | MET | `packages/app/src/services/history-service.ts:500` (`const renderer = opts.mode !== undefined ? resolveReportMode(opts.mode) : null` — validated at `daily` entry, before the import fan-out, so an unknown mode fails fast). CLI `apps/cli/src/commands/history.ts:235` (`--mode <name>` on `daily`, sidecar render). `daily` with no mode behaves as before. Anchors corrected this run (history-service.ts 369 → 500, history.ts 219 → 235, docs/04_DESIGN.md 558-562 → 698-705) |
+| R5 | MET | `packages/domain/src/analytics/render-forensics.ts:17-18` (module contract: "Honest incompleteness (R5): sections whose derived inputs are missing state `not available`"); `:405` (`NOT_AVAILABLE_DERIVED` — "artifact has no derived block (rerun `spur history analyze`)"); `:48` (span renders `not available (no derived block)` rather than 0); `:157-159` (`phaseSupport === 'unsupported'` → explicit not-available line, not an empty table); `:129`, `:79`, `:167` (`n/a` rather than a fabricated `0`). Covered by the render-forensics unavailability + empty-bucket tests |
 
 **Acceptance Criteria Verification**
 
-| AC                                                                  | Status | Evidence Type | Evidence                                                                                                                                                                                                                        |
-| ------------------------------------------------------------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scenario: R4 — Report renders by selected mode                      | MET    | test          | `packages/domain/tests/analytics/report-modes.test.ts` this run: 5 pass / 0 fail (default + forensics resolve; default byte-identical to legacy `renderReport`; unknown mode names registered set; `renderMarkdown` mode-aware) |
-| Scenario: R5 — The forensics mode reproduces the derivable sections | MET    | test          | `packages/domain/tests/analytics/render-forensics.test.ts` this run: 14 pass / 0 fail (8 headings, tokens/cache not currency, missing derived → not-available, unsupported phases, n/a not 0)                                   |
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: R4 — Report renders by selected mode | MET | test | `bun test packages/domain/tests/analytics/ …` this run → **275 pass / 0 fail / 851 expect()**, including `report-modes.test.ts` (default + forensics resolve, default byte-identical to legacy `renderReport`, unknown mode names the registered set, `renderMarkdown` mode-aware) |
+| Scenario: R5 — The forensics mode reproduces the derivable sections | MET | test | Same run: `render-forensics.test.ts` — section headings present, tokens/cache rendered with no currency substring, missing derived → not-available, unsupported phases, `n/a` rather than `0`. `docs/04_DESIGN.md:698-705` documents the registry + `UnknownReportModeError` fail-fast |
 
 **SECUA Review**
 
-| Priority | Dimension | Location | Finding                                |
-| -------- | --------- | -------- | -------------------------------------- |
-| P4       | —         | —        | No P1–P3 findings; verify verdict PASS |
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | C | `apps/cli/src/commands/history.ts`, `packages/app/src/services/history-service.ts`, `docs/04_DESIGN.md` | **Fixed this run.** Five Testing anchors had drifted after 0564/0581 (history.ts 219 resolved to the `daily` command registration rather than the `--mode` option; history-service.ts 853 to a closing brace; docs/04_DESIGN.md 558-562 to the 0505 reconciliation paragraph). Citations corrected; no implementation change |
+| P4 | — | — | No P1–P2 findings; verify verdict PASS |
 
-This run: report-modes 5 + render-forensics 14 + derived 11 + migrations 39 = 69 pass / 0 fail. `report-modes.ts` and `render-forensics.ts` 100% lines/funcs on that slice.
-
+Coverage: N/A (verdict-based re-audit; the verify pipeline does not measure code coverage).
 ### Review
 
 L3 review (inline, model-authored). No P1/P2 findings.

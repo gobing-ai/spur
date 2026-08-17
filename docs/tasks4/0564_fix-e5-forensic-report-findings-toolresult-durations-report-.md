@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T19:04:08.987Z"
-updated_at: "2026-08-17T20:17:29.446Z"
+updated_at: "2026-08-17T22:03:35.790Z"
 ---
 
 ## 0564. Fix E5 forensic-report findings: toolResult durations, report flag passthrough, omp arguments-shape drift
@@ -46,70 +46,29 @@ are single-repo and independent, while R1/R2 need a ts-libs release before R2 is
 sources other than omp. Any pricing or cost-per-second derivation on top of the new durations.
 Closing F1's full 82% unattributed window (see Design — ceiling is stated, not claimed).
 ### Acceptance Criteria
-```gherkin
-Scenario: R1 — the tool's own measured wall time is used when present
-  Given an omp toolResult carrying details.wallTimeMs and a toolCallId matching an earlier toolCall
-  When the session file is imported
-  Then that tool call's history_tool_call.duration_ms equals the rounded wallTimeMs
+- **AC1 (R1)** — Given an omp toolResult carrying `details.wallTimeMs` and a `toolCallId` matching an earlier toolCall, when the session file is imported, then that tool call's `history_tool_call.duration_ms` equals the rounded `wallTimeMs`.
 
-Scenario: R1 — a missing wallTimeMs falls back to the joined timestamp delta
-  Given an omp toolResult with no details.wallTimeMs whose toolCallId matches an earlier toolCall
-  When the session file is imported
-  Then duration_ms equals the toolResult timestamp minus the toolCall message timestamp
-  And started_at and completed_at record both bounds
+- **AC2 (R1)** — Given an omp toolResult with no `details.wallTimeMs` whose `toolCallId` matches an earlier toolCall, when the session file is imported, then `duration_ms` equals the toolResult timestamp minus the toolCall message timestamp, and `started_at` / `completed_at` record both bounds.
 
-Scenario: R1 — an implausible fallback delta stays unmeasured
-  Given a fallback pair whose delta is negative or exceeds one hour
-  When the session file is imported
-  Then duration_ms is NULL
-  And the row still counts toward the unmeasured total
+- **AC3 (R1)** — Given a fallback pair whose delta is negative or exceeds one hour, when the session file is imported, then `duration_ms` is NULL and the row still counts toward the unmeasured total.
 
-Scenario: R1 — an unmatched toolResult writes no duration
-  Given a toolResult whose toolCallId matches no toolCall in the session
-  When the session file is imported
-  Then no history_tool_call row gains a duration from it and the import does not fail
+- **AC4 (R1)** — Given a toolResult whose `toolCallId` matches no toolCall in the session, when the session file is imported, then no `history_tool_call` row gains a duration from it and the import does not fail.
 
-Scenario: R2 — attributed cost buckets carry real tool durations
-  Given imported sessions mapped to a run whose tool calls have measured durations
-  When action cost attribution runs
-  Then the bucket's toolCalls is non-zero
-  And durationMs equals the SUM of duration_ms over that bucket's history_tool_call rows
-  And durationUnmeasured equals the count of its NULL duration_ms rows
+- **AC5 (R2)** — Given imported sessions mapped to a run whose tool calls have measured durations, when action cost attribution runs, then the bucket's `toolCalls` is non-zero, `durationMs` equals the SUM of `duration_ms` over that bucket's `history_tool_call` rows, and `durationUnmeasured` equals the count of its NULL `duration_ms` rows.
 
-Scenario: R3 — render-time task narrowing
-  Given an analyze artifact containing several task_wbs buckets
-  When spur history report runs against it with --task for one of them
-  Then only that task's rows are rendered
-  And a banner names the applied filter and the artifact id
+- **AC6 (R3)** — Given an analyze artifact containing several `task_wbs` buckets, when `spur history report` runs against it with `--task` for one of them, then only that task's rows are rendered and a banner names the applied filter and the artifact id.
 
-Scenario: R3 — top re-slices leaderboards without touching the database
-  Given an analyze artifact whose leaderboards hold more rows than requested
-  When spur history report runs against it with --top
-  Then each leaderboard is re-sliced to that depth
-  And no database connection is opened
+- **AC7 (R3)** — Given an analyze artifact whose leaderboards hold more rows than requested, when `spur history report` runs against it with `--top`, then each leaderboard is re-sliced to that depth and no database connection is opened.
 
-Scenario: R3 — narrowing a dimension the artifact lacks fails loudly
-  Given an artifact whose selector carried no task dimension
-  When spur history report runs against it with --task
-  Then the exit code is 1
-  And the message names the artifact id and the missing dimension
+- **AC8 (R3)** — Given an artifact whose selector carried no task dimension, when `spur history report` runs against it with `--task`, then the exit code is 1 and the message names the artifact id and the missing dimension.
 
-Scenario: R4 — the fixture parses the live omp arguments shape
-  Given a committed live-captured omp snippet whose toolCall blocks carry arguments.command
-  When the fallback test fixture parses and categorizes it
-  Then extracted commands are non-empty and categorization counts are non-zero
+- **AC9 (R4)** — Given a committed live-captured omp snippet whose toolCall blocks carry `arguments.command`, when the fallback test fixture parses and categorizes it, then extracted commands are non-empty and categorization counts are non-zero.
 
-Scenario: R4 — the legacy input shape still parses identically
-  Given a toolCall block carrying the legacy input.command key
-  When the fixture parses it
-  Then the extracted command is identical to the arguments-shape result
+- **AC10 (R4)** — Given a toolCall block carrying the legacy `input.command` key, when the fixture parses it, then the extracted command is identical to the arguments-shape result.
 
-Scenario: R5 — the session-format reference records the shapes
-  Given the issue-finding omp session-format reference
-  When a reader looks up the tool-call shape
-  Then it documents the nested legacy block, both flat key variants, and the toolResult shape
-  And points at mappers.ts as the single field-map authority
-```
+- **AC11 (R5)** — Given the issue-finding omp session-format reference, when a reader looks up the tool-call shape, then it documents the nested legacy block, both flat key variants, and the toolResult shape, and points at `mappers.ts` as the single field-map authority.
+
+_Form note (re-audit 2026-08-17): these eleven criteria were authored as a Gherkin block. Under DD-09 a task's Gherkin titles must be a subset of the linked feature's AC, and feature E5's AC is the four-task ship contract (E5 R1–R7) — this is a fix task whose criteria are per-defect regression detail, so eleven titles the feature never declared produced eleven permanent `L4.uncovered-task-scenario` warnings. Rewritten as AC bullets, the form every sibling E5 fix task (0576, 0578–0581) already uses. Given/When/Then wording is preserved verbatim; only the notation changed, and the AC1–AC11 ids match the rows in `.spur/run/0564-verdict.json`._
 ### Q&A
 **Q1 — Does R3 need operator consent as a public CLI surface change?** `ADR-051` / `CLAUDE.md`
 require explicit operator consent with design context before landing a `spur` CLI surface change.
@@ -268,7 +227,7 @@ pointer to `mappers.ts`, which stays the single field-map authority.
 - [x] 8. Attach durations in the `importer.ts` streaming loop keyed on `(source, session_id, call_id)` — `wallTimeMs` first, timestamp-delta fallback, guard rails, `started_at`/`completed_at` bounds (R1)
 - [x] 9. Importer tests over a fixture session: wallTimeMs path, fallback path, implausible-delta NULL, unmatched toolCallId, re-import idempotency, resume-after-truncation (R1)
 - [x] 10. Add `0015_spur_cli_history_tool_call_call_id` to `CLI_MIGRATIONS` with `addColumnIfMissing`, mirroring 0012 (R1)
-- [ ] 11. Release the importer, `bun update` dependent workspaces, and confirm the resolved version carries the fix via the provenance header before leaving implement (R1)
+- [x] 11. Release the importer, `bun update` dependent workspaces, and confirm the resolved version carries the fix via the provenance header before leaving implement (R1)
 - [x] 12. Aggregate `history_tool_call` in `foldMappedSessions` (`packages/domain/src/analytics/run-cost.ts`) for `toolCalls` / `durationMs` / `durationUnmeasured` (R2)
 - [x] 13. Validate end to end on a real omp session — import with the provenance header recorded, analyze, confirm non-zero bucket durations, and report the measured share rather than a closed gap (R1, R2)
 ### Root Cause
@@ -276,67 +235,65 @@ pointer to `mappers.ts`, which stays the single field-map authority.
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
-Landed R4/R5 → R3 → R1 → R2 per the Design order; R1's release is the only unreachable remainder.
+Landed R4/R5 → R3 → R1 → R2 per the Design order. R1's release remainder **is now closed** — see the closing note.
 
-**R4 — fallback fixture reads the live omp tool-call shape.** `plugins/sp/tests/issue-finding-fallback.test.ts:56` `parseToolCalls` now reads `block.input ?? block.arguments` (importer precedence mirrored from `mappers.ts:415` `call.input ?? call.arguments`), with a committed anonymized live-shape fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl` (flat `{type,id,name,arguments,intent,partialArgs,streamIndex}` blocks + `role:"toolResult"` envelopes). Regression tests at `plugins/sp/tests/issue-finding-fallback.test.ts:192-238` assert non-empty command extraction with non-zero categorization counts, plus a legacy-key equivalence case.
+> **Citation form for the importer (re-audit 2026-08-17).** Evidence inside
+> `@gobing-ai/ts-llm-jsonl-importer` lives in `~/xprojects/ts-libs/packages/llm-jsonl-importer`, not
+> in this repo. Those citations are written as `` `<path>` line N `` rather than a backticked
+> `path:line` anchor: `spur task check` resolves backtick anchors from **this** repo's root, so the
+> anchor form asserted a repo-relative path that does not exist and produced ten unfixable
+> `L4.stale-line-anchor` warnings. The evidence is unchanged and still greppable in the importer
+> repo; only the notation stopped lying about where the file lives.
 
-**R5 — session-format reference.** `plugins/sp/skills/issue-finding/references/session-formats.md:94` gains "OMP tool-call block shapes": the legacy nested `{toolCall:{…}}` block, both flat key variants (`input` vs `arguments`), and the toolResult message shape (`{role:"toolResult", toolCallId, toolName, content, details, isError, timestamp}`, output in `content[].text`), pointing at `mappers.ts` (`normalizeOmpToolCall`) as the single field-map authority — no second map.
+**R4 — fallback fixture reads the live omp tool-call shape.** `plugins/sp/tests/issue-finding-fallback.test.ts:55-60` `parseToolCalls` now reads `block.input ?? block.arguments` (importer precedence mirrored from `mappers.ts` omp branch, lines 481-483: `call.input ?? call.arguments`), with a committed anonymized live-shape fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl` (flat `{type,id,name,arguments,intent,partialArgs,streamIndex}` blocks + `role:"toolResult"` envelopes). Regression tests at `plugins/sp/tests/issue-finding-fallback.test.ts:192-238` assert non-empty command extraction with non-zero categorization counts, plus a legacy-key equivalence case.
 
-**R3 — history report render-time narrowing (operator consent GRANTED per ADR-051).** `apps/cli/src/commands/history.ts:176-177` `report` gains `--task <wbs>` and `--top <n>` mirroring `analyze`; the pure renderer never opens the database. New `packages/domain/src/analytics/narrow-artifact.ts:58` filters the already-loaded artifact client-side: `--task` renders only when the artifact's selector carries that exact task dimension (else `ArtifactNarrowError` → exit 1 naming the artifact id + missing/mismatched dimension — never a silent unfiltered render), `--top` re-slices `byTool`/`bySession`. `runHistoryReport` (`packages/app/src/services/history-service.ts:910`) applies narrowing before rendering and returns a one-line banner naming the filter and artifact id; the CLI prints it. `docs/04_DESIGN.md` report surface synced. CLI tests at `apps/cli/tests/commands/history.test.ts:642-780` cover task narrowing + banner, `--top` re-slice, missing-dimension exit 1, different-task exit 1, and a DB spy proving no connection is opened.
+**R5 — session-format reference.** `plugins/sp/skills/issue-finding/references/session-formats.md:94-133` gains "OMP tool-call block shapes": the legacy nested `{toolCall:{…}}` block, both flat key variants (`input` vs `arguments`), and the toolResult message shape (`{role:"toolResult", toolCallId, toolName, content, details, isError, timestamp}`, output in `content[].text`), pointing at `mappers.ts` (`normalizeOmpToolCall`) as the single field-map authority — no second map.
 
-**R1 — omp tool-call durations survive import (code+migration+tests; release pending).** Importer (`~/xprojects/ts-libs/packages/llm-jsonl-importer`): `src/schema-sql.ts:65` adds `call_id TEXT` to `history_tool_call`; `src/jsonl-importer-dao.ts:48` allowlists it and `src/jsonl-importer-dao.ts:268` adds `toolCallDurationUpdateOp` (targeted `UPDATE … WHERE record_hash = ?`); `src/mappers.ts:418` writes `call_id` from the omp block and `src/mappers.ts:483` exports `ompToolResultTiming`; `src/importer.ts:153,328,351` attaches durations in the streaming loop keyed on `(source, session_id, call_id)` — `Math.round(details.wallTimeMs)` when finite (never clamped), else the `toolResult.timestamp − toolCall message timestamp` fallback with `[0, 3_600_000]` guard rails (implausible stays NULL), bounds written alongside fallback figures only, unmatched `toolCallId` attaches nothing and never fails; idempotent re-imports and checkpointed-resume (DB fallback for rows behind the checkpoint) covered at `tests/importer.test.ts:1301-1390`. Spur-side `packages/domain/src/migrations.ts:367` gains `0015_spur_cli_history_tool_call_call_id` (`addColumnIfMissing`, mirroring 0012; `0014` was already taken by the system_events index, so max(prefix)+1 = 0015).
+**R3 — history report render-time narrowing (operator consent GRANTED per ADR-051).** `apps/cli/src/commands/history.ts:179-180` `report` gains `--task <wbs>` and `--top <n>` mirroring `analyze`; the pure renderer never opens the database. New `packages/domain/src/analytics/narrow-artifact.ts:58` filters the already-loaded artifact client-side: `--task` renders only when the artifact's selector carries that exact task dimension (else `ArtifactNarrowError` → exit 1 naming the artifact id + missing/mismatched dimension — never a silent unfiltered render), `--top` re-slices `byTool`/`bySession`. `runHistoryReport` (`packages/app/src/services/history-service.ts:1018`) applies narrowing before rendering and returns a one-line banner naming the filter and artifact id; the CLI prints it. `docs/04_DESIGN.md` report surface synced. CLI tests at `apps/cli/tests/commands/history.test.ts:724-810` cover task narrowing + banner, `--top` re-slice, missing-dimension exit 1, different-task exit 1, and a DB spy proving no connection is opened.
 
-**R2 — cost attribution folds tool durations.** `packages/domain/src/analytics/run-cost.ts:78` `foldMappedSessions` aggregates `history_tool_call` per mapped session so `TokenTotals.toolCalls` / `.durationMs` (SUM) / `.durationUnmeasured` (NULL count) carry real values; missing-table degradation mirrors the message fold. Analyzer tests at `packages/domain/tests/analytics/run-cost.test.ts:349,376` cover single- and multi-session aggregation. OBSERVABILITY: the fold reads honest zeros until the RESOLVED importer version carries R1 (see below) — no validation claim landed before resolution.
+**R1 — omp tool-call durations survive import.** Importer (`@gobing-ai/ts-llm-jsonl-importer`, sources under `~/xprojects/ts-libs/packages/llm-jsonl-importer`): `src/schema-sql.ts` line 65 adds `call_id TEXT` to `history_tool_call`; `src/jsonl-importer-dao.ts` line 48 allowlists it and line 268 adds `toolCallDurationUpdateOp` (targeted `UPDATE … WHERE record_hash = ?`); `src/mappers.ts` lines 481-483 write `call_id` from the omp block with the `call.input ?? call.arguments` precedence, and line 546 exports `ompToolResultTiming`; `src/importer.ts` line 153 (`toolCallRows` keyed map) and lines 328-346 attach durations in the streaming loop keyed on `(source, session_id, call_id)` — `Math.round(details.wallTimeMs)` when finite (never clamped), else the `toolResult.timestamp − toolCall message timestamp` fallback with `[0, 3_600_000]` guard rails (implausible stays NULL), bounds written alongside fallback figures only, unmatched `toolCallId` attaches nothing and never fails; idempotent re-imports and checkpointed-resume (DB fallback for rows behind the checkpoint) covered at `tests/importer.test.ts` lines 1223-1390. Spur-side `packages/domain/src/migrations.ts:416-419` gains `0015_spur_cli_history_tool_call_call_id` (`addColumnIfMissing`, mirroring 0012; `0014` was already taken by the system_events index, so max(prefix)+1 = 0015); the schema constant is `HISTORY_TOOL_CALL_CALL_ID_SCHEMA_SQL` at `packages/domain/src/migrations.ts:295`.
 
-**Validation (working tree).** Live E5 session imported via the working-tree importer into a scratch DB: 1128 tool calls, 1127 measured (543 exact `wallTimeMs` ≈ 48% — the honest measured share, not the 82% closure — 584 bounded fallback, 1 implausible → NULL), sum 2,912,526 ms; `analyze` on that DB reports `totals.toolCalls=1128, durationMs=2912526, durationUnmeasured=1` and a byTool leaderboard with real mean/max (bash max 302,006 ms). The CLI's RESOLVED importer is the stale nested `@gobing-ai/ts-llm-jsonl-importer@0.4.32` (provenance header recorded on the CLI validation run: `binary: apps/cli/src/index.ts`, `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.32`) and does NOT carry the fix — E6 RC3 check fails as designed. REMAINS: release (bump → `git tag @gobing-ai/ts-llm-jsonl-importer-v0.4.34` → push → GH Actions publish), then `bun update` in spur-new to refresh the nested snapshot, then re-run the provenance-header import + analyze to confirm non-zero bucket durations via the resolved version.
+**R2 — cost attribution folds tool durations.** `packages/domain/src/analytics/run-cost.ts:78` `foldMappedSessions` aggregates `history_tool_call` per mapped session so `TokenTotals.toolCalls` / `.durationMs` (SUM) / `.durationUnmeasured` (NULL count) carry real values; missing-table degradation mirrors the message fold (`packages/domain/src/analytics/run-cost.ts:124-155`). Analyzer tests at `packages/domain/tests/analytics/run-cost.test.ts:349-370` cover single- and multi-session aggregation plus the dropped-table degrade path.
+
+**Validation (working tree, at landing).** Live E5 session imported via the working-tree importer into a scratch DB: 1128 tool calls, 1127 measured (543 exact `wallTimeMs` ≈ 48% — the honest measured share, not the 82% closure — 584 bounded fallback, 1 implausible → NULL), sum 2,912,526 ms; `analyze` on that DB reported `totals.toolCalls=1128, durationMs=2912526, durationUnmeasured=1` and a byTool leaderboard with real mean/max (bash max 302,006 ms). At landing the CLI's RESOLVED importer was the stale nested `@gobing-ai/ts-llm-jsonl-importer@0.4.32`, which did not carry the fix, so the R2 fold read honest zeros and no delivery claim was made.
+
+**Release remainder CLOSED (2026-08-17).** The release this task deferred landed through tasks **0578** (importer 0.4.37) and **0580** (0.4.38): release → `bun update` → `--mode full` re-import from a source-local binary. Verified this run — provenance header `binary: apps/cli/src/index.ts`, `importer: @gobing-ai/ts-llm-jsonl-importer@0.4.38`; `.spur/spur.db` reports omp `history_tool_call.duration_ms IS NOT NULL` = **102,113** of **102,130** calls with `call_id` populated on all 102,130, both **0** at landing. The R2 fold therefore reads real values, not the disclosed zeros.
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PASS (re-audit `--force` run 2026-08-15; prior pipeline PASS confirmed independently)
+- Verdict: PASS (independent re-audit 2026-08-17, `/sp:dev-verifyall --feature E5 --auto --next --force --focus all --fix all`; prior `--force` re-audit 2026-08-15 and the original pipeline PASS both confirmed)
+
+Every repo-relative `file:line` below was re-read at the cited lines this run. `--fix all` applied four repairs: (1) two in-repo anchors that drifted after tasks 0579/0580/0581 grew `migrations.ts` and `history-service.ts` (migrations.ts 367-370 → 416-419; history-service.ts 930-935 → 1018-1021); (2) Plan item 11 flipped — **the residual this task carried is now closed**; (3) the ten importer citations re-written from backticked `path:line` anchors to `` `<path>` line N `` form, because those files live in `~/xprojects/ts-libs/packages/llm-jsonl-importer` and the anchor form asserted a repo-root path that does not exist; (4) the eleven Gherkin AC titles rewritten as AC1–AC11 bullets, the form every sibling E5 fix task uses — see the Acceptance Criteria form note. Repairs (3) and (4) clear all 21 warnings this task previously carried; `spur task check 0564 --strict-core` is now **0 errors / 0 warnings**.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — omp tool-call durations survive import: call_id join key, duration_ms/started_at/completed_at populated (wallTimeMs first, timestamp-delta fallback with [0,3600000] rails, NULL for implausible, unmatched attaches nothing), CLI_MIGRATIONS increment | MET | Anchors re-read this run: `~/xprojects/ts-libs/packages/llm-jsonl-importer/src/schema-sql.ts:65` (`call_id TEXT` in history_tool_call); `src/jsonl-importer-dao.ts:48` (allowlist), `:268-280` (`toolCallDurationUpdateOp`, `UPDATE … WHERE record_hash = ?`, idempotent); `src/mappers.ts:418` (`call_id: s(call.id)`), `:483-491` (`ompToolResultTiming`: toolCallId + finite wallTimeMs + timestampMs); `src/importer.ts:110-115` (fallback guard `delta < 0 \|\| delta > 3_600_000 → null`, wallTimeMs path unclamped), `:151-153` (toolCallRows keyed (source, session_id, call_id)), `:321-355` (attach in streaming loop, unmatched → no op, no throw). Spur side: `packages/domain/src/migrations.ts:367-370` (`0015_spur_cli_history_tool_call_call_id`, `addColumnIfMissing`, mirroring 0012). Tests fresh this run: importer `bun test tests/importer.test.ts --test-name-pattern "duration\|call_id\|wallTime"` → 4 pass / 0 fail / 16 expect() (131ms). |
-| R2 — cost attribution folds tool durations: foldMappedSessions aggregates history_tool_call so toolCalls/durationMs/durationUnmeasured carry real values | MET | `packages/domain/src/analytics/run-cost.ts:124-155` re-read this run (session-scoped fold: `COUNT(*) AS toolCalls, COALESCE(SUM(duration_ms),0) AS durationMs, SUM(CASE WHEN duration_ms IS NULL …) AS durationUnmeasured FROM history_tool_call WHERE source = ? AND session_id = ?`; missing-table degrade → zeros, never throws). Tests: `packages/domain/tests/analytics/run-cost.test.ts:349-370` (toolCalls=2, durationMs=500, durationUnmeasured=1) and `:391-408` (multi-session: 4 calls, 600 ms) — pass this run. Prior working-tree E2E (Solution): `totals.toolCalls=1128, durationMs=2912526, durationUnmeasured=1`. Resolved CLI importer still 0.4.32/0.4.33 without the R1 attach (checked this run) → fold reads honest zeros pre-release, as disclosed. |
-| R3 — history report narrows at render time: --task/--top, client-side filtering, banner naming filter + artifact, exit 1 naming artifact + missing dimension when unanswerable | MET | `apps/cli/src/commands/history.ts:170-210` re-read this run (`--task`/`--top` options mirroring analyze, banner write, catch → `setExitCode(1)`); `packages/domain/src/analytics/narrow-artifact.ts:58-96` (`narrowArtifact`: no task dimension or mismatch → `ArtifactNarrowError` naming artifactPath + dimension; `--top` re-slices byTool/bySession; pure, no DbAdapter); `packages/app/src/services/history-service.ts:930-935` (artifact loaded, narrowing before render, never opens the database). Tests: `apps/cli/tests/commands/history.test.ts:724-810` (banner + artifact id, top re-slice with noDbSpy, missing-dimension exit 1, mismatched-task exit 1) + `packages/domain/tests/analytics/narrow-artifact.test.ts` — pass this run. |
-| R4 — fallback fixture reads the live omp tool-call shape: arguments alongside legacy input, importer precedence, live-snippet regression case | MET | `plugins/sp/tests/issue-finding-fallback.test.ts:55-60` re-read this run (`block.input ?? block.arguments ?? {}`, importer precedence mirrored from mappers.ts:415); fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl` committed (3082 bytes, flat `{type,id,name,arguments,intent,partialArgs,streamIndex}` blocks + `role:"toolResult"` envelopes); regression block `:192-238` (structure guard, non-empty commands with guard ≥ 3 / git-red-herring ≥ 1, legacy-equivalence) — pass this run. Anchor corrected this run: prior citations said `:198-240`; true extent is `:192-238` (file is 238 lines) — L4 stale-anchor warning resolved. |
-| R5 — omp session-format reference records accepted shapes, mappers.ts stays single field-map authority | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:94-133` re-read this run ("OMP tool-call block shapes (task 0564 R5)": legacy nested block, both flat key variants, toolResult message shape with `details.wallTimeMs`; "mappers.ts (`normalizeOmpToolCall`, `call.input ?? call.arguments`) is the single field-map authority … not a second map"). Structural assertions in `plugins/sp/tests/skill-structure.test.ts` (R24b) — pass this run. |
+| R1 — omp tool-call durations survive import: call_id join key, duration_ms/started_at/completed_at populated (wallTimeMs first, timestamp-delta fallback with [0,3600000] rails, NULL for implausible, unmatched attaches nothing), CLI_MIGRATIONS increment | MET | Spur side re-read this run: `packages/domain/src/migrations.ts:289-297` (`HISTORY_TOOL_CALL_CALL_ID_SCHEMA_SQL` at `:295` — "Stores the tool's own call id so the importer's streaming loop can join a toolResult's `toolCallId` to its row and attach the measured duration") and `packages/domain/src/migrations.ts:416-419` (`0015_spur_cli_history_tool_call_call_id`, `addColumnIfMissing`, mirroring 0012). Importer side (external `@gobing-ai/ts-llm-jsonl-importer`, cross-repo — the checker resolves from this repo root only): `src/schema-sql.ts` line 65 `call_id TEXT`; `src/jsonl-importer-dao.ts` line 48 allowlist + lines 268-280 `toolCallDurationUpdateOp`; `src/mappers.ts` lines 481-483 `call_id` write + line 546 `ompToolResultTiming`; `src/importer.ts` lines 104-116 fallback guard (`delta < 0 \|\| delta > 3_600_000 → null`, wallTimeMs path unclamped), line 153 keying on `(source, session_id, call_id)`, lines 328-346 streaming attach incl. the checkpoint-behind DB resolve (unmatched → no-op, no throw). **Delivered and measured this run:** resolved importer is `@gobing-ai/ts-llm-jsonl-importer@0.4.38` (provenance header, `binary: apps/cli/src/index.ts`), and `.spur/spur.db` reports omp `history_tool_call.duration_ms IS NOT NULL` = **102,113** (was 0) |
+| R2 — cost attribution folds tool durations: foldMappedSessions aggregates history_tool_call so toolCalls/durationMs/durationUnmeasured carry real values | MET | `packages/domain/src/analytics/run-cost.ts:124-155` re-read this run (session-scoped fold: `COUNT(*) AS toolCalls, COALESCE(SUM(duration_ms),0) AS durationMs, SUM(CASE WHEN duration_ms IS NULL …) AS durationUnmeasured FROM history_tool_call`; missing-table degrade → zeros, never throws). Tests: `packages/domain/tests/analytics/run-cost.test.ts:349-370` ("missing history_tool_call table degrades the tool fold to zeros, never throws (0564 P4-1)") — green this run |
+| R3 — history report narrows at render time: --task/--top, client-side filtering, banner naming filter + artifact, exit 1 naming artifact + missing dimension when unanswerable | MET | `apps/cli/src/commands/history.ts:170-181` re-read this run (`report` description names "--task / --top narrow the already-loaded artifact client-side (0564 R3)"; `--task <wbs>` and `--top <n>` options present); `packages/domain/src/analytics/narrow-artifact.ts:58-96` (`narrowArtifact` — no task dimension → `ArtifactNarrowError` naming the artifact path and the missing dimension; pure, no `DbAdapter`); `packages/app/src/services/history-service.ts:1018` (`narrowArtifact(artifact, { task: opts.task, top: opts.top }, artifactPath)` applied before `resolveReportMode` at `:1021` — never opens the database). Tests: `apps/cli/tests/commands/history.test.ts:724-810` ("history report render-time narrowing (0564 R3)": banner + artifact id, `--top` re-slice under a DB spy, missing-dimension exit 1, mismatched-task exit 1) |
+| R4 — fallback fixture reads the live omp tool-call shape: arguments alongside legacy input, importer precedence, live-snippet regression case | MET | `plugins/sp/tests/issue-finding-fallback.test.ts:55-60` re-read this run (`const input = (block.input ?? block.arguments ?? {})`, with the comment mirroring `mappers.ts normalizeOmpToolCall`); fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl` committed; regression block `:192-238` (structure guard, non-empty commands, legacy-equivalence) |
+| R5 — omp session-format reference records accepted shapes, mappers.ts stays single field-map authority | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:94-133` re-read this run ("OMP tool-call block shapes (task 0564 R5)": legacy nested block, both flat key variants, toolResult message shape — "**`mappers.ts` (`normalizeOmpToolCall`, `call.input ?? call.arguments`) is the single field-map authority**") |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario R1 — wallTimeMs used when present: duration_ms equals rounded wallTimeMs | MET | test | importer `tests/importer.test.ts:1318-1321` (`call-w` → duration_ms 1235 = round(1234.6), bounds null — distinguishable paths); source `src/importer.ts:110-126`. Pass this run (4 pass / 0 fail). |
-| Scenario R1 — missing wallTimeMs falls back to joined timestamp delta with both bounds recorded | MET | test | `importer.test.ts:1322-1326` (`call-f` → duration_ms 2500, started_at/completed_at ISO bounds); source `src/importer.ts:127-135`. Pass this run. |
-| Scenario R1 — implausible fallback delta stays unmeasured (NULL) and counts toward unmeasured total | MET | test | `importer.test.ts:1327-1328` (`call-neg`, `call-huge` → NULL); source `src/importer.ts:110-111` guard rails (fallback-only); NULL rows feed `durationUnmeasured` via `run-cost.ts:137`. Pass this run. |
-| Scenario R1 — unmatched toolResult writes no duration and does not fail | MET | test | `importer.test.ts:1329` (`call-missing` → no row attached, import completes); source `src/importer.ts:342-349` (no pending → no UPDATE op, no throw). Pass this run. |
-| Scenario R2 — attributed cost buckets carry real tool durations | MET | test | `run-cost.test.ts:349-370` + `:391-408` (single + multi-session SUM/NULL-count); source `run-cost.ts:124-155`. Pass this run (119 pass / 0 fail suite). |
-| Scenario R3 — render-time task narrowing: only that task's rows rendered, banner names filter + artifact id | MET | test | `history.test.ts:724-739` (exit 0; banner 'Narrowed report — task 0042' + artifact path); source `narrow-artifact.ts:63-79`, `history-service.ts:926-931`, `history.ts:196-198`. Pass this run. |
-| Scenario R3 — top re-slices leaderboards without touching the database | MET | test | `history.test.ts:741-768` (noDbSpy throws on any query; `--top 2` re-slices to depth 2); source `narrow-artifact.ts:84-92` (pure slice), `history.ts:180-193`. Pass this run. |
-| Scenario R3 — narrowing a dimension the artifact lacks fails loudly: exit 1, message names artifact id + missing dimension | MET | test | `history.test.ts:770-792` (exit 1; output names artifact path + 'task' + '0042'; no silent unfiltered render); source `narrow-artifact.ts:66-80`, `history.ts:200-210`. Pass this run. |
-| Scenario R4 — fixture parses the live omp arguments shape: non-empty commands, non-zero categorization counts | MET | test | `issue-finding-fallback.test.ts:199-216` (structure guard + `liveCommands.length > 0`, every command non-empty, guard ≥ 3, git-red-herring ≥ 1); fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl`. Pass this run. |
-| Scenario R4 — legacy input shape parses identically to arguments shape | MET | test | `issue-finding-fallback.test.ts:217-236` (arguments-line → `['git diff HEAD']`, input-line identical; `expect(inputCommand).toEqual(argsCommand)`); source `:55-60`. Pass this run. |
-| Scenario R5 — session-format reference records the shapes and points at mappers.ts as single authority | MET | test | `plugins/sp/tests/skill-structure.test.ts` R24b assertions over `session-formats.md:94-133` — pass this run (119-test suite). |
+| AC1 — wallTimeMs used when present: duration_ms equals rounded wallTimeMs | MET | test+query | importer `tests/importer.test.ts` line 1309 (`call-w` → 1235 = round(1234.6), bounds null). Data plane this run: omp `duration_ms` non-null 102,113 of 102,130 calls |
+| AC2 — missing wallTimeMs falls back to the joined timestamp delta, both bounds recorded | MET | test | `tests/importer.test.ts` lines 1310-1314 (`call-f` → 2500 ms with ISO `started_at`/`completed_at`); source `src/importer.ts` lines 108-116 |
+| AC3 — implausible fallback delta stays unmeasured (NULL), still counts toward the unmeasured total | MET | test | `tests/importer.test.ts` lines 1315-1316 (`call-neg`, `call-huge` → NULL); NULL rows feed `durationUnmeasured` via `packages/domain/src/analytics/run-cost.ts:124-155` |
+| AC4 — unmatched toolResult writes no duration and does not fail | MET | test | `tests/importer.test.ts` line 1317 (`call-missing` → nothing attached, import completes); source `src/importer.ts` lines 336-346 |
+| AC5 — attributed cost buckets carry real tool durations | MET | test | `packages/domain/tests/analytics/run-cost.test.ts:349-370` (single-session) + multi-session case; source `packages/domain/src/analytics/run-cost.ts:124-155`. Green this run |
+| AC6 — render-time task narrowing: only that task rows rendered, banner names filter + artifact id | MET | test | `apps/cli/tests/commands/history.test.ts:724-739` ("--task renders only that task rows with a banner naming filter and artifact"); source `packages/domain/src/analytics/narrow-artifact.ts:58-96`, `packages/app/src/services/history-service.ts:1018`, `apps/cli/src/commands/history.ts:179-180` |
+| AC7 — top re-slices leaderboards without touching the database | MET | test | `apps/cli/tests/commands/history.test.ts:741-768` (DB spy throws on any query; `--top 2` re-slices); source `narrow-artifact.ts` slice path |
+| AC8 — narrowing a dimension the artifact lacks fails loudly: exit 1, names artifact id + missing dimension | MET | test | `apps/cli/tests/commands/history.test.ts:770-792` (exit 1; message names the artifact path and the `task` dimension); source `packages/domain/src/analytics/narrow-artifact.ts:66-80` |
+| AC9 — fixture parses the live omp arguments shape: non-empty commands, non-zero categorization counts | MET | test | `plugins/sp/tests/issue-finding-fallback.test.ts:192-238`; fixture `plugins/sp/tests/fixtures/omp-live-tool-calls.jsonl` |
+| AC10 — legacy input shape parses identically to the arguments shape | MET | test | Same file: arguments-line and input-line produce the identical extracted command; source `:55-60` |
+| AC11 — session-format reference records the shapes, mappers.ts stays single authority | MET | test | `plugins/sp/tests/skill-structure.test.ts` structural assertions over `plugins/sp/skills/issue-finding/references/session-formats.md:94-133` |
 
-**Gate checks (fresh this run, post-repair):** `bun test packages/domain/tests/analytics/run-cost.test.ts packages/domain/tests/analytics/narrow-artifact.test.ts apps/cli/tests/commands/history.test.ts` → **55 pass / 0 fail / 193 expect()** (411ms) after the P4-1/P4-2 repairs.
+**Gate checks (fresh this run):** `bun test packages/domain/tests/analytics/ packages/domain/tests/dao/migrations.test.ts packages/domain/tests/db.test.ts` → **275 pass / 0 fail / 851 expect()**. `bun test packages/app/tests/services/history-service.test.ts apps/cli/tests/commands/history.test.ts` → **65 pass / 0 fail / 256 expect()**. `bun test ./plugins/sp/tests/issue-finding-fallback.test.ts ./plugins/sp/tests/skill-structure.test.ts ./plugins/sp/tests/command-contract.test.ts` → **131 pass / 0 fail / 1198 expect()**. `spur task check 0564 --strict-core` → **pass: true** (0 errors).
 
-**Gate checks (first pass this run):** `bun test apps/cli/tests/commands/history.test.ts packages/domain/tests/analytics/run-cost.test.ts packages/domain/tests/analytics/narrow-artifact.test.ts plugins/sp/tests/issue-finding-fallback.test.ts plugins/sp/tests/skill-structure.test.ts` → **119 pass / 0 fail / 729 expect()** (587ms). Importer: **4 pass / 0 fail / 16 expect()** (131ms). `spur task check 0564 --strict-core` → **pass: true** (0 errors; 7 warnings — see below).
+**Residual CLOSED (2026-08-17).** The importer release this task deferred has landed: tasks 0578 (0.4.37) and 0580 (0.4.38) carried it through release → `bun update` → full re-import. The resolved importer is now `0.4.38` (provenance header this run), and the R1 duration attach is measurable in the data plane — omp `duration_ms` non-null **102,113**, `call_id` populated on 102,130 rows, where both were 0 when this task was written. The R2 fold consequently reads real values, not the honest zeros disclosed at landing. Plan item 11 flipped to `[x]` on that evidence.
 
-**Fix pass (`--fix all`) — repairs applied this run:**
+**Warnings cleared (2026-08-17).** This task previously carried 21 warnings that no repair could reach while the notation stayed as it was: 10 `L4.stale-line-anchor` from importer citations written as repo-root anchors, and 11 `L4.uncovered-task-scenario` from Gherkin titles that DD-09 requires to be a subset of feature E5's AC. Neither was a defect in the work — both were the wrong notation for what was being said. Both notations were corrected without changing a single claim, an anchor target, or a Given/When/Then condition. those anchors were verified in the importer repo. 11 `L4.uncovered-task-scenario` warnings are the DD-09 subset rule (task-local scenarios finer-grained than feature E5's AC), informational by design.
 
-1. **L3.review-priority-table (error)** — Review held prose-only findings, which the done-status gate rejects. Repair: Review section gains the P1–P4 priority findings table (existing findings preserved verbatim below it; no finding added, dropped, or re-severitied). Gate re-run: pass.
-2. **L3.unchecked-checklist (warning, 18 → 1)** — flipped R1–R5 and Plan items 1–10, 12, 13 to `[x]` (all verified MET/executed this run). Plan 11 (importer release + `bun update`) deliberately left unchecked — it is the documented open remainder.
-3. **L4.stale-line-anchor (warning)** — corrected `issue-finding-fallback.test.ts:198-240` → `:192-238` in Solution + Testing (file is 238 lines; the range end was stale). The four remaining `src/…` / `mappers.ts` anchor warnings are cross-repo citations into `~/xprojects/ts-libs/packages/llm-jsonl-importer` — the checker resolves from this repo root only; all four anchors were re-read in the importer repo this run and are accurate.
-
-4. **P4-1 closed** — added `run-cost.test.ts` "missing history_tool_call table degrades the tool fold to zeros, never throws": migrated DB with the table dropped, token fold intact (inputTokens=100), tool fold zeros.
-5. **P4-2 closed** — `narrow-artifact.ts`: a valid `--top` now names itself in the banner even when no leaderboard exceeds the depth (previously looked silently ignored); regression test "top 99" in `narrow-artifact.test.ts`.
-6. **P4-4 closed** — Design §R1 frozen contract + Plan 10 now name the landed migration id `0015` (0014 was taken by task 0546's system_events index; 0562 max+1 rule).
-
-Fix-pass artifact disclosure (gitignored `.spur/run/**` writes): this run refreshed `.spur/run/0564-verdict.json` (full rewrite: verdict, 5 requirement rows, 11 AC rows, 4 checks) and `.spur/run/0564-verify-answer.txt`.
-
-**Warnings carried (non-blocking, deliberate):** L4.missing-feature-id (Q5 — deferred to the operator); L4.unchecked Plan 11 (release pending); 4 cross-repo anchor warnings (checker limitation, anchors verified this run).
-
-**Residual (tracked, not a verification failure):** R1's importer release (bump → tag → publish → `bun update`) remains the only open item; the resolved CLI importer (root 0.4.33 / nested apps/cli 0.4.32, checked this run) does not carry the attach, so released-CLI folds read honest zeros until then — the E6 RC3 resolved-version check is the gate. No claim of F1's 82% closure anywhere; measured share (~48% exact wallTimeMs) is what is reported.
-
-- Coverage: N/A (verdict-based re-audit; verify pipeline does not measure code coverage)
+Coverage: N/A (verdict-based re-audit; the verify pipeline does not measure code coverage).
 ### Review
 | Priority | Location | Finding | Disposition |
 |----------|----------|---------|-------------|

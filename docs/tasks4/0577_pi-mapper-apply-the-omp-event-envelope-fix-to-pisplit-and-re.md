@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T18:35:44.094Z"
-updated_at: "2026-08-17T19:36:18.390Z"
+updated_at: "2026-08-17T21:50:40.128Z"
 ---
 
 ## 0577. pi mapper: apply the omp event-envelope fix to piSplit and re-import pi
@@ -109,35 +109,42 @@ tool-call evidence to find turn closers) marks essentially every pi session `in-
 pi from analytics entirely. That symptom is guarded separately in task 0576; this task removes the
 cause.
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+**Correction (re-audit 2026-08-17, `/sp:dev-verifyall --feature E5 --force --fix all`).** The
+previous auto-generated change-map on this section listed task **0576**'s watermark diff
+(`packages/domain/src/analytics/watermark.ts`, `watermark.test.ts`,
+`packages/app/src/services/history-service.ts`) — 0576 and 0577 landed in the same commit
+`d3b8f082`, and the generator attributed the whole commit to this task while omitting 0577's own
+changes. Replaced below with this task's actual delivery surface.
 
-| Change (`file:line`) |
-|----------------------|
-| `packages/app/src/services/history-service.ts:316` |
-| `packages/app/src/services/history-service.ts:35` |
-| `packages/app/src/services/history-service.ts:352` |
-| `packages/domain/src/analytics/index.ts:108` |
-| `packages/domain/src/analytics/watermark.ts:1` |
-| `packages/domain/src/analytics/watermark.ts:160` |
-| `packages/domain/src/analytics/watermark.ts:178` |
-| `packages/domain/src/analytics/watermark.ts:190` |
-| `packages/domain/src/analytics/watermark.ts:20` |
-| `packages/domain/src/analytics/watermark.ts:238` |
-| `packages/domain/src/analytics/watermark.ts:40` |
-| `packages/domain/tests/analytics/watermark.test.ts:10` |
-| `packages/domain/tests/analytics/watermark.test.ts:167` |
-| `packages/domain/tests/analytics/watermark.test.ts:178` |
-| `packages/domain/tests/analytics/watermark.test.ts:242` |
-| `packages/domain/tests/analytics/watermark.test.ts:247` |
-| `packages/domain/tests/analytics/watermark.test.ts:252` |
-| `packages/domain/tests/analytics/watermark.test.ts:254` |
-| `packages/domain/tests/analytics/watermark.test.ts:312` |
-| `packages/domain/tests/analytics/watermark.test.ts:323` |
-| `packages/domain/tests/analytics/watermark.test.ts:332` |
-| `packages/domain/tests/analytics/watermark.test.ts:335` |
-| `packages/domain/tests/analytics/watermark.test.ts:352` |
-| `packages/domain/tests/analytics/watermark.test.ts:355` |
+**R1–R6 — `piSplit` (external package, not a repo-relative path).** The mapper fix lives in
+`@gobing-ai/ts-llm-jsonl-importer` (`packages/llm-jsonl-importer/src/mappers.ts` in
+`~/xprojects/ts-libs`), not in this monorepo: `piSplit` now derives `session_id` via
+`sessionIdFromContext(context, raw)` instead of the per-event `raw.id` (R1), `seq` from
+`context.sourceLine` (R2), `role` from the nested `message.role` before the record-type fallback
+(R3), collapses pi lifecycle/custom record types to `disposition: 'meta'` (R4), extracts
+`content_text` through `extractContentText` (R5), and emits tool calls for pi assistant messages
+(R6) — the `ompSplit` shape throughout. Unit coverage is `tests/mappers.test.ts` in that repo.
+
+**R7 — release + re-import (this repo).**
+
+- `package.json:36` (`workspaces.catalog`) and `package.json:95` — `@gobing-ai/ts-llm-jsonl-importer`
+  pinned to the released mapper (`^0.4.38` / `0.4.38` today; `0.4.36` at this task's landing,
+  carried forward monotonically by tasks 0578 and 0580).
+- `bun.lock` — resolved snapshot for the bump.
+- Full pi re-import from a source-local binary (`bun run apps/cli/src/index.ts history import
+  --source pi --mode full`), provenance header recorded in Testing. Record hashes and session ids
+  change, so an incremental import cannot repair the existing rows.
+
+**R8 — coverage-matrix correction.**
+
+- `docs/tasks4/0489_forensic-primitive-coverage-matrix-what-the-ten-sources-actu.md:245` — the pi
+  **session-discovery** cell now reads `✅ (fixed by 0577)` rather than an unqualified `✅`.
+- Same file `:258-262` — the per-primitive evidence block records the measured result
+  (1,501 files → 1,424 sessions, 0 singletons; was 176,792 sessions / 175,288 singletons).
+
+**Not changed here:** the watermark fail-open fix (`watermark.ts`) is task **0576**; the release +
+re-import contract this task follows is defined by task **0578**; codex/claude/grok/pi timestamp and
+usage mapper work is task **0580**.
 ### Testing
 **Pipeline verify results**
 

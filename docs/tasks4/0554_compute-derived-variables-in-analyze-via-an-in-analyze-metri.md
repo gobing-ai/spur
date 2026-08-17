@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0553"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.385Z"
-updated_at: "2026-08-14T18:46:17.275Z"
+updated_at: "2026-08-17T21:55:37.591Z"
 ---
 
 ## 0554. Compute derived variables in analyze via an in-analyze metric registry
@@ -247,32 +247,33 @@ forensics report needs is added to the registry here, not derived inside a rende
 
 **Dependency note (validation-time only):** runtime validation uses a local dist copy of `@gobing-ai/ts-llm-jsonl-importer` 0.4.32+args_raw under `packages/{domain,app}/node_modules/` (real dir, not symlink — symlinks break tsc type identity by realpath-ing into the ts-libs tree, where `ts-db` resolution falls through to a stale `~/node_modules` 0.4.31). Final delivery requires npm publish (0.4.33) + `bun update` per AGENTS.md; npm auth was unavailable this session.
 ### Testing
-Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan. Artifact: `.spur/run/0554-verdict.json`.
+Independent re-audit 2026-08-17 (`/sp:dev-verifyall --feature E5 --auto --next --force --focus all --fix all`). Every `file:line` below was re-read at the cited lines this run. `--fix all` corrected **ten** anchors that drifted after tasks 0578/0579/0581 grew `derived.ts`, `forensic-query.ts`, `artifact.ts`, and `history-service.ts`; every implementation is still present, only its line numbers moved. Prior re-audit 2026-08-14 flipped 13 leftover `[ ]` boxes. Artifacts: `.spur/run/0554-verdict.json`, `.spur/run/0554-verify-answer.txt`.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/domain/src/analytics/derived.ts:329-333` (`createDefaultRegistry`); `packages/domain/src/analytics/derived.ts:344-349` (`computeDerived`) called from `packages/app/src/services/history-service.ts:284` inside `analyze()` — no extra process |
-| R2 | MET | `packages/domain/src/analytics/derived.ts:166-187` (`parseTodoItems`); `packages/domain/src/analytics/derived.ts:196` (`extractPhases`); `packages/domain/src/analytics/forensic-query.ts:391-408` (`todoToolCalls`, `args_raw IS NOT NULL`). Zero-todo → `phaseSupport: 'unsupported'` (this run: derived.test.ts) |
-| R3 | MET | `packages/domain/src/analytics/forensic-query.ts:357-369` (`sessionSpans`); `packages/domain/src/analytics/forensic-query.ts:373-384` (`sessionToolDurations`). Unmeasured remainder → `unattributedMs` + warning `derived-unattributed-time` (`packages/domain/src/analytics/derived.ts:356-364`) |
-| R4 | MET | Default registry registers `bottlenecks` after `decomposition` (`packages/domain/src/analytics/derived.ts:329-333`). This run: fully-measured session ranks `idle`/`llm`/`tool` desc |
-| R5 | MET | `packages/domain/src/analytics/artifact.ts:136` `derived?: DerivedVariables`; schema version stays 1 (this run: `artifact compatibility` test) |
+| R1 | MET | `packages/domain/src/analytics/derived.ts:373` (`createDefaultRegistry`) and `:388` (`computeDerived`), called from `packages/app/src/services/history-service.ts:394` (`const derived = computeDerived(spanRows, toolDurRows, todoRows)`) inside `analyze()` — one invocation, no extra process, no workflow step. Anchors corrected this run (were derived.ts 329-333, derived.ts 344-349, history-service.ts 284) |
+| R2 | MET | `packages/domain/src/analytics/derived.ts:169` (`parseTodoItems` — codex `plan`, pi `todoList`, omp `ops`, others `todos`; malformed JSON → `[]`) and `:232` (`extractPhases`, per-session grouping). Query input `packages/domain/src/analytics/forensic-query.ts:628` (`todoToolCalls`, `LIMIT ?`-bounded). A source with no todo signal yields `phaseSupport: 'unsupported'`, never fabricated phases. Anchors corrected this run (derived.ts 196 → 232, forensic-query.ts 391-408 → 628) |
+| R3 | MET | `packages/domain/src/analytics/forensic-query.ts:582` (`sessionSpans`) and `:604` (`sessionToolDurations`). Unattributable time routes to `unattributedMs` with a `derived-unattributed-time` warning from `packages/domain/src/analytics/derived.ts:400` (`derivedWarnings`) — never folded into idle. Anchors corrected this run (forensic-query.ts 357-369 and 373-384, derived.ts 356-364) |
+| R4 | MET | `packages/domain/src/analytics/derived.ts:345-352` (`bottlenecksMetric` — ranks llm/tool/idle/unattributed by ms descending off `timeDecomposition`), registered after `decomposition` in `createDefaultRegistry` (`:373`). Deterministic: the same artifact ranks identically across runs |
+| R5 | MET | `packages/domain/src/analytics/artifact.ts:206` (`derived?: DerivedVariables` — optional, additive); `HISTORY_ARTIFACT_SCHEMA_VERSION` stays **1**, so pre-change artifacts still pass `assertArtifactVersion` and a reader unaware of `derived` is unaffected. Anchor corrected this run (was artifact.ts 136, which now holds 0581's per-step support comment) |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R3 — Analyze computes derived variables without a schema break | MET | test | `packages/domain/tests/analytics/derived.test.ts` this run: 11 pass / 0 fail (parseTodoItems, extractPhases, computeDerived via in-memory SQLite incl. 0012 `args_raw`, unmeasured → unattributed, zero-todo unsupported, v1 artifact without `derived` still validates) |
+| Scenario: R3 — Analyze computes derived variables without a schema break | MET | test | `bun test packages/domain/tests/analytics/ packages/domain/tests/dao/migrations.test.ts packages/domain/tests/db.test.ts` this run → **275 pass / 0 fail / 851 expect()**, covering `parseTodoItems`, `extractPhases`, `computeDerived` over in-memory SQLite (incl. migration 0012 `args_raw`), unmeasured → unattributed, zero-todo → unsupported, and a v1 artifact without `derived` still validating |
 
 **SECUA Review**
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | E | `packages/domain/src/analytics/forensic-query.ts:405` | `todoToolCalls` is `LIMIT ?` (default 5000) — bounded, not a blocker |
-| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+| P3 | C | `packages/domain/src/analytics/derived.ts`, `forensic-query.ts`, `artifact.ts`, `packages/app/src/services/history-service.ts` | **Fixed this run.** Ten Testing anchors had drifted by 40–240 lines and resolved to unrelated code (derived.ts 196 → a closing brace; forensic-query.ts 357-369 → the disposition-drift query; artifact.ts 136 → 0581's per-step comment; history-service.ts 284 → runJsonlImport). Citations corrected against the current tree; no implementation change |
+| P4 | E | `packages/domain/src/analytics/forensic-query.ts:628-632` | `todoToolCalls` is `LIMIT ?`-bounded (default 5000) — bounded by design, not a blocker |
+| P4 | — | — | No P1–P2 findings; verify verdict PASS |
 
-This run: `bun test packages/domain/tests/analytics/derived.test.ts` → 11 pass / 0 fail; `derived.ts` 93.33% funcs / 100.00% lines on that file.
+Coverage: N/A (verdict-based re-audit; the verify pipeline does not measure code coverage).
 ### Review
 **L3 review — P1–P4 findings:**
 

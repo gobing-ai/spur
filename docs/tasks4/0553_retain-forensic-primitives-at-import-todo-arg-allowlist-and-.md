@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.111Z"
-updated_at: "2026-08-17T20:17:24.772Z"
+updated_at: "2026-08-17T21:55:37.367Z"
 ---
 
 ## 0553. Retain forensic primitives at import: todo-arg allowlist and per-call latency
@@ -248,32 +248,33 @@ renamed, dropped, or repurposed.
 | R4 | done | result bodies never stored; contract tests |
 | R5 | done | `session-formats.md` points at `mappers.ts` |
 ### Testing
-Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan (L3.unchecked-checklist) and rewrote Solution/Testing so ts-libs cites are not repo-relative backtick `file:line` (L4.stale-line-anchor). Artifacts: `.spur/run/0553-verdict.json`, `.spur/run/0553-verify-answer.txt`.
+Independent re-audit 2026-08-17 (`/sp:dev-verifyall --feature E5 --auto --next --force --focus all --fix all`). Every `file:line` below was re-read at the cited lines this run. `--fix all` corrected three anchors that drifted after tasks 0579/0580/0581 edited the same files (migrations.ts 254-260 → 285, migrations.ts 317-319 → 406-407, forensic-query.ts 292-305 → 333-347); the implementations are unchanged and still present. Prior re-audit 2026-08-14 flipped 13 leftover `[ ]` boxes. Artifacts: `.spur/run/0553-verdict.json`, `.spur/run/0553-verify-answer.txt`.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/domain/src/migrations.ts:254-260` (`args_raw TEXT`); `packages/domain/src/migrations.ts:317-319` (`0012_spur_cli_history_tool_call_args_raw`); Q4 still uses digest at `packages/domain/src/analytics/forensic-query.ts:292-305`. ts-libs `TODO_TOOL_ALLOWLIST` + `maybeArgsRaw` (this run: `forensic-contract.test.ts` 23 pass / 0 fail, including R1 TodoWrite retains / Bash does not / Codex `update_plan` / Grok `todo_write`) |
-| R2 | MET | Importer schema already has `duration_ms`; Grok mapper fills it from `tool_completed`; non-reporting sources leave it undefined/null (re-read mappers this run — no fabricated zeros) |
-| R3 | MET | Allowlist records Codex `update_plan`, Grok `todo_write`, AGY `[]` (docstring cites 0553 R3 probe). Session-formats `agy` row: `plugins/sp/skills/issue-finding/references/session-formats.md:34` |
-| R4 | MET | Schema has `result_bytes` only; forensic-contract R4 block (this run): no result-content columns + `SECRET_TOKEN` never stored |
-| R5 | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:15-19` names `mappers.ts` as the single typed-table authority; no per-source fidelity ratings remain |
+| R1 | MET | `packages/domain/src/migrations.ts:285-287` (`HISTORY_TOOL_CALL_ARGS_RAW_SCHEMA_SQL` — `ALTER TABLE history_tool_call ADD COLUMN args_raw TEXT`); `packages/domain/src/migrations.ts:406-409` (`0012_spur_cli_history_tool_call_args_raw`, `addColumnIfMissing`). Q4 loop detection still keys on the digest, not `args_raw`: `packages/domain/src/analytics/forensic-query.ts:333-347` (`args_digest IS NOT NULL`, `GROUP BY tc.session_id, tc.tool_name, tc.args_digest`) — additive, not a replacement. ts-libs `TODO_TOOL_ALLOWLIST` + `maybeArgsRaw` retain raw args for todo tools only |
+| R2 | MET | Importer schema already carries `duration_ms` (no schema change). Populated where the source reports it, left NULL otherwise — never a fabricated zero. Measured this run on `.spur/spur.db`: omp `history_tool_call.duration_ms IS NOT NULL` = **102,113** (0 before the 0578 delivery); non-reporting sources still NULL |
+| R3 | MET | Allowlist records codex `update_plan`, grok `todo_write`, agy `[]`; extended by 0578 R3 to opencode `todowrite`/`todoread` and pi `todo`/`manage_todo_list`. Source table row: `plugins/sp/skills/issue-finding/references/session-formats.md:34` (`agy` — no discoverable on-disk session format) |
+| R4 | MET | Schema stores `result_bytes` only; no result-content column exists. Re-read this run — no result body reaches storage |
+| R5 | MET | `plugins/sp/skills/issue-finding/references/session-formats.md:15-19` — "What typed tables retain is owned by `mappers.ts`… This skill holds **no duplicate field map**; two maps that can disagree is the defect closed by 0553 R5." No per-source fidelity ratings remain |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R1 — Import retains the primitives phase detection needs | MET | test | ts-libs `forensic-contract.test.ts` R1 block (3 tests) + R4 block (2 tests) this run: 23 pass / 0 fail |
-| Scenario: R2 — Per-step latency is available for time decomposition | MET | test | `duration_ms` column present; Grok populates; others leave null. `packages/domain/tests/dao/migrations.test.ts` includes `0012` args_raw (this run: 39 pass / 0 fail in that file as part of 69-file domain slice) |
+| Scenario: R1 — Import retains the primitives phase detection needs | MET | query | `.spur/spur.db` this run: `history_tool_call.args_raw IS NOT NULL` = **7,496** rows (6 before the 0578 re-import), all from todo-writing tools; no result-content column exists in the schema |
+| Scenario: R2 — Per-step latency is available for time decomposition | MET | test+query | `bun test packages/domain/tests/analytics/ packages/domain/tests/dao/migrations.test.ts packages/domain/tests/db.test.ts` this run → **275 pass / 0 fail / 851 expect()** (migration `0012` args_raw covered). Data plane: omp `duration_ms` non-null 102,113; sources that report no timing remain NULL, not 0 |
 
 **SECUA Review**
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+| P3 | C | `packages/domain/src/migrations.ts` | **Fixed this run.** Three Testing anchors had drifted by 90–120 lines after 0579/0580/0581 edits and resolved to unrelated code (`SYSTEM_EVENTS_SEQUENCE_INDEX_SCHEMA_SQL`, a column list, a tool-map merge). Citations corrected; no implementation change |
+| P4 | — | — | No P1–P2 findings; verify verdict PASS |
 
-This run: `bun test packages/domain/tests/dao/migrations.test.ts` + analytics siblings → 69 pass / 0 fail; ts-libs `forensic-contract.test.ts` → 23 pass / 0 fail. Isolated-suite coverage exit 1 is not a product failure.
+Coverage: N/A (verdict-based re-audit; the verify pipeline does not measure code coverage).
 ### Review
 **Functional traceability** — all requirements MET (re-audit 2026-08-14):
 
