@@ -43,6 +43,7 @@ import {
     renderSolutionFromDiff,
     renderTesting,
 } from './task-record';
+import { evaluateTaskSize } from './task-size-precheck';
 
 /**
  * Replace or add a frontmatter field in rendered markdown.
@@ -1141,6 +1142,22 @@ export class TaskService {
                 return {
                     ...result,
                     warnings: [...(result.warnings ?? []), ...warnings],
+                };
+            }
+        }
+
+        // 0575 R1: authoring-time size warning — re-run the same evaluation the
+        // pipeline precheck uses, at the moment an oversize is authored. Counts
+        // the whole post-write body (a Plan write must still see the file's
+        // R-items). Advisory only: the write above has already landed, and the
+        // reasons ride the existing `warnings[]` channel (stderr in human mode,
+        // inside the payload under `--json`) with no CLI change.
+        if (sectionName === 'Requirements' || sectionName === 'Plan') {
+            const report = evaluateTaskSize(await this.ctx.fs.readFile(filePath));
+            if (!report.ok) {
+                return {
+                    ...result,
+                    warnings: [...(result.warnings ?? []), ...report.reasons],
                 };
             }
         }

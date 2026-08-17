@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Authoring-time task size warning on spur task create / update --section (ADR-051 consent pending)"
 description: ""
-status: backlog
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T23:28:49.554Z"
-updated_at: "2026-08-16T23:56:33.918Z"
+updated_at: "2026-08-17T04:41:29.877Z"
 ---
 
 ## 0575. Authoring-time task size warning on spur task create / update --section (ADR-051 consent pending)
@@ -21,7 +21,7 @@ updated_at: "2026-08-16T23:56:33.918Z"
 ### Background
 Split out of task 0568 (2026-08-16) so that task could clear its own size gate: 0568 carried 6 R-items against `maxReqs: 5` (`bun plugins/sp/scripts/task-size-precheck.ts --wbs 0568` → `FAIL — 6 R-items, 6 Plan items`). Parking this requirement drops 0568 to 5 and clears the gate — the remaining five requirements are all doc/skill/parser work with no consent gate.
 
-**Held pending operator consent.** This is a change to the **public** `spur` CLI surface (`spur task create`, `spur task update --section`), which per **ADR-051** requires explicit operator consent with design context before it is built, plus `docs/04_DESIGN.md` updated in the same commit (T3). Operator decision 2026-08-16: **parked** — not approved, not rejected. Do not implement without revisiting that call.
+**ADR-051 consent recorded 2026-08-16: APPROVED.** The operator approved via the consent ask surfaced at the start of `/sp-dev-run 0575 --auto --next` (host session `mswlw0hh-2qe6hxc5`), with design context presented: a non-blocking size warning on `spur task update --section Requirements|Plan` (stderr in human mode, `warnings[]` under `--json`), no new flag/noun/verb, exit code unchanged, code confined to `packages/app/src/services/task-service.ts`, `docs/04_DESIGN.md` updated in the same commit (T3). This supersedes the earlier 2026-08-16 "parked" decision; R1+R2 may proceed.
 
 The underlying gap is real: the size gate today fires first at *pipeline precheck*, which is after a task has already been authored, refined, and queued. An authoring-time warning surfaces the same signal at the moment the oversize is created, when it is cheap to fix. 0568 itself is the worked example — it was authored at 6 R-items and nothing said so until it was picked up for execution.
 ### Requirements
@@ -169,17 +169,43 @@ rather than deferred, per the advisory's own second option.
 - [ ] Document the surface in `docs/04_DESIGN.md` under `spur task update` — trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract — in the same commit as the code (T3) (R2)
 - [ ] Gates: `bun test packages/app/tests/services --test-name-pattern 'size|warning'` targeted first, then `bun run lint`, `bun test plugins/sp/tests/task-size-precheck.test.ts` (parity at `:76` must stay green), and `spur task check 0575` (R1, R2)
 ### Solution
+Implemented R1 + R2 as a single write-seam change; no CLI, plugin, or precheck code touched.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — service seam.** `TaskService.updateSection` gains one post-write branch (`packages/app/src/services/task-service.ts:1149`): when the section written is `Requirements` or `Plan`, the method re-reads the whole post-write task body via `this.ctx.fs.readFile(filePath)` and calls `evaluateTaskSize(content)` with no `executor` argument (import at `packages/app/src/services/task-service.ts:46`). When `report.ok === false`, `report.reasons` are appended onto the write result's `warnings[]` (`packages/app/src/services/task-service.ts:1156`), composing with — never overwriting — any warnings the write service itself produced. This mirrors the existing DD-09 AC-subset fold (`packages/app/src/services/task-service.ts:1138`) exactly: evaluation runs only after the mutation has landed, so the warning can never block or change the exit code, and the thresholds stay solely owned by `DEFAULT_TASK_SIZE_LIMITS` in `packages/app/src/services/task-size-precheck.ts:33` — no duplicated constants. Whole-body re-read (not the section body) is deliberate: a conforming Plan write onto a task that already carries 6 R-items still surfaces the R-item reason.
 
+**Rendering — zero CLI change.** `task update --section` already prints every `result.warnings[]` entry to stderr in human mode and serializes them inside the JSON payload (`apps/cli/src/commands/task.ts:317`), so both acceptance renderings fall out of the service change; verified end-to-end against a rebuilt `apps/cli/spur.js` in an isolated `--folder` corpus.
+
+**R2 — T3 doc sync.** The `spur task update` surface row (`docs/04_DESIGN.md:1330`) now names the authoring-time size warning, its trigger sections (`--section Requirements` / `--section Plan`), the `DEFAULT_TASK_SIZE_LIMITS` threshold source (max 5 R-items / max 8 Plan items, same caps as the pipeline precheck), and the non-blocking contract (write landed first, exit code stays 0, no other section evaluated).
+
+**Tests.** New describe block `updateSection — authoring-time size warning (0575 R1)` (`packages/app/tests/services/task-service.test.ts:1882`) covers: 6-R-item Requirements write warns + write lands on disk (non-blocking proof), conforming 5-R-item write stays silent, 9-item Plan write warns on plan items, a Plan write counts R-items from the whole post-write body (and does not warn about its own small Plan), and a Background write never runs the evaluation. Full file: 106 pass / 0 fail.
+
+**Out of scope, untouched** (per Requirements): `spur task create` (unreachable — the standard template seeds placeholder Requirements that never trigger), blocking behavior, new flags/nouns/verbs, threshold duplication, executor-tier branching.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/task-service.ts:1150-1163 — post-write advisory branch inside updateSection: gate the Requirements-or-Plan section gate (:1155), whole-post-write-body re-read via `evaluateTaskSize(await this.ctx.fs.readFile(filePath))` (:1156), reasons folded into existing `warnings[]` channel (:1157-1162); import at :46 reuses task-size-precheck (no executor arg, no threshold duplication). Unit: packages/app/tests/services/task-service.test.ts:1883-1954, 5 tests, file suite 106/106 pass re-run this session. E2E this run against real CLI ./apps/cli/spur.js in scratch corpus /tmp/0575v: (P1) 6-R-item Requirements write → exit 0, stderr `Task has 6 R-items (max 5). Consider decomposing into smaller tasks or raise maxImplementReqs via --vars.`, `**R6.**` present on disk after write; (P2) same write --json → identical string inside `warnings[]`, stdout valid JSON per jq -e, stderr empty, exit 0; (P3) conforming 5-R-item Requirements and 8-item Plan writes → no stderr (human) and no `warnings` key (--json); (P4) 1-step Plan write onto the 6-R-item task still warns on R-count (whole-body counting); (P5) Background write on the oversize task → no evaluation, no warning. |
+| R2 | MET | docs/04_DESIGN.md:1330 — `spur task update <wbs> <status>` row now carries "**Authoring-time size warning (0575 R1):** a `--section Requirements` or `--section Plan` write re-evaluates the whole post-write task body via `evaluateTaskSize` against `DEFAULT_TASK_SIZE_LIMITS` (max 5 R-items / max 8 Plan items — the same caps the pipeline precheck enforces, sole owner of the thresholds)" plus the non-blocking warnings[] contract (stderr in human mode, inside payload under --json). Gates re-run this session: `bun run lint` (biome check --error-on-warnings + full typecheck) exit 0; `spur task check 0575` → PASS with 3 pre-accepted L4 advisories (missing feature_id deferred with owner per task Q&A; gate-language warnings accepted deliberately in Q&A). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-1 (R1 — An oversized Requirements write warns without blocking) | MET | test | E2E probe: `task update 0576 --section Requirements --from-file req6.md` → exit 0, stderr carries `Task has 6 R-items (max 5)`, write landed (R6 on disk). Unit: task-service.test.ts:1899 asserts warning present, file mutated, non-blocking. |
+| AC-2 (R1 — The same warning is machine-readable under --json) | MET | test | E2E probe: same write with `--json` → `warnings: ["Task has 6 R-items (max 5). …"]`, `jq -e` validates stdout as JSON, exit 0, stderr empty. Unit: task-service.test.ts:1899 block asserts reasons ride `result.warnings`. |
+| AC-3 (R1 — A conforming write stays silent) | MET | test | E2E probes: 5-R-item Requirements write (human mode) → empty stderr; 8-item Plan write (--json) → no `warnings` key. Unit: task-service.test.ts:1912 (5-R-item silent) and :1921 (8-item Plan silent). |
+| AC-4 (R1 — A Plan write counts R-items from the whole task body) | MET | test | E2E probe: 1-step Plan write onto task already holding 6 R-items → warns `Task has 6 R-items (max 5)`. Unit: task-service.test.ts:1933 (Plan write re-reads whole post-write body). |
+| AC-5 (R1 — Non-trigger sections are untouched) | MET | test | E2E probe: Background write on the oversize task (--json) → no `warnings`, empty stderr, exit 0. Unit: task-service.test.ts:1945 (Background/Design/Solution writes never run the evaluation). |
+| AC-6 (R2 — The surface change is documented in the same commit) | MET | command | `git status`/`git diff --stat` this session: docs/04_DESIGN.md and packages/app/src/services/task-service.ts (+ tests) sit in the same single working-tree changeset pending the pipeline's record commit (T3 honored). Doc row live at docs/04_DESIGN.md:1330. ADR-051 consent APPROVED dated 2026-08-16 recorded in task Background (docs/tasks4/0575_…md) precedes the change. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - **ADR-051** — `docs/00_ADR.md:436` "Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate". The consent gate this task is parked behind.
 - **Parent task 0568** — `docs/tasks4/0568_fix-0567-run-process-bottlenecks-plan-time-size-gate-verdict.md`. This task was its R1 until the 2026-08-16 split; 0568 kept R2–R6.
@@ -190,3 +216,7 @@ rather than deferred, per the advisory's own second option.
 - **Hard gate that stays authoritative** — `plugins/sp/scripts/task-size-precheck.ts` (pipeline precheck; task 0454 R2, task 0487 R3).
 - **ADR-021** — apps are thin transports; logic lives in `packages/app`. The reason the evaluation belongs in the service, not the command file.
 ### History
+- 2026-08-17T02:59:52.658Z backlog → todo (system)
+- 2026-08-17T04:41:23.803Z todo → wip (system)
+- 2026-08-17T04:41:24.296Z wip → testing (system)
+- 2026-08-17T04:41:29.877Z testing → done (system)
