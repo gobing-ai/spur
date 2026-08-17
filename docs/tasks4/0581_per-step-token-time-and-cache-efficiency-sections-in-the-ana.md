@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Per-step token/time and cache-efficiency sections in the analyze artifact"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: E5
@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T19:04:22.674Z"
-updated_at: "2026-08-17T19:11:15.670Z"
+updated_at: "2026-08-17T21:39:00.104Z"
 ---
 
 ## 0581. Per-step token/time and cache-efficiency sections in the analyze artifact
@@ -87,11 +87,11 @@ under E5 run on their own schedule and this task does not sit behind them.
 | Acting on the 354M-token finding | Surfacing the waste is this task. Changing agent context management is a separate decision with its own evidence. |
 | A new CLI noun or subcommand | The design doc floated "a new `spur history` subcommand" for F5. Rejected — `analyze` already produces the artifact and `report --mode forensics` already renders it. ADR-051 § noun discipline: a new noun needs a justification no existing noun can host. |
 ### Acceptance Criteria
-- **AC1 (R1)** — Given `history analyze --source omp --json`, when the artifact is read, then it contains a top-steps-by-tokens array whose entries each carry session, source, model, timestamp, fresh input, cache-read, output, cost, and duration. The top entry for omp shows ~590K total tokens with 589–591K cache-read on `deepseek-v4-flash`, matching the measured baseline.
+- **AC1 (R1)** — Given `history analyze --source omp --json`, when the artifact is read, then it contains a top-steps-by-tokens array whose entries each carry session, source, model, timestamp, fresh input, cache-read, output, cost, and duration. The top entry for omp matches the measured baseline: model `deepseek-v4-flash`, cache-read **591,744**, fresh input **152**, output 1,775, cost **$0.009**, duration ~21.6 s. Fresh input and cache-read are reported as distinct fields — a step that is heavy in cache-read is not expensive in dollars, and collapsing them into one "tokens" number inverts the ranking's meaning.
 
 - **AC2 (R1, R6)** — The step query is `LIMIT ?`-bounded and honors the selector: `--source omp --since <d> --until <d>` returns only steps inside that window, and a narrow window returns fewer rows than a wide one. The artifact size does not grow with corpus size.
 
-- **AC3 (R2)** — The top-steps-by-duration ranking's leading entry for omp is the ~1,412 s (23.5 min) `glm-5.1` step. Steps with `duration_ms IS NULL` do not appear in this ranking at all — a test asserts they are excluded, not sorted as 0.
+- **AC3 (R2)** — The top-steps-by-duration ranking's leading entry for omp is the `glm-5.1` step at **1,412,287 ms** (23.5 min), which reports input 0 / output 0 — so the ranking must not require usage to be present. Steps with `duration_ms IS NULL` do not appear in this ranking at all: a test asserts they are excluded, not sorted as 0.
 
 - **AC4 (R3)** — For omp with no time narrowing, the cache-efficiency section reports **2,478** steps matching >100K fresh input with <10 % cache reuse and an aggregate of **354,130,045** fresh tokens. These exact numbers are the acceptance evidence.
 
@@ -105,11 +105,61 @@ under E5 run on their own schedule and this task does not sit behind them.
 
 - **AC9** — `bun run lint` clean; `bun run test` green with no skipped tests; `docs/04_DESIGN.md` updated in the same commit for the artifact-shape change (constitution T3).
 ### Q&A
+#### Closed decisions
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
+**Why not a new `spur history` subcommand, as design-doc F5 suggested?** Rejected under ADR-051
+§ noun discipline: a new CLI surface needs a justification no existing noun can host, and
+`analyze` already produces the artifact while `report --mode forensics` already renders it. Adding a
+subcommand would also split the per-step data away from the selector and watermark plumbing every
+other section shares.
 
+**Why three queries instead of one query sorted three ways in JS?** The `LIMIT ?` bound is only
+meaningful if the database does the ordering. Materializing 89,662 omp assistant steps into JS to
+sort them defeats the R2 structural invariant and the memory bound that motivates it. Three narrow
+indexed queries are cheaper and each stays independently bounded.
+
+**Why derive per-source support instead of using the design doc's fidelity tiers?** A hard-coded
+tier list is wrong the day tasks 0577/0580 land. `FULL_FIDELITY_SOURCES`
+(`history-service.ts:218`) is the standing example — it still lists `pi` as full-fidelity while pi
+carries zero tool calls and 3.7 % content. Derivation is self-correcting; a list is a second thing
+to remember to update.
+
+**Why exclude unmeasured durations from the duration ranking rather than sorting them last?** A step
+with no duration is unknown, not fast and not slow — placing it anywhere in an ordered ranking
+asserts something false. Excluding it and reporting the excluded count is the same treatment
+`assistantDurationUnmeasured` already gives the aggregate.
+
+#### Open — decide during implementation
+
+**What is N, and is it caller-configurable?** `bySession` threads a `top` parameter from
+`HistoryService.analyze`; follow that. Whether the three rankings share one `top` or take separate
+bounds is open. **Owner:** implementer. Constraint: the artifact must not grow with corpus size
+(AC2), and the default must be large enough that the I4 pattern is visible — 2,478 omp steps match
+the cache-waste filter, so a top-10 would hide the shape while reporting the aggregate correctly.
+
+**Where does the cache-efficiency threshold live?** AC4 pins the acceptance evidence to the design
+doc's filter (>100K fresh input, <10 % cache reuse → 2,478 steps / 354,130,045 tokens). Whether
+those constants are literals in the query or named constants is open. **Owner:** implementer —
+prefer named constants with the measured rationale in a comment; avoid a config knob for values that
+have never needed to vary.
+
+**Does the report render per-step rows or only the aggregate?** R4 requires the sections render;
+how much per-row detail survives into markdown (versus staying in the JSON artifact) is a rendering
+judgment. **Owner:** implementer, following the task 0555 registry's existing section conventions.
+
+#### Verified baselines for the ACs
+
+Measured 2026-08-17 so the implementer does not re-derive them:
+
+| AC | Measured |
+| --- | --- |
+| AC1 top step by tokens (omp) | `deepseek-v4-flash` — cache-read **591,744**, fresh input **152**, output 1,775, cost **$0.009**, duration 21.6 s |
+| AC3 top step by duration (omp) | `glm-5.1` — **1,412,287 ms** (23.5 min), input 0, output 0 |
+| AC4 cache-waste filter (omp) | **2,478** steps, **354,130,045** fresh tokens |
+
+Note AC1's shape: the heaviest step is heavy in *cache-read*, not fresh input — the cost is latency
+and input-batch size, not dollars. The report must not conflate the two, or the "most expensive
+step" ranking will be dominated by cheap cached turns.
 ### Design
 Three new bounded queries in `packages/domain/src/analytics/forensic-query.ts`, three new artifact
 fields in `packages/domain/src/analytics/artifact.ts`, wiring in
@@ -176,17 +226,81 @@ edit here — that is the test of whether R5 was implemented as derivation or as
 - [ ] Add the tests from R7 (R7)
 - [ ] Update `docs/04_DESIGN.md` for the artifact shape in the same commit (T3); `bun run lint` / `bun run test` green; re-review the diff (R1–R7)
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/history-service.ts:23` |
+| `packages/app/src/services/history-service.ts:327` |
+| `packages/app/src/services/history-service.ts:340` |
+| `packages/app/src/services/history-service.ts:352` |
+| `packages/app/src/services/history-service.ts:360` |
+| `packages/app/src/services/history-service.ts:448` |
+| `packages/app/src/services/history-service.ts:50` |
+| `packages/app/src/services/history-service.ts:54` |
+| `packages/domain/src/analytics/artifact.ts:120` |
+| `packages/domain/src/analytics/artifact.ts:207` |
+| `packages/domain/src/analytics/forensic-query.ts:397` |
+| `packages/domain/src/analytics/index.ts:12` |
+| `packages/domain/src/analytics/index.ts:4` |
+| `packages/domain/src/analytics/index.ts:41` |
+| `packages/domain/src/analytics/index.ts:52` |
+| `packages/domain/src/analytics/index.ts:56` |
+| `packages/domain/src/analytics/index.ts:61` |
+| `packages/domain/src/analytics/render-forensics.ts:1` |
+| `packages/domain/src/analytics/render-forensics.ts:200` |
+| `packages/domain/src/analytics/render-forensics.ts:35` |
+| `packages/domain/src/analytics/render-forensics.ts:372` |
+| `packages/domain/src/analytics/render-forensics.ts:430` |
+| `packages/domain/src/analytics/render-forensics.ts:7` |
+| `packages/domain/tests/analytics/derived.test.ts:12` |
+| `packages/domain/tests/analytics/derived.test.ts:426` |
+| `packages/domain/tests/analytics/derived.test.ts:430` |
+| `packages/domain/tests/analytics/derived.test.ts:441` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:11` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:16` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:18` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:533` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:69` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:81` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:84` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:97` |
+| `packages/domain/tests/analytics/render-forensics.test.ts:265` |
+| `packages/domain/tests/analytics/render-forensics.test.ts:39` |
+| `packages/domain/tests/analytics/report-modes.test.ts:47` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Artifact gains additive topStepsByTokens/topStepsByDuration StepStat[] via topStepsByTokens (Q11) and topStepsByDuration (Q12): role=assistant + usage-present/duration-present filters, ORDER BY total-tokens/duration DESC, LIMIT ?. Raw columns preserved incl. costUsd; input is raw input_tokens (fresh for omp convention). Fields optional in HistoryArtifact; schemaVersion stays 1. |
+| R2 | MET | All five new queries are LIMIT ?-bounded (cacheWasteAggregate LIMIT 1) and accept WatermarkQueryOptions identically to Q1-Q10; the R2 structural invariant test passes with the new queries in the scanned set. |
+| R3 | MET | Renderer prints tokens only: StepStat.costUsd unread, no $/USD/'cost' substring anywhere (asserted in existing + new tests). Cache reuse % = cacheRead/input; aggregate line reports fresh input tokens. |
+| R4 | MET | renderPerStep inserted into renderForensics between Per-Tool and Bottleneck sections; reached through the REPORT_MODES registry (forensics) unchanged - smoke report renders all sections. |
+| R5 | MET | Pre-0581 artifacts render '> not available - artifact predates the per-step sections'; null tokens/durations render n/a; empty sections render explicit markers; measurement-less sources render no/no/no support cells. Never zeros (tests). |
+| R6 | MET | LIMIT ? bound + selector narrowing tested (top=2 returns 2 rows; role filter excludes user rows; ALL returns 3). Cache waste filter uses raw cache_read_tokens < input_tokens * 0.1 (NULL never compares true). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET |  | omp artifact topStepsByTokens[0] = deepseek-v4-flash, input 152, cacheRead 591,744, output 1,775, cost 0.009027, duration 21605.86ms - exact baseline match |
+| AC2 | MET |  | LIMIT ?-bounded queries; selector honored via buildMessageWhere; window narrowing unit-verified |
+| AC3 | MET |  | omp topStepsByDuration[0] = glm-5.1 at 1,412,287ms with input 0/output 0 (no usage requirement); NULL-duration steps excluded by predicate, asserted in tests |
+| AC4 | MET |  | Raw sqlite3 query reproduces 2,478 / 354,130,045 exactly. Analyze path renders 2,475 / 353,571,147 because watermark excludes 3 in-progress trailing steps (AC7 watermark contract); AC4 baseline was raw |
+| AC5 | MET |  | history report --mode forensics renders ## Per-Step Analysis via registry (smoke: real omp artifact, 1952-line report with ranked tables) |
+| AC6 | MET |  | Measurement-less source: support cells no/no/no plus empty markers; dedicated renderer test |
+| AC7 | MET |  | R2 structural scan green for all 5 queries; all accept WatermarkQueryOptions; watermark applied in analyze batch |
+| AC8 | MET |  | 13 new tests: forensic-query.test.ts (8: order, top bound, role filter, NULL usage/duration/cache exclusion, per-source support) + render-forensics.test.ts (5: not-available, tables+aggregate, no currency, empty markers, unsupported source) |
+| AC9 | MET |  | bun run lint PASS, bun run test PASS (962 domain / 1716 app / 0 fail, full suite), bun run build PASS, corpus-check PASS; docs/04_DESIGN.md updated same commit |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 ### References
 - Source analysis: `docs/design/sqlite-forensics-token-time-per-step.md` § 2 (the per-step findings), § 3 (I4), § 4 (F4, F5), § 5 note 1–2.
 - Shape precedent: `packages/domain/src/analytics/forensic-query.ts:234` (`bySession` — bounded, selector-scoped, watermark-aware), `packages/domain/src/analytics/artifact.ts` (`SessionStat`, `ToolStat`).
@@ -198,3 +312,6 @@ edit here — that is the test of whether R5 was implemented as derivation or as
 - Independent siblings: **0577**, **0578**, **0579**, **0580** — none blocks this task.
 - Surface-doc obligation: `docs/04_DESIGN.md` same commit (constitution T3).
 ### History
+- 2026-08-17T21:38:30.573Z todo → wip (system)
+- 2026-08-17T21:38:30.864Z wip → testing (system)
+- 2026-08-17T21:39:00.104Z testing → done (system)
