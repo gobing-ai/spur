@@ -17,7 +17,7 @@ const SCRIPT = join(import.meta.dir, '..', 'scripts', 'history-load.ts');
 // ─── Stub harness ────────────────────────────────────────────────────────────
 
 interface StubEnv {
-    /** Import fan-out exit code (0 ok, 1 all-failed). */
+    /** Import fan-out exit code (0 ok, 1 all-failed, 2 mixed/degraded — 0569). */
     importExit?: string;
     /** Message count the fake analyze reports (0 = empty window). */
     messages?: string;
@@ -36,9 +36,13 @@ function writeStub(dir: string, env: StubEnv): { stub: string; calls: string; ar
 printf '%s\\n' "$*" >> "${calls}"
 case "$1 $2" in
   "history import")
-    if [ "${importExit}" != "0" ]; then
-      printf '%s\\n' '{"entries":[{"source":"codex","status":"failed","files":0,"messages":0}],"exitCode":${importExit},"warnings":[{"code":"source-failed","source":"codex","detail":"boom"}]}'
-      exit ${importExit}
+    if [ "${importExit}" = "1" ]; then
+      printf '%s\\n' '{"entries":[{"source":"codex","status":"failed","files":0,"messages":0,"parseErrors":0,"validationErrors":0}],"exitCode":1,"warnings":[{"code":"source-failed","source":"codex","detail":"boom"}]}'
+      exit 1
+    fi
+    if [ "${importExit}" = "2" ]; then
+      printf '%s\\n' '{"entries":[{"source":"agy","status":"degraded","messages":10,"parseErrors":203,"validationErrors":0},{"source":"pi","status":"ok","messages":5,"parseErrors":0,"validationErrors":0}],"exitCode":2,"warnings":[{"code":"source-degraded","source":"agy","detail":"imported 10 records but skipped 203 parse error(s)"}]}'
+      exit 2
     fi
     printf '%s\\n' '{"entries":[{"source":"claude","status":"ok","files":3,"messages":${messages}}],"exitCode":0,"warnings":[]}'
     exit 0
@@ -150,6 +154,13 @@ describe('history-load — failure paths (R5)', () => {
         expect(calls.some((c) => c.startsWith('history analyze'))).toBe(false);
     });
 
+    test('exit 1 (all-failed) bare run — analyze is never invoked, exit 1 propagates (0569 R2)', () => {
+        const { exitCode, stderr, calls } = runScript(dir, [], { importExit: '1' });
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain('codex');
+        expect(calls.some((c) => c.startsWith('history analyze'))).toBe(false);
+    });
+
     test('a zero-row window exits non-zero and names the empty window', () => {
         const { exitCode, stderr } = runScript(dir, ['--since', '2026-01-01', '--until', '2026-01-02'], {
             messages: '0',
@@ -207,5 +218,60 @@ describe('history-load — output contracts (R4/R7)', () => {
         expect(exitCode).toBe(0);
         expect(stdout).toContain('artifact:');
         expect(stdout).toContain('REPORT of');
+    });
+});
+
+describe('history-load — degraded fan-out tolerance (0569 R1/R2)', () => {
+    let dir: string;
+    beforeEach(() => {
+        dir = mkdtempSync(join(tmpdir(), 'history-load-degraded-'));
+    });
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('exit 2 proceeds to analyze, exits 0, and the JSON payload carries warnings naming the degraded source', () => {
+        const { exitCode, stdout, stderr, calls } = runScript(dir, ['--json'], { importExit: '2' });
+        expect(exitCode).toBe(0);
+        expect(calls.some((c) => c.startsWith('history analyze'))).toBe(true);
+        const lines = stdout.trim().split('\n');
+        expect(lines).toHaveLength(1);
+        const obj = JSON.parse(lines[0] as string) as {
+            status: string;
+            warnings?: Array<{
+                source: string;
+                status: string;
+                parseErrors: number;
+                validationErrors: number;
+                detail: string;
+            }>;
+        };
+        expect(obj.status).toBe('ok');
+        expect(obj.warnings).toHaveLength(1);
+        const w = obj.warnings?.[0];
+        expect(w?.source).toBe('agy');
+        expect(w?.status).toBe('degraded');
+        expect(w?.parseErrors).toBe(203);
+        expect(w?.validationErrors).toBe(0);
+        expect(w?.detail).toContain('203 parse error(s)');
+        // JSON mode must not interleave the human warning into the single-object contract.
+        expect(stderr).toBe('');
+    });
+
+    test('exit 2 in human mode warns on stderr naming the degraded source and its counts', () => {
+        const { exitCode, stderr, calls } = runScript(dir, [], { importExit: '2' });
+        expect(exitCode).toBe(0);
+        expect(calls.some((c) => c.startsWith('history analyze'))).toBe(true);
+        expect(stderr).toContain('degraded');
+        expect(stderr).toContain('agy');
+        expect(stderr).toContain('203');
+        expect(stderr).toContain('validationErrors=0');
+    });
+
+    test('a clean fan-out payload has no warnings field (R5: clean-run payload unchanged)', () => {
+        const { exitCode, stdout } = runScript(dir, ['--json'], { importExit: '0' });
+        expect(exitCode).toBe(0);
+        const obj = JSON.parse(stdout.trim()) as { warnings?: unknown };
+        expect(obj.warnings).toBeUndefined();
     });
 });

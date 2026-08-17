@@ -44,11 +44,14 @@ and never double-counts. This command never prunes reports and never re-implemen
 pipeline; for the periodic cadence (import-all → analyze → artifact → 90-day prune, self-healing),
 run `spur history daily` instead.
 
-**Fail-hard on a degraded source (deliberate).** Any non-zero import exit — including exit 2 for a
-mixed/degraded fan-out — aborts the sequence before analyze and propagates the exit code. If one
-source is steady-state degraded (e.g. corrupt transcript chunks in a tool's own logs), a bare run
-never completes; scope the run with `--source <name>` (repeat per source as needed), or use
-`spur history daily`, whose fan-out treats degraded sources as non-fatal.
+**Degraded sources proceed with a warning; fully-failed imports abort (0569).** `spur history
+import` distinguishes fatal from degraded fan-outs by exit code: **exit 1** (every source
+failed) aborts the sequence before analyze and propagates the exit code; **exit 2** (mixed —
+at least one source imported, some skipped malformed rows) proceeds to analyze with a loud
+per-source warning: stderr names each degraded source with its parse/validation error counts
+(human mode), and the `--json` payload carries a `warnings` array with the source, counts, and
+the import step's warning detail. A steady-state degraded source therefore no longer blocks a
+bare run; to scope around one deliberately, use `--source <name>` per source.
 
 ## Implementation
 

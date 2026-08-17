@@ -3,7 +3,8 @@
  * dev-history-load — on-demand cumulative history import + narrowed analyze (task 0567).
  *
  * Deterministic CLI sequence backing `/sp:dev-history-load`. Runs `spur history import`
- * first, then `spur history analyze` only after import exits 0. Narrowing flags
+ * first, then `spur history analyze` only after import exits 0 or 2 (exit 2 is a
+ * mixed/degraded fan-out: proceed with a loud per-source warning — 0569). Narrowing flags
  * (`--session`, `--task`, `--since`, `--until`) are forwarded to `analyze` only — `import`
  * rejects them. `--source` reaches both. Owns no import logic, no state, and no cadence:
  * cumulative behavior comes from the shipped checkpoint resume, and the periodic pipeline
@@ -141,7 +142,13 @@ function latestArtifactPath(cwd: string): string | null {
 // ─── Result shaping ──────────────────────────────────────────────────────────
 
 interface ImportJson {
-    entries?: Array<{ source: string; status: string; messages?: number }>;
+    entries?: Array<{
+        source: string;
+        status: string;
+        messages?: number;
+        parseErrors?: number;
+        validationErrors?: number;
+    }>;
     exitCode?: number;
     warnings?: Array<{ code: string; source: string; detail?: string }>;
     provenance?: unknown;
@@ -173,6 +180,39 @@ function emitJson(obj: unknown): void {
     process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
+/** Per-source degradation summary carried into output payloads (task 0569). */
+interface DegradedWarning {
+    source: string;
+    status: string;
+    parseErrors: number;
+    validationErrors: number;
+    detail: string;
+}
+
+/**
+ * Build per-source degradation warnings from a fan-out import JSON: one entry per
+ * degraded/failed source with its parse/validation error counts and the import step's
+ * warning detail (0569 R1). Empty on a clean fan-out.
+ */
+function buildDegradedWarnings(imp: ImportJson | null): DegradedWarning[] {
+    const detailFor = (source: string): string =>
+        imp?.warnings?.find((w) => w.source === source)?.detail ?? 'no warning detail reported by import';
+    return (imp?.entries ?? [])
+        .filter((e) => e.status === 'degraded' || e.status === 'failed')
+        .map((e) => ({
+            source: e.source,
+            status: e.status,
+            parseErrors: typeof e.parseErrors === 'number' ? e.parseErrors : 0,
+            validationErrors: typeof e.validationErrors === 'number' ? e.validationErrors : 0,
+            detail: detailFor(e.source),
+        }));
+}
+
+/** Attach the degradation warnings to a payload only when the fan-out was degraded (0569 R1). */
+function withWarnings(payload: Record<string, unknown>, degraded: DegradedWarning[]): Record<string, unknown> {
+    return degraded.length > 0 ? { ...payload, warnings: degraded } : payload;
+}
+
 // ─── Main sequence ───────────────────────────────────────────────────────────
 
 function main(): void {
@@ -188,11 +228,10 @@ function main(): void {
     const importResult = runSpur(spurBin, importArgs);
     const imp = parseImportJson(importResult.stdout);
 
-    // 2. Non-zero import exit (R9): surface the failing source + error, skip analyze,
-    //    exit with the import step's exit code.
-    if (importResult.status !== 0) {
-        // Any non-zero fan-out exit (all-failed=1, mixed/degraded=2) aborts: surface the
-        // non-clean source(s) and the first warning/error detail, skip analyze, propagate.
+    // 2. Fatal import failures (R9, 0569): any non-zero exit EXCEPT the mixed/degraded
+    //    code 2 aborts — surface the failing source + error, skip analyze, propagate the
+    //    import step's exit code.
+    if (importResult.status !== 0 && importResult.status !== 2) {
         const failed = (imp?.entries ?? [])
             .filter((e) => e.status !== 'ok' && e.status !== 'empty')
             .map((e) => e.source);
@@ -213,6 +252,19 @@ function main(): void {
         process.exit(importResult.status);
     }
 
+    // 2b. Degraded fan-out tolerance (0569 R1): exit 2 (mixed — at least one source
+    //     imported, some skipped rows) proceeds to analyze with a loud per-source warning.
+    const degraded = importResult.status === 2 ? buildDegradedWarnings(imp) : [];
+    if (degraded.length > 0 && !args.json) {
+        console.error('WARNING: import fan-out degraded — proceeding with the healthy sources:');
+        for (const w of degraded) {
+            console.error(
+                `  ${w.source}: status=${w.status} parseErrors=${w.parseErrors} ` +
+                    `validationErrors=${w.validationErrors} — ${w.detail}`,
+            );
+        }
+    }
+
     // 3. Dry-run short-circuit (R4): report what would have run, write nothing.
     if (args.dryRun) {
         const analyzeArgs = buildAnalyzeArgs(args);
@@ -220,13 +272,18 @@ function main(): void {
         sequence.push(`spur ${analyzeArgs.join(' ')}`);
         if (args.report) sequence.push('spur history report --mode forensics <artifact-path>');
         if (args.json) {
-            emitJson({
-                import: imp ?? { entries: [], exitCode: 0 },
-                artifact: null,
-                reported: false,
-                status: 'dry-run',
-                wouldRun: sequence,
-            });
+            emitJson(
+                withWarnings(
+                    {
+                        import: imp ?? { entries: [], exitCode: importResult.status },
+                        artifact: null,
+                        reported: false,
+                        status: 'dry-run',
+                        wouldRun: sequence,
+                    },
+                    degraded,
+                ),
+            );
         } else {
             console.log('[dry-run] would run:');
             for (const line of sequence) console.log(`  ${line}`);
@@ -322,12 +379,15 @@ function main(): void {
     // 7. Output: one JSON object (no interleaved banner) or a short human summary.
     const count = (imp?.entries ?? []).reduce((sum, e) => sum + (typeof e.messages === 'number' ? e.messages : 0), 0);
     if (args.json) {
-        const payload: Record<string, unknown> = {
-            import: imp ?? { entries: [], exitCode: 0 },
-            artifact: artifactPath,
-            reported,
-            status: 'ok',
-        };
+        const payload = withWarnings(
+            {
+                import: imp ?? { entries: [], exitCode: 0 },
+                artifact: artifactPath,
+                reported,
+                status: 'ok',
+            },
+            degraded,
+        );
         if (args.report) payload.report = reportText;
         emitJson(payload);
     } else {

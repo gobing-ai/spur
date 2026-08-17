@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-16T06:43:02.398Z"
-updated_at: "2026-08-16T07:37:57.553Z"
+updated_at: "2026-08-16T23:34:01.251Z"
 ---
 
 # I5: dev-history-load command: on-demand cumulative import + analyze
@@ -113,12 +113,20 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
     And the command is not a bare forwarder of "spur history daily" (ADR-016)
 
   @edge
-  Scenario: R9 — A failing import aborts before analyze and propagates the exit code
-    Given the import step exits non-zero after per-source failure isolation reports a fatal error
+  Scenario: R9 — A fully failed import aborts before analyze and propagates the exit code
+    Given the import step reports all sources failed (exit 1)
     When the operator runs "/sp:dev-history-load"
     Then the analyze step is not run
     And the command surfaces the failing source and the import error
     And the command exits with the import step's non-zero exit code
+
+  @edge
+  Scenario: R11 — A degraded fan-out proceeds to analyze with a loud warning
+    Given the import step exits 2 for a mixed/degraded fan-out with at least one source imported
+    When the operator runs "/sp:dev-history-load"
+    Then the analyze step runs and the command exits 0 after a successful analyze
+    And the command surfaces a per-source warning naming each degraded source and its parse/validation error counts
+    And in --json mode the payload carries a "warnings" array with each source's counts and warning detail
 
   @edge
   Scenario: R10 — Narrowing to a window with no imported rows fails loudly

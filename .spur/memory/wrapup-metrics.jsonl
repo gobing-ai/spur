@@ -51,12 +51,5 @@
 {"wbs":"0561","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-15T16:36:35.551Z"}
 {"wbs":"0565","feature_id":"G5","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:00.000Z"}
 {"wbs":"0566","feature_id":"G5","status":"done","verdict":"PASS","timestamp":"2026-08-15T00:00:00.000Z"}
-```jsonl
-{"wbs": "0572", "feature_id": "B3", "status": "done", "verdict": "PASS", "timestamp": "2026-08-16T22:45:39.492Z"}
-```
-
-Captured to `.spur/run/wrapup-metrics.jsonl`.
-
-Fields: `wbs` 0572, `feature_id` B3, `status` done, `verdict` PASS (from the task's verify artifact — all 5 ACs MET), `timestamp` from `spur task show 0572` (done transition `updated_at`).
-
-Note: the file carried leaked transcript prose from a prior run (fenced text + prose merged with a JSON line, breaking parse). Cleaned it — now 2 strict-parseable lines (0561, 0572).
+{"wbs":"0572","feature_id":"B3","status":"done","verdict":"PASS","timestamp":"2026-08-16T22:45:39.492Z"}
+{"wbs":"0569","feature_id":"I5","status":"done","verdict":"PASS","timestamp":"2026-08-16T23:54:16.429Z"}
