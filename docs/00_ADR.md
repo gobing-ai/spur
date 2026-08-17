@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.20.0
+version: 1.21.0
 owner: Robin Min
 updated_at: 2026-08-16
 read_before: any structural change; before diverging from a decision
@@ -469,6 +469,12 @@ is already crowded.
 
   **Amendment (2026-08-10):** Task 0502 completed the recorded promotion: the public gate is now
   `spur task check --corpus`; the spur-dev command was removed. **Detail:** `04 §7.1`.
+
+  **Amendment (2026-08-16):** Consent granted for the task 0575 authoring-time size warning — a
+  behavior-only surface change (new stderr line + `warnings[]` entry on `spur task update --section
+  Requirements|Plan`; no noun, verb, or flag added; code confined to `packages/app`). Confirms the
+  consent gate covers observable output changes of existing verbs, not just noun/verb additions; the
+  granted application supersedes the earlier 2026-08-16 parked status. **Detail:** `04 §7.1`.
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 

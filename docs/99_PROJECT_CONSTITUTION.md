@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.3.2
+version: 1.3.3
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-08-15T00:00:00.000Z
+updated_at: 2026-08-16T00:00:00.000Z
 ---
 
 # Project Constitution — How to Organize the Project
@@ -439,6 +439,10 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: An ADR number was burned by confusion with a sibling repo's ADR
   sequence; the gap was later documented as a `Skipped` stub. One sequence per repo, stub the
   gaps (now §6.1 rule 4).
+- [2026-08-16] spur-new: Task 0575 changed only the *observable output* of an existing verb (new
+  stderr line + `warnings[]` entry on `spur task update --section Requirements|Plan`) — no
+  noun/verb/flag — and still required ADR-051 consent. Record the granted application as a dated
+  amendment so behavior-only changes are never later exempted from the gate.
 
 ### Lessons for `docs/01_PRD.md`
 
@@ -562,7 +566,9 @@ if it recurs, a new rule in §6.
   amendment, a `03` §6.3 projection, and three `04` surface notes — all verify-PASSed, none bumping
   the §4.3 frontmatter `version`/`updated_at`; the wrapup contract-verify caught it. Recurred on
   0572: ADR-061 landed in-tree with `00` still at `version 1.19.0` / `updated_at 2026-08-15`.
-  Frontmatter bookkeeping is part of the same edit as the body change, not a follow-up pass.
+  Recurred again on 0575: the `04 §7.1` update row edit shipped with `version 1.35.0` still on the
+  pre-edit value, caught only at wrapup. Frontmatter bookkeeping is part of the same edit as the
+  body change, not a follow-up pass.
 - [2026-08-15] spur-new: An E3 wrapup placed a real-data measurement record (`0548-measurement.md`)
   in the `docs/design/` satellite layer with no `04 §0` index row — §4.5 orphan drift, and a
   classification error: measurements/evidence records are dated working documents (`docs/plans/`),
