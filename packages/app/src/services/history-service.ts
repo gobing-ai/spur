@@ -20,6 +20,7 @@ import {
     bySession,
     byTool,
     type CoverageEntry,
+    cacheWasteAggregate,
     computeDerived,
     countCheckpointsBySource,
     type DriftRow,
@@ -46,9 +47,13 @@ import {
     sessionToolDurations,
     sessionWatermarks,
     sourceSummary,
+    stepSupport,
     type ToolRollupRow,
     todoToolCalls,
     toolRollup,
+    topCacheWasteSteps,
+    topStepsByDuration,
+    topStepsByTokens,
 } from '@gobing-ai/spur-domain';
 import {
     type ImportIssue,
@@ -320,7 +325,6 @@ export class HistoryService {
         // sessions (task 0550), which crashed every message query. A crashed mid-batch
         // run self-heals: the next materialize resets via CREATE IF NOT EXISTS + DELETE.
         const dropWatermarkExclude = await materializeWatermarkExclude(db, watermarks);
-
         const [
             mRows,
             tRows,
@@ -333,6 +337,11 @@ export class HistoryService {
             toolDurRows,
             todoRows,
             pairings,
+            stepTokenRows,
+            stepDurationRows,
+            cacheWasteAggRow,
+            cacheWasteRows,
+            stepSupportRows,
         ] = await Promise.all([
             messageRollup(db, selector, queryOpts),
             toolRollup(db, selector, queryOpts),
@@ -340,7 +349,7 @@ export class HistoryService {
             bySession(db, selector, top, queryOpts),
             loops(db, selector, queryOpts),
             drift(db, selector, queryOpts),
-            // sourceSummary is import coverage — not watermarked, stays import-faithful.
+            // sourceSummary is import coverage - not watermarked, stays import-faithful.
             sourceSummary(db, selector),
             sessionSpans(db, selector, queryOpts),
             sessionToolDurations(db, selector, queryOpts),
@@ -348,6 +357,12 @@ export class HistoryService {
             // feature J8 R1: per-(executor, role) pairing stats over the same
             // selector window (system_events plane, not the message plane).
             pairingSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
+            // task 0581: per-step rankings + support verdicts, all LIMIT-bounded (R2).
+            topStepsByTokens(db, selector, top, queryOpts),
+            topStepsByDuration(db, selector, top, queryOpts),
+            cacheWasteAggregate(db, selector, queryOpts),
+            topCacheWasteSteps(db, selector, top, queryOpts),
+            stepSupport(db, selector, queryOpts),
         ]);
         await dropWatermarkExclude();
 
@@ -430,6 +445,14 @@ export class HistoryService {
             pairings,
             ladderSnapshot,
             derived,
+            topStepsByTokens: stepTokenRows,
+            topStepsByDuration: stepDurationRows,
+            cacheWaste: {
+                steps: cacheWasteAggRow?.steps ?? 0,
+                inputTokens: cacheWasteAggRow?.inputTokens ?? 0,
+                topSteps: cacheWasteRows,
+            },
+            stepSupport: stepSupportRows,
         };
 
         if (opts.out !== undefined || opts.cwd !== undefined) {

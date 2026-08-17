@@ -1,13 +1,14 @@
-import type { HistoryArtifact } from './artifact';
+import type { HistoryArtifact, StepStat } from './artifact';
 import { selectorDigest } from './artifact';
 import type { DerivedVariables } from './derived';
 import { fmtBytes, fmtDur } from './render-report';
 
 /**
- * The forensics renderer (0555 R2): the 8 sections task 0491 identified as derivable from
- * the artifact alone. The 2 partial and 6 model-authored sections are **not** stubbed here —
- * they are task 0556's (skill-authored) half; a placeholder would read as a complete report
- * and is the same failure class as rendering unmeasured data as zero.
+ * The 2 partial and 6 model-authored sections are **not** stubbed here - they are task
+ * 0556's (skill-authored) half; a placeholder would read as a complete report and is the
+ * same failure class as rendering unmeasured data as zero. The per-step rankings and
+ * cache re-send waste sections (task 0581) render from additive artifact fields; a
+ * pre-0581 artifact states `not available` for them (R5).
  *
  * Tokens, not prices (R3): renders provider-reported token counts and a cache-hit ratio. No
  * currency value anywhere — `costUsd` fields are deliberately unread, and this module adds no
@@ -31,6 +32,7 @@ export function renderForensics(artifact: HistoryArtifact): string {
     lines.push(...renderTimeDecomposition(derived));
     lines.push(...renderPhases(derived));
     lines.push(...renderToolExecutionTime(artifact));
+    lines.push(...renderPerStep(artifact));
     lines.push(...renderBottlenecks(derived));
     lines.push(...renderRawData(artifact));
 
@@ -195,7 +197,158 @@ function renderToolExecutionTime(artifact: HistoryArtifact): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Section 5 — Bottleneck Ranking
+// Section 5 - Per-Step Analysis (0581)
+// ---------------------------------------------------------------------------
+
+const NOT_AVAILABLE_PER_STEP =
+    '> not available - artifact predates the per-step sections (rerun `spur history analyze`)';
+
+function renderPerStep(artifact: HistoryArtifact): string[] {
+    const lines = ['## Per-Step Analysis', ''];
+    if (
+        artifact.topStepsByTokens === undefined &&
+        artifact.topStepsByDuration === undefined &&
+        artifact.cacheWaste === undefined &&
+        artifact.stepSupport === undefined
+    ) {
+        lines.push(NOT_AVAILABLE_PER_STEP, '');
+        return lines;
+    }
+    if ((artifact.stepSupport?.length ?? 0) > 0) {
+        lines.push(
+            '### Section Support',
+            '',
+            '| Source | Assistant steps | Tokens | Time | Cache |',
+            '| --- | ---: | --- | --- | --- |',
+        );
+        for (const e of artifact.stepSupport ?? []) {
+            lines.push(
+                `| ${e.source} | ${e.assistantSteps.toLocaleString('en-US')} | ${e.stepsWithUsage > 0 ? 'yes' : 'no'} | ${e.stepsWithDuration > 0 ? 'yes' : 'no'} | ${e.stepsWithCacheRead > 0 ? 'yes' : 'no'} |`,
+            );
+        }
+        lines.push('');
+    }
+    lines.push(...renderTopStepsByTokens(artifact));
+    lines.push(...renderTopStepsByDuration(artifact));
+    lines.push(...renderCacheWaste(artifact));
+    return lines;
+}
+
+function renderTopStepsByTokens(artifact: HistoryArtifact): string[] {
+    const lines = ['### Top Steps by Total Tokens', ''];
+    if (artifact.topStepsByTokens === undefined) {
+        lines.push(NOT_AVAILABLE_PER_STEP, '');
+        return lines;
+    }
+    if (artifact.topStepsByTokens.length === 0) {
+        lines.push('(no assistant steps with provider usage in selection)', '');
+        return lines;
+    }
+    const multiSource = (artifact.stepSupport?.length ?? 0) > 1;
+    lines.push(
+        ...(multiSource
+            ? [
+                  '| Model | Source | Input | Cache read | Output | Duration | Session |',
+                  '| --- | --- | ---: | ---: | ---: | ---: | --- |',
+              ]
+            : [
+                  '| Model | Input | Cache read | Output | Duration | Session |',
+                  '| --- | ---: | ---: | ---: | ---: | --- |',
+              ]),
+    );
+    for (const s of artifact.topStepsByTokens) {
+        lines.push(`| ${stepRowCells(s, multiSource).join(' | ')} |`);
+    }
+    lines.push('');
+    return lines;
+}
+
+function renderTopStepsByDuration(artifact: HistoryArtifact): string[] {
+    const lines = ['### Top Steps by Duration', ''];
+    if (artifact.topStepsByDuration === undefined) {
+        lines.push(NOT_AVAILABLE_PER_STEP, '');
+        return lines;
+    }
+    if (artifact.topStepsByDuration.length === 0) {
+        lines.push('(no assistant steps carry measured duration in selection)', '');
+        return lines;
+    }
+    const support = artifact.stepSupport;
+    if (support !== undefined) {
+        const totalSteps = support.reduce((sum, e) => sum + e.assistantSteps, 0);
+        const measured = support.reduce((sum, e) => sum + e.stepsWithDuration, 0);
+        if (totalSteps > measured) {
+            lines.push(
+                `Excluding ${(totalSteps - measured).toLocaleString('en-US')} assistant step(s) without measured duration.`,
+                '',
+            );
+        }
+    }
+    const multiSource = (artifact.stepSupport?.length ?? 0) > 1;
+    lines.push(
+        ...(multiSource
+            ? [
+                  '| Model | Source | Input | Cache read | Output | Duration | Session |',
+                  '| --- | --- | ---: | ---: | ---: | ---: | --- |',
+              ]
+            : [
+                  '| Model | Input | Cache read | Output | Duration | Session |',
+                  '| --- | ---: | ---: | ---: | ---: | --- |',
+              ]),
+    );
+    for (const s of artifact.topStepsByDuration) {
+        lines.push(`| ${stepRowCells(s, multiSource).join(' | ')} |`);
+    }
+    lines.push('');
+    return lines;
+}
+
+function renderCacheWaste(artifact: HistoryArtifact): string[] {
+    const lines = ['### Cache Re-Send Waste', ''];
+    const cw = artifact.cacheWaste;
+    if (cw === undefined) {
+        lines.push(NOT_AVAILABLE_PER_STEP, '');
+        return lines;
+    }
+    if (cw.steps === 0) {
+        lines.push('(no assistant step met the re-send filter: input > 100,000 tokens and < 10% cache reuse)', '');
+        return lines;
+    }
+    lines.push(
+        `Re-sent context: ${cw.steps.toLocaleString('en-US')} steps · ${cw.inputTokens.toLocaleString('en-US')} fresh input tokens (input > 100,000 and < 10% cache reuse).`,
+        '',
+    );
+    if (cw.topSteps.length > 0) {
+        lines.push('| Model | Input | Cache read | Reuse % | Session |', '| --- | ---: | ---: | ---: | --- |');
+        for (const s of cw.topSteps) {
+            const reuse =
+                s.cacheReadTokens !== null && s.inputTokens !== null && s.inputTokens > 0
+                    ? `${((s.cacheReadTokens / s.inputTokens) * 100).toFixed(1)}%`
+                    : 'n/a';
+            lines.push(
+                `| ${s.model ?? 'unknown'} | ${fmtTok(s.inputTokens)} | ${fmtTok(s.cacheReadTokens)} | ${reuse} | ${fmtSessionId(s.sessionId)} |`,
+            );
+        }
+        lines.push('');
+    }
+    return lines;
+}
+
+/** Step table row cells shared by the token and duration rankings (source column when multi-source). */
+function stepRowCells(s: StepStat, multiSource: boolean): string[] {
+    return [
+        s.model ?? 'unknown',
+        ...(multiSource ? [s.source] : []),
+        fmtTok(s.inputTokens),
+        fmtTok(s.cacheReadTokens),
+        fmtTok(s.outputTokens),
+        s.durationMs === null ? 'n/a' : fmtDur(s.durationMs),
+        fmtSessionId(s.sessionId),
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// Section 6 - Bottleneck Ranking
 // ---------------------------------------------------------------------------
 
 function renderBottlenecks(derived: DerivedVariables | null): string[] {
@@ -216,7 +369,7 @@ function renderBottlenecks(derived: DerivedVariables | null): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Section 6 — Raw Data appendix
+// Section 7 - Raw Data appendix
 // ---------------------------------------------------------------------------
 
 function renderRawData(artifact: HistoryArtifact): string[] {
@@ -274,7 +427,17 @@ function formatCacheHitRatio(cacheRead: number, billedInput: number, recordsWith
     return `${((cacheRead / billedInput) * 100).toFixed(1)}% of billed input served from cache`;
 }
 
-/** Tool duration with the all-unmeasured → `n/a` convention (never zero for unknown). */
+/** Token cell for per-step tables: null is unmeasured, rendered `n/a` (R5). */
+function fmtTok(n: number | null): string {
+    return n === null ? 'n/a' : n.toLocaleString('en-US');
+}
+
+/** Session ids are uuid-scale; keep the table readable with a stable prefix. */
+function fmtSessionId(id: string): string {
+    return id.length > 12 ? `${id.slice(0, 12)}…` : id;
+}
+
+/** Tool duration with the all-unmeasured -> `n/a` convention (never zero for unknown). */
 function fmtToolDur(ms: number, bucket: { durationUnmeasured: number; calls: number }): string {
     const allUnmeasured = bucket.calls > 0 && bucket.durationUnmeasured === bucket.calls;
     return allUnmeasured ? 'n/a' : fmtDur(ms);

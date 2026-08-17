@@ -1,6 +1,7 @@
 export {
     type ArtifactSelector,
     type ArtifactWarning,
+    type CacheWasteStat,
     type CoverageEntry,
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
@@ -8,6 +9,8 @@ export {
     type LadderEntry,
     type LoopFinding,
     type SessionStat,
+    type StepStat,
+    type StepSupportEntry,
     selectorDigest,
     type ToolStat,
 } from './artifact';
@@ -35,6 +38,8 @@ export {
     buildMessageWhere,
     bySession,
     byTool,
+    type CacheWasteAggregateRow,
+    cacheWasteAggregate,
     countCheckpointsBySource,
     type DriftRow,
     drift,
@@ -44,13 +49,18 @@ export {
     messageRollup,
     type SessionRow,
     type SourceSummaryRow,
+    type StepRow,
     sessionSpans,
     sessionToolDurations,
     sourceSummary,
+    stepSupport,
     type ToolRollupRow,
     type ToolStatRow,
     todoToolCalls,
     toolRollup,
+    topCacheWasteSteps,
+    topStepsByDuration,
+    topStepsByTokens,
 } from './forensic-query';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
 export {

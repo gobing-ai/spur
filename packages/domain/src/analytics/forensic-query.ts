@@ -394,6 +394,186 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
     );
     return row?.cnt ?? 0;
 }
+
+// ---------------------------------------------------------------------------
+// Per-step rankings (task 0581)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cache re-send waste thresholds (task 0581, I4). A step is counted when its fresh
+ * input exceeds the floor and the provider served less than the reuse fraction of it
+ * from cache. Baseline measured on omp 2026-08-17: 2,478 steps / 354,130,045 fresh
+ * tokens. Adjust only with new evidence.
+ */
+export const CACHE_WASTE_MIN_INPUT_TOKENS = 100_000;
+export const CACHE_WASTE_MAX_REUSE_FRACTION = 0.1;
+
+/** One assistant step in the 0581 rankings - raw `history_message` columns, nulls preserved. */
+export interface StepRow {
+    sessionId: string;
+    source: string;
+    ts: string | null;
+    model: string | null;
+    /** Raw `input_tokens`; on Anthropic-convention sources (omp) this is fresh, non-cached input. */
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+    costUsd: number | null;
+    durationMs: number | null;
+}
+
+/** Per-source support verdict for the per-step sections, derived from assistant rows (0581 R5). */
+export interface StepSupportRow {
+    source: string;
+    assistantSteps: number;
+    stepsWithUsage: number;
+    stepsWithDuration: number;
+    stepsWithCacheRead: number;
+}
+
+/** Cache re-send waste aggregate: one row for the whole selection, never bounded by `top`. */
+export interface CacheWasteAggregateRow {
+    steps: number;
+    inputTokens: number | null;
+}
+
+/** Appends fixed predicates to a (possibly empty) selector WHERE - no user input, fixed strings only. */
+function withStepPredicates(wmWhere: string, predicates: string): string {
+    return wmWhere === '' ? `WHERE ${predicates}` : `${wmWhere} AND ${predicates}`;
+}
+
+/**
+ * Q11 - top assistant steps by total tokens (input + cache-read), bounded by `top`.
+ * A step is measured when either token column is non-NULL; 0 counts as measured
+ * (glm steps legitimately report 0/0 while still being usage-bearing rows).
+ */
+export async function topStepsByTokens(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    top: number,
+    opts?: WatermarkQueryOptions,
+): Promise<StepRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryAll<StepRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+                m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
+         FROM history_message m
+         ${withStepPredicates(wm.where, "m.role = 'assistant' AND (m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)")}
+         ORDER BY (COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) DESC
+         LIMIT ?`,
+        ...params,
+        ...wm.params,
+        top,
+    );
+}
+
+/** Q12 - top assistant steps by measured duration. Unmeasured steps are excluded, never zeroed. */
+export async function topStepsByDuration(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    top: number,
+    opts?: WatermarkQueryOptions,
+): Promise<StepRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryAll<StepRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+                m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
+         FROM history_message m
+         ${withStepPredicates(wm.where, "m.role = 'assistant' AND m.duration_ms IS NOT NULL")}
+         ORDER BY m.duration_ms DESC
+         LIMIT ?`,
+        ...params,
+        ...wm.params,
+        top,
+    );
+}
+
+/**
+ * Q13a - cache re-send waste aggregate for the whole selection (single row, R2-safe).
+ * `m.cache_read_tokens < m.input_tokens * ?` is raw-column: a NULL cache read does not
+ * compare true, so only measured low-reuse steps count (matches the AC4 baseline query).
+ */
+export async function cacheWasteAggregate(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<CacheWasteAggregateRow | null | undefined> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryFirst<CacheWasteAggregateRow>(
+        `SELECT COUNT(*) AS steps, SUM(m.input_tokens) AS inputTokens
+         FROM history_message m
+         ${withStepPredicates(
+             wm.where,
+             "m.role = 'assistant' AND m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
+         )}
+         LIMIT ?`,
+        ...params,
+        CACHE_WASTE_MIN_INPUT_TOKENS,
+        CACHE_WASTE_MAX_REUSE_FRACTION,
+        ...wm.params,
+        1,
+    );
+}
+
+/** Q13b - the bounded offenders ranking under the same waste predicate as Q13a. */
+export async function topCacheWasteSteps(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    top: number,
+    opts?: WatermarkQueryOptions,
+): Promise<StepRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryAll<StepRow>(
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+                m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
+         FROM history_message m
+         ${withStepPredicates(
+             wm.where,
+             "m.role = 'assistant' AND m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
+         )}
+         ORDER BY m.input_tokens DESC
+         LIMIT ?`,
+        ...params,
+        CACHE_WASTE_MIN_INPUT_TOKENS,
+        CACHE_WASTE_MAX_REUSE_FRACTION,
+        ...wm.params,
+        top,
+    );
+}
+
+/**
+ * Q14 - per-source support verdicts for the per-step sections. Never hard-codes a
+ * source list: tokens supported iff usage-bearing steps exist, duration iff measured
+ * durations exist, cache iff any cache-read column is populated (0581 R5).
+ */
+export async function stepSupport(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<StepSupportRow[]> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryAll<StepSupportRow>(
+        `SELECT m.source AS source,
+                COUNT(*) AS assistantSteps,
+                SUM(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL) AS stepsWithUsage,
+                SUM(m.duration_ms IS NOT NULL) AS stepsWithDuration,
+                SUM(m.cache_read_tokens IS NOT NULL) AS stepsWithCacheRead
+         FROM history_message m
+         ${withStepPredicates(wm.where, "m.role = 'assistant'")}
+         GROUP BY m.source`,
+        ...params,
+        ...wm.params,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Derived-variable queries (task 0554)
 // ---------------------------------------------------------------------------

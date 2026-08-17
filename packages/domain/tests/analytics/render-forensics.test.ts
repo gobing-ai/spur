@@ -36,7 +36,14 @@ function derived(): DerivedVariables {
                 },
             ],
         },
-        timeDecomposition: { llmMs: 120_000, toolMs: 180_000, idleMs: 60_000, unattributedMs: 30_000, spanMs: 390_000 },
+        timeDecomposition: {
+            llmMs: 120_000,
+            toolMs: 180_000,
+            idleMs: 60_000,
+            unattributedMs: 30_000,
+            spanMs: 390_000,
+            spanExcludedSessions: 0,
+        },
         bottlenecks: [{ label: 'LLM latency', ms: 120_000, share: 0.31 }],
     };
 }
@@ -253,5 +260,145 @@ describe('renderForensics — empty buckets and appendix edges', () => {
         const out = renderForensics(a);
         // Calls-descending in Tool Breakdown: Bash (9) before Read (2).
         expect(out.indexOf('| Bash |')).toBeLessThan(out.indexOf('| Read |'));
+    });
+});
+
+describe('renderForensics — per-step sections (0581)', () => {
+    test('pre-0581 artifact → per-step sections state not available (R5)', () => {
+        const out = renderForensics(artifact());
+        expect(out).toContain(
+            '> not available - artifact predates the per-step sections (rerun `spur history analyze`)',
+        );
+    });
+
+    test('step tables render tokens, support verdicts, and cache-waste aggregates', () => {
+        const a = artifact({
+            topStepsByTokens: [
+                {
+                    sessionId: 'sess-long-0001',
+                    source: 'omp',
+                    ts: '2026-08-17T00:00:00Z',
+                    model: 'deepseek-v4-flash',
+                    inputTokens: 591_744,
+                    cacheReadTokens: 152,
+                    outputTokens: 1_775,
+                    costUsd: 0.009027,
+                    durationMs: 21_605,
+                },
+            ],
+            topStepsByDuration: [
+                {
+                    sessionId: 'sess-long-0001',
+                    source: 'omp',
+                    ts: '2026-08-17T00:00:00Z',
+                    model: 'glm-5.1',
+                    inputTokens: 2_000,
+                    cacheReadTokens: null,
+                    outputTokens: null,
+                    costUsd: null,
+                    durationMs: 1_412_287,
+                },
+            ],
+            cacheWaste: {
+                steps: 2_478,
+                inputTokens: 354_130_045,
+                topSteps: [
+                    {
+                        sessionId: 'sess-long-0001',
+                        source: 'omp',
+                        ts: '2026-08-17T00:00:00Z',
+                        model: 'deepseek-v4-flash',
+                        inputTokens: 2_478,
+                        cacheReadTokens: 300,
+                        outputTokens: 100,
+                        costUsd: null,
+                        durationMs: 1000,
+                    },
+                ],
+            },
+            stepSupport: [
+                {
+                    source: 'omp',
+                    assistantSteps: 81_726,
+                    stepsWithUsage: 81_724,
+                    stepsWithDuration: 12_900,
+                    stepsWithCacheRead: 81_724,
+                },
+            ],
+        });
+        const out = renderForensics(a);
+        expect(out).toContain('## Per-Step Analysis');
+        expect(out).toContain('### Top Steps by Total Tokens');
+        expect(out).toContain('### Top Steps by Duration');
+        expect(out).toContain('### Cache Re-Send Waste');
+        expect(out).toContain('| omp | 81,726 | yes | yes | yes |');
+        // Token cells render with thousands separators; null duration stays `n/a`.
+        expect(out).toContain('591,744');
+        expect(out).toContain('1,775');
+        expect(out).toContain('21.6s');
+        expect(out).toContain('sess-long-00…');
+        // Duration section: unmeasured exclusion note and n/a cells.
+        expect(out).toContain('Excluding 68,826 assistant step(s) without measured duration.');
+        expect(out).toContain('n/a');
+        // Cache waste: aggregate line with baseline numbers + reuse %.
+        expect(out).toContain(
+            'Re-sent context: 2,478 steps · 354,130,045 fresh input tokens (input > 100,000 and < 10% cache reuse).',
+        );
+        expect(out).toContain('12.1%');
+    });
+
+    test('no currency in per-step sections (R3)', () => {
+        const a = artifact({
+            topStepsByTokens: [
+                {
+                    sessionId: 's1',
+                    source: 'omp',
+                    ts: null,
+                    model: 'm',
+                    inputTokens: 1,
+                    cacheReadTokens: 0,
+                    outputTokens: 0,
+                    costUsd: 0.5,
+                    durationMs: null,
+                },
+            ],
+            cacheWaste: { steps: 1, inputTokens: 1, topSteps: [] },
+        });
+        const out = renderForensics(a);
+        expect(out.includes('$')).toBe(false);
+        expect(out.toLowerCase().includes('cost')).toBe(false);
+        expect(out).toContain('n/a'); // NULL duration renders n/a, never zero
+    });
+
+    test('empty per-step sections render their markers, never zeros (R5)', () => {
+        const a = artifact({
+            topStepsByTokens: [],
+            topStepsByDuration: [],
+            cacheWaste: { steps: 0, inputTokens: 0, topSteps: [] },
+            stepSupport: [],
+        });
+        const out = renderForensics(a);
+        expect(out).toContain('(no assistant steps with provider usage in selection)');
+        expect(out).toContain('(no assistant steps carry measured duration in selection)');
+        expect(out).toContain(
+            '(no assistant step met the re-send filter: input > 100,000 tokens and < 10% cache reuse)',
+        );
+    });
+
+    test('measurement-less source reads unsupported, not zero (AC6)', () => {
+        const a = artifact({
+            topStepsByTokens: [],
+            topStepsByDuration: [],
+            cacheWaste: { steps: 0, inputTokens: 0, topSteps: [] },
+            stepSupport: [
+                { source: 'claude', assistantSteps: 4, stepsWithUsage: 0, stepsWithDuration: 0, stepsWithCacheRead: 0 },
+            ],
+        });
+        const out = renderForensics(a);
+        // Support verdicts are `no`, and the section bodies stay honest: no ranked rows,
+        // no fabricated numbers.
+        expect(out).toContain('| claude | 4 | no | no | no |');
+        expect(out).toContain('(no assistant steps with provider usage in selection)');
+        expect(out).toContain('(no assistant steps carry measured duration in selection)');
     });
 });

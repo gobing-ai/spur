@@ -8,11 +8,16 @@ import {
     buildMessageWhere,
     bySession,
     byTool,
+    cacheWasteAggregate,
     drift,
     loops,
     messageRollup,
     sourceSummary,
+    stepSupport,
     toolRollup,
+    topCacheWasteSteps,
+    topStepsByDuration,
+    topStepsByTokens,
 } from '../../src/analytics/forensic-query';
 
 const SESSION: ArtifactSelector = {
@@ -61,6 +66,8 @@ interface Msg {
     input?: number | null;
     output?: number | null;
     cost?: number | null;
+    cache_read?: number | null;
+    source?: string;
     provenance?: string;
     run_id?: string | null;
     task_wbs?: string | null;
@@ -71,10 +78,10 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
     await db.run(
         `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
              role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
-             provenance, run_id, task_wbs, duration_ms, imported_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             cache_read_tokens, provenance, run_id, task_wbs, duration_ms, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         m.record_hash,
-        'claude',
+        m.source ?? 'claude',
         'test.jsonl',
         1,
         m.session_id,
@@ -87,6 +94,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         m.input ?? null,
         m.output ?? null,
         m.cost ?? null,
+        m.cache_read ?? null,
         m.provenance ?? 'agent',
         m.run_id ?? null,
         m.task_wbs ?? null,
@@ -520,5 +528,155 @@ describe('R2 structural invariant — every corpus query is bounded', () => {
                 throw new Error(`Unbounded corpus query (R2 violation): ${sql}`);
             }
         }
+    });
+});
+
+describe('task 0581 — per-step rankings and cache waste (R2-bounded)', () => {
+    // Dedicated fixture: cache-read tokens and multi-source rows the shared
+    // seedFixture does not carry.
+    async function stepFixture(db: DbAdapter): Promise<void> {
+        await insertMessage(db, {
+            record_hash: 'w1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:00:00Z',
+            model: 'deepseek-v4-flash',
+            input: 200_000,
+            output: 1000,
+            cache_read: 50,
+            duration_ms: 1000,
+        });
+        await insertMessage(db, {
+            record_hash: 'w2',
+            session_id: 's1',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:01:00Z',
+            model: 'deepseek-v4-flash',
+            input: 8000,
+            output: 200,
+            cache_read: null,
+            duration_ms: null,
+        });
+        await insertMessage(db, {
+            record_hash: 'w3',
+            session_id: 's2',
+            seq: 1,
+            role: 'user',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:02:00Z',
+            model: 'deepseek-v4-flash',
+            input: 999_999,
+            output: 0,
+            cache_read: 999_999,
+            duration_ms: 500,
+        });
+        await insertMessage(db, {
+            record_hash: 'w4',
+            session_id: 's2',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:03:00Z',
+            model: 'glm-5.1',
+            input: 500,
+            output: null,
+            cache_read: 0,
+            duration_ms: 123,
+        });
+    }
+
+    test('topStepsByTokens ranks assistant steps by input+cache-read, top-bounded (Q11)', async () => {
+        const db = await setup();
+        await stepFixture(db);
+        const rows = await topStepsByTokens(db, ALL, 2);
+        expect(rows).toHaveLength(2);
+        // w3 is a user row — excluded by the role filter; w1 (200_000 + 50) tops w2 (8000 + 0).
+        expect(rows[0]?.inputTokens).toBe(200_000);
+        expect(rows[0]?.model).toBe('deepseek-v4-flash');
+        expect(rows[1]?.inputTokens).toBe(8000);
+        db.close();
+    });
+
+    test('topStepsByTokens keeps NULL-usage assistant steps out of the ranking (Q11)', async () => {
+        const db = await setup();
+        await stepFixture(db);
+        const rows = await topStepsByTokens(db, ALL, 10);
+        expect(rows).toHaveLength(3); // w1, w2, w4 — all assistant with usage present
+        // w3 (user, 999_999 input) never appears; NULL cache never nullifies input.
+        expect(rows.some((r) => r.inputTokens === 999_999)).toBe(false);
+        db.close();
+    });
+
+    test('topStepsByDuration excludes steps with NULL duration, top-bounded (Q12)', async () => {
+        const db = await setup();
+        await stepFixture(db);
+        const rows = await topStepsByDuration(db, ALL, 2);
+        expect(rows).toHaveLength(2);
+        expect(rows[0]?.sessionId).toBe('s1'); // w1 1000ms — top
+        expect(rows[0]?.durationMs).toBe(1000);
+        expect(rows[1]?.inputTokens).toBe(500); // w4 123ms — second; w2 NULL excluded
+        db.close();
+    });
+
+    test('cacheWasteAggregate counts only measured low-reuse assistant steps (Q13a)', async () => {
+        const db = await setup();
+        await stepFixture(db);
+        const row = await cacheWasteAggregate(db, ALL);
+        // w1: 200_000 input, 50 cache-read (`< 10%`) — matches; w2: 8000 input — below the
+        // 100_000 floor; w4: 500 input — below the floor. NULL-cache rows never compare true.
+        expect(row?.steps).toBe(1);
+        expect(row?.inputTokens).toBe(200_000);
+        db.close();
+    });
+
+    test('topCacheWasteSteps bounds offenders by input tokens (Q13b)', async () => {
+        const db = await setup();
+        await stepFixture(db);
+        const rows = await topCacheWasteSteps(db, ALL, 10);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.inputTokens).toBe(200_000);
+        db.close();
+    });
+
+    test('stepSupport reports per-source assistant counts and section support (Q14)', async () => {
+        const db = await setup();
+        // w1/w2/w4 (claude) + a second source so the grouping is meaningful.
+        await stepFixture(db);
+        await insertMessage(db, {
+            record_hash: 'g1',
+            session_id: 's3',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:04:00Z',
+            model: 'glm-5.1',
+            input: null,
+            output: null,
+            cache_read: null,
+            duration_ms: null,
+            source: 'glm',
+        });
+        const rows = await stepSupport(db, ALL);
+        expect(rows).toHaveLength(2);
+        const claude = rows.find((r) => r.source === 'claude');
+        expect(claude?.assistantSteps).toBe(3); // w1, w2, w4
+        expect(claude?.stepsWithUsage).toBe(3);
+        expect(claude?.stepsWithDuration).toBe(2); // w2 NULL duration
+        expect(claude?.stepsWithCacheRead).toBe(2); // w2 cache_read NULL
+        const glm = rows.find((r) => r.source === 'glm');
+        expect(glm?.assistantSteps).toBe(1);
+        expect(glm?.stepsWithUsage).toBe(0);
+        expect(glm?.stepsWithDuration).toBe(0);
+        expect(glm?.stepsWithCacheRead).toBe(0);
+        db.close();
     });
 });

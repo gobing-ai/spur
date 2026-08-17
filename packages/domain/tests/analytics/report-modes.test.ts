@@ -44,7 +44,14 @@ function derived(): DerivedVariables {
                 },
             ],
         },
-        timeDecomposition: { llmMs: 120_000, toolMs: 180_000, idleMs: 60_000, unattributedMs: 30_000, spanMs: 390_000 },
+        timeDecomposition: {
+            llmMs: 120_000,
+            toolMs: 180_000,
+            idleMs: 60_000,
+            unattributedMs: 30_000,
+            spanMs: 390_000,
+            spanExcludedSessions: 0,
+        },
         bottlenecks: [{ label: 'LLM latency', ms: 120_000, share: 0.31 }],
     };
 }

@@ -9,6 +9,7 @@ import {
     emptyDerived,
     extractPhases,
     parseTodoItems,
+    type SessionSpanRow,
 } from '../../src/analytics/derived';
 import { sessionSpans, sessionToolDurations, todoToolCalls } from '../../src/analytics/forensic-query';
 import { assertArtifactVersion } from '../../src/analytics/render-report';
@@ -422,10 +423,11 @@ describe('sessionSpans timestamp sanitization (0579)', () => {
 
         const spans = await sessionSpans(db, ALL);
         expect(spans).toHaveLength(1);
-        expect(spans[0].firstTs).toBeNull();
-        expect(spans[0].lastTs).toBeNull();
+        const [span] = spans as [SessionSpanRow];
+        expect(span.firstTs).toBeNull();
+        expect(span.lastTs).toBeNull();
         // Measured durations survive a fully sentinel session.
-        expect(spans[0].assistantDurationMs).toBe(100);
+        expect(span.assistantDurationMs).toBe(100);
     });
 
     test('poisoned session: sentinel rows are ignored, real bounds win', async () => {
@@ -436,8 +438,9 @@ describe('sessionSpans timestamp sanitization (0579)', () => {
 
         const spans = await sessionSpans(db, ALL);
         expect(spans).toHaveLength(1);
-        expect(spans[0].firstTs).toBe(T0);
-        expect(spans[0].lastTs).toBe(T110);
+        const [span] = spans as [SessionSpanRow];
+        expect(span.firstTs).toBe(T0);
+        expect(span.lastTs).toBe(T110);
     });
 
     test('mixed session: sentinel rows shift no bound; real span kept', async () => {

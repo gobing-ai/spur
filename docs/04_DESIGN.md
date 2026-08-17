@@ -712,6 +712,21 @@ from cache", `n/a` when `recordsWithUsage === 0`). Missing derived inputs render
 three derived-dependent sections, `phaseSupport: 'unsupported'` for phases (R5). The 8 partial /
 model-authored sections from 0491 are deliberately absent, not stubbed (task 0556).
 
+**Per-step sections (task 0581, feature E5):** the analyze artifact gains three additive fields
+(no schema bump, `schemaVersion` stays 1): `topStepsByTokens`, `topStepsByDuration`
+(`StepStat[]` — raw `history_message` columns, nulls preserved), `cacheWaste`
+(`{ steps, inputTokens, topSteps }`), and `stepSupport` (`StepSupportEntry[]` — per-source
+support verdicts derived from assistant rows, never hard-coded). Queries Q11–Q14 are
+`LIMIT ?`-bounded and watermarked like the Q1–Q10 set; Q13a is a single-row aggregate bounded
+by `LIMIT 1`. `renderForensics` renders `## Per-Step Analysis` (between Per-Tool Execution Time
+and Bottleneck Ranking) — `### Section Support`, `### Top Steps by Total Tokens`, `### Top Steps
+by Duration`, `### Cache Re-Send Waste`. Tokens only (R3): `StepStat.costUsd` is unread. Cache
+waste counts assistant steps with fresh input > 100,000 tokens and < 10 % cache reuse
+(`CACHE_WASTE_MIN_INPUT_TOKENS` / `CACHE_WASTE_MAX_REUSE_FRACTION` in
+`packages/domain/src/analytics/forensic-query.ts`); NULL cache reads never compare true, so
+only measured low-reuse steps count. Pre-0581 artifacts state `not available` for all four
+sections (R5), never zeros.
+
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
 (`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode
 consuming ONLY the additive `pairings` / `ladderSnapshot` fields (0573); never opens the
@@ -1242,7 +1257,10 @@ SQL over `history_message` / `history_tool_call` into a versioned `HistoryArtifa
 forensic dimensions (`messages`, `toolCalls`, `durationMs`, `durationUnmeasured`) and
 `cacheWriteTokens` (matching the `history_message.cache_write_tokens` column). Artifact contract:
 `schemaVersion`, `generatedAt`, `spurVersion`, `selector`, `coverage`, `totals`, `bySource`,
-`byModel`, `daily`, `byTool`, `bySession`, `loops`, `warnings` (0464 R2).
+`byModel`, `daily`, `byTool`, `bySession`, `loops`, `warnings` (0464 R2). Additive 0581 fields for
+the per-step sections: `topStepsByTokens`, `topStepsByDuration` (`StepStat[]`), `cacheWaste`
+(`{ steps, inputTokens, topSteps }`), `stepSupport` (`StepSupportEntry[]`) — all optional in the
+type, absent on pre-0581 artifacts (schemaVersion stays 1).
 
 ## 4. Output Conventions
 

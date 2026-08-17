@@ -118,6 +118,42 @@ export interface LoopFinding {
 }
 
 /**
+ * One assistant step in the 0581 per-step rankings - raw `history_message` columns,
+ * nulls preserved so consumers can distinguish unmeasured from zero.
+ */
+export interface StepStat {
+    sessionId: string;
+    source: string;
+    ts: string | null;
+    model: string | null;
+    /** Raw `input_tokens`; on Anthropic-convention sources (omp) this is fresh, non-cached input. */
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+    costUsd: number | null;
+    durationMs: number | null;
+}
+
+/** Per-source support for the per-step sections, derived from assistant rows (0581 R5). */
+export interface StepSupportEntry {
+    source: string;
+    assistantSteps: number;
+    stepsWithUsage: number;
+    stepsWithDuration: number;
+    stepsWithCacheRead: number;
+}
+
+/** Cache re-send waste (0581 R3): full-selection aggregate plus the bounded offender ranking. */
+export interface CacheWasteStat {
+    /** Assistant steps matching the waste filter - full count, not bounded by `top`. */
+    steps: number;
+    /** Total fresh input tokens re-sent by matching steps. */
+    inputTokens: number;
+    /** Largest offenders, bounded by the same `top` as the other rankings. */
+    topSteps: StepStat[];
+}
+
+/**
  * One executor on the capability ladder, snapshotted at analyze time (feature J8 R2).
  *
  * Read from project config (`agent.executors`) by the app layer and embedded in
@@ -168,6 +204,17 @@ export interface HistoryArtifact {
     ladderSnapshot?: LadderEntry[];
     /** Derived variables (phases, time decomposition, bottlenecks) from task 0554. Absent on pre-0554 artifacts. */
     derived?: DerivedVariables;
+    /**
+     * Top assistant steps by total tokens (input + cache-read) - additive, absent on
+     * pre-0581 artifacts so consumers treat absence as unknown (task 0581 R1).
+     */
+    topStepsByTokens?: StepStat[];
+    /** Top assistant steps by measured duration - additive (0581). Unmeasured steps excluded. */
+    topStepsByDuration?: StepStat[];
+    /** Cache re-send waste aggregate + bounded ranking - additive (0581 R3). */
+    cacheWaste?: CacheWasteStat;
+    /** Per-source per-step section support, derived from data - additive (0581 R5). */
+    stepSupport?: StepSupportEntry[];
 }
 
 /**
