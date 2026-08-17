@@ -69,11 +69,11 @@ export interface TeamServiceContext {
      */
     events?: EventBus<AgentEvents>;
     /**
-     * Layer-1 role → tier map parsed from `plugins/sp/references/roles.md`
-     * at the CLI boundary (0543 R1) — the same map AgentService receives, so a
-     * role-only team member resolves through the SAME ladder as `--agent <role>`.
-     * Absent → a role-only member fails materialization loudly (the CLI threads
-     * it from `agentRoles`; the server path does not resolve roles).
+     * Layer-1 role → tier map resolved at the CLI boundary (0543 R1) from the
+     * `DEFAULT_AGENT_ROLES` SSOT (0572 / ADR-061) — the same map AgentService
+     * receives, so a role-only team member resolves through the SAME ladder as
+     * `--agent <role>`. Absent → a role-only member fails materialization loudly
+     * (the CLI threads it from `agentRoles`; the server path does not resolve roles).
      */
     roles?: ReadonlyMap<string, AgentRoleDefinition>;
 }
@@ -724,7 +724,7 @@ export class TeamService {
                 const roleTier = this.ctx.roles?.get(role)?.tier;
                 if (roleTier === undefined) {
                     throw new Error(
-                        `Team "${teamId}" member at index ${index} declares role "${role}" but no Layer-1 role table is available — run spur team up from the CLI (roles.md not resolved)`,
+                        `Team "${teamId}" member at index ${index} declares role "${role}" but no Layer-1 role table is available — run spur team up from the CLI (the role table is threaded only at the CLI boundary)`,
                     );
                 }
                 const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);

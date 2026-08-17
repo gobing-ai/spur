@@ -220,7 +220,9 @@ export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
  */
 export const AgentRoleConfigSchema = z.object({
     tier: z.enum(EXECUTOR_CAPABILITY_TIERS).optional(),
-    stages: z.array(z.string().min(1)).optional(),
+    // `.min(1)`: an explicit empty array must not un-stage a role — an omitted
+    // field keeps the default, so `[]` can only be an authoring error (0572 R10).
+    stages: z.array(z.string().min(1)).min(1).optional(),
 });
 
 /** Inferred type for one role override — mirrors {@link AgentRoleOverride}. */

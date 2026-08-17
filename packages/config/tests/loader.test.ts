@@ -195,6 +195,11 @@ describe('app-section schemas', () => {
         expect(result.success).toBe(false);
     });
 
+    test('AgentConfigSchema rejects an empty stages override — omit the field to keep the default (0572 R10)', () => {
+        const result = AgentConfigSchema.safeParse({ roles: { coder: { stages: [] } } });
+        expect(result.success).toBe(false);
+    });
+
     test('AgentConfigSchema rejects an executor named "auto" (task 0413 R4)', () => {
         const result = AgentConfigSchema.safeParse({
             executors: [{ name: 'auto', agent: 'claude' }],
@@ -806,6 +811,32 @@ describe('agent.team JSON schema round-trip', () => {
         await writeConfig(
             tmpCwd,
             `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - purpose: reviewer\n`,
+        );
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
+    });
+});
+
+// ---- agent.roles JSON schema round-trip (0572 R10) — the editor/CI aid must stay in sync with the zod SSOT ----
+
+describe('agent.roles JSON schema round-trip (0572)', () => {
+    const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
+
+    test('a valid per-field roles override is accepted by both zod and the JSON schema', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  roles:\n    reviewer:\n      tier: capable-2\n    coder:\n      stages: [implement]\n`,
+        );
+        const viaJsonSchema = await loadSpurConfig(tmpCwd, { validateJsonSchema: true });
+        expect(viaJsonSchema.agent?.roles?.reviewer).toEqual({ tier: 'capable-2' });
+        const viaZod = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        expect(viaZod.agent?.roles?.coder).toEqual({ stages: ['implement'] });
+    });
+
+    test('an empty stages override is rejected by both', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  roles:\n    coder:\n      stages: []\n`,
         );
         await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
         await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();

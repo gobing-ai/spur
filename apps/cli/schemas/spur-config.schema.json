@@ -135,6 +135,26 @@
                         }
                     }
                 },
+                "roles": {
+                    "type": "object",
+                    "description": "Per-role tier/stage overrides over DEFAULT_AGENT_ROLES (0572 / ADR-061). Keys are the closed role vocabulary (scribe, coder, reviewer, planner); a present field replaces the default for that role, an omitted field keeps it. Mirrors @gobing-ai/spur-config AgentRoleConfigSchema (Zod is SSOT).",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "tier": {
+                                "type": "string",
+                                "enum": ["cheap", "standard", "capable-1", "capable-2", "capable-3"],
+                                "description": "Replacement capability tier for the role. Must not sit below the highest min_tier among the role's folded stages (enforced at the CLI boundary)."
+                            },
+                            "stages": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": { "type": "string", "minLength": 1 },
+                                "description": "Replacement folded-stage list for the role. Ids must come from the canonical stage registry (validated at the CLI boundary). Omit the field to keep the default — an empty array is rejected."
+                            }
+                        }
+                    }
+                },
                 "team": {
                     "type": "object",
                     "description": "Declarative agent teams keyed by team id (the map key is the teamId). Each team materializes a roster of agent specs (feature M). Mirrors @gobing-ai/spur-config TeamConfigSchema (Zod is SSOT).",

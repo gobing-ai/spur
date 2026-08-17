@@ -65,6 +65,32 @@ describe('context', () => {
         expect(roles.get('planner')).toEqual({ tier: 'capable-2', stages: ['plan', 'refine', 'brainstorm'] });
     });
 
+    test('resolveAgentRoles rejects an unknown override stage id, naming role and id (0572 R10)', () => {
+        expect(() => resolveAgentRoles({ roles: { coder: { stages: ['implment'] } } })).toThrow(
+            /agent\.roles\.coder\.stages.*implment/,
+        );
+    });
+
+    test('resolveAgentRoles rejects an empty override stages array from a non-schema caller (0572 R10)', () => {
+        expect(() => resolveAgentRoles({ roles: { reviewer: { stages: [] } } })).toThrow(
+            /agent\.roles\.reviewer\.stages.*empty stages array/,
+        );
+    });
+
+    test('resolveAgentRoles rejects a re-tier below the folded-stage floor (roles R4 / 0572 R10)', () => {
+        // coder folds implement (min_tier standard) — cheap would start the run below the floor.
+        expect(() => resolveAgentRoles({ roles: { coder: { tier: 'cheap' } } })).toThrow(
+            /agent\.roles\.coder.*'cheap'.*implement/,
+        );
+    });
+
+    test('resolveAgentRoles rejects a re-stage that raises the floor above the kept default tier (0572 R10)', () => {
+        // scribe keeps tier cheap; folding verify/review (min_tier capable-1) breaks the floor.
+        expect(() => resolveAgentRoles({ roles: { scribe: { stages: ['verify', 'review'] } } })).toThrow(
+            /agent\.roles\.scribe.*'cheap'/,
+        );
+    });
+
     test('createCliContext threads the merged role map so --agent <role> resolves without the plugin tree (0572 R1)', () => {
         const ctx = createCliContext({ output: nullOutput() });
         expect(ctx.agentRoles?.get('planner')?.tier).toBe('capable-2');

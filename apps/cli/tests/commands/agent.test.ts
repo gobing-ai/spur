@@ -80,6 +80,7 @@ describe('agent command (main)', () => {
                 throw new Error('not needed');
             },
             agentService,
+            agentRoles: resolveAgentRoles(),
         } as unknown as CliContext;
 
         const { registerAgentCommand } = await import('../../src/commands/agent');
@@ -500,6 +501,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
                 throw new Error('ledger attach is best-effort in this unit test');
             },
             agentService,
+            agentRoles: resolveAgentRoles(),
         } as unknown as CliContext;
 
         const code = await runAgentRun('/sp:dev-run 0126', context, { agent: 'auto' });
@@ -521,6 +523,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
                 throw new Error('ledger error');
             },
             agentService,
+            agentRoles: resolveAgentRoles(),
         } as unknown as CliContext;
 
         const code = await runAgentRun('hello', context, { drain: true });
