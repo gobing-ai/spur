@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.50] — 2026-08-17
+
+### Added
+
+- feat(app): add anchor-qualification pass for evidence citations (812d5ef4)
+- feat(app): anchor integrity — qualification, subject-matching, external-evidence form, AC altitude (91f56755)
+- feat(app): fail the gate on duplicate baseline keys (14dbccd2)
+- feat(corpus): sweep every task folder and ratchet warning severity (e99c933e)
+- feat(E5): pi mapper event-envelope fix — port omp fix to piSplit, re-import, correct 0489 (d3b8f082)
+
+### Fixed
+
+- fix: close mapper release+re-import gap (0578) — importer 0.4.37, omp/pi/grok/opencode full re-import, parseTodoItems ops/todoList shapes (fc53a0d9)
+- fix: migration 0016 nullable ts + importer 0.4.38 bump and re-import (0580) (13cd7ede)
+- fix: sanitize sentinel timestamps out of time-decomposition span math (0579) (807d5fc0)
+- fix: add per-step token/time + cache-efficiency sections to history artifact and forensics report (0581) (e231f83b)
+- fix(app): classify port-probe bind errors and add bind-free test seam (47743b4d)
+
+### Changed
+
+- docs(projects): add K2 port-probe robustness spec and 0585 task (11af1e0b)
+- docs(features): refresh task status tables across feature files (c7be74ed)
+- docs(tasks): record E5 re-audit evidence and anchor corrections (551bd3f0)
+- docs(tasks): update task status after implementation (c6e2f91b)
+
+### Other
+
+- chore(E5): wrap-up — learnings, metrics, checkpoint for 0576+0577 (5885bf11)
+- chore(E5): wrap-up — learnings, metrics, checkpoint for 0578+0580+0579+0581 (6ab3ad54)
+- chore(tasks): mark completed plan items on 0576, 0578-0581 (8364f48c)
+- chore: harden tests and add SVG titles (4eac0788)
+
 ## [0.3.49] — 2026-08-17
 
 ### Added
