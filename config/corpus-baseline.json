@@ -5809,14 +5809,6 @@
         },
         {
             "kind": "task",
-            "id": "0180",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0181",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks — see note § L3.ac-empty.",
@@ -12146,14 +12138,6 @@
             "code": "L4.dogfood-missing",
             "severity": "warning",
             "reason": "Feature F7 has no report under docs/dogfood/. Pre-existing and unrelated to the anchor work; owned by F7.",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "feature",
-            "id": "F61",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift — feature F61's ship scenarios are covered by task 0586, which has not run yet. `feature check --strict` enforces this for real at the `verifying -> done` gate. Remove when 0586 lands; the two-sided ratchet will fail as stale and force it.",
             "since": "2026-08-18"
         },
         {
