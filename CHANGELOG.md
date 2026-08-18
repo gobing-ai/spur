@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.51] — 2026-08-18
+
+### Added
+
+- feat(app): honor accepted baseline debt in the per-task gate (f0e6c1a5)
+
+### Fixed
+
+- fix(sp): refuse pr-review on base branch pre-push, report upstream, probe recheck, coverage opt-in (ff5d31a3)
+
+### Changed
+
+- docs: record 0588 latency decision as ADR-064, close task 0588 (ca15b6cb)
+- docs(task): add 0588/0589/0590 plans, update 0511, sync constitution (b559fc51)
+
+### Other
+
+- chore(baseline): drop two stale ratchet entries no longer reproducing (7ec57075)
+- chore(project): restore the project configuration (7e87b1e8)
+
 ## [0.3.50] — 2026-08-17
 
 ### Added
