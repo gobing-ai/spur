@@ -736,8 +736,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 const ambiguous = report.fileReports.flatMap((r) =>
                     r.ambiguous.map((a) => `${r.wbs}: ${a.cited} → candidates: ${a.candidates.join(', ')}`),
                 );
+                const skipped = report.fileReports
+                    .filter((r) => r.skipped !== undefined)
+                    .map((r) => `${r.wbs}: ${r.skipped}`);
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, dryRun, qualified, ambiguous, ...report }));
+                    context.output.write(toJson({ ok: true, dryRun, qualified, ambiguous, skipped, ...report }));
                 } else if (dryRun) {
                     const lines = [
                         `Anchor qualification ${dryRun ? 'dry-run' : 'apply'} complete`,
@@ -750,11 +753,17 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         '',
                         'Ambiguous (reported, not rewritten):',
                         ...(ambiguous.length ? ambiguous : ['  none']),
+                        '',
+                        'Skipped (unwritable — frontmatter predates the current schema):',
+                        ...(skipped.length ? skipped : ['  none']),
                     ];
                     context.output.write(lines.join('\n'));
                 } else {
                     context.output.write(
-                        `Anchor qualification apply complete — ${report.filesModified} file(s) modified.`,
+                        `Anchor qualification apply complete — ${report.filesModified} file(s) modified` +
+                            (skipped.length
+                                ? `, ${skipped.length} skipped (unwritable):\n  ${skipped.join('\n  ')}`
+                                : '.'),
                     );
                 }
             } catch (err) {

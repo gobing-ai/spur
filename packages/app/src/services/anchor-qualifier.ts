@@ -48,6 +48,16 @@ export interface AnchorFileReport {
     qualified: QualifiedAnchor[];
     /** Ambiguous basenames — reported, never rewritten. */
     ambiguous: Array<{ cited: string; candidates: string[] }>;
+    /**
+     * Why this file's rewrite was skipped, when it was. Writes go through
+     * `PlanningWriteService.updateSection`, which validates frontmatter first — and
+     * the legacy corpora contain tasks that predate the current schema (80 carry a
+     * baselined `L1.schema-validation`). One such file must not abort the pass: a
+     * single unwritable legacy task was blocking 144 valid rewrites. Skip it, name
+     * it, keep going — the same "reported, never guessed" discipline the ambiguous
+     * case already follows.
+     */
+    skipped?: string;
 }
 
 /** Aggregate qualification report (mirrors MigrationReport shape). */
@@ -282,6 +292,7 @@ export async function qualifyAnchors(
             const doc = MarkdownDocument.parse(raw, 'task');
             const wbs = (doc.frontmatterData?.wbs as string | undefined) ?? basename(filePath).replace(/_\d{4}_.*/, '');
             let modified = false;
+            let skipped: string | undefined;
             const qualified: QualifiedAnchor[] = [];
             const ambiguous: Array<{ cited: string; candidates: string[] }> = [];
             for (const section of ['Testing', 'Solution'] as const) {
@@ -294,15 +305,27 @@ export async function qualifyAnchors(
                 }
                 if (result.newBody !== body && !dryRun) {
                     if (opts.write) {
-                        await opts.write(filePath, wbs, section, result.newBody);
+                        try {
+                            await opts.write(filePath, wbs, section, result.newBody);
+                        } catch (err) {
+                            skipped = String(err instanceof Error ? err.message : err);
+                            break;
+                        }
                     }
                     modified = true;
                 } else if (result.newBody !== body) {
                     modified = true; // dry-run still reports the would-be change
                 }
             }
-            if (qualified.length > 0 || ambiguous.length > 0 || modified) {
-                fileReports.push({ path: filePath, wbs, modified, qualified, ambiguous });
+            if (qualified.length > 0 || ambiguous.length > 0 || modified || skipped !== undefined) {
+                fileReports.push({
+                    path: filePath,
+                    wbs,
+                    modified: skipped === undefined && modified,
+                    qualified,
+                    ambiguous,
+                    ...(skipped === undefined ? {} : { skipped }),
+                });
             }
         }
     }

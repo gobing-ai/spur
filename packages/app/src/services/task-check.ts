@@ -337,6 +337,16 @@ export function extractSubjectTokens(row: string, excludeCitation?: string): str
                 if (word.length >= 3 && /[A-Za-z]/.test(word)) tokens.add(word.toLowerCase());
             }
         }
+        // `key()` must match `function key(e: {...})`, and `BaselineEntry.severity`
+        // must match the `severity?: …` field it names. A call-signature suffix and a
+        // qualifying owner are how humans cite a symbol; neither survives a literal
+        // substring test against the declaration, so contribute the bare identifier too.
+        const bare = t.replace(/\(\s*\)$/, '');
+        if (bare !== t && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bare)) tokens.add(bare.toLowerCase());
+        if (/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(bare)) {
+            const last = bare.split('.').pop();
+            if (last !== undefined && last.length >= 3) tokens.add(last.toLowerCase());
+        }
     }
     // CamelCase / PascalCase / snake_case identifiers (bare symbols).
     for (const m of row.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*\b/g)) {
