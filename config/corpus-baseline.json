@@ -12211,6 +12211,30 @@
             "severity": "warning",
             "reason": "DD-09 subset rule: 0590's AC are parser-behaviour checks for a verdict-tooling defect, an altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "feature",
+            "id": "F92",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift — F92 was planned in commit e032b181 and its eight ship scenarios are covered by tasks 0591/0592/0593, all still todo. `feature check --strict` enforces this for real at the `verifying -> done` gate. Remove when 0591, 0592 and 0593 have all landed with PASS verdicts; the two-sided ratchet will fail as stale and force it.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0592",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift — 0592 declares 0591 as a prerequisite and 0591 is still todo. This is the intended dependency ordering of the F92 batch, not a defect. Remove when 0591 is done; the two-sided ratchet will fail as stale and force it.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0593",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift — 0593 declares 0591 and 0592 as prerequisites (plus 0591 transitively) and both are still todo. This is the intended dependency ordering of the F92 batch, not a defect. Remove when 0591 and 0592 are done; the two-sided ratchet will fail as stale and force it.",
+            "since": "2026-08-18"
         }
     ]
 }

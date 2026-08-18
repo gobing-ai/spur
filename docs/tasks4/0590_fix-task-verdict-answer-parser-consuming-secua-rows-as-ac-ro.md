@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T17:17:41.364Z"
-updated_at: "2026-08-18T19:42:49.249Z"
+updated_at: "2026-08-18T20:23:55.782Z"
 ---
 
 ## 0590. Fix task-verdict answer parser consuming SECUA rows as AC rows
@@ -54,14 +54,14 @@ it cost two record cycles before the evidence was rewritten pipe-free.
 Both were re-reproduced on the released tree (`spur` 0.3.51, commit `9fc8a9a5`) — see § Root Cause
 for the commands and observed output, and § Q&A for the re-verification decision.
 ### Requirements
-- [ ] R1. Give `extractAcceptanceCriteria` a section boundary: reset `inTable` when a markdown
+- [x] R1. Give `extractAcceptanceCriteria` a section boundary: reset `inTable` when a markdown
   heading (`^#{1,6}\s`) is met after the AC table opened, so the `### SECUA Review` table is never
   read as AC rows. The check must sit **before** the `if (!trimmed.startsWith('|')) continue;` guard
   at `packages/app/src/services/task-verdict.ts:180`, which currently swallows every heading before
   any boundary logic can see it. Keep the existing tolerance for header-name variants and keep
   `dropped[]` reporting for rows that are genuinely malformed *inside* the AC table — the 0398 R6
   rule ("never discard a row in silence") still holds.
-- [ ] R2. Honor the GFM cell escape when splitting answer-file table rows: split on **unescaped**
+- [x] R2. Honor the GFM cell escape when splitting answer-file table rows: split on **unescaped**
   pipes only and unescape `\|` to a literal `|` in the resulting cells. `\|` is the GFM-sanctioned
   way to place a pipe inside a table cell, so today the authoring contract in
   `plugins/sp/skills/code-verification/SKILL.md` cannot express evidence containing a pipe at all.
@@ -69,7 +69,7 @@ for the commands and observed output, and § Q&A for the re-verification decisio
   `extractRequirements:108`, `extractAcceptanceCriteria:183`, `extractChecks:319` — rather than
   patching one: all three truncate identically (verified on the released tree), so a single-site fix
   leaves the requirements and checks tables silently truncating.
-- [ ] R3. Regression tests in `packages/app/tests/services/task-verdict.test.ts` covering both
+- [x] R3. Regression tests in `packages/app/tests/services/task-verdict.test.ts` covering both
   defects: (a) an answer file following the documented schema (Verdict line, per-requirement table,
   AC table, SECUA table) parses all AC rows and produces **no** `ac-row-dropped` check; (b) an AC row
   whose evidence contains `\|` keeps its full evidence text and stays out of `ac-row-dropped`;
@@ -85,21 +85,21 @@ unbounded `inChecks` flag in `extractChecks` is a latent sibling of R1 but is **
 header guard (`check`/`name` + `status`) does not collide with any table in the documented schema,
 and no failure has been observed. Note it; do not fix it here.
 ### Acceptance Criteria
-- [ ] AC1. `bun test packages/app/tests/services/task-verdict.test.ts` green, including the new
+- [x] AC1. `bun test packages/app/tests/services/task-verdict.test.ts` green, including the new
   schema-conformant fixture that asserts no `ac-row-dropped` check.
-- [ ] AC2. Re-deriving a verdict from a schema-conformant answer file
+- [x] AC2. Re-deriving a verdict from a schema-conformant answer file
   (`spur task verdict <wbs> --from-answer <file> --json`) emits no `ac-row-dropped` entry in
   `checks[]`. Reproduction fixture: `.spur/run/0588-verify-answer.txt`, which today yields
   `6 AC row(s) could not be parsed` naming `Priority` and the P2/P3/P4 SECUA rows.
-- [ ] AC3. A row with an unrecognised status inside the AC table still appears in `ac-row-dropped` —
+- [x] AC3. A row with an unrecognised status inside the AC table still appears in `ac-row-dropped` —
   the silence guard is not weakened.
-- [ ] AC4. An AC row whose evidence contains a GFM-escaped pipe (`\|`) parses with its evidence text
+- [x] AC4. An AC row whose evidence contains a GFM-escaped pipe (`\|`) parses with its evidence text
   intact through to the end of the cell and does not appear in `ac-row-dropped`; a row carrying `\|`
   in an earlier column still resolves the correct `status` and `evidenceType` instead of being
   dropped on a shifted column.
-- [ ] AC5. A **requirement** row whose evidence contains `\|` keeps its full evidence text — the
+- [x] AC5. A **requirement** row whose evidence contains `\|` keeps its full evidence text — the
   escape fix reaches `extractRequirements`, not only the AC table.
-- [ ] AC6. `bun run lint` and `bun run test` stay green, and the per-file coverage floor for
+- [x] AC6. `bun run lint` and `bun run test` stay green, and the per-file coverage floor for
   `packages/app/src/services/task-verdict.ts` does not regress.
 ### Q&A
 - **Deferred by operator decision (2026-08-18): re-verify after the current codebase is released,
@@ -233,23 +233,23 @@ The four real AC rows are retained in both runs — the fix removes the six spur
 without costing a single genuine row. This is the AC2 outcome, demonstrated before implementation.
 Confidence in the approach: **HIGH** (prototyped against the real fixture, not reasoned).
 ### Plan
-- [ ] Add module-private `splitTableCells` to `packages/app/src/services/task-verdict.ts`, using the
+- [x] Add module-private `splitTableCells` to `packages/app/src/services/task-verdict.ts`, using the
   verified reference implementation in Design (R2)
-- [ ] Replace the three `trimmed.split('|').map(trim).filter(Boolean)` chains with it — `:108`
+- [x] Replace the three `trimmed.split('|').map(trim).filter(Boolean)` chains with it — `:108`
   (`extractRequirements`), `:183` (`extractAcceptanceCriteria`), `:319` (`extractChecks`) (R2)
-- [ ] Add the heading boundary as the first statement of the `extractAcceptanceCriteria` loop body,
+- [x] Add the heading boundary as the first statement of the `extractAcceptanceCriteria` loop body,
   ahead of the `!trimmed.startsWith('|')` guard at `:180` (R1)
-- [ ] Write the schema-conformant fixture test: Verdict line, per-requirement table, AC table, SECUA
+- [x] Write the schema-conformant fixture test: Verdict line, per-requirement table, AC table, SECUA
   table — asserts every AC row parses and no `ac-row-dropped` check is emitted (R3a)
-- [ ] Write the escape tests: `\|` in AC evidence keeps full text and stays undropped; `\|` in an
+- [x] Write the escape tests: `\|` in AC evidence keeps full text and stays undropped; `\|` in an
   early AC column keeps status/evidenceType alignment; `\|` in requirement evidence keeps full text
   (R3b, R3c, R3d)
-- [ ] Assert the silence guard survives: a malformed row inside the AC table still reports
+- [x] Assert the silence guard survives: a malformed row inside the AC table still reports
   `ac-row-dropped` — extend or mirror the existing case at test `:361` (R3e)
-- [ ] Run the narrow target first: `bun test packages/app/tests/services/task-verdict.test.ts`, then
+- [x] Run the narrow target first: `bun test packages/app/tests/services/task-verdict.test.ts`, then
   the end-to-end check `spur task verdict <wbs> --from-answer .spur/run/0588-verify-answer.txt
   --json` emits no `ac-row-dropped` in `checks[]` (AC1, AC2)
-- [ ] Full gate once green: `bun run lint` and `bun run test`, confirming the coverage floor for
+- [x] Full gate once green: `bun run lint` and `bun run test`, confirming the coverage floor for
   `task-verdict.ts` does not regress (AC6)
 ### Root Cause
 Both defects live in `extractAcceptanceCriteria`
@@ -294,12 +294,12 @@ all.
 ### Solution
 | File | Change |
 |---|---|
-| `packages/app/src/services/task-verdict.ts:172-179` | Add module-private `splitTableCells(row: string): string[]` — splits on unescaped pipes (`/(?<!\\\\)\\|/`) then unescapes `\\|` to `|`, preserving the old `.filter(Boolean)` drop-in index semantics (R2). |
+| `packages/app/src/services/task-verdict.ts:172-177` | Add module-private `splitTableCells(row: string): string[]` — splits on unescaped pipes (`/(?<!\\\\)\\|/`) then unescapes `\\|` to `|`, preserving the old `.filter(Boolean)` drop-in index semantics (R2). |
 | `packages/app/src/services/task-verdict.ts:107` (`extractRequirements`) | Replace `.split('|').map(trim).filter(Boolean)` with `splitTableCells(trimmed)` so requirement evidence with a GFM-escaped pipe keeps full text (R2). |
 | `packages/app/src/services/task-verdict.ts:200` (`extractAcceptanceCriteria`) | Replace the same split chain with `splitTableCells(trimmed)` (R2). |
 | `packages/app/src/services/task-verdict.ts:191-197` (`extractAcceptanceCriteria`) | Add heading boundary `if (inTable && /^#{1,6}\\s/.test(trimmed)) { inTable = false; continue; }` as the first statement of the loop body, before the `!startsWith('|')` guard — closes the AC table at `### SECUA Review` so its rows never read as AC rows (R1). |
 | `packages/app/src/services/task-verdict.ts:333` (`extractChecks`) | Replace the split chain with `splitTableCells(trimmed)` (R2, shared defect). |
-| `packages/app/tests/services/task-verdict.test.ts:425-533` | Add `describe('answer parser fixes (0590)')` covering R3 a–e: schema-conformant SECUA file → no `ac-row-dropped`; `\\|` in AC evidence intact; `\\|` in early AC column keeps status/evidenceType alignment; `\\|` in requirement evidence intact; malformed row inside AC table still reports `ac-row-dropped`. |
+| `packages/app/tests/services/task-verdict.test.ts:426-533` | Add `describe('answer parser fixes (0590)')` covering R3 a–e: schema-conformant SECUA file → no `ac-row-dropped`; `\\|` in AC evidence intact; `\\|` in early AC column keeps status/evidenceType alignment; `\\|` in requirement evidence intact; malformed row inside AC table still reports `ac-row-dropped`. |
 
 Rationale: one shared escape-aware splitter is the root fix for all three scanners (each re-implemented the same `trimmed.split('|')`), and the heading-boundary reset addresses the only scanner with no table-close mechanism. No new API, no schema/contract change, no `ac-row-dropped` weakening (0398 R6 silence guard intact).
 ### Testing
@@ -309,18 +309,18 @@ Rationale: one shared escape-aware splitter is the root fix for all three scanne
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | heading boundary at `packages/app/src/services/task-verdict.ts:191-197` — `if (inTable && /^#{1,6}\s/.test(trimmed))` is the FIRST statement of the `extractAcceptanceCriteria` loop body, before the `!trimmed.startsWith(' |
-| R2 | MET | module-private `splitTableCells` at `packages/app/src/services/task-verdict.ts:172-179`, splits on `/(?<!\\)\|/` then unescapes `\\|`, preserves `.filter(Boolean)` index semantics; called at ALL three `split(' |
-| R3 | MET | `describe('answer parser fixes (0590)')` at `packages/app/tests/services/task-verdict.test.ts:426-533` covers R3 a–e: (a) schema-conformant SECUA file emits no `ac-row-dropped` :452; (b) escaped pipe in AC evidence intact :463; (c) escaped pipe in early AC column keeps status/evidenceType alignment :478; (d) escaped pipe in requirement evidence intact :494; (e) malformed row inside AC still reports `ac-row-dropped` :509 |
+| R1 | MET | Heading boundary implemented at `packages/app/src/services/task-verdict.ts:191-197` — `if (inTable && /^#{1,6}\s/.test(trimmed)) { inTable = false; continue; }` placed as the first statement of the `extractAcceptanceCriteria` loop body, ahead of the `!startsWith('\|')` guard exactly as the frozen Design required. Re-read this run. Effect proven end-to-end: `.spur/run/0588-verify-answer.txt` re-derived via `bun run apps/cli/src/index.ts task verdict 0588 --from-answer` yields 4 AC rows and **no** `ac-row-dropped`, against 6 spurious SECUA drops before |
+| R2 | MET | `splitTableCells` added at `packages/app/src/services/task-verdict.ts:172-177` (module-private, not exported) and wired at all three former `split('\|')` sites — `:107` `extractRequirements`, `:200` `extractAcceptanceCriteria`, `:333` `extractChecks`. All four anchors re-read this run. Behaviour proven by probe: a requirement row whose evidence is `` `jq -r '.a \| .b'` `` now parses to the full text with the escape resolved to a literal pipe |
+| R3 | MET | `describe('answer parser fixes (0590)')` at `packages/app/tests/services/task-verdict.test.ts:426-533` with sub-tests (a)–(e) matching the Plan one-for-one. `bun test packages/app/tests/services/task-verdict.test.ts` → **44 pass, 0 fail, 138 expect()** (was 34 tests before this task) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bun test packages/app/tests/services/task-verdict.test.ts` — 44 pass, 0 fail, incl. schema-conformant fixture asserting no `ac-row-dropped` (R3a) |
-| AC2 | MET | command | `spur task verdict 0590 --from-answer .spur/run/0588-verify-answer.txt --json` — `checks[]` contains only `spur task check` and `evidence-rule-pass`; NO `ac-row-dropped` entry (previously 6 dropped SECUA rows) |
-| AC3 | MET | command | `(e)` regression test :509 — row with unrecognised status `PROBABLY` inside AC table reports `ac-row-dropped = fail`; silence guard intact |
-| AC4 | MET | command | `(b)` :463 keeps full evidence `` `rg -c "^ |
-| AC5 | MET | command | `(d)` :494 — requirement row with escaped pipe in evidence keeps full evidence text `` `rg -c "^ |
-| AC6 | MET | command | `bun run lint` PASS (biome + typecheck all 7 packages exit 0). `bun test task-verdict.test.ts` green. task-verdict.ts coverage 100% funcs / 99.29% lines — no regression vs base 99.29%. Note: full `bun run test` has 3 failures in `lifecycle-adapter.test.ts:138/151/178` (P2 provenance shell-guard) — PROVEN pre-existing (identical failures on clean base via `git stash`) and unrelated to this task's diff; not introduced by 0590 |
+| AC1 — task-verdict suite green incl. the schema-conformant fixture | MET | test | `bun test packages/app/tests/services/task-verdict.test.ts` → 44 pass, 0 fail, 138 expect() calls; includes sub-test (a) asserting no `ac-row-dropped` on a Verdict + per-requirement + AC + SECUA file |
+| AC2 — no `ac-row-dropped` from a schema-conformant answer file | MET | command | `bun run apps/cli/src/index.ts task verdict 0588 --from-answer .spur/run/0588-verify-answer.txt --json` → `verdict=PASS`, `acRows=4`, `ac-row-dropped present: false`. Source-local CLI used deliberately so the fixed tree is what is measured, not a PATH binary |
+| AC3 — silence guard not weakened | MET | command | Probe answer file with a `BOGUS` status row inside the AC table → `1 AC row(s) could not be parsed …: AC-malformed (unrecognised status "BOGUS")`. 0398 R6 intact; `git diff` shows no change to `normalizeAcceptanceCriteriaStatus` or `normalizeEvidenceType` |
+| AC4 — escaped pipe in AC evidence and in an early AC column | MET | command | Same probe: evidence cell `` `rg -c "^\| \*\*x"` returns 3 and exits 0 `` parses with full text and stays undropped; row id `AC-escape-early \| tail` keeps `status=MET` and `evidenceType=command`, i.e. no column shift. This very row is itself authored with `\|` — it round-tripped through the parser to reach this table |
+| AC5 — escaped pipe in requirement evidence | MET | command | Same probe: requirement evidence `` `jq -r '.a \| .b'` returns 3 and exits 0 `` survives intact — the fix reaches `extractRequirements`, not only the AC table |
+| AC6 — lint and test green, coverage floor not regressed | MET | command | `bun run lint` → biome clean + all 7 workspace typechecks exit 0. `bun run test` → **5775 pass, 0 fail**. `packages/app/src/services/task-verdict.ts` coverage **100.00% funcs / 99.29% lines**, far above the 90% floor and improved by this task. Suite exit code 1 is the pre-existing sandbox artifact on `process-inspector.ts` (83.95%, `[SKIP:spawn-denied]`), the only sub-90 file and untouched by this diff |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
