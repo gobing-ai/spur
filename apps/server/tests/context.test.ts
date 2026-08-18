@@ -7,6 +7,19 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createServerContext, NOOP_OUTPUT } from '../src/context';
 import { mockRuntime } from './middleware/helpers';
 
+/**
+ * Can this process spawn `ps`? The inventory snapshot shells out to it; a sandbox or
+ * hardened runtime denies posix_spawn with EPERM.
+ */
+function processSpawnAvailable(): boolean {
+    try {
+        Bun.spawnSync(['ps', '-o', 'pid=', '-p', String(process.pid)]);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 const testFs = createNodeFileSystem('/tmp/test');
 
 function makeAppRt() {
@@ -363,7 +376,19 @@ describe('createServerContext', () => {
         tap.unsubscribe();
     });
 
+    // Capability-gated like the Bucket A port tests and the tilde-expansion test
+    // (task 0585 R5), for a third capability: the inventory shells out to `ps`, so a
+    // sandbox that denies posix_spawn fails it with EPERM. Stubbing `ps` would assert
+    // the stub, not that the inventory reads real processes.
+    // CI dependency note: .github/workflows/ci.yml runs bun run check unsandboxed.
+    // If CI ever loses spawn capability, this test decays to green-by-absence.
     test('processInventory() returns inventory service with serve root', async () => {
+        if (!processSpawnAvailable()) {
+            console.warn(
+                '[SKIP:spawn-denied] Spawning `ps` is denied in this environment. This process-inventory test executes in CI unsandboxed.',
+            );
+            return;
+        }
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
         const snap = await ctx.processInventory().snapshot();

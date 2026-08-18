@@ -29,6 +29,28 @@ export function normalizeProjectPath(pathInput: string): string {
     return expanded;
 }
 
+/** Result of probing whether a port can be bound by a server. */
+export type PortProbeResult = 'available' | 'in-use' | 'denied';
+
+/** Test override function type for port probing. */
+export type PortProbe = (port: number) => Promise<PortProbeResult>;
+
+let testPortProbe: PortProbe | undefined;
+
+/** Install or clear the process-wide port probe override (tests only). */
+export function setPortProbeForTests(probe: PortProbe | undefined): void {
+    testPortProbe = probe;
+}
+
+/** Classify a net.Server bind error code into a PortProbeResult. */
+export function classifyPortBindError(err: unknown): PortProbeResult {
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: unknown }).code) : '';
+    if (code === 'EADDRINUSE' || code === 'EADDRNOTAVAIL') {
+        return 'in-use';
+    }
+    return 'denied';
+}
+
 /**
  * Probe one host/port for a live TCP listener.
  * Bun.serve({ hostname: 'localhost' }) often binds IPv6-only on macOS, so
@@ -60,20 +82,59 @@ async function isPortLiveOnHost(port: number, host: string, timeoutMs: number): 
  * project-start health polls fail even after `spur serve` was up.
  */
 export async function isPortLive(port: number, timeoutMs = 200): Promise<boolean> {
+    if (testPortProbe) {
+        return (await testPortProbe(port)) === 'in-use';
+    }
     if (port <= 0) return false;
     if (await isPortLiveOnHost(port, '127.0.0.1', timeoutMs)) return true;
     if (await isPortLiveOnHost(port, '::1', timeoutMs)) return true;
     return false;
 }
 
+/**
+ * Probe whether a TCP port is available to bind, already in use, or denied by the environment.
+ */
+export async function probePort(port: number): Promise<PortProbeResult> {
+    if (testPortProbe) {
+        return testPortProbe(port);
+    }
+    if (port <= 0 || port > 65535) return 'denied';
+
+    return new Promise<PortProbeResult>((resolve) => {
+        const server = createServer();
+        server.unref();
+        server.on('error', (err: NodeJS.ErrnoException) => {
+            resolve(classifyPortBindError(err));
+        });
+        server.listen({ port, host: '127.0.0.1' }, () => {
+            server.close(() => resolve('available'));
+        });
+    });
+}
+
 /** Check if a port can be bound by a new server on localhost. */
 export async function isPortAvailable(port: number): Promise<boolean> {
-    if (port <= 0 || port > 65535) return false;
+    const result = await probePort(port);
+    return result === 'available';
+}
+
+/**
+ * Check if the current environment permits binding a local TCP port (port 0).
+ *
+ * CI-load-bearing note: .github/workflows/ci.yml runs tests unsandboxed, so
+ * real OS bind tests (Bucket A) execute on every push. If CI ever loses the
+ * capability to bind TCP ports, those tests decay to green-by-absence.
+ */
+export async function portBindingAvailable(): Promise<boolean> {
+    if (testPortProbe) {
+        const result = await testPortProbe(0);
+        return result === 'available';
+    }
     return new Promise<boolean>((resolve) => {
         const server = createServer();
         server.unref();
         server.on('error', () => resolve(false));
-        server.listen({ port, host: '127.0.0.1' }, () => {
+        server.listen({ port: 0, host: '127.0.0.1' }, () => {
             server.close(() => resolve(true));
         });
     });
@@ -96,7 +157,17 @@ export class ProjectRegistry {
     async withLock<T>(fn: () => Promise<T>): Promise<T> {
         const lockParent = dirname(this.lockDir);
         if (!existsSync(lockParent)) {
-            mkdirSync(lockParent, { recursive: true });
+            try {
+                mkdirSync(lockParent, { recursive: true });
+            } catch (err) {
+                const code = (err as NodeJS.ErrnoException | null)?.code;
+                if (code === 'EPERM' || code === 'EACCES') {
+                    throw new Error(
+                        `Cannot create the project registry directory ${lockParent}: permission denied (${code}).`,
+                    );
+                }
+                throw err;
+            }
         }
 
         const maxTries = 50;
@@ -107,7 +178,21 @@ export class ProjectRegistry {
                 mkdirSync(this.lockDir);
                 acquired = true;
                 break;
-            } catch {
+            } catch (err) {
+                // Retry only CONTENTION (the lock dir already exists — another writer
+                // holds it and will release). A permission failure is permanent: no
+                // number of retries makes an EPERM mkdir succeed, so backing off 50×50 ms
+                // just burns 2.5 s before the same failure. Measured 2026-08-18: that
+                // backoff was the whole cost of three `startServer` tests blowing the 5 s
+                // default in a home-write-denied sandbox. Same distinction `probePort`
+                // draws between `in-use` and `denied` (task 0585 R1/R2).
+                const code = (err as NodeJS.ErrnoException | null)?.code;
+                if (code === 'EPERM' || code === 'EACCES') {
+                    throw new Error(
+                        `Cannot lock the project registry at ${this.lockDir}: permission denied (${code}). ` +
+                            'The process is not permitted to write there — this is not lock contention.',
+                    );
+                }
                 await new Promise((r) => setTimeout(r, 50));
             }
         }
@@ -287,11 +372,32 @@ export class ProjectRegistry {
         const data = this.readRaw();
         const claimedPorts = new Set(data.projects.map((p) => p.port).filter((p) => p > 0));
 
+        // A port claimed in the registry is NOT evidence that binding works — it only
+        // says the port is spoken for. Only an actual probe result can tell "in use"
+        // from "not permitted", so the two are tracked separately: folding the claimed
+        // set into `sawInUse` made a single registered project in the band mask a fully
+        // denied environment, restoring the exact misleading message this classification
+        // exists to remove (task 0585 R2).
+        let sawInUse = false;
+        let probedAny = false;
+
         for (let port = 3000; port <= 3999; port++) {
             if (claimedPorts.has(port)) continue;
-            if (await isPortAvailable(port)) {
+            const probe = await probePort(port);
+            probedAny = true;
+            if (probe === 'available') {
                 return port;
             }
+            if (probe === 'in-use') {
+                sawInUse = true;
+            }
+        }
+
+        // Probed at least one port and never once saw a real conflict ⇒ the environment
+        // denied every bind. With no probe at all (every port claimed), the cause really
+        // is exhaustion.
+        if (probedAny && !sawInUse) {
+            throw new Error('Port binding denied: permission denied');
         }
 
         throw new Error('No available ports in range 3000–3999');

@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry, setDetachedServeSpawnForTests } from '@gobing-ai/spur-app';
+import { ProjectRegistry, setDetachedServeSpawnForTests, setPortProbeForTests } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../src/context';
 import { healthModule } from '../../src/modules/health';
@@ -20,6 +19,7 @@ describe('healthModule', () => {
     });
 
     afterEach(() => {
+        setPortProbeForTests(undefined);
         ProjectRegistry.prototype.allocatePort = origAllocate;
         delete process.env.SPUR_PROJECTS_FILE;
         if (existsSync(tempDir)) {
@@ -153,38 +153,32 @@ describe('healthModule', () => {
 
     test('/api/projects/start handles already running project', async () => {
         const registry = new ProjectRegistry(projectsFile);
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const livePort = (server.address() as { port: number }).port;
+        const livePort = 3500;
+        setPortProbeForTests(async (p) => (p === livePort ? 'in-use' : 'available'));
 
-        try {
-            await registry.upsert({ name: 'RunningApp', path: tempDir, port: livePort });
+        await registry.upsert({ name: 'RunningApp', path: tempDir, port: livePort });
 
-            const app = new Hono();
-            const ctx = { cwd: tempDir } as ServerContext;
-            healthModule.mount(app, ctx);
+        const app = new Hono();
+        const ctx = { cwd: tempDir } as ServerContext;
+        healthModule.mount(app, ctx);
 
-            const res = await app.request('/api/projects/start', {
-                method: 'POST',
-                body: JSON.stringify({ name: 'RunningApp' }),
-                headers: { 'content-type': 'application/json' },
-            });
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as { running: boolean; port: number };
-            expect(body.running).toBe(true);
-            expect(body.port).toBe(livePort);
-        } finally {
-            server.close();
-        }
+        const res = await app.request('/api/projects/start', {
+            method: 'POST',
+            body: JSON.stringify({ name: 'RunningApp' }),
+            headers: { 'content-type': 'application/json' },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { running: boolean; port: number };
+        expect(body.running).toBe(true);
+        expect(body.port).toBe(livePort);
     });
 
     test('/api/projects/start starts stopped project and updates registry when port is live', async () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'StoppedApp', path: tempDir, port: 0 });
 
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3501;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
@@ -208,14 +202,12 @@ describe('healthModule', () => {
         } finally {
             setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
     test('/api/projects/start auto-registers target path if existing directory on disk', async () => {
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3502;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
@@ -237,7 +229,6 @@ describe('healthModule', () => {
         } finally {
             setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 });

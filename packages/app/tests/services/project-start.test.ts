@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry } from '../../src/services/project-registry';
+import { ProjectRegistry, setPortProbeForTests } from '../../src/services/project-registry';
 import {
     type DetachedServeChild,
     type DetachedServeSpawn,
@@ -12,6 +11,20 @@ import {
     setDetachedServeSpawnForTests,
     startRegisteredProject,
 } from '../../src/services/project-start';
+
+/**
+ * Can this process create a directory under the real home? The tilde-expansion test
+ * needs one; a sandbox or hardened runtime may deny it with EPERM.
+ */
+function homeWriteAvailable(): boolean {
+    try {
+        const probe = mkdtempSync(join(homedir(), '.spur-home-probe-'));
+        rmSync(probe, { recursive: true, force: true });
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 /** Fake detached serve — never touches global Bun.spawn. */
 function fakeServeSpawn(
@@ -41,6 +54,7 @@ describe('project-start', () => {
     });
 
     afterEach(() => {
+        setPortProbeForTests(undefined);
         setDetachedServeSpawnForTests(undefined);
         delete process.env.SPUR_PROJECTS_FILE;
         delete process.env.SPUR_CLI_PATH;
@@ -56,20 +70,14 @@ describe('project-start', () => {
     });
 
     it('startRegisteredProject returns alreadyRunning when port is live', async () => {
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const livePort = (server.address() as { port: number }).port;
-
-        try {
-            await registry.upsert({ name: 'LiveApp', path: tempDir, port: livePort });
-            const result = await startRegisteredProject(registry, 'LiveApp');
-            expect(result.alreadyRunning).toBe(true);
-            expect(result.port).toBe(livePort);
-            expect(result.running).toBe(true);
-            expect(result.url).toContain(String(livePort));
-        } finally {
-            server.close();
-        }
+        const livePort = 3500;
+        setPortProbeForTests(async (p) => (p === livePort ? 'in-use' : 'available'));
+        await registry.upsert({ name: 'LiveApp', path: tempDir, port: livePort });
+        const result = await startRegisteredProject(registry, 'LiveApp');
+        expect(result.alreadyRunning).toBe(true);
+        expect(result.port).toBe(livePort);
+        expect(result.running).toBe(true);
+        expect(result.url).toContain(String(livePort));
     });
 
     it('startRegisteredProject rejects missing projects with a clear error', async () => {
@@ -90,9 +98,8 @@ describe('project-start', () => {
             );
         }
 
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3501;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
@@ -107,7 +114,6 @@ describe('project-start', () => {
             expect(result.path.startsWith('~')).toBe(false);
         } finally {
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
@@ -195,9 +201,8 @@ describe('project-start', () => {
 
     it('setDetachedServeSpawnForTests overrides spawn when options.spawn is omitted', async () => {
         await registry.upsert({ name: 'OverrideApp', path: tempDir, port: 0 });
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3502;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         let sawServe = false;
         setDetachedServeSpawnForTests(
             fakeServeSpawn(null, (cmd) => {
@@ -216,14 +221,12 @@ describe('project-start', () => {
             expect(sawServe).toBe(true);
         } finally {
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
     it('startRegisteredProject auto-registers an on-disk path not yet in the registry', async () => {
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3503;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
         try {
@@ -241,11 +244,22 @@ describe('project-start', () => {
             expect(entry).toBeDefined();
         } finally {
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
+    // Capability-gated like the Bucket A port tests (task 0585 R5), for a different
+    // capability: this asserts `~/…` expansion end to end, so it needs a real directory
+    // under the real home. `os.homedir()` reads the passwd entry under Bun and ignores
+    // $HOME, so a fake home cannot stand in without deleting what the test proves.
+    // CI dependency note: .github/workflows/ci.yml runs bun run check unsandboxed.
+    // If CI ever loses home-write capability, this test decays to green-by-absence.
     it('startRegisteredProject starts a project stored as ~/… (registry heals on list)', async () => {
+        if (!homeWriteAvailable()) {
+            console.warn(
+                '[SKIP:home-write-denied] Writing under the home directory is denied in this environment. This tilde-expansion test executes in CI unsandboxed.',
+            );
+            return;
+        }
         // Registry.list() rewrites ~/… before startRegisteredProject sees the entry.
         // Assert the end-to-end path: hand-edited tilde form still starts cleanly.
         const underHome = mkdtempSync(join(homedir(), '.spur-project-start-heal-'));
@@ -267,9 +281,8 @@ describe('project-start', () => {
         expect(JSON.parse(readFileSync(homeProjectsFile, 'utf8')).projects[0].path).toBe(tildePath);
         const homeRegistry = new ProjectRegistry(homeProjectsFile);
 
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3504;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
         try {
@@ -283,16 +296,14 @@ describe('project-start', () => {
             expect(result.running).toBe(true);
         } finally {
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
             rmSync(underHome, { recursive: true, force: true });
         }
     });
 
     it('startRegisteredProject uses options.port when provided instead of allocatePort', async () => {
         await registry.upsert({ name: 'FixedPort', path: tempDir, port: 0 });
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3505;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         let allocateCalled = false;
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => {
@@ -310,7 +321,6 @@ describe('project-start', () => {
             expect(allocateCalled).toBe(false);
         } finally {
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
@@ -354,22 +364,17 @@ describe('project-start', () => {
                 globalHits += 1;
             }),
         );
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
-        try {
-            await startRegisteredProject(registry, 'Precedence', {
-                port: targetPort,
-                pollAttempts: 5,
-                pollIntervalMs: 20,
-                spawn: fakeServeSpawn(null, () => {
-                    optionHits += 1;
-                }),
-            });
-            expect(optionHits).toBe(1);
-            expect(globalHits).toBe(0);
-        } finally {
-            server.close();
-        }
+        const targetPort = 3506;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
+        await startRegisteredProject(registry, 'Precedence', {
+            port: targetPort,
+            pollAttempts: 5,
+            pollIntervalMs: 20,
+            spawn: fakeServeSpawn(null, () => {
+                optionHits += 1;
+            }),
+        });
+        expect(optionHits).toBe(1);
+        expect(globalHits).toBe(0);
     });
 });

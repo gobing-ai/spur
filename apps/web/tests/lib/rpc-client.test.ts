@@ -41,10 +41,13 @@ describe('rpc client', () => {
     });
 
     test('fetchWithTimeout resolves when fetch succeeds', async () => {
-        const server = Bun.serve({ fetch: () => new Response('ok'), port: 0 });
-        const res = await fetchWithTimeout(new Request(server.url.href), 5000);
-        expect(res).toBeInstanceOf(Response);
-        server.stop();
+        setFetchForTesting((async () => new Response('ok')) as unknown as typeof fetch);
+        try {
+            const res = await fetchWithTimeout(new Request('http://localhost/test'), 5000);
+            expect(res).toBeInstanceOf(Response);
+        } finally {
+            resetFetchForTesting();
+        }
     });
 
     test('fetchWithTimeout aborts on timeout', async () => {
@@ -76,10 +79,13 @@ describe('rpc client', () => {
     });
 
     test('apiFetchWithTimeout delegates to fetchWithTimeout with default ms', async () => {
-        const server = Bun.serve({ fetch: () => new Response('ok'), port: 0 });
-        const res = await apiFetchWithTimeout(new Request(server.url.href));
-        expect(res).toBeInstanceOf(Response);
-        server.stop();
+        setFetchForTesting((async () => new Response('ok')) as unknown as typeof fetch);
+        try {
+            const res = await apiFetchWithTimeout(new Request('http://localhost/test'));
+            expect(res).toBeInstanceOf(Response);
+        } finally {
+            resetFetchForTesting();
+        }
     });
 
     test('logTransportError dispatches api-error custom event', () => {
@@ -93,7 +99,8 @@ describe('rpc client', () => {
             logTransportError(new Error('boom'));
             expect(dispatched).toHaveLength(1);
             expect(dispatched[0]?.type).toBe('api-error');
-            expect((dispatched[0]?.detail as Record<string, unknown>).message).toBe('boom');
+            const detail = dispatched[0]?.detail as Record<string, unknown> | undefined;
+            expect(detail?.message).toBe('boom');
         } finally {
             globalThis.dispatchEvent = origDispatch;
         }

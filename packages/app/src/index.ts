@@ -43,6 +43,18 @@ export type {
     AgentServiceOutput,
 } from './services/agent-service';
 export { _resetAgentServiceShimsForTest, AGENT_INLINE_HEADLESS_MESSAGE, AgentService } from './services/agent-service';
+export type {
+    AnchorFileReport,
+    AnchorQualifyReport,
+    QualifiedAnchor,
+} from './services/anchor-qualifier';
+export {
+    anchorQualify,
+    buildTrackedBasenameIndex,
+    qualifyAnchors,
+    qualifySectionBody,
+    resolveConfiguredTaskDirs,
+} from './services/anchor-qualifier';
 export type { CorpusCheckResult } from './services/corpus-check';
 export {
     baselineSeverity,
@@ -229,7 +241,18 @@ export type {
     SupervisorOverlayEntry,
 } from './services/process-inventory-service';
 export { ProcessInventoryService } from './services/process-inventory-service';
-export { isPortAvailable, isPortLive, normalizeProjectPath, ProjectRegistry } from './services/project-registry';
+export {
+    classifyPortBindError,
+    isPortAvailable,
+    isPortLive,
+    normalizeProjectPath,
+    type PortProbe,
+    type PortProbeResult,
+    ProjectRegistry,
+    portBindingAvailable,
+    probePort,
+    setPortProbeForTests,
+} from './services/project-registry';
 export {
     type DetachedServeChild,
     type DetachedServeSpawn,

@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry, setDetachedServeSpawnForTests } from '@gobing-ai/spur-app';
+import { ProjectRegistry, setDetachedServeSpawnForTests, setPortProbeForTests } from '@gobing-ai/spur-app';
 import { main } from '../../src/index';
 
 describe('spur projects CLI command', () => {
@@ -21,6 +20,7 @@ describe('spur projects CLI command', () => {
     });
 
     afterEach(() => {
+        setPortProbeForTests(undefined);
         ProjectRegistry.prototype.list = origList;
         ProjectRegistry.prototype.allocatePort = origAllocate;
         delete process.env.SPUR_PROJECTS_FILE;
@@ -166,39 +166,33 @@ describe('spur projects CLI command', () => {
 
     it('should handle start for an already running project', async () => {
         const registry = new ProjectRegistry(projectsFile);
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const livePort = (server.address() as { port: number }).port;
+        const livePort = 3500;
+        setPortProbeForTests(async (p) => (p === livePort ? 'in-use' : 'available'));
 
-        try {
-            await registry.upsert({ name: 'RunningProj', path: projectPath, port: livePort });
+        await registry.upsert({ name: 'RunningProj', path: projectPath, port: livePort });
 
-            // Start running project --json
-            const mockJson = createMockOutput();
-            const jsonExit = await main(['projects', 'start', 'RunningProj', '--json'], {
-                cwd: tempDir,
-                output: mockJson.output,
-            });
-            expect(jsonExit).toBe(0);
-            expect(mockJson.getText()).toContain('"running": true');
+        // Start running project --json
+        const mockJson = createMockOutput();
+        const jsonExit = await main(['projects', 'start', 'RunningProj', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(jsonExit).toBe(0);
+        expect(mockJson.getText()).toContain('"running": true');
 
-            // Start running project plain text
-            const mockText = createMockOutput();
-            const textExit = await main(['projects', 'start', 'RunningProj'], {
-                cwd: tempDir,
-                output: mockText.output,
-            });
-            expect(textExit).toBe(0);
-            expect(mockText.getText()).toContain('already running at');
-        } finally {
-            server.close();
-        }
+        // Start running project plain text
+        const mockText = createMockOutput();
+        const textExit = await main(['projects', 'start', 'RunningProj'], {
+            cwd: tempDir,
+            output: mockText.output,
+        });
+        expect(textExit).toBe(0);
+        expect(mockText.getText()).toContain('already running at');
     });
 
     it('should handle start for an un-registered target path (auto-register)', async () => {
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3501;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
@@ -216,7 +210,6 @@ describe('spur projects CLI command', () => {
         } finally {
             setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
@@ -224,9 +217,8 @@ describe('spur projects CLI command', () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'StoppedProj', path: projectPath, port: 0 });
 
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const targetPort = (server.address() as { port: number }).port;
+        const targetPort = 3502;
+        setPortProbeForTests(async (p) => (p === targetPort ? 'in-use' : 'available'));
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
@@ -243,7 +235,6 @@ describe('spur projects CLI command', () => {
         } finally {
             setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
-            server.close();
         }
     });
 
@@ -267,37 +258,30 @@ describe('spur projects CLI command', () => {
 
     it('should stop a registered project with active port via CLI', async () => {
         const registry = new ProjectRegistry(projectsFile);
-        // Listen in THIS process so Linux `fuser <port>/tcp` returns our pid.
-        // Production stop must skip self/ppid — otherwise CI dies with SIGTERM 143.
-        const server = createServer();
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-        const activePort = (server.address() as { port: number }).port;
+        const activePort = 3503;
+        setPortProbeForTests(async (p) => (p === activePort ? 'in-use' : 'available'));
 
-        try {
-            await registry.upsert({ name: 'ActiveStop', path: projectPath, port: activePort });
+        await registry.upsert({ name: 'ActiveStop', path: projectPath, port: activePort });
 
-            // Stop JSON — must not kill the test runner even when fuser reports us.
-            const mockJson = createMockOutput();
-            const exitJson = await main(['projects', 'stop', 'ActiveStop', '--json'], {
-                cwd: tempDir,
-                output: mockJson.output,
-            });
-            expect(exitJson).toBe(0);
-            expect(mockJson.getText()).toContain('"stopped": "ActiveStop"');
-            // Still alive after stop (would not reach here if we SIGTERM'd ourselves).
-            expect(process.pid).toBeGreaterThan(0);
+        // Stop JSON — must not kill the test runner even when fuser reports us.
+        const mockJson = createMockOutput();
+        const exitJson = await main(['projects', 'stop', 'ActiveStop', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exitJson).toBe(0);
+        expect(mockJson.getText()).toContain('"stopped": "ActiveStop"');
+        // Still alive after stop (would not reach here if we SIGTERM'd ourselves).
+        expect(process.pid).toBeGreaterThan(0);
 
-            // Stop text (port already cleared — no fuser path)
-            const mockText = createMockOutput();
-            const exitText = await main(['projects', 'stop', 'ActiveStop'], {
-                cwd: tempDir,
-                output: mockText.output,
-            });
-            expect(exitText).toBe(0);
-            expect(mockText.getText()).toContain('Stopped project "ActiveStop"');
-        } finally {
-            server.close();
-        }
+        // Stop text (port already cleared — no fuser path)
+        const mockText = createMockOutput();
+        const exitText = await main(['projects', 'stop', 'ActiveStop'], {
+            cwd: tempDir,
+            output: mockText.output,
+        });
+        expect(exitText).toBe(0);
+        expect(mockText.getText()).toContain('Stopped project "ActiveStop"');
     });
 
     it('should return error when stopping a non-existent project', async () => {

@@ -119,7 +119,15 @@ describe('startServer', () => {
         /** Resolves when the mocked process.exit is first invoked. */
         exitCalled: Promise<number>;
     } {
-        if (!origServe) origServe = Bun.serve;
+        if (!origServe) {
+            origServe = Bun.serve;
+            Bun.serve = ((opts?: { port?: number }) => ({
+                port: opts?.port ?? 3000,
+                stop: () => {},
+                ref: () => {},
+                unref: () => {},
+            })) as unknown as typeof Bun.serve;
+        }
         if (!origExit) origExit = process.exit;
         if (!origOn) origOn = process.on;
         if (!origOff) origOff = process.off;
