@@ -309,8 +309,16 @@ Before “done”:
 3. `bun run test` green (workspaces + `plugins/sp`; no skipped tests to pass)
 4. `bun run test-cf` green
 5. `bun run build` green
-6. `spur task check --corpus` green (`bun run corpus-check`, inside `spur-check`; see below)
+6. `spur task check --corpus` green (`bun run corpus-check` — **not** part of `spur-check`; it is
+   gated behind `bun run spur-check-new`, which is `spur-check` + the corpus sweep. Run the sweep
+   before a commit that touches the task/feature corpus; see below)
 7. `git status` intentional only
+
+**Two gate variants.** `spur-check` is the fast gate (~72 s: link-check → transition-shim-check →
+lint → test-pre-check → test → test-post-check). `spur-check-new` is that plus `corpus-check`
+(~+41 s). The split is deliberate (commit `4b929877`, 2026-08-09) — the corpus sweep costs more than
+half the gate again, so it is opt-in. Both run the sub-second checks first so a link or shim
+violation fails in ~0.3 s instead of after the 63 s test run.
 
 **`spur task check --corpus` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
 structural error outside `config/corpus-baseline.json`. It exists because per-task gates run **once**,
@@ -320,8 +328,9 @@ that no longer reproduces fails, so it cannot rot into a silent suppression list
 tightening a finding code obliges you to reconcile the fallout in the same commit (constitution
 **T10**).
 
-**`bun run transition-shim-check` — tracked compatibility shims.** Last step of `spur-check` /
-`spur-check-new` (task 0541, ADR-058). Two-sided against `config/transition-shims.json`: an
+**`bun run transition-shim-check` — tracked compatibility shims.** Runs **second** (after
+`link-check`, before `lint`) in both `spur-check` and `spur-check-new` (task 0541, ADR-058); it costs
+~0.26 s, so it is placed ahead of the 63 s test run to fail fast. Two-sided against `config/transition-shims.json`: an
 `@transition-shim(<id>)` marker with no entry fails, **and** a listed entry whose marker is gone
 from source fails. Emptying the manifest is the definition of the agent-role transition being
 complete. Shapes: `docs/04_DESIGN.md` §2.5.
@@ -344,9 +353,11 @@ when the task used the pipeline.
 ## Testing
 
 - Location: `<workspace>/tests/**/*.test.ts` (`bun:test`); `plugins/sp` chained in root `test`.
-- Coverage: per-file line/function ≥ 90% aggregate, enforced via `bun run test:coverage`
-  (what `bun run check` and the `*:full` chains run; plain `bun run test` skips coverage
-  measurement); React `.tsx` excluded from the per-file gate (happy-dom).
+- Coverage: per-file line/function ≥ 90% aggregate. **Coverage is always measured** — `bunfig.toml`
+  sets `[test] coverage = true` with `coverageThreshold = { lines = 0.9, functions = 0.9 }`, so plain
+  `bun run test` measures and enforces it too; `bun run test:coverage` only adds the explicit
+  `--coverage` reporter. Instrumentation costs ~1 % of suite wall-clock, so there is no faster
+  no-coverage mode to reach for. React `.tsx` excluded from the per-file gate (happy-dom).
 - DAOs: in-memory SQLite (`:memory:`), fresh adapter per test.
 - Names describe behavior under conditions; assert the requirement, not the implementation.
 - Extension path: `/sp:dev-unit`; evidence path: `/sp:dev-verify`.
