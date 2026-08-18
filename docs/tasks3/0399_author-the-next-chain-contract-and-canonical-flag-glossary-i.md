@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "commands", "docs"]
 dependencies: []
 created_at: "2026-08-01T05:05:18.211Z"
-updated_at: "2026-08-01T15:51:49.677Z"
+updated_at: "2026-08-18T04:42:48.333Z"
 done_forced: "true"
 done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
@@ -189,31 +189,31 @@ gate. Contention is the better problem: the gate is the thing that failed here.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `dev-operations.md:315` § `--next` chain contract — on success hand back to the router, re-invoke with `--next` set, repeat until done or a gate stops it |
-| R2 | MET | `dev-operations.md:328-339` — stop-condition table naming failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status; each row gives the halting step and the operator message; terminal is explicitly distinct from a halt |
-| R3 | MET | `dev-operations.md:76-99` § Flag glossary; 27 `**Anchor:** #flag-<name>` entries; preamble states the shared-flag set is derived mechanically from the 28 argument-hints |
-| R3a | MET | `dev-operations.md:84-90` — reference form is a markdown link to `#flag-<name>`, and the preamble publishes the exact regex the 0403 gate uses; prose-only citations explicitly do not count |
-| R4 | MET | `dev-operations.md:109` — "Redefinition (breaking). Before this entry (feature H8, task 0399, 2026-07-31) `--next` carried …" |
-| R5 | MET | `dev-operations.md:351-354` — `/sp:dev-next` runs the next step once and stops; `--next` makes any command keep going. Neither renamed |
-| R6 | MET | `dev-operations.md:93-99` — availability rule for `--json`/`--auto`, capability-exists qualifier, `--agent` deferred to H9 |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:315` § `--next` chain contract — on success hand back to the router, re-invoke with `--next` set, repeat until done or a gate stops it |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:328-339` — stop-condition table naming failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status; each row gives the halting step and the operator message; terminal is explicitly distinct from a halt |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:76-99` § Flag glossary; 27 `**Anchor:** #flag-<name>` entries; preamble states the shared-flag set is derived mechanically from the 28 argument-hints |
+| R3a | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:84-90` — reference form is a markdown link to `#flag-<name>`, and the preamble publishes the exact regex the 0403 gate uses; prose-only citations explicitly do not count |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:109` — "Redefinition (breaking). Before this entry (feature H8, task 0399, 2026-07-31) `--next` carried …" |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:351-354` — `/sp:dev-next` runs the next step once and stops; `--next` makes any command keep going. Neither renamed |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:93-99` — availability rule for `--json`/`--auto`, capability-exists qualifier, `--agent` deferred to H9 |
 | R7 | MET | `next-router/SKILL.md:85-88` — "The router is the single owner of `--next` chain progression"; definition and contract cited from the glossary rather than restated |
-| R8 | MET | `dev-operations.md:340-341` — a chain stopping at a gate is "a normal outcome, not an error"; terminal-status row reports "chain complete" distinctly from the halt rows |
+| R8 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:340-341` — a chain stopping at a gate is "a normal outcome, not an error"; terminal-status row reports "chain complete" distinctly from the halt rows |
 | R9 | MET | `routing-table.md` reconciled — chain rows gained a per-row "Stop condition" column (`git diff`: 25 insertions/7 deletions) aligning each annotation with the contract |
-| R10 | MET | `dev-operations.md:343-347` — hop bound of 8 primary hops, the message emitted when reached, and the sizing rationale (refine→run→verify→wrap is four) |
+| R10 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:343-347` — hop bound of 8 primary hops, the message emitted when reached, and the sizing rationale (refine→run→verify→wrap is four) |
 | R12 | MET | `config/workflows/task-pipeline.yaml` unmodified (`git status` clean for that path); skills changed outside next-router belong to 0404, not this task |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | The canonical --next definition exists in one place | MET | command | `grep -n "^## \`--next\` chain contract" dev-operations.md` → `:315`; glossary entry at `:101` is the single definition |
-| Stop conditions are stated once as a general contract | MET | command | `dev-operations.md:328-339` table — failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status, each with halting step and message |
+| Stop conditions are stated once as a general contract | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:328-339` table — failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status, each with halting step and message |
 | The breaking change is discoverable | MET | command | `grep -n "Redefinition (breaking)" dev-operations.md` → `:109`, naming feature H8, task 0399, 2026-07-31 |
-| The flag and the router command are disambiguated in writing | MET | command | `dev-operations.md:351-354` |
-| [doc-only] The glossary reference form is defined and machine-detectable | MET | static-ref | `dev-operations.md:84-90` — link form plus the literal regex the 0403 gate applies |
+| The flag and the router command are disambiguated in writing | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:351-354` |
+| [doc-only] The glossary reference form is defined and machine-detectable | MET | static-ref | `plugins/sp/skills/spur-dev/references/dev-operations.md:84-90` — link form plus the literal regex the 0403 gate applies |
 | The glossary covers every shared flag | MET | test | Mechanical count: 22 in-scope shared flags, each with exactly one anchor, zero with none — asserted by `command-flag-parity.test.ts` R1 (130 pass) |
 | [doc-only] A propagating --next drives a task to completion | MET | static-ref | `next-router/SKILL.md:85-88` chain-progression contract; router resolves next dispatch and re-invokes with `--next` propagated |
-| The chain stops at a gate rather than forcing past it | MET | command | `dev-operations.md:328-339` — halt rows name the step and reason; no later step attempted |
-| The chain stops when the work is done | MET | command | `dev-operations.md:339` terminal-status row → "chain complete — task `<wbs>` is `<status>`", distinct from halts |
-| A runaway chain is bounded | MET | command | `dev-operations.md:343-347` — 8 primary hops; on exhaustion reports "chain halted — hop bound (8) reached at …" rather than claiming completion |
+| The chain stops at a gate rather than forcing past it | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:328-339` — halt rows name the step and reason; no later step attempted |
+| The chain stops when the work is done | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:339` terminal-status row → "chain complete — task `<wbs>` is `<status>`", distinct from halts |
+| A runaway chain is bounded | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:343-347` — 8 primary hops; on exhaustion reports "chain halted — hop bound (8) reached at …" rather than claiming completion |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (inline review — H8 batch dev-runall --auto)

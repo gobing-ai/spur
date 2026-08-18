@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-06-29T06:20:51.500Z
-updated_at: 2026-06-29T18:41:01.996Z
+updated_at: "2026-08-18T04:42:47.005Z"
 ---
 
 ## 0152. Normalize task status before lifecycle transition; fix opaque FSMError on case-drift
@@ -155,7 +155,7 @@ Implemented Option A (service-boundary normalization) — the single production 
 - Added `normalizeStatusForDomain(status, domain)` (file-local helper) that dispatches to the domain normalizer and passes unrecognized values through unchanged.
 - Wrapped `currentStatus` (step 2 capture, `:326`) and `newStatus` (step 5 capture, `:367`) with it, before `lifecycle.requestTransition` (`:373`).
 
-**Why the service layer, not the adapter (P2's original suggestion):** call-graph audit shows `planning-write-service.ts:373` is the **sole** production callsite for `LifecyclePort.requestTransition`. The adapter's `requestTransition` is only ever reached from there, so normalizing at the service boundary covers the entire production path. The adapter-level enrichment (P2) would protect a hypothetical future caller that bypasses the service layer — defensible as defense-in-depth but redundant today; deferred.
+**Why the service layer, not the adapter (P2's original suggestion):** call-graph audit shows `packages/app/src/services/planning-write-service.ts:373` is the **sole** production callsite for `LifecyclePort.requestTransition`. The adapter's `requestTransition` is only ever reached from there, so normalizing at the service boundary covers the entire production path. The adapter-level enrichment (P2) would protect a hypothetical future caller that bypasses the service layer — defensible as defense-in-depth but redundant today; deferred.
 
 **Why passthrough on unknown (not throw):** a corrupted `status: banana` on disk must not block a *non-status* edit (e.g. `spur task update 0152 --section Background ...`). This mirrors the corrupted-file-remains-editable invariant the step-3.5 phantom-section guard upholds. Unknown values fall through to step-4 validation, which emits a clear Zod enum error naming the allowed vocabulary. This satisfies R3/R4 via a different mechanism than the planned catch-and-rethrow (see Plan P5).
 

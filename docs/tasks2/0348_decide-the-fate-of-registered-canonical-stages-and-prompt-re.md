@@ -12,7 +12,7 @@ priority: P2
 tags: ["wayfinder:grilling", "stage-registry", "adr-033"]
 dependencies: ["0344"]
 created_at: "2026-07-27T01:27:19.157Z"
-updated_at: "2026-07-27T06:56:48.577Z"
+updated_at: "2026-08-18T04:42:48.115Z"
 ---
 
 ## 0348. Decide the fate of REGISTERED_CANONICAL_STAGES and prompt-regex phase detection
@@ -185,7 +185,7 @@ A: Yes. Option B adds one optional key to `AgentConfigSchema` with deep-replace 
 **Routing precedence (as implemented today + Option B addition), high → low:**
 
 1. **Explicit `--agent`** (0346) — `resolveAgent` → `resolveExecutorSelector`; **bypasses** stage routing entirely.
-2. **`default-by-phase` shim** — if a phase is available and mapped (`agent-service.ts:643-652`), resolves that executor selector and **never enters** stage `model_policy`.
+2. **`default-by-phase` shim** — if a phase is available and mapped (`packages/app/src/services/agent-service.ts:643-652`), resolves that executor selector and **never enters** stage `model_policy`.
 3. **Stage path** — `targetStageId` from `--stage` flag (`:656`) or residual phase/alias → `getCanonicalStage` (`:660`) → `resolveStageModelPolicy` (`:681`): use **`config.model_policy[stage_id]` if set, else registry seed**.
 4. **Fallthrough** — `agent.default` then Tier-1 priority (`:669-675`).
 
@@ -196,9 +196,9 @@ Evidence base:
 - Registry is data-poor: all 10 records set `gates`, `context_layers`, `observability`, `required_references` to `[]`.
 - Parallel adapter (`plugins/sp/scripts/stage-registry-adapter.ts:225`) has **12** records (`handover`, `fixall` extra), 4-value `mutation_class` (`none|corpus|worktree|irreversible`) vs domain’s **8** (`schema.ts:115-124`), no validator, different resolution (TABLE A/B/C).
 
-**R2 (objective escalation home): STAYS in the domain registry.** `getNextFallback` (`packages/domain/src/stage-registry/schema.ts:372`) and `resolveStageModelPolicy` (`agent-service.ts:681`) stay the enforcement path. Override deep-replaces per-stage `model_policy` **before** those functions consume it — no second escalation implementation. Signal vocabulary remains `ObjectiveEscalationSignal` at `schema.ts:366` (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`).
+**R2 (objective escalation home): STAYS in the domain registry.** `getNextFallback` (`packages/domain/src/stage-registry/schema.ts:372`) and `resolveStageModelPolicy` (`packages/app/src/services/agent-service.ts:681`) stay the enforcement path. Override deep-replaces per-stage `model_policy` **before** those functions consume it — no second escalation implementation. Signal vocabulary remains `ObjectiveEscalationSignal` at `schema.ts:366` (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`).
 
-**R3 (`extractPhase` fate): OWNED BY 0344 — prompt-shape inference does NOT survive in regex form.** `extractPhase` (`agent-service.ts:937-954`) is slash-anchored after `trimStart()`. Task 0344 (done) owns replacement via intention vocabulary on the command surface. Demoted registry does **not** depend on `extractPhase`: doors are `--stage` (`:656`) and residual phase/alias only when still present; neither requires expanding the regex.
+**R3 (`extractPhase` fate): OWNED BY 0344 — prompt-shape inference does NOT survive in regex form.** `extractPhase` (`packages/app/src/services/agent-service.ts:937-954`) is slash-anchored after `trimStart()`. Task 0344 (done) owns replacement via intention vocabulary on the command surface. Demoted registry does **not** depend on `extractPhase`: doors are `--stage` (`:656`) and residual phase/alias only when still present; neither requires expanding the regex.
 
 **R4 (validator DAG): RETIRED (follow-up impl, not this ticket).** `validateStageRegistryGraph` (`packages/domain/src/stage-registry/validator.ts:210`) has zero production callers (definition + tests only). `StageTransition` appears only in validator types/tests. Orthogonal to A/B/C; Follow-up B executes retirement.
 
@@ -220,10 +220,10 @@ Decision-only (R7). Coverage: N/A (no runtime code path).
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | Solution: DEMOTE Option B; sole consumer `agent-service.ts:656-681`; data-poor 10/10 empty gates; adapter 12 vs 10 |
+| R1 | MET | Solution: DEMOTE Option B; sole consumer `packages/app/src/services/agent-service.ts:656-681`; data-poor 10/10 empty gates; adapter 12 vs 10 |
 | R2 | MET | Escalation stays `getNextFallback` `schema.ts:372` + `resolveStageModelPolicy` `:681`; override feeds them |
-| R3 | MET | `extractPhase` `agent-service.ts:937-954` owned by 0344; no regex survival; doors `--stage`/seed |
-| R4 | MET | Validator RETIRED as follow-up; `validator.ts:210` zero prod callers (this-run `rg`) |
+| R3 | MET | `extractPhase` `packages/app/src/services/agent-service.ts:937-954` owned by 0344; no regex survival; doors `--stage`/seed |
+| R4 | MET | Validator RETIRED as follow-up; `packages/domain/src/stage-registry/validator.ts:210` zero prod callers (this-run `rg`) |
 | R5 | MET | Auto path single chokepoint; explicit `--agent` correctly out of stage policy (0346) |
 | R6 | MET | AMEND ADR-033 `:778`; amendment draft in Solution; apply = Follow-up D |
 | R7 | MET | No packages/apps/plugins change for this decision; follow-ups listed only |

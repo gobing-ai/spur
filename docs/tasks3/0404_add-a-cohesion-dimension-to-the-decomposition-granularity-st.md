@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "skills", "process"]
 dependencies: []
 created_at: "2026-08-01T05:20:37.436Z"
-updated_at: "2026-08-01T15:52:39.871Z"
+updated_at: "2026-08-18T04:42:48.365Z"
 done_forced: "true"
 done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
@@ -129,8 +129,8 @@ last clause matters — without it the rule reads as "never split", which is the
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `decomposition.md:26-28` — cohesion stated as the first dimension: work editing the same files, or needing the same review context, is one task even when the hour estimate would justify splitting |
-| R2 | MET | `decomposition.md:36-39` — rationale written down: splitting cohesive work multiplies the fixed per-task ceremony (precheck, implement, test, review, …); "Ceremony cost is per-task, which is why this rule exists" |
+| R1 | MET | `plugins/sp/skills/spec-decomposition/references/decomposition.md:26-28` — cohesion stated as the first dimension: work editing the same files, or needing the same review context, is one task even when the hour estimate would justify splitting |
+| R2 | MET | `plugins/sp/skills/spec-decomposition/references/decomposition.md:36-39` — rationale written down: splitting cohesive work multiplies the fixed per-task ceremony (precheck, implement, test, review, …); "Ceremony cost is per-task, which is why this rule exists" |
 | R3 | MET | `decomposition.md:30,34-43` — precedence as an order of application: cohesion decides whether a split is legitimate; hours then bound the resulting task, with `force_decompose_above_hours` overriding cohesion |
 | R4 | MET | `decomposition.md` worked example — H8's own five-task split, hour-compliant under `target_min_hours`/`target_max_hours`, rejected because three children edited the same files |
 | R5 | MET | `spec-decomposition/SKILL.md:89-93` — "Sizing has two dimensions, applied in order: cohesion …"; cites both alongside the hour knobs |
@@ -138,9 +138,9 @@ last clause matters — without it the rule reads as "never split", which is the
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| The cohesion rule is stated in the granularity guidance | MET | command | `decomposition.md:26-28` — same files / same review context = one task, explicitly even when hours would justify splitting |
-| The rationale is written down | MET | command | `decomposition.md:36-39` names per-task ceremony cost as the reason |
-| Precedence between the dimensions is unambiguous | MET | command | `decomposition.md:34-43` — numbered order, with the `force_decompose_above_hours` override stated so the rule cannot read as "never split" |
+| The cohesion rule is stated in the granularity guidance | MET | command | `plugins/sp/skills/spec-decomposition/references/decomposition.md:26-28` — same files / same review context = one task, explicitly even when hours would justify splitting |
+| The rationale is written down | MET | command | `plugins/sp/skills/spec-decomposition/references/decomposition.md:36-39` names per-task ceremony cost as the reason |
+| Precedence between the dimensions is unambiguous | MET | command | `plugins/sp/skills/spec-decomposition/references/decomposition.md:34-43` — numbered order, with the `force_decompose_above_hours` override stated so the rule cannot read as "never split" |
 | A worked example makes the rule applicable | MET | command | H8's original five-task split, with the files that overlapped and the 5→4 merge that followed |
 | The skill cites the new dimension | MET | command | `grep -n cohesion spec-decomposition/SKILL.md` → `:89`, `:93` |
 | The hour values are unchanged | MET | command | `git diff plugins/sp/skills/spec-decomposition/references/decomposition.md \ |

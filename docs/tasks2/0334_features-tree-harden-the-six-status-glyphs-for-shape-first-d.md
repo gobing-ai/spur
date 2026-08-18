@@ -12,7 +12,7 @@ priority: P2
 tags: ["web", "features", "a11y", "design"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.958Z"
-updated_at: "2026-07-28T00:33:30.273Z"
+updated_at: "2026-08-18T04:42:47.951Z"
 ---
 
 ## 0334. Features tree: harden the six status glyphs for shape-first distinguishability
@@ -103,9 +103,9 @@ deduplication; the visual claim is the manual matrix, not the test).
 ### Solution
 Redrawn three of the six glyph paths in `apps/web/src/modules/features/status-icons.tsx` so every canonical status owns a distinct silhouette; viewBox, component contract (`className`/`ariaLabel`), labels, and color classes untouched.
 
-- `status-icons.tsx:33` — backlog: dashed ring (`<circle strokeDasharray>`) → **dashed rounded-square outline** (`<rect x="3" y="3" width="10" height="10" rx="2.5" strokeDasharray="2 2">`). Breaks the ring family; separated from `active`'s filled disc by outer contour, not fill alone (R2).
-- `status-icons.tsx:101-115` — done: ring + check → **standalone bold check** (`<path d="M3.5 8.5l3.5 3.5 5.5-7">`, `strokeWidth` 1.75→2, round caps/joins). The check itself is the silhouette (R2).
-- `status-icons.tsx:135-136` — cancelled: ring + ✕ → **✕ inside octagon outline** (`<path d="M5.5 2.5h5l3 3v5l-3 3h-5l-3-3v-5l3-3z">` + inner ✕). Stop-sign contour, distinct from done's open check and from any ring (R2).
+- `apps/web/src/modules/features/status-icons.tsx:33` — backlog: dashed ring (`<circle strokeDasharray>`) → **dashed rounded-square outline** (`<rect x="3" y="3" width="10" height="10" rx="2.5" strokeDasharray="2 2">`). Breaks the ring family; separated from `active`'s filled disc by outer contour, not fill alone (R2).
+- `apps/web/src/modules/features/status-icons.tsx:101-115` — done: ring + check → **standalone bold check** (`<path d="M3.5 8.5l3.5 3.5 5.5-7">`, `strokeWidth` 1.75→2, round caps/joins). The check itself is the silhouette (R2).
+- `apps/web/src/modules/features/status-icons.tsx:135-136` — cancelled: ring + ✕ → **✕ inside octagon outline** (`<path d="M5.5 2.5h5l3 3v5l-3 3h-5l-3-3v-5l3-3z">` + inner ✕). Stop-sign contour, distinct from done's open check and from any ring (R2).
 - `active` (filled disc), `verifying` (eye), `blocked` (triangle) unchanged per R3/R4-design.
 - `tests/modules/features/components.test.tsx` — added `every canonical status maps to distinct shape markup` guard to the existing `FeatureStatusIcon` describe block: renders all six via `FeatureStatusIcon` and asserts pairwise-distinct inner SVG markup (proxy against accidental path deduplication).
 
@@ -123,7 +123,7 @@ Resulting set: dashed square / filled disc / eye / triangle / check / octagon-wi
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Six mutually distinct silhouettes re-read at `status-icons.tsx:35` (dashed rounded-square), `:51` (filled disc), `:69-70` (eye), `:90-92` (triangle), `:112` (standalone check), `:132-133` (octagon + ✕); guard `components.test.tsx:329` (27 pass, fresh this run) |
+| R1 | MET | Six mutually distinct silhouettes re-read at `apps/web/src/modules/features/status-icons.tsx:35` (dashed rounded-square), `:51` (filled disc), `:69-70` (eye), `:90-92` (triangle), `:112` (standalone check), `:132-133` (octagon + ✕); guard `components.test.tsx:329` (27 pass, fresh this run) |
 | R2 | MET | Ring family broken — `git diff` shape-element isolation (fresh this run): backlog circle→rect, done ring+check→standalone check, cancelled ring+✕→octagon+✕; zero circular-outline glyphs remain; backlog/active separated by outer contour, not fill |
 | R3 | MET | Same diff isolation: zero shape-element changes in the verifying or blocked hunks |
 | R4 | MET | Greyscale render re-executed this run (see below): 6/6 glyphs at exactly 14×14 px, single color, 15/15 pairs distinct |

@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.672Z"
-updated_at: "2026-08-04T20:11:33.452Z"
+updated_at: "2026-08-18T04:42:48.455Z"
 ---
 
 ## 0432. Workflow var interpolation into shell action commands executes as shell
@@ -149,7 +149,7 @@ summary.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R3 — workflow var carrying shell metacharacters is treated as data | MET | `packages/app/src/workflow/actions/shell.ts:51-67` re-read at anchor — `context.vars` merged over `process.env`, passed via `runStreaming({ env })`; `builtins.ts:49` confirms `StreamingShellActionRunner` is the **registered runtime runner**, so the fix is on the live path |
+| R3 — workflow var carrying shell metacharacters is treated as data | MET | `packages/app/src/workflow/actions/shell.ts:51-67` re-read at anchor — `context.vars` merged over `process.env`, passed via `runStreaming({ env })`; `packages/app/src/workflow/builtins.ts:49` confirms `StreamingShellActionRunner` is the **registered runtime runner**, so the fix is on the live path |
 | R4 — shell interpolation cannot silently mask a gate | MET | `packages/app/tests/workflow/actions/shell.test.ts:260-277` — doctor-status write survives a backtick idea, writes `PASS`, terminates with no in-flight hang |
 | R8 — defect covered at the shared mechanism, plus YAML audit | MET | 3 regression tests target shared `shell.ts`, not `idea-pipeline.yaml`; independent YAML re-parse of `config/workflows/` reproduced the claim exactly: **41 action commands, 0 residual `${vars.*}`** |
 
@@ -165,7 +165,7 @@ summary.
 | Claim | Method | Result |
 |---|---|---|
 | `.spur/workflows/*.yaml` are hardlinks, so runtime reads the fixed files | `stat -f %i` both paths | Confirmed — same inode |
-| The fixed runner is the one actually used | read `builtins.ts:49` | Confirmed — registered `shell` runner |
+| The fixed runner is the one actually used | read `packages/app/src/workflow/builtins.ts:49` | Confirmed — registered `shell` runner |
 | "41 actions, zero residual" | independent YAML re-parse | Reproduced exactly |
 
 **Prior PARTIAL now cleared.** The first pass of this re-audit returned **PARTIAL** — not for any

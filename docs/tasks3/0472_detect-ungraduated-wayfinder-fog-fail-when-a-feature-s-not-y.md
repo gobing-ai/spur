@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T05:48:12.113Z"
-updated_at: "2026-08-08T18:22:30.497Z"
+updated_at: "2026-08-18T04:42:48.537Z"
 ---
 
 ## 0472. Detect ungraduated wayfinder fog: fail when a feature's Not-yet-specified shrinks without new tickets
@@ -377,43 +377,43 @@ range something to measure.
 
 | File | What changed |
 | --- | --- |
-| `scripts/commands/corpus-check.ts:144-390` | The whole fog check — range resolver, tree readers, section parser, task-added detection, the four-row rule (R1–R6, R8). |
-| `scripts/commands/corpus-check.ts:412` | `ungraduatedFog()` joins `sweep()` and `duplicateIds()` in the shared baseline pipeline (R7). |
-| `scripts/commands/corpus-check.ts:392` `scripts/commands/corpus-check.ts:418-426` | `corpusCheck(cwd, since?)` threads the `--since` override through, and the stale sweep excludes `corpus.ungraduated-fog` entries when the range skipped — "not evaluated" is not "no longer reproduces" (R7 + R8). |
+| `packages/app/src/services/corpus-check.ts:144-390` | The whole fog check — range resolver, tree readers, section parser, task-added detection, the four-row rule (R1–R6, R8). |
+| `packages/app/src/services/corpus-check.ts:412` | `ungraduatedFog()` joins `sweep()` and `duplicateIds()` in the shared baseline pipeline (R7). |
+| `packages/app/src/services/corpus-check.ts:392` `packages/app/src/services/corpus-check.ts:418-426` | `corpusCheck(cwd, since?)` threads the `--since` override through, and the stale sweep excludes `corpus.ungraduated-fog` entries when the range skipped — "not evaluated" is not "no longer reproduces" (R7 + R8). |
 | `scripts/spur-dev.ts:76-86` | `corpus-check [--since <ref>]` argument parse, and `--since` with no ref now **errors** instead of silently measuring the default range (R5). |
 | `plugins/sp/skills/wayfinder/SKILL.md:113` `plugins/sp/skills/wayfinder/SKILL.md:134` | Step 0 "Branch first" on both charting and resolution, with the reason the gate depends on that boundary (R10). |
 | `plugins/sp/skills/wayfinder/SKILL.md:151` | Step 6 now names the gate that fires when fog is deleted without a ticket. |
 | `plugins/sp/skills/wayfinder/SKILL.md:227` `plugins/sp/skills/wayfinder/SKILL.md:245` `plugins/sp/skills/wayfinder/SKILL.md:258` | Red flag + both verification checklists get the branch requirement. |
 | `plugins/sp/skills/wayfinder/SKILL.md` (10 refs) | Every `## Not yet specified` / `## Out of scope` reference corrected to `###` nested under `## Notes` — the protocol previously told authors to write a heading the gate cannot match. |
-| `scripts/commands/corpus-check.ts:46` | `key()` exported so a test can assert a fog finding's baseline identity against the shared function. |
-| `scripts/commands/corpus-check.test.ts:1-399` | 25 tests: real-corpus parser, shrinkage measure, the four decision-table rows, range + degradation, real-history replay. |
+| `packages/app/src/services/corpus-check.ts:46` | `key()` exported so a test can assert a fog finding's baseline identity against the shared function. |
+| `packages/app/tests/services/corpus-check.test.ts:1-399` | 25 tests: real-corpus parser, shrinkage measure, the four decision-table rows, range + degradation, real-history replay. |
 | `package.json:76` `package.json:79` `bunfig.toml:24` | `./scripts` added to the `test` / `test:full` roots so these tests execute in a gate at all; `scripts/**` added to `coveragePathIgnorePatterns` because `scripts/` is tooling and three of its four test files sit below the 90/90 per-file threshold. |
 
 **Detail**
 
-- **Range (R5, R8)** — `resolveFogRange()` (`scripts/commands/corpus-check.ts:228-262`) resolves
+- **Range (R5, R8)** — `resolveFogRange()` (`packages/app/src/services/corpus-check.ts:228-262`) resolves
   `merge-base(<default branch>, HEAD)` and pairs it with the working tree; `--since <ref>` replaces
   the base. `DEFAULT_BRANCHES` tries `origin/main`, `origin/master`, `main`, `master` so the resolver
   works in a clone without a remote. Not-a-repo, shallow clone, unresolvable `--since`, no default
   branch, and an undiverged HEAD each return `{ skip, spec }` — never a failure — and the `spec`
   string names the range on both paths.
-- **Shrinkage (R1)** — `sectionLabels()` (`scripts/commands/corpus-check.ts:273-296`) locates a `###`
+- **Shrinkage (R1)** — `sectionLabels()` (`packages/app/src/services/corpus-check.ts:273-296`) locates a `###`
   heading (`Not yet specified`, `Out of scope`) tolerating any trailing text, reads to the next
   same-or-higher heading, and keys each top-level bullet by its leading bold label, normalized
   (emphasis, whitespace, trailing punctuation, case). Reflow, rewording a bullet body, and reordering
   are all invisible to that measure. A bullet with no bold label falls back to its first clause.
   The heading is located by level and name only, **not** by requiring a `## Notes` parent: E1 keeps
   its `### Out of scope` under `## Scope`, so a parent check would have made its scope cut invisible.
-- **Graduation (R2)** — `taskAddedForFeature()` (`scripts/commands/corpus-check.ts:311-329`) counts a
+- **Graduation (R2)** — `taskAddedForFeature()` (`packages/app/src/services/corpus-check.ts:311-329`) counts a
   task whose `feature_id` matches at the range end and that either did not exist at the range start
   or carried a different `feature_id` then, so re-parenting counts. It runs only after shrinkage is
   detected, which keeps the `git show` spawns to one feature's tickets rather than all ~470 tasks.
-- **Rule (R3, R4, R6)** — `ungraduatedFog()` (`scripts/commands/corpus-check.ts:342-390`) passes when
+- **Rule (R3, R4, R6)** — `ungraduatedFog()` (`packages/app/src/services/corpus-check.ts:342-390`) passes when
   nothing was removed, when `### Out of scope` gained a label, or when a task joined the feature; only
   the fourth row emits `corpus.ungraduated-fog` with the feature id, the removed fog text, the
   evaluated range, and both remediations.
 - **Integration (R7)** — a `CorpusError` with `kind: 'feature'`, the feature id, and the script-local
-  code, so the existing `key()` identity (`scripts/commands/corpus-check.ts:46`) baselines it as
+  code, so the existing `key()` identity (`packages/app/src/services/corpus-check.ts:46`) baselines it as
   `feature:<id>:corpus.ungraduated-fog` under the same two-sided contract. No new exemption
   mechanism, no `finding-codes.ts` entry. The stale sweep at `:422-426` is skip-aware, so an accepted
   fog exemption stays green on `main` and on a CI shallow clone instead of inverting into a STALE
@@ -431,7 +431,7 @@ code this task added, and both are the same silent-fallback class the ticket exi
   (`exit 1`), verified: `bun scripts/spur-dev.ts corpus-check --since` → `error: corpus-check:
   --since requires a git ref (e.g. --since ee0771ab~1)`.
 - `plugins/sp/skills/wayfinder/SKILL.md:113` — stated the gate measures
-  `merge-base(origin/main, HEAD)..HEAD`; `resolveFogRange` (`scripts/commands/corpus-check.ts:229`) measures
+  `merge-base(origin/main, HEAD)..HEAD`; `resolveFogRange` (`packages/app/src/services/corpus-check.ts:229`) measures
   `..(working tree)`, so an uncommitted fog deletion also fires. Corrected to match the code.
 
 **Deliberately not built:** `0473`'s `WAYFINDER_MAP_TAG` had not landed, so map detection is the
@@ -461,14 +461,14 @@ Coverage: `scripts/commands/corpus-check.ts` — 87.50% funcs / 54.89% lines und
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `scripts/commands/corpus-check.ts:159` (`FOG_HEADING` `/^###\s+Not yet specified\b/`, tolerates trailing parenthetical) + `:273-296` (`sectionLabels`) + `:256-264` (`normalizeLabel`); tests `:74-88` (reflow ≠ shrink), `:90-98` (removal is), `:100-103` (no-bold fallback), `:35-52` (8 real maps, both heading spellings) |
-| R2 | MET | `scripts/commands/corpus-check.ts:311-329` (`taskAddedForFeature`: new file + re-parent both count); tests `:226-238` (re-parent), `:199-208` (new file), `:240-249` (pre-existing ticket is not graduation) |
-| R3 | MET | `scripts/commands/corpus-check.ts:160` (`OUT_OF_SCOPE_HEADING`) + `:371-373`; test `:210-216` |
-| R4 | MET | `scripts/commands/corpus-check.ts:373-385` four-row rule (fail only row 4); tests `:183-224` |
-| R5 | MET | `scripts/commands/corpus-check.ts:228-253` (`resolveFogRange`, branch-scoped default, `--since` override, undiverged-skip names range); `scripts/spur-dev.ts:76-83` (`--since` no-ref errors); tests `:285-373` |
-| R6 | MET | `scripts/commands/corpus-check.ts:376-385` — feature id, removed fog text, both remediations; test `:183-197` asserts all three |
-| R7 | MET | `scripts/commands/corpus-check.ts:413` integration + shared `key()` `:46` + skip-aware stale sweep `:422-426`; test `:260-271` (identity via shared `key()`); two-sided diff is pre-existing shared `corpusCheck` logic |
-| R8 | MET | `scripts/commands/corpus-check.ts:230-252` — not-a-repo, shallow, unresolvable `--since`, no default branch, undiverged HEAD all skip with message; tests `:306-373` |
+| R1 | MET | `packages/app/src/services/corpus-check.ts:159` (`FOG_HEADING` `/^###\s+Not yet specified\b/`, tolerates trailing parenthetical) + `:273-296` (`sectionLabels`) + `:256-264` (`normalizeLabel`); tests `:74-88` (reflow ≠ shrink), `:90-98` (removal is), `:100-103` (no-bold fallback), `:35-52` (8 real maps, both heading spellings) |
+| R2 | MET | `packages/app/src/services/corpus-check.ts:311-329` (`taskAddedForFeature`: new file + re-parent both count); tests `:226-238` (re-parent), `:199-208` (new file), `:240-249` (pre-existing ticket is not graduation) |
+| R3 | MET | `packages/app/src/services/corpus-check.ts:160` (`OUT_OF_SCOPE_HEADING`) + `:371-373`; test `:210-216` |
+| R4 | MET | `packages/app/src/services/corpus-check.ts:373-385` four-row rule (fail only row 4); tests `:183-224` |
+| R5 | MET | `packages/app/src/services/corpus-check.ts:228-253` (`resolveFogRange`, branch-scoped default, `--since` override, undiverged-skip names range); `scripts/spur-dev.ts:76-83` (`--since` no-ref errors); tests `:285-373` |
+| R6 | MET | `packages/app/src/services/corpus-check.ts:376-385` — feature id, removed fog text, both remediations; test `:183-197` asserts all three |
+| R7 | MET | `packages/app/src/services/corpus-check.ts:413` integration + shared `key()` `:46` + skip-aware stale sweep `:422-426`; test `:260-271` (identity via shared `key()`); two-sided diff is pre-existing shared `corpusCheck` logic |
+| R8 | MET | `packages/app/src/services/corpus-check.ts:230-252` — not-a-repo, shallow, unresolvable `--since`, no default branch, undiverged HEAD all skip with message; tests `:306-373` |
 | R9 | MET | tests `:376-399` — four rows + reflow + real `ee0771ab~1..c9bc177b` replay + narrow-range control; `./scripts` now a test root (`package.json:76`) |
 | R10 | MET | `plugins/sp/skills/wayfinder/SKILL.md` — branch-first in charting + resolution step 0, red flag, both verification checklists; all heading refs corrected to `###` under `## Notes` |
 
@@ -476,12 +476,12 @@ Coverage: `scripts/commands/corpus-check.ts` — 87.50% funcs / 54.89% lines und
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R4 — deleting fog without ticketing fails the gate | MET | test | `scripts/commands/corpus-check.test.ts:183-197` |
+| Scenario: R4 — deleting fog without ticketing fails the gate | MET | test | `packages/app/tests/services/corpus-check.test.ts:183-197` |
 | Scenario: R4 — graduating fog into tickets passes | MET | test | `:199-208` |
 | Scenario: R3 — ruling fog out of scope passes | MET | test | `:210-216` |
 | Scenario: R1 — reflowing fog text is not shrinkage | MET | test | `:74-88`, `:218-224` |
 | Scenario: R1 — the fog section is found where it actually lives | MET | test | `:35-52` — 8 real maps, plain + decorated heading |
-| Scenario: R7 — an accepted violation is baselined like any other corpus finding | MET | test | `:260-271` identity via shared `key()`; two-sided diff is pre-existing shared `corpusCheck` logic, now skip-aware (`corpus-check.ts:422-426`) |
+| Scenario: R7 — an accepted violation is baselined like any other corpus finding | MET | test | `:260-271` identity via shared `key()`; two-sided diff is pre-existing shared `corpusCheck` logic, now skip-aware (`packages/app/src/services/corpus-check.ts:422-426`) |
 | Scenario: R8 — an unusable range degrades gracefully | MET | test | `:306-373` — no-git, shallow, undiverged, no default branch, unresolvable `--since` |
 | Scenario: R2 — re-parenting an existing ticket counts as graduation | MET | test | `:226-238` |
 | Scenario: R5 — the evaluated revision range is stated, not implied | MET | test | `:285-294` evaluated, `:360-373` skip names `..` |
@@ -494,7 +494,7 @@ Coverage: `scripts/commands/corpus-check.ts` — 87.50% funcs / 54.89% lines und
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | Correctness | `scripts/commands/corpus-check.ts:357-364` | Path-keyed map matching: renaming a feature file inside the range makes `before.read(file)` null, so that map's fog is unmeasured for the range. Accepted + documented; renames are rare here. |
+| P4 | Correctness | `packages/app/src/services/corpus-check.ts:357-364` | Path-keyed map matching: renaming a feature file inside the range makes `before.read(file)` null, so that map's fog is unmeasured for the range. Accepted + documented; renames are rare here. |
 | P4 | Maintainability | `scripts/commands/corpus-check.ts:408,422` | `corpusCheck` resolves the range twice (findings + skip-aware stale sweep) rather than widening the frozen `ungraduatedFog(cwd, opts)` signature. Accepted + documented. |
 
 No P1–P3 findings; verify verdict PASS.

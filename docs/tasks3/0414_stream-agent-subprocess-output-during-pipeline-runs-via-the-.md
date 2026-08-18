@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-02T13:15:29.002Z"
-updated_at: "2026-08-02T18:51:13.172Z"
+updated_at: "2026-08-18T04:42:48.421Z"
 ---
 
 ## 0414. Stream agent subprocess output during pipeline runs via the unused onOutput hook
@@ -262,7 +262,7 @@ J3 may later promote the artifact into its data plane.
 
 **R3 (0295 stall fix) preserved:** no `ts-runtime` change; output policy stays
 `{ mode: 'buffered' }` on the pipeline path; stdin stays `'ignore'` (executor-internal); the sink
-consumes the existing `onOutput` relay (`agent-service.ts:670`) — the child's TTY perception is
+consumes the existing `onOutput` relay (`packages/app/src/services/agent-service.ts:670`) — the child's TTY perception is
 untouched. Mutation checks: `invocation.outputMode === 'buffered'` + `stdinInteractive === false`
 tests fail if the contract changes.
 
@@ -279,7 +279,7 @@ read **mid-run** (`sawMidRunWhileRunning: true`; `[ts] stderr: Working...` obser
 **Pipeline verify results** — re-audited 2026-08-02 (`/sp:dev-verify 0414 --force --focus all --fix all`).
 All `file:line` anchors below were re-read this run; drifted anchors from the prior pass were corrected
 (notably `packages/config/src/index.ts` 306-313 → 284-290, `run-output-sink.ts:39` → `:51`,
-`agent-run.test.ts:1107-1120` → `:1126`). Behavioural evidence is fresh from this run, not carried over.
+`packages/app/tests/workflow/actions/agent-run.test.ts:1107-1120` → `:1126`). Behavioural evidence is fresh from this run, not carried over.
 
 - Verdict: PASS
 
@@ -319,33 +319,33 @@ All `file:line` anchors below were re-read this run; drifted anchors from the pr
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — capture incremental output on the pipeline path | MET | `packages/app/src/workflow/actions/agent-run.ts:159` sink construction, `:165-171` fan-out observer (`sink?.observe(event)` + bus emit), `:194` observer threaded into `runTraced` options; `packages/app/src/services/agent-service.ts:670` `onOutput: (output) => lifecycle.observe(output)` (pre-existing relay, reused as-is — no ts-runtime change); test `packages/app/tests/services/agent-service.test.ts:1560` 'passes onOutput to the executor on the runTraced path (R7 core claim)' — green this run |
-| R2 — readable mid-run + reachable via trace | MET | Sink path `packages/app/src/observability/run-output-sink.ts:51`; timestamped lines `:109`; `writeSync` (unbuffered, readable pre-close) `:127`; `packages/app/src/services/workflow-service.ts:748,752` `traceRun` surfaces `outputArtifact`, `:822` `outputArtifactForRun`, `:284` DTO field; CLI print `apps/cli/src/commands/workflow.ts:648`; tests `run-output-sink.test.ts:88`, `workflow-service.test.ts:540`, `workflow.test.ts:1158`. Behavioural: mid-run read at 319B while pid 81239 alive; trace printed the artifact line (both above) |
-| R3 — 0295 stall fix survives | MET | Output policy unchanged: `packages/app/src/services/agent-service.ts:504-509` `forceBuffered` → `{ mode: 'buffered' }`, `runTraced` sets `silent: true, nonInteractive: true` at `:420-421`; stdin stays executor-internal `'ignore'` (no ts-runtime diff — confirmed by `git diff --stat`, no `node_modules`/ts-libs path); no `['inherit','pipe']` adoption anywhere in the diff; mutation test `agent-service.test.ts:1576` asserts `outputMode: 'buffered'` (`:1580`) + `stdinInteractive: false` (`:1581`) — fails if the policy flips; `agent-run.test.ts:918` 'translated slash command records buffered output and ignored stdin' — green this run |
-| R4 — bounded, configurable, visible truncation | MET | `run-output-sink.ts:10-15` `RunOutputSinkConfig`, `:18` `DEFAULT_OUTPUT_MAX_BYTES` (1 MiB), `:20` `TRUNCATION_MARKER`, `:112-121` bound enforcement + marker; `packages/config/src/index.ts:284-290` `AgentOutputConfigSchema` (int, positive), `:320` wired into `AgentConfigSchema`, `:444` exported type; `workflow-service.ts:804` `resolveOutputLogConfig` reads `.spur/config.yaml`; tests `loader.test.ts:162-196`, `run-output-sink.test.ts:100` (byte bound) and `:119` (line bound), `workflow-service.test.ts:1291` (config → truncation, full chain). Behavioural: 302B at `max-bytes: 300` with the marker present |
-| R5 — best-effort, never load-bearing | MET | `run-output-sink.ts:54-60` ctor try/catch → inert sink on unwritable dir, `:70` observe no-ops without fd, `:124-133` append try/catch, `:98-102` close try/catch; `workflow-service.ts:804-818` config failure degrades to defaults; `packages/app/src/observability/agent-execution.ts:246-251` `deliver` swallows observer exceptions (pre-existing); `agent-run.ts:283` `sink?.close()` in `finally` — no fd leak on any exit path; tests `run-output-sink.test.ts:136` (unwritable dir never throws), `agent-service.test.ts:1586` (throwing observer never fails the run) — green this run |
+| R2 — readable mid-run + reachable via trace | MET | Sink path `packages/app/src/observability/run-output-sink.ts:51`; timestamped lines `:109`; `writeSync` (unbuffered, readable pre-close) `:127`; `packages/app/src/services/workflow-service.ts:748,752` `traceRun` surfaces `outputArtifact`, `:822` `outputArtifactForRun`, `:284` DTO field; CLI print `apps/cli/src/commands/workflow.ts:648`; tests `run-output-sink.test.ts:88`, `packages/app/tests/services/workflow-service.test.ts:540`, `apps/cli/tests/commands/workflow.test.ts:1158`. Behavioural: mid-run read at 319B while pid 81239 alive; trace printed the artifact line (both above) |
+| R3 — 0295 stall fix survives | MET | Output policy unchanged: `packages/app/src/services/agent-service.ts:504-509` `forceBuffered` → `{ mode: 'buffered' }`, `runTraced` sets `silent: true, nonInteractive: true` at `:420-421`; stdin stays executor-internal `'ignore'` (no ts-runtime diff — confirmed by `git diff --stat`, no `node_modules`/ts-libs path); no `['inherit','pipe']` adoption anywhere in the diff; mutation test `packages/app/tests/services/agent-service.test.ts:1576` asserts `outputMode: 'buffered'` (`:1580`) + `stdinInteractive: false` (`:1581`) — fails if the policy flips; `packages/app/tests/workflow/actions/agent-run.test.ts:918` 'translated slash command records buffered output and ignored stdin' — green this run |
+| R4 — bounded, configurable, visible truncation | MET | `run-output-sink.ts:10-15` `RunOutputSinkConfig`, `:18` `DEFAULT_OUTPUT_MAX_BYTES` (1 MiB), `:20` `TRUNCATION_MARKER`, `:112-121` bound enforcement + marker; `packages/config/src/index.ts:284-290` `AgentOutputConfigSchema` (int, positive), `:320` wired into `AgentConfigSchema`, `:444` exported type; `packages/app/src/services/workflow-service.ts:804` `resolveOutputLogConfig` reads `.spur/config.yaml`; tests `packages/config/tests/loader.test.ts:162-196`, `run-output-sink.test.ts:100` (byte bound) and `:119` (line bound), `packages/app/tests/services/workflow-service.test.ts:1291` (config → truncation, full chain). Behavioural: 302B at `max-bytes: 300` with the marker present |
+| R5 — best-effort, never load-bearing | MET | `run-output-sink.ts:54-60` ctor try/catch → inert sink on unwritable dir, `:70` observe no-ops without fd, `:124-133` append try/catch, `:98-102` close try/catch; `packages/app/src/services/workflow-service.ts:804-818` config failure degrades to defaults; `packages/app/src/observability/agent-execution.ts:246-251` `deliver` swallows observer exceptions (pre-existing); `packages/app/src/workflow/actions/agent-run.ts:283` `sink?.close()` in `finally` — no fd leak on any exit path; tests `run-output-sink.test.ts:136` (unwritable dir never throws), `packages/app/tests/services/agent-service.test.ts:1586` (throwing observer never fails the run) — green this run |
 | R6 — no new dep / ts-libs / protocol work | MET | `git diff --stat HEAD` covers only `apps/cli`, `packages/app`, `packages/config`, `plugins/sp` — no `package.json`, no `bun.lock`, no `node_modules`, no ts-libs path; exactly one sink built (file); the EventBus fan-out pre-existed at HEAD; no stdin or per-agent protocol work; sink choice + rationale recorded in `### Solution` |
-| R7 — regression coverage | MET | Full R7 set green: chunks during a buffered run (`agent-service.test.ts:1560`, `agent-run.test.ts:1126`), artifact readable pre-exit (`run-output-sink.test.ts:88`), visible truncation (`run-output-sink.test.ts:100,119` + `workflow-service.test.ts:1291`), throwing observer (`agent-service.test.ts:1586`), stdin `'ignore'`/TTY-blind mutation check (`agent-service.test.ts:1576`, `agent-run.test.ts:918`); 8 sink tests total (`run-output-sink.test.ts:69,88,100,119,136,148,181,194`) |
+| R7 — regression coverage | MET | Full R7 set green: chunks during a buffered run (`packages/app/tests/services/agent-service.test.ts:1560`, `packages/app/tests/workflow/actions/agent-run.test.ts:1126`), artifact readable pre-exit (`run-output-sink.test.ts:88`), visible truncation (`run-output-sink.test.ts:100,119` + `packages/app/tests/services/workflow-service.test.ts:1291`), throwing observer (`packages/app/tests/services/agent-service.test.ts:1586`), stdin `'ignore'`/TTY-blind mutation check (`packages/app/tests/services/agent-service.test.ts:1576`, `packages/app/tests/workflow/actions/agent-run.test.ts:918`); 8 sink tests total (`run-output-sink.test.ts:69,88,100,119,136,148,181,194`) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Chunks observed while the subprocess is still running | MET | command+test | Mid-run read: chunk line present at 319B while pid 81239 alive, final 2105B; tests `agent-service.test.ts:1560`, `agent-run.test.ts:1126` |
+| Chunks observed while the subprocess is still running | MET | command+test | Mid-run read: chunk line present at 319B while pid 81239 alive, final 2105B; tests `packages/app/tests/services/agent-service.test.ts:1560`, `packages/app/tests/workflow/actions/agent-run.test.ts:1126` |
 | Operator reads current activity at minute N without waiting for exit | MET | command | `midrun-proof.sh` run `midrun-1785696470` — `kill -0` confirmed the process alive at the moment of the read |
 | Stream reachable from run id via `spur workflow trace` | MET | command | `spur workflow trace midrun-1785696470` → `Agent output: .spur/run/midrun-1785696470-output.log (tail -f for live view)` |
 | Chunk timestamps preserved | MET | command+test | Artifact lines carry `[2026-08-02T18:47:51.565Z]` prefixes; `run-output-sink.test.ts:69` |
-| `stdin` remains `'ignore'` on the pipeline path | MET | test | `agent-service.test.ts:1581` (`stdinInteractive: false`); `agent-run.test.ts:918` |
-| Output policy remains `{ mode: 'buffered' }` | MET | test | `agent-service.test.ts:1580`; no `['inherit','pipe']` in the diff |
-| Regression test proves no stall on an interactive prompt | MET | test | `agent-run.test.ts:918` — green this run |
-| Child TTY perception provably unchanged (mutation-checked) | MET | test | `agent-service.test.ts:1576` — fails if `nonInteractive` is dropped or the policy switches to stream |
-| Bound is configuration, not a hardcoded constant | MET | command+test | `max-bytes: 300` → 302B vs `4096` → 2105B in real runs; `loader.test.ts:162-196`; `workflow-service.test.ts:1291` |
+| `stdin` remains `'ignore'` on the pipeline path | MET | test | `packages/app/tests/services/agent-service.test.ts:1581` (`stdinInteractive: false`); `packages/app/tests/workflow/actions/agent-run.test.ts:918` |
+| Output policy remains `{ mode: 'buffered' }` | MET | test | `packages/app/tests/services/agent-service.test.ts:1580`; no `['inherit','pipe']` in the diff |
+| Regression test proves no stall on an interactive prompt | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts:918` — green this run |
+| Child TTY perception provably unchanged (mutation-checked) | MET | test | `packages/app/tests/services/agent-service.test.ts:1576` — fails if `nonInteractive` is dropped or the policy switches to stream |
+| Bound is configuration, not a hardcoded constant | MET | command+test | `max-bytes: 300` → 302B vs `4096` → 2105B in real runs; `packages/config/tests/loader.test.ts:162-196`; `packages/app/tests/services/workflow-service.test.ts:1291` |
 | Truncation is visible in the artifact | MET | command | Real artifact ends with the `[truncated] … reached its configured bound …` marker |
-| A throwing observer does not fail the run | MET | test | `agent-service.test.ts:1586` |
+| A throwing observer does not fail the run | MET | test | `packages/app/tests/services/agent-service.test.ts:1586` |
 | Unwritable run dir degrades the stream, pipeline stays correct | MET | test | `run-output-sink.test.ts:136` |
 | No `ts-libs` change | MET | command | `git diff --stat HEAD` — no ts-libs/node_modules path in the diff |
 | No new dependency, schema, stdin, or protocol work | MET | command | No `package.json`/`bun.lock` change in the diff |
 | Exactly one sink built, choice recorded | MET | command | One new sink source + its test; EventBus fan-out pre-existing; rationale in `### Solution` |
 | Artifact readable before the subprocess exits | MET | test | `run-output-sink.test.ts:88` — `writeSync`, no close required |
 | Volume bound truncates visibly | MET | test | `run-output-sink.test.ts:100,119` |
-| `stdin: 'ignore'` asserted, not assumed | MET | test | `agent-service.test.ts:1581` |
+| `stdin: 'ignore'` asserted, not assumed | MET | test | `packages/app/tests/services/agent-service.test.ts:1581` |
 | `bun run lint` / `test` / `build` green, full suite, failures bucketed | MET | command | lint 0, build 0, full suite 4329/24 with all 24 bucketed environmental (detail above); 0414 suites 346/0 |
 | Verified against a real long-running invocation, not only unit tests | MET | command | Three real `agent.run` workflow runs this turn (`midrun-1785696450`, `midrun-1785696470`, `trunc-1785696487`) |
 

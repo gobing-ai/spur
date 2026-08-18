@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-12T07:33:24.696Z"
-updated_at: "2026-07-12T07:40:15.968Z"
+updated_at: "2026-08-18T04:42:47.237Z"
 ---
 
 ## 0243. Observability Processes: serve-rooted runtime tree inventory
@@ -184,11 +184,11 @@ Coverage: unit suites for inventory + inspector at 100% line on those files in t
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 ProcessInventoryService tree + overlay | MET | `process-inventory-service.ts:62-163`; test overlays supervisor by pid |
-| R2 macOS+Linux ps parser / fail loud | MET | `process-inspector.ts:40-135`; fixtures + win32 throws |
+| R1 ProcessInventoryService tree + overlay | MET | `packages/app/src/services/process-inventory-service.ts:62-163`; test overlays supervisor by pid |
+| R2 macOS+Linux ps parser / fail loud | MET | `packages/app/src/services/process-inspector.ts:40-135`; fixtures + win32 throws |
 | R3 GET /api/observability/processes | MET | `observability/index.ts:18-28`; team routes untouched |
 | R4 exclusions (no threads/CPU/host scan/registry) | MET | Design + DTO fields; no threads/CPU columns in UI |
-| R5 ProcessListTab table + poll | MET | `ProcessListTab.tsx:28-76`; web tests root without team empty-state |
+| R5 ProcessListTab table + poll | MET | `apps/web/src/modules/observability/ProcessListTab.tsx:28-76`; web tests root without team empty-state |
 | R6 tests | MET | 82 pass targeted suite above |
 | R7 docs/04_DESIGN §7.8a | MET | `docs/04_DESIGN.md` process inventory surface |
 
@@ -201,7 +201,7 @@ Coverage: unit suites for inventory + inspector at 100% line on those files in t
 | R3 Supervised agents labeled | MET | test | overlay sets source=supervisor + agentId |
 | R4 Tab not blank without autostart | MET | test | web: serve root without supervised empty copy |
 | R5 Unsupported platform fails loud | MET | test | API 501 UNSUPPORTED_PLATFORM |
-| R6 Poll refresh / unmount cancel | MET | static-ref | `ProcessListTab.tsx:68-76` interval + AbortController cleanup |
+| R6 Poll refresh / unmount cancel | MET | static-ref | `apps/web/src/modules/observability/ProcessListTab.tsx:68-76` interval + AbortController cleanup |
 
 **Design conformance:** Approach 1 DONE (app service, flat rows, new API, read-only poll UI).
 ### Review

@@ -12,7 +12,7 @@ priority: P2
 tags: ["web", "features", "ui"]
 dependencies: ["0332"]
 created_at: "2026-07-26T00:26:23.975Z"
-updated_at: "2026-07-28T00:33:22.060Z"
+updated_at: "2026-08-18T04:42:47.985Z"
 ---
 
 ## 0336. Features tree: add a hover tooltip revealing the status label
@@ -103,7 +103,7 @@ Implemented daisyUI tooltip on the feature-tree status indicator (R1–R5).
 
 - `apps/web/src/modules/features/status-icons.tsx:144` — added exported `featureStatusLabel(status)`:
   the single label source (`FEATURE_STATUS_MAP` lookup, `Unknown status: ${status}` fallback).
-  `FeatureStatusIcon`'s unknown-status fallback now routes through it (`status-icons.tsx:163`)
+  `FeatureStatusIcon`'s unknown-status fallback now routes through it (`apps/web/src/modules/features/status-icons.tsx:163`)
   instead of an inline literal.
 - `apps/web/src/modules/features/FeatureTree.tsx:78-85` — the leading status-indicator slot (the
   fixed `w-4` span from 0333, `data-testid="feature-tree-status"`) now carries
@@ -131,10 +131,10 @@ Decisions:
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 (verify daisyUI tooltip availability) | MET | `apps/web/node_modules/daisyui/package.json` → `"version": "5.0.29"` (read this run); `node_modules/daisyui/components/tooltip.css` present, defines `.tooltip{display:inline-block...}` + `[data-tip]:before{content:attr(data-tip)}` + `.tooltip-right` variant (read this run); `apps/web/src/styles/global.css:2` → `@plugin "daisyui"` |
-| R2 (use daisyUI if available; no new dep) | MET | `FeatureTree.tsx:80-83` applies `tooltip tooltip-right` + `data-tip={featureStatusLabel(feature.status)}`; `git status --short` shows no `apps/web/package.json` or lockfile change → no new dependency added |
-| R3 (hover reveals human label) | MET | `FeatureTree.tsx:82` slot carries `data-tip={featureStatusLabel(feature.status)}`; daisyUI tooltip is pure CSS hover (`[data-tip]:before` opacity transition, `components/tooltip.css:1`); test `indicator slot carries a daisyUI tooltip whose data-tip is the human status label` (`components.test.tsx:292-303`) asserts `data-tip="Blocked"` — 31/31 pass this run |
+| R2 (use daisyUI if available; no new dep) | MET | `apps/web/src/modules/features/FeatureTree.tsx:80-83` applies `tooltip tooltip-right` + `data-tip={featureStatusLabel(feature.status)}`; `git status --short` shows no `apps/web/package.json` or lockfile change → no new dependency added |
+| R3 (hover reveals human label) | MET | `apps/web/src/modules/features/FeatureTree.tsx:82` slot carries `data-tip={featureStatusLabel(feature.status)}`; daisyUI tooltip is pure CSS hover (`[data-tip]:before` opacity transition, `components/tooltip.css:1`); test `indicator slot carries a daisyUI tooltip whose data-tip is the human status label` (`components.test.tsx:292-303`) asserts `data-tip="Blocked"` — 31/31 pass this run |
 | R4 (presentational only; accessible name survives removal) | MET | Test `removing the tooltip affordance leaves the accessible name intact (ADR-034)` (`components.test.tsx:313-329`) strips `data-tip` + tooltip classes, asserts `role="img"` + `aria-label="Blocked"` intact; daisyUI tooltip contributes no accessible name (CSS `content` only) |
-| R5 (no native `title` as the mechanism) | MET | `grep 'title='` over `FeatureTree.tsx` + `status-icons.tsx` → zero hits (this run); test `no title attribute is rendered anywhere in a tree row` (`components.test.tsx:331-338`). Pre-existing `title=` in `FeatureDetail.tsx:523` and `FeaturesShell.tsx:170,243` are unrelated to the feature-tree status indicator mechanism and outside 0336's scope. |
+| R5 (no native `title` as the mechanism) | MET | `grep 'title='` over `FeatureTree.tsx` + `status-icons.tsx` → zero hits (this run); test `no title attribute is rendered anywhere in a tree row` (`components.test.tsx:331-338`). Pre-existing `title=` in `apps/web/src/modules/features/FeatureDetail.tsx:523` and `FeaturesShell.tsx:170,243` are unrelated to the feature-tree status indicator mechanism and outside 0336's scope. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS, re-derived this turn)

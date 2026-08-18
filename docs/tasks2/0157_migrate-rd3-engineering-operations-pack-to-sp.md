@@ -11,7 +11,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-06-29T23:34:46.101Z
-updated_at: 2026-06-29T23:55:13.117Z
+updated_at: "2026-08-18T04:42:47.028Z"
 ---
 
 ## 0157. Migrate rd3 engineering operations pack to sp
@@ -153,11 +153,11 @@ Changed plugin docs and skill routing:
 - Updated the migration inventory at `plugins/README.md:331` and `plugins/README.md:334` to mark
   the engineering operations assets as partially absorbed
   where they now live, and to explicitly reject `sp:super-pm` plus `/sp:prd-*` for now.
-- Added `plugins/sp/skills/spur-dev/references/debugging.md:1` for root-cause-first debugging during
+- Added `plugins/sp/skills/code-implementation/references/debugging.md:1` for root-cause-first debugging during
   failed gates, runtime defects, intermittent behavior, and unclear test failures.
-- Added `plugins/sp/skills/spur-dev/references/implementation-patterns.md:1` for task-driven
+- Added `plugins/sp/skills/code-implementation/references/implementation-patterns.md:1` for task-driven
   implementation discipline, stack-pattern selection, progress persistence, and handoff.
-- Extended `plugins/sp/skills/spur-dev/references/unit-testing.md:191` with advanced testing
+- Extended `plugins/sp/skills/code-testing/references/unit-testing.md:191` with advanced testing
   escalation triggers for mutation testing, property-based testing, accessibility testing, and
   implementation comparison.
 - Added `plugins/sp/skills/code-verification/references/code-improvement.md:1` and linked it from

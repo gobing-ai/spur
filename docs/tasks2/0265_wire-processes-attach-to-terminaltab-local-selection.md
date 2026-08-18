@@ -12,7 +12,7 @@ priority: P1
 tags: ["teams", "terminal", "processes"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.117Z"
-updated_at: "2026-07-15T23:31:57.902Z"
+updated_at: "2026-08-18T04:42:47.433Z"
 ---
 
 ## 0265. Wire Processes Attach to TerminalTab local selection
@@ -67,7 +67,7 @@ Scenario: Attach for unknown agentId is a no-op with no crash
 **Attach intent bus + Terminal consume + shell tab switch** (Design option A, amended).
 
 **Design deviation (documented).** Option A as written — a `teams:attach-process` listener living
-only in TerminalTab — cannot satisfy the `@core` AC. `TeamsShell.tsx:47` renders only the active tab
+only in TerminalTab — cannot satisfy the `@core` AC. `apps/web/src/modules/teams/TeamsShell.tsx:47` renders only the active tab
 (`{Active ? <Active /> : null}`), so TerminalTab is **unmounted** at the moment the operator clicks
 Attach in Processes. The CustomEvent fired with no listener registered and was dropped; transient
 events are not replayed to components that mount later. Verified by driving the real path
@@ -97,7 +97,7 @@ dispatch→mount gap, and moves *tab* state (already TeamsShell's own concern) w
 
 **Correction to the prior Solution note:** it stated `teamsRef` is "already maintained by
 `useTeamsData`". No such hook exists in this file — the ref is assigned during render
-(`TerminalTab.tsx:117-118`). Extracting `useTeamsData` is task 0268.
+(`apps/web/src/modules/teams/TerminalTab.tsx:117-118`). Extracting `useTeamsData` is task 0268.
 ### Testing
 **Re-verification (`/sp:dev-verify 0265 --force --fix all`, 2026-07-15)**
 
@@ -108,10 +108,10 @@ through the operator's real path. See Solution for the design deviation this req
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `TerminalTab.tsx:173-187` — live `ATTACH_EVENT` listener; `TerminalTab.tsx:156-157` — mount-time consume |
-| R2 | MET | `TerminalTab.tsx:140-147` — `applyAttach` scans `teamsRef.current` for the team owning `agentId` |
+| R1 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:173-187` — live `ATTACH_EVENT` listener; `apps/web/src/modules/teams/TerminalTab.tsx:156-157` — mount-time consume |
+| R2 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:140-147` — `applyAttach` scans `teamsRef.current` for the team owning `agentId` |
 | R3 | MET | `components.test.tsx:907` — asserts `[data-member-terminal="planner"]` mounts via the shell path |
-| R4 | MET | `TeamsShell.tsx:14-21` — `ATTACH_EVENT` → `setActiveId('terminal')`. Reclassified from "optional/deferred": the @core AC cannot pass without it |
+| R4 | MET | `apps/web/src/modules/teams/TeamsShell.tsx:14-21` — `ATTACH_EVENT` → `setActiveId('terminal')`. Reclassified from "optional/deferred": the @core AC cannot pass without it |
 | R5 | MET | `components.test.tsx:948-952` — localStorage equals `{teamId:'alpha',memberId:'planner'}` after Attach |
 | R6 | MET | 3 tests: `components.test.tsx:809` (isolated), `:862` (edge), `:907` (real shell path) |
 

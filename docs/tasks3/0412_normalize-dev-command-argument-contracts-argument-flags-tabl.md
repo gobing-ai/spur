@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0413"]
 created_at: "2026-08-02T04:14:27.417Z"
-updated_at: "2026-08-05T22:38:07.360Z"
+updated_at: "2026-08-18T04:42:48.398Z"
 done_forced: "true"
 done_reason: "Pipeline implement step timed out (30-min subprocess limit); implementation done directly. Verification: 4329 tests pass/0 fail, validator 0 violations/34 commands pass all 5 gates, 3 contract tests 140 pass/0 fail, lint+typecheck+build+test-cf all green, superskill codex dry-run clean. Commit 70df78de."
 ---
@@ -623,7 +623,7 @@ against the already-`done` task (`--force`). Two passes in one session.
 | R1 — audit every input; ledger in `### Solution` | UNMET   | **MET**                           | Audit performed and recorded in `### Solution`: 64 unique flags / 28 commands; **Direction A** 0 orphans (every advertised flag has a consumer in `skills`/`scripts`/`workflows`); **Direction B** 6 candidates, all false positives on inspection — no unadvertised public input exists                                                                                   |
 | R2 — migrate all 28 wrappers                     | MET     | **MET**                           | 28/28 carry `## Argument Flags`; heading order correct on all 28; columns exactly `Flag/Description/Default`; 0 blank defaults; exactly one glossary ref per section; **89 → 0** Markdown links in hints; hint↔table parity holds. The one divergence (`dev-idea`) is correct — both rows are labeled compatibility aliases, which the contract omits from hints by design |
 | R3 — compatibility changed only on evidence      | PARTIAL | **MET**                           | Aliases live in tables, absent from hints. The evidence trail R3 depends on is now in R1's ledger                                                                                                                                                                                                                                                                          |
-| R4 — make the contract mechanical                | PARTIAL | **MET** _(with a recorded limit)_ | `DEV_REQUIRED_HEADINGS` at `validate-commands.ts:123`, dev/non-dev split at `:141`, 0 violations / 34 files; parity derives shared-flag membership from all 28 hints (`command-flag-parity.test.ts:128`). The prose-roster gate is explicitly delegated to task 0415 — see "R4's recorded limit" below                                                                     |
+| R4 — make the contract mechanical                | PARTIAL | **MET** _(with a recorded limit)_ | `DEV_REQUIRED_HEADINGS` at `plugins/sp/scripts/validate-commands.ts:123`, dev/non-dev split at `:141`, 0 violations / 34 files; parity derives shared-flag membership from all 28 hints (`plugins/sp/tests/command-flag-parity.test.ts:128`). The prose-roster gate is explicitly delegated to task 0415 — see "R4's recorded limit" below                                                                     |
 | R5 — reconcile every contradiction               | UNMET   | **MET**                           | Operation-contract half was already done. Glossary half was entirely undone; all five named errors plus five further defects fixed in pass 2                                                                                                                                                                                                                               |
 | R6 — preserve the architecture                   | MET     | **MET**                           | No registry, generator, or committed adapters; `ValidationResult`/`Violation` envelope unchanged; all 6 non-`dev-*` commands still on the two-heading contract                                                                                                                                                                                                             |
 
@@ -679,7 +679,7 @@ wolf trains people to ignore it, so the ten defects were fixed by inspection and
 left to 0415.
 
 **Test-deletion audit.** The sp test-file set is identical to commit `105a1b4c`; raw `test(` count
-rose 348 → 362. The runner total moved 517 → 456 because `command-flag-parity.test.ts:167` generates
+rose 348 → 362. The runner total moved 517 → 456 because `plugins/sp/tests/command-flag-parity.test.ts:167` generates
 one test per _shared flag_, and task 0413 collapsed three shared flags into one. Nothing was deleted
 to go green.
 

@@ -12,7 +12,7 @@ priority: P2
 tags: ["cli", "gates", "feature-check", "traceability", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.191Z"
-updated_at: "2026-07-27T15:45:41.793Z"
+updated_at: "2026-08-18T04:42:48.038Z"
 ---
 
 ## 0340. spur feature check --strict reports PASS when a linked AC scenario is known-unsatisfied
@@ -183,7 +183,7 @@ Feature: spur feature check --strict surfaces AC satisfaction
 
 **Rationale.** Linkage alone (DD-09) could PASS while a covering task recorded UNMET. Satisfaction consults the same `.spur/run/<wbs>-verdict.json` artifacts the done-transition guard uses. Non-strict keeps warnings (R6); `--strict` elevates via existing severity policy (R4). Orphans stay on the uncovered-feature path only (R3).
 
-**Match rule.** Scenario MET when any covering task is `done` + verdict `PASS` + `requirements[]` row MET by normalized title or `AC-N` alias (`feature-check.ts:572-577`).
+**Match rule.** Scenario MET when any covering task is `done` + verdict `PASS` + `requirements[]` row MET by normalized title or `AC-N` alias (`packages/app/src/services/feature-check.ts:572-577`).
 ### Testing
 **Re-verify (2026-07-27)** — `/sp:dev-verify 0340 --auto --force --focus all --fix all`. Fix-pass: added design satellite (R1), strengthened R5 strict test, filled Solution/Testing. Artifacts: `docs/design/feature-check-strict-ac-satisfaction.md`; `feature-check.test.ts` R5; `.spur/run/0340-verdict.json`.
 
@@ -199,7 +199,7 @@ Feature: spur feature check --strict surfaces AC satisfaction
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | Decision recorded in `docs/design/feature-check-strict-ac-satisfaction.md` + task Design; evidence = verdict artifacts; warning default / error under `--strict` |
-| R2 | MET | `feature-check.ts:503-554` three-state path; unit tests linked-and-verified / linked-but-unverified (todo, no-verdict, UNMET, FAIL) |
+| R2 | MET | `packages/app/src/services/feature-check.ts:503-554` three-state path; unit tests linked-and-verified / linked-but-unverified (todo, no-verdict, UNMET, FAIL) |
 | R3 | MET | Orphan test emits `L4.uncovered-feature-scenario` only, zero `L4.scenario-unverified` for orphan title |
 | R4 | MET | Unit "R4: --strict elevates… pass false"; CLI R2 `--strict` pass=false |
 | R5 | MET | Unit R5 dogfood with `strict:true` → error + pass=false on UNMET MET-row gap |

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T23:40:32.947Z"
-updated_at: "2026-07-28T00:33:13.093Z"
+updated_at: "2026-08-18T04:42:47.831Z"
 ---
 
 ## 0326. Board: add status filter menu to Features panel header
@@ -65,9 +65,9 @@ updated_at: "2026-07-28T00:33:13.093Z"
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 filter-icon button before the `+` button, inline SVG, no new dependency | MET | `FeaturesShell.tsx:150-170` (filter button) vs `:228-237` (`+`); `FilterIcon` inline SVG at `:13-28`; `git show f5594b4c --name-only` — no package.json |
-| R2 popup menu lists all canonical statuses + All | MET | `FeaturesShell.tsx:191-224` — All entry + `FEATURE_STATUSES.map` (`status-icons.tsx:11` = the six canonical statuses) |
-| R3 selecting an item hides the menu and filters client-side; All clears | MET | `FeaturesShell.tsx:193-213` (set + close); `getFilteredFeatures` at `:122-139`; test "opens status filter menu … filters tree by selected status" passed |
+| R1 filter-icon button before the `+` button, inline SVG, no new dependency | MET | `apps/web/src/modules/features/FeaturesShell.tsx:150-170` (filter button) vs `:228-237` (`+`); `FilterIcon` inline SVG at `:13-28`; `git show f5594b4c --name-only` — no package.json |
+| R2 popup menu lists all canonical statuses + All | MET | `apps/web/src/modules/features/FeaturesShell.tsx:191-224` — All entry + `FEATURE_STATUSES.map` (`apps/web/src/modules/features/status-icons.tsx:11` = the six canonical statuses) |
+| R3 selecting an item hides the menu and filters client-side; All clears | MET | `apps/web/src/modules/features/FeaturesShell.tsx:193-213` (set + close); `getFilteredFeatures` at `:122-139`; test "opens status filter menu … filters tree by selected status" passed |
 | R4 active-filter affordance on the icon | MET | accent class swap at `:156` + accent dot at `:164-169` |
 | R5 empty result ⇒ friendly empty state; SSE updates apply under filter | MET | empty-state line at `:242-245` (test "shows empty state message when status filter matches zero features" passed); filter is a pure projection of `features` state, so SSE refetch (`:80-98`) re-filters automatically |
 | R6 done-when (each status filters; lint/tests green) | MET | 11/11 tests pass; biome clean; tsc exit 0 |
@@ -84,7 +84,7 @@ N/A — no approved `### Design` content (template stub); verified directly agai
 
 | Severity | File | Finding | Disposition |
 | --- | --- | --- | --- |
-| P4 | `apps/web/src/modules/features/FeaturesShell.tsx:158` | Filter menu closed only on selection / button re-click — no outside-click or Escape dismissal | FIXED — dismissal effect at `FeaturesShell.tsx:65-79` (outside mousedown via `filterMenuRef` + Escape); test "closes status filter menu on Escape and on outside mousedown" passed |
+| P4 | `apps/web/src/modules/features/FeaturesShell.tsx:158` | Filter menu closed only on selection / button re-click — no outside-click or Escape dismissal | FIXED — dismissal effect at `apps/web/src/modules/features/FeaturesShell.tsx:65-79` (outside mousedown via `filterMenuRef` + Escape); test "closes status filter menu on Escape and on outside mousedown" passed |
 | P4 | `apps/web/src/modules/features/FeaturesShell.tsx:122-139` | Filter keeps ancestors of matching features visible so children stay reachable — a **documented deviation** from the literal "filtered out with this status" spec, and arguably the correct tree behavior | Accepted — matches tree UX conventions; no downgrade |
 
 Residual risk: none blocking.
@@ -95,7 +95,7 @@ Residual risk: none blocking.
 - `bunx biome check` on the changed files — clean
 - `cd apps/web && bunx tsc --noEmit` — exit 0
 - Coverage: N/A for the per-file gate — React `.tsx` excluded (happy-dom); tests at `apps/web/tests/modules/features/components.test.tsx`
-- Line-anchor rule: `FeaturesShell.tsx:122-139`, `:150-224` re-read this run; cited lines name the requirement subjects
+- Line-anchor rule: `apps/web/src/modules/features/FeaturesShell.tsx:122-139`, `:150-224` re-read this run; cited lines name the requirement subjects
 - Fix-pass disclosure: the fix pass touched `apps/web/src/modules/features/FeaturesShell.tsx:1-2` (imports), `:65-79` (dismissal effect), `:151` (ref on anchor div) and `apps/web/tests/modules/features/components.test.tsx` (new dismissal test); untracked artifact updated at `.spur/run/0326-verdict.json`
 - Browser check: not re-run by this audit — happy-dom interaction tests (menu open → select → filtered tree; zero-match empty state; Escape/outside dismissal) stand in; golden-path browser confirmation optional
 - Verdict artifact: `.spur/run/0326-verdict.json` (written last, standalone path)

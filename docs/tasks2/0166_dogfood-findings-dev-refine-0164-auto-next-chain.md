@@ -12,7 +12,7 @@ priority: P2
 tags: [review]
 dependencies: []
 created_at: 2026-06-30T23:29:53.230Z
-updated_at: 2026-07-01T00:49:22.193Z
+updated_at: "2026-08-18T04:42:47.074Z"
 ---
 
 ## 0166. Dogfood findings — dev-refine 0164 auto-next chain
@@ -74,7 +74,7 @@ Per-finding verification:
 | P2: Verifier section-write guidance | MET | `plugins/sp/skills/code-verification/SKILL.md:206-212` — Testing section now covered alongside Review |
 | P3: Task-type awareness | MET | `plugins/sp/commands/dev-run.md:57-69` — template→scope table present |
 | P3: Table-format file:line citations | MET | `packages/app/src/services/task-check.ts:132-157` — `hasAdjacentFileLineColumns()` added; Solution guard updated |
-| P4: L4 advisories in SKIP | MET | `dev-refine.md:71-75`, `dev-operations.md:103-111` — L4 suffix + JSON field added |
+| P4: L4 advisories in SKIP | MET | `plugins/sp/commands/dev-refine.md:71-75`, `plugins/sp/skills/spur-dev/references/dev-operations.md:103-111` — L4 suffix + JSON field added |
 
 Gate results:
 - `bun run lint` — clean (382 files, 0 warnings)

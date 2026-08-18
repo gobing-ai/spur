@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:52.580Z"
-updated_at: "2026-07-28T00:32:40.975Z"
+updated_at: "2026-08-18T04:42:47.757Z"
 ---
 
 ## 0315. Harden sp command contracts — dev-review modes, safe handover, least-privilege tools
@@ -121,9 +121,9 @@ The simplification target is **contract ambiguity, not command count**. Any surf
 |-----|--------|----------|
 | R1 | MET | `validate-commands.ts` → 28/28 thin-wrapper gates pass; `git status plugins/sp` shows no committed platform adapters |
 | R2 | MET | Evidenced mismatches fixed (`dev-review.md`, `dev-operations.md` §2/§11); six candidate commands left unchanged (no evidence surfaced) |
-| R3 | MET | `dev-review.md:16-18` deterministic WBS vs Path modes; `--fix`/`--next` deprecated; test gate (h) in `command-contract.test.ts` |
+| R3 | MET | `plugins/sp/commands/dev-review.md:16-18` deterministic WBS vs Path modes; `--fix`/`--next` deprecated; test gate (h) in `command-contract.test.ts` |
 | R4 | MET | `dev-operations.md` §11 step 4 — `docs/handover/<date>-<slug>.md` SSOT + non-destructive `References`/`Notes` append; preservation test PASS |
-| R10 | MET | `dev-review.md:4` allowed-tools drops `Write`; `dev-handover.md:4` retains `Write` (writes the handover file — justified, not an oversight) |
+| R10 | MET | `plugins/sp/commands/dev-review.md:4` allowed-tools drops `Write`; `plugins/sp/commands/dev-handover.md:4` retains `Write` (writes the handover file — justified, not an oversight) |
 | R8 | MET | `README.md:105` dev-review description corrected (SECUA-only → functional + SECUA + architecture) |
 | R9 | MET | 4 tests in gate (h); full `plugins/sp` suite 369 pass / 0 fail (re-run) |
 | R11 | MET | `docs/04_DESIGN.md` §7.8 (WBS/Path modes + handover SSOT) + `CHANGELOG.md` `[0.3.21]` entry |

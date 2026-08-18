@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0335"]
 created_at: "2026-07-26T20:07:54.169Z"
-updated_at: "2026-07-28T00:33:27.544Z"
+updated_at: "2026-08-18T04:42:47.996Z"
 ---
 
 ## 0338. Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10)
@@ -227,9 +227,9 @@ produced this turn; line anchors re-read at the cited lines.
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `global.css:17` (`--color-spur-text-faint: #5f6978`) + `global.css:44` (`--color-spur-text-faint: #7c8699`); cancelled/light re-measured at 3.67:1 (≥ 3:1, in the 3.3-3.8:1 window); cancelled/dark held at 3.40:1 (≥ 3:1, no regression); `--color-spur-text-muted` untouched (anti-ripple) |
+| R1 | MET | `apps/web/src/styles/global.css:17` (`--color-spur-text-faint: #5f6978`) + `apps/web/src/styles/global.css:44` (`--color-spur-text-faint: #7c8699`); cancelled/light re-measured at 3.67:1 (≥ 3:1, in the 3.3-3.8:1 window); cancelled/dark held at 3.40:1 (≥ 3:1, no regression); `--color-spur-text-muted` untouched (anti-ripple) |
 | R2 | MET | 12-ratio table below, computed this run by `bun /tmp/verify-0338-contrast.mjs`; 12/12 ≥ 3:1 |
-| R3 | MET | `status-icons.tsx:77` = `text-spur-error` (was `text-error`); `:99` = `text-spur-success` (was `text-success`); `:119` = `text-spur-text-faint` (was `text-spur-text-muted opacity-60`) — all six now on the Spur token family |
+| R3 | MET | `apps/web/src/modules/features/status-icons.tsx:77` = `text-spur-error` (was `text-error`); `:99` = `text-spur-success` (was `text-success`); `:119` = `text-spur-text-faint` (was `text-spur-text-muted opacity-60`) — all six now on the Spur token family |
 | R4 | MET | All six `colorClass` values resolve through `text-spur-*`; all 12 ratios ≥ 3:1 on both canvases (gate that froze 0335's R3 now passes) |
 
 **Acceptance Criteria Verification**

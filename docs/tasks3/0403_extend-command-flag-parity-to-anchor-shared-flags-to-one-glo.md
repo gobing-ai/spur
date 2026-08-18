@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "tests", "gate"]
 dependencies: ["0401"]
 created_at: "2026-08-01T05:05:18.252Z"
-updated_at: "2026-08-01T15:52:37.397Z"
+updated_at: "2026-08-18T04:42:48.354Z"
 done_forced: "true"
 done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
@@ -136,7 +136,7 @@ to get green.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `command-flag-parity.test.ts:165-189` — for every shared flag, `expect(glossaryEntryCount(flag)).toBe(1)`. **Fixed during this verify pass:** the shipped form asserted `toBeLessThanOrEqual(1)`, so a shared flag with zero entries passed. R1 says "exactly one"; the exemption was not load-bearing (all 22 in-scope shared flags already carry exactly one anchor) so the strict form costs nothing and closes the hole |
+| R1 | MET | `plugins/sp/tests/command-flag-parity.test.ts:165-189` — for every shared flag, `expect(glossaryEntryCount(flag)).toBe(1)`. **Fixed during this verify pass:** the shipped form asserted `toBeLessThanOrEqual(1)`, so a shared flag with zero entries passed. R1 says "exactly one"; the exemption was not load-bearing (all 22 in-scope shared flags already carry exactly one anchor) so the strict form costs nothing and closes the hole |
 | R2 | MET | `:190-208` — `commandHasReference()` regex `\[`--<name>`\]\([^)]*#flag-<name>` applied to each declaring command |
 | R3 | MET | `:200-207` — failure message names the flag and the command and prints the exact reference to add |
 | R4 | MET | The 0397 presence-parity assertions are untouched; the 0403 block is additive under its own comment banner at `:132` |

@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "commands", "docs", "tests"]
 dependencies: ["0392", "0396"]
 created_at: "2026-07-30T23:16:14.651Z"
-updated_at: "2026-07-31T03:47:19.071Z"
+updated_at: "2026-08-18T04:42:48.311Z"
 done_forced: "true"
 done_reason: "Flag surfaces aligned (R1-R7); command-flag-parity.test.ts gate extended (R8/R9) — 38 tests, fires on injected drift; lint clean; 465/465 plugin tests pass."
 ---
@@ -131,7 +131,7 @@ Aligned the batch command flag surfaces and extended the parity gate to the slas
 - `plugins/sp/commands/dev-verifyall.md:3` — added `--next` to argument-hint + Usage; documented per-task lifecycle-chaining semantics (PASS → testing→done via FSM with `--strict-core`; PARTIAL/FAIL does not transition; transitions run before the shippable gate). (R1, R2, R3)
 - `plugins/sp/commands/dev-runall.md:3,12-28` — rewrote from 19-line stub to refineall depth: per-flag meanings, explicit "no `--next`" rationale (R4), and the three-axis distinction (`--keep-going`/`--continue`/`--next`). (R6, R7)
 - `plugins/sp/skills/spur-dev/references/dev-operations.md`:
-  - Command table rows reconciled with arg-hints (R5): `dev-operations.md:57-73` — added `--next` to dev-verify/dev-verifyall/dev-run rows; `--mode` to dev-runall row (`:70`); `--max-retry`/positional to dev-fixall (`:67`); `--wayfind`/`<topic>` to dev-brainstorm (`:69`); `--dry-run` to dev-wrap/dev-wrapall (`:72-73`); removed stale `--auto` from dev-review row (`:57`).
+  - Command table rows reconciled with arg-hints (R5): `plugins/sp/skills/spur-dev/references/dev-operations.md:57-73` — added `--next` to dev-verify/dev-verifyall/dev-run rows; `--mode` to dev-runall row (`:70`); `--max-retry`/positional to dev-fixall (`:67`); `--wayfind`/`<topic>` to dev-brainstorm (`:69`); `--dry-run` to dev-wrap/dev-wrapall (`:72-73`); removed stale `--auto` from dev-review row (`:57`).
   - verifyall Inputs line: documented `--next` with per-task PASS-only transition + before-shippable-gate ordering (`:114`). (R1)
   - runall Inputs line: added `--mode <sequential|parallel>`, `--continue`, and the three-axis distinction (`:224`). (R5, R7)
 - `plugins/sp/tests/command-flag-parity.test.ts:1-136` — NEW (R8/R9). Bidirectional parity: for every command WITH a numbered dev-operations.md table entry, every argument-hint flag appears in the table row and vice versa. Deprecated-flag ignore-list (`dev-review` `--fix`/`--next`) with stated reasons. Plus a regression test pinning the three drift defects 0397 closes (dev-verifyall `--next`, dev-runall `--mode`/`--continue`, dev-runall no `--next`). 38 tests, 194 assertions.

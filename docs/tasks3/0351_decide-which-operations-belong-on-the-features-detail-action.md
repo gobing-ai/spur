@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0349"]
 created_at: "2026-07-27T17:49:44.771Z"
-updated_at: "2026-07-27T22:35:08.199Z"
+updated_at: "2026-08-18T04:42:48.165Z"
 ---
 
 ## 0351. Decide which operations belong on the Features detail action group per status
@@ -100,7 +100,7 @@ Legal outbound transitions per status — the authority for every `never (illega
 | done | *(terminal, none)* |
 | cancelled | *(terminal, none)* |
 
-Note: `SchemaLifecyclePort` (`planning-write-service.ts:85-94`) is a same-status guard only — it does NOT enforce the graph. The action group is the primary user-facing guardrail against illegal transitions; a `never (illegal)` disposition means "do not offer the button," not "server will reject."
+Note: `SchemaLifecyclePort` (`packages/app/src/services/planning-write-service.ts:85-94`) is a same-status guard only — it does NOT enforce the graph. The action group is the primary user-facing guardrail against illegal transitions; a `never (illegal)` disposition means "do not offer the button," not "server will reject."
 
 ---
 

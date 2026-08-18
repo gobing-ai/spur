@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-02T13:26:38.152Z"
-updated_at: "2026-08-03T00:18:57.762Z"
+updated_at: "2026-08-18T04:42:48.432Z"
 ---
 
 ## 0416. Guard WBS allocation: reject colliding task IDs before write and honor baseCounter
@@ -273,35 +273,35 @@ the requirement's subject (anti-stale-citation rule).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `task-service.ts:150-165` `WbsCollisionError` (message names WBS + existing + attempted path); `:1556-1563` `allocateWbsChecked` throws on `locator.findByWbs` hit; `apps/cli/src/commands/task.ts:187-204` exit 3 + JSON `wbs-collision`. Mutation-executed this run (see below). |
+| R1 | MET | `packages/app/src/services/task-service.ts:150-165` `WbsCollisionError` (message names WBS + existing + attempted path); `:1556-1563` `allocateWbsChecked` throws on `locator.findByWbs` hit; `apps/cli/src/commands/task.ts:187-204` exit 3 + JSON `wbs-collision`. Mutation-executed this run (see below). |
 | R2 | MET | Only two `allocateWbs()` call sites remain (`grep`): `:1557` inside `allocateWbsChecked`. Both create paths route through the guard — `:621` `create()`, `:1286` `createBatchItem()`. Guard is at the allocation seam, not duplicated per caller. |
-| R3 | MET | `packages/config/src/loader.ts:50` `TaskFolderEntry.baseCounter`; `:425` now assigns the zod-parsed object directly (mapping layer deleted); `packages/config/src/index.ts:45` schema emits `baseCounter`; `task-service.ts:1525` reads `entry.baseCounter`. `rg base_counter` over source: **zero** hits (remaining hits are historical task-record prose only). |
-| R4 | MET | `task-service.ts:1522-1530` builds `folderFloors` keyed by `fs.resolve(key)` — the *same* mapping `TaskLocator`'s constructor uses (`task-locator.ts:70`), so relative config keys and the absolute `tasksDir` normalize to one shape by construction. 3 floor tests pass (empty folder, floor above existing WBS, non-active folder contributes to global max). |
+| R3 | MET | `packages/config/src/loader.ts:50` `TaskFolderEntry.baseCounter`; `:425` now assigns the zod-parsed object directly (mapping layer deleted); `packages/config/src/index.ts:45` schema emits `baseCounter`; `packages/app/src/services/task-service.ts:1525` reads `entry.baseCounter`. `rg base_counter` over source: **zero** hits (remaining hits are historical task-record prose only). |
+| R4 | MET | `packages/app/src/services/task-service.ts:1522-1530` builds `folderFloors` keyed by `fs.resolve(key)` — the *same* mapping `TaskLocator`'s constructor uses (`packages/app/src/services/task-locator.ts:70`), so relative config keys and the absolute `tasksDir` normalize to one shape by construction. 3 floor tests pass (empty folder, floor above existing WBS, non-active folder contributes to global max). |
 | R5 | MET | Race diagnosed and recorded in `### Solution` / `### References`: 20 concurrent creates outside the sandbox; `acquireCreateLock` (`packages/domain/src/planning/locks.ts:128`) serializes the scan+write critical section; 0 collisions, 10 unique WBS + 10 loud `LockTimeoutError`. Response recorded with rationale (no retry-with-next-free; guard is defense-in-depth inside the lock). |
-| R6 | MET | `task-locator.ts:138-155` `findDuplicateWbs` (groups by WBS, filters `>1`, reuses `folderDirs()` — no second walk); wired into existing `spur task check` at `apps/cli/src/commands/task.ts:926-940`, no new entry point. |
+| R6 | MET | `packages/app/src/services/task-locator.ts:138-155` `findDuplicateWbs` (groups by WBS, filters `>1`, reuses `folderDirs()` — no second walk); wired into existing `spur task check` at `apps/cli/src/commands/task.ts:926-940`, no new entry point. |
 | R7 | MET | Regression coverage present and mutation-checked; full-suite gate run this turn (below). |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Colliding create fails with non-zero exit; never overwrites, never creates a second same-prefix file | MET | test | `task-service.test.ts:1475` (create → `rejects.toThrow(WbsCollisionError)`), `:1501` batch case additionally asserts the pre-seeded `0500_existing.md` survives and **no** second `0500_*` file exists |
-| Diagnostic names WBS, existing path, attempted path | MET | test | `task-service.ts:155-159` message interpolates all three; `task-service.test.ts:1531-1560` asserts `.wbs` / `.existingPath` / `.attemptedPath` fields |
+| Colliding create fails with non-zero exit; never overwrites, never creates a second same-prefix file | MET | test | `packages/app/tests/services/task-service.test.ts:1475` (create → `rejects.toThrow(WbsCollisionError)`), `:1501` batch case additionally asserts the pre-seeded `0500_existing.md` survives and **no** second `0500_*` file exists |
+| Diagnostic names WBS, existing path, attempted path | MET | test | `packages/app/src/services/task-service.ts:155-159` message interpolates all three; `packages/app/tests/services/task-service.test.ts:1531-1560` asserts `.wbs` / `.existingPath` / `.attemptedPath` fields |
 | Both `allocateWbs()` callers covered; guard at the seam | MET | static-ref | `grep -n allocateWbs` → callers `:621`, `:1286` both use `allocateWbsChecked`; sole raw call is `:1557` inside the guard |
 | Mutation-checked: removing the guard makes the collision test fail | MET | command | **Executed this run.** Removed the `findByWbs`/throw block from `allocateWbsChecked`, ran `bun test tests/services/task-service.test.ts -t 0416` → `5 pass, 3 fail` (the 3 collision tests failed; the 5 baseCounter/duplicate tests correctly unaffected). Source restored from backup and re-verified: `git diff --numstat` = `63 9` (unchanged from pre-mutation), `8 pass 0 fail`. |
-| Allocator reads `baseCounter`, not `base_counter` | MET | static-ref | `loader.ts:50`, `index.ts:45`, `task-service.ts:1525`; `rg base_counter` over source = 0 hits |
-| Folder lookup uses one key shape; active folder's floor is found | MET | static-ref | `task-service.ts:1524` `fs.resolve(key)` vs `task-locator.ts:70` `source.fs.resolve(key)` — identical mapping on the same `fs` instance, so `folderFloors.get(dir)` cannot miss |
+| Allocator reads `baseCounter`, not `base_counter` | MET | static-ref | `packages/config/src/loader.ts:50`, `index.ts:45`, `packages/app/src/services/task-service.ts:1525`; `rg base_counter` over source = 0 hits |
+| Folder lookup uses one key shape; active folder's floor is found | MET | static-ref | `packages/app/src/services/task-service.ts:1524` `fs.resolve(key)` vs `packages/app/src/services/task-locator.ts:70` `source.fs.resolve(key)` — identical mapping on the same `fs` instance, so `folderFloors.get(dir)` cannot miss |
 | Empty folder with `baseCounter: N` allocates above `N` | MET | test | `task-service.test.ts` `R3/R4: baseCounter is honored when folder is empty (floor > 0)` — passes |
 | Real config floors (tasks2:128, tasks3:348) honored — by test, not by reading config | MET | test | `task-service.test.ts` `R3/R4: baseCounter is honored as a floor when existing WBS are below it` + `…non-active folder contributes to global max` — pass |
 | Floors were **not** raised in config to mask the bug | MET | command | `git diff --stat -- .spur/config.yaml` → empty (file untouched); declared floors still `128` / `348` |
 | Concurrent create behavior determined and recorded | MET | manual-review | `### Solution` + `### References`: method (20 parallel creates, outside sandbox), result (0 collisions), and mechanism (create-lock) all recorded |
 | Race response recorded with rationale | MET | manual-review | Recorded: no retry-with-next-free; lock serializes, guard is defense-in-depth — retry rejected explicitly rather than adopted to avoid diagnosis |
-| Check surfaces duplicate WBS prefixes across all folders, reports each offending pair | MET | test | `task-locator.test.ts:206-260` — 5 cases incl. planted cross-folder duplicate |
+| Check surfaces duplicate WBS prefixes across all folders, reports each offending pair | MET | test | `packages/app/tests/services/task-locator.test.ts:206-260` — 5 cases incl. planted cross-folder duplicate |
 | Runs where corpus checks already run — no new entry point | MET | static-ref | `apps/cli/src/commands/task.ts:926` inside the existing `task check` handler, gated on `!wbs` (full-corpus scan only) |
 | Verified against a planted duplicate **and** the real corpus (clean ≠ not running) | MET | command | Planted duplicate → detector fires (5 tests pass). Real corpus this run: `spur task check --json` → 0 `"status":"duplicate"` rows, cross-checked independently by `ls docs/tasks{,2,3} \| grep -oE '^[0-9]{4}_' \| sort \| uniq -d` → empty. Both agree: corpus clean, detector proven live by the planted case. |
 | No locking framework, WBS registry, transactional-write layer, or corpus-repair tool | MET | static-ref | Diff is 18 files / +705 −41, confined to the guard, the `baseCounter` read, duplicate detection, and their tests/exports |
-| `<wbs>_<slug>.md` naming unchanged | MET | static-ref | `resolveTaskPath` untouched in diff; `TASK_FILENAME_RE = /^(\d{4})_(.+)\.md$/` unchanged (`task-locator.ts:37`) |
-| Guard reuses `TaskLocator`'s scan; no second directory walk per create | MET | static-ref | `task-service.ts:1558` `locator.findByWbs`; `:1506` `allFolderDirs()` delegates to `locator.folderDirs()`; `findDuplicateWbs` shares the same `folderDirs()` walk |
+| `<wbs>_<slug>.md` naming unchanged | MET | static-ref | `resolveTaskPath` untouched in diff; `TASK_FILENAME_RE = /^(\d{4})_(.+)\.md$/` unchanged (`packages/app/src/services/task-locator.ts:37`) |
+| Guard reuses `TaskLocator`'s scan; no second directory walk per create | MET | static-ref | `packages/app/src/services/task-service.ts:1558` `locator.findByWbs`; `:1506` `allFolderDirs()` delegates to `locator.folderDirs()`; `findDuplicateWbs` shares the same `folderDirs()` walk |
 | `bun run lint`, `bun run test`, `bun run build` green (full suite, failures bucketed by cause) | MET | command | See gate results below |
 
 **Gate results (run this turn, full suite — not a subset)**

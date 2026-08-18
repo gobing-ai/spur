@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-01T22:50:42.255Z"
-updated_at: "2026-08-02T05:08:34.966Z"
+updated_at: "2026-08-18T04:42:48.386Z"
 ---
 
 ## 0411. Stop batch orchestration from retrying unchanged blocked feature sync
@@ -100,7 +100,7 @@ decision, and replays the prior blocked result instead of re-invoking when nothi
 | `plugins/sp/tests/feature-sync-bounded.test.ts` | new, 58 tests | Named PATH 1–5 regression set (R6), the H9 four-call batch simulation, CLI/I-O layer with `Bun.spawnSync` mocking, and real-filesystem verdict-mtime coverage |
 | `config/workflows/task-pipeline.yaml:194` | `spur feature sync` → `bun plugins/sp/scripts/feature-sync-bounded.ts` | The per-task `record` step was one of the two repeat callers |
 | `config/workflows/wrapup-pipeline.yaml:127` | same substitution | The wrap-up `feature-transition` step was the other |
-| `.spur/workflows/task-pipeline.yaml:194`, `.spur/workflows/wrapup-pipeline.yaml:127` | same substitution | Gitignored runtime copies; kept in sync so the fix is live, not just tracked |
+| `config/workflows/task-pipeline.yaml:194`, `config/workflows/wrapup-pipeline.yaml:127` | same substitution | Gitignored runtime copies; kept in sync so the fix is live, not just tracked |
 | `plugins/sp/skills/spur-dev/references/execution-batch.md` | +§3.3c, +traceability row | Documents that the wrapper lives inside the pipeline steps and the batch driver does nothing extra (R4.1 unchanged) |
 
 **How suppression decides**
@@ -231,7 +231,7 @@ No gitignored `.spur/**` deliverable was mutated by the fix pass. The verdict ar
 | P3 | C | `writeBlockedState` (`plugins/sp/scripts/feature-sync-bounded.ts:332-351`) swallows every error and never `mkdir -p`s the run dir. If `.spur/run` is absent, suppression silently never engages — the exact failure class this task fixes, failing invisibly. The comment calls this intentional graceful degradation; a one-line stderr warning would make it observable |
 | P3 | A | `BoundedSyncOutcome` declares a `skip-precheck-failed` variant (`plugins/sp/scripts/feature-sync-bounded.ts:157`) that is never constructed or tested. Dead union member — the fallback is expressed as an early `invokeLiveSync` return instead |
 | P3 | C | Both workflow steps invoke `bun plugins/sp/scripts/feature-sync-bounded.ts` by relative path, so they require cwd = repo root. Consistent with the existing `batch-preflight.ts` convention, so not newly introduced |
-| P3 | U | This task's `### References` cite `.spur/workflows/task-pipeline.yaml:193` and `.spur/workflows/wrapup-pipeline.yaml:126`. The tracked source is `config/workflows/`; `.spur/workflows/` is the gitignored runtime copy. Both carry the fix (verified this run), so the change is live — but the citation points at the untracked copy |
+| P3 | U | This task's `### References` cite `config/workflows/task-pipeline.yaml:193` and `config/workflows/wrapup-pipeline.yaml:126`. The tracked source is `config/workflows/`; `.spur/workflows/` is the gitignored runtime copy. Both carry the fix (verified this run), so the change is live — but the citation points at the untracked copy |
 
 No P0/P1 findings. No secrets, no injection surface (all subprocess args are fixed arrays, never
 shell-interpolated user input after the `sh -c` removal).

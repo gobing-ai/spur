@@ -12,7 +12,7 @@ priority: P2
 tags: ["web", "features", "ui"]
 dependencies: ["0332"]
 created_at: "2026-07-26T00:26:23.950Z"
-updated_at: "2026-07-28T00:33:26.181Z"
+updated_at: "2026-08-18T04:42:47.928Z"
 ---
 
 ## 0333. Features tree: move status to a fixed leading slot and drop the text label
@@ -177,13 +177,13 @@ No production-code changes outside `FeatureTree.tsx`; `FeatureDetail` and `statu
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | `apps/web/src/modules/features/FeatureTree.tsx:76-78` — `feature-tree-status` slot is the row button's first child, ahead of the id span; `StatusBadge` deleted; test `components.test.tsx:205-217` asserts child order slot → id → name |
-| R2 | MET | `FeatureTree.tsx:76` — `w-4 shrink-0 flex items-center justify-center` (fixed, not intrinsic); `components.test.tsx:219-243` asserts identical slot classes across depths 0/1/2 |
-| R3 | MET | `FeatureTree.tsx:73` — `paddingLeft: calc(0.5rem + depth*px)` unchanged on the button; no `Badge` import (grep exit 1, this run); test asserts `padding-left` 0/16/32px per depth |
+| R2 | MET | `apps/web/src/modules/features/FeatureTree.tsx:76` — `w-4 shrink-0 flex items-center justify-center` (fixed, not intrinsic); `components.test.tsx:219-243` asserts identical slot classes across depths 0/1/2 |
+| R3 | MET | `apps/web/src/modules/features/FeatureTree.tsx:73` — `paddingLeft: calc(0.5rem + depth*px)` unchanged on the button; no `Badge` import (grep exit 1, this run); test asserts `padding-left` 0/16/32px per depth |
 | R4 | MET | `components.test.tsx:177-203` — zero `[aria-label^="Status:"]`, zero `.badge` in tree, no `>status<` text for all six statuses; grep of `FeatureTree.tsx` for `Badge`/raw status text: no match |
 | R5 | MET | `components.test.tsx:245-256` — selected row keeps `role="img"` + `aria-label="Done"`; `:258-272` — `shrink-0` slot vs `flex-1 truncate` name; accessible name from 0332 (`status-icons.tsx`) rides unchanged |
 | R6 | MET | flat-list test re-keyed to `svg[aria-label="Active"/"Done"]` (`:143-165`); six-statuses test on accessible-name queries (`:177-203`); SSE tests re-keyed to `getByTestId('status-pill')` (`:484-516`) — load-bearing disambiguation now keys on the detail pane's unique test-id |
 | R7 | MET | `components.test.tsx:205-243` — leading-slot position + fixed-width alignment across nesting depths |
-| R8 | MET | `components.test.tsx:361-368` — `status-pill` test-id, `rounded-full border` chrome, raw status text on `FeatureDetail`; `FeatureDetail.tsx:393` carries `data-testid="status-pill"` |
+| R8 | MET | `components.test.tsx:361-368` — `status-pill` test-id, `rounded-full border` chrome, raw status text on `FeatureDetail`; `apps/web/src/modules/features/FeatureDetail.tsx:393` carries `data-testid="status-pill"` |
 
 **Acceptance Criteria Verification**
 

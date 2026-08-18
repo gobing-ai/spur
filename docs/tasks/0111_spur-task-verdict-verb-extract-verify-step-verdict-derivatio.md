@@ -4,7 +4,7 @@ name: "spur task verdict verb — extract verify-step verdict derivation from YA
 status: done
 template: feature-impl
 created_at: 2026-06-24T03:52:29.295Z
-updated_at: 2026-06-25T05:17:02.594Z
+updated_at: "2026-08-18T04:42:46.823Z"
 feature_id: H2
 parent_wbs: "0109"
 priority: P1
@@ -94,9 +94,9 @@ spur task verdict <wbs> --from-answer <path> [--json]
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1: `spur task verdict` CLI verb + `deriveVerdict()` | **MET** | `task-verdict.ts:33-57` — pure derivation function; `task.ts:251-297` — CLI command with `--from-answer` flag |
-| R2: Replace pipeline grep/shell with verb | **MET** | `task-pipeline.yaml:118-121` — 7-line grep/shell replaced with single `spur task verdict` invocation |
-| R3: Unit-test PASS/PARTIAL/FAIL/UNKNOWN derivation | **MET** | `task-verdict.test.ts:1-69` — 7 tests covering all 4 verdict paths + priority rules |
+| R1: `spur task verdict` CLI verb + `deriveVerdict()` | **MET** | `packages/app/src/services/task-verdict.ts:33-57` — pure derivation function; `task.ts:251-297` — CLI command with `--from-answer` flag |
+| R2: Replace pipeline grep/shell with verb | **MET** | `config/workflows/task-pipeline.yaml:118-121` — 7-line grep/shell replaced with single `spur task verdict` invocation |
+| R3: Unit-test PASS/PARTIAL/FAIL/UNKNOWN derivation | **MET** | `packages/app/tests/services/task-verdict.test.ts:1-69` — 7 tests covering all 4 verdict paths + priority rules |
 | R4: `bun run check` passes | **MET** | Typecheck (7 workspaces) ✓, 1794 tests (0 fail), biome clean |
 
 Coverage: 99.07% lines, 99.54% funcs (spur-new).

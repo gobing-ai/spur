@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-18T19:34:31.804Z"
-updated_at: "2026-07-18T23:31:34.512Z"
+updated_at: "2026-08-18T04:42:47.574Z"
 ---
 
 ## 0293. Refuse-gate coverage for mutating --fix modes in dogfood detection
@@ -74,23 +74,23 @@ A second, related honesty gap: the refuse message offers `--max-retry 0 (observe
 Implemented R1–R6 in `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts` + tests + docs.
 
 **Source (`detect-pipeline-driving.ts`)**
-- `detect-pipeline-driving.ts:75` — exported `MUTATING_FIX_REFUSE_MESSAGE` constant (R2 honesty wording: `--max-retry 0` bounds the driver only; testee still mutates).
-- `detect-pipeline-driving.ts:109` — exported `hasMutatingFixMode(step)` boundary-guarded regex (already existed as a private helper for `isImplementHeavyStep`; now surfaced for tests + the Phase 1.0 gate).
-- `detect-pipeline-driving.ts:183` — `GateResult` gained `mutatingFix: boolean` so callers/tests can distinguish the two refuse sources.
-- `detect-pipeline-driving.ts:222` — `evaluateDogfoodGate` pipeline-driving refuse branch (unchanged behavior; now feeds `mutatingFix` into the result).
-- `detect-pipeline-driving.ts:232` — NEW refuse branch: `hasMutatingFixMode(testee) && !maxRetryPresent` → `MUTATING_FIX_REFUSE_MESSAGE` (no pipeline token required; R1).
-- `detect-pipeline-driving.ts:178` — `detectImplementHeavy` no longer short-circuits on `!detectPipelineDriving`: a mutating-`--fix` testee now reports implement-heavy on its own (R3). `isImplementHeavyStep(testee)` already covered this via its `hasMutatingFixMode` branch; the fix was removing the pipeline-driving precondition before checking derived steps.
-- `detect-pipeline-driving.ts:245` — advisory branch unchanged; reached by mutating-fix + maxRetry path via the new `detectImplementHeavy` behavior.
-- `detect-pipeline-driving.ts:326` — CLI usage text updated: exit 2 now covers both refuse sources.
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:75` — exported `MUTATING_FIX_REFUSE_MESSAGE` constant (R2 honesty wording: `--max-retry 0` bounds the driver only; testee still mutates).
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:109` — exported `hasMutatingFixMode(step)` boundary-guarded regex (already existed as a private helper for `isImplementHeavyStep`; now surfaced for tests + the Phase 1.0 gate).
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:183` — `GateResult` gained `mutatingFix: boolean` so callers/tests can distinguish the two refuse sources.
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:222` — `evaluateDogfoodGate` pipeline-driving refuse branch (unchanged behavior; now feeds `mutatingFix` into the result).
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:232` — NEW refuse branch: `hasMutatingFixMode(testee) && !maxRetryPresent` → `MUTATING_FIX_REFUSE_MESSAGE` (no pipeline token required; R1).
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:178` — `detectImplementHeavy` no longer short-circuits on `!detectPipelineDriving`: a mutating-`--fix` testee now reports implement-heavy on its own (R3). `isImplementHeavyStep(testee)` already covered this via its `hasMutatingFixMode` branch; the fix was removing the pipeline-driving precondition before checking derived steps.
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:245` — advisory branch unchanged; reached by mutating-fix + maxRetry path via the new `detectImplementHeavy` behavior.
+- `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:326` — CLI usage text updated: exit 2 now covers both refuse sources.
 - `PIPELINE_TOKENS` array **unchanged** (R6) — mutating-fix is not a new token; it's a separate matcher.
 
 **Tests (`pipeline-detect.test.ts`)**
-- `pipeline-detect.test.ts:9` — imported `MUTATING_FIX_REFUSE_MESSAGE`.
-- `pipeline-detect.test.ts:279` — added `describe('task 0293 — mutating --fix refuse gate (R4 a–f)')` block with 8 tests: (a) `--fix all` refuse; (b) `--fix blockers-first` refuse; (c) `--fix none` clean proceed; (d) `--focus all` / `--prefix all` never match; (e) `--fix all` + `--max-retry` → advisory (R3); (f) pipeline-token cases unchanged (R6) + `PIPELINE_TOKENS` not polluted. Plus `detectImplementHeavy` R3 test and a live-CLI-binary exit-2 test.
+- `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:9` — imported `MUTATING_FIX_REFUSE_MESSAGE`.
+- `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:279` — added `describe('task 0293 — mutating --fix refuse gate (R4 a–f)')` block with 8 tests: (a) `--fix all` refuse; (b) `--fix blockers-first` refuse; (c) `--fix none` clean proceed; (d) `--focus all` / `--prefix all` never match; (e) `--fix all` + `--max-retry` → advisory (R3); (f) pipeline-token cases unchanged (R6) + `PIPELINE_TOKENS` not polluted. Plus `detectImplementHeavy` R3 test and a live-CLI-binary exit-2 test.
 
 **Docs (R5, same-commit T3)**
-- `dev-dogfood.md:35` — `--max-retry` row extended with the second refuse source; both refuse messages printed verbatim.
-- `dev-dogfood.md:65` — detection description now covers (a) pipeline-driving and (b) mutating `--fix`.
+- `plugins/sp/commands/dev-dogfood.md:35` — `--max-retry` row extended with the second refuse source; both refuse messages printed verbatim.
+- `plugins/sp/commands/dev-dogfood.md:65` — detection description now covers (a) pipeline-driving and (b) mutating `--fix`.
 - `SKILL.md:54` — `--max-retry` row in the skill arguments table.
 - `SKILL.md:59` — repo-mutation warning now lists both independent mutation sources.
 - `SKILL.md:81` — Phase 1.0 step 0 updated; prints whichever refuse message the CLI emits.
@@ -108,12 +108,12 @@ Verified 2026-07-18 by `/sp:dev-verify 0293 --auto --next --force --focus all --
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `detect-pipeline-driving.ts:235-246` refuse branch (`mutatingFix && !maxRetryPresent` → exit 2); live CLI: `--fix all` → exit 2 + msg, `--fix blockers-first` → exit 2, `--fix none` → exit 0 (no pipeline token in any) |
-| R2 | MET | `MUTATING_FIX_REFUSE_MESSAGE` exported at `detect-pipeline-driving.ts:75-76`; live stdout matches the literal incl. "the testee still mutates the tree"; tests import + assert the constant (`pipeline-detect.test.ts:9`) |
-| R3 | MET | `detectImplementHeavy` (`detect-pipeline-driving.ts:178-182`) checks `isImplementHeavyStep(testee)` before the pipeline-driving precondition; live CLI: `--fix all` + `--max-retry-present`, no pipeline token → exit 0 + W8 advisory |
-| R4 | MET | `describe('task 0293 — mutating --fix refuse gate (R4 a–f)')` at `pipeline-detect.test.ts:280` (8 tests covering a–f); focused run 49 pass / 0 fail / 120 expect() |
+| R1 | MET | `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:235-246` refuse branch (`mutatingFix && !maxRetryPresent` → exit 2); live CLI: `--fix all` → exit 2 + msg, `--fix blockers-first` → exit 2, `--fix none` → exit 0 (no pipeline token in any) |
+| R2 | MET | `MUTATING_FIX_REFUSE_MESSAGE` exported at `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:75-76`; live stdout matches the literal incl. "the testee still mutates the tree"; tests import + assert the constant (`plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:9`) |
+| R3 | MET | `detectImplementHeavy` (`plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:178-182`) checks `isImplementHeavyStep(testee)` before the pipeline-driving precondition; live CLI: `--fix all` + `--max-retry-present`, no pipeline token → exit 0 + W8 advisory |
+| R4 | MET | `describe('task 0293 — mutating --fix refuse gate (R4 a–f)')` at `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:280` (8 tests covering a–f); focused run 49 pass / 0 fail / 120 expect() |
 | R5 | MET | `dev-dogfood.md` `--max-retry` row + detection description cover both refuse sources with verbatim messages; `SKILL.md` repo-mutation warning, Phase 1.0 step 0, and new §Mutating `--fix` mode contract (notes `PIPELINE_TOKENS` unchanged); same working-tree change set (T3) |
-| R6 | MET | `PIPELINE_TOKENS` (`detect-pipeline-driving.ts:50-62`) unchanged; test-file diff 84 additions / 0 deletions; full `plugins/sp` suite 252 pass / 0 fail |
+| R6 | MET | `PIPELINE_TOKENS` (`plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:50-62`) unchanged; test-file diff 84 additions / 0 deletions; full `plugins/sp` suite 252 pass / 0 fail |
 
 **Acceptance Criteria Verification**
 

@@ -11,7 +11,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-06-29T23:46:29.541Z
-updated_at: 2026-06-30T04:52:36.673Z
+updated_at: "2026-08-18T04:42:47.051Z"
 ---
 
 ## 0158. Absorb rd3 product management judgment into sp planning
@@ -132,7 +132,7 @@ Rejected for this round:
 | File | What / why |
 | --- | --- |
 | `plugins/sp/skills/spur-dev/references/product-planning.md:1` | Added the product-management judgment overlay for the existing planning path: intake, RICE/MoSCoW, strategy profiles, PRD-shaped output, and deterministic handoff rules. |
-| `plugins/sp/skills/spur-features/references/roadmap-priority.md:1` | Added feature hierarchy, priority/status, and roadmap adjustment guidance for `spur feature`. |
+| `plugins/sp/skills/spur-cli/references/features/roadmap-priority.md:1` | Added feature hierarchy, priority/status, and roadmap adjustment guidance for `spur feature`. |
 | `plugins/sp/skills/spur-dev/SKILL.md:89` | Linked PM-shaped planning into the planning step routing and resource list without creating a new PM surface. |
 | `plugins/sp/skills/spur-features/SKILL.md:141` | Linked roadmap/priority conventions from the feature companion skill. |
 | `plugins/README.md:331` | Marked `rd3:product-management` as absorbed through existing planning/roadmap references and kept `sp:super-pm` plus `/sp:prd-*` rejected. |
@@ -145,7 +145,7 @@ Coverage: N/A (documentation-only change; no runtime code path added).
 | --- | --- | --- |
 | R1. Add PM planning guidance to the existing `sp` planning layer, preferably `plugins/sp/skills/spur-dev/references/product-planning.md`. | MET | `plugins/sp/skills/spur-dev/references/product-planning.md:1` adds the planning overlay; `plugins/sp/skills/spur-dev/SKILL.md:89` links it from planning intake. |
 | R2. Link the new guidance from `plugins/sp/skills/spur-dev/SKILL.md`. | MET | `plugins/sp/skills/spur-dev/SKILL.md:89` and `plugins/sp/skills/spur-dev/SKILL.md:165` reference `product-planning.md`. |
-| R3. Add feature hierarchy / roadmap / priority-status guidance to `sp:spur-features` or a focused reference under it. | MET | `plugins/sp/skills/spur-features/references/roadmap-priority.md:1` adds the focused reference; `plugins/sp/skills/spur-features/SKILL.md:141` links the core habits. |
+| R3. Add feature hierarchy / roadmap / priority-status guidance to `sp:spur-features` or a focused reference under it. | MET | `plugins/sp/skills/spur-cli/references/features/roadmap-priority.md:1` adds the focused reference; `plugins/sp/skills/spur-features/SKILL.md:141` links the core habits. |
 | R4. Reuse `sp:doc-evolve` for PRD/doc synchronization guidance instead of adding `/sp:prd-doc`. | MET | `plugins/sp/skills/spur-dev/references/product-planning.md:115` and `plugins/sp/skills/spur-dev/references/product-planning.md:143` route PRD-shaped docs to `sp:doc-evolve`; no `/sp:prd-doc` command was added. |
 | R5. Do not add `sp:super-pm`. | MET | `rg -n "super-pm|prd-" plugins/sp/commands plugins/sp/agents` returned no matches in live command/agent surfaces. |
 | R6. Do not add `/sp:prd-run`, `/sp:prd-doc`, `/sp:prd-adjust`, or `/sp:prd-init`. | MET | No command files were added; `rg -n "super-pm|prd-" plugins/sp/commands plugins/sp/agents` returned no matches. |

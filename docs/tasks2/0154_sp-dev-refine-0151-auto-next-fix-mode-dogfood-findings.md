@@ -11,7 +11,7 @@ priority: P2
 tags: [review]
 dependencies: []
 created_at: 2026-06-29T07:21:23.638Z
-updated_at: 2026-06-29T23:05:52.986Z
+updated_at: "2026-08-18T04:42:47.016Z"
 ---
 
 ## 0154. /sp:dev-refine 0151 --auto --next fix-mode dogfood findings
@@ -52,9 +52,9 @@ Audit against the current tree (post-0151/0153 fix waves):
 
 | # | Sev | Finding | Disposition |
 |---|-----|---------|-------------|
-| 1 | P2 | `dev-refine.md:67` step-1 `resolve` vs `path` wording | **RESOLVED** — line 67 now uses `spur task path`; calls out `resolve` as the inverse. |
-| 2 | P2 | `dev-operations.md:90` `--next` silent self-edge on `todo` | **RESOLVED** — transition is now idempotent (`only when status == backlog`, skip+chain when `>= todo`); dev-refine.md:78-82 + dev-operations.md:90,104. |
-| 3 | P2 | FSM/L2 not enforcing section matrix on `issue`→`done` | **RESOLVED** — `issue.done` requires `[Root Cause, Solution, Testing, Review]` with `gate:true`; `planning-check-base.ts:140` makes a missing required section a hard error at the `done` gate. |
+| 1 | P2 | `plugins/sp/commands/dev-refine.md:67` step-1 `resolve` vs `path` wording | **RESOLVED** — line 67 now uses `spur task path`; calls out `resolve` as the inverse. |
+| 2 | P2 | `plugins/sp/skills/spur-dev/references/dev-operations.md:90` `--next` silent self-edge on `todo` | **RESOLVED** — transition is now idempotent (`only when status == backlog`, skip+chain when `>= todo`); dev-refine.md:78-82 + dev-operations.md:90,104. |
+| 3 | P2 | FSM/L2 not enforcing section matrix on `issue`→`done` | **RESOLVED** — `issue.done` requires `[Root Cause, Solution, Testing, Review]` with `gate:true`; `packages/app/src/services/planning-check-base.ts:140` makes a missing required section a hard error at the `done` gate. |
 | 4 | P3 | global `superskill hook run` missing from published binary | **RESOLVED** — `superskill hook run <plugin> <hook-id>` is present in the current global binary. |
 | 5 | P3 | `cross-platform.md:57` stale `$PLUGIN_ROOT` model | **RESOLVED** — superskill's `cross-platform.md` already rewritten to the `superskill hook run` standard with the portability warning. |
 

@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-1", "cli", "dependencies", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.281Z"
-updated_at: "2026-07-28T00:32:35.646Z"
+updated_at: "2026-08-18T04:42:47.657Z"
 ---
 
 ## 0303. Implement the CLI-safe task dependency mutation verb
@@ -230,10 +230,10 @@ All 11 Gherkin scenarios exercised against the real CLI this session (`bun run a
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 set/add/remove/clear + WBS-existence, self-edge, cycle, duplicate validation | MET | `task-service.ts:570` `mutateDependencies`; all 4 ops + all 6 codes exercised via CLI this session, incl. `[duplicate] Duplicate WBS in dependencies: 0001, 0001` (exit 3) |
+| R1 set/add/remove/clear + WBS-existence, self-edge, cycle, duplicate validation | MET | `packages/app/src/services/task-service.ts:570` `mutateDependencies`; all 4 ops + all 6 codes exercised via CLI this session, incl. `[duplicate] Duplicate WBS in dependencies: 0001, 0001` (exit 3) |
 | R2 atomic, machine-readable JSON, stable exit codes | MET | Atomicity: byte-identical shasum after failed mutation (AC10). JSON: `{ref{kind,id,filePath,folder}, eventName:"task.updated", dependencies[]}`. Exit map `task.ts:412-419` verified live: usage->2, format/not-found/self-edge/duplicate/cycle->3, other->1 |
-| R3 preserve write guard, section matrix, timestamps, lifecycle, feature refresh, back-compat | MET | Reuses `executePipeline` via `planning-write-service.ts:305`. Live check on mutated file: `updated_at` bumped 00:00:00.000Z -> 23:14:34.802Z, `created_at` unchanged, `status` unchanged (lifecycle inert), frontmatter key order preserved, body byte-identical, `eventName: task.updated` emitted |
-| R4 migration behavior for direct-authored dependency arrays | MET | `corpus-migrator.ts:627-629` re-read this session: `const deps = coerceArray(data.dependencies)` coerces legacy comma-separated to arrays on `spur task migrate`. 0303 writes canonical inline YAML only |
+| R3 preserve write guard, section matrix, timestamps, lifecycle, feature refresh, back-compat | MET | Reuses `executePipeline` via `packages/app/src/services/planning-write-service.ts:305`. Live check on mutated file: `updated_at` bumped 00:00:00.000Z -> 23:14:34.802Z, `created_at` unchanged, `status` unchanged (lifecycle inert), frontmatter key order preserved, body byte-identical, `eventName: task.updated` emitted |
+| R4 migration behavior for direct-authored dependency arrays | MET | `packages/app/src/services/corpus-migrator.ts:627-629` re-read this session: `const deps = coerceArray(data.dependencies)` coerces legacy comma-separated to arrays on `spur task migrate`. 0303 writes canonical inline YAML only |
 
 **Design conformance**
 

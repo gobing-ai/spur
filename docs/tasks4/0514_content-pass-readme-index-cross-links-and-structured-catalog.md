@@ -13,7 +13,7 @@ tags: ["parity", "content-pass", "plugins/sp"]
 dependencies: ["0513"]
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.667Z"
-updated_at: "2026-08-12T03:59:43.221Z"
+updated_at: "2026-08-18T04:42:48.709Z"
 ---
 
 ## 0514. Content pass: README index, cross-links, and structured-catalog ownership
@@ -84,9 +84,9 @@ explicit `**Anchor:** `#id`` directive (the flag-glossary.md convention, honored
 `validate-commands.ts`), with the anchor set cached per target file. A bounded second R16c test stats
 every backticked `docs/*.md` target in the root `AGENTS.md` doc map (all 7 resolve). The scan found
 2 broken anchors, fixed to point at their real heading slugs:
-- `skills/spur-dev/references/execution-batch.md:684` — `flag-glossary.md#-next-chain-contract` →
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:684` — `flag-glossary.md#-next-chain-contract` →
   `#--next-chain-contract` (heading `## --next chain contract`).
-- `skills/spur-dev/references/flag-glossary.md:369` —
+- `plugins/sp/skills/spur-dev/references/flag-glossary.md:369` —
   `execution-batch.md#worktree-isolation---worktree` →
   `#worktree-isolation---worktree-name` (heading `## Worktree isolation (`--worktree [<name>]`)`).
 

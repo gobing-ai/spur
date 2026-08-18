@@ -4,7 +4,7 @@ name: "Fix replaceSection body validation + from-file header stripping + write p
 status: done
 template: standard
 created_at: 2026-06-24T04:37:18.463Z
-updated_at: 2026-06-24T06:50:02.978Z
+updated_at: "2026-08-18T04:42:46.848Z"
 priority: P1
 tags: ["planning-layer", "bugfix", "dogfood", "markdown-document", "write-pipeline"]
 feature_id: H2
@@ -141,9 +141,9 @@ Per-requirement traceability:
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `task-service.ts:138` `stripLeadingSectionHeader` + `:345` wired into `updateSection`; tests `task-service.test.ts:543` (h2 strip, h3 same-level, non-match survives) |
-| R2 | MET | `markdown-document.ts:357` `stripSameLevelHeadings` (code-fence-aware) + `:268` `strippedHeadings` getter; tests `markdown-document.test.ts:528` (strip, code-fence preserve, bold/table no-op, insertSection, feature `##` domain) |
-| R3 | MET (fixed during verify) | `planning-write-service.ts:428` `assertNoNewPhantomSections` + `:434` `phantomSections`, single domain vocabulary; tests `planning-write-service.test.ts:247` (new-phantom reject, pre-existing tolerate, R2+R3 chain) |
+| R1 | MET | `packages/app/src/services/task-service.ts:138` `stripLeadingSectionHeader` + `:345` wired into `updateSection`; tests `packages/app/tests/services/task-service.test.ts:543` (h2 strip, h3 same-level, non-match survives) |
+| R2 | MET | `packages/domain/src/planning/markdown-document.ts:357` `stripSameLevelHeadings` (code-fence-aware) + `:268` `strippedHeadings` getter; tests `packages/domain/tests/planning/markdown-document.test.ts:528` (strip, code-fence preserve, bold/table no-op, insertSection, feature `##` domain) |
+| R3 | MET (fixed during verify) | `packages/app/src/services/planning-write-service.ts:428` `assertNoNewPhantomSections` + `:434` `phantomSections`, single domain vocabulary; tests `packages/app/tests/services/planning-write-service.test.ts:247` (new-phantom reject, pre-existing tolerate, R2+R3 chain) |
 | R4 | MET | `SKILL.md:286` body-only format block (no header, no `###`, never suppress stderr) + check-after-write note |
 | R5 | MET | full gate green below; no test skipped/`.skip`/commented |
 

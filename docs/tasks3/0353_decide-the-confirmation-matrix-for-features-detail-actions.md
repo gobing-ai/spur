@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0351", "0352"]
 created_at: "2026-07-27T17:49:48.949Z"
-updated_at: "2026-07-27T22:43:01.780Z"
+updated_at: "2026-08-18T04:42:48.196Z"
 ---
 
 ## 0353. Decide the confirmation matrix for Features detail actions
@@ -102,7 +102,7 @@ Ops 0351 placed at `never` (illegal / elsewhere / broken-stub) are out of scope 
 | **start** (→active) | backlog P | **none** | Primary CTA; forward, benign, reversible (cancel). |
 | **verify** (→verifying) | active P | **soft** | [expensive] FSM-guarded shell run (`feature check`); soft confirm sets expectation of multi-second work. Copy: "Start verification? Runs feature check." |
 | **complete** (→done) | verifying P | **soft** | Terminal (done is success-terminal; reopen is CLI-only today per 0351). Copy: "Mark feature done? Done is terminal." |
-| **rework** (→active) | verifying P | **hard** | [destructive]; `feature-lifecycle.yaml:60-63` makes a History entry mandatory — the typed reason IS that entry. See R2. |
+| **rework** (→active) | verifying P | **hard** | [destructive]; `config/workflows/feature-lifecycle.yaml:60-63` makes a History entry mandatory — the typed reason IS that entry. See R2. |
 | **block** (→blocked) | active P | **none** | Reversible impediment pause (unblock returns); low accidental cost. |
 | **unblock** (→active) | blocked P | **none** | Resumes work; benign forward progress. |
 | **cancel** (→cancelled) | all non-terminal P | **hard** | [destructive], terminal. Today already opens `showCancelModal` (`FeatureDetail.tsx:57,607-637`); upgrade modal to typed input. See R2. |
@@ -129,7 +129,7 @@ Ops 0351 placed at `never` (illegal / elsewhere / broken-stub) are out of scope 
 
 | Op | Surfaces on (0351) | Confirm | Reason |
 |----|---|---|---|
-| **add-child** | non-terminal P | **none** | The inline naming modal (`inlineModal`, `FeatureDetail.tsx:59`) is its own gate; creation is non-destructive growth. |
+| **add-child** | non-terminal P | **none** | The inline naming modal (`inlineModal`, `apps/web/src/modules/features/FeatureDetail.tsx:59`) is its own gate; creation is non-destructive growth. |
 | **add-task** | non-terminal P | **none** | Same — inline naming gate; growth. |
 | **link-task** | active/verifying P; backlog/blocked OF | **none** | Inline selection modal gates the action; linking is additive. |
 | **unlink-task** | non-terminal OF | **hard** | [destructive] — severs the feature↔task traceability edge. Not in R2's named list but flagged destructive by 0351; copy specified below for completeness. |
@@ -148,7 +148,7 @@ Each destructive op gets a modal with: (a) a one-line **risk statement** naming 
 | Op | Risk statement (modal body) | Typed-input gate | Confirm button label |
 |----|---|---|---|
 | **cancel** | "This feature moves to `cancelled` (terminal). **Linked tasks are NOT cancelled automatically.** Reopening requires `spur feature update <id> active` on the CLI." | Type the **feature name** (exact). | "Cancel feature" |
-| **rework** | "Send feature back to `active`. A **reason is required** and recorded in History (FSM mandate, `feature-lifecycle.yaml:60-63`)." | Type a **one-line reason** (non-empty; min ~10 chars). | "Send back to active" |
+| **rework** | "Send feature back to `active`. A **reason is required** and recorded in History (FSM mandate, `config/workflows/feature-lifecycle.yaml:60-63`)." | Type a **one-line reason** (non-empty; min ~10 chars). | "Send back to active" |
 | **move** (re-parent) | "Re-parenting **renames this feature's id and cascades the rename to all children**. Existing links/shortcuts may break." | Type the **new parent id** (must resolve to an existing feature). | "Re-parent" |
 | **unlink-task** | "Unlinking **severs the feature↔task traceability edge**. The task itself is not deleted; the edge is removed and WBS roll-ups will drop it." | Type the **task WBS** being unlinked (exact). | "Unlink task" |
 | **sync push** (when un-hidden) | "Push **overwrites the status of N linked tasks** to match this feature's status. Task-level in-flight state (e.g. `testing`) will be replaced." | Type the **feature name** (exact). | "Push status to tasks" |

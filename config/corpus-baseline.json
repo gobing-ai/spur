@@ -193,14 +193,6 @@
         },
         {
             "kind": "feature",
-            "id": "F91",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "Linked task lacks a PASS verdict with MET requirement \u2014 verification pending, see note \u00a7 L4.scenario-unverified.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "feature",
             "id": "G",
             "code": "L3.scope-delineation",
             "severity": "warning",
@@ -4318,14 +4310,6 @@
         {
             "kind": "task",
             "id": "0102",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0102",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -4350,14 +4334,6 @@
         {
             "kind": "task",
             "id": "0103",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0103",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -4377,14 +4353,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0104",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -4653,14 +4621,6 @@
         {
             "kind": "task",
             "id": "0115",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0115",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -4798,14 +4758,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0123",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -4959,14 +4911,6 @@
         },
         {
             "kind": "task",
-            "id": "0131",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0132",
             "code": "L3.unchecked-checklist",
             "severity": "warning",
@@ -5209,14 +5153,6 @@
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked \u2014 see note \u00a7 L4.missing-feature-id.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0139",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -5449,14 +5385,6 @@
         {
             "kind": "task",
             "id": "0152",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0152",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -5612,14 +5540,6 @@
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked \u2014 see note \u00a7 L4.missing-feature-id.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0159",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -5958,14 +5878,6 @@
         },
         {
             "kind": "task",
-            "id": "0183",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0184",
             "code": "L4.missing-feature-id",
             "severity": "warning",
@@ -6086,14 +5998,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0192",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -6687,14 +6591,6 @@
         },
         {
             "kind": "task",
-            "id": "0234",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0235",
             "code": "L3.review-priority-table",
             "reason": "Gate postdates the task: Review carries the older prose-verdict form \u2014 see note \u00a7 L3.review-priority-table.",
@@ -6796,14 +6692,6 @@
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked \u2014 see note \u00a7 L4.missing-feature-id.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0240",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -6944,14 +6832,6 @@
         },
         {
             "kind": "task",
-            "id": "0249",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0250",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
@@ -6995,14 +6875,6 @@
         },
         {
             "kind": "task",
-            "id": "0252",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0253",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
@@ -7011,14 +6883,6 @@
         {
             "kind": "task",
             "id": "0253",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0255",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -7034,26 +6898,10 @@
         },
         {
             "kind": "task",
-            "id": "0257",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0258",
             "code": "L3.testing-coverage",
             "severity": "warning",
             "reason": "Closed before the numeric coverage-claim requirement existed \u2014 see note \u00a7 L3.testing-coverage.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0259",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -7118,14 +6966,6 @@
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0267",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -7243,14 +7083,6 @@
         {
             "kind": "task",
             "id": "0277",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0278",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -7402,14 +7234,6 @@
         },
         {
             "kind": "task",
-            "id": "0293",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0294",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
@@ -7503,14 +7327,6 @@
         },
         {
             "kind": "task",
-            "id": "0300",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0301",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
@@ -7573,31 +7389,7 @@
         },
         {
             "kind": "task",
-            "id": "0306",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0307",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0308",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0309",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -7667,14 +7459,6 @@
         {
             "kind": "task",
             "id": "0315",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0315",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -7691,25 +7475,9 @@
         {
             "kind": "task",
             "id": "0317",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0317",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0318",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -7787,14 +7555,6 @@
         },
         {
             "kind": "task",
-            "id": "0325",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0326",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
@@ -7802,25 +7562,9 @@
         },
         {
             "kind": "task",
-            "id": "0326",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0327",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0327",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -7847,14 +7591,6 @@
         },
         {
             "kind": "task",
-            "id": "0329",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0330",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
@@ -7862,25 +7598,9 @@
         },
         {
             "kind": "task",
-            "id": "0330",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0331",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks \u2014 see note \u00a7 L3.ac-empty.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0331",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -7902,14 +7622,6 @@
         {
             "kind": "task",
             "id": "0334",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0335",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -7940,33 +7652,9 @@
         {
             "kind": "task",
             "id": "0338",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0338",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0339",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0340",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -8003,14 +7691,6 @@
         {
             "kind": "task",
             "id": "0343",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0344",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -8028,14 +7708,6 @@
             "id": "0345",
             "code": "L3.solution-file-line",
             "reason": "Gate postdates the task: Solution is pre-citation narrative \u2014 see note \u00a7 L3.solution-file-line.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0346",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -8072,14 +7744,6 @@
         },
         {
             "kind": "task",
-            "id": "0351",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0352",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
@@ -8097,14 +7761,6 @@
         {
             "kind": "task",
             "id": "0354",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0355",
             "code": "L4.stale-line-anchor",
             "severity": "warning",
             "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
@@ -8156,14 +7812,6 @@
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0361",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -8320,14 +7968,6 @@
         {
             "kind": "task",
             "id": "0392",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0392",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -8339,14 +7979,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0393",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -8376,14 +8008,6 @@
         {
             "kind": "task",
             "id": "0395",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0395",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -8400,14 +8024,6 @@
         {
             "kind": "task",
             "id": "0396",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0396",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -8419,14 +8035,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0397",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -8464,14 +8072,6 @@
         {
             "kind": "task",
             "id": "0399",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0399",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -8512,14 +8112,6 @@
         {
             "kind": "task",
             "id": "0401",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0401",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -8547,14 +8139,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0403",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -9095,14 +8679,6 @@
         {
             "kind": "task",
             "id": "0472",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0472",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -9138,14 +8714,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0474",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -9303,14 +8871,6 @@
         {
             "kind": "task",
             "id": "0496",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0496",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these \u2014 see note \u00a7 L4.uncovered-task-scenario.",
@@ -9350,14 +8910,6 @@
         },
         {
             "kind": "task",
-            "id": "0502",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0503",
             "code": "L3.unchecked-checklist",
             "severity": "warning",
@@ -9382,14 +8934,6 @@
         },
         {
             "kind": "task",
-            "id": "0512",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0513",
             "code": "L3.unchecked-checklist",
             "severity": "warning",
@@ -9410,14 +8954,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0514",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -9450,14 +8986,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history \u2014 remediation is separate work, see note \u00a7 L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0517",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -9574,14 +9102,6 @@
         },
         {
             "kind": "task",
-            "id": "0562",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0563",
             "code": "L3.unchecked-checklist",
             "severity": "warning",
@@ -9694,26 +9214,10 @@
         },
         {
             "kind": "task",
-            "id": "0573",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0574",
             "code": "L3.ac-requirement-coverage",
             "severity": "warning",
             "reason": "Some requirements lack AC scenarios; adding them post-close rewrites verdict history \u2014 see note \u00a7 L3.ac-requirement-coverage.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0574",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair \u2014 see note \u00a7 L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -9775,14 +9279,6 @@
         {
             "kind": "task",
             "id": "0100",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject \u2014 a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
-            "id": "0125",
             "code": "L4.anchor-subject-mismatch",
             "severity": "warning",
             "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject \u2014 a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
@@ -11902,14 +11398,6 @@
         },
         {
             "kind": "task",
-            "id": "0585",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject \u2014 a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
             "id": "0574",
             "code": "L4.anchor-subject-mismatch",
             "severity": "warning",
@@ -12158,22 +11646,6 @@
         },
         {
             "kind": "task",
-            "id": "0582",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject \u2014 a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
-            "id": "0584",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject \u2014 a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
             "id": "0573",
             "code": "L4.anchor-subject-mismatch",
             "severity": "warning",
@@ -12381,11 +11853,307 @@
             "since": "2026-08-18"
         },
         {
+            "kind": "task",
+            "id": "0110",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0127",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0192",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0271",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0335",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0344",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0296",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0241",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0279",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0293",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0305",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0277",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0235",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0240",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0253",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0338",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0334",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0306",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0307",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0268",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0332",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0154",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0228",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0134",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0304",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0159",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0355",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0396",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0353",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0399",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0412",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0432",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0393",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0401",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0492",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0512",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "warning",
+            "reason": "Accumulated anchor drift surfaced by task 0583's content-matching rule: the cited lines resolve and are in bounds but no longer name the requirement row's subject, because a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives. Held at WARNING severity \u2014 promotion to error would fail the per-task `--strict-core` done-gate for 332 of 586 tasks, and that gate does not consult this baseline.",
+            "since": "2026-08-18"
+        },
+        {
             "kind": "feature",
-            "id": "K2",
+            "id": "F7",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature F7 has no report under docs/dogfood/. Pre-existing and unrelated to the anchor work; owned by F7.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "feature",
+            "id": "F61",
             "code": "L4.scenario-unverified",
             "severity": "warning",
-            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift \u2014 the feature's ship scenarios are covered by a task that has not reached a PASS verdict yet. `feature check --strict` enforces this for real at the `verifying -> done` gate. Remove when the covering task lands; the two-sided ratchet will fail as stale and force it.",
+            "reason": "MID-FLIGHT LIFECYCLE STATE, not drift \u2014 feature F61's ship scenarios are covered by task 0586, which has not run yet. `feature check --strict` enforces this for real at the `verifying -> done` gate. Remove when 0586 lands; the two-sided ratchet will fail as stale and force it.",
             "since": "2026-08-18"
         }
     ]

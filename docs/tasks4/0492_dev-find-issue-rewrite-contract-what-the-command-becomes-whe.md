@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0491"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:03:55.207Z"
-updated_at: "2026-08-10T00:43:28.465Z"
+updated_at: "2026-08-18T04:42:48.644Z"
 done_forced: "true"
 done_reason: "Exit ticket for map E2. Operator ruled report-first (R3). Contract specifies rewritten flow (R1), command/skill/CLI split (R2), omp-sample walkthrough (R4), downstream batch order (R6), primacy inversion argument (R7), session-formats ownership edit (R8). R5: implementation tasks deferred to decomposition per map recipe (decisions and specs, not diffs). All claims HIGH/MEDIUM confidence per Testing table."
 ---
@@ -337,7 +337,7 @@ Order 7→8→9 can parallelize once 5 lands (they touch different files). Order
 
 **What is lost:**
 
-- **Tool-loop evidence the typed tables do not retain.** Today the skill reads raw tool-call arguments to detect loops (e.g., repeated `Read` of the same file). `args_digest` is a hash (`mappers.ts:189`); the digest preserves loop detection (Q4, `forensic-query.ts:275`) but not the _content_ needed for issue categorization. **This is exactly what the import-retention task (R6 order 1) restores.** Until it lands, the inversion is lossy for issue categorization on sources where raw args are discarded.
+- **Tool-loop evidence the typed tables do not retain.** Today the skill reads raw tool-call arguments to detect loops (e.g., repeated `Read` of the same file). `args_digest` is a hash (`mappers.ts:189`); the digest preserves loop detection (Q4, `packages/domain/src/analytics/forensic-query.ts:275`) but not the _content_ needed for issue categorization. **This is exactly what the import-retention task (R6 order 1) restores.** Until it lands, the inversion is lossy for issue categorization on sources where raw args are discarded.
 - **Source-specific JSONL quirks** the mappers flatten away. The skill's manual parsing tolerates malformed lines; `analyze` rejects them at import.
 
 **Fallback conditions — when raw JSONL parsing remains:**
@@ -359,7 +359,7 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 
 **The edit is a task** in the downstream batch (R6 order 9), not an inline fix here. This ticket specifies it; the task executes it.
 
-**Pre-existing `--template` default contradiction:** `dev-find-issue.md:21` (Argument Flags) says default `standard`; `:55` (Arguments) says default `meta`. Both tables are collapsed in the rewrite (R2), which resolves it structurally — but the contradiction is noted here, not fixed inline, per the map's anti-patterns. The command-rewrite task (R6 order 8) owns the fix.
+**Pre-existing `--template` default contradiction:** `plugins/sp/commands/dev-find-issue.md:21` (Argument Flags) says default `standard`; `:55` (Arguments) says default `meta`. Both tables are collapsed in the rewrite (R2), which resolves it structurally — but the contradiction is noted here, not fixed inline, per the map's anti-patterns. The command-rewrite task (R6 order 8) owns the fix.
 
 ### Testing
 
@@ -379,7 +379,7 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 | `args_digest` preserves loop detection but not content          | `packages/domain/src/analytics/forensic-query.ts:275` (Q4 uses digest), `mappers.ts:189` (argsDigest hashes)                                                | **HIGH** — read from source                                         | Open both files                                     |
 | Import-retention task blocks phase detection                    | 0489 coverage matrix: `history_tool_call.args_digest` is a hash; phase detection needs todo contents (`schema-sql.ts:120`)                                  | **HIGH** — measured                                                 | Read 0489 Solution                                  |
 | TTFT/Generation split is a deliberate loss                      | 0491 R-deferred: artifact has no intra-call latency fields                                                                                                  | **HIGH** — read from artifact schema                                | Inspect `packages/domain/src/analytics/artifact.ts` |
-| `--template` default contradicts across two tables              | `dev-find-issue.md:21` says `standard`, `:55` says `meta`                                                                                                   | **HIGH** — read from source                                         | Open both lines                                     |
+| `--template` default contradicts across two tables              | `plugins/sp/commands/dev-find-issue.md:21` says `standard`, `:55` says `meta`                                                                                                   | **HIGH** — read from source                                         | Open both lines                                     |
 | session-formats.md ownership verdict                            | 0489 R1 verdict (mappers own code authority, prose retains root table + bridge)                                                                             | **HIGH** — read from 0489 Solution                                  | Read 0489 `:371-382`                                |
 | Implementation tasks not emitted here (decomposition owns them) | E2 map close recipe: wayfinder tickets carry "decisions and specs, not diffs"                                                                               | **HIGH** — read from map                                            | Read E2 `### Notes`                                 |
 

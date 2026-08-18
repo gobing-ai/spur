@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:42.940Z"
-updated_at: "2026-07-27T22:30:33.403Z"
+updated_at: "2026-08-18T04:42:48.156Z"
 ---
 
 ## 0350. Inventory Board action-runner patterns (FeatureDetail, TaskDetail jobs, Teams confirm, SSE)
@@ -143,7 +143,7 @@ File: `apps/web/src/modules/features/FeaturesShell.tsx`
 - No filter for `task.*`, `queue.*`, `agent.*`, etc. — the Features shell subscribes **only** to the `feature.*` prefix.
 
 
-File: `packages/app/src/services/planning-write-service.ts:102-105` declares the `PlanningEventName` union including `feature.created` / `feature.updated` / `feature.transitioned`. `resolveEventName` (550–556) maps `create` → `feature.created`, status change → `feature.transitioned`, otherwise `feature.updated`. Emitted at step 8 of the write sequence (443–452) via `this.emitter.emit(event)`, which `BusPlanningEventEmitter` (`planning-events.ts:36-51`) persists to the `planning_events` ledger and publishes to the `EventBus`. The server-side `registerSystemEventTap` (`system-event-tap.ts:27-`) normalizes and persists each cataloged event to `system_events` and the SSE stream carries it to the shell.
+File: `packages/app/src/services/planning-write-service.ts:102-105` declares the `PlanningEventName` union including `feature.created` / `feature.updated` / `feature.transitioned`. `resolveEventName` (550–556) maps `create` → `feature.created`, status change → `feature.transitioned`, otherwise `feature.updated`. Emitted at step 8 of the write sequence (443–452) via `this.emitter.emit(event)`, which `BusPlanningEventEmitter` (`packages/app/src/services/planning-events.ts:36-51`) persists to the `planning_events` ledger and publishes to the `EventBus`. The server-side `registerSystemEventTap` (`system-event-tap.ts:27-`) normalizes and persists each cataloged event to `system_events` and the SSE stream carries it to the shell.
 
 Catalog registration: `event-names.ts:81-83`.
 
@@ -163,10 +163,10 @@ This Solution is an **inventory only**. The decision about which async-runner mo
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `FeatureDetail.tsx:56` actionLoading; `:221-252` handleAction; `:254-276` handleFSMTransition (cancel modal `:258-261`, `api-error` `:271`); `:303`/`:`333` api-error on inline/agent; `:318-320` syncFeatureStatus/dispatchFeatureAction; `:423-427` loading disable |
-| R2 | MET | `task-service.ts:319-322` TaskActionResult `{runId,action,status:'queued'}`; `:1016-1035` fulfillAction enqueue inject; `handlers.ts:95-105` task action → `jobQueue.enqueue('task-action')`; `event-names.ts:85-91` queue.job.*; `TaskDetail.tsx:180-201` dispatchAction awaits `api.task.action` then list refresh — discards runId |
-| R3 | MET | `TerminalTab.tsx:79-80` confirmStopFor/confirmDownFor; `:336-373` stop Modal; `:375-411` down Modal |
-| R4 | MET | `FeaturesShell.tsx:11` sseUrl planning events; `:86-107` EventSource filters `feature.*` only (`:94`); detail refresh on feature.updated/transitioned (`:99`) — no queue.* subscription |
+| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:56` actionLoading; `:221-252` handleAction; `:254-276` handleFSMTransition (cancel modal `:258-261`, `api-error` `:271`); `:303`/`:`333` api-error on inline/agent; `:318-320` syncFeatureStatus/dispatchFeatureAction; `:423-427` loading disable |
+| R2 | MET | `packages/app/src/services/task-service.ts:319-322` TaskActionResult `{runId,action,status:'queued'}`; `:1016-1035` fulfillAction enqueue inject; `handlers.ts:95-105` task action → `jobQueue.enqueue('task-action')`; `event-names.ts:85-91` queue.job.*; `apps/web/src/modules/task-kanban/TaskDetail.tsx:180-201` dispatchAction awaits `api.task.action` then list refresh — discards runId |
+| R3 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:79-80` confirmStopFor/confirmDownFor; `:336-373` stop Modal; `:375-411` down Modal |
+| R4 | MET | `apps/web/src/modules/features/FeaturesShell.tsx:11` sseUrl planning events; `:86-107` EventSource filters `feature.*` only (`:94`); detail refresh on feature.updated/transitioned (`:99`) — no queue.* subscription |
 | R5 | MET | Solution § explicitly inventory-only; defers async model to 0352 (confirm 0353, observability 0354) |
 
 **Acceptance Criteria Verification**

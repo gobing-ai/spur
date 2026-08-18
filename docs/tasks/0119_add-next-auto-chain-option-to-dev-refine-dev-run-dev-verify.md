@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-25T03:59:36.891Z"
-updated_at: 2026-06-25T04:19:51.026Z
+updated_at: "2026-08-18T04:42:46.871Z"
 ---
 
 ## 0119. Add --next auto-chain option to dev-refine, dev-run, dev-verify
@@ -148,7 +148,7 @@ For `dev-run`: `--next` is only meaningful with `--mode implement`. With `--mode
 | R1: dev-refine --next auto-chains to dev-run | **MET** | `dev-refine.md:3,30,63-66` — arg-hint, args table, workflow step 6 with transition + invoke |
 | R2: dev-run --next auto-chains to dev-verify | **MET** | `dev-run.md:3,33,53-59` — arg-hint, args table, `--next` chain section with transition + invoke |
 | R3: dev-verify --next auto-transitions to done on PASS | **MET** | `dev-verify.md:3,32,42-49` — arg-hint, args table, `--next` chain section with PASS→done, terminal note |
-| R4: Chain stops on failure at any step | **MET** | `dev-refine.md:66`, `dev-run.md:59`, `dev-verify.md:32,47` — explicit "stop, do NOT invoke/advance" on all 3 commands |
+| R4: Chain stops on failure at any step | **MET** | `plugins/sp/commands/dev-refine.md:66`, `plugins/sp/commands/dev-run.md:59`, `dev-verify.md:32,47` — explicit "stop, do NOT invoke/advance" on all 3 commands |
 | R5: --next is opt-in, zero breaking change | **MET** | All `--next` flags default `off`; no existing behavior paths altered when flag is absent |
 | R6: dev-unit and dev-fixall unchanged | **MET** | Neither command modified — `--next` only on dev-refine, dev-run, dev-verify |
 | R7: dev-run --mode full ignores --next | **MET** | `dev-run.md:33,53` — "For `--mode implement` only — ignored in full mode", "`--next` with `--mode full` is a no-op" |

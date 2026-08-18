@@ -11,7 +11,7 @@ priority: P3
 tags: [meta]
 dependencies: []
 created_at: 2026-06-27T07:03:28.263Z
-updated_at: 2026-06-27T16:30:48.345Z
+updated_at: "2026-08-18T04:42:46.982Z"
 ---
 
 ## 0139. F6 — improve cache-hit rate for programmatic dev-run drives
@@ -110,7 +110,7 @@ lever the finding named. The fixable surface:
 | `plugins/sp/skills/spur-dev/references/execution-workflow.md:64-79` | Step 1 (Task selection) gained a "Reuse in-context task state" note: don't re-fetch `show`/`check` output already in context; when you must fetch, use the smallest `--json` shape. Keeps a programmatic dev-run drive's cache hit rate high; cross-links the dogfood discipline. |
 
 **Why this is the right lever (and not a no-op).** The dogfood report's own monitor-ledger rule
-(`monitor-ledger.md:61`) attributes sub-40% steps to "re-reading files or re-sending prompt
+(`plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:61`) attributes sub-40% steps to "re-reading files or re-sending prompt
 context." The skill *detected* that but never told the driver how to *avoid* it. The fix adds the
 missing mitigation at exactly the surface (the dogfooding driver's behavior + the dev-run step
 framing) where the waste originates. The Anthropic prompt cache cannot carry across the pipeline's
@@ -121,7 +121,7 @@ hygiene, which is what this guidance targets.
 **Measurement honesty (the core caveat — R12).**
 
 The F6 baseline ("~46% aggregate, steps 3–7 under 40%") is a **self-reported estimate** by the
-dogfooding agent, computed via the heuristic in `monitor-ledger.md:41-55`, which itself states "a
+dogfooding agent, computed via the heuristic in `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:41-55`, which itself states "a
 skill cannot read its own exact token meter." No hard per-step telemetry exists in Spur; `ccusage`
 (the only hard source) reports **daily aggregate** only and is **not installed** in this
 environment. So a before/after measurement requires **re-running the same programmatic `dev-run`

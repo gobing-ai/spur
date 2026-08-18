@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:59:26.486Z"
-updated_at: "2026-07-28T00:32:27.594Z"
+updated_at: "2026-08-18T04:42:47.778Z"
 ---
 
 ## 0318. Complete the R10 least-privilege allowed-tools sweep across all sp command wrappers
@@ -124,7 +124,7 @@ Do not add wrappers, change Usage/Implementation, or move lifecycle prose. Any s
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `git diff` frontmatter-only on 9 command wrappers; Usage/Implementation unchanged (`dev-idea.md:4`, `dev-verify.md:4`, …) |
+| R1 | MET | `git diff` frontmatter-only on 9 command wrappers; Usage/Implementation unchanged (`plugins/sp/commands/dev-idea.md:4`, `plugins/sp/commands/dev-verify.md:4`, …) |
 | R2 | MET | Notes: 30-command write-path classification table (path class + Implementation evidence + KEEP/TRIM) |
 | R3 | MET | 9 trims applied (pre-evidenced five + plan/refine/parallel/runall); `command-contract.test.ts` block (j) |
 | R4 | MET | `dev-run`/`dev-unit`/`dev-simplify`/`dev-reverse` retain Write/Edit; interactive wrappers retain AskUserQuestion — test (j) |

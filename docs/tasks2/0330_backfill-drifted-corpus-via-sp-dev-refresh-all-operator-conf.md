@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0328", "0329"]
 created_at: "2026-07-25T00:27:53.584Z"
-updated_at: "2026-07-28T00:33:20.442Z"
+updated_at: "2026-08-18T04:42:47.886Z"
 ---
 
 ## 0330. Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed)
@@ -85,7 +85,7 @@ Residual risk: R → done will legitimately apply once 0330 closes (its 5 ticket
 - `bun run lint` — clean (biome + all 5 workspace typechecks exit 0)
 - `spur feature list --json` — statuses match the Solution record (10 → verifying/done advanced; F2/F3/F5 backlog with zero linked tasks confirmed via `rg -l 'feature_id: F2' docs/tasks2/` = 0)
 - Coverage: N/A beyond service change (covered by the 41 service tests); corpus mutations are data, not code
-- Line-anchor rule: `feature-service.ts:488`, current `feature list` statuses re-read this run; cited lines name the requirement subjects
+- Line-anchor rule: `packages/app/src/services/feature-service.ts:488`, current `feature list` statuses re-read this run; cited lines name the requirement subjects
 - Verdict artifact: `.spur/run/0330-verdict.json` (written last, standalone path)
 ### Review
 | Severity | File | Finding | Recommendation |

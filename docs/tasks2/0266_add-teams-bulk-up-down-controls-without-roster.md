@@ -12,7 +12,7 @@ priority: P1
 tags: ["teams", "roster-redistribution"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.128Z"
-updated_at: "2026-07-16T00:35:11.028Z"
+updated_at: "2026-08-18T04:42:47.442Z"
 ---
 
 ## 0266. Add Teams bulk Up/Down controls without Roster
@@ -92,7 +92,7 @@ All 5 requirements and both `@core` AC MET. `--strict-core` gate now green. The 
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — Teams UI control for Up/Down | MET | `TeamControlStrip.tsx:145-199`; mounted `TeamsShell.tsx:54`; tests `components.test.tsx:1055,1082` |
+| R1 — Teams UI control for Up/Down | MET | `TeamControlStrip.tsx:145-199`; mounted `apps/web/src/modules/teams/TeamsShell.tsx:54`; tests `components.test.tsx:1055,1082` |
 | R2 — Call POST `/api/team/:team/up` and `/down` | MET | `TeamControlStrip.tsx:43-44,101-102`; POST + bare-query-string asserts `components.test.tsx:1122-1126,1224-1232` |
 | R3 — Success/error feedback; refresh after action | MET | notice/error `TeamControlStrip.tsx:201-210`; refresh `load()` `TeamControlStrip.tsx:119`; refetch pinned `components.test.tsx:1131`; tests `:1128,:1226,:1271` |
 | R4 — No Roster tab reintroduced | MET | `rg -ril "roster" apps/web/src apps/web/tests` → zero hits |

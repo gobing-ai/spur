@@ -8,7 +8,7 @@ priority: P1
 dependencies: ["superskill#0041"]
 tags: ["anti-hallucination","workflow","agent","dogfood","ts-libs","cross-repo"]
 created_at: 2026-06-18T06:48:44.275Z
-updated_at: 2026-06-18T18:48:21.228Z
+updated_at: "2026-08-18T04:42:46.739Z"
 ---
 
 ## 0087. "Provide spur workflow + spur agent primitives for the anti-hallucination migration (answer-capture, response.validate action, ts-libs upstream if needed)"
@@ -117,7 +117,7 @@ Order chosen so each step is independently verifiable.
   behavior intact.
 
 #### Step 3 — `response.validate` action (R2)
-- New `packages/app/src/workflow/actions/response-validate.ts` mirroring `rule-check.ts:25`: reads text
+- New `packages/app/src/workflow/actions/response-validate.ts` mirroring `packages/app/src/workflow/actions/rule-check.ts:25`: reads text
   from options/vars, calls the injected guard engine, maps `{ ok, reason, issues }` to `ActionResult`.
 - Register in `packages/app/src/workflow/builtins.ts:24`.
 - The guard engine is injected via `ResponseValidateEngine` interface (the seam); superskill 0041
@@ -183,18 +183,3 @@ Order chosen so each step is independently verifiable.
 | ---- | ---- | ----- | ---- |
 
 ### References
-### References
-
-- **superskill#0041** — the owning migration task (relocates the guard engine + prose, re-homes the
-  Stop-hook, re-develops the launchers as the `spur workflow` + `spur agent` flow). This task delivers
-  the primitives 0041 Phase 4 consumes. Cross-repo dependency declared in frontmatter.
-- **`docs/00_ADR.md` → ADR-024** — Anti-hallucination guard engine leaves Spur; Spur adds
-  `response.validate` + answer capture; engine consumed, not owned.
-- **`docs/04_DESIGN.md`** — surface rows for `AgentService.runCapture`, `agent.run capture:true`,
-  `response.validate`.
-- **`docs/05_FEATURES.md`** — capability status entry.
-- **Spike fixture** — `packages/app/tests/fixtures/anti-hallucination-spike.yaml` (R3): proves the
-  generate→validate→retry→deny transition-flow; documents the deferred var-based retry guard (R3.1).
-- **Engine source (temporary)** — `plugins/sp/skills/anti-hallucination/scripts/ah_guard.ts`
-  (`verifyAntiHallucinationProtocol`), the adapter target until superskill 0041 publishes the package.
-

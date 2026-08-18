@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "skills", "rename"]
 dependencies: ["0392"]
 created_at: "2026-07-30T21:52:24.885Z"
-updated_at: "2026-07-31T03:37:40.004Z"
+updated_at: "2026-08-18T04:42:48.279Z"
 done_forced: "true"
 done_reason: Rename complete (1 dir + 13 files); R6 grep clean; structure test asserts new name; lint clean; 427/427 plugin tests pass. omp timed out; work complete.
 ---
@@ -103,7 +103,7 @@ cd plugins/sp && bun test   # 427 pass, 0 fail, 2040 assertions
 
 **R6 verification:** post-rename grep (excluding historical tasks2/3 and the H6 feature's own rename-plan lines) returns zero matches. No live reference to `spur-tdd` remains.
 
-**Structure test (R4):** `skill-structure.test.ts:704` updated to `'test-driven-development'`; the R9/R55 skill-resolution assertions pass.
+**Structure test (R4):** `plugins/sp/tests/skill-structure.test.ts:704` updated to `'test-driven-development'`; the R9/R55 skill-resolution assertions pass.
 
 **Coverage:** rename task; no implementation logic. Structure test is the coverage instrument.
 ### Review

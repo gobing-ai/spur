@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "tests", "adr"]
 dependencies: ["0394", "0395"]
 created_at: "2026-07-30T21:52:24.896Z"
-updated_at: "2026-07-31T02:34:34.168Z"
+updated_at: "2026-08-18T04:42:48.300Z"
 done_forced: "true"
 done_reason: Tests pass (427/427 plugin suite; 14/14 parity incl new R6 Tier A phantom); lint+typecheck clean. ADR-038 landed. omp implement timed out at 1800s; work complete.
 ---
@@ -113,8 +113,8 @@ WHY a new ADR rather than amending ADR-013: ADR-013 governs the shape of `--help
 Extended the Tier B parity test (landed by 0395) with bidirectional **Tier A phantom detection** (R6) and added ADR-038 recording the CLI↔skill coupling contract and the dispatch-surface composition over ADR-033.
 
 - `docs/00_ADR.md` — NEW: ADR-038. Dated 2026-07-31. States a `spur` CLI surface change requires a same-change `spur-cli` skill update; names `plugins/sp/tests/spur-cli-parity.test.ts` as the enforcement mechanism. Records the dispatch-surface rule as deciding execution surface only, deferring model-tier selection to ADR-033.
-- `plugins/sp/tests/spur-cli-parity.test.ts:213-254` — NEW test "Tier A reference flags exist in live CLI (no phantom flags, R6)". Symmetric to the existing Tier B phantom test: extracts every `` `--flag `` token from table rows in the Tier A refs (tasks.md, tasks/verbs.md, features.md, rules.md, workflows.md) and asserts each appears in live `bun cli <noun> [verb] --help` output. 30s timeout (spawns ~30 subprocesses across 4 nouns).
-- `plugins/sp/tests/spur-cli-parity.test.ts:24` — EXTENDED `EXPECTED_TIER_A_VERBS.feature` to include `sync` (real feature verb that carries `--all`/`--dry-run`/`--force`; was missing from the verb list, which would have produced a false negative once Tier A phantom detection iterates the verb set).
+- `apps/cli/tests/spur-cli-parity.test.ts:213-254` — NEW test "Tier A reference flags exist in live CLI (no phantom flags, R6)". Symmetric to the existing Tier B phantom test: extracts every `` `--flag `` token from table rows in the Tier A refs (tasks.md, tasks/verbs.md, features.md, rules.md, workflows.md) and asserts each appears in live `bun cli <noun> [verb] --help` output. 30s timeout (spawns ~30 subprocesses across 4 nouns).
+- `apps/cli/tests/spur-cli-parity.test.ts:24` — EXTENDED `EXPECTED_TIER_A_VERBS.feature` to include `sync` (real feature verb that carries `--all`/`--dry-run`/`--force`; was missing from the verb list, which would have produced a false negative once Tier A phantom detection iterates the verb set).
 
 R1–R6, R9 were already satisfied by 0395's parity test; this change closes the R6 gap (phantom detection now covers Tier A, not just Tier B) and lands the R7/R8 ADR. No new dependency (R9): the test uses `bun:test`, `node:fs`, `node:path`, and `Bun.spawnSync` against the monorepo CLI entry — all already in the tree.
 ### Testing

@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "routing", "determinism"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.129Z"
-updated_at: "2026-08-14T01:22:10.073Z"
+updated_at: "2026-08-18T04:42:48.070Z"
 ---
 
 ## 0344. Decide who emits intention: skill declaration, inferred judge, or hybrid
@@ -187,9 +187,9 @@ Decision-only ticket (`template: issue`, R8). Deliverable is the recorded Soluti
 | R1 | MET | Solution D1: 8-value vocabulary table; set-diff of `plugins/sp/commands/*.md` vs D1 command cells = empty (31/31 exclusive). 10 stage records in `packages/domain/src/stage-registry/schema.ts:655-849` (`REGISTERED_CANONICAL_STAGES`); 21 stage-less covered by adopt-existing + `orchestrate`/`utility`. |
 | R2 | MET | Solution D2: location `plugins/sp/references/intentions.md` (plugin-root); fenced YAML + prose; skills-include rule exclusive after fix-pass (multi-intention must / single-intention need not). Existing convention: 11 files under `plugins/sp/skills/spur-dev/references/`. |
 | R3 | MET | Solution D3 table: four paths (slash / `spur agent run` / subagent / workflow). Anchors re-read: `extractPhase` `packages/app/src/services/agent-service.ts:942-955`; regex at `:953`; `AgentRunActionRunner` `packages/app/src/workflow/actions/agent-run.ts:71`. |
-| R4 | MET | Solution D4: warning + `default_tier` (not hard error / silent). Pattern reuse: `warnDeprecationOnce` `agent-service.ts:608-612`, call site `:646-648`. |
-| R5 | MET | Solution D5: fall through to `agent.default` then priority. Anchor re-read: `resolveAgentAuto` fallthrough `agent-service.ts:666-672`. |
-| R6 | MET | Solution D6: `--agent` full bypass. Anchors: `resolveAgent` `agent-service.ts:621-622`; `resolveAgentExplicit` `:808-820`. |
+| R4 | MET | Solution D4: warning + `default_tier` (not hard error / silent). Pattern reuse: `warnDeprecationOnce` `packages/app/src/services/agent-service.ts:608-612`, call site `:646-648`. |
+| R5 | MET | Solution D5: fall through to `agent.default` then priority. Anchor re-read: `resolveAgentAuto` fallthrough `packages/app/src/services/agent-service.ts:666-672`. |
+| R6 | MET | Solution D6: `--agent` full bypass. Anchors: `resolveAgent` `packages/app/src/services/agent-service.ts:621-622`; `resolveAgentExplicit` `:808-820`. |
 | R7 | MET | Solution D7: `intentions.md` `version: N`; config `agent.intentions_version`; add = compatible, rename/remove = major; independent `sp`/`spur` cadences. |
 | R8 | MET | No implementation this ticket. `plugins/sp/references/intentions.md` absent; no `--intention` wiring in agent CLI / agent-run; working tree code files clean (only task corpus modified). Operator confirmed 2026-07-26 (Q&A). |
 

@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-04T17:26:20.903Z"
-updated_at: "2026-08-05T06:54:06.825Z"
+updated_at: "2026-08-18T04:42:48.466Z"
 ---
 
 ## 0433. Headless HITL taste gates cannot be approved after the fact
@@ -242,7 +242,7 @@ Each entry cites the first changed line per file (`file:line`).
 | R3 | MET | `--yes` only skips resume confirm; comment + branch at `apps/cli/src/commands/workflow.ts:428,463-465`. CLI test `continue --answer does not imply --yes` (`apps/cli/tests/commands/workflow.test.ts:393+`) — `--answer yes` without `--yes`/run-id still prompts and aborts. |
 | R4 | MET | Two-gate service test: first approve → pause at gate2 (`packages/app/tests/services/workflow-service.test.ts:917-983`). |
 | R5 | MET | `hitlAnswer=no` → `cancelled` (`:893-901`); `hitlAnswer=cancel` → `cancelled` via dedicated cancel guard (`:904-914`, YAML cancel edge `:849-854`). CLI enum accepts yes/no/cancel. |
-| R6 | MET | idea-pipeline reject counter + cap: onEnter increment (`.spur/workflows/idea-pipeline.yaml:229-233`); `no→system-design` when count≤1 (`:470-476`); over-cap `no→failed` naming design-approval (`:477-483`). Mechanism test R6/R7 (`packages/app/tests/services/workflow-service.test.ts:998-1080`). |
+| R6 | MET | idea-pipeline reject counter + cap: onEnter increment (`config/workflows/idea-pipeline.yaml:229-233`); `no→system-design` when count≤1 (`:470-476`); over-cap `no→failed` naming design-approval (`:477-483`). Mechanism test R6/R7 (`packages/app/tests/services/workflow-service.test.ts:998-1080`). |
 | R7 | MET | Shared-mechanism suites: 6 service HITL tests + 4 CLI `--answer` tests; reject-cap YAML is not idea-pipeline. |
 | R8 | MET | ADR-038 docs: continue table (`plugins/sp/skills/spur-cli/references/workflows.md:93`), command surface (`:207`), HITL `--answer` vs `--yes` paragraph (`:256-260`). |
 

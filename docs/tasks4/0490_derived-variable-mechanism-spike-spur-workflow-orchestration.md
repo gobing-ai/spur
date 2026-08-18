@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0489"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:03:52.759Z"
-updated_at: "2026-08-10T02:51:01.343Z"
+updated_at: "2026-08-18T04:42:48.608Z"
 done_forced: "true"
 done_reason: "Three-way mechanism spike complete. All three mechanisms (A/B/C) implemented, run, and agree numerically on synthetic fixture. Recommendation: B (in-analyze metric registry), MEDIUM confidence. C available as thin wrapper on B. Evidence in .spur/run/0490-spike/ (throwaway). R1-R7 all addressed with file:line evidence."
 ---
@@ -199,7 +199,7 @@ llmLatencyMs = 5000, toolExecutionMs = 3000, idleMs = 3500
 Agreement: YES
 ```
 
-The fixture is in `.spur/run/0490-spike/shared.ts:101-145` (`seedSyntheticSession`). The shared SQL and gap-classification logic live in the same file (`TIME_DECOMPOSITION_SQL` at `:32`, `classifyGaps` at `:74`), so all three consume identical arithmetic — the comparison measures the mechanism, not three different formulas.
+The fixture is in `packages/contracts/src/shared.ts:101-145` (`seedSyntheticSession`). The shared SQL and gap-classification logic live in the same file (`TIME_DECOMPOSITION_SQL` at `:32`, `classifyGaps` at `:74`), so all three consume identical arithmetic — the comparison measures the mechanism, not three different formulas.
 
 - A (`.spur/run/0490-spike/mechanism-a.ts:22`): the query function is injected; the mechanism simulates the string-boundary crossings (stdout → file → var → next command) that a real `shell`-step workflow would produce.
 - B (`.spur/run/0490-spike/mechanism-b.ts:28`): the registry calls `db.queryAll(TIME_DECOMPOSITION_SQL, ...)` directly and returns typed `TimeDecomposition`.
@@ -238,7 +238,7 @@ MEDIUM (not HIGH) because: the spike uses a synthetic fixture, not a real import
 | --- | --- | --- |
 | Phases (todo-event segmentation) | yes | segmentation over `history_tool_call` where `tool_name` ∈ todo-event set; same SQL layer |
 | Per-phase metrics (tokens, tools, cost per phase) | yes | aggregate `history_message` fields grouped by phase boundaries |
-| Time decomposition (LLM latency / tool exec / idle) | yes | **spiked** — `.spur/run/0490-spike/shared.ts:32` |
+| Time decomposition (LLM latency / tool exec / idle) | yes | **spiked** — `packages/contracts/src/shared.ts:32` |
 | Bottleneck ranking (by wall time + call count) | yes | order `byTool` rollup (`forensic-query.ts`) by `duration_ms` sum |
 | Issue candidates (loops + error patterns) | yes | pattern over `history_tool_call.status` + `error_text` sequences |
 

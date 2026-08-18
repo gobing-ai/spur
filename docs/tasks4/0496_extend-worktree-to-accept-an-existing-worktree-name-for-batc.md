@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T04:12:40.831Z"
-updated_at: "2026-08-10T06:47:51.171Z"
+updated_at: "2026-08-18T04:42:48.666Z"
 ---
 
 ## 0496. Extend --worktree to accept an existing worktree name for batch reuse
@@ -436,9 +436,9 @@ note sketched. This matches the established convention of every other value-taki
 parity, which holds.
 
 **Fix pass (verify `--fix all`, this run).** WT-7 bullet gained "no create-with-name" and "or
-markers" (`execution-batch.md:647-648`, closes AC R5.3); test comment placeholder `H??` → `H1`;
-dev-next negative assertion added (`command-flag-parity.test.ts:239-245`, declared in the approved
-Testing text); missing blank line before `### WT-2` restored (`execution-batch.md:390`).
+markers" (`plugins/sp/skills/spur-dev/references/execution-batch.md:647-648`, closes AC R5.3); test comment placeholder `H??` → `H1`;
+dev-next negative assertion added (`plugins/sp/tests/command-flag-parity.test.ts:239-245`, declared in the approved
+Testing text); missing blank line before `### WT-2` restored (`plugins/sp/skills/spur-dev/references/execution-batch.md:390`).
 ### Testing
 
 **Verdict: PASS** — `/sp:dev-verify 0496 --auto --next --force --focus all --fix all` (2026-08-09).
@@ -458,11 +458,11 @@ assertions + new dev-next negative assertion), and `flag-contract-parity` (Defau
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | hints `plugins/sp/commands/dev-runall.md:3`, `dev-refineall.md:3`, `dev-verifyall.md:3`; flag rows `dev-runall.md:25`, `dev-refineall.md:27`, `dev-verifyall.md:26` (Default `off`); usage `dev-runall.md:32`, `dev-refineall.md:34-35`, `dev-verifyall.md:33`; dev-operations `plugins/sp/skills/spur-dev/references/dev-operations.md:67,70,78`; value binding `plugins/sp/skills/spur-dev/references/flag-glossary.md:363-365`; dev-next excluded (`grep worktree plugins/sp/commands/dev-next.md` → 0 matches; pinned by `plugins/sp/tests/command-flag-parity.test.ts:239-245`) |
+| R1 | MET | hints `plugins/sp/commands/dev-runall.md:3`, `plugins/sp/commands/dev-refineall.md:3`, `plugins/sp/commands/dev-verifyall.md:3`; flag rows `plugins/sp/commands/dev-runall.md:25`, `plugins/sp/commands/dev-refineall.md:27`, `plugins/sp/commands/dev-verifyall.md:26` (Default `off`); usage `plugins/sp/commands/dev-runall.md:32`, `plugins/sp/commands/dev-refineall.md:34-35`, `plugins/sp/commands/dev-verifyall.md:33`; dev-operations `plugins/sp/skills/spur-dev/references/dev-operations.md:67,70,78`; value binding `plugins/sp/skills/spur-dev/references/flag-glossary.md:363-365`; dev-next excluded (`grep worktree plugins/sp/commands/dev-next.md` → 0 matches; pinned by `plugins/sp/tests/command-flag-parity.test.ts:239-245`) |
 | R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:441-461` — tiers path/basename/branch `:450-452`; 0-hit abort + never-creates line `:456-458`; ≥2-hit abort `:459`; locked/prunable/foreign-repo abort `:460-461`; git-not-marker authority `:444-445` |
 | R3 | MET | WT-1 reuse delta `:385-389` (main-tree precheck unchanged `:378-383`); WT-2 reuse `:423-438` (creation skipped `:425`, detached-HEAD abort `:425-426`, conditional install `:431-434`, cwd `:435-438`); WT-3 marker adoption `:513-536` (adopt-in-place `:528-531`, synthesize `:532-533`, active-marker abort + `--force` `:534-536`) |
-| R4 | MET | WT-4 split `:538-570` — create merge/remove/delete `:544-554`, reuse merge/retain `:557-566`, marker `merged` `:560-562`; ownership rule `plugins/sp/skills/spur-dev/references/flag-glossary.md:358-361` + `execution-batch.md:568`; non-FF fall-through `:572-579`; WT-5 retain+report unchanged `:588-614` |
-| R5 | MET | glossary two-mode rewrite `flag-glossary.md:336-368`; WT-6 name-first resolution `execution-batch.md:621-628` + no-fall-through `:637-639`; WT-7 narrowed `:641-648` (**repaired this run** `:647-648` — added "no create-with-name" + "or markers"); WT-5 resume line `:606`; `bun test plugins/sp` 647 pass / 0 fail |
+| R4 | MET | WT-4 split `:538-570` — create merge/remove/delete `:544-554`, reuse merge/retain `:557-566`, marker `merged` `:560-562`; ownership rule `plugins/sp/skills/spur-dev/references/flag-glossary.md:358-361` + `plugins/sp/skills/spur-dev/references/execution-batch.md:568`; non-FF fall-through `:572-579`; WT-5 retain+report unchanged `:588-614` |
+| R5 | MET | glossary two-mode rewrite `plugins/sp/skills/spur-dev/references/flag-glossary.md:336-368`; WT-6 name-first resolution `plugins/sp/skills/spur-dev/references/execution-batch.md:621-628` + no-fall-through `:637-639`; WT-7 narrowed `:641-648` (**repaired this run** `:647-648` — added "no create-with-name" + "or markers"); WT-5 resume line `:606`; `bun test plugins/sp` 647 pass / 0 fail |
 
 **Acceptance Criteria Verification**
 
@@ -499,10 +499,10 @@ assertions + new dev-next negative assertion), and `flag-contract-parity` (Defau
 
 | Claim | Status | Evidence |
 | --- | --- | --- |
-| Two modes, one flag (mode table semantics) | DONE | `plugins/sp/skills/spur-dev/references/flag-glossary.md:343-356`; `execution-batch.md:349-353` |
-| Resolution algorithm (3 tiers, stop at first hit, exactly-one survivor) | DONE | `execution-batch.md:441-461` |
-| Marker delta (`adopted`/`adoptedAt`; "this run did not create"; retained→active) | DONE | `execution-batch.md:505-536` |
-| Two-writer abort rationale (0487 R5) | DONE | `execution-batch.md:534-536` |
+| Two modes, one flag (mode table semantics) | DONE | `plugins/sp/skills/spur-dev/references/flag-glossary.md:343-356`; `plugins/sp/skills/spur-dev/references/execution-batch.md:349-353` |
+| Resolution algorithm (3 tiers, stop at first hit, exactly-one survivor) | DONE | `plugins/sp/skills/spur-dev/references/execution-batch.md:441-461` |
+| Marker delta (`adopted`/`adoptedAt`; "this run did not create"; retained→active) | DONE | `plugins/sp/skills/spur-dev/references/execution-batch.md:505-536` |
+| Two-writer abort rationale (0487 R5) | DONE | `plugins/sp/skills/spur-dev/references/execution-batch.md:534-536` |
 | Surfaces touched (6 files + declared test edit) | DONE | Solution change map |
 | Parity-gate constraints (hint↔table tokens; Default off; no phantom flag) | DONE | suite green; `off` on both sides |
 | Table first-cell literal single-span | CHANGED | two-span form per established `--mode` convention; token-parity gate green — documented in Solution § Documented deviation |
@@ -512,9 +512,9 @@ assertions + new dev-next negative assertion), and `flag-contract-parity` (Defau
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
 | P2 | Correctness | `execution-batch.md` WT-7 | narrowed exclusions dropped "no create-with-name" and "or markers" (AC R5.3) — **fixed this run** `:647-648` |
-| P4 | Correctness | `command-flag-parity.test.ts:220` | placeholder comment `H??` — **fixed** → `H1` |
-| P4 | Correctness | `command-flag-parity.test.ts:239-245` | dev-next negative assertion declared in approved Testing text was missing — **fixed** |
-| P4 | Usability | `execution-batch.md:390` | missing blank line before `### WT-2` — **fixed** |
+| P4 | Correctness | `plugins/sp/tests/command-flag-parity.test.ts:220` | placeholder comment `H??` — **fixed** → `H1` |
+| P4 | Correctness | `plugins/sp/tests/command-flag-parity.test.ts:239-245` | dev-next negative assertion declared in approved Testing text was missing — **fixed** |
+| P4 | Usability | `plugins/sp/skills/spur-dev/references/execution-batch.md:390` | missing blank line before `### WT-2` — **fixed** |
 
 Residual (non-blocking, out of task scope): `spur task check 0496` reports 26
 `L4.uncovered-task-scenario` warnings — 0496's scenarios are not appended to feature H1's AC (the

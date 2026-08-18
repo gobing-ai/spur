@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-18T22:51:48.132Z"
-updated_at: "2026-07-28T00:32:21.950Z"
+updated_at: "2026-08-18T04:42:47.595Z"
 ---
 
 ## 0294. Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293)
@@ -188,7 +188,7 @@ Implemented all seven consolidated dogfood-remediation requirements and closed t
 
 **R3 — verdict-answer contract and UNKNOWN remediation**
 
-- `plugins/sp/skills/spur-cli/references/tasks/verbs.md:218-280` specifies the exact requirement and AC tables parsed by `spur task verdict`; `tasks.md:34` links to that contract.
+- `plugins/sp/skills/spur-cli/references/tasks/verbs.md:218-280` specifies the exact requirement and AC tables parsed by `spur task verdict`; `plugins/sp/skills/spur-cli/references/tasks.md:34` links to that contract.
 - `packages/app/src/services/done-transition-guard.ts:189-216` enriches UNKNOWN/zero-row denials with source, row counts, expected headers, and `/sp:dev-verify <wbs>`. The parser remains strict.
 - `packages/app/tests/services/done-transition-guard.test.ts` covers source, zero-row, nonzero-row, exclusion, pluralization, and remediation cases.
 
@@ -204,8 +204,8 @@ Implemented all seven consolidated dogfood-remediation requirements and closed t
 
 **R6 — protocol decisions**
 
-- `monitor-ledger.md:41-62` permits batch-finalize only below three minutes with an explicit report note; longer batching is a self-reported protocol violation.
-- `dev-dogfood.md:40-50` documents single-dash normalization and requires the normalized flag in Phase-1 output.
+- `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:41-62` permits batch-finalize only below three minutes with an explicit report note; longer batching is a self-reported protocol violation.
+- `plugins/sp/commands/dev-dogfood.md:40-50` documents single-dash normalization and requires the normalized flag in Phase-1 output.
 
 **R7 — hygiene**
 
@@ -227,18 +227,18 @@ Implemented all seven consolidated dogfood-remediation requirements and closed t
 |---|---|---|
 | R1 | MET | `plugins/sp/commands/dev-verify.md:80-137`; static review confirmed precondition, exact execution order, three contract layers, remediation, and honest no-op. |
 | R2 | MET | `plugins/sp/commands/dev-run.md:114-151`; backlog step 0 and failure remediation are explicit. |
-| R3 | MET | `tasks/verbs.md:218-280`, `tasks.md:34`, `done-transition-guard.ts:189-216`; full suite includes UNKNOWN/zero-row remediation cases. |
-| R4 | MET | `task-check.ts:387-405` and six focused cases in `task-check.test.ts`; full suite passes. |
+| R3 | MET | `tasks/verbs.md:218-280`, `plugins/sp/skills/spur-cli/references/tasks.md:34`, `packages/app/src/services/done-transition-guard.ts:189-216`; full suite includes UNKNOWN/zero-row remediation cases. |
+| R4 | MET | `packages/app/src/services/task-check.ts:387-405` and six focused cases in `task-check.test.ts`; full suite passes. |
 | R5 | MET | Solution cites workflow command, answer/capture, continuation, and timeout paths; `spur task show 0295 --json` confirms the bounded follow-up. |
-| R6 | MET | `monitor-ledger.md:41-62` and `dev-dogfood.md:40-50`. |
+| R6 | MET | `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:41-62` and `plugins/sp/commands/dev-dogfood.md:40-50`. |
 | R7 | MET | 0292/0293 counts corrected through CLI; `.spur/run/0231-verdict.json` parses as PASS JSON. |
 
 **Acceptance Criteria verification**
 
 | AC | Status | Evidence Type | Evidence |
 |---|---|---|---|
-| AC-1 dev-verify gate contract | MET | command | Static source review of `dev-verify.md:80-137`; `git diff --check HEAD` exit 0. |
-| AC-2 backlog-seeded dev-run | MET | command | Static source review of `dev-run.md:114-151`; full plugin tests pass. |
+| AC-1 dev-verify gate contract | MET | command | Static source review of `plugins/sp/commands/dev-verify.md:80-137`; `git diff --check HEAD` exit 0. |
+| AC-2 backlog-seeded dev-run | MET | command | Static source review of `plugins/sp/commands/dev-run.md:114-151`; full plugin tests pass. |
 | AC-3 UNKNOWN remediation | MET | test | `bun run spur-check` exit 0; done-transition guard tests cover source and zero-row artifacts. |
 | AC-4 empty Design warning | MET | test | `bun run spur-check` exit 0; six R4 cases pass and `task-check.ts` is 98.80% lines. |
 | AC-5 pipeline stall root cause | MET | command | Solution contains required evidence and `spur task show 0295 --json` confirms R1–R4 follow-up scope. |

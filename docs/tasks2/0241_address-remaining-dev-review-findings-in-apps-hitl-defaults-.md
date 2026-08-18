@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-11T23:32:44.667Z"
-updated_at: "2026-07-12T06:35:59.690Z"
+updated_at: "2026-08-18T04:42:47.227Z"
 ---
 
 ## 0241. Address remaining dev-review findings in apps (HITL defaults, minors, architecture)
@@ -310,8 +310,8 @@ imports from `apps/server` (reversed dependency — rejected). Moving to a share
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Server `hitlResponder() default-denies` + `SPUR_HITL_AUTO_APPROVE=1` tests (`context.test.ts:411+`). CLI defaults `no` (`default-responder.ts:24`, `desktop-notifier-responder.ts:57`); non-macOS fallback test. |
-| R2 | MET | `messageForStatus` `error-handler.ts:70-87`. Prod test: 404→"Not found", 422→"Bad request", 500→"Internal server error". |
+| R1 | MET | Server `hitlResponder() default-denies` + `SPUR_HITL_AUTO_APPROVE=1` tests (`context.test.ts:411+`). CLI defaults `no` (`apps/cli/src/workflow/hitl/default-responder.ts:24`, `apps/cli/src/workflow/hitl/desktop-notifier-responder.ts:57`); non-macOS fallback test. |
+| R2 | MET | `messageForStatus` `apps/server/src/middleware/error-handler.ts:70-87`. Prod test: 404→"Not found", 422→"Bad request", 500→"Internal server error". |
 | R3 | MET | `rg _CoverageAnchor apps/server/src` → 0. |
 | R4 | MET | `rg "as unknown as never" apps/server/src/context.ts` → 0. Service wiring uses `bridgeEventBus` (9 call sites). Residual bootstrap cast is `appRt.events as unknown as EventBus<ServerEventMap>` (application runtime map), not the 7× service never-casts. |
 | R5 | MET | InboxTab single-controller abort-before-start on poll/focus/SSE/unmount (`InboxTab.tsx:128-175`). |

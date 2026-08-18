@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0310"]
 created_at: "2026-07-21T22:42:52.950Z"
-updated_at: "2026-07-28T00:33:01.687Z"
+updated_at: "2026-08-18T04:42:47.745Z"
 ---
 
 ## 0311. Attach real token cost and cache-hit ratio to workflow agent.run steps via history join
@@ -262,31 +262,31 @@ starts at the join.
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — Join key | MET | `run-cost.ts:93-158` — `matchEtlForAction` = R1a `matchBySessionId` (exact session-id join) + R1b `matchByTimeWindow` (time-window heuristic, agent/model narrowed). `run-cost.ts:54-63` — `extractSessionId` pulls `sessionId` from `result_json.invocation`. `agent-service.ts:126-132` — `AgentRunInvocation.sessionId?: string` documented as the R1a join key. Tests: `run-cost.test.ts` extractSessionId (5) + matchEtlForAction (4), incl. "prefers session-id join (R1a)". |
-| R2 — Cost + cache per step | MET | `run-cost.ts:171-190` — `actionCost` feeds matched records through existing `etlToCostRecord` → `computeRecordCost` → `aggregateCosts` → `cacheHitRatio`. No new token math (`query.ts:119` `source` is a label only; pricing from `payload.model`). Test: "computes cost and cache-hit from records with usage". |
-| R3 — Unavailable is first-class | MET (fixed this run) | `run-cost.ts:31-43` — `UNAVAILABLE` const, `cacheHit: null`. `workflow.ts:formatActionCost` now renders ` · cost n/a` for the unjoinable `records===0` case (was previously an empty suffix — closed this run). Never `$0.00`. Test: "renders `cost n/a` for an unjoinable step — never $0.00". |
-| R4 — Surface on `spur workflow trace` | MET | `workflow-service.ts:643-655,694` — `traceRun` pre-computes cost per `agent.run` and attaches `cost` to each timeline event. `workflow.ts:454-455` — `formatTraceTimeline` appends cost suffix; `workflow.ts:469-479` — `formatActionCost`. `--json` inherits `cost` via `toJson(result)` (`workflow.ts:370`). Tests: `formatActionCost` (6) + `formatTraceTimeline cost footer` (2). |
+| R1 — Join key | MET | `packages/domain/src/analytics/run-cost.ts:93-158` — `matchEtlForAction` = R1a `matchBySessionId` (exact session-id join) + R1b `matchByTimeWindow` (time-window heuristic, agent/model narrowed). `packages/domain/src/analytics/run-cost.ts:54-63` — `extractSessionId` pulls `sessionId` from `result_json.invocation`. `packages/app/src/services/agent-service.ts:126-132` — `AgentRunInvocation.sessionId?: string` documented as the R1a join key. Tests: `run-cost.test.ts` extractSessionId (5) + matchEtlForAction (4), incl. "prefers session-id join (R1a)". |
+| R2 — Cost + cache per step | MET | `packages/domain/src/analytics/run-cost.ts:171-190` — `actionCost` feeds matched records through existing `etlToCostRecord` → `computeRecordCost` → `aggregateCosts` → `cacheHitRatio`. No new token math (`packages/domain/src/analytics/query.ts:119` `source` is a label only; pricing from `payload.model`). Test: "computes cost and cache-hit from records with usage". |
+| R3 — Unavailable is first-class | MET (fixed this run) | `packages/domain/src/analytics/run-cost.ts:31-43` — `UNAVAILABLE` const, `cacheHit: null`. `workflow.ts:formatActionCost` now renders ` · cost n/a` for the unjoinable `records===0` case (was previously an empty suffix — closed this run). Never `$0.00`. Test: "renders `cost n/a` for an unjoinable step — never $0.00". |
+| R4 — Surface on `spur workflow trace` | MET | `workflow-service.ts:643-655,694` — `traceRun` pre-computes cost per `agent.run` and attaches `cost` to each timeline event. `apps/cli/src/commands/workflow.ts:454-455` — `formatTraceTimeline` appends cost suffix; `apps/cli/src/commands/workflow.ts:469-479` — `formatActionCost`. `--json` inherits `cost` via `toJson(result)` (`apps/cli/src/commands/workflow.ts:370`). Tests: `formatActionCost` (6) + `formatTraceTimeline cost footer` (2). |
 | R5 — Live run reuses same numbers | MET (optional live-fill deferred) | Mandatory clause satisfied: one computation path only (`actionCost`); no divergent second path. `sessionId` field + shared path in place. R5's own wording ("MAY fill 0310's slot") + Design § "Live run (R5, optional)" mark the mid-run step-finished fill optional; deferred, documented — not a silent gap. |
 | R6 — Import is precondition, not trigger | MET (hint added this run) | Zero `history import` calls in `run-cost.ts` / `workflow-service.ts` / `workflow.ts` (grep-verified). `matchEtlForAction` is read-only over existing ETL tables (missing table → graceful skip, `run-cost.ts:110,138`). The "output says so" sub-clause is now satisfied: `formatTraceTimeline` footer emits "run `spur history import` to populate cost" when any step is unjoinable. Test: "appends a `history import` hint". |
-| R7 — Machine output stability | MET | `workflow-service.ts:262-263` — `cost?: ActionCost` optional / additive / nullable. No existing `TimelineEvent` field changed. `--json` gains the field naturally. Test: "omits the hint when every agent.run step is joined" exercises the joined JSON-bearing path. |
-| R8 — Multi-record steps | MET | `run-cost.ts:182` — `actionCost` calls `aggregateCosts(costRecords)`, summing all matched records before `cacheHitRatio`. Test: "aggregates multiple records" → 2 records → 300 input / 150 output. |
+| R7 — Machine output stability | MET | `packages/app/src/services/workflow-service.ts:262-263` — `cost?: ActionCost` optional / additive / nullable. No existing `TimelineEvent` field changed. `--json` gains the field naturally. Test: "omits the hint when every agent.run step is joined" exercises the joined JSON-bearing path. |
+| R8 — Multi-record steps | MET | `packages/domain/src/analytics/run-cost.ts:182` — `actionCost` calls `aggregateCosts(costRecords)`, summing all matched records before `cacheHitRatio`. Test: "aggregates multiple records" → 2 records → 300 input / 150 output. |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
 | Scenario: A joinable agent.run shows real cost | MET | test | `run-cost.test.ts` "matches records within time window (R1b)" + "computes cost and cache-hit from records with usage" — matched ETL → real totals + cache-hit via `cacheHitRatio`. |
-| Scenario: An unjoinable agent.run shows unavailable, never zero | MET (fixed this run) | test | `workflow.test.ts` "renders `cost n/a` for an unjoinable step — never $0.00" (asserts no `$0.00`/`0%`) + "appends a `history import` hint" (import affordance). Prior self-report cited `workflow.ts:474-478` — a misread: those lines only fire for `records>0`; the `records===0` case returned an empty suffix until this run's fix. |
+| Scenario: An unjoinable agent.run shows unavailable, never zero | MET (fixed this run) | test | `workflow.test.ts` "renders `cost n/a` for an unjoinable step — never $0.00" (asserts no `$0.00`/`0%`) + "appends a `history import` hint" (import affordance). Prior self-report cited `apps/cli/src/commands/workflow.ts:474-478` — a misread: those lines only fire for `records>0`; the `records===0` case returned an empty suffix until this run's fix. |
 | Scenario: A multi-turn session aggregates first | MET | test | `run-cost.test.ts` "aggregates multiple records" — summed totals before ratio. |
-| Scenario: JSON output stays backward-compatible | MET | static-ref | `workflow-service.ts:262-263` — `cost?` optional/nullable; additive only. Serialized via `toJson` (`workflow.ts:370`). |
+| Scenario: JSON output stays backward-compatible | MET | static-ref | `packages/app/src/services/workflow-service.ts:262-263` — `cost?` optional/nullable; additive only. Serialized via `toJson` (`apps/cli/src/commands/workflow.ts:370`). |
 | Scenario: The task never triggers an import | MET | static-ref | Zero `history import` calls in the cost path; `matchEtlForAction` read-only. |
 
 **SECUA Review** (`--focus all`)
 
 | Finding | Severity | File:Line | Notes |
 |---------|----------|-----------|-------|
-| Empty `source` label passed to `actionCost` | P3 (advisory) | `workflow-service.ts:649` | `actionCost(matched, '')` — `source` is only a `CostRecord` label (`query.ts:134`); pricing derives from `payload.model`, and the trace never surfaces `source`. Harmless; noted for hygiene. |
-| SQL identifier interpolation | — | `run-cost.ts:109,137` | Safe — table names come only from the `SOURCE_TABLES` compile-time allowlist (`query.ts:8`), never from input. Invariant preserved. |
+| Empty `source` label passed to `actionCost` | P3 (advisory) | `packages/app/src/services/workflow-service.ts:649` | `actionCost(matched, '')` — `source` is only a `CostRecord` label (`packages/domain/src/analytics/query.ts:134`); pricing derives from `payload.model`, and the trace never surfaces `source`. Harmless; noted for hygiene. |
+| SQL identifier interpolation | — | `run-cost.ts:109,137` | Safe — table names come only from the `SOURCE_TABLES` compile-time allowlist (`packages/domain/src/analytics/query.ts:8`), never from input. Invariant preserved. |
 | Session-id redaction | — | — | N/A — `sessionId` is not a secret; `ActionRedactor` applies to action options, not invocation passthrough. |
 
 **Fix-pass disclosure (this run, `--fix all`).** Two tracked files changed to close the R3/AC2 surface gap (visible in `git status`, not gitignored): `apps/cli/src/commands/workflow.ts` — `formatActionCost` renders `cost n/a` for `records===0` (was empty); `formatTraceTimeline` appends the `history import` hint footer; both exported for test. `apps/cli/tests/commands/workflow.test.ts` — +8 tests (`formatActionCost` ×6, `formatTraceTimeline cost footer` ×2).

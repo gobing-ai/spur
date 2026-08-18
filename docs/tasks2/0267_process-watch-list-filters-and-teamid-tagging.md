@@ -12,7 +12,7 @@ priority: P2
 tags: ["teams", "process-registry"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.136Z"
-updated_at: "2026-07-16T02:56:41.873Z"
+updated_at: "2026-08-18T04:42:47.452Z"
 ---
 
 ## 0267. Process watch list filters and teamId tagging
@@ -100,10 +100,10 @@ Scenario: Supervised spawns carry teamId when team membership is known
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 Supervisor start tags teamId when agent has known team | MET | `supervisor-service.ts:154-169,185`; tests `resolves teamId from spec.tags` + `leaves teamId null` (`supervisor-service.test.ts:124-162`); API maps `teamId` (`apps/server/src/modules/team/index.ts:49,65`) |
-| R2 ProcessesTab filters: running-only, source (supervisor\|one-shot\|other), optional team | MET | `filterWatchRows` + `ProcessFilterControls` (`ProcessesTab.tsx:102-196`); UI options all/supervisor/one-shot/other; component tests + 9 pure-helper tests |
-| R3 Filter state ephemeral (no persistence) | MET | `useState<WatchFilters>` only (`ProcessesTab.tsx:218`); no localStorage for filters |
-| R4 Empty state when filters hide all rows | MET | filtered-empty branch + copy (`ProcessesTab.tsx:335-350`); test `filters hiding all rows show the no-matches empty state` |
+| R1 Supervisor start tags teamId when agent has known team | MET | `supervisor-service.ts:154-169,185`; tests `resolves teamId from spec.tags` + `leaves teamId null` (`packages/app/tests/services/supervisor-service.test.ts:124-162`); API maps `teamId` (`apps/server/src/modules/team/index.ts:49,65`) |
+| R2 ProcessesTab filters: running-only, source (supervisor\|one-shot\|other), optional team | MET | `filterWatchRows` + `ProcessFilterControls` (`apps/web/src/modules/teams/ProcessesTab.tsx:102-196`); UI options all/supervisor/one-shot/other; component tests + 9 pure-helper tests |
+| R3 Filter state ephemeral (no persistence) | MET | `useState<WatchFilters>` only (`apps/web/src/modules/teams/ProcessesTab.tsx:218`); no localStorage for filters |
+| R4 Empty state when filters hide all rows | MET | filtered-empty branch + copy (`apps/web/src/modules/teams/ProcessesTab.tsx:335-350`); test `filters hiding all rows show the no-matches empty state` |
 | R5 Tests for filter logic + API teamId | MET | 9 `filterWatchRows`/`buildWatchRows` unit tests + 4 ProcessesTab filter UI tests + 2 supervisor teamId tests |
 
 **Acceptance Criteria Verification**

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-12T22:48:20.425Z"
-updated_at: "2026-07-12T22:59:15.063Z"
+updated_at: "2026-08-18T04:42:47.260Z"
 ---
 
 ## 0247. Tool Using live: SSE stream + cursor pagination (replace Live poll)
@@ -141,11 +141,11 @@ Coverage: N/A as monorepo aggregate gate for the 4-file run (exit 1 from unrelat
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 Cursor pagination | MET | `token-ledger-service.ts:155-156,214` (`before` exclusive; `nextBefore`); server `index.ts:61-63`; test `token-ledger-service.test.ts:217-247` page1/page2 no overlap |
+| R1 Cursor pagination | MET | `token-ledger-service.ts:155-156,214` (`before` exclusive; `nextBefore`); server `index.ts:61-63`; test `packages/app/tests/services/token-ledger-service.test.ts:217-247` page1/page2 no overlap |
 | R2 SSE stream | MET | `token-ledger-watcher.ts:41-52,114-157` fs.watch + byte poll fail-soft; server `index.ts:71-147` `/tool-use/stream`; test `index.test.ts:133-158` SSE content-type |
-| R3 Live SSE | MET | `ToolUsingTab.tsx:121-179` EventSource primary; test `components.test.tsx:907-959` FakeEventSource prepend + close on unmount |
-| R4 Load more | MET | `ToolUsingTab.tsx:181-204` + `data-load-more`; test `components.test.tsx:962+` `before=` fetch |
-| R5 Poll fallback | MET | `ToolUsingTab.tsx:128-133` when `EventSource === undefined` → 3s poll; primary path is SSE |
+| R3 Live SSE | MET | `apps/web/src/modules/observability/ToolUsingTab.tsx:121-179` EventSource primary; test `components.test.tsx:907-959` FakeEventSource prepend + close on unmount |
+| R4 Load more | MET | `apps/web/src/modules/observability/ToolUsingTab.tsx:181-204` + `data-load-more`; test `components.test.tsx:962+` `before=` fetch |
+| R5 Poll fallback | MET | `apps/web/src/modules/observability/ToolUsingTab.tsx:128-133` when `EventSource === undefined` → 3s poll; primary path is SSE |
 | R6 Hooks unchanged | MET | 0247 Solution map has no hook files; hooks stay append-only JSONL (0246 hook edits are sibling scope) |
 | R7 Tests | MET | service pagination + watcher emit/unsub + server before/SSE + web SSE/load-more — 55 pass this turn |
 | R8 Design | MET | `docs/04_DESIGN.md:907-926` §7.8b stream + cursor + nextBefore + Live SSE/poll policy |
@@ -154,10 +154,10 @@ Coverage: N/A as monorepo aggregate gate for the 4-file run (exit 1 from unrelat
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R1 Cursor returns older page | MET | test | `token-ledger-service.test.ts:217-247` + server forwards `before` `index.test.ts:124-130` |
+| Scenario: R1 Cursor returns older page | MET | test | `packages/app/tests/services/token-ledger-service.test.ts:217-247` + server forwards `before` `index.test.ts:124-130` |
 | Scenario: R2 Live SSE prepends new tool events | MET | test | `components.test.tsx:907-959` tool-use frame prepends write row |
-| Scenario: R3 Live off closes the stream | MET | test + static-ref | toggle Live off `components.test.tsx:875-881`; effect cleanup `es.close()` `ToolUsingTab.tsx:175-178` when `live` changes |
-| Scenario: R4 EventSource unavailable falls back gracefully | MET | static-ref | `ToolUsingTab.tsx:128-133` poll branch; documented in §7.8b |
+| Scenario: R3 Live off closes the stream | MET | test + static-ref | toggle Live off `components.test.tsx:875-881`; effect cleanup `es.close()` `apps/web/src/modules/observability/ToolUsingTab.tsx:175-178` when `live` changes |
+| Scenario: R4 EventSource unavailable falls back gracefully | MET | static-ref | `apps/web/src/modules/observability/ToolUsingTab.tsx:128-133` poll branch; documented in §7.8b |
 
 **Design conformance:** DONE — reverse-tail `before` + `nextBefore`; fs.watch watcher fan-out; SSE route; UI EventSource primary + Load older; poll fallback only. No silent design deviation.
 

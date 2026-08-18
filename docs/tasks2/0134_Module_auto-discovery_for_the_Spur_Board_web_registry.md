@@ -4,7 +4,7 @@ name: Module auto-discovery for the Spur Board web registry
 status: done
 type: task
 created_at: 2026-06-27T00:41:16.312Z
-updated_at: 2026-06-29T16:38:40.309Z
+updated_at: "2026-08-18T04:42:46.961Z"
 ---
 
 ## 0134. Module auto-discovery for the Spur Board web registry
@@ -93,7 +93,7 @@ The board registry (apps/web/src/modules/registry.ts) is a hand-maintained built
 
 File layout under `apps/web/src/modules/`:
 - `config.ts:1` (new) — `moduleRoots: ['./']`, `disabledModules: []`. Pure data, the swappable source for roots/blacklist.
-- `discover.ts:94` (new) — the sole `import.meta.glob('./*/index.{ts,tsx}', { eager: true, as: 'sync' })` call (`discover.ts:77`). Reads the named `module` export (fallback: `default`) via `readModule` (`discover.ts:44`)/`isWebModule` (`discover.ts:52`); sorts within root by directory name; skips entries with no WebModule export. Ships a bun-test fallback (`discoverViaFs`, `discover.ts:129`) wired from `discoverModules()` (`discover.ts:95`) so unit tests resolve `task-kanban` without the Vite transform.
+- `apps/web/src/modules/discover.ts:94` (new) — the sole `import.meta.glob('./*/index.{ts,tsx}', { eager: true, as: 'sync' })` call (`apps/web/src/modules/discover.ts:77`). Reads the named `module` export (fallback: `default`) via `readModule` (`apps/web/src/modules/discover.ts:44`)/`isWebModule` (`apps/web/src/modules/discover.ts:52`); sorts within root by directory name; skips entries with no WebModule export. Ships a bun-test fallback (`discoverViaFs`, `apps/web/src/modules/discover.ts:129`) wired from `discoverModules()` (`apps/web/src/modules/discover.ts:95`) so unit tests resolve `task-kanban` without the Vite transform.
 - `registry.ts:105` (rewritten) — `createRegistry(discovered, opts?)`: pure runtime registry owning duplicate id/route fail-fast validation, enable/disable, ordering (root-then-sorted), and the `modules`/`getModule`/`defaultModule` consumer exports (`registry.ts:108,111,116`). The module-level singletons wire `discoverModules()` + `config.ts` once at load.
 - `apps/web/src/modules/task-kanban/index.tsx:114` — one-line rename: `export const TaskKanbanModule` → `export const module: WebModule`.
 

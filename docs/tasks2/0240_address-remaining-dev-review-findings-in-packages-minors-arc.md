@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-11T22:56:19.099Z"
-updated_at: "2026-07-12T06:20:26.855Z"
+updated_at: "2026-08-18T04:42:47.217Z"
 ---
 
 ## 0240. Address remaining dev-review findings in packages (minors + architecture)
@@ -90,18 +90,18 @@ A full `/sp:dev-review packages --focus all` (2026-07-11) swept `packages/{app,c
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | Dead private-host gate removed (`http-request.ts`); `rg isPrivateHost` → 0. Allowlist sole host gate. Tests: `http-request.test.ts` private-host cases. |
-| R2 | MET | FM-scoped `patchFrontmatterField` `task-service.ts:45-68`. Regression: `does not rewrite body lines that look like frontmatter keys (R2)` — pass. |
-| R3 | MET | `escapeYamlValue` `markdown-document.ts:555`; suite green. No leftover `formatYamlValue`/`yamlSafeValue`. |
-| R4 | MET | `numberFlag` NaN → undefined; exit-2 path `agent-service.ts:289-291`. **Fix-pass:** `non-numeric --timeout returns exit 2… (R4)` — pass. |
-| R5 | MET | Docstring `planning-write-service.ts:66-71` (same-status only). |
-| R6 | MET | `lstat` `workflow-service.ts:716`. Symlink list test green. |
-| R7 | MET | `.catch` `supervisor-service.ts:282-288`; suite green. |
-| R8 | MET | `addColumnIfMissing` on 0005 `migrations.ts:165-169`. |
-| R9 | MET | mtime cache key + `invalidateSpurConfig` `loader.ts:214-234`; loader tests green. |
-| R10 | MET | `escapeTablePipe` `task-record.ts:21`; task-record tests green. |
-| R11 | N/A | **Deferred** (Solution PARTIAL). Outside-PWS call sites remain: `feature-service.ts` (`acquireCreateLock`/`atomicWriteAsync`), `task-service.ts:913` (`refreshRoster`), `team-service.ts`, `corpus-migrator.ts`. Not in this task's shipped scope. |
-| R12 | MET | `renderCreatedTaskContent` `task-service.ts:85`; create + createBatchItem call sites. |
-| R13 | MET | Single `bridgeEventBus` in `event-bridge.ts:13`; Agent/Rule/Workflow consumers only. |
+| R2 | MET | FM-scoped `patchFrontmatterField` `packages/app/src/services/task-service.ts:45-68`. Regression: `does not rewrite body lines that look like frontmatter keys (R2)` — pass. |
+| R3 | MET | `escapeYamlValue` `packages/domain/src/planning/markdown-document.ts:555`; suite green. No leftover `formatYamlValue`/`yamlSafeValue`. |
+| R4 | MET | `numberFlag` NaN → undefined; exit-2 path `packages/app/src/services/agent-service.ts:289-291`. **Fix-pass:** `non-numeric --timeout returns exit 2… (R4)` — pass. |
+| R5 | MET | Docstring `packages/app/src/services/planning-write-service.ts:66-71` (same-status only). |
+| R6 | MET | `lstat` `packages/app/src/services/workflow-service.ts:716`. Symlink list test green. |
+| R7 | MET | `.catch` `packages/app/src/services/supervisor-service.ts:282-288`; suite green. |
+| R8 | MET | `addColumnIfMissing` on 0005 `packages/domain/src/migrations.ts:165-169`. |
+| R9 | MET | mtime cache key + `invalidateSpurConfig` `packages/config/src/loader.ts:214-234`; loader tests green. |
+| R10 | MET | `escapeTablePipe` `packages/app/src/services/task-record.ts:21`; task-record tests green. |
+| R11 | N/A | **Deferred** (Solution PARTIAL). Outside-PWS call sites remain: `feature-service.ts` (`acquireCreateLock`/`atomicWriteAsync`), `packages/app/src/services/task-service.ts:913` (`refreshRoster`), `team-service.ts`, `corpus-migrator.ts`. Not in this task's shipped scope. |
+| R12 | MET | `renderCreatedTaskContent` `packages/app/src/services/task-service.ts:85`; create + createBatchItem call sites. |
+| R13 | MET | Single `bridgeEventBus` in `packages/app/src/services/event-bridge.ts:13`; Agent/Rule/Workflow consumers only. |
 | R14 | MET | Multi-folder `findTaskFileName` / `resolveTaskFile` / `show`. **Fix-pass:** `show resolves a task that lives only in a non-active folder` — pass. |
 
 **Acceptance Criteria Verification**

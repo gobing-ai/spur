@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:dev-next"]
 dependencies: []
 created_at: "2026-07-17T00:54:25.959Z"
-updated_at: "2026-07-28T00:32:08.334Z"
+updated_at: "2026-08-18T04:42:47.484Z"
 ---
 
 ## 0271. Decide skill ownership for dev-next router
@@ -73,7 +73,7 @@ Scenario: Ownership decision is implementation-ready
 ### Solution
 **Decision: Option A — new skill `sp:next-router`**, thin command `/sp:dev-next` → Skill only.
 
-**Not B** (fold into `sp:spur-dev`): the spine owns planning/execution *pipelines* and gates. A status→command UX router is a meta-dispatcher over many operations, not a pipeline step. Putting TABLE A/B/C + dispatch protocol into `dev-operations.md` / spur-dev bloats the spine and couples every routing change to the lifecycle skill. Peer counterexample: `sp:dogfood-testing` is deliberately *outside* the numbered dev-operations table (`dev-operations.md:31-33`).
+**Not B** (fold into `sp:spur-dev`): the spine owns planning/execution *pipelines* and gates. A status→command UX router is a meta-dispatcher over many operations, not a pipeline step. Putting TABLE A/B/C + dispatch protocol into `dev-operations.md` / spur-dev bloats the spine and couples every routing change to the lifecycle skill. Peer counterexample: `sp:dogfood-testing` is deliberately *outside* the numbered dev-operations table (`plugins/sp/skills/spur-dev/references/dev-operations.md:31-33`).
 
 **Not C** (command-only): violates README pass-through principle (`plugins/sp/README.md:311-312` — commands contain zero domain logic). Also blocks reuse from agents / non-Claude platforms that load skills by name.
 
@@ -135,7 +135,7 @@ Do **not** name the skill `sp:dev-next` — keeps skill catalog free of the `dev
 
 | Gate | Mechanism |
 | --- | --- |
-| Command indexed | R43 walks `commands/*.md` vs README Command index (`skill-structure.test.ts:535`) |
+| Command indexed | R43 walks `commands/*.md` vs README Command index (`plugins/sp/tests/skill-structure.test.ts:535`) |
 | Skill description budget | Existing skill-description length tests over all `skills/*/SKILL.md` — keep `description:` under router/non-router budget |
 | Reference integrity | Existing markdown link / skill reference scans |
 | Recommended R-next | Assert command→skill wiring string + routing-table file present |

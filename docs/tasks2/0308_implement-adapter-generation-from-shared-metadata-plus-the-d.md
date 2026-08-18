@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-2", "adapters", "drift-test", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T03:32:22.469Z"
-updated_at: "2026-07-28T00:32:32.965Z"
+updated_at: "2026-08-18T04:42:47.723Z"
 ---
 
 ## 0308. Implement adapter generation from shared metadata plus the drift-test contract
@@ -100,7 +100,7 @@ Derived from 0283 R4/R7/R8 (feature O wave-2). Each scenario maps to an executab
 | `plugins/sp/skills/dogfood-testing/SKILL.md:1` | Monitor ledger, live/report templates (§Arguments) | `plugins/sp/commands/dev-dogfood.md` |
 | `plugins/sp/skills/spur-dev/references/execution-workflow.md:1` | +91 lines: Task execution pipeline walkthrough | `plugins/sp/commands/dev-run.md` |
 | `plugins/sp/skills/spur-dev/references/gate-checklists.md:89` | +55 lines: `testing → done` three-layer gate | `plugins/sp/commands/dev-next.md` + `plugins/sp/commands/dev-verify.md` |
-| `plugins/sp/skills/spur-dev/references/implementation-patterns.md:1` | +16 lines: Implement-step patterns | `plugins/sp/commands/dev-run.md` |
+| `plugins/sp/skills/code-implementation/references/implementation-patterns.md:1` | +16 lines: Implement-step patterns | `plugins/sp/commands/dev-run.md` |
 | `plugins/sp/skills/spur-dev/references/dev-operations.md:1` | +105 lines: Daily ops guide | Multiple commands |
 | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:1` | AC → CLI command mapping | `plugins/sp/commands/dev-plan.md` |
 | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:1` | Answer-file shape reference | Cross-ref from gate-checklists |

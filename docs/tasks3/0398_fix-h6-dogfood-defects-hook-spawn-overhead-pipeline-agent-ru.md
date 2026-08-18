@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-31T04:24:04.544Z"
-updated_at: "2026-08-01T04:13:41.758Z"
+updated_at: "2026-08-18T04:42:48.322Z"
 ---
 
 ## 0398. Fix H6 dogfood defects: hook spawn overhead, pipeline agent.run timeouts, and verdict AC parser/linkage traps
@@ -485,7 +485,7 @@ complete with tests.
 
 #### R4 — pipeline timeout budget
 
-- `config/workflows/task-pipeline.yaml:52` and `apps/cli/config/workflows/task-pipeline.yaml:43` —
+- `config/workflows/task-pipeline.yaml:52` and `config/workflows/task-pipeline.yaml:43` —
   `stepTimeoutMs` `"600000"` → `"1800000"`, each patched in place (the two copies differ; neither
   was overwritten with the other). Comment records the H6 evidence (3 of 4 timeouts were `test`
   steps at the 600 s wall) and carries the same STOP-don't-raise-again rule as `implementTimeoutMs`.

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-06T23:30:12.554Z"
-updated_at: "2026-08-08T12:32:05.476Z"
+updated_at: "2026-08-18T04:42:48.480Z"
 done_forced: "true"
 done_reason: "Wayfinder investigation ticket resolved. Per-source field map complete with proposed roots, expected yields, and ingestion-path inventory. Full analysis in Solution section. Unblocks 0455 and 0457."
 ---
@@ -640,7 +640,7 @@ Coverage: N/A (documentation-only / wayfinder research; no runtime code path add
 | Scenario: R1 — every in-scope source is characterized from real files — field map R1–R4 | MET | static-ref + command | Solution per-source maps; fresh `find -L` + per-file grep/python probes this run (all six roots, all six formats touched) |
 | And agy characterized JSONL + SQLite | MET | command | `cmp` DIFFER + 7-table sqlite listing on `0943d750-…` this run |
 | And proposed roots/patterns per source | MET | static-ref | Solution "Proposed Roots and Patterns"; corroborated by ts-libs `sources.ts:152-196` (adopted) |
-| And both ingestion paths inventoried without deciding | MET | static-ref | Solution "Ingestion Paths"; anchors `agent-run.ts:143`, `:408`, `shims.ts:338` re-read this run |
+| And both ingestion paths inventoried without deciding | MET | static-ref | Solution "Ingestion Paths"; anchors `packages/app/src/workflow/actions/agent-run.ts:143`, `:408`, `shims.ts:338` re-read this run |
 | And expected post-fix yield per source | MET | static-ref | Solution "Expected Post-Fix Yield" table |
 | And every claim cites real files inspected | MET | static-ref | Solution "Files inspected" table + this run's fresh probes named above |
 

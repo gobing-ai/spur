@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-26T03:20:48.998Z"
-updated_at: 2026-06-26T06:16:27.540Z
+updated_at: "2026-08-18T04:42:46.893Z"
 ---
 
 ## 0127. sp-dev-run 0102 dogfood: fix sync-orphan, Solution section, cache hit rate
@@ -160,11 +160,11 @@ The upstream half (`@gobing-ai/ts-ai-runner` **0.4.1**) was released by the oper
 | Plan item | Status | Evidence |
 |-----------|--------|----------|
 | P1-auth-decouple (upstream) | ✅ DONE | 0.4.1: `spur agent doctor` shows every installed agent `usable:true` (omp/opencode/agy/openclaw included); `authenticated` is now tri-state `authenticated\|unauthenticated\|unknown` |
-| P0-a liveness readiness gate | ✅ DONE | `agent-service.ts:338-355` (`resolveAgentExplicit`): liveness-only gate, fails fast when `!installed`/`!usable`, auth NOT consulted. On the run path via `executeRun`→`resolveAgent` (`agent-service.ts:230`). Tested: agent-service.test.ts (non-usable→exit 1; auth≠usable) |
-| P0-b timeout-kill ⇒ fail | ✅ DONE | `agent-run.ts:23-26` contract; tests `agent-run.test.ts:246,256` — `timeoutMs + non-zero exit → ok:false` for capture + plain-run paths |
-| P1-doctor-column | ✅ DONE | `agent-service.ts:113-118` renders `auth=yes\|no\|?` via `renderAuth(AuthState)` (`:401`); text + json |
-| P1-async (sync-orphan doc) | ✅ DONE | `execution-workflow.md:72-85` mandates `--async` + `spur workflow trace`, cites task 0127 |
-| P4 `--next` ignored warning | ✅ DONE | `dev-run.md:77-81` emits the full-mode warning |
+| P0-a liveness readiness gate | ✅ DONE | `packages/app/src/services/agent-service.ts:338-355` (`resolveAgentExplicit`): liveness-only gate, fails fast when `!installed`/`!usable`, auth NOT consulted. On the run path via `executeRun`→`resolveAgent` (`packages/app/src/services/agent-service.ts:230`). Tested: agent-service.test.ts (non-usable→exit 1; auth≠usable) |
+| P0-b timeout-kill ⇒ fail | ✅ DONE | `packages/app/src/workflow/actions/agent-run.ts:23-26` contract; tests `agent-run.test.ts:246,256` — `timeoutMs + non-zero exit → ok:false` for capture + plain-run paths |
+| P1-doctor-column | ✅ DONE | `packages/app/src/services/agent-service.ts:113-118` renders `auth=yes\|no\|?` via `renderAuth(AuthState)` (`:401`); text + json |
+| P1-async (sync-orphan doc) | ✅ DONE | `plugins/sp/skills/spur-dev/references/execution-workflow.md:72-85` mandates `--async` + `spur workflow trace`, cites task 0127 |
+| P4 `--next` ignored warning | ✅ DONE | `plugins/sp/commands/dev-run.md:77-81` emits the full-mode warning |
 | P2 renderReview (from 0102 dogfood) | ✅ DONE | verify-only; pre-existing fix intact |
 | P2 implement-agent Solution prompt | ⬜ OPEN (minor) | `execution-workflow.md` already states the implement step owns `## Solution` (lines 49-58); the prompt-hardening / A/B-confirmation step is unstarted. Lower priority — the `record --solution-from-diff` safety net + claude default mitigate it |
 | P3 cache-hit-rate tuning | ⬜ OPEN (measure-only) | gated on a fresh dogfood re-measure under claude; no code change yet |

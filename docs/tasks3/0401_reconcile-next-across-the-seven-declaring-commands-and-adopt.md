@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "commands", "breaking-change"]
 dependencies: ["0399"]
 created_at: "2026-08-01T05:05:18.245Z"
-updated_at: "2026-08-01T15:52:34.913Z"
+updated_at: "2026-08-18T04:42:48.343Z"
 done_forced: "true"
 done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
@@ -183,7 +183,7 @@ exists to remove. Commands reference the glossary and the router; they do not de
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | Every in-scope command declaring a shared flag carries the glossary link form; enforced mechanically by `command-flag-parity.test.ts` R2/R3 (130 pass) and proven load-bearing by mutation |
-| R2 | MET | `dev-run.md:24-25` — `--mode implement` is the documented implement-only spelling; `--next` "No longer selects implement-only mode". `:30` carries the dated redefinition warning (feature H8, 2026-07-31) |
+| R2 | MET | `plugins/sp/commands/dev-run.md:24-25` — `--mode implement` is the documented implement-only spelling; `--next` "No longer selects implement-only mode". `:30` carries the dated redefinition warning (feature H8, 2026-07-31) |
 | R3 | MET | `dev-review.md` argument-hint no longer declares `--next` (grep count 0); `:19` records the removal with date and routes progression to `/sp:dev-next` |
 | R4 | MET | Per-command disposition with reasons: `dev-refine` keeps it (`:27-29`, backlog/todo chains refine→run→verify); `dev-refineall` drops it (`:26-28`, batch chaining is a token bomb, points at dev-runall); `dev-brainstorm` keeps it (`:20-23`, chains into `/sp:dev-plan`, ignored without `--feature`) |
 | R5 | MET | `dev-runall.md` argument-hint declares `--next`; `:31-35` defines chain-each-task-to-terminal then wrap **once for the batch**, mirroring dev-verifyall's batch-once shippable gate |
@@ -204,7 +204,7 @@ exists to remove. Commands reference the glossary and the router; they do not de
 | dev-run implement-only has a non-overloaded spelling | MET | command | `dev-run.md:18,24` — `--mode implement` documented; `--next` explicitly no longer selects it |
 | dev-runall accepts --next with batch-once wrap | MET | command | `dev-runall.md` argument-hint + `:31-35` batch-once wrap; superseded rationale removed (grep 0) |
 | Previously undefined declarations are resolved | MET | command | refine keeps / refineall drops / brainstorm keeps, each with the reason recorded at the cited lines |
-| --json and --auto follow a stated availability rule | MET | test | Availability rule at `dev-operations.md:93-99`; presence parity across 18 in-scope commands asserted by the gate (130 pass) |
+| --json and --auto follow a stated availability rule | MET | test | Availability rule at `plugins/sp/skills/spur-dev/references/dev-operations.md:93-99`; presence parity across 18 in-scope commands asserted by the gate (130 pass) |
 | Missing capability is recorded rather than built | MET | command | `git status` shows changes confined to `plugins/sp/commands/*.md` + skills/tests — no source file gained a `--json` emitter or HITL gate |
 | --agent coverage is untouched | MET | command | `git diff plugins/sp/commands/ \ |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)

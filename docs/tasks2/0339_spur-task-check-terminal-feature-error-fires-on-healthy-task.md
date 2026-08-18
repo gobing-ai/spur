@@ -12,7 +12,7 @@ priority: P1
 tags: ["cli", "gates", "task-check", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.157Z"
-updated_at: "2026-07-27T07:09:02.945Z"
+updated_at: "2026-08-18T04:42:48.017Z"
 ---
 
 ## 0339. spur task check: terminal-feature error fires on healthy tasks; content-free tasks pass
@@ -92,7 +92,7 @@ Why error not warning: a content-free task is unverifiable by construction. The 
 ### Solution
 Two-predicate fix in `packages/app/src/services/task-check.ts`; two new finding codes in `packages/config/src/finding-codes.ts` (added to both `ALL_FINDING_CODES` and `FINDING_CODES`).
 
-**(a) `L4_FEATURE_TERMINAL` narrowed (R1/R2).** `runL4` (`task-check.ts:431`) now takes `status: string`; caller at `task-check.ts:271` passes the already-computed task status. The predicate at `task-check.ts:478` changed from
+**(a) `L4_FEATURE_TERMINAL` narrowed (R1/R2).** `runL4` (`packages/app/src/services/task-check.ts:431`) now takes `status: string`; caller at `packages/app/src/services/task-check.ts:271` passes the already-computed task status. The predicate at `packages/app/src/services/task-check.ts:478` changed from
 
 ```
 if (featureStatus === 'done' || featureStatus === 'cancelled') { … }
@@ -108,12 +108,12 @@ if (featureTerminal && !taskTerminal) { … }
 
 A done/cancelled task under a done/cancelled feature is now the correct end state and produces no error. Live-task signal (R2) is unchanged: the finding still fires with identical message, code, and `error` severity for any `backlog`/`todo`/`wip`/`testing`/`blocked` task parented to a terminal feature.
 
-**(b) Content-free section enforcement (R3).** Two new error-severity L3 findings, reusing `isPlaceholderBody` (`task-check.ts:59`) and `stripAcFence`:
+**(b) Content-free section enforcement (R3).** Two new error-severity L3 findings, reusing `isPlaceholderBody` (`packages/app/src/services/task-check.ts:59`) and `stripAcFence`:
 
 - `L3_REQUIREMENTS_EMPTY` — fires when `### Requirements` heading exists AND `isPlaceholderBody(body)`.
 - `L3_AC_EMPTY` — fires when `### Acceptance Criteria` heading exists AND `isPlaceholderBody(stripAcFence(body))`.
 
-Both fire at the top of `runL3` (`task-check.ts:287`), before the existing R-numbering warning. Severity `error` makes them gate-failing per `summarizeWithStatus` (`planning-check-base.ts:222`).
+Both fire at the top of `runL3` (`packages/app/src/services/task-check.ts:287`), before the existing R-numbering warning. Severity `error` makes them gate-failing per `summarizeWithStatus` (`packages/app/src/services/planning-check-base.ts:222`).
 
 **Predicate refinement during implementation:** the Design drafted the check as "section body null OR placeholder". That broke the existing `L1: schema validation passes for valid frontmatter` test, which uses a `backlog` task with no Requirements/AC headings (legitimately absent at `backlog` where the matrix does not require them). The final predicate fires only when the section heading **exists** but the body is placeholder-only — a missing section remains L2's job (matrix-driven presence). This matches R3 precisely ("body is empty or consists only of template placeholder comments" — the body exists to be checked) and preserves the L2/L3 separation: L2 drives presence, L3 drives substance.
 
@@ -147,7 +147,7 @@ Both must be kept in sync — `FindingCode` is `(typeof ALL_FINDING_CODES)[numbe
 |-----|--------|----------|
 | R1 | MET | `packages/app/src/services/task-check.ts:506-508` `featureTerminal && !taskTerminal`; tests "R1: done task under done feature" + "R1: cancelled…"; CLI `task check 0320` no terminal finding |
 | R2 | MET | Same predicate; tests "R2: live (todo)…" + "R2: live (wip)…" assert `L4_FEATURE_TERMINAL` retained with message containing done/cancelled |
-| R3 | MET | `task-check.ts:299-317` `L3_REQUIREMENTS_EMPTY` / `L3_AC_EMPTY`; CLI 0337 FAIL; unit tests R3 placeholder cases |
+| R3 | MET | `packages/app/src/services/task-check.ts:299-317` `L3_REQUIREMENTS_EMPTY` / `L3_AC_EMPTY`; CLI 0337 FAIL; unit tests R3 placeholder cases |
 | R4 | MET | Live-task signal + format warning retained; only predicate narrowed + findings added |
 | R5 | MET | 9 tests under `describe('TaskCheckService task 0339…')` including new missing-section case |
 | R6 | MET | R2 non-cancelled 0332–0336,0338 PASS; 0337 cancelled correctly FAILs empty findings |

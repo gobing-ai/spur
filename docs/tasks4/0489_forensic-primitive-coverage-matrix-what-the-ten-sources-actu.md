@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:03:51.533Z"
-updated_at: "2026-08-10T00:31:39.796Z"
+updated_at: "2026-08-18T04:42:48.597Z"
 done_forced: "true"
 done_reason: "Wayfinder research ticket: coverage matrix built with 10x10 cells, every cell evidence-backed (file:line or measured). No code shipped. Check pass:true. L4 warnings are ts-libs external paths, not project-relative."
 ---
@@ -260,7 +260,7 @@ zero rows (not a coverage verdict).
   `grokSplit` (`:782`). Pi was corrected in task 0577: `piSplit` now keys sessions by the source
   file (`sessionIdFromContext`), not the per-record event id — 1,501 files → 1,424 sessions,
   0 singletons (was 176,792 sessions / 175,288 singletons).
-- **Existing query:** `bySession` groups by `session_id` (`forensic-query.ts:190-273`).
+- **Existing query:** `bySession` groups by `session_id` (`packages/domain/src/analytics/forensic-query.ts:190-273`).
 - **Blocker (generic four):** **mapper** — the `sourceDefinition()` path stores `payload_json` only;
   no typed `session_id` reaches the consumer tables.
 - **Retention cost if fixed:** 0 additional bytes — `session_id` is already in the raw JSONL for all
@@ -271,12 +271,12 @@ zero rows (not a coverage verdict).
   (`schema-sql.ts:93`). The `disposition` field (`keep`/`meta`) further classifies
   (`mappers.ts:114,131,161`).
 - **Existing query:** `drift` groups by `record_type` and filters `disposition = 'unknown'`
-  (`forensic-query.ts:296-307`).
+  (`packages/domain/src/analytics/forensic-query.ts:296-307`).
 - **Blocker (generic four):** **mapper**.
 - **Retention cost:** 0 additional bytes.
 
 - **Evidence:** `messageRollup` aggregates `messages`, `inputTokens`, `outputTokens`, `costUsd` per
-  (source, model, day) (`forensic-query.ts:132-148`). All six mappers populate `input_tokens` /
+  (source, model, day) (`packages/domain/src/analytics/forensic-query.ts:132-148`). All six mappers populate `input_tokens` /
   `output_tokens` / `cost_usd` (e.g. `claudeSplit:165-169`). Schema: `schema-sql.ts:98-102`.
 - **Blocker (generic four):** **mapper**.
 - **Retention cost:** 0 additional bytes.
@@ -318,7 +318,7 @@ zero rows (not a coverage verdict).
   (`:656-659`).
 - **No mapper populates** `started_at` / `completed_at` — all set them to `undefined`
   (`mappers.ts:191-192` Claude, same in all six).
-- **Existing query:** `byTool` uses `tc.duration_ms` (`forensic-query.ts:173-176`) but it will be NULL
+- **Existing query:** `byTool` uses `tc.duration_ms` (`packages/domain/src/analytics/forensic-query.ts:173-176`) but it will be NULL
   for five of six sources.
 - **Blocker:** **mapper** for five sources (the JSONL may have the signal — OMP raw has
   `wallTimeMs`: 19 occurrences in sample, `duration`: 20 — but the mapper does not extract it).
@@ -331,14 +331,14 @@ zero rows (not a coverage verdict).
 - **Evidence:** All six mappers populate `input_tokens`, `output_tokens`, `cache_read_tokens`,
   `cache_write_tokens`, `cost_usd` (e.g. `claudeSplit:165-169`; Pi `:243-247`; OMP `:341`; Codex
   `:441`; AGY `:566`; Grok `:782`). `computeCost()` derives `cost_usd` where the upstream doesn't
-  provide it (`mappers.ts:1061-1071`). `messageRollup` aggregates these (`forensic-query.ts:132-148`).
+  provide it (`mappers.ts:1061-1071`). `messageRollup` aggregates these (`packages/domain/src/analytics/forensic-query.ts:132-148`).
 - **Blocker (generic four):** **mapper**.
 - **Retention cost:** 0 additional bytes.
 
 - **Evidence:** The methodology ranks bottlenecks by wall time + LLM round-trips (Step 8). Wall time
   requires `duration_ms` (primitive 6, mostly NULL). LLM round-trips can be counted from
   `history_message` rows with `role = 'assistant'`, but the wall-time side is NULL for five sources.
-- **Existing query:** `byTool` ranks by `durationMsTotal` (`forensic-query.ts:182`) — will produce
+- **Existing query:** `byTool` ranks by `durationMsTotal` (`packages/domain/src/analytics/forensic-query.ts:182`) — will produce
   NULL rankings for five sources. `loops` finds repeated `args_digest` (`:275-293`) — this works
   independent of latency.
 - **Blocker:** **mapper** (transitive — fix time-decomposition for full ranking; partial ranking via

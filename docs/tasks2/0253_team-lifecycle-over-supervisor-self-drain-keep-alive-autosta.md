@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:04.883Z"
-updated_at: "2026-07-14T06:30:39.837Z"
+updated_at: "2026-08-18T04:42:47.316Z"
 ---
 
 ## 0253. Team lifecycle over supervisor: self-drain keep-alive, autostart, and the no-auto-restart gap
@@ -97,13 +97,13 @@ message: queued → injected (drainPending) → [delivered (optional ack via mar
 
 **Requirements resolution:**
 - **R1 — Keep-alive owner:** the **supervisor** (`SupervisorService`, in-memory registry) owns member liveness for v1; the ts-infra scheduler is NOT used (reserved for a future timed cadence). One owner of process state avoids split-brain liveness.
-- **R2 — Autostart flow:** a shared `resolveAutostartSet(config)` yields members with effective autostart true across `agent.team.*`; called by serve-boot (augmenting the raw env read at `bootstrap.ts:44`) and by `team up`'s best-effort start (the 0252 handoff). Env unions/overrides; start order = config declaration order.
-- **R3 — Crash policy:** replace the current no-restart behaviour (`supervisor-service.ts:177` — records exit, drops after 60s) with restart-on-abnormal-exit: exponential backoff capped at 30s, max 5 consecutive failures in a rolling window → stop, mark `errored`. Normal loop iterations are NOT crashes (the loop lives inside one process).
+- **R2 — Autostart flow:** a shared `resolveAutostartSet(config)` yields members with effective autostart true across `agent.team.*`; called by serve-boot (augmenting the raw env read at `apps/server/src/bootstrap.ts:44`) and by `team up`'s best-effort start (the 0252 handoff). Env unions/overrides; start order = config declaration order.
+- **R3 — Crash policy:** replace the current no-restart behaviour (`packages/app/src/services/supervisor-service.ts:177` — records exit, drops after 60s) with restart-on-abnormal-exit: exponential backoff capped at 30s, max 5 consecutive failures in a rolling window → stop, mark `errored`. Normal loop iterations are NOT crashes (the loop lives inside one process).
 - **R4 — Drain cadence:** the loop idle-sleeps when `countPending()==0` (short configurable poll) and re-iterates immediately after a non-empty drain. No central tick.
-- **R5 — Graceful stop:** reuse `SupervisorService.stop` (SIGTERM → 3s → SIGKILL, `supervisor-service.ts:193`) per member; `stopAll` on shutdown; `team down` delegates here.
+- **R5 — Graceful stop:** reuse `SupervisorService.stop` (SIGTERM → 3s → SIGKILL, `packages/app/src/services/supervisor-service.ts:193`) per member; `stopAll` on shutdown; `team down` delegates here.
 
 **Key correctness fix (grounded, not averaged): drain must consume.**
-`agent run --drain` currently reads via the NON-consuming `getInbox`/`inbox()` (`agent.ts:303` → `dao.inbox`), so a loop would re-prepend the same messages every iteration. The DAO already ships the idempotent primitive — **`InboxMessageDao.drainPending(toId)`** atomically transitions `queued → injected` and returns the batch (ts-db `inbox-message-dao.ts:121`). The loop wrapper's `--drain` MUST call `drainPending`, not `inbox()`. `markDelivered` (`:156`) stays available for an optional agent-ack step.
+`agent run --drain` currently reads via the NON-consuming `getInbox`/`inbox()` (`apps/cli/src/commands/agent.ts:303` → `dao.inbox`), so a loop would re-prepend the same messages every iteration. The DAO already ships the idempotent primitive — **`InboxMessageDao.drainPending(toId)`** atomically transitions `queued → injected` and returns the batch (ts-db `inbox-message-dao.ts:121`). The loop wrapper's `--drain` MUST call `drainPending`, not `inbox()`. `markDelivered` (`:156`) stays available for an optional agent-ack step.
 
 **Grounding (verified from source 2026-07-14):**
 - `packages/app/src/services/supervisor-service.ts:65` — `defaultWrapperArgv` (the single-shot wrapper to convert to a loop).
@@ -119,17 +119,17 @@ message: queued → injected (drainPending) → [delivered (optional ack via mar
 ### Testing
 **N/A** — decision ticket, no code. Verification = citation accuracy + a confidence rating.
 
-**Citation check (verified from source, 2026-07-14):** `inbox-message-dao.ts:121/156/198` (`drainPending`/`markDelivered`/`countPending`), `agent.ts:303` (non-consuming `getInbox`), `supervisor-service.ts:65/177/193` (`defaultWrapperArgv` / no-restart exit / `stop`), `bootstrap.ts:44` (`SPUR_TEAM_AUTOSTART`), `agent-service.ts:295-351` (`--continue` = resume, single-shot). All confirmed.
+**Citation check (verified from source, 2026-07-14):** `inbox-message-dao.ts:121/156/198` (`drainPending`/`markDelivered`/`countPending`), `apps/cli/src/commands/agent.ts:303` (non-consuming `getInbox`), `supervisor-service.ts:65/177/193` (`defaultWrapperArgv` / no-restart exit / `stop`), `apps/server/src/bootstrap.ts:44` (`SPUR_TEAM_AUTOSTART`), `packages/app/src/services/agent-service.ts:295-351` (`--continue` = resume, single-shot). All confirmed.
 
 **Confidence:**
 
 | Claim / decision | Level | Basis |
 |---|---|---|
-| `--drain` uses non-consuming `getInbox`; `drainPending` is the idempotent primitive | HIGH | `agent.ts:303` + `inbox-message-dao.ts:121` |
-| Supervisor has no restart (records exit, drops after 60s) | HIGH | `supervisor-service.ts:177` |
-| `stop` = SIGTERM→3s→SIGKILL, reusable for graceful stop | HIGH | `supervisor-service.ts:193` |
-| `--continue` is resume (single-shot), not a loop | HIGH | `agent-service.ts:295-351` |
-| Autostart via `SPUR_TEAM_AUTOSTART` env at boot | HIGH | `bootstrap.ts:44` |
+| `--drain` uses non-consuming `getInbox`; `drainPending` is the idempotent primitive | HIGH | `apps/cli/src/commands/agent.ts:303` + `inbox-message-dao.ts:121` |
+| Supervisor has no restart (records exit, drops after 60s) | HIGH | `packages/app/src/services/supervisor-service.ts:177` |
+| `stop` = SIGTERM→3s→SIGKILL, reusable for graceful stop | HIGH | `packages/app/src/services/supervisor-service.ts:193` |
+| `--continue` is resume (single-shot), not a loop | HIGH | `packages/app/src/services/agent-service.ts:295-351` |
+| Autostart via `SPUR_TEAM_AUTOSTART` env at boot | HIGH | `apps/server/src/bootstrap.ts:44` |
 | Loop-wrapper + restart-on-crash design | MEDIUM | sound; unproven until built + dogfooded (esp. attach-during-respawn) |
 | Backoff/max-retries constants (30s cap, 5 retries) | MEDIUM | reasonable defaults; tune under load |
 | Idle poll interval | LOW | placeholder; pick empirically |

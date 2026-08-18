@@ -13,7 +13,7 @@ tags: ["corpus", "gate"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-17T22:18:51.142Z"
-updated_at: "2026-08-18T00:26:43.946Z"
+updated_at: "2026-08-18T04:49:57.962Z"
 ---
 
 ## 0582. Corpus ratchet: sweep every configured task folder and ratchet warning severity
@@ -153,11 +153,11 @@ introduce a parallel baseline.
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | MET | `packages/app/src/services/corpus-check.ts:183-190` — `for (const tasksDir of taskDirs)` replaces the active-folder-only loop; scope comment at `:175-182` names ADR-062. Live gate this run: `errors 406 observed, 365 baselined, 0 new, 0 stale`, covering all four folders. Regression test added this run: `packages/app/tests/services/corpus-check.test.ts` "sweeps every configured task folder, not only the active one" — an error in an inactive `docs/tasks2` is observed and fails the gate |
-| R2 | MET | `key()` at `packages/app/src/services/corpus-check.ts:108`; `reconcileBaseline` two-sided at `:598-606`. Error baseline is 365 entries over 365 unique keys — no over-coverage on the error side |
+| R2 | MET | `key()` at `packages/app/src/services/corpus-check.ts:102-110`; `reconcileBaseline` two-sided at `:598-606`. Error baseline is 365 entries over 365 unique keys — no over-coverage on the error side |
 | R3 | MET | `CorpusSeverity` (`packages/app/src/services/corpus-check.ts:39`); sweep captures every severity (`:191-197`); severity is part of the acceptance contract at `:598` (`accepted.get(key(e)) !== e.severity`). Tests green this run: "ratchets a warning outside the baseline as a new warning failure", "a baselined warning that stops reproducing fails as stale" |
-| R4 | MET | `BaselineEntry.severity` (`packages/app/src/services/corpus-check.ts:50`), `CorpusError.severity` (`:65`), separate `newErrors`/`newWarnings` (`:84-85`), `bySeverity` (`:87-95`). CLI prints `[error]` / `[warning]` tags per finding (`apps/cli/src/commands/task.ts:1017`, `:1022`). Test: "severity is part of the acceptance contract: a baselined warning does not cover an error" |
+| R4 | MET | `BaselineEntry.severity` (`packages/app/src/services/corpus-check.ts:41-53`), `CorpusError.severity` (`:65`), separate `newErrors`/`newWarnings` (`:84-85`), `bySeverity` (`:87-95`). CLI prints `[error]` / `[warning]` tags per finding (`apps/cli/src/commands/task.ts:1078`, `:1022`). Test: "severity is part of the acceptance contract: a baselined warning does not cover an error" |
 | R5 | MET | Reconciled and green, after a repair. The first generated warning baseline held **2,541 entries covering only 903 unique keys** — 1,638 redundant rows across 357 keys (worst: `task:0412:L4.uncovered-task-scenario` ×33), generated per-observed-finding rather than per key; see the P2 finding. Deduped to one row per key and installed this run. Live gate: `errors 406 observed, 365 baselined, 0 new, 0 stale; warnings 2540 observed, 903 baselined, 0 new, 0 stale`; baseline is 1,268 entries over 1,268 unique keys |
-| R6 | MET | `apps/cli/src/commands/task.ts:1010-1013` prints `errors <n> observed, <n> baselined, <n> new, <n> stale; warnings <n> …`. Live output this run carries both severity lines. It is what exposed R5: `warnings 2540 observed, 2541 baselined … 0 stale` is internally inconsistent on its face |
+| R6 | MET | `apps/cli/src/commands/task.ts:1071-1076` prints `errors <n> observed, <n> baselined, <n> new, <n> stale; warnings <n> …`. Live output this run carries both severity lines. It is what exposed R5: `warnings 2540 observed, 2541 baselined … 0 stale` is internally inconsistent on its face |
 
 **Acceptance Criteria Verification**
 
@@ -170,7 +170,7 @@ introduce a parallel baseline.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P2 | C | `config/corpus-baseline.json` | **Duplicate baseline keys defeat the two-sided ratchet.** Reconciliation is key-addressed (`accepted` and `observedKeys` are Maps), so a second entry for a key is unreachable — it can never be matched or reported stale independently. A task emitting 33 findings for one key that later emits 1 still reconciles clean. The ratchet could therefore detect only total disappearance, never a partial reduction — the suppression-list rot ADR-050/ADR-062 exist to prevent, reintroduced on the warning side. It also violates the baseline `note`'s own contract ("every entry needs a real diagnosis"): 33 identical rows are not 33 diagnoses. **Fixed this run** — `duplicateBaselineKeys` (`packages/app/src/services/corpus-check.ts:587-595`) fails the gate and names each offending key; `CorpusCheckResult.duplicateKeys` carries it; CLI prints a `DUP` line per key (`apps/cli/src/commands/task.ts:1030-1035`) |
+| P2 | C | `config/corpus-baseline.json` | **Duplicate baseline keys defeat the two-sided ratchet.** Reconciliation is key-addressed (`accepted` and `observedKeys` are Maps), so a second entry for a key is unreachable — it can never be matched or reported stale independently. A task emitting 33 findings for one key that later emits 1 still reconciles clean. The ratchet could therefore detect only total disappearance, never a partial reduction — the suppression-list rot ADR-050/ADR-062 exist to prevent, reintroduced on the warning side. It also violates the baseline `note`'s own contract ("every entry needs a real diagnosis"): 33 identical rows are not 33 diagnoses. **Fixed this run** — `duplicateBaselineKeys` (`packages/app/src/services/corpus-check.ts:587-595`) fails the gate and names each offending key; `CorpusCheckResult.duplicateKeys` carries it; CLI prints a `DUP` line per key (`apps/cli/src/commands/task.ts:1093-1098`) |
 | P3 | C | `packages/app/tests/services/corpus-check.test.ts` | R1's widened sweep had **no regression test** — it was evidenced only by the live corpus run, so a re-narrowing of the loop would not have failed any test. **Fixed this run** with the inactive-folder test |
 | P4 | U | `config/corpus-baseline.json` | `task:0583:L4.prerequisite-not-done` ×2 is baselined, but that warning is transient by construction — it disappears the moment 0582/0584 reach `done`, at which point the entries go stale and fail the gate. Baselining a warning designed to vanish schedules a future failure. Advisory: drop it rather than carry it |
 

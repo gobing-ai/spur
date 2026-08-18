@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-08T05:17:31.225Z"
-updated_at: "2026-08-08T07:08:19.494Z"
+updated_at: "2026-08-18T04:42:48.582Z"
 ---
 
 ## 0481. 0475-verify retrospective: worktree deps install, worktree-local spur CLI, merge commit-type contract, lifecycle transition chain, merge side-effect hygiene
@@ -311,10 +311,10 @@ Updated four plugin reference/skill files and one root config file to address al
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `execution-batch.md:394-400`, `worktree-patterns.md:30,35` — `bun install --frozen-lockfile`. **Empirical:** probe worktree `bun test task-check.test.ts` 0 pass / 1 error pre-install → **103 pass / 0 fail** after `bun install --frozen-lockfile` |
-| R2 | MET | `execution-batch.md:407-421`, `worktree-patterns.md:90-100` — "`spur` on PATH is not this checkout" section: published-bundle trap + `resolveSpurBin()` → `vars.spurBin` → `$spurBin task check` propagation + prescribes `bun apps/cli/src/index.ts` |
-| R3 | MET | `SKILL.md:73`, `branch-lifecycle.md:52` — `git merge --no-ff <branch> -m "chore(<scope>): merge ..."`; both files (:77/:58) document `cog verify` rejection. **Empirical:** `cog verify` exit 0 on `chore(x):`, exit 1 on `merge(0475):` and on `Merge branch 'x' into main` |
-| R4 | MET | `gate-checklists.md:24-35` — "## Task lifecycle transitions" block: `backlog → todo → wip → testing → done`, `wip → done` marked not-an-edge, cites SSOT `config/workflows/task-lifecycle.yaml`, links to done-gate section |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:394-400`, `worktree-patterns.md:30,35` — `bun install --frozen-lockfile`. **Empirical:** probe worktree `bun test task-check.test.ts` 0 pass / 1 error pre-install → **103 pass / 0 fail** after `bun install --frozen-lockfile` |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:407-421`, `plugins/sp/skills/branch-workflow/references/worktree-patterns.md:90-100` — "`spur` on PATH is not this checkout" section: published-bundle trap + `resolveSpurBin()` → `vars.spurBin` → `$spurBin task check` propagation + prescribes `bun apps/cli/src/index.ts` |
+| R3 | MET | `SKILL.md:73`, `plugins/sp/skills/branch-workflow/references/branch-lifecycle.md:52` — `git merge --no-ff <branch> -m "chore(<scope>): merge ..."`; both files (:77/:58) document `cog verify` rejection. **Empirical:** `cog verify` exit 0 on `chore(x):`, exit 1 on `merge(0475):` and on `Merge branch 'x' into main` |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/gate-checklists.md:24-35` — "## Task lifecycle transitions" block: `backlog → todo → wip → testing → done`, `wip → done` marked not-an-edge, cites SSOT `config/workflows/task-lifecycle.yaml`, links to done-gate section |
 | R5 | MET | `.lefthook.yml:11-12` — `bunx biome check --staged --write --no-errors-on-unmatched` + `stage_fixed: true`. **Empirical:** staged probe reformatted, unstaged drift probe md5-unchanged, exit 0 |
 
 **Acceptance Criteria Verification**

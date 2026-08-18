@@ -12,7 +12,7 @@ priority: P2
 tags: ["web", "features", "a11y", "prefactor"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.914Z"
-updated_at: "2026-07-28T00:33:28.930Z"
+updated_at: "2026-08-18T04:42:47.917Z"
 ---
 
 ## 0332. Features tree: make the status icon self-describing and vocabulary-linked
@@ -142,19 +142,19 @@ R1 explicitly allows the re-export, so prefer it.
 - `apps/web/src/modules/features/status-icons.tsx:7` — local `FEATURE_STATUSES` declaration deleted;
   re-exported from `@gobing-ai/spur-domain/schema` (sole definition site, ADR-034). R1. R2 honored:
   the domain's emoji `FEATURE_STATUS_ICONS` is not imported; SVG remains the Board's encoding.
-- `status-icons.tsx:13` — `StatusMeta.Icon` signature gains optional `ariaLabel?: string`.
-- `status-icons.tsx:25-130` — all six `FEATURE_STATUS_MAP` entries: `aria-hidden="true"` removed,
+- `apps/web/src/modules/features/status-icons.tsx:13` — `StatusMeta.Icon` signature gains optional `ariaLabel?: string`.
+- `apps/web/src/modules/features/status-icons.tsx:25-130` — all six `FEATURE_STATUS_MAP` entries: `aria-hidden="true"` removed,
   `role="img"` + `aria-label={ariaLabel}` added to the `<svg>`. Glyph paths, colors, sizes untouched
   (zero visual change). R3/R5.
-- `status-icons.tsx:146` — `FeatureStatusIcon` passes `ariaLabel={meta.label}`, so the accessible
+- `apps/web/src/modules/features/status-icons.tsx:146` — `FeatureStatusIcon` passes `ariaLabel={meta.label}`, so the accessible
   name is the map's capitalized label, not the raw status. R3/R6.
-- `status-icons.tsx:149-157` — unknown-status fallback `<svg>` gets `role="img"` +
+- `apps/web/src/modules/features/status-icons.tsx:149-157` — unknown-status fallback `<svg>` gets `role="img"` +
   ``aria-label={`Unknown status: ${status}`}`` — non-empty for any input, never throws. R4.
 - `apps/web/tests/modules/features/components.test.tsx` — new `FeatureStatusIcon` describe block
   (4 tests): domain re-export identity (`toBe` reference equality), per-status accessible names for
   all six canonical statuses, label-vs-raw-string assertion, unknown-status fallback.
 
-**Rationale.** Re-export (not consumer-edit) keeps `FeaturesShell.tsx:9` untouched — R1 explicitly
+**Rationale.** Re-export (not consumer-edit) keeps `apps/web/src/modules/features/FeaturesShell.tsx:9` untouched — R1 explicitly
 allows it and it is the surgical option. Accessible name is carried on the SVG itself in markup,
 independent of the Badge's `title` tooltip channel (ADR-034 (3)).
 ### Testing
@@ -165,10 +165,10 @@ line anchors re-read at cited lines).
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:7` — `export { FEATURE_STATUSES } from '@gobing-ai/spur-domain/schema'`; local declaration deleted; `apps/web/tests/modules/features/components.test.tsx:198` — `expect(FEATURE_STATUSES).toBe(DOMAIN_FEATURE_STATUSES)` reference identity; precedent `task-kanban/KanbanBoard.tsx:2` confirmed |
+| R1 | MET | `apps/web/src/modules/features/status-icons.tsx:7` — `export { FEATURE_STATUSES } from '@gobing-ai/spur-domain/schema'`; local declaration deleted; `apps/web/tests/modules/features/components.test.tsx:198` — `expect(FEATURE_STATUSES).toBe(DOMAIN_FEATURE_STATUSES)` reference identity; precedent `apps/web/src/modules/task-kanban/KanbanBoard.tsx:2` confirmed |
 | R2 | MET | `FEATURE_STATUS_ICONS` not imported anywhere in `status-icons.tsx` (grep: references only in `packages/domain/src/planning/schema.ts`); SVG remains the Board encoding |
-| R3 | MET | All six `FEATURE_STATUS_MAP` entries carry `role="img"` + `aria-label={ariaLabel}`, zero `aria-hidden` (re-read `status-icons.tsx:27-134`); `status-icons.tsx:146` passes `ariaLabel={meta.label}`; test asserts `aria-hidden` is null |
-| R4 | MET | `status-icons.tsx:149-157` — fallback `aria-label={`Unknown status: ${status}`}` (prefix guarantees non-empty for any input); test renders `frobnicate` without throw, exactly one svg |
+| R3 | MET | All six `FEATURE_STATUS_MAP` entries carry `role="img"` + `aria-label={ariaLabel}`, zero `aria-hidden` (re-read `apps/web/src/modules/features/status-icons.tsx:27-134`); `apps/web/src/modules/features/status-icons.tsx:146` passes `ariaLabel={meta.label}`; test asserts `aria-hidden` is null |
+| R4 | MET | `apps/web/src/modules/features/status-icons.tsx:149-157` — fallback `aria-label={`Unknown status: ${status}`}` (prefix guarantees non-empty for any input); test renders `frobnicate` without throw, exactly one svg |
 | R5 | MET | Accessible name is an `aria-label` attribute on the `<svg>` element itself — in markup, no tooltip channel involved; test comment + assertions `components.test.tsx:224-226` |
 | R6 | MET | `components.test.tsx:205-227` — all six canonical capitalized labels asserted via `role="img"` + `aria-label`; existing `FeatureTree` tests unchanged and green |
 

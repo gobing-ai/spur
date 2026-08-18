@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "docs", "refactor"]
 dependencies: ["0391"]
 created_at: "2026-07-30T21:52:24.882Z"
-updated_at: "2026-07-31T03:34:12.535Z"
+updated_at: "2026-08-18T04:42:48.267Z"
 done_forced: "true"
 done_reason: "Sweep complete (19 files, 66 edits); grep AC R7 clean; lint clean; 427/427 plugin tests pass. omp implement timed out; work complete."
 ---
@@ -96,7 +96,7 @@ Files edited (orchestration → super-planner):
 - `plugins/sp/skills/spur-dev/references/execution-batch.md` (9) — all orchestration (batch-driver SSOT)
 - `plugins/sp/skills/spur-dev/references/dev-operations.md` (6) — all orchestration
 - `plugins/sp/skills/spur-dev/references/glossary.md:25` — batch orchestrator agent
-- `plugins/sp/skills/parallel-execution/SKILL.md` (6) + `references/fan-out-patterns.md:47`
+- `plugins/sp/skills/parallel-execution/SKILL.md` (6) + `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:47`
 - `plugins/sp/skills/next-router/references/routing-table.md:16` — TABLE A batch reader
 - `plugins/sp/scripts/batch-preflight.ts:2` — header comment
 - `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md` (4) + `docs/help/how_to_use_spur_for_daily_software_development.md` (3) — batch driver refs
@@ -104,7 +104,7 @@ Files edited (orchestration → super-planner):
 - `docs/design/e2e-workflow-for-system-development.md` (2)
 - `plugins/sp/agents/super-reviewer.md:150` — pipeline driving → super-planner (line 148 build ref KEPT)
 
-BUILD refs deliberately KEPT: `super-coder.md` (self), `super-planner.md` ("those are sp:super-coder (build)"), `super-reviewer.md:148` (implementing fixes), `docs/05_FEATURES.md:154` ("super-coder absorbs expert-dev" — ADR-028 build consolidation).
+BUILD refs deliberately KEPT: `super-coder.md` (self), `super-planner.md` ("those are sp:super-coder (build)"), `plugins/sp/agents/super-reviewer.md:148` (implementing fixes), `docs/05_FEATURES.md:154` ("super-coder absorbs expert-dev" — ADR-028 build consolidation).
 
 Historical records untouched (R3): `docs/tasks2/**`, `docs/tasks3/**`, `docs/plans/**`, `docs/features/**`, `CHANGELOG.md`.
 ### Testing

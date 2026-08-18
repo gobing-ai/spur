@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.418Z"
-updated_at: "2026-07-15T21:36:49.244Z"
+updated_at: "2026-08-18T04:42:47.389Z"
 ---
 
 ## 0261. Implement local echo + message-enqueue behavior for Terminal input (loop agents)
@@ -182,19 +182,19 @@ Invariants:
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 local echo `> ${line}` as meta frame | MET | `MemberTerminal.tsx:249-259` appends `stream:'meta'` frame; test asserts `data-stream=meta` text `> ls -la` at `MemberTerminal.test.tsx:477-480` |
-| R2 message enqueue for loop members | MET | `MemberTerminal.tsx:270-281` POST `messagesUrl()` body `{ from:'terminal', to:agentId, body:line }` matching server `POST /api/messages` (`messages/index.ts:48-62`); test `MemberTerminal.test.tsx:462-469` |
-| R3 echo immediate client-side | MET | Echo applied via `setFrames` before awaits (`MemberTerminal.tsx:249-259`); same test echo assertion |
-| R4 isRunning guard + retain on failure | MET | `onKeyDown` only when `isRunning` (`:297-301`); input `disabled={!isRunning}`; failure test retains text (`MemberTerminal.test.tsx:487-541`) |
+| R1 local echo `> ${line}` as meta frame | MET | `apps/web/src/modules/teams/MemberTerminal.tsx:249-259` appends `stream:'meta'` frame; test asserts `data-stream=meta` text `> ls -la` at `apps/web/tests/modules/teams/MemberTerminal.test.tsx:477-480` |
+| R2 message enqueue for loop members | MET | `apps/web/src/modules/teams/MemberTerminal.tsx:270-281` POST `messagesUrl()` body `{ from:'terminal', to:agentId, body:line }` matching server `POST /api/messages` (`messages/index.ts:48-62`); test `apps/web/tests/modules/teams/MemberTerminal.test.tsx:462-469` |
+| R3 echo immediate client-side | MET | Echo applied via `setFrames` before awaits (`apps/web/src/modules/teams/MemberTerminal.tsx:249-259`); same test echo assertion |
+| R4 isRunning guard + retain on failure | MET | `onKeyDown` only when `isRunning` (`:297-301`); input `disabled={!isRunning}`; failure test retains text (`apps/web/tests/modules/teams/MemberTerminal.test.tsx:487-541`) |
 | R5 no agent-loop change | MET | Diff scope is web client only (`MemberTerminal.tsx` + test); no `agent.ts` / loop edits |
-| R6 update terminal input tests | MET | `MemberTerminal.test.tsx:452-480` expects 2 POSTs (stdin + messages) + echo |
+| R6 update terminal input tests | MET | `apps/web/tests/modules/teams/MemberTerminal.test.tsx:452-480` expects 2 POSTs (stdin + messages) + echo |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario: R3 Terminal input produces visible local echo | MET | test | `MemberTerminal.test.tsx:477-480` — meta frame `> ls -la` in output |
-| Scenario: R3 + R2 line delivered as message for loop agents | MET | test | `MemberTerminal.test.tsx:452-469` — POST `/messages` with `{ from, to, body }`; server path already exists (`messages/index.ts:50-62`) |
+| Scenario: R3 Terminal input produces visible local echo | MET | test | `apps/web/tests/modules/teams/MemberTerminal.test.tsx:477-480` — meta frame `> ls -la` in output |
+| Scenario: R3 + R2 line delivered as message for loop agents | MET | test | `apps/web/tests/modules/teams/MemberTerminal.test.tsx:452-469` — POST `/messages` with `{ from, to, body }`; server path already exists (`messages/index.ts:50-62`) |
 
 **Design conformance:** 5/5 DONE (local meta echo; dual delivery stdin+messages; preserve writeStdin; always-enqueue v1; no backend change). R2 prose used `fromId`/`toId`; implementation + Solution correctly use server wire `{ from, to, body }` (CHANGED vs Requirements wording, aligned with `POST /api/messages`).
 

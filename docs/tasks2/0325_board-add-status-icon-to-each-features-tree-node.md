@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T23:40:30.512Z"
-updated_at: "2026-07-28T00:33:08.536Z"
+updated_at: "2026-08-18T04:42:47.819Z"
 ---
 
 ## 0325. Board: add status icon to each Features tree node
@@ -64,10 +64,10 @@ updated_at: "2026-07-28T00:33:08.536Z"
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 icon+color per status over canonical enum | MET | `FeatureTree.tsx:104-117` StatusBadge renders `FeatureStatusIcon` + label; `status-icons.tsx:14-126` maps all 6 canonical statuses; test "renders mapped status icons and accessible labels for all 6 canonical statuses" passed |
+| R1 icon+color per status over canonical enum | MET | `apps/web/src/modules/features/FeatureTree.tsx:104-117` StatusBadge renders `FeatureStatusIcon` + label; `apps/web/src/modules/features/status-icons.tsx:14-126` maps all 6 canonical statuses; test "renders mapped status icons and accessible labels for all 6 canonical statuses" passed |
 | R2 inline SVG co-located module, no new dependency | MET | `status-icons.tsx` — all icons inline SVG; `git diff --name-only 43842d22~1..HEAD` = exactly 3 files, no package.json |
-| R3 mapping table + design tokens | MET | `FEATURE_STATUS_MAP` (`status-icons.tsx:14`) — all 6 entries now use spur/daisy tokens; `verifying` uses `text-spur-warning` (`global.css:16`) after the fix pass |
-| R4 accessibility — not color-only | MET | `FeatureTree.tsx:110-111` `aria-label` + `title` = `Status: <status>`; visible status text retained (`:114`) |
+| R3 mapping table + design tokens | MET | `FEATURE_STATUS_MAP` (`apps/web/src/modules/features/status-icons.tsx:14`) — all 6 entries now use spur/daisy tokens; `verifying` uses `text-spur-warning` (`apps/web/src/styles/global.css:16`) after the fix pass |
+| R4 accessibility — not color-only | MET | `apps/web/src/modules/features/FeatureTree.tsx:110-111` `aria-label` + `title` = `Status: <status>`; visible status text retained (`:114`) |
 | R5 SSE re-render on status change | MET | StatusBadge is a pure function of `feature.status` from FeaturesShell state — no memoization blocks re-render; shell tests exercise the EventSource mock |
 | R6 done-when (node per status; lint/tests green) | MET | 8/8 tests pass incl. six-status render; biome clean; tsc exit 0 |
 
@@ -83,8 +83,8 @@ N/A — no approved `### Design` content (template stub); verified directly agai
 
 | Severity | File | Finding | Disposition |
 | --- | --- | --- | --- |
-| P4 | `apps/web/src/modules/features/status-icons.tsx:50` | `verifying` used raw `text-amber-500` despite `--color-spur-warning` token (`global.css:16`, same hex) | FIXED — now `text-spur-warning` (re-verified: 8/8 tests, biome, tsc) |
-| P4 | `apps/web/src/modules/features/status-icons.tsx:6` | `StatusMeta.colorClass` declared per entry but never consumed — Icon closures hardcoded the same class | FIXED — Icon closures no longer hardcode color; `FeatureStatusIcon` composes `meta.colorClass` (`status-icons.tsx:129-135`), mapping table is the single source of truth |
+| P4 | `apps/web/src/modules/features/status-icons.tsx:50` | `verifying` used raw `text-amber-500` despite `--color-spur-warning` token (`apps/web/src/styles/global.css:16`, same hex) | FIXED — now `text-spur-warning` (re-verified: 8/8 tests, biome, tsc) |
+| P4 | `apps/web/src/modules/features/status-icons.tsx:6` | `StatusMeta.colorClass` declared per entry but never consumed — Icon closures hardcoded the same class | FIXED — Icon closures no longer hardcode color; `FeatureStatusIcon` composes `meta.colorClass` (`apps/web/src/modules/features/status-icons.tsx:129-135`), mapping table is the single source of truth |
 
 Residual risk: none.
 
@@ -94,8 +94,8 @@ Residual risk: none.
 - `bunx biome check` on the changed files — clean
 - `cd apps/web && bunx tsc --noEmit` — exit 0
 - Coverage: N/A for the per-file gate — React `.tsx` excluded (happy-dom); component test at `apps/web/tests/modules/features/components.test.tsx`
-- Line-anchor rule: `FeatureTree.tsx:104-117` and `status-icons.tsx:14-126` re-read this run; cited lines name the requirement subjects
-- Fix-pass disclosure: the fix pass touched `apps/web/src/modules/features/status-icons.tsx:50-53` (token swap) and `status-icons.tsx:19-145` (color-class composition); untracked artifact updated at `.spur/run/0325-verdict.json`
+- Line-anchor rule: `apps/web/src/modules/features/FeatureTree.tsx:104-117` and `apps/web/src/modules/features/status-icons.tsx:14-126` re-read this run; cited lines name the requirement subjects
+- Fix-pass disclosure: the fix pass touched `apps/web/src/modules/features/status-icons.tsx:50-53` (token swap) and `apps/web/src/modules/features/status-icons.tsx:19-145` (color-class composition); untracked artifact updated at `.spur/run/0325-verdict.json`
 - Browser check: not re-run by this audit — deterministic happy-dom render of all six statuses stands in; golden-path browser confirmation optional
 - Verdict artifact: `.spur/run/0325-verdict.json` (written last, standalone path)
 ### Review

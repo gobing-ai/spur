@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:15.298Z"
-updated_at: "2026-08-15T21:47:58.998Z"
+updated_at: "2026-08-18T04:42:48.759Z"
 done_forced: "true"
 done_reason: Verified with PASS verdict in .spur/run/0562-verdict.json; full test suite 5290 pass / 0 fail
 ---
@@ -184,7 +184,7 @@ at the cited lines.
 | --- | --- | --- | --- |
 | P4 | Correctness | `packages/domain/tests/dao/migrations.test.ts:74` | `Number.isNaN(prefix)` is unreachable given the `/^\d{4}/` guard in the same condition — a redundant clause, not a defect. No fix applied (behaviour-neutral churn on a closed task). |
 | P4 | Correctness | `packages/domain/tests/dao/migrations.test.ts:68-70` | `if (!item) continue;` silently skips a falsy element rather than failing. Unreachable for the dense `CLI_MIGRATIONS` literal; present only to satisfy `noUncheckedIndexedAccess`. Advisory. |
-| P4 | Usability | task `Requirements` / `Design` / `Solution` / `References` / `Acceptance Criteria` | **Stale citations — corrected this run** via `spur task update --section`. `migrations.ts:288-322` → `:314-352` (`CLI_MIGRATIONS`); `:326-345` → `:358-427` (`applyCliMigrations`); colliding ids `:317`/`:321` → `:343`/`:347`; `migrations.test.ts:90` → `:94`; AC parenthetical "(0000 through 0013)" → "(0000 through 0014, 15 entries)". These correct *citations* only — no requirement, scenario, or assertion was reworded, weakened, or added. All corrected anchors were re-read at their new lines. |
+| P4 | Usability | task `Requirements` / `Design` / `Solution` / `References` / `Acceptance Criteria` | **Stale citations — corrected this run** via `spur task update --section`. `packages/domain/src/migrations.ts:288-322` → `:314-352` (`CLI_MIGRATIONS`); `:326-345` → `:358-427` (`applyCliMigrations`); colliding ids `:317`/`:321` → `:343`/`:347`; `packages/domain/tests/dao/migrations.test.ts:90` → `:94`; AC parenthetical "(0000 through 0013)" → "(0000 through 0014, 15 entries)". These correct *citations* only — no requirement, scenario, or assertion was reworded, weakened, or added. All corrected anchors were re-read at their new lines. |
 
 **Design conformance:** 6/6 frozen-rule claims DONE (prefix parse `:73-76`, duplicate assert naming
 both ids `:78-82`, strict-ascent assert naming the offending position `:84-89`, contiguity

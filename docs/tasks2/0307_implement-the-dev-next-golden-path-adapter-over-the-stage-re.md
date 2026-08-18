@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-2", "dev-next", "golden-path", "feature-O"]
 dependencies: ["0283"]
 created_at: "2026-07-20T03:32:22.462Z"
-updated_at: "2026-07-28T00:32:57.334Z"
+updated_at: "2026-08-18T04:42:47.712Z"
 ---
 
 ## 0307. Implement the dev-next golden-path adapter over the stage registry
@@ -112,7 +112,7 @@ The stage-registry adapter delivers the dev-next golden-path bridge over the can
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 (status-aware facade: readiness/blockers, one stage, full report) | MET | `stage-registry-adapter.ts:843-865` (resolveStage), `:867-985` (resolveTask TABLE A), `:987-1067` (resolveFeature TABLE B); A2 unmet-dep stop `:522-533`; 81 tests pass |
+| R1 (status-aware facade: readiness/blockers, one stage, full report) | MET | `plugins/sp/scripts/stage-registry-adapter.ts:843-865` (resolveStage), `:867-985` (resolveTask TABLE A), `:987-1067` (resolveFeature TABLE B); A2 unmet-dep stop `:522-533`; 81 tests pass |
 | R2 (invariants: one-dispatch, HITL stop, child `--next`, overrides, non-routes) | MET | flag forwarding `:878-892` (`--once` strips `--next`, `--full` override); stop rows A2/A7/A8/A9 + B1/B2/B8; tests `:216-237` (`--once`/`--full`), `:127-205` (stops) |
 | R3 (thin adapters, no parallel router) | MET | adapter is pure (no fs/spawn/exec); `dev-next.md` wraps `sp:next-router`; STAGE_BY_DISPATCH_PREFIX `:897-906` maps to existing commands |
 | R4 (discoverability, help, error, dry-run, no internals) | MET | `renderHelp():1069`, `parseCliArgs():1121`, CLI error/no-route `:1205`; tests `:398-431` (help/error/unknown) |
@@ -121,7 +121,7 @@ The stage-registry adapter delivers the dev-next golden-path bridge over the can
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| R4: facade selects ≤1 stage, reports state/stage/reason/blocker/outcome; dep stop | MET | test | `stage-registry-adapter.test.ts:127-205` (A2 stop + unmet deps), `:740-759` (formatStageResult renders all fields) |
+| R4: facade selects ≤1 stage, reports state/stage/reason/blocker/outcome; dep stop | MET | test | `plugins/sp/tests/stage-registry-adapter.test.ts:127-205` (A2 stop + unmet deps), `:740-759` (formatStageResult renders all fields) |
 | Workflow removal evidence-backed: one dispatch; `--once`/`--full`; HITL stop; thin adapters | MET | test | `:216-237` (flag forwarding), `:307-325` (B1/B2/B8 stops), adapter purity grep (no fs/spawn) |
 | R9: discoverable help/error/no-route without internals | MET | test | `:398-431` (renderHelp, CLI no-args error, --help, unknown-status no-route) |
 

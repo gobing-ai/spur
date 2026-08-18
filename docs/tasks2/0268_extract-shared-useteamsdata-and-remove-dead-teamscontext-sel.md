@@ -12,7 +12,7 @@ priority: P2
 tags: ["teams", "cleanup"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.145Z"
-updated_at: "2026-07-16T06:41:07.000Z"
+updated_at: "2026-08-18T04:42:47.473Z"
 ---
 
 ## 0268. Extract shared useTeamsData and remove dead TeamsContext selection
@@ -71,7 +71,7 @@ Scenario: Terminal still loads teams after hook extraction
 **Requirement traceability:**
 
 - **R1** (hook with poll): ✅ — `fetchWithTimeout` wraps AbortController internally; `mountedRef` guards unmount. Functionally equivalent to AbortController, matches existing rpc-client pattern.
-- **R2** (TerminalTab + bulk controls consume hook): ✅ — both `TerminalTab.tsx:72` and `TeamControlStrip.tsx` call `useTeamsData()`.
+- **R2** (TerminalTab + bulk controls consume hook): ✅ — both `apps/web/src/modules/teams/TerminalTab.tsx:72` and `TeamControlStrip.tsx` call `useTeamsData()`.
 - **R3** (remove dead TeamsContext selection): ✅ — provider dropped from shell entirely.
 - **R4** (no Messages behavior change): ✅ — MessagesTab reads global `GET /api/messages` feed, unaffected.
 - **R5** (no Roster references, tests green): ✅ — `rg "Roster"` in teams module returns only historical comments; 2902 tests pass.
@@ -81,7 +81,7 @@ Scenario: Terminal still loads teams after hook extraction
 **Commands run (this verify — fresh evidence):**
 - `rg selectedTeamId|selectedMemberId|TeamsProvider|TeamsContext` under `apps/web/src` — **no production consumers** (historical comments only).
 - `TeamsContext.tsx` — **deleted** (`test ! -f` OK).
-- Consumers: `TerminalTab.tsx:73`, `TeamControlStrip.tsx:18` call `useTeamsData()`.
+- Consumers: `apps/web/src/modules/teams/TerminalTab.tsx:73`, `TeamControlStrip.tsx:18` call `useTeamsData()`.
 - `bun test apps/web/tests/modules/teams/useTeamsData.test.ts apps/web/tests/modules/teams/components.test.tsx apps/web/tests/modules/teams/tabs.test.ts` — **56 pass, 0 fail**, 250 expect().
 - `useTeamsData.ts` coverage (scoped): **100% lines / 100% functions**.
 - `spur task check 0268 --strict-core` — **pass** (warn: edge AC not in M2 feature AC subset, DD-09).
@@ -92,8 +92,8 @@ Scenario: Terminal still loads teams after hook extraction
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 useTeamsData poll + AbortController | MET | `useTeamsData.ts:62-95` — 5s poll (`TEAMS_POLL_MS=5000`), `reload`; AbortController via `fetchWithTimeout` (`rpc-client.ts:44-55`); unit tests green |
-| R2 TerminalTab + bulk controls consume hook | MET | `TerminalTab.tsx:73`; `TeamControlStrip.tsx:18` |
+| R1 useTeamsData poll + AbortController | MET | `useTeamsData.ts:62-95` — 5s poll (`TEAMS_POLL_MS=5000`), `reload`; AbortController via `fetchWithTimeout` (`apps/web/src/lib/rpc-client.ts:44-55`); unit tests green |
+| R2 TerminalTab + bulk controls consume hook | MET | `apps/web/src/modules/teams/TerminalTab.tsx:73`; `TeamControlStrip.tsx:18` |
 | R3 Remove dead TeamsContext selection | MET | file deleted; shell has no TeamsProvider; zero selectedTeamId/selectedMemberId in production UI |
 | R4 No Terminal/Messages regression | MET | Terminal dropdown tests; Messages unfiltered feed independent of context |
 | R5 Tests; no Roster references | MET | 12 hook unit tests + component suite; Roster only historical comments |

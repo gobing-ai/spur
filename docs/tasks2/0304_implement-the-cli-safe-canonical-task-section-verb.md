@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-1", "cli", "sections", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.288Z"
-updated_at: "2026-07-28T00:32:39.621Z"
+updated_at: "2026-08-18T04:42:47.667Z"
 ---
 
 ## 0304. Implement the CLI-safe canonical task-section verb
@@ -151,22 +151,22 @@ environment and has been corrected to observed numbers.
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 — validated CLI path to init/add canonical sections, no direct file edits | MET | `apps/cli/src/commands/task.ts:425-499`; `packages/app/src/services/task-service.ts:695-846`. Live probe on a minimal fixture: `sections 0001 init --json` → exit 0, `added: ["Acceptance Criteria","Design","Plan"]`, guidance comments written. |
-| R2 — enforce section matrix + task-write guard; reject unknown/out-of-order | MET | Unknown/forbidden rejection `task-service.ts:770-778`; all writes route through `writeService.updateSection` (`task-service.ts:791,827`), inheriting phantom-section guards + atomic writes. Ordering enforced by construction via `CANONICAL_INDEX` (`task-skeleton.ts:108`) — probe emitted Background → Acceptance Criteria → Design → Plan in canonical order, not append order. |
-| R3 — JSON schema, runtime, help text share SSOT so it cannot drift | MET | `sectionNameSchema = z.enum(TASK_CANONICAL_SECTIONS)` (`task-skeleton.ts:25`) feeds `matrixEntrySchema`. **Drift experiment executed this run:** renamed `'Root Cause'` → `'Root Causes'` in `markdown-document.ts:40`; `bun run typecheck` failed TS2353 in 4 workspaces (domain, spur, app, server); reverted and lint re-confirmed green. Help text now interpolates `UNIVERSAL_SECTIONS` (`task.ts:440`) rather than hardcoding the names — the last prose-drift vector is closed. |
+| R2 — enforce section matrix + task-write guard; reject unknown/out-of-order | MET | Unknown/forbidden rejection `packages/app/src/services/task-service.ts:770-778`; all writes route through `writeService.updateSection` (`task-service.ts:791,827`), inheriting phantom-section guards + atomic writes. Ordering enforced by construction via `CANONICAL_INDEX` (`packages/domain/src/planning/task-skeleton.ts:108`) — probe emitted Background → Acceptance Criteria → Design → Plan in canonical order, not append order. |
+| R3 — JSON schema, runtime, help text share SSOT so it cannot drift | MET | `sectionNameSchema = z.enum(TASK_CANONICAL_SECTIONS)` (`packages/domain/src/planning/task-skeleton.ts:25`) feeds `matrixEntrySchema`. **Drift experiment executed this run:** renamed `'Root Cause'` → `'Root Causes'` in `packages/domain/src/planning/markdown-document.ts:40`; `bun run typecheck` failed TS2353 in 4 workspaces (domain, spur, app, server); reverted and lint re-confirmed green. Help text now interpolates `UNIVERSAL_SECTIONS` (`task.ts:440`) rather than hardcoding the names — the last prose-drift vector is closed. |
 | R4 — acceptance tests + record feature O sequencing | MET | 16 CLI tests `apps/cli/tests/commands/task.test.ts:842-1102` + 2 service tests `packages/app/tests/services/task-service.test.ts:1043-1127`, all passing. Feature O sequencing recorded in `### References` + `### Background`. |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| `list --json` → exit 0, `op:"list"`, matrix/present/missing | MET | test | `task.test.ts:844`; live probe returned all five keys |
-| `init` adds every missing required section, `added` lists them | MET | test | `task.test.ts:899-955` — **added by this verify pass**; previously UNMET (no test exercised the positive path) |
-| `init` when all present → `added: []` + warnings | MET | test | `task.test.ts:867`, `:884` |
-| `add Notes` → exit 0, `Notes` in file with guidance, `added:["Notes"]` | MET | test | `task.test.ts:958-977` |
-| `add "Bogus Section"` → exit 3, message includes `unknown-section` | MET | test | `task.test.ts:998-1010` |
-| `add Notes` when present → exit 0, `added: []`, warning | MET | test | `task.test.ts:979-996`, `:1012-1030` |
-| unknown op / `add` w/o name / `init` w/ extra arg → exit 2 | MET | test | `task.test.ts:1032`, `:1043`, `:1054`, `:1068` |
-| `sections 7777 list` → exit 1 | MET | test | `task.test.ts:1097-1102` |
+| `list --json` → exit 0, `op:"list"`, matrix/present/missing | MET | test | `apps/cli/tests/commands/task.test.ts:844`; live probe returned all five keys |
+| `init` adds every missing required section, `added` lists them | MET | test | `apps/cli/tests/commands/task.test.ts:899-955` — **added by this verify pass**; previously UNMET (no test exercised the positive path) |
+| `init` when all present → `added: []` + warnings | MET | test | `apps/cli/tests/commands/task.test.ts:867`, `:884` |
+| `add Notes` → exit 0, `Notes` in file with guidance, `added:["Notes"]` | MET | test | `apps/cli/tests/commands/task.test.ts:958-977` |
+| `add "Bogus Section"` → exit 3, message includes `unknown-section` | MET | test | `apps/cli/tests/commands/task.test.ts:998-1010` |
+| `add Notes` when present → exit 0, `added: []`, warning | MET | test | `apps/cli/tests/commands/task.test.ts:979-996`, `:1012-1030` |
+| unknown op / `add` w/o name / `init` w/ extra arg → exit 2 | MET | test | `apps/cli/tests/commands/task.test.ts:1032`, `:1043`, `:1054`, `:1068` |
+| `sections 7777 list` → exit 1 | MET | test | `apps/cli/tests/commands/task.test.ts:1097-1102` |
 | matrix/runtime/help stay in sync; `bun run lint` catches drift | MET | command | Drift experiment above — TS2353 across 4 workspaces, then reverted |
 
 **SECUA findings — all closed**
@@ -174,9 +174,9 @@ environment and has been corrected to observed numbers.
 | # | Sev | Finding | Disposition |
 |---|-----|---------|-------------|
 | 1 | P2 | Solution table cited `renderSectionGuidanceBody` at `387-401`; those lines hold `stripLeadingSectionHeader`/`sectionIsBare`. Actual: `414-426`. | FIXED — all anchors re-derived in `### Solution` |
-| 2 | P3 | No-op `add`/`init` returned `eventName: 'task.updated'` despite performing no write and emitting no `PlanningEvent` — misleading to any consumer treating the field as write proof. | FIXED — `task-service.ts:779-791,806-816`; doc narrowed at `:130`; regression assertion `task.test.ts:1026-1028` |
+| 2 | P3 | No-op `add`/`init` returned `eventName: 'task.updated'` despite performing no write and emitting no `PlanningEvent` — misleading to any consumer treating the field as write proof. | FIXED — `task-service.ts:779-791,806-816`; doc narrowed at `:130`; regression assertion `apps/cli/tests/commands/task.test.ts:1026-1028` |
 | 3 | P4 | CLI help prose hardcoded "History, References, Notes"; a change to `UNIVERSAL_SECTIONS` would drift silently since tsc cannot check a string literal. | FIXED — `task.ts:30,440` interpolate `UNIVERSAL_SECTIONS.join(', ')`; verified via `task sections --help` |
-| 4 | P4 | `init` wrote one section per `updateSection` call, so a mid-loop failure left the file partially initialized and the raw throw discarded which sections had landed. | FIXED — `task-service.ts:817-845` reports the landed set and points at the idempotent re-run. A single batched write would need a new pipeline kind, which D3 forbids, so the loop is retained by design. Covered by `task-service.test.ts:1043-1127`. |
+| 4 | P4 | `init` wrote one section per `updateSection` call, so a mid-loop failure left the file partially initialized and the raw throw discarded which sections had landed. | FIXED — `packages/app/src/services/task-service.ts:817-845` reports the landed set and points at the idempotent re-run. A single batched write would need a new pipeline kind, which D3 forbids, so the loop is retained by design. Covered by `packages/app/tests/services/task-service.test.ts:1043-1127`. |
 
 **Coverage**
 

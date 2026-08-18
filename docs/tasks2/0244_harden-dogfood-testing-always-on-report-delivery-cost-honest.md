@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-12T18:21:58.680Z"
-updated_at: "2026-07-12T18:30:08.264Z"
+updated_at: "2026-08-18T04:42:47.248Z"
 ---
 
 ## 0244. Harden dogfood-testing: always-on report delivery, cost honesty, minimal report upgrades
@@ -314,14 +314,14 @@ protocol: sp:dogfood-testing@1.1
 | Req | Status | Evidence type | Evidence |
 |-----|--------|---------------|----------|
 | R1 dual artifacts Phase 1 | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:80-88` — open live + docs/dogfood, `status: running` |
-| R2 disk dual-write every step | MET | static-ref | `monitor-ledger.md:17-35` Disk SSOT; `SKILL.md:109-116` mirror row to report path |
-| R3 partial status model | MET | static-ref | `report-template.md:37` status enum; `:66` incomplete markers |
-| R4 finalize-or-abort | MET | static-ref | `SKILL.md:124-140`; `report-template.md:241` non-skippable gate |
-| R5 minimal structure | MET | static-ref | frontmatter + protocol@1.1 + **Repro** (`report-template.md:86`) + `#### Cost` (`:109`) |
-| R6 Cost honesty | MET | static-ref | Method/confidence/Meter rules `report-template.md:111-122`; multi-source table `monitor-ledger.md:79-90` |
-| R7 `--save` no-op | MET | static-ref | `dev-dogfood.md:36-42`; `SKILL.md:55`; gotcha #8 `:209` |
+| R2 disk dual-write every step | MET | static-ref | `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:17-35` Disk SSOT; `SKILL.md:109-116` mirror row to report path |
+| R3 partial status model | MET | static-ref | `plugins/sp/skills/dogfood-testing/references/report-template.md:37` status enum; `:66` incomplete markers |
+| R4 finalize-or-abort | MET | static-ref | `SKILL.md:124-140`; `plugins/sp/skills/dogfood-testing/references/report-template.md:241` non-skippable gate |
+| R5 minimal structure | MET | static-ref | frontmatter + protocol@1.1 + **Repro** (`plugins/sp/skills/dogfood-testing/references/report-template.md:86`) + `#### Cost` (`:109`) |
+| R6 Cost honesty | MET | static-ref | Method/confidence/Meter rules `plugins/sp/skills/dogfood-testing/references/report-template.md:111-122`; multi-source table `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:79-90` |
+| R7 `--save` no-op | MET | static-ref | `plugins/sp/commands/dev-dogfood.md:36-42`; `SKILL.md:55`; gotcha #8 `:209` |
 | R8 surface sync | MET | command | surfaces present: SKILL, report-template, monitor-ledger, dev-dogfood; platform notes restate dual-path (`SKILL.md:234-280`) |
-| R9 consumer gate | MET | static-ref | `super-coder.md:260` rg status complete\|aborted + ledger + footer |
+| R9 consumer gate | MET | static-ref | `plugins/sp/agents/super-coder.md:260` rg status complete\|aborted + ledger + footer |
 | R10 dogfood proof | MET | command | Live `.spur/run/dogfood/0244-proof-20260712T112609.md` + Report `docs/dogfood/2026-07-12-spur-task-check-0244-contract-smoke-dogfood.md` without `--save`; rg counts: ledger=1 footer=1 status=1 cost=1 Live=1 Report=1 Meter=1 |
 | R11 out of scope | N/A | command | no `dogfood-testing/scripts/`; apps/packages dirty count=0; no runner language in skill |
 | R12 docs hygiene | MET | static-ref + command | help `docs/help/...:304` always-on wording; README trackable after `.gitignore` un-ignore `!/docs/dogfood/README.md` (post-fix); reports still ignored via `/docs/dogfood/*` |

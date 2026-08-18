@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:02.470Z"
-updated_at: "2026-07-14T06:20:43.154Z"
+updated_at: "2026-08-18T04:42:47.294Z"
 ---
 
 ## 0252. spur team up/down: materialize roster into .spur/agents specs; reconcile with existing team start/stop
@@ -122,17 +122,17 @@ status per member via existing getStatus() (server), else 'stopped' offline
 **N/A** — decision ticket, no code to test. Verification = citation accuracy + a confidence rating on each claim.
 
 **Citation check (verified from source, 2026-07-14):** every `file:line` in ## Solution confirmed —
-`team-service.ts:304` (`createAgentSpec`, create-only throw), `:337` (`listAgentSpecs`),
-`supervisor-service.ts:252` (reads top-level `spec.command`), `team.ts:25,48` (server-backed `start`,
+`packages/app/src/services/team-service.ts:304` (`createAgentSpec`, create-only throw), `:337` (`listAgentSpecs`),
+`packages/app/src/services/supervisor-service.ts:252` (reads top-level `spec.command`), `team.ts:25,48` (server-backed `start`,
 `DEFAULT_SERVER` = localhost:3000). `agent-spec.ts` contains no `command` token → round-trip gap confirmed.
 
 **Confidence (HIGH = verified from source today · MEDIUM = sound design, unproven until built · LOW = assumption to resolve at implementation):**
 
 | Claim / decision | Level | Basis |
 |---|---|---|
-| Per-member `command` can't round-trip (serializer/loader drop it; supervisor reads top-level) | HIGH | `agent-spec.ts` has no `command`; `supervisor-service.ts:252` |
-| Autostart via `SPUR_TEAM_AUTOSTART` env, not `agent.team.*.autostart` | HIGH | `bootstrap.ts:44` |
-| `createAgentSpec` is create-only → materialization needs a `saveAgentSpec` upsert | HIGH | `team-service.ts:304` throw |
+| Per-member `command` can't round-trip (serializer/loader drop it; supervisor reads top-level) | HIGH | `agent-spec.ts` has no `command`; `packages/app/src/services/supervisor-service.ts:252` |
+| Autostart via `SPUR_TEAM_AUTOSTART` env, not `agent.team.*.autostart` | HIGH | `apps/server/src/bootstrap.ts:44` |
+| `createAgentSpec` is create-only → materialization needs a `saveAgentSpec` upsert | HIGH | `packages/app/src/services/team-service.ts:304` throw |
 | `team start/stop` are server-backed (start needs `spur serve`) | HIGH | `team.ts:25,48` |
 | `tags` is persisted → usable as the `spur:generated` marker | HIGH | `serializeAgentSpec` includes `tags` |
 | The three forks (provenance tag / up-scope / down-scope) | MEDIUM | internally consistent design; unproven until implemented + dogfooded |

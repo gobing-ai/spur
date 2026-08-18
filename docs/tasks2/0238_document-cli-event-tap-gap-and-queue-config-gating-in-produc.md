@@ -12,7 +12,7 @@ priority: P2
 tags: ["observability", "documentation", "audit"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.996Z"
-updated_at: "2026-07-28T00:31:58.519Z"
+updated_at: "2026-08-18T04:42:47.207Z"
 ---
 
 ## 0238. Document CLI event-tap gap and queue config gating in producer audit
@@ -57,7 +57,7 @@ Documented systemic observability gaps in the producer-audit inventory (task 023
 - `docs/inventory/system-events-producer-audit.md:153–198` — **Systemic Observability Gaps** section (Gaps 1–4).
 - Gap 1 CLI event-tap: `registerSystemEventTap` only at `apps/server/src/serve.ts:274`; no CLI registration under `apps/cli/src/`.
 - Gap 2 queue gating: `jobQueueEnabled` default false at `context.ts:265`; throws at `context.ts:450–451` / `468–469`; wired via `createQueueConsumer` at `context.ts:472–474` when `bootConfig.jobqueue.enabled` (`serve.ts:243`, `287`).
-- Gap 3 `process.started` side-channel: `agent-service.ts:312` `processEvents` wiring; supervisor uses `process.spawned` instead.
+- Gap 3 `process.started` side-channel: `packages/app/src/services/agent-service.ts:312` `processEvents` wiring; supervisor uses `process.spawned` instead.
 - Gap 4 nested-CLI: child process-local bus; marked ⚠️ deferred (not ❌ unwired) in legend + Gap 4 + footer §1 (`serve.ts:137–145`).
 - Prefix-family observability path table under Gap 1 (R2).
 - Supersede note header + footer §3 references task 0226 (R4).
@@ -85,7 +85,7 @@ SYSTEM_EVENT_CATALOG queue.* count = 7 — OK
 ```
 
 **`--fix all` applied this run:**
-1. Refreshed drifted line numbers in Gaps 2–3 (`context.ts` job-queue accessors, `agent-service.ts:312`).
+1. Refreshed drifted line numbers in Gaps 2–3 (`context.ts` job-queue accessors, `packages/app/src/services/agent-service.ts:312`).
 2. Corrected section intro "Three" → "Four" architectural constraints (Gaps 1–4).
 3. Testing expanded with deterministic verification evidence; Solution given `file:line` cites.
 

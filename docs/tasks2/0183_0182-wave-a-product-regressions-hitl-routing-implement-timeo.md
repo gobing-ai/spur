@@ -11,7 +11,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: 2026-07-03T01:08:16.978Z
-updated_at: 2026-07-03T04:52:09.724Z
+updated_at: "2026-08-18T04:42:47.087Z"
 ---
 
 ## 0183. 0182 Wave A: product regressions — HITL routing, implement timeout hardening, absolute-path fix, JSDoc
@@ -88,7 +88,7 @@ Recorded as `bug-752` in `.wolf/buglog.json`.
 ### Solution
 **R1 — approve-gate HITL routing + `cancelled` terminal state**
 (`config/workflows/task-pipeline.yaml`): replaced the single `approve -> verify` `always`
-guard with three ordered guards mirroring `idea-pipeline.yaml:352-366` — `test
+guard with three ordered guards mirroring `config/workflows/idea-pipeline.yaml:352-366` — `test
 "${vars.__hitlAnswer}" = yes` -> `verify`, `= no` -> `failed`, `= cancel` -> `cancelled`
 (declaration order: yes, no, cancel; no `always` edge remains out of `approve`). Added
 `cancelled` to `terminalStates` and as a new terminal state. Declared `__hitlAnswer: ""` in

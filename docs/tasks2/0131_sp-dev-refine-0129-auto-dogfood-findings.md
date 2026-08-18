@@ -11,7 +11,7 @@ priority: P2
 tags: [review]
 dependencies: []
 created_at: 2026-06-26T19:14:43.613Z
-updated_at: 2026-06-28T18:40:57.167Z
+updated_at: "2026-08-18T04:42:46.915Z"
 ---
 
 ## 0131. /sp:dev-refine 0129 --auto dogfood findings
@@ -130,8 +130,8 @@ regression test; R2 is a doc/skill-prose enhancement.
 
 | Requirement | Test / Evidence |
 |-------------|-----------------|
-| R1 — L3 Plan check recognizes bold-phase + checkbox form | `task-check.test.ts:592` "Plan with bold-phase header followed by checkbox items produces no warning (0129-shape)" — PASS |
-| R1 — free-form prose Plan still warns | `task-check.test.ts:630` "Plan as free-form prose still warns after permissive fix" — PASS |
+| R1 — L3 Plan check recognizes bold-phase + checkbox form | `packages/app/tests/services/task-check.test.ts:592` "Plan with bold-phase header followed by checkbox items produces no warning (0129-shape)" — PASS |
+| R1 — free-form prose Plan still warns | `packages/app/tests/services/task-check.test.ts:630` "Plan as free-form prose still warns after permissive fix" — PASS |
 | R1 — existing L3 tests unaffected | All 44 prior task-check tests remain PASS (permissive-only change) |
 | R2 — skip gate in dev-operations.md | Pre-synthesis skip gate bullet added to §5 refine Behavior — present and accurate |
 | R2 — skip gate in planning-workflow.md | Skip gate paragraph + SKIP result shape added to Step 6 — present and accurate |

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.848Z"
-updated_at: "2026-07-15T21:54:04.063Z"
+updated_at: "2026-08-18T04:42:47.412Z"
 ---
 
 ## 0263. Persist Terminal selection in localStorage and improve empty states / headers
@@ -181,9 +181,9 @@ R1/R2 (localStorage persist/restore) already implemented during task 0259 and co
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 persist `{teamId,memberId}` | MET | `TerminalTab.tsx:78-84,155-160` key `spur:board:teams:lastTerminal`; test “persists selection… on change” |
-| R2 restore + validate on mount | MET | `TerminalTab.tsx:130-146` restore with team/member validation + clear stale; tests restore + “rejects stale…” |
+| R2 restore + validate on mount | MET | `apps/web/src/modules/teams/TerminalTab.tsx:130-146` restore with team/member validation + clear stale; tests restore + “rejects stale…” |
 | R3 empty/loading polish | MET | Terminal no-teams (`:197-203`); MemberTerminal waiting copy (`:333`); Processes guidance (`:134-137`); tests cover all three |
-| R4 header agent identity | MET | `MemberTerminal.tsx:308` agentId in header; status + connected retained; test “0263 R4: header surfaces…” |
+| R4 header agent identity | MET | `apps/web/src/modules/teams/MemberTerminal.tsx:308` agentId in header; status + connected retained; test “0263 R4: header surfaces…” |
 
 **Acceptance Criteria Verification**
 

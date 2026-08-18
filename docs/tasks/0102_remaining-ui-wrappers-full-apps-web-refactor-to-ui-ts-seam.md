@@ -4,7 +4,7 @@ name: "Remaining UI wrappers + full apps/web refactor to ui.ts seam"
 status: done
 template: feature-impl
 created_at: 2026-06-23T06:04:57.964Z
-updated_at: 2026-06-26T07:03:10.576Z
+updated_at: "2026-08-18T04:42:46.768Z"
 feature_id: F7
 priority: P1
 tags: ["web", "ui", "daisyui", "refactor"]
@@ -44,10 +44,10 @@ Checklist-tier AC (infrastructure refactor establishing the `ui.ts` UI seam — 
 - [x] Verify `bun run lint + bun run test + bun run build` green — confirmed via `bun run spur-check` (lint + test-pre-check + 1895 tests + test-post-check all pass)
 - [x] Verify no raw daisyUI component classes remain outside `components/ui/` — confirmed 0 leaks (`rg` over the 0103 component-class list outside the seam)
 ### Solution
-- Created 10 typed daisyUI wrapper components under `apps/web/src/components/ui/`: Badge (`Badge.tsx:41`), Card + CardBody (`Card.tsx`), Checkbox (`Checkbox.tsx`), Input (`Input.tsx`), Join + JoinItem (`Join.tsx`), Loading (`Loading.tsx`), Modal (`Modal.tsx`), Select (`Select.tsx:41`), Textarea (`Textarea.tsx`), Toggle (`Toggle.tsx`). Each follows the Button pilot pattern: variant/size class maps as `const` records, typed `Props` extending the native HTML element, `className` passthrough via filter(Boolean).join(' ').
+- Created 10 typed daisyUI wrapper components under `apps/web/src/components/ui/`: Badge (`apps/web/src/components/ui/Badge.tsx:41`), Card + CardBody (`Card.tsx`), Checkbox (`Checkbox.tsx`), Input (`Input.tsx`), Join + JoinItem (`Join.tsx`), Loading (`Loading.tsx`), Modal (`Modal.tsx`), Select (`apps/web/src/components/ui/Select.tsx:41`), Textarea (`Textarea.tsx`), Toggle (`Toggle.tsx`). Each follows the Button pilot pattern: variant/size class maps as `const` records, typed `Props` extending the native HTML element, `className` passthrough via filter(Boolean).join(' ').
 - Updated `apps/web/src/ui.ts:1-11` barrel to re-export all 10 new wrappers (+types), completing the centralized daisyUI seam — every component is now importable from `@/ui`.
-- Refactored 6 call-site files in `apps/web/src/modules/task-kanban/` to import wrappers from `@/ui` instead of hand-writing daisyUI classes: KanbanBoard, KanbanColumn, NewTaskPanel, TaskCard (`TaskCard.tsx:4`), TaskDetail, TaskFilters. Raw `className="badge …"` / `className="select …"` etc. replaced with `<Badge variant=… size=…>` / `<Select variant=… size=…>`.
-- Card wrapper supports `asChild` (Radix-style composition) for semantic nesting (e.g., `<Card asChild><button>…</button></Card>` in `TaskCard.tsx:45-51`).
+- Refactored 6 call-site files in `apps/web/src/modules/task-kanban/` to import wrappers from `@/ui` instead of hand-writing daisyUI classes: KanbanBoard, KanbanColumn, NewTaskPanel, TaskCard (`apps/web/src/modules/task-kanban/TaskCard.tsx:4`), TaskDetail, TaskFilters. Raw `className="badge …"` / `className="select …"` etc. replaced with `<Badge variant=… size=…>` / `<Select variant=… size=…>`.
+- Card wrapper supports `asChild` (Radix-style composition) for semantic nesting (e.g., `<Card asChild><button>…</button></Card>` in `apps/web/src/modules/task-kanban/TaskCard.tsx:45-51`).
 ### Testing
 **Pipeline verify results**
 
@@ -59,7 +59,7 @@ Checklist-tier AC (infrastructure refactor establishing the `ui.ts` UI seam — 
 | R2: Encapsulate daisyUI classes behind props | MET | All use `VARIANT_CLASSES`/`SIZE_CLASSES` const records |
 | R3: Layout-utility className passthrough | MET | All spread `className` into `.filter(Boolean).join(' ')` |
 | R4: Follow Button pilot conventions | MET | All match Button.tsx pattern |
-| R5: Re-export from ui.ts | MET | `ui.ts:1-11` exports all 10 + Props types |
+| R5: Re-export from ui.ts | MET | `apps/web/src/ui.ts:1-11` exports all 10 + Props types |
 | R6: Refactor call sites to `@/ui` seam | MET | 6 task-kanban call sites import from `@/ui` |
 | R7: No raw daisyUI component-class leak outside seam | MET | `rg` over component-class list → 0 matches outside `components/ui/` |
 

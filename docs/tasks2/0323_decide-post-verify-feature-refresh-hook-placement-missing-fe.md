@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-24T23:40:25.668Z"
-updated_at: "2026-07-28T00:33:11.395Z"
+updated_at: "2026-08-18T04:42:47.809Z"
 ---
 
 ## 0323. Decide post-verify feature-refresh hook placement, missing-feature-id UX, and unattended policy
@@ -52,7 +52,7 @@ updated_at: "2026-07-28T00:33:11.395Z"
 
 1. **Hook points — all three, one implementation:**
    - `task-pipeline.yaml` record phase calls `spur feature sync <id> --json` after the record write (config-only change per ADR-022 — the pipeline never touches files directly).
-   - `wrapup-pipeline.yaml` feature-transition step (`.spur/workflows/wrapup-pipeline.yaml:118`) replaces today's unconditional `spur feature advance ${vars.feature}` with derivation sync.
+   - `wrapup-pipeline.yaml` feature-transition step (`config/workflows/wrapup-pipeline.yaml:118`) replaces today's unconditional `spur feature advance ${vars.feature}` with derivation sync.
    - `/sp:dev-verify` PASS adds an interactive confirm step delegating to the same verb. Behavior identical across entry points.
 2. **Unattended runs (profile=auto, dev-runall/dev-verifyall), feature_id present:** forward derivations auto-apply via legal advance hops and are reported in run output; reopen/regression proposals are queued, never auto-applied.
 3. **Unattended runs, feature_id missing:** LLM-judge link proposals are queued into the run report for a later operator-confirmed sweep (`/sp:dev-refresh --all`); the batch never blocks.
@@ -62,7 +62,7 @@ N/A — decision ticket, no code.
 
 **Confidence ratings (decision claims):**
 
-- HIGH — wrapup's feature-transition step runs unconditional `spur feature advance` only when `vars.feature` is set (verified `.spur/workflows/wrapup-pipeline.yaml:118-129` today).
+- HIGH — wrapup's feature-transition step runs unconditional `spur feature advance` only when `vars.feature` is set (verified `config/workflows/wrapup-pipeline.yaml:118-129` today).
 - HIGH — feature-link-helper already implements candidate listing → LLM-judge → propose/confirm → apply, plus batch-sweep mode (verified `plugins/sp/skills/spur-dev/references/feature-link-helper.md` today).
 - MEDIUM — persisted-skip frontmatter marker (field name like `feature_link_declined`) — exact key to finalize at implementation against the task frontmatter schema.
 - MEDIUM — record-phase wiring is config-only (ADR-022), but unattended auto-apply semantics need a dogfood pass before trusting them in dev-runall.

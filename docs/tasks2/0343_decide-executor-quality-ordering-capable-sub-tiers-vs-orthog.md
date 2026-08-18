@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "config", "adr-033"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.099Z"
-updated_at: "2026-07-27T02:06:37.739Z"
+updated_at: "2026-08-18T04:42:48.059Z"
 ---
 
 ## 0343. Decide executor quality ordering: capable sub-tiers vs orthogonal tier+rank
@@ -113,7 +113,7 @@ explicit sub-tier. The structural answer above is settled here; the migration re
 
 | Case | Behavior under the chosen model |
 | --- | --- |
-| Executor declares **no** `tier` | Field stays **optional**. Resolver (`getExecutorTier`, `agent-service.ts:1083`) still infers today via name/model/agent regex. Under sub-tiers, inference may only yield `cheap`, `standard`, or **`capable-1`** — never invent `capable-2`/`capable-3` from a regex. |
+| Executor declares **no** `tier` | Field stays **optional**. Resolver (`getExecutorTier`, `packages/app/src/services/agent-service.ts:1083`) still infers today via name/model/agent regex. Under sub-tiers, inference may only yield `cheap`, `standard`, or **`capable-1`** — never invent `capable-2`/`capable-3` from a regex. |
 | Config written against the **3-value** enum | `cheap` / `standard` unchanged. `tier: capable` (or inferred `capable`) is a **migration synonym for `capable-1`** for one deprecation window; after the window, bare `capable` is rejected. JSON schema + zod move in lockstep. |
 | Third-party / unpublished configs | Full inventory of external consumers is **0347**; this ticket only records the intended reading so implementers are not blocked. |
 

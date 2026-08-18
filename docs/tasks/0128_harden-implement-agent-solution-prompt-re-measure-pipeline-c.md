@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-26T06:16:27.866Z"
-updated_at: 2026-06-26T06:26:30.686Z
+updated_at: "2026-08-18T04:42:46.904Z"
 ---
 
 ## 0128. Harden implement-agent Solution prompt + re-measure pipeline cache hit rate
@@ -89,7 +89,7 @@ Investigation-only task; **no code or sp-doc change** — both sub-items closed 
 | _(none)_ | — | No change to `dev-run.md` / `execution-workflow.md` / `dev-operations.md` — prompt already `MUST`-hardened, no prose gap |
 | _(none)_ | — | No code change — P3 has no instrumentation to re-measure against |
 
-**P2 finding — prompt already hardened.** `plugins/sp/commands/dev-run.md:54-67` already instructs the implement agent to author `## Solution` with `MUST` + the exact `spur task update <wbs> --section Solution --from-file` verb + a `file:line` change-map shape + write-only-when-bare. `execution-workflow.md:49-58` and `dev-operations.md §4` carry the matching contract. The original non-authoring (0102 dogfood) was an **omp-executor artifact** — 0128 Background: "Partly mitigated now — claude is a saner default than the unusable omp." Behavioral confirmation under claude is deferred to the next natural pipeline run rather than forced via a throwaway probe that would implement an unrelated task (0103/0104) as a side effect. The `record`-step `git diff --name-only` backfill remains the safety net.
+**P2 finding — prompt already hardened.** `plugins/sp/commands/dev-run.md:54-67` already instructs the implement agent to author `## Solution` with `MUST` + the exact `spur task update <wbs> --section Solution --from-file` verb + a `file:line` change-map shape + write-only-when-bare. `plugins/sp/skills/spur-dev/references/execution-workflow.md:49-58` and `dev-operations.md §4` carry the matching contract. The original non-authoring (0102 dogfood) was an **omp-executor artifact** — 0128 Background: "Partly mitigated now — claude is a saner default than the unusable omp." Behavioral confirmation under claude is deferred to the next natural pipeline run rather than forced via a throwaway probe that would implement an unrelated task (0103/0104) as a side effect. The `record`-step `git diff --name-only` backfill remains the safety net.
 
 **P3 finding — not measurable.** No token/cache capture exists in `packages/app/src/services/agent-service.ts`, `packages/app/src/workflow/actions/agent-run.ts`, or domain persistence; `spur workflow trace` returns step/run status only. The ~47% baseline was a tagged `[~estimate]` in `docs/dogfood/2026-06-26-sp-dev-run-0102-dogfood.md` (L14/42/57/79) — heuristic token eyeballing, never a measured trace value. A genuine re-measurement would first require building cache instrumentation into the agent-run path + surfacing it in the trace (a separate feature). Operator chose **close-as-not-measurable**; instrumentation task **not** spun.
 

@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-1", "stage-registry", "validation", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.274Z"
-updated_at: "2026-07-28T00:32:58.697Z"
+updated_at: "2026-08-18T04:42:47.646Z"
 ---
 
 ## 0302. Implement the stage-registry validator
@@ -160,9 +160,9 @@ bunx biome check validator.ts test.ts index.ts      # clean
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1. Validate the whole registry graph at load time and reject before execution | MET | `packages/domain/src/stage-registry/validator.ts:210` `validateStageRegistryGraph` — non-throwing, returns `RegistryValidationResult` (:128-137) with all diagnostics collected before any execution; per-record semantics via `validateStageRecord` catch->diagnostic (:227-243). Tests: R1 describe block `stage-registry-validator.test.ts:89` (3 tests) — 28/28 pass fresh this run. |
-| R2. Cross-reference checks with actionable diagnostics for missing skills, commands, gates, workflows, adapters, artifact paths | MET | `RegistryReferenceResolver` `validator.ts:64-77` (6 has* methods, opt-out per kind); cross-reference sweep :279-335 (skill :281, command alias :293, gate :303, artifact-path :313, adapter opt-in via `adapter_refs` :325-335 declared at :154); every diagnostic carries `kind`/`ref`/`stageId`/actionable `message` (`RegistryDiagnostic` :106-119). Tests: R2 describe block `test.ts:125` (8 tests). |
-| R3. Reject cyclic transitions, unknown gates, unsupported transitions, incompatible model policy before any corpus mutation or agent invocation | MET | Dangling edges both directions `validator.ts:342-364` (`dangling-transition`); transition gate/workflow resolution :366-378; DFS cycle detection WHITE/GRAY/BLACK :381-446 (self-transition :429-438, longer cycle :440-445); irreversible-target-without-gate :452-465 (`incompatible-model-policy` :456). Pure function — no corpus mutation, no agent invocation, never throws. Tests: R3 describe block `test.ts:223` (10 tests). |
-| R4. Emit same stage/run identifiers for observability on both pass and fail paths | MET | `run_id = options.run_id ?? generateRunId()` `validator.ts:214`; result always carries `run_id`/`stage_ids` (:134-136, returned unconditionally :468-473); every diagnostic stamped with `run_id` via `diag()` closure :223. Tests: R4 describe block `test.ts:403` (4 tests). |
+| R2. Cross-reference checks with actionable diagnostics for missing skills, commands, gates, workflows, adapters, artifact paths | MET | `RegistryReferenceResolver` `packages/domain/src/stage-registry/validator.ts:64-77` (6 has* methods, opt-out per kind); cross-reference sweep :279-335 (skill :281, command alias :293, gate :303, artifact-path :313, adapter opt-in via `adapter_refs` :325-335 declared at :154); every diagnostic carries `kind`/`ref`/`stageId`/actionable `message` (`RegistryDiagnostic` :106-119). Tests: R2 describe block `test.ts:125` (8 tests). |
+| R3. Reject cyclic transitions, unknown gates, unsupported transitions, incompatible model policy before any corpus mutation or agent invocation | MET | Dangling edges both directions `packages/domain/src/stage-registry/validator.ts:342-364` (`dangling-transition`); transition gate/workflow resolution :366-378; DFS cycle detection WHITE/GRAY/BLACK :381-446 (self-transition :429-438, longer cycle :440-445); irreversible-target-without-gate :452-465 (`incompatible-model-policy` :456). Pure function — no corpus mutation, no agent invocation, never throws. Tests: R3 describe block `test.ts:223` (10 tests). |
+| R4. Emit same stage/run identifiers for observability on both pass and fail paths | MET | `run_id = options.run_id ?? generateRunId()` `packages/domain/src/stage-registry/validator.ts:214`; result always carries `run_id`/`stage_ids` (:134-136, returned unconditionally :468-473); every diagnostic stamped with `run_id` via `diag()` closure :223. Tests: R4 describe block `test.ts:403` (4 tests). |
 
 **Acceptance Criteria Verification**
 

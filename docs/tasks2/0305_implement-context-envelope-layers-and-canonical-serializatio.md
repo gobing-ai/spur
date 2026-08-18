@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-2", "context-envelope", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T03:32:22.423Z"
-updated_at: "2026-07-28T00:32:55.969Z"
+updated_at: "2026-08-18T04:42:47.678Z"
 ---
 
 ## 0305. Implement context-envelope layers and canonical serialization
@@ -180,10 +180,10 @@ tables below reflect the post-fix state and name what changed.
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — typed layer with canonical serialization/order, size budget, content hash, provenance, cacheability | MET (was PARTIAL) | Typed record `schema.ts:107-146`; provenance `:58-68`; size budget `:83-87`; cacheability `:27`; hash `fingerprint.ts:24`. **Canonical serialization was absent** — the task is named for it, yet no serializer existed and content was accepted as an opaque pre-serialized string. Added `serialization.ts`: `canonicalJson:27`, `serializeLayer:46`, `serializeEnvelope:63`, `serializeStablePrefix:79`. Ordering `assemblies.ts:42-57`. Redaction reachable via `sensitivityByLayer` (`assemblies.ts:218-232`). |
+| R1 — typed layer with canonical serialization/order, size budget, content hash, provenance, cacheability | MET (was PARTIAL) | Typed record `schema.ts:107-146`; provenance `:58-68`; size budget `:83-87`; cacheability `:27`; hash `packages/domain/src/envelope/fingerprint.ts:24`. **Canonical serialization was absent** — the task is named for it, yet no serializer existed and content was accepted as an opaque pre-serialized string. Added `serialization.ts`: `canonicalJson:27`, `serializeLayer:46`, `serializeEnvelope:63`, `serializeStablePrefix:79`. Ordering `packages/domain/src/envelope/assemblies.ts:42-57`. Redaction reachable via `sensitivityByLayer` (`packages/domain/src/envelope/assemblies.ts:218-232`). |
 | R2 — ordered 7-layer stack, stable-first | MET | Vocabulary derived from `CONTEXT_LAYER_NAMES` at `schema.ts:114` (was an inline duplicate); partition `:154-172`; guard `:184-186` — **verified by mutation this run**: appending an unclassified layer to `CONTEXT_LAYER_NAMES` failed `tsc` with `TS2322` at `schema.ts:185`; reverted. |
 | R3 — snapshot schemas fingerprinted by content hash, never a full-file reread | MET (was PARTIAL) | Schemas `schema.ts:237,282,312`. **Fingerprinting had no implementation** — `content_hash` was documented as "SHA-256 of canonical JSON" with no canonical-JSON function, so any caller using `JSON.stringify` would have produced key-order-dependent hashes. Added `computeSnapshotHash:97`, `withSnapshotHash:109`. CLI `--json` wiring deferred to a later task (0284 R2 boundary, recorded in Design). |
-| R4 — assemblies for refine/implement/review/verify/dogfood selecting required vs optional-disclosure per mutation class and gate set | MET (was PARTIAL) | Five selectors `assemblies.ts:83-130`. **The required-vs-optional half was docstring-only** — one flat list per stage, `disclosure_handle` never populated, no reference to mutation class or gate set. Added `STAGE_LAYER_DISCLOSURE:133`, `getStageLayerSelection:166`, `appendDisclosurePlaceholders:274`. |
+| R4 — assemblies for refine/implement/review/verify/dogfood selecting required vs optional-disclosure per mutation class and gate set | MET (was PARTIAL) | Five selectors `packages/domain/src/envelope/assemblies.ts:83-130`. **The required-vs-optional half was docstring-only** — one flat list per stage, `disclosure_handle` never populated, no reference to mutation class or gate set. Added `STAGE_LAYER_DISCLOSURE:133`, `getStageLayerSelection:166`, `appendDisclosurePlaceholders:274`. |
 
 **Acceptance Criteria Verification**
 
@@ -194,10 +194,10 @@ implementation** — this AC discriminates rather than rubber-stamps.
 
 | AC clause | Status | Evidence Type | Evidence |
 |-----------|--------|---------------|----------|
-| "stable layers remain identical" across repeated assembly without source changes | MET (failed pre-fix) | test | `serialization.test.ts:75-107` — determinism under key reorder, and stable prefix byte-identical across two runs differing only in tool-observations |
-| "dynamic layers are minimal" | MET (failed pre-fix) | test | `disclosure.test.ts:23-60` — verify gate carries run-state but never tool-observations; mutating stages defer evidence + tool output to optional |
-| "explicit" — deferred layers are visible, not silently dropped | MET (failed pre-fix) | test | `disclosure.test.ts:82-116` — a missing optional layer becomes a metadata-only layer with a resolvable `disclosure_handle` |
-| "invalidated by content state" — fingerprint primitive | MET | test | `serialization.test.ts:122-152` (canonical snapshot hash, idempotent); `assemblies.test.ts:288-316` (`stablePrefixesMatch` content-hash comparison, not time-based) |
+| "stable layers remain identical" across repeated assembly without source changes | MET (failed pre-fix) | test | `packages/domain/tests/envelope/serialization.test.ts:75-107` — determinism under key reorder, and stable prefix byte-identical across two runs differing only in tool-observations |
+| "dynamic layers are minimal" | MET (failed pre-fix) | test | `packages/domain/tests/envelope/disclosure.test.ts:23-60` — verify gate carries run-state but never tool-observations; mutating stages defer evidence + tool output to optional |
+| "explicit" — deferred layers are visible, not silently dropped | MET (failed pre-fix) | test | `packages/domain/tests/envelope/disclosure.test.ts:82-116` — a missing optional layer becomes a metadata-only layer with a resolvable `disclosure_handle` |
+| "invalidated by content state" — fingerprint primitive | MET | test | `packages/domain/tests/envelope/serialization.test.ts:122-152` (canonical snapshot hash, idempotent); `packages/domain/tests/envelope/assemblies.test.ts:288-316` (`stablePrefixesMatch` content-hash comparison, not time-based) |
 | "invalidated by content state" — trigger wiring (corpus/git/config/gate events) | N/A | static-ref | Out of scope for this task by decomposition: task 0306 "Implement envelope invalidation, progressive disclosure, and attribution instrumentation" owns it (0284 R3). Recorded in Design's scope boundary. |
 
 Feature O's sibling scenario "Progressive disclosure preserves quality gates" is deliberately **not**
@@ -208,16 +208,16 @@ claimed by this task — it is 0306's.
 | # | Sev | Finding | Disposition |
 |---|-----|---------|-------------|
 | 1 | P2 | `Acceptance Criteria`, `Design`, and `Plan` were unmodified template placeholders on a `done` task; the matrix makes all three optional at `done`, so `strict-core` passed and the gap was invisible to the deterministic gate. | FIXED — AC derived from spec 0284 (not from the shipped code, and four scenarios fail pre-fix); Design and Plan recorded as audit trail with the scope boundary stated. |
-| 2 | P2 | The 7-layer vocabulary was defined three times — `stage-registry/schema.ts:350`, an inline `z.enum` in `envelope/schema.ts`, and private re-declarations in `assemblies.ts` — while `schema.ts`'s docstring cited `CONTEXT_LAYER_NAMES` as the source of truth. Renaming or adding a layer would have drifted silently. | FIXED — `schema.ts:114` derives the enum; `assemblies.ts:23` imports the tuples; partition guard `schema.ts:184-186` verified by mutation. |
-| 3 | P3 | `getStageLayerNames` documented `@throws If stageId is unknown` but returned a full-stack fallback and never threw. | FIXED — `assemblies.ts:172-178` documents the real behavior. |
-| 4 | P4 | `buildStageLayers` hardcoded `sensitivity: 'internal'`, leaving the schema's `confidential` class unreachable from the only layer-building function. | FIXED — optional `sensitivityByLayer` param (`assemblies.ts:218-232`); covered by `disclosure.test.ts:62-80`. |
-| 5 | P4 | `stablePrefixesMatch` shadowed its own `a`/`b` parameters with loop-local consts. | FIXED — renamed to `left`/`right` (`assemblies.ts:322-334`). |
+| 2 | P2 | The 7-layer vocabulary was defined three times — `stage-registry/schema.ts:350`, an inline `z.enum` in `envelope/schema.ts`, and private re-declarations in `assemblies.ts` — while `schema.ts`'s docstring cited `CONTEXT_LAYER_NAMES` as the source of truth. Renaming or adding a layer would have drifted silently. | FIXED — `schema.ts:114` derives the enum; `packages/domain/src/envelope/assemblies.ts:23` imports the tuples; partition guard `schema.ts:184-186` verified by mutation. |
+| 3 | P3 | `getStageLayerNames` documented `@throws If stageId is unknown` but returned a full-stack fallback and never threw. | FIXED — `packages/domain/src/envelope/assemblies.ts:172-178` documents the real behavior. |
+| 4 | P4 | `buildStageLayers` hardcoded `sensitivity: 'internal'`, leaving the schema's `confidential` class unreachable from the only layer-building function. | FIXED — optional `sensitivityByLayer` param (`packages/domain/src/envelope/assemblies.ts:218-232`); covered by `packages/domain/tests/envelope/disclosure.test.ts:62-80`. |
+| 5 | P4 | `stablePrefixesMatch` shadowed its own `a`/`b` parameters with loop-local consts. | FIXED — renamed to `left`/`right` (`packages/domain/src/envelope/assemblies.ts:322-334`). |
 
 **Coverage**
 
 91 tests across 5 files (was 64 across 3). New: `serialization.test.ts` (15), `disclosure.test.ts`
 (12). All 64 pre-existing tests pass unchanged — the fixes are additive. The one existing contract
-that constrained the design (`buildStageLayers` skips content-less layers, `assemblies.test.ts:123`)
+that constrained the design (`buildStageLayers` skips content-less layers, `packages/domain/tests/envelope/assemblies.test.ts:123`)
 was preserved by composing `appendDisclosurePlaceholders` beside it rather than folding disclosure
 in and rewriting the test to match.
 

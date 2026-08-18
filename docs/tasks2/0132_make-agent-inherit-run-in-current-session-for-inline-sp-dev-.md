@@ -11,7 +11,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: 2026-06-26T21:36:27.166Z
-updated_at: 2026-06-27T06:34:18.890Z
+updated_at: "2026-08-18T04:42:46.927Z"
 ---
 
 ## 0132. Make --agent inherit run in current session for inline /sp:dev-* commands; honest two-surface agent contract
@@ -187,11 +187,11 @@ Re-verified this pass against the committed tree (`bun run lint` exit 0; `bun ru
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 — Inline skills run default model step in-session; `spur agent run` only for explicit `<name>`/`auto` | **MET** | All four inline commands document in-session default + spawn-on-explicit: `dev-plan.md:30,57-60`, `dev-refine.md:29,60-63`, `dev-brainstorm.md:32,214-216`, `dev-unit.md:31,48-50`. Each states "The default never shells out." |
-| R2 — `cross-cutting.md` canonical contract rewritten (two-surface) | **MET** | `cross-cutting.md:14` "Honor `--agent` — the two-surface contract"; `:19-22` surface table; `:24` Inline surface; `:35` Pipeline surface. SSOT live and self-consistent. |
+| R2 — `cross-cutting.md` canonical contract rewritten (two-surface) | **MET** | `plugins/sp/skills/spur-dev/references/cross-cutting.md:14` "Honor `--agent` — the two-surface contract"; `:19-22` surface table; `:24` Inline surface; `:35` Pipeline surface. SSOT live and self-consistent. |
 | R3 — All ~13 dev-* docs updated; phantom "inherit = current agent (CLI default)" removed | **MET** | `rg "inherit.*current agent.*CLI default"` → 0 hits across live docs (`plugins/sp/`, `docs/00_ADR.md`, `docs/04_DESIGN.md`); only self-referential hits remain inside this task file. |
-| R4 — Pipeline docs state inherit = configured default + current-agent impossible | **MET** | `dev-run.md` (3 hits), `dev-review.md` (2), `dev-verify.md` (2) carry "not expressible / impossible / cannot block on itself"; `cross-cutting.md:35-41` Pipeline surface. |
-| R5 — Dead `current`/`inherit`/`$SPUR_AGENT` removed from resolver (verify retained) | **MET** | `rg "SPUR_AGENT\|resolveAgentCurrent" packages/app/src/` → 0 hits. Regression test `agent-service.test.ts:422` sets `SPUR_AGENT:'pi'` and asserts both `current` and `inherit` → exit 2 (proves the env-var path has no producer). 65/65 pass. |
-| R6 — `report-template.md` "Testee agent" line fixed | **MET** | `report-template.md:29` — "`omitted (testee runs in current session)`"; no `inherit (default)` resolvable value. |
+| R4 — Pipeline docs state inherit = configured default + current-agent impossible | **MET** | `dev-run.md` (3 hits), `dev-review.md` (2), `dev-verify.md` (2) carry "not expressible / impossible / cannot block on itself"; `plugins/sp/skills/spur-dev/references/cross-cutting.md:35-41` Pipeline surface. |
+| R5 — Dead `current`/`inherit`/`$SPUR_AGENT` removed from resolver (verify retained) | **MET** | `rg "SPUR_AGENT\|resolveAgentCurrent" packages/app/src/` → 0 hits. Regression test `packages/app/tests/services/agent-service.test.ts:422` sets `SPUR_AGENT:'pi'` and asserts both `current` and `inherit` → exit 2 (proves the env-var path has no producer). 65/65 pass. |
+| R6 — `report-template.md` "Testee agent" line fixed | **MET** | `plugins/sp/skills/dogfood-testing/references/report-template.md:29` — "`omitted (testee runs in current session)`"; no `inherit (default)` resolvable value. |
 | R7 — Gate green (lint + test + test-cf + build) | **MET** | Re-ran: `bun run lint` exit 0 (all 7 workspace typechecks); `bun run test` → 1945 pass / 0 fail. test-cf + build certified green at landing commit `2702e29` and unchanged since (no code touched). |
 | R8 — Inline default runs in-session (no `omp` subprocess) | **MET** | The deliverable is the skill-prose contract; verified present and consistent across all four inline commands + the `cross-cutting.md` SSOT (`:24-33`), which explicitly gates `spur agent run` behind explicit `--agent`. The AC scenario ("inline default runs in the current session") is satisfied by the in-session instruction the agent executes. **Operator note:** the live interactive dogfood (`/sp:dev-refine <task> --auto` + `ps | rg omp`, task Design P6) is an operator-side confirmation deliberately deferred — not an AC gate; no CLI hook can assert skill-prose behavior. |
 

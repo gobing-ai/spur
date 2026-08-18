@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:prototype", "cli", "backward-compat"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.143Z"
-updated_at: "2026-07-27T06:20:12.102Z"
+updated_at: "2026-08-18T04:42:48.081Z"
 ---
 
 ## 0346. Unify the --agent selector namespace with agent.executors
@@ -100,8 +100,8 @@ Reasoning:
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | MET | `resolveAgent` explicit branch → `resolveExecutorSelector(..., 'explicit')` at `packages/app/src/services/agent-service.ts:615-624`. No second path. |
-| R2 | MET | Test R2 bare `pi`: `agent-service.test.ts:1776-1784`. R8 preserved `:1786-1794`. Fresh suite green (below). |
-| R3 | MET | Executor-wins JSDoc `agent-service.ts:762-764`; collision test `:1765-1774`. `docs/04_DESIGN.md` explicit-`--agent` paragraph (0346) updated this fix-pass. |
+| R2 | MET | Test R2 bare `pi`: `packages/app/tests/services/agent-service.test.ts:1776-1784`. R8 preserved `:1786-1794`. Fresh suite green (below). |
+| R3 | MET | Executor-wins JSDoc `packages/app/src/services/agent-service.ts:762-764`; collision test `:1765-1774`. `docs/04_DESIGN.md` explicit-`--agent` paragraph (0346) updated this fix-pass. |
 | R4 | MET | No `--executor` flag in CLI; Q&A follow-up only. Static: no deprecation for rename. |
 | R5 | MET | R5 test `:1755-1763` — `omp-zai` → agent `omp`, model `zai//glm-5.2`. |
 | R6 | MET | Q&A: "ship ahead of the rest of map B2" with three reasons. |
@@ -110,8 +110,8 @@ Reasoning:
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| R1 Executor-aware explicit selection | MET | test | `agent-service.test.ts:1755-1763` (this run: suite green) |
-| R2 No bare-name regression | MET | test | `agent-service.test.ts:1776-1784`, R8 `:1786-1794` |
+| R1 Executor-aware explicit selection | MET | test | `packages/app/tests/services/agent-service.test.ts:1755-1763` (this run: suite green) |
+| R2 No bare-name regression | MET | test | `packages/app/tests/services/agent-service.test.ts:1776-1784`, R8 `:1786-1794` |
 | R3 Collision precedence executor wins | MET | test + static-ref | test `:1765-1774`; JSDoc `:762-764`; `docs/04_DESIGN.md` explicit-agent paragraph |
 | R4 Rough take / no flag rename | MET | static-ref | Q&A follow-up; no `--executor` implementation |
 | R5 Regression test | MET | test | describe block `:1742-1802` (5 tests) |

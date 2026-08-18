@@ -12,7 +12,7 @@ priority: P1
 tags: [bug]
 dependencies: []
 created_at: 2026-06-29T05:34:21.692Z
-updated_at: "2026-08-05T22:46:56.008Z"
+updated_at: "2026-08-18T04:42:46.994Z"
 ---
 
 ## 0151. Make sp task-write-guard hook portable across superskill/rulesync installs
@@ -317,8 +317,8 @@ Verification gate:
 ### Solution
 Change-map (full detail in `### History`):
 
-- superskill: `apps/cli/src/commands/hook-run.ts:1` (new dispatcher + registry), `apps/cli/src/commands/hook.ts:247` (`registerHookRun`), `packages/core/src/targets.ts:30` (`TARGET_TO_RULESYNC_HOOKS`), `packages/core/src/rulesync.ts:45` (`targetMap` override), `apps/cli/src/commands/install.ts:190` (hooks-only pass), `plugins/cc/hooks/hooks.json:9` (command swap), `plugins/cc/scripts/anti-hallucination/ah_guard.ts:95` (null-safety).
-- spur-new: `plugins/sp/hooks/hooks.json:9` + `.rulesync/hooks.json:6` (command swap), `plugins/sp/hooks/task-write-guard.ts:24` (shim; `findCli` removed).
+- superskill: `apps/cli/src/commands/hook-run.ts:1` (new dispatcher + registry), `apps/cli/src/commands/hook.ts:247` (`registerHookRun`), `packages/core/src/targets.ts:30` (`TARGET_TO_RULESYNC_HOOKS`), `packages/core/src/rulesync.ts:45` (`targetMap` override), `apps/cli/src/commands/install.ts:190` (hooks-only pass), `plugins/sp/hooks/hooks.json:9` (command swap), `plugins/cc/scripts/anti-hallucination/ah_guard.ts:95` (null-safety).
+- spur-new: `plugins/sp/hooks/hooks.json:9` + `plugins/sp/hooks/hooks.json:6` (command swap), `plugins/sp/hooks/task-write-guard.ts:24` (shim; `findCli` removed).
 
 Smoke-verified: `superskill hook run sp task-write-guard` denies an owned corpus task, allows non-corpus; `cc anti-hallucination` emits the corrected `allowStop` JSON.
 ### Root Cause

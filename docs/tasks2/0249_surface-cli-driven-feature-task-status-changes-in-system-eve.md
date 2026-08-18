@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-13T22:26:43.993Z"
-updated_at: "2026-07-14T00:07:55.184Z"
+updated_at: "2026-08-18T04:42:47.282Z"
 ---
 
 ## 0249. Surface CLI-driven feature.* / task.* status changes in System Events tabview
@@ -274,11 +274,11 @@ marked `done` without the review dimension. That gap is owned by the review step
 |-----|--------|----------|
 | R1 task.* persisted from CLI | MET | `apps/cli/tests/commands/planning-system-events.test.ts:81` — `task.created` + `task.transitioned` (from=backlog→to=todo) land in `system_events`. |
 | R2 feature.* persisted from CLI | MET | same suite `:108` — `feature.created` + `feature.transitioned` (from=backlog→to=active). |
-| R3 canonical path, no fork | MET | `system-event-emitter.ts:43-53` reuses `systemEventCatalogEntry`/`normalizeSystemEventPayload`/`extractSystemEventActor`/`safeStringify`; unit tests "persists a registered planning event with normalized payload + actor", "skips unregistered event names". |
+| R3 canonical path, no fork | MET | `packages/app/src/services/system-event-emitter.ts:43-53` reuses `systemEventCatalogEntry`/`normalizeSystemEventPayload`/`extractSystemEventActor`/`safeStringify`; unit tests "persists a registered planning event with normalized payload + actor", "skips unregistered event names". |
 | R4 process-independent durability | MET | `planning-emitter.ts` lazy `context.getDb()`; integration "read-only verbs do NOT open the DB", server-down read-back via shared `SystemEventDao.query` (the tabview's read path). |
-| R5 failure isolation | MET | `system-event-emitter.ts:57-64` try/catch; tests "swallows a DAO insert failure and warns without throwing", "swallows a lazy DB resolution failure". |
+| R5 failure isolation | MET | `packages/app/src/services/system-event-emitter.ts:57-64` try/catch; tests "swallows a DAO insert failure and warns without throwing", "swallows a lazy DB resolution failure". |
 | R6 no double-write on Board path | MET | static-ref: `makePlanningEmitter`/`SystemEventEmitter` referenced only in `apps/cli/`; absent from `apps/server/src`, which keeps `registerSystemEventTap` (`serve.ts`) — the CLI sink cannot fire in the server process. |
-| R7 cap honored | MET | `system-event-emitter.ts:56` `dao.prune(SYSTEM_EVENTS_CAP)`; test "honors the append-only cap on every insert". |
+| R7 cap honored | MET | `packages/app/src/services/system-event-emitter.ts:56` `dao.prune(SYSTEM_EVENTS_CAP)`; test "honors the append-only cap on every insert". |
 | R8 docs updated | MET | commit `b872990` updates `docs/inventory/system-events-producer-audit.md` (Planning rows + Gap 1 → Board+CLI) and `docs/features/J_...md`. |
 | R9 out of scope | N/A | scope boundary honored — diff touches only planning (`task.*`/`feature.*`); no rule/workflow/agent/message wiring. |
 
@@ -286,13 +286,13 @@ marked `done` without the review dimension. That gap is owned by the review step
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| CLI task transition persisted to system_events | MET | test | `planning-system-events.test.ts:81` |
-| CLI feature transition persisted to system_events | MET | test | `planning-system-events.test.ts:108` |
-| Tabview history surfaces CLI-originated rows | MET | test | read-back via `SystemEventDao.query({limit:500})` = the history endpoint's read path (`planning-system-events.test.ts:21-28`); HTTP endpoint not separately driven. |
+| CLI task transition persisted to system_events | MET | test | `apps/cli/tests/commands/planning-system-events.test.ts:81` |
+| CLI feature transition persisted to system_events | MET | test | `apps/cli/tests/commands/planning-system-events.test.ts:108` |
+| Tabview history surfaces CLI-originated rows | MET | test | read-back via `SystemEventDao.query({limit:500})` = the history endpoint's read path (`apps/cli/tests/commands/planning-system-events.test.ts:21-28`); HTTP endpoint not separately driven. |
 | Sink failure never breaks the mutation | MET | test | `system-event-emitter.test.ts` "swallows a DAO insert failure and warns (R5)"; `planning-emitter.test.ts` lazy-fail swallow. |
 | No duplicate row on the Board-driven path | MET | static-ref | CLI emitter not wired in `apps/server/src`; server writes rows only via `registerSystemEventTap`. |
 
-**Design conformance:** DONE — implementation matches the approved Design (DAO-backed `SystemEventEmitter` reusing catalog helpers; lazy CLI wrapper wired into both `makeService` builders). The Design's one open question (`*.transitioned` vs `*.updated`) was resolved during implementation: status transitions emit `*.transitioned` (asserted by `planning-system-events.test.ts:97`).
+**Design conformance:** DONE — implementation matches the approved Design (DAO-backed `SystemEventEmitter` reusing catalog helpers; lazy CLI wrapper wired into both `makeService` builders). The Design's one open question (`*.transitioned` vs `*.updated`) was resolved during implementation: status transitions emit `*.transitioned` (asserted by `apps/cli/tests/commands/planning-system-events.test.ts:97`).
 
 **SECUA review (summary — no blocker/major):**
 - minor · efficiency — `dao.prune(SYSTEM_EVENTS_CAP)` runs on every emit (one prune per CLI mutation); mirrors the tap, acceptable.

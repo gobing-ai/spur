@@ -13,7 +13,7 @@ tags: ["parity", "harness", "plugins/sp"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-11T20:41:23.615Z"
-updated_at: "2026-08-12T03:58:36.332Z"
+updated_at: "2026-08-18T04:42:48.688Z"
 ---
 
 ## 0512. Extend spur-cli/spur-dev parity harness to capture the live CLI surface
@@ -67,13 +67,13 @@ Resolve the repository root from `import.meta.dir`; read version `0.3.43` dynami
 
 | Location | What | Why |
 | --- | --- | --- |
-| `cli-surface.ts:25-39` (`CliSurfaceProvenance` / `CliSurfaceCapture`) | Typed capture result: sorted `commands`/`flags` arrays plus `{ entryPath, packageName: '@gobing-ai/spur', packageVersion }`. | Freezes the shape downstream tasks 0516/0517 consume; `packageName` is a literal (line 28), version is dynamic. |
-| `cli-surface.ts:42-59` (`commanderBlock`) | Collects indented lines under a `Commands:`/`Options:` header; returns null when absent. | Narrow adapter — block membership = 2-space-indented lines after the header; stops at the first non-indented line (`Lifecycle:`/`Usage:`/blank). |
-| `cli-surface.ts:61-79` (`parseCommanderHelp`) | Parses only Commander `Commands:`/`Options:` blocks; dedupes + sorts; absent block → empty array; throws when neither block exists. | Not a general help parser (per design §3): a non-Commander capture fails loudly instead of silently parsing garbage. |
-| `cli-surface.ts:83-113` (`captureCliSurface(commandPath = [])`) | Runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...commandPath, '--help']` (argv built at line 96) with the repo root as cwd; supports `[]` / `['task']` / `['task','update']`. | Source-local by construction — never a bare PATH `spur`, so a stale global binary cannot validate the wrong surface (design §2, R13). |
-| `cli-surface.ts:84-92` | Reads `packageVersion` dynamically from `apps/cli/package.json` (currently `0.3.43`); unreadable/invalid metadata throws. | Provenance version must track the source tree, never a pinned constant. |
-| `cli-surface.ts:98-101` | Non-zero exit → throw with the invoked argv + stderr in the message. | Fail loudly per the 0512 contract; the failing argv is directly actionable. |
-| `cli-surface.ts:1-18` (doc comment, esp. lines 8-11) | npm-skew scope note (R2): published npm `spur` may lag the source-local CLI; the gate is deterministic only for the monorepo surface and cannot catch skew on end-user installs. | R2 documentation lives in both the helper contract and `docs/design/plugin-surface-parity.md` §2/§3. |
+| `plugins/sp/tests/helpers/cli-surface.ts:25-39` (`CliSurfaceProvenance` / `CliSurfaceCapture`) | Typed capture result: sorted `commands`/`flags` arrays plus `{ entryPath, packageName: '@gobing-ai/spur', packageVersion }`. | Freezes the shape downstream tasks 0516/0517 consume; `packageName` is a literal (line 28), version is dynamic. |
+| `plugins/sp/tests/helpers/cli-surface.ts:42-59` (`commanderBlock`) | Collects indented lines under a `Commands:`/`Options:` header; returns null when absent. | Narrow adapter — block membership = 2-space-indented lines after the header; stops at the first non-indented line (`Lifecycle:`/`Usage:`/blank). |
+| `plugins/sp/tests/helpers/cli-surface.ts:61-79` (`parseCommanderHelp`) | Parses only Commander `Commands:`/`Options:` blocks; dedupes + sorts; absent block → empty array; throws when neither block exists. | Not a general help parser (per design §3): a non-Commander capture fails loudly instead of silently parsing garbage. |
+| `plugins/sp/tests/helpers/cli-surface.ts:83-113` (`captureCliSurface(commandPath = [])`) | Runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...commandPath, '--help']` (argv built at line 96) with the repo root as cwd; supports `[]` / `['task']` / `['task','update']`. | Source-local by construction — never a bare PATH `spur`, so a stale global binary cannot validate the wrong surface (design §2, R13). |
+| `plugins/sp/tests/helpers/cli-surface.ts:84-92` | Reads `packageVersion` dynamically from `apps/cli/package.json` (currently `0.3.43`); unreadable/invalid metadata throws. | Provenance version must track the source tree, never a pinned constant. |
+| `plugins/sp/tests/helpers/cli-surface.ts:98-101` | Non-zero exit → throw with the invoked argv + stderr in the message. | Fail loudly per the 0512 contract; the failing argv is directly actionable. |
+| `plugins/sp/tests/helpers/cli-surface.ts:1-18` (doc comment, esp. lines 8-11) | npm-skew scope note (R2): published npm `spur` may lag the source-local CLI; the gate is deterministic only for the monorepo surface and cannot catch skew on end-user installs. | R2 documentation lives in both the helper contract and `docs/design/plugin-surface-parity.md` §2/§3. |
 
 **New: `plugins/sp/tests/helpers/cli-surface.test.ts`** — focused helper test (5 tests):
 fixture parsing (blocks, dedupe/sort, missing-`Commands:` block, non-Commander throw) and live captures

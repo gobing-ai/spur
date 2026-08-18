@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-12T22:48:21.764Z"
-updated_at: "2026-07-12T23:04:17.076Z"
+updated_at: "2026-08-18T04:42:47.272Z"
 ---
 
 ## 0248. Tool Using hooks: expand matchers to Bash/Grep/Glob with redaction
@@ -125,23 +125,23 @@ Coverage: redaction/summary/token helpers unit-tested; hook integration covers B
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 Matcher + allowlist | MET | `hooks.json:18` `Bash\|Grep\|Glob\|Read\|Write\|Edit`; `context-post-tool.ts:26,261` `ALLOWED_TOOLS` |
-| R2 Types + summary | MET | `mapToolType`/`buildToolSummary` `:123-165`; event.summary `:284`; tests `context-hooks.test.ts:174-216` |
-| R3 Redaction | MET | `scrubSecrets`/`redactText` 4 KiB `:74-104`; body never written; `token-estimate.test.ts:26-41` |
+| R1 Matcher + allowlist | MET | `plugins/sp/hooks/hooks.json:18` `Bash\|Grep\|Glob\|Read\|Write\|Edit`; `context-post-tool.ts:26,261` `ALLOWED_TOOLS` |
+| R2 Types + summary | MET | `mapToolType`/`buildToolSummary` `:123-165`; event.summary `:284`; tests `plugins/sp/hooks/context-hooks.test.ts:174-216` |
+| R3 Redaction | MET | `scrubSecrets`/`redactText` 4 KiB `:74-104`; body never written; `plugins/sp/hooks/token-estimate.test.ts:26-41` |
 | R4 Tokens after cap | MET | Bash/Grep/Glob use `cappedByteLength` `:205-212`; test `:100-105` + hooks `:223-241` (20k → 1024 tokens) |
 | R5 Target column | MET | `ToolUsingTab.tsx:290,368-371` Target + formatTarget; UI test `:863-866` |
 | R6 Tests | MET | 80 pass this turn across hooks unit + integration + service + UI |
 | R7 Docs | MET | `docs/04_DESIGN.md:907-930` §7.8b; `indexed-context/SKILL.md:139-154` |
-| R8 Out of scope | MET | no `*` matcher; ToolX fail-open `context-hooks.test.ts:246-260` |
+| R8 Out of scope | MET | no `*` matcher; ToolX fail-open `plugins/sp/hooks/context-hooks.test.ts:246-260` |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R1 Bash tool is logged | MET | test | `context-hooks.test.ts:174-191` type=bash summary=`ls -la` |
-| Scenario: R2 Grep and Glob are logged | MET | test | `context-hooks.test.ts:194-220` grep/glob summaries, no file dumps |
-| Scenario: R3 Large stdout is capped | MET | test | `context-hooks.test.ts:223-241` 20k body → tokens 1024; body absent from JSONL |
-| Scenario: R4 Unknown tools still fail open | MET | test | `context-hooks.test.ts:246-260` ToolX exit 0, ledger unchanged |
+| Scenario: R1 Bash tool is logged | MET | test | `plugins/sp/hooks/context-hooks.test.ts:174-191` type=bash summary=`ls -la` |
+| Scenario: R2 Grep and Glob are logged | MET | test | `plugins/sp/hooks/context-hooks.test.ts:194-220` grep/glob summaries, no file dumps |
+| Scenario: R3 Large stdout is capped | MET | test | `plugins/sp/hooks/context-hooks.test.ts:223-241` 20k body → tokens 1024; body absent from JSONL |
+| Scenario: R4 Unknown tools still fail open | MET | test | `plugins/sp/hooks/context-hooks.test.ts:246-260` ToolX exit 0, ledger unchanged |
 
 **Design conformance:** DONE — widen allowlist + summary-over-body privacy; 0246 token cascade reused with cap for Bash/search.
 

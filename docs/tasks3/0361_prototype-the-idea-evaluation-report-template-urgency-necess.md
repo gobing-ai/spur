@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-28T03:21:53.100Z"
-updated_at: "2026-08-11T21:18:35.361Z"
+updated_at: "2026-08-18T04:42:48.241Z"
 done_forced: "true"
 done_reason: "Prototype-only task: template + filled example + home recommendation written to Solution; no code changes to verify"
 ---
@@ -180,7 +180,7 @@ Rationale: The template is consumed by the idea-pipeline agent at the `idea-eval
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 Template with all required dimensions | MET | Solution §1 template includes Enhanced Idea, Scores (urgency/necessity 0–5), Premises, Pros, Cons, Better Alternatives, Recommendation (proceed\|reshape\|drop), Approve/Reject; score guide 0–5 defined |
-| R2 Decision-brief norms alignment | MET | Solution cites `decision-brief.md:10`; recommendation mandatory; stakes plain English; no second HITL SSOT |
+| R2 Decision-brief norms alignment | MET | Solution cites `plugins/sp/skills/spur-dev/references/decision-brief.md:10`; recommendation mandatory; stakes plain English; no second HITL SSOT |
 | R3 Long-term home recommended | MET | Solution recommends `plugins/sp/skills/spur-dev/references/idea-evaluation.md` (ownership deferred to 0362, which confirmed) |
 | R4 No pipeline wire-up | MET | No idea-pipeline.yaml / command edits from this ticket; prototype in Solution only |
 | R5 Map I1 gist | MET | I1 Decisions so far includes 0361 one-liner (fixed this verify pass under `--fix all`) |

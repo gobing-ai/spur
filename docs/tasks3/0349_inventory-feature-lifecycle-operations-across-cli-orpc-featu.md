@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:41.046Z"
-updated_at: "2026-07-27T22:29:18.815Z"
+updated_at: "2026-08-18T04:42:48.136Z"
 ---
 
 ## 0349. Inventory feature lifecycle operations across CLI, oRPC, FeatureService, and Board action map
@@ -163,7 +163,7 @@ From `FEATURE_STATUS_ACTIONS`:
 
 1. **POST `/features/{id}/action` is a stub** — always `{ ok: true }` without agent run (`handlers.ts:95-99`). Board brainstorm/plan buttons show success-shaped flow but do no work.
 2. **Sync push not implemented** — server throws if `direction === 'push'` (`handlers.ts:122-124`). Board Sync modal still offers push (`FeatureDetail` `syncDirection` default is **`push`** per state init — high risk of fail-on-first-use).
-3. **checkFeature client without UI** — API + `feature-client.ts:72` + tests; F8 Goal/AC promised check in detail panel; **no button**.
+3. **checkFeature client without UI** — API + `apps/web/src/lib/feature-client.ts:72` + tests; F8 Goal/AC promised check in detail panel; **no button**.
 4. **refresh oRPC without Board client** — corpus INDEX rebuild reachable only via CLI / raw API.
 5. **advance / move / update-field / update-section** — CLI (+ service for move) with **no oRPC**, hence no Board.
 6. **CLI sync --all / --dry-run / --force** — richer than Board modal (single-id pull only when it works).
@@ -191,8 +191,8 @@ Candidates to evaluate for primary/overflow: **check**, **sync pull** (fix defau
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | Solution multi-surface inventory table; CLI verbs `create/show/update/advance/list/move/refresh/check/sync` in `apps/cli/src/commands/feature.ts`; oRPC `packages/contracts/src/feature.ts:171-303` (list/show/create/transition/refresh/check/body/action/children/tasks/link/sync) |
-| R2 | MET | `feature-actions.ts:2-9` FEATURE_STATUS_ACTIONS; `FeatureDetail.tsx:56-62` actionLoading + syncDirection default `push`; `:221-252` handleAction; `:254-276` handleFSMTransition; `:380` statusActions from map; checkFeature client-only |
-| R3 | MET | action stub `handlers.ts:95-100` returns ok without agent; push throw `:122-124`; sync default push `FeatureDetail.tsx:62`; checkFeature `feature-client.ts:72` with zero UI call sites outside client |
+| R2 | MET | `apps/web/src/modules/features/feature-actions.ts:2-9` FEATURE_STATUS_ACTIONS; `apps/web/src/modules/features/FeatureDetail.tsx:56-62` actionLoading + syncDirection default `push`; `:221-252` handleAction; `:254-276` handleFSMTransition; `:380` statusActions from map; checkFeature client-only |
+| R3 | MET | action stub `handlers.ts:95-100` returns ok without agent; push throw `:122-124`; sync default push `apps/web/src/modules/features/FeatureDetail.tsx:62`; checkFeature `apps/web/src/lib/feature-client.ts:72` with zero UI call sites outside client |
 | R4 | MET | Solution ends with explicit no-redesign; membership deferred to 0351+ |
 | R5 | MET | Inventory recorded in Solution on this task file with path:line anchors |
 
@@ -203,7 +203,7 @@ Candidates to evaluate for primary/overflow: **check**, **sync pull** (fix defau
 | Scenario: Inventory covers all surfaces | MET | static-ref | Solution multi-surface table + CLI/oRPC/service/Board columns [docs-only research] |
 | Scenario: Gaps are explicit | MET | static-ref | R3 gap list; handlers.ts:95-100, :122-124; FeatureDetail.tsx:62; feature-client.ts:72 [docs-only] |
 
-**SECUA (`--focus all`):** N/A security/correctness surface — research ticket; no production code modified by 0349. Residual product risk (documented, not in scope): Sync modal default `push` vs server reject (`FeatureDetail.tsx:62` / `handlers.ts:122-124`) — membership/impl tickets own remediation.
+**SECUA (`--focus all`):** N/A security/correctness surface — research ticket; no production code modified by 0349. Residual product risk (documented, not in scope): Sync modal default `push` vs server reject (`apps/web/src/modules/features/FeatureDetail.tsx:62` / `handlers.ts:122-124`) — membership/impl tickets own remediation.
 
 **`--fix all`:** no UNMET/PARTIAL requirements; no code repair applied.
 

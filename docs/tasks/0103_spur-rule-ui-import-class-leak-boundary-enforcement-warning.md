@@ -4,7 +4,7 @@ name: "Spur rule: UI import + class-leak boundary enforcement (warning)"
 status: done
 template: feature-impl
 created_at: 2026-06-23T06:04:57.965Z
-updated_at: 2026-06-26T07:16:11.184Z
+updated_at: "2026-08-18T04:42:46.789Z"
 feature_id: F7
 priority: P2
 tags: ["rules", "ui", "boundary"]
@@ -122,7 +122,7 @@ exclude: ["apps/web/src/components/ui/**", "apps/web/src/ui.ts", "**/tests/**", 
 | ---- | ----- | ---------- |
 | `config/rules/ui/ui-import-boundary.yaml` | `1-57` (new) | New rule preset with two warning-severity rules. `ui-import-seam-only` (`forbidden-import`) forbids `daisyui` + `@uiw/react-md-editor` imports under `apps/web/src/**` except the `ui.ts` seam and `components/ui/**`. `no-daisyui-class-leak` (`rg`) flags daisyUI component classes in `className` strings outside `components/ui/**`, word-bounded to the component allowlist so layout/utility classes never match. Both start at `warning` per DD-06 (promotion + pre-check wiring is 0104). |
 
-**Outcome.** `spur rule validate` clean (2 rules). `spur rule run` (default `--fail-on error`) exits 0 with 2 warnings on the one deferred leak — `@uiw/react-md-editor` imported directly in `apps/web/src/modules/task-kanban/MarkdownBody.tsx:1` and `TaskDetail.tsx:2` — which 0102's Solution explicitly handed to 0103/0104. `--fail-on warning` exits 1, proving the rule fires. `bun run lint` green. No `04_DESIGN.md` change (it indexes the `spur rule` command surface, not the preset inventory). The MDEditor import is intentionally NOT refactored — wrapping it into the seam is 0104's promotion work.
+**Outcome.** `spur rule validate` clean (2 rules). `spur rule run` (default `--fail-on error`) exits 0 with 2 warnings on the one deferred leak — `@uiw/react-md-editor` imported directly in `apps/web/src/modules/task-kanban/MarkdownBody.tsx:1` and `apps/web/src/modules/task-kanban/TaskDetail.tsx:2` — which 0102's Solution explicitly handed to 0103/0104. `--fail-on warning` exits 1, proving the rule fires. `bun run lint` green. No `04_DESIGN.md` change (it indexes the `spur rule` command surface, not the preset inventory). The MDEditor import is intentionally NOT refactored — wrapping it into the seam is 0104's promotion work.
 
 ### Testing
 
@@ -131,7 +131,7 @@ exclude: ["apps/web/src/components/ui/**", "apps/web/src/ui.ts", "**/tests/**", 
 | Req | Status | Evidence |
 | --- | ------ | -------- |
 | R1 | MET | `config/rules/ui/ui-import-boundary.yaml` created; `spur rule validate` → valid, ruleCount=2 (`no-daisyui-class-leak`, `ui-import-seam-only`). |
-| R2 | MET | `ui-import-seam-only` (`forbidden-import`, warning) forbids `daisyui` + `@uiw/react-md-editor` under `apps/web/src/**` except `ui.ts` + `components/ui/**`. Fires on `MarkdownBody.tsx:1` + `TaskDetail.tsx:2` (`--fail-on warning` → exit 1). |
+| R2 | MET | `ui-import-seam-only` (`forbidden-import`, warning) forbids `daisyui` + `@uiw/react-md-editor` under `apps/web/src/**` except `ui.ts` + `components/ui/**`. Fires on `apps/web/src/modules/task-kanban/MarkdownBody.tsx:1` + `apps/web/src/modules/task-kanban/TaskDetail.tsx:2` (`--fail-on warning` → exit 1). |
 | R3 | MET | `no-daisyui-class-leak` (`rg`, warning) probe test: `className="btn btn-primary"` flagged (1 finding); `className="flex grid gap-2 p-4"` not flagged (0 findings). Word-bounded component allowlist excludes layout/utility. |
 | R4 | MET | Both rules: `include` `apps/web/src/**`; `exclude` `components/ui/**` + `ui.ts` + `**/tests/**` + `**/node_modules/**`. |
 | R5 | MET | `spur rule run` default (`--fail-on error`) exits 0; flags the deferred MDEditor leak at warning severity only (the case 0102 explicitly handed to 0103/0104). No `recommended-pre-check` change. |

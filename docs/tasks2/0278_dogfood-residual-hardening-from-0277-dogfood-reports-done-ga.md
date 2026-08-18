@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: ["0276", "0277"]
 created_at: "2026-07-17T06:11:43.445Z"
-updated_at: "2026-07-28T00:32:07.123Z"
+updated_at: "2026-08-18T04:42:47.532Z"
 ---
 
 ## 0278. Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate)
@@ -170,7 +170,7 @@ Scenario: Chained cost row is honest
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `lifecycle-adapter.ts:148` `checkReviewReadyForDone` after provenance; denies missing populated P1–P4 (`:235`) |
+| R1 | MET | `packages/app/src/workflow/lifecycle-adapter.ts:148` `checkReviewReadyForDone` after provenance; denies missing populated P1–P4 (`:235`) |
 | R2 | MET | `lifecycle-adapter.test.ts` — prose-only Review denies with Review L3 message; populated table passes Review gate (shell may still deny) |
 | R3 | MET | `monitor-ledger.md` chained unobservable MUST `P3 — chained-step cost not observable`; SKILL Phase 4 step 4 |
 | R4 | MET | `SKILL.md` §Step-splitting recipe — three concrete dogfood invocations |

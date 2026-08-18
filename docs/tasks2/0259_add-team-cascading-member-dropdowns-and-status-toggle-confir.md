@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.261Z"
-updated_at: "2026-07-15T17:55:34.598Z"
+updated_at: "2026-08-18T04:42:47.367Z"
 ---
 
 ## 0259. Add team + cascading member dropdowns and status toggle+confirm to Terminal toolbar
@@ -162,13 +162,13 @@ Constraints / invariants:
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `TerminalTab.tsx:210-250` — Team Select populated from /api/team/teams |
-| R2 | MET | `TerminalTab.tsx:240-260` — Member Select with id+type+status |
-| R3 | MET | `TerminalTab.tsx:280` — renders MemberTerminal when selected (local state) |
+| R1 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:210-250` — Team Select populated from /api/team/teams |
+| R2 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:240-260` — Member Select with id+type+status |
+| R3 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:280` — renders MemberTerminal when selected (local state) |
 | R4 | MET | `TerminalTab.tsx:260-270 + 290-330` — status toggle + confirmation Modal |
 | R5 | MET | toolbar + inner MemberTerminal connected indicator preserved |
 | R6 | MET | `TerminalTab.tsx:50-90,130-160` — localStorage persist/restore with validation |
-| R7 | MET | `TerminalTab.tsx:190-205` — explicit empty state for no teams |
+| R7 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:190-205` — explicit empty state for no teams |
 
 **Acceptance Criteria Verification**
 

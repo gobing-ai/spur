@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:57.566Z"
-updated_at: "2026-07-28T00:32:34.311Z"
+updated_at: "2026-08-18T04:42:47.768Z"
 ---
 
 ## 0317. Make sp:spur-cli an executable surface SSOT — add missing task verbs, fix section set
@@ -91,7 +91,7 @@ Independent of 0315/0316 — but 0315's R4 handover-reference wording should cit
 3. `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:45-47` — Corrected the canonical section list to include `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes` and universal sections (`History`, `References`, `Notes`).
 4. `plugins/sp/skills/spur-cli/SKILL.md:32-47` — Updated noun routing table to distinguish Tier A (`task`, `feature`, `rule`, `workflow`), Tier B (`init`/`status` + long-tail router), and established the **Execute-First Contract**.
 5. `AGENTS.md:61` — Updated non-negotiable rule 4 to direct agents to execute high-frequency Tier A verbs directly from `sp:spur-cli` references before resorting to `--help`.
-6. `plugins/sp/tests/spur-cli-parity.test.ts:1-118` — Created new reference↔live-CLI parity test suite asserting verb coverage and critical-flag presence across all Tier A nouns (`task`, `feature`, `rule`, `workflow`).
+6. `apps/cli/tests/spur-cli-parity.test.ts:1-118` — Created new reference↔live-CLI parity test suite asserting verb coverage and critical-flag presence across all Tier A nouns (`task`, `feature`, `rule`, `workflow`).
 7. `CHANGELOG.md:15-16` — Added release changelog entry under `[0.3.21]`.
 
 ### Testing

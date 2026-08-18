@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-25T21:35:05.729Z"
-updated_at: 2026-06-25T21:55:46.860Z
+updated_at: "2026-08-18T04:42:46.882Z"
 ---
 
 ## 0123. spur task refresh: auto-generate parent sub-task roster block
@@ -111,7 +111,7 @@ Added `spur task refresh-roster <wbs>` — the generator half of the 0121 roll-u
 | `docs/00_ADR.md` (ADR-020 amendment 2026-06-25, 0123) | Documents the generator + the deliberate non-use of `replaceMarkerRegion`. |
 | `AGENTS.md:173` | CLI surface line for the new verb (CLAUDE.md symlinks here). |
 
-**Design-defining decision (per the 0121/0122 type-fit lesson):** the obvious "call `MarkdownDocument.replaceMarkerRegion` like feature refresh" is wrong twice over — (1) a task `## Plan` is hand-authored *without* markers, so the helper throws (`markdown-document.ts:455`); (2) the helper hardcodes the rewrite label to "spur feature refresh", which would mislabel a task roster. So region handling is done in the service (strip-prior-region + re-append) with `refresh-roster`-labeled markers. Verified against the real types before coding, not assumed.
+**Design-defining decision (per the 0121/0122 type-fit lesson):** the obvious "call `MarkdownDocument.replaceMarkerRegion` like feature refresh" is wrong twice over — (1) a task `## Plan` is hand-authored *without* markers, so the helper throws (`packages/domain/src/planning/markdown-document.ts:455`); (2) the helper hardcodes the rewrite label to "spur feature refresh", which would mislabel a task roster. So region handling is done in the service (strip-prior-region + re-append) with `refresh-roster`-labeled markers. Verified against the real types before coding, not assumed.
 
 **Live-corpus smoke (reverted, not committed):** `task refresh-roster 0109` on the real corpus correctly appended an auto-block below 0109's hand-written roster and was idempotent on a second run; the test mutation to 0109 was reverted (out of 0123 scope).
 ### Testing

@@ -11,7 +11,7 @@ priority: P2
 tags: [review]
 dependencies: []
 created_at: 2026-06-29T23:55:30.798Z
-updated_at: 2026-06-30T01:20:51.511Z
+updated_at: "2026-08-18T04:42:47.062Z"
 ---
 
 ## 0159. Review dogfood findings for sp-dev-refine 0157 auto-next
@@ -49,7 +49,7 @@ The findings below are workflow-quality issues captured under `--full`; none blo
 
 | File | Lines | What / Why |
 |------|-------|------------|
-| `packages/app/src/services/task-record.ts` | 170 | Add `Coverage: N/A` line to `renderTesting` output — the verify pipeline does not measure code coverage, so the verdict-generated Testing section must carry an explicit `N/A` claim to satisfy the `spur task check` L3 coverage regex (`task-check.ts:256`). |
+| `packages/app/src/services/task-record.ts` | 170 | Add `Coverage: N/A` line to `renderTesting` output — the verify pipeline does not measure code coverage, so the verdict-generated Testing section must carry an explicit `N/A` claim to satisfy the `spur task check` L3 coverage regex (`packages/app/src/services/task-check.ts:256`). |
 | `packages/app/tests/services/task-record.test.ts` | 167-169 | Assert `Coverage: N/A` appears in `renderTesting` output — guards against regression of the P3 fix. |
 
 ### Testing

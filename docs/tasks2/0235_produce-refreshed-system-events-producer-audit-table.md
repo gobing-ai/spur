@@ -12,7 +12,7 @@ priority: P3
 tags: ["observability", "docs", "audit"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.457Z"
-updated_at: "2026-07-28T00:32:02.974Z"
+updated_at: "2026-08-18T04:42:47.163Z"
 ---
 
 ## 0235. Produce refreshed system-events producer-audit table
@@ -64,12 +64,12 @@ Created `docs/inventory/system-events-producer-audit.md` as the canonical produc
 Columns: Catalog entry | Emit site (file:line) | Bus path to tap | Status. Legend covers reachable (✅), nested-CLI deferred (⚠️), unwired (❌), plus diagnostic-only (🔬) and conditional (◐) for honest edge cases.
 
 Key verified cites (re-checked 2026-07-11):
-- `agent.started` / `agent.stopped` / `agent.message.sent` — `team-orchestrator.ts:73/86/98` via `team-service.ts:388` + `context.ts:362`
+- `agent.started` / `agent.stopped` / `agent.message.sent` — `team-orchestrator.ts:73/86/98` via `packages/app/src/services/team-service.ts:388` + `context.ts:362`
 - `process.started` — `process-executor.ts:138,202,271`
 - `process.spawned/exited/stopped` — `supervisor-service.ts:174/186/216`
 - `scheduler.job.executed` — `serve.ts:89` (`registerSchedulerEntries`)
-- `message.sent/replied` — `team-service.ts:177` → `:371`
-- `api.request.error` — `error-handler.ts:176`
+- `message.sent/replied` — `packages/app/src/services/team-service.ts:177` → `:371`
+- `api.request.error` — `apps/server/src/middleware/error-handler.ts:176`
 - Nested-CLI residual — footer + legend referencing `serve.ts:137–145` (⚠️ deferred, not ❌)
 - Single-queue note — footer §2 (`serve.ts:279–294`; `type` is the discriminator; no `queueName`)
 
@@ -88,7 +88,7 @@ missing = []  extra = []  dups = []
 ```
 
 **`--fix all` applied this run:**
-1. Refreshed drifted emit-site line numbers in `docs/inventory/system-events-producer-audit.md` (scheduler `serve.ts:89`, message `team-service.ts:177`, process supervisor `174/186/216`).
+1. Refreshed drifted emit-site line numbers in `docs/inventory/system-events-producer-audit.md` (scheduler `serve.ts:89`, message `packages/app/src/services/team-service.ts:177`, process supervisor `174/186/216`).
 2. Solution section rewritten with `file:line` citations (strict-core L3).
 3. Testing section expanded with deterministic catalog-crosscheck evidence.
 

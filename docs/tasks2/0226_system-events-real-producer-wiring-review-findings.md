@@ -12,7 +12,7 @@ priority: P1
 tags: ["review", "observability", "system-events", "eventbus", "server", "sse"]
 dependencies: []
 created_at: "2026-07-07T21:45:00.000-07:00"
-updated_at: "2026-07-08T19:07:13.238Z"
+updated_at: "2026-08-18T04:42:47.117Z"
 ---
 
 ## 0226. System Events real producer wiring review findings
@@ -235,7 +235,7 @@ Do not rely on `EventBus` injection across process boundaries; it is in-memory o
   then emits `api.request.error` via `c.get('ctx')?.eventBus()?.emit(...)` before returning the
   JSON error envelope. Payload: `{ method, path, status, route, code, requestId }` — all keys
   safe under `metadata-only` payload policy (none in redaction list).
-- `error-handler.ts:26-33` — `hasHttpStatus()` duck-typing guard for `HTTPException` (avoids
+- `apps/server/src/middleware/error-handler.ts:26-33` — `hasHttpStatus()` duck-typing guard for `HTTPException` (avoids
   `hono/http-exception` subpath import); `isAppErrorLike()` guard for `AppError`.
 - `apps/server/tests/middleware/error-handler.test.ts` — 2 F7 tests verify `api.request.error`
   is emitted on the bus when a `ServerContext` is present (16 tests total, 48 expect calls).
@@ -259,10 +259,10 @@ threaded into `AiRunner`.
 
 **Observable from parent level:**
 - `agent.invoke.start`/`agent.invoke.exit` — emitted by `AiRunner` (`ai-runner.ts:138,156`),
-  bridged through `AgentService` (`agent-service.ts:299-308`)
+  bridged through `AgentService` (`packages/app/src/services/agent-service.ts:299-308`)
 - `process.started`/`process.exited` — emitted by `NodeProcessExecutor`
   (`process-executor.ts:138,202,226,258`), bridged through `AgentService.processEvents`
-  (`agent-service.ts:307`)
+  (`packages/app/src/services/agent-service.ts:307`)
 
 **NOT observable (child-process internals):** if the agent's session itself runs `spur workflow
 run` or `spur rule run` inside the child process, those `workflow.*`/`rule.*` events fire on the

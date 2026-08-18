@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0327"]
 created_at: "2026-07-25T00:27:51.163Z"
-updated_at: "2026-07-28T00:33:17.691Z"
+updated_at: "2026-08-18T04:42:47.875Z"
 ---
 
 ## 0329. Author /sp:dev-refresh command (feature-id | wbs | --all | --auto)
@@ -58,9 +58,9 @@ Conventions: existing dev-* command shape at `plugins/sp/commands/dev-wrap.md`; 
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 `plugins/sp/commands/dev-refresh.md` per dev-* conventions | MET | `plugins/sp/commands/dev-refresh.md:1-5` — frontmatter `description` / `argument-hint` / `allowed-tools` matches the dev-wrap shape; command-contract validator passes (`validate() → zero violations`, 309/309 plugin tests) |
-| R2 modes: feature-id / WBS (link-helper + persisted skip) / `--all` combined sweep / `--auto` unattended | MET | `dev-refresh.md:17-20` — feature-id: dry-run proposal + confirm + apply; WBS: resolve linked feature, link-helper propose or persist skip (`feature_link_declined: true`); `--all`: orphan sweep + `spur feature sync --all --json` with summary; `--auto`: forward-only auto-apply, orphan proposals queued to `.spur/run/dev-refresh-report.txt` |
-| R3 thin wrapper — orchestrates CLI verb + link-helper, no duplicated derivation logic | MET | `dev-refresh.md:9` wraps `sp:spur-dev`; every mode delegates to `spur feature sync` (0327 engine) or feature-link-helper — zero derivation logic in the command |
-| R4 idempotence + sensible exit semantics | MET | idempotent by delegation: `syncFeature` no-ops when `from === to` (`feature-service.ts:450-452`) and CLI prints NOOP; CLI error path exits non-zero (`apps/cli/src/commands/feature.ts` sync action, `context.setExitCode(1/2)`); command usage line documents the arg modes |
+| R2 modes: feature-id / WBS (link-helper + persisted skip) / `--all` combined sweep / `--auto` unattended | MET | `plugins/sp/commands/dev-refresh.md:17-20` — feature-id: dry-run proposal + confirm + apply; WBS: resolve linked feature, link-helper propose or persist skip (`feature_link_declined: true`); `--all`: orphan sweep + `spur feature sync --all --json` with summary; `--auto`: forward-only auto-apply, orphan proposals queued to `.spur/run/dev-refresh-report.txt` |
+| R3 thin wrapper — orchestrates CLI verb + link-helper, no duplicated derivation logic | MET | `plugins/sp/commands/dev-refresh.md:9` wraps `sp:spur-dev`; every mode delegates to `spur feature sync` (0327 engine) or feature-link-helper — zero derivation logic in the command |
+| R4 idempotence + sensible exit semantics | MET | idempotent by delegation: `syncFeature` no-ops when `from === to` (`packages/app/src/services/feature-service.ts:450-452`) and CLI prints NOOP; CLI error path exits non-zero (`apps/cli/src/commands/feature.ts` sync action, `context.setExitCode(1/2)`); command usage line documents the arg modes |
 | R5 register in `plugins/sp/README.md` + `docs/04_DESIGN.md` same commit (T3) | MET | commit 50f9a1ee: README index row for `dev-refresh`; `docs/04_DESIGN.md` surface count 28→31 in §1.3; command-contract counts updated (31) |
 
 **Acceptance Criteria Verification**
@@ -83,9 +83,9 @@ Residual risk: command-to-spine routing gets its first live exercise at the 0330
 
 - `bun test plugins/sp/tests/` — 309 pass / 0 fail / 1537 expects (command-contract validator: zero violations, 31 files)
 - `bun run lint` — clean (biome + all 5 workspace typechecks exit 0)
-- `bun run test` — 3 fail = the pre-existing sandbox denials (2× EADDRINUSE port-bind `rpc-client.test.ts`, 1× `ps` EPERM `process-inventory-service.ts:92`); no plugin/CLI failures
+- `bun run test` — 3 fail = the pre-existing sandbox denials (2× EADDRINUSE port-bind `rpc-client.test.ts`, 1× `ps` EPERM `packages/app/src/services/process-inventory-service.ts:92`); no plugin/CLI failures
 - Coverage: N/A (documentation-only change — markdown command + README/design index; no runtime code path added; contract covered by plugin test suite)
-- Line-anchor rule: `dev-refresh.md:1-20`, README row, `docs/04_DESIGN.md:320` re-read this run; cited lines name the requirement subjects
+- Line-anchor rule: `plugins/sp/commands/dev-refresh.md:1-20`, README row, `docs/04_DESIGN.md:320` re-read this run; cited lines name the requirement subjects
 - Verdict artifact: `.spur/run/0329-verdict.json` (written last, standalone path)
 ### Review
 | Severity | File | Finding | Recommendation |

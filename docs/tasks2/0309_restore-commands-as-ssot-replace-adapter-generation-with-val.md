@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0308"]
 created_at: "2026-07-21T19:37:11.213Z"
-updated_at: "2026-07-28T00:32:28.899Z"
+updated_at: "2026-08-18T04:42:47.734Z"
 ---
 
 ## 0309. Restore commands as SSOT: replace adapter generation with validation, delete codex adapters
@@ -206,10 +206,10 @@ defects found in the prior self-reported results and repaired — see the fix-pa
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 — Commands restored as SSOT, hand/LLM-editable | MET | 28 `plugins/sp/commands/*.md`; no generator upstream (`generate-adapters.ts` absent). Heading inventory across all 28: exactly `H1 + ## Usage + ## Implementation`, nothing else. |
-| R2a — Heading whitelist (set is **exactly** Usage+Implementation) | MET *(after fix)* | `validate-commands.ts:106` `checkHeadingWhitelist` — forbidden + **missing** + **duplicate** checks; parser at `:69` collects **all** heading levels, fence-aware. Probe: wrapper missing `## Usage` → caught; `### Behavior` prose → caught; fenced `# comment` → not a false positive. |
-| R2b — Frontmatter schema | MET | `validate-commands.ts:122` `checkFrontmatterSchema`; negative-path tests in `command-contract.test.ts` describe `(b)`. |
-| R2c — Target resolution | MET | `validate-commands.ts:138` `checkTargetResolution` — `sp:<skill>` refs, `.spur/workflows/*.yaml`, procedure anchors; describe `(c)`. |
-| R2d — allowed-tools coherence | MET | `validate-commands.ts:205` — `Skill` iff body has `Skill()`. Caught a real incoherence: `plugins/sp/commands/dev-reverse.md:4` gained `Skill`. |
+| R2a — Heading whitelist (set is **exactly** Usage+Implementation) | MET *(after fix)* | `plugins/sp/scripts/validate-commands.ts:106` `checkHeadingWhitelist` — forbidden + **missing** + **duplicate** checks; parser at `:69` collects **all** heading levels, fence-aware. Probe: wrapper missing `## Usage` → caught; `### Behavior` prose → caught; fenced `# comment` → not a false positive. |
+| R2b — Frontmatter schema | MET | `plugins/sp/scripts/validate-commands.ts:122` `checkFrontmatterSchema`; negative-path tests in `command-contract.test.ts` describe `(b)`. |
+| R2c — Target resolution | MET | `plugins/sp/scripts/validate-commands.ts:138` `checkTargetResolution` — `sp:<skill>` refs, `.spur/workflows/*.yaml`, procedure anchors; describe `(c)`. |
+| R2d — allowed-tools coherence | MET | `plugins/sp/scripts/validate-commands.ts:205` — `Skill` iff body has `Skill()`. Caught a real incoherence: `plugins/sp/commands/dev-reverse.md:4` gained `Skill`. |
 | R3 — Registry, generator, adapters deleted | MET | `git status`: `D plugins/sp/scripts/command-registry.ts`, `D plugins/sp/scripts/generate-adapters.ts`, `D plugins/sp/tests/adapter-drift.test.ts`, `D` ×28 `plugins/sp/adapters/codex/*`. Directory `plugins/sp/adapters/` absent. |
 | R4 — Test rewritten as `.md` contract test, gates retained | MET *(after fix)* | `plugins/sp/tests/command-contract.test.ts` — 283 pass / 0 fail; coverage on `validate-commands.ts` 100.00% funcs / 99.57% lines. New describe `(a2)` locks the exact-set regressions closed. |
 | R5 — `adapter:generated` markers stripped | MET | `rg -l 'adapter:generated' plugins/sp/commands/` → 0 files. Fresh-session caveat retained in `plugins/sp/README.md`. |

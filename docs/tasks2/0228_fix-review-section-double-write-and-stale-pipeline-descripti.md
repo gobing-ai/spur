@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-08T22:28:31.879Z"
-updated_at: "2026-07-08T22:41:08.838Z"
+updated_at: "2026-08-18T04:42:47.128Z"
 ---
 
 ## 0228. fix review section double-write and stale pipeline descriptions
@@ -191,7 +191,7 @@ step is authoritative).
 **P1 — functional-review Step 7: Testing → Review** (`plugins/sp/skills/functional-review/SKILL.md:243-249`):
 Changed `spur task update --section Testing` to `--section Review` and updated the temp-file name
 from `/tmp/<wbs>-testing.md` to `/tmp/<wbs>-functional.md`. The per-requirement traceability table
-now writes to `## Review`, matching `dev-review.md:62-63`'s declaration of `## Review` as the output
+now writes to `## Review`, matching `plugins/sp/commands/dev-review.md:62-63`'s declaration of `## Review` as the output
 section for all three review dimensions.
 
 **P2 — functional-review Step 8: resolve contradiction** (`plugins/sp/skills/functional-review/SKILL.md:272-273`):
@@ -203,7 +203,7 @@ structure stable." Step 7 and Step 8 now agree on `## Review` as the output sect
 Removed the `spur task update --section Review --from-file` block. Verify mode now writes only
 `## Testing` via CLI verb. Added a blockquote warning explaining why: `## Review` is owned by the
 review step (`/sp:dev-review`), the `record` step backfills via `sectionIsBare` guard
-(`task-service.ts:563`), and writing `## Review` here destroys the review step's findings.
+(`packages/app/src/services/task-service.ts:563`), and writing `## Review` here destroys the review step's findings.
 Also removed the `Review section` body-only guidance bullet (no longer needed since verify mode
 no longer writes Review).
 
@@ -217,7 +217,7 @@ Updated from "The **record** step transcribes the answer file into the task: `##
 per-requirement/AC tables, `## Review` ← SECUA findings" to "The **record** step transcribes only
 `## Testing` from the verdict — verdict + per-requirement/AC tables + evidence. `## Review` is
 owned by the review step (`/sp:dev-review`) and the record step's `sectionIsBare` guard
-(`task-service.ts:563`) preserves any non-bare Review content. Verify mode never writes `## Review`."
+(`packages/app/src/services/task-service.ts:563`) preserves any non-bare Review content. Verify mode never writes `## Review`."
 
 **P5 — task-pipeline.yaml: review state description** (`config/workflows/task-pipeline.yaml:123`):
 Changed "SECUA-framework code review via /sp:dev-review (Security, Efficiency, Correctness, Usability, Architecture)"
@@ -233,7 +233,7 @@ findings written to `## Review`."
 
 **R7 confirmation:** `code-improvement/SKILL.md:190-192` does not write to the task file directly — confirmed not part of the double-write. No change needed.
 
-**No engine code changes.** The record step (`task-service.ts:554-567`) is correct as-is: `## Testing` unconditional (verdict authoritative), `## Review` bareness-guarded (dev-review owns it). The fix realigns skill documentation with the record step's existing logic.
+**No engine code changes.** The record step (`packages/app/src/services/task-service.ts:554-567`) is correct as-is: `## Testing` unconditional (verdict authoritative), `## Review` bareness-guarded (dev-review owns it). The fix realigns skill documentation with the record step's existing logic.
 
 ### Testing
 

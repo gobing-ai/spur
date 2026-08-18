@@ -4,7 +4,7 @@ name: "Promote UI boundary rule to error + wire into pre-check gate + doc sync"
 status: done
 template: feature-impl
 created_at: 2026-06-23T06:04:57.965Z
-updated_at: 2026-06-26T15:45:19.651Z
+updated_at: "2026-08-18T04:42:46.800Z"
 feature_id: F7
 priority: P2
 tags: ["rules", "ui", "gate", "docs"]
@@ -150,11 +150,11 @@ then discovers `config/rules/ui/`.
 
 | Req | Status | Evidence |
 | --- | ------ | -------- |
-| R1 | MET | `MDEditor` re-exported from `ui.ts:7`; CSS side-effect at `ui.ts:5`; `MarkdownBody.tsx:3` + `TaskDetail.tsx:3` import from `@/ui`. `rg` → zero `@uiw/*` imports under `apps/web/src/modules/**`; only `ui.ts` imports the lib. |
-| R2 | MET | `ui-import-boundary.yaml:25-28` — Rule A exclude = `ui.ts` + tests + node_modules (dropped `components/ui/**`). Authoritative probe: a raw UI-lib import placed inside `components/ui/` is **now flagged** (1 finding) — pre-0104 it was exempt. |
-| R3 | MET | `ui-import-boundary.yaml:16` — `ui-import-seam-only` severity `error`. `spur rule run` exits 0 at `--fail-on error` (leak gone). |
-| R4 | MET | `ui-import-boundary.yaml:39` — `no-daisyui-class-leak` severity `error`; `components/ui/**` retained in its exclude (`:45`) — the sanctioned class-authoring site. |
-| R5 | MET | `recommended-pre-check.yaml:13` extends `ui`; `rule list --preset` shows both ui rules; `test-pre-check` (`--fail-on warning`) exits 0. |
+| R1 | MET | `MDEditor` re-exported from `apps/web/src/ui.ts:7`; CSS side-effect at `apps/web/src/ui.ts:5`; `apps/web/src/modules/task-kanban/MarkdownBody.tsx:3` + `apps/web/src/modules/task-kanban/TaskDetail.tsx:3` import from `@/ui`. `rg` → zero `@uiw/*` imports under `apps/web/src/modules/**`; only `ui.ts` imports the lib. |
+| R2 | MET | `config/rules/ui/ui-import-boundary.yaml:25-28` — Rule A exclude = `ui.ts` + tests + node_modules (dropped `components/ui/**`). Authoritative probe: a raw UI-lib import placed inside `components/ui/` is **now flagged** (1 finding) — pre-0104 it was exempt. |
+| R3 | MET | `config/rules/ui/ui-import-boundary.yaml:16` — `ui-import-seam-only` severity `error`. `spur rule run` exits 0 at `--fail-on error` (leak gone). |
+| R4 | MET | `config/rules/ui/ui-import-boundary.yaml:39` — `no-daisyui-class-leak` severity `error`; `components/ui/**` retained in its exclude (`:45`) — the sanctioned class-authoring site. |
+| R5 | MET | `config/rules/recommended-pre-check.yaml:13` extends `ui`; `rule list --preset` shows both ui rules; `test-pre-check` (`--fail-on warning`) exits 0. |
 | R6 | MET | `lint` 0 · `test` 1895 pass / 0 fail · `test-cf` 0 · `build` 0; preset run exits 0 at both `--fail-on warning` and `--fail-on error`. |
 | R7 | MET | `00_ADR.md` ADR-025 consequence note (NO new ADR — the seam is the enforcement *mechanism*, not a new decision; ADR-025 already owns the `@uiw/react-md-editor` choice); `05_FEATURES.md §4` status row added. |
 | R8 | MET | `git status` shows only intentional changes; no `biome-ignore` added to silence the gate. |

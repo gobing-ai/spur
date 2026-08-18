@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-25T00:27:56.004Z"
-updated_at: "2026-07-28T00:33:14.507Z"
+updated_at: "2026-08-18T04:42:47.896Z"
 ---
 
 ## 0331. Normalize legacy 'Done' task statuses to canonical done
@@ -56,7 +56,7 @@ Corpus hygiene split out of the backfill scope: 12 tasks carry legacy status `Do
 | R1 enumerate legacy-`Done` tasks (12 as of 2026-07-24) | MET | Solution record: 12 tasks2 files (0193–0196, 0204–0210, 0220) + archived `docs/tasks/` files normalized (`Done`→`done`, `Blocked`→`blocked`, `Canceled`→`cancelled`); commit 708ca1c1 touches 101 files |
 | R2 normalize to `done` through canonical paths | MET | post-normalization grep: `rg '^status: (Done\|Blocked\|Canceled\|Cancelled\|Todo\|Wip\|Testing\|Active)$' docs/tasks2/ docs/tasks/` → **0 matches** — no non-canonical casing remains |
 | R3 verify single `done` bucket; `spur task check` clean | MET | 0 non-canonical statuses corpus-wide; `spur task check --strict-core` → 0 errors (only pre-existing L4 AC-subset warnings on feature J, unrelated to casing) |
-| R4 root-cause if a code source writes `Done` | MET | traced: `apps/cli/src/commands/task.ts:66,244,294` — the schema already alias-normalizes `Done`/`DONE`→`done` on read (task 0292 fix pass); the legacy values came from pre-normalization-era corpus files, not a live writer. Incidental type-cast cleanup in `feature-service.ts:497-498` (`as FeatureStatus` removed after the syncAllFeatures resilience change) |
+| R4 root-cause if a code source writes `Done` | MET | traced: `apps/cli/src/commands/task.ts:66,244,294` — the schema already alias-normalizes `Done`/`DONE`→`done` on read (task 0292 fix pass); the legacy values came from pre-normalization-era corpus files, not a live writer. Incidental type-cast cleanup in `packages/app/src/services/feature-service.ts:497-498` (`as FeatureStatus` removed after the syncAllFeatures resilience change) |
 
 **Acceptance Criteria Verification**
 
@@ -82,7 +82,7 @@ Residual risk: none. Corpus now has a single canonical `done` bucket; derivation
 - `bun run lint` — clean (biome + all 5 workspace typechecks exit 0)
 - Root-cause trace: `task.ts:66,244,294` alias-normalizes on read; no live `Done` writer exists
 - Coverage: N/A (corpus data normalization + one type-cast cleanup covered by the 41 service tests)
-- Line-anchor rule: `feature-service.ts:497-498`, `task.ts:66,244,294` re-read this run; cited lines name the requirement subjects
+- Line-anchor rule: `packages/app/src/services/feature-service.ts:497-498`, `task.ts:66,244,294` re-read this run; cited lines name the requirement subjects
 - Verdict artifact: `.spur/run/0331-verdict.json` (written last, standalone path)
 ### Review
 | Severity | File | Finding | Recommendation |

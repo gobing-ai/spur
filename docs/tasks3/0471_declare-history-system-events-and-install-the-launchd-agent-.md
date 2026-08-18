@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0470"]
 ac_numbering: task-local
 created_at: "2026-08-07T05:02:01.610Z"
-updated_at: "2026-08-08T12:42:53.883Z"
+updated_at: "2026-08-18T04:42:48.515Z"
 done_forced: "true"
 done_reason: "Implement agent completed all 14 plan items; pipeline test-fix agent hit provider quota (exit 3) before verify ran. Manual re-verification: 4673 tests pass 0 fail, lint+typecheck+build green, event-names 100%/history.ts 99.25%/daily-summary 92.88% coverage, plist validated via plutil -lint, docs R8 T3 complete. Force-done waives the verify verdict only (task 0292)."
 ---
@@ -345,7 +345,7 @@ R8 — Docs (same commit, T3):
 | R4 | MET | plist `StandardOutPath`/`StandardErrorPath` → `PROJECT_DIR/.spur/logs/history-daily.out`/`.err` (re-read this run); launchd owns the fds from the first byte, so pre-logging failures are captured; `plutil -lint` OK |
 | R5 | MET | Layer 2 (ledger events) = R2 tests above; layer 4 (launchd err log) = plist `StandardErrorPath`; layer 1 staleness banner independent of ledger — test `apps/cli/tests/commands/history.test.ts:175` "report prints staleness banner when pointer artifact is older than 36h" passed this run; layer 3 owned by 0470; composition table `docs/04_DESIGN.md:478-484` |
 | R6 | MET | `history.daily.failed` row present ⇒ ran-and-failed vs zero `history.*` rows ⇒ never-started; failure-persist tests `history.test.ts:421-423`/`:467-469`/`:499-500` assert the row post-return; success test `:542` asserts no failure event; rationale `docs/04_DESIGN.md:486-489` |
-| R7 | MET | `plugins/sp/scripts/daily-summary/daily-summary.ts:81` (`historyReportPath?`), `:443-446` (`## History Report` section), `:486-499` (`resolveHistoryReportPath` follows `latest.json` symlink, absent ⇒ omit); `plugins/sp/skills/daily-summary/SKILL.md:129`; tests `daily-summary.test.ts:327`/`:336`/`:778`/`:794` — 4 pass this run |
+| R7 | MET | `plugins/sp/scripts/daily-summary/daily-summary.ts:81` (`historyReportPath?`), `:443-446` (`## History Report` section), `:486-499` (`resolveHistoryReportPath` follows `latest.json` symlink, absent ⇒ omit); `plugins/sp/skills/daily-summary/SKILL.md:129`; tests `plugins/sp/tests/daily-summary/daily-summary.test.ts:327`/`:336`/`:778`/`:794` — 4 pass this run |
 | R8 | MET | `docs/04_DESIGN.md:437-490` records chosen surface (launchd), rejected alternatives (embedded scheduler, installer verb, fifth layer), plist install/uninstall, three event names, four-layer table; design doc and surface code are in the same working-tree change set (`git diff HEAD` covers both `history.ts`/`event-names.ts` and `04_DESIGN.md`; no commit contains `history.import.completed` without the doc) |
 
 **Acceptance Criteria Verification**
@@ -358,7 +358,7 @@ R8 — Docs (same commit, T3):
 | Scenario: R4 — pre-logging failures are still captured | MET | command | `plutil -lint` OK; `StandardErrorPath` → `.spur/logs/history-daily.err` (static-ref) — launchd owns the fd before the binary starts |
 | Scenario: R5 — no single detection layer is the sole signal | MET | test | staleness banner test `history.test.ts:175` passes with no ledger dependency; layers 2/4 evidenced above; composition doc `docs/04_DESIGN.md:478-484` |
 | Scenario: R6 — a failed run is distinguishable from a run that never started | MET | test | `history.test.ts:399`/`:435`/`:481` persist `history.daily.failed`; `:542` proves success writes no failure row; absence-of-rows case is the never-started signal |
-| Scenario: R7 — the report path reaches the operator through an existing surface | MET | test | `daily-summary.test.ts:778` symlink-resolution integration test + `:327` render test — 4 pass |
+| Scenario: R7 — the report path reaches the operator through an existing surface | MET | test | `plugins/sp/tests/daily-summary/daily-summary.test.ts:778` symlink-resolution integration test + `:327` render test — 4 pass |
 | Scenario: R8 — the surface decision is documented in the same commit | MET | static-ref | `docs/04_DESIGN.md:437-490`; doc + surface in the same uncommitted change set (batch commits at end) — T3 intent satisfied |
 
 **Design conformance.** 8/8 claims DONE: frozen file targets all match (event-names union `:18`, catalog `:130-132`, history.ts daily verb with `flush()` in `finally` `:259-260`, plist template, daily-summary surface, DESIGN doc); frozen names exact (three event names, renderer keys, label, log paths); `metadata-only` policy (never `raw-safe`); existing bridge reused (no second bridge); ledger failures log-and-swallow (`system-event-ledger.ts` R5, 3 tests pass); ship-as-template with documented `bootstrap`/`bootout`; no fifth layer / health verb / new notification channel / web renderer; layers 1+3 left to 0469/0470 as designed.

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-28T04:09:48.559Z"
-updated_at: "2026-08-11T21:18:35.361Z"
+updated_at: "2026-08-18T04:42:48.252Z"
 done_forced: "true"
 done_reason: PASS verdict + Review table; workflow validate and plugin tests green
 ---
@@ -110,7 +110,7 @@ Feature: Ship I1 idea path enhancements
 | R1 | MET | `plugins/sp/commands/dev-idea.md:3` arg-hint omits `--design` |
 | R2 | MET | `config/workflows/idea-pipeline.yaml:298-330` design=auto + needs_design only |
 | R3 | MET | `config/workflows/idea-pipeline.yaml:89` idea-eval; `:256-282` transitions |
-| R4 | MET | `idea-evaluation.md:1`; `brainstorm/SKILL.md:199-215`; discovery input `:86` |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/idea-evaluation.md:1`; `brainstorm/SKILL.md:199-215`; discovery input `:86` |
 | R5 | MET | `spur workflow validate` ok; skill-structure + command-contract 90 pass |
 
 **Acceptance Criteria Verification**

@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,cli,planning]
 dependencies: []
 created_at: 2026-07-03T23:35:28.256Z
-updated_at: 2026-07-05T00:30:17.075Z
+updated_at: "2026-08-18T04:42:47.101Z"
 ---
 
 ## 0192. Wire spur task migrate verb (A17) and run the board-cutover corpus normalization
@@ -85,7 +85,7 @@ Feature: Corpus migration
 **Verb wiring (R1–R3).** `spur task migrate [--dry-run] [--folder <path>] [--json]` is wired in `apps/cli/src/commands/task.ts` over the existing `CorpusMigrator` service. Sibling-verb pattern: `makeService`, `toJson` envelope, exit 0/1/2, `helpText()` entry. The CLI seam is tested in `apps/cli/tests/commands/task.test.ts` (dry-run zero-writes, idempotency golden fixture, `--json` envelope); the service suite is not duplicated.
 
 **Migrator hardening (done as part of R4 — the first dry-run exposed latent bugs).** Before applying to the live corpus, a test-apply on two sample files revealed the migrator was silently destructive. Five fixes in `packages/app/src/services/corpus-migrator.ts`:
-- `template` added to `FIELD_ORDER` — was being dropped, which would have flipped every `feature-impl` task's `task-check` variant to `default` (regression in `task-check.ts:201`).
+- `template` added to `FIELD_ORDER` — was being dropped, which would have flipped every `feature-impl` task's `task-check` variant to `default` (regression in `packages/app/src/services/task-check.ts:201`).
 - `parent_wbs: null` now round-trips (added `NULL_PRESERVING_KEYS`) — was dropped, losing the explicit "no parent" marker.
 - `dependencies: []` now round-trips — empty arrays were dropped, losing the "no deps" marker.
 - Empty-string scalars are quoted (`yamlScalar`) — a bare `description:` re-parses as `null`, failing the schema's `z.string().optional()`.

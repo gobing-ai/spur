@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "skills", "spur-cli"]
 dependencies: ["0394"]
 created_at: "2026-07-30T21:52:24.892Z"
-updated_at: "2026-07-31T01:53:15.822Z"
+updated_at: "2026-08-18T04:42:48.290Z"
 done_forced: "true"
 done_reason: "Tests pass manually (322/322 plugin suite incl new spur-cli-parity.test.ts 13 tests/211 assertions); lint+typecheck clean. Pipeline test step failed on omp 600s timeout, not a code defect."
 ---
@@ -108,7 +108,7 @@ Promoted six Tier B nouns (`agent`, `message`, `team`, `init`, `status`, `serve`
 - `plugins/sp/tests/spur-cli-parity.test.ts` - EXTENDED. Added Tier B verb parity, Tier C exclusion, routing-table link, and R7 dispatch-surface cross-reference tests.
 
 
-Verbs: parity test checks every documented Tier B verb against live `spur <noun> --help` output. Flags: agent's 19 flags verified against CLI source (`agent.ts:18-120`); all match. Flag-level parity test added this session (see Testing section).
+Verbs: parity test checks every documented Tier B verb against live `spur <noun> --help` output. Flags: agent's 19 flags verified against CLI source (`apps/cli/src/commands/agent.ts:18-120`); all match. Flag-level parity test added this session (see Testing section).
 ### Testing
 **Parity test suite** (`plugins/sp/tests/spur-cli-parity.test.ts`): 13 tests, 211 assertions, all passing.
 

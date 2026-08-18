@@ -12,7 +12,7 @@ priority: P2
 tags: ["web", "features", "a11y", "tokens"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.967Z"
-updated_at: "2026-07-28T00:33:23.355Z"
+updated_at: "2026-08-18T04:42:47.962Z"
 done_forced: "true"
 done_reason: "Operator accepted the designed R4 hard-stop outcome at the pipeline approve gate (2026-07-26, runall batch R2): cancelled-glyph light contrast 2.30:1 < 3:1 blocks the token swap; AC R10 carried by follow-up task 0338. Task requirements R1-R4 all MET per verify; verdict PARTIAL solely on the deferred R10."
 ---
@@ -144,7 +144,7 @@ re-produced this turn; line anchors re-read at the cited lines.
 |-----|--------|----------|
 | R1 | MET | `apps/web/src/styles/global.css:39-41` — `--color-spur-success: #15803d`, `--color-spur-warning: #b45309`, `--color-spur-error: #dc2626` inside `[data-theme="light"]` (re-read this run); dark `@theme` values at lines 15-17 untouched |
 | R2 | MET | Ratio table below, independently re-computed this run (`bun /tmp/verify-0335-contrast.mjs`) — 12/12 values match the recorded table |
-| R3 | MET (conditional complied) | R3 permits the swap only once both canvases pass; they do not (cancelled/light 2.30:1), so the mandated behavior is no swap. Re-read this run: `status-icons.tsx:77` keeps `text-error`, `:99` keeps `text-success` |
+| R3 | MET (conditional complied) | R3 permits the swap only once both canvases pass; they do not (cancelled/light 2.30:1), so the mandated behavior is no swap. Re-read this run: `apps/web/src/modules/features/status-icons.tsx:77` keeps `text-error`, `:99` keeps `text-success` |
 | R4 | MET | Gate fired on `cancelled`/light = 2.30:1 < 3:1; stopped before R3; 4/2 split left in place; blocker recorded in Solution with three follow-up levers |
 
 **Acceptance Criteria Verification**

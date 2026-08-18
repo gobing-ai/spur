@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T06:50:47.941Z"
-updated_at: "2026-07-14T20:05:41.828Z"
+updated_at: "2026-08-18T04:42:47.356Z"
 ---
 
 ## 0257. Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation
@@ -87,7 +87,7 @@ charset reuse is a small **MEDIUM** decision (reuse vs mirror).
 - `packages/config/src/index.ts:193` — `resolveExecutor(name, agentConfig, opts)` exported; executors-first, raw-agent fallback, optional `isCanonicalAgent` predicate (injected by 0258).
 - `packages/config/src/index.ts:215` — `team` field added to `AgentConfigSchema`; `superRefine` checks dup-localId + composed-id `AGENT_ID_REGEX`.
 - `packages/config/src/loader.ts:253` — `expandTilde` (Node-only; `~`/`~/` via `node:os` homedir).
-- `packages/config/src/loader.ts:269` — `expandTeamTildes` applies to `work_dir` + per-member `workspace`; wired into `loadSpurConfigFile` return at `loader.ts:316`.
+- `packages/config/src/loader.ts:269` — `expandTeamTildes` applies to `work_dir` + per-member `workspace`; wired into `loadSpurConfigFile` return at `packages/config/src/loader.ts:316`.
 - `apps/cli/schemas/spur-config.schema.json` — JSON schema synced with team/member/work_dir/executor defs (zod is SSOT).
 - `packages/config/tests/team-config.test.ts` — 22 tests covering AC1-AC6 (parse, normalize, dup-id, charset/length, resolveExecutor, backward-compat).
 - `packages/config/tests/loader.test.ts` — AC4 (tilde), AC6 (no-team backward-compat), AC7 (JSON-schema round-trip).
@@ -104,7 +104,7 @@ charset reuse is a small **MEDIUM** decision (reuse vs mirror).
 | R2 | MET | `TeamConfigSchema` + `team: z.record(...)` on `AgentConfigSchema` (index.ts). |
 | R3 | MET | `normalizeMember` + `resolveExecutor` exported (executors-first, raw fallback). |
 | R4 | MET | `superRefine`: dup-localId + per-team composed-id charset/length + (review) global cross-team uniqueness; non-empty name/work_dir. AC2/AC3 + collision tests. |
-| R5 | MET | `expandTilde`/`expandTeamTildes` wired at `loader.ts:316`. AC4 test. |
+| R5 | MET | `expandTilde`/`expandTeamTildes` wired at `packages/config/src/loader.ts:316`. AC4 test. |
 | R6 | MET | `spur-config.schema.json` matches the zod. AC7 round-trip test. |
 | R7 | MET | `team` optional; no-team config unchanged. AC6 test. |
 

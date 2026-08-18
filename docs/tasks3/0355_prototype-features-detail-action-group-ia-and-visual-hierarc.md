@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0351", "0353", "0352", "0354"]
 created_at: "2026-07-27T17:49:52.422Z"
-updated_at: "2026-07-27T22:43:04.439Z"
+updated_at: "2026-08-18T04:42:48.229Z"
 ---
 
 ## 0355. Prototype Features detail action-group IA and visual hierarchy
@@ -78,11 +78,11 @@ This Solution addresses: R1 (artifact covering primary/overflow/confirm/in-fligh
 
 **R1 — Prototype artifact**
 
-The artifact has two parts: (A) a **markdown wire** of the per-status action group layout, and (B) a **lightweight TSX sketch** of the button-group component shape (not wired to data; for IA review). Both reuse the design tokens already in the tree (`text-spur-text`, `text-spur-text-muted`, `text-spur-text-faint`, `bg-spur-accent`, `text-spur-accent`, `border-spur-border`, `bg-spur-surface`, and the status colors `text-spur-success`/`text-spur-warning`/`text-spur-error`) so the prototype reads as a plausible extension of the current `FeatureDetail.tsx:412-442` button row, not an alien skin.
+The artifact has two parts: (A) a **markdown wire** of the per-status action group layout, and (B) a **lightweight TSX sketch** of the button-group component shape (not wired to data; for IA review). Both reuse the design tokens already in the tree (`text-spur-text`, `text-spur-text-muted`, `text-spur-text-faint`, `bg-spur-accent`, `text-spur-accent`, `border-spur-border`, `bg-spur-surface`, and the status colors `text-spur-success`/`text-spur-warning`/`text-spur-error`) so the prototype reads as a plausible extension of the current `apps/web/src/modules/features/FeatureDetail.tsx:412-442` button row, not an alien skin.
 
 **A. Markdown wire — per-status action group**
 
-The action group has three zones, top-to-bottom in the detail header (right of the title/chips stack, below the status pill row at `FeatureDetail.tsx:390-410`):
+The action group has three zones, top-to-bottom in the detail header (right of the title/chips stack, below the status pill row at `apps/web/src/modules/features/FeatureDetail.tsx:390-410`):
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -147,7 +147,7 @@ CHIP:     idle
 
 #### Confirm affordance (binds 0353 R1/R2)
 
-Three confirm primitives, all reusing existing modal chrome from `FeatureDetail.tsx:607-776`:
+Three confirm primitives, all reusing existing modal chrome from `apps/web/src/modules/features/FeatureDetail.tsx:607-776`:
 
 | Level | Trigger | Modal shape | Reuse |
 |---|---|---|---|
@@ -167,7 +167,7 @@ After `POST /features/{id}/action` returns `{ runId, action, status: 'queued' }`
 | queued | disabled | `queued` (muted) | shown, spinner |
 | running | disabled | `running` (accent) | shown, spinner |
 | retrying | disabled | `retrying` (warning) | shown, "retrying…" |
-| succeeded | re-enabled; chip → `done` (success) for ~3s then clears | clears → idle | hides; detail refreshes via `feature.*` SSE (existing `detailRefreshKey` bump, `FeaturesShell.tsx:99-100`) |
+| succeeded | re-enabled; chip → `done` (success) for ~3s then clears | clears → idle | hides; detail refreshes via `feature.*` SSE (existing `detailRefreshKey` bump, `apps/web/src/modules/features/FeaturesShell.tsx:99-100`) |
 | failed | re-enabled; chip → `failed` (error) | `failed` (error) until next action or dismiss | strip → error styling; global error toast fires (0354 R2) |
 | cancelled (reserved, 0354 R1) | re-enabled | clears → idle | hides |
 
@@ -175,7 +175,7 @@ After `POST /features/{id}/action` returns `{ runId, action, status: 'queued' }`
 
 #### Empty / done / cancelled statuses (R1 explicit)
 
-- **Empty (no feature selected):** current `Select a feature to view details` placeholder (`FeatureDetail.tsx:181-183`) is unchanged — the action group does not render.
+- **Empty (no feature selected):** current `Select a feature to view details` placeholder (`apps/web/src/modules/features/FeatureDetail.tsx:181-183`) is unchanged — the action group does not render.
 - **done:** no FSM buttons, no composition buttons (growth suppressed). Overflow holds only read-only maintenance + move. Zone 3/4 idle. The header status pill (`:391-396`) already shows `done` in its status color; no extra "frozen" affordance is added.
 - **cancelled:** no buttons at all (primary and overflow both empty). A single muted line under the header — *"Reopen via `spur feature update <id> active` on the CLI."* — replaces the action row, so the operator is not left staring at an empty strip wondering why. (This is the only status where the action group is replaced by a hint rather than hidden.)
 
@@ -314,7 +314,7 @@ Overflow is **flat** (not sub-grouped) for ship — a kebab with a single list. 
 
 **Truncation on narrow panel**
 
-The detail panel is resizable (`FeatureDetail.tsx` uses `ResizeHandle`) with a 36rem min and 80vw max (`KanbanBoard.tsx:313`). On narrow widths the current flat `statusActions.map` already wraps (`flex-wrap`, `:412`). The prototype preserves wrap but adds two narrow-width behaviors:
+The detail panel is resizable (`FeatureDetail.tsx` uses `ResizeHandle`) with a 36rem min and 80vw max (`apps/web/src/modules/task-kanban/KanbanBoard.tsx:313`). On narrow widths the current flat `statusActions.map` already wraps (`flex-wrap`, `:412`). The prototype preserves wrap but adds two narrow-width behaviors:
 
 1. **Primary row collapses to a max of 3 visible buttons** below ~28rem panel width; the rest demote into the overflow kebab for that render only (visual demotion, not a membership change — 0351 stays the SSOT). The 3 kept are the **FSM leaders** (e.g. Complete/Rework on verifying; Verify/Block on active; Start on backlog). Composition and sync demote first.
 2. **Button labels shorten** under ~24rem: `Complete` → `✓`, `Rework` → `↩`, `Cancel` → `✕`, with the full label in `title`/`aria-label`. FSM glyphs are status-unambiguous; composition buttons keep text ("+ Child", "+ Task") because glyphs would be ambiguous. This is the only place the prototype introduces icon-only buttons — text labels remain the default at every other width.
@@ -326,7 +326,7 @@ The kebab (`⋮`) is always visible (never truncates away) so overflow is reacha
 - **Tab order:** primary row (left→right, DOM order = visual order) → overflow kebab → status chip (if present) → close (`✕`). This matches the current single-row tab order (`:412-441`); the prototype adds only the kebab and chip as new tab stops.
 - **Enter/Space** on a button fires the same click handler (confirm modal or dispatch). On the kebab, Enter/Space opens the menu; Arrow Down moves focus into the first item; Escape closes and returns focus to the kebab (standard daisyUI dropdown behavior, already in the tree).
 - **Soft/hard confirm modals:** initial focus is the **non-destructive** button (`Cancel`/close) per 0353 R2. Tab cycles `Cancel → Confirm → (typed input for hard)`. Escape closes as Cancel. The destructive `Confirm` is **never** the focused element on open — this is the single most important keyboard-safety rule and is repeated in the modal IA.
-- **Overflow menu items** are reachable by arrow keys (not just Tab) once open, matching the System Events prefix-pill pattern (`SystemEventsTab.tsx:595-617` uses a fieldset of buttons; the overflow menu should use `role="menu"` with `arrow` navigation for parity with kebab conventions). This is a parity note for the implementing ticket, not a prototype decision.
+- **Overflow menu items** are reachable by arrow keys (not just Tab) once open, matching the System Events prefix-pill pattern (`apps/web/src/modules/observability/SystemEventsTab.tsx:595-617` uses a fieldset of buttons; the overflow menu should use `role="menu"` with `arrow` navigation for parity with kebab conventions). This is a parity note for the implementing ticket, not a prototype decision.
 - **No keyboard shortcut layer is added.** The action group is mouse+keyboard-reachable via Tab; a full shortcut layer (e.g. `g s` to start) is out of scope for F81 and would conflict with the Board's existing `g`/`f`/`t` module-switching keys.
 
 ---
@@ -337,7 +337,7 @@ This ticket ships **no production UI**. Specifically:
 
 - No change to `FeatureDetail.tsx`, `feature-actions.ts`, `FeaturesShell.tsx`, or any `*.tsx`/`*.ts`/`*.js`/`*.jsx`.
 - The TSX sketch above is illustrative — it is not imported, not compiled into the app, and not tested. It exists only to make the IA concrete for operator reaction.
-- The artifact feeds later `/sp:dev-plan` implementation tasks under F81, which will: (a) implement `FeatureService.fulfillAction` + worker consumer (0352 R4/R5), (b) widen the client SSE filter (`FeaturesShell.tsx:94`, 0354 R1), (c) add the status chip + global error toast (0354 R2), (d) build the confirm modals from 0353 R2 copy, (e) reshape the button row per this prototype's zone layout.
+- The artifact feeds later `/sp:dev-plan` implementation tasks under F81, which will: (a) implement `FeatureService.fulfillAction` + worker consumer (0352 R4/R5), (b) widen the client SSE filter (`apps/web/src/modules/features/FeaturesShell.tsx:94`, 0354 R1), (c) add the status chip + global error toast (0354 R2), (d) build the confirm modals from 0353 R2 copy, (e) reshape the button row per this prototype's zone layout.
 
 Operator reaction is the gate. If the operator rejects the zone layout, the grouping priority, or the narrow-width truncation rules, the implementing tickets adjust against this artifact — the artifact is the single point of revision.
 
@@ -353,7 +353,7 @@ This prototype assumes the following placeholders from 0352 and 0354 (both `done
 | All-async-except-`check` | 0352 R3 | `check` fires inline (no chip, no strip); every other op goes through the queue | the `sync` job is atomic (0354 R4 contract requirement on the implementing ticket) |
 | Confirm-before-enqueue | 0353 R3 | the modal runs in the click handler before `POST`; the typed payload rides with enqueue | the modal primitives are built (0353 R2 copy → implementing ticket) |
 | Status chip + global error toast | 0354 R2 | zones 3+4 exist and are driven by SSE after `FeatureActionResponse` returns | the `api-error` dead-letter listener is mounted (0354 R2 — implementing ticket) |
-| `queue.job.*` already streamed | 0354 R1 | the server needs no widening; only the client filter (`FeaturesShell.tsx:94`) widens | the client filter change is made (implementing ticket) |
+| `queue.job.*` already streamed | 0354 R1 | the server needs no widening; only the client filter (`apps/web/src/modules/features/FeaturesShell.tsx:94`) widens | the client filter change is made (implementing ticket) |
 | `cancelled` is reserved | 0354 R1 | the chip/strip never show a cancelled state for ship; cancel surfaces only as chip→idle | a cancel affordance exists (none today; future) |
 
 The prototype is **forward-compatible** with 0352/0354's named enhancements (a future `queue.job.started` event changes "running" from inferred to observed with no zone change; a future cancel affordance adds a chip state without a layout change) — the zone layout is stable across those enhancements.

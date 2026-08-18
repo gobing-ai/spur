@@ -12,7 +12,7 @@ priority: P2
 tags: ["observability", "web", "tooltip"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.456Z"
-updated_at: "2026-07-28T00:32:01.608Z"
+updated_at: "2026-08-18T04:42:47.140Z"
 ---
 
 ## 0234. Enrich buildTooltipSummary so every renderer surfaces high-value diagnostic fields
@@ -139,15 +139,15 @@ cd apps/web && bun test tests/modules/observability/system-events-tab.test.ts
 **Coverage:** N/A as monorepo aggregate % (happy-dom unit file only). Focused path coverage: `formatDuration` + every `buildTooltipSummary` renderer branch exercised by the 32 tests above (including one AC fixture per Gherkin scenario).
 
 **`--fix all` applied this run:**
-1. **R10 code fix** — workflow branch now first-non-null of phase → transition → action (was pushing all three). `SystemEventsTab.tsx:379-387`.
+1. **R10 code fix** — workflow branch now first-non-null of phase → transition → action (was pushing all three). `apps/web/src/modules/observability/SystemEventsTab.tsx:379-387`.
 2. **AC fixture tests** — added exact Gherkin payloads for queue (2), scheduler, message, process+pid, rule, api+error, workflow first-non-null (+ action fallthrough). Suite 23 → 32 tests.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `formatDuration` `SystemEventsTab.tsx:257-261`; boundary tests 999→`999ms`, 1000→`1.0s`, 65000→`65.0s`, non-finite→null |
-| R2 | MET | `pickNumber` closure `SystemEventsTab.tsx:278-284` (finite number only; null otherwise) |
+| R1 | MET | `formatDuration` `apps/web/src/modules/observability/SystemEventsTab.tsx:257-261`; boundary tests 999→`999ms`, 1000→`1.0s`, 65000→`65.0s`, non-finite→null |
+| R2 | MET | `pickNumber` closure `apps/web/src/modules/observability/SystemEventsTab.tsx:278-284` (finite number only; null otherwise) |
 | R3 | MET | `push` drops null/empty (`:305-307`); `.slice(0,4)` (`:397`); tests cap + drop-missing |
 | R4 | MET | queue branch `:319-325`; AC fixtures type/jobId/status/duration + failed+error |
 | R5 | MET | scheduler `:326-330` name-first, no cron; AC fixture 3200→`3.2s` + error, cron key ignored |

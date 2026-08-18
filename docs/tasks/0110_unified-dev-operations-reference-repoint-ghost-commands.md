@@ -4,7 +4,7 @@ name: "Unified dev-* operations reference + repoint ghost commands"
 status: done
 template: feature-impl
 created_at: 2026-06-24T03:52:29.293Z
-updated_at: 2026-06-25T06:47:03.151Z
+updated_at: "2026-08-18T04:42:46.812Z"
 feature_id: H2
 parent_wbs: "0109"
 priority: P1
@@ -105,9 +105,9 @@ Invariants: (1) no dev-* command delegates to an undefined sp:spur-dev operation
 ### Testing
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — dev-operations.md with all dev-* operations | **MET** | `dev-operations.md:33-44` — operation map table defines all 13 ops (8 Skill()-backed + 5 inline); `dev-operations.md:56-233` — 12 detail sections (implement covered as sub-mode of run #4, docs at #7) |
-| R2 — 5 ghost commands repointed to real backing | **MET** | All 5 commands have zero `Skill()` delegations; each Implementation section describes inline procedure + links to dev-operations.md; `dev-changelog.md:47`, `dev-gitmsg.md:42`, `dev-fixall.md:47`, `dev-handover.md:52`, `dev-new-task.md:51` |
-| R3 — Real flags in arg-hints | **MET** | `dev-changelog.md:3` — `[output-file] [--since] [--until] [--version]`; `dev-gitmsg.md:3` — `[--commit] [--scope]`; `dev-fixall.md:3` — `[<validation-command>] [--max-retry] [--scope]`; `dev-handover.md:3` — `"<blocker description>"`; `dev-new-task.md:3` — `"<description>" [--feature] [--template] [--parent]` |
+| R1 — dev-operations.md with all dev-* operations | **MET** | `plugins/sp/skills/spur-dev/references/dev-operations.md:33-44` — operation map table defines all 13 ops (8 Skill()-backed + 5 inline); `plugins/sp/skills/spur-dev/references/dev-operations.md:56-233` — 12 detail sections (implement covered as sub-mode of run #4, docs at #7) |
+| R2 — 5 ghost commands repointed to real backing | **MET** | All 5 commands have zero `Skill()` delegations; each Implementation section describes inline procedure + links to dev-operations.md; `plugins/sp/commands/dev-changelog.md:47`, `plugins/sp/commands/dev-gitmsg.md:42`, `plugins/sp/commands/dev-fixall.md:47`, `plugins/sp/commands/dev-handover.md:52`, `dev-new-task.md:51` |
+| R3 — Real flags in arg-hints | **MET** | `plugins/sp/commands/dev-changelog.md:3` — `[output-file] [--since] [--until] [--version]`; `plugins/sp/commands/dev-gitmsg.md:3` — `[--commit] [--scope]`; `plugins/sp/commands/dev-fixall.md:3` — `[<validation-command>] [--max-retry] [--scope]`; `plugins/sp/commands/dev-handover.md:3` — `"<blocker description>"`; `dev-new-task.md:3` — `"<description>" [--feature] [--template] [--parent]` |
 | R4 — lint green + surface synced | **MET** | `bun run lint` → 0 errors; `04_DESIGN.md:449` — §7.8 dev-* operation map row; `AGENTS.md` — plugin commands documented via dev-operations reference |
 
 Coverage: N/A (documentation-only task — no code under test; arg-hint strings and markdown structure verified by inspection + lint).

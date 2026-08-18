@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-2", "context-envelope", "invalidation", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T03:32:22.455Z"
-updated_at: "2026-07-28T00:32:44.805Z"
+updated_at: "2026-08-18T04:42:47.701Z"
 ---
 
 ## 0306. Implement envelope invalidation, progressive disclosure, and attribution instrumentation
@@ -64,24 +64,24 @@ Feature: Envelope invalidation, progressive disclosure, and attribution (0284 R3
 
 ### Solution
 #### R1: Per-layer fingerprint-driven invalidation (`packages/domain/src/envelope/invalidation.ts`)
-- **`computeInvalidationFingerprint(trigger: InvalidationTrigger): string | null`** — `invalidation.ts:47-72`. Computes SHA-256 fingerprint from any invalidation trigger source (corpus-update mtime+hash, git-change worktree SHA, config-change config hash+model id, version-change manifest version+source, gate-result verdict hash). Tool-output triggers return `null` — never cached across stages.
-- **`checkLayerStale(layer: EnvelopeLayer, freshFingerprint: string | null): LayerStalenessResult`** — `invalidation.ts:107-136`. Returns staleness verdict for a single layer: stable layer with matching fingerprint = fresh; mismatched = stale (fingerprint-mismatch); null fingerprint = always stale (never-cached); volatile layer = always stale by contract (volatile-layer).
-- **`identifyStaleLayers(layers, freshFingerprints): LayerStalenessResult[]`** — `invalidation.ts:155-172`. Batch stale-layer identification. Layers without a fresh fingerprint entry are conservatively treated as stale.
-- **`artifactFingerprintsMatch(capturedHashes, freshFingerprints): boolean`** — `invalidation.ts:189-200`. Subprocess boundary check: every captured hash must have a matching fresh fingerprint.
+- **`computeInvalidationFingerprint(trigger: InvalidationTrigger): string | null`** — `packages/domain/src/envelope/invalidation.ts:47-72`. Computes SHA-256 fingerprint from any invalidation trigger source (corpus-update mtime+hash, git-change worktree SHA, config-change config hash+model id, version-change manifest version+source, gate-result verdict hash). Tool-output triggers return `null` — never cached across stages.
+- **`checkLayerStale(layer: EnvelopeLayer, freshFingerprint: string | null): LayerStalenessResult`** — `packages/domain/src/envelope/invalidation.ts:107-136`. Returns staleness verdict for a single layer: stable layer with matching fingerprint = fresh; mismatched = stale (fingerprint-mismatch); null fingerprint = always stale (never-cached); volatile layer = always stale by contract (volatile-layer).
+- **`identifyStaleLayers(layers, freshFingerprints): LayerStalenessResult[]`** — `packages/domain/src/envelope/invalidation.ts:155-172`. Batch stale-layer identification. Layers without a fresh fingerprint entry are conservatively treated as stale.
+- **`artifactFingerprintsMatch(capturedHashes, freshFingerprints): boolean`** — `packages/domain/src/envelope/invalidation.ts:189-200`. Subprocess boundary check: every captured hash must have a matching fresh fingerprint.
 
 #### R2: Progressive disclosure (`packages/domain/src/envelope/assemblies.ts`)
-- Required safety, authorization, requirements-traceability, and mutation-gate contracts remain mandatory inline layers per the `STAGE_LAYER_DISCLOSURE` required split (`assemblies.ts:133-154`), surfaced by `getStageLayerSelection()` (`assemblies.ts:166-168`). The named contracts map to canonical layers: safety→`harness-policy`, authorization→`project-authority`, requirements-traceability→`task-state` + `stage-contract`, mutation-gate→`stage-contract`.
-- Optional layers (`indexed-evidence`, `tool-observations`) route through disclosure handles via `appendDisclosurePlaceholders()` (`assemblies.ts:291-318`) — each placeholder carries an explicit `disclosure_handle` (trigger) and `size_budget` (`DEFAULT_DISCLOSURE_BUDGET_BYTES`, `assemblies.ts:270`). The cheap model cannot defer or omit required layers.
+- Required safety, authorization, requirements-traceability, and mutation-gate contracts remain mandatory inline layers per the `STAGE_LAYER_DISCLOSURE` required split (`packages/domain/src/envelope/assemblies.ts:133-154`), surfaced by `getStageLayerSelection()` (`packages/domain/src/envelope/assemblies.ts:166-168`). The named contracts map to canonical layers: safety→`harness-policy`, authorization→`project-authority`, requirements-traceability→`task-state` + `stage-contract`, mutation-gate→`stage-contract`.
+- Optional layers (`indexed-evidence`, `tool-observations`) route through disclosure handles via `appendDisclosurePlaceholders()` (`packages/domain/src/envelope/assemblies.ts:291-318`) — each placeholder carries an explicit `disclosure_handle` (trigger) and `size_budget` (`DEFAULT_DISCLOSURE_BUDGET_BYTES`, `packages/domain/src/envelope/assemblies.ts:270`). The cheap model cannot defer or omit required layers.
 
 #### R3: Session/subprocess boundaries (`packages/domain/src/envelope/boundary.ts`)
-- **`InlineContext` class** — `boundary.ts:52-121`. Captures stable-prefix-eligible layers within one dispatch. Provides `captureLayer()` (`boundary.ts:73-77`), `isStableLayerFresh()` (`boundary.ts:101-105`), and `reset()` (`boundary.ts:111-113`). Volatile layers are never captured.
-- **`verifySubprocessArtifact(artifact, fingerprints): boolean`** — `boundary.ts:152-157`. Verifies on-disk artifact fingerprints match fresh process state before crossing subprocess boundary.
-- **`createBoundaryContext(kind, dispatchId): InlineContext | null`** — `boundary.ts:170-174`. Returns `InlineContext` for inline, `null` for subprocess (no in-process state).
+- **`InlineContext` class** — `packages/domain/src/envelope/boundary.ts:52-121`. Captures stable-prefix-eligible layers within one dispatch. Provides `captureLayer()` (`packages/domain/src/envelope/boundary.ts:73-77`), `isStableLayerFresh()` (`packages/domain/src/envelope/boundary.ts:101-105`), and `reset()` (`packages/domain/src/envelope/boundary.ts:111-113`). Volatile layers are never captured.
+- **`verifySubprocessArtifact(artifact, fingerprints): boolean`** — `packages/domain/src/envelope/boundary.ts:152-157`. Verifies on-disk artifact fingerprints match fresh process state before crossing subprocess boundary.
+- **`createBoundaryContext(kind, dispatchId): InlineContext | null`** — `packages/domain/src/envelope/boundary.ts:170-174`. Returns `InlineContext` for inline, `null` for subprocess (no in-process state).
 
 #### R4: Attribution instrumentation (`packages/domain/src/envelope/attribution.ts`)
-- **`attributeFreshVsReused(layers, captured, ...): AttributionReport`** — `attribution.ts:117-185`. Compares content hashes to classify each layer as fresh or reused; an empty content hash is never classified as reused. Provider telemetry fields default to `null`/`'unavailable'` — never fabricates host cache hits.
-- **`attributeWithoutTelemetry(layers, captured): AttributionReport`** — `attribution.ts:199-210`. Safety wrapper that sets all provider fields to unavailable. Invariant: cannot accidentally claim a cache hit.
-- Attribution records evidence kind (`documented`, `locally-observed`, `inferred`, `unavailable`) per layer and per provider dimension (`attribution.ts:32`).
+- **`attributeFreshVsReused(layers, captured, ...): AttributionReport`** — `packages/domain/src/envelope/attribution.ts:117-185`. Compares content hashes to classify each layer as fresh or reused; an empty content hash is never classified as reused. Provider telemetry fields default to `null`/`'unavailable'` — never fabricates host cache hits.
+- **`attributeWithoutTelemetry(layers, captured): AttributionReport`** — `packages/domain/src/envelope/attribution.ts:199-210`. Safety wrapper that sets all provider fields to unavailable. Invariant: cannot accidentally claim a cache hit.
+- Attribution records evidence kind (`documented`, `locally-observed`, `inferred`, `unavailable`) per layer and per provider dimension (`packages/domain/src/envelope/attribution.ts:32`).
 ### Testing
 #### Verification commands (re-audit, post-fix)
 - `bun run lint` (biome `--error-on-warnings` + per-workspace `tsc --noEmit`) — **clean**, all 7 workspaces exit 0
@@ -93,20 +93,20 @@ Feature: Envelope invalidation, progressive disclosure, and attribution (0284 R3
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 (per-layer fingerprint invalidation) | MET | `invalidation.ts:47-72` (fingerprint), `:107-136` (staleness), `:155-172` (batch), `:189-200` (artifact match); `invalidation.test.ts` 44 tests pass |
-| R2 (progressive disclosure / mandatory-inline contracts) | MET | `assemblies.ts:133-154` (required split), `:166-168` (`getStageLayerSelection`), `:291-318` (`appendDisclosurePlaceholders`), `:270` (`DEFAULT_DISCLOSURE_BUDGET_BYTES`); `disclosure.test.ts` passes incl. new budget assertion |
-| R3 (session/subprocess boundaries) | MET | `boundary.ts:52-121` (InlineContext), `:152-157` (verifySubprocessArtifact), `:170-174` (createBoundaryContext); `boundary.test.ts` 13 tests pass |
-| R4 (fresh-vs-reused attribution, no fabrication) | MET | `attribution.ts:117-185` (attributeFreshVsReused + empty-hash guard), `:199-210` (attributeWithoutTelemetry), `:32` (EvidenceKind); `attribution.test.ts` 15 tests pass |
+| R1 (per-layer fingerprint invalidation) | MET | `packages/domain/src/envelope/invalidation.ts:47-72` (fingerprint), `:107-136` (staleness), `:155-172` (batch), `:189-200` (artifact match); `invalidation.test.ts` 44 tests pass |
+| R2 (progressive disclosure / mandatory-inline contracts) | MET | `packages/domain/src/envelope/assemblies.ts:133-154` (required split), `:166-168` (`getStageLayerSelection`), `:291-318` (`appendDisclosurePlaceholders`), `:270` (`DEFAULT_DISCLOSURE_BUDGET_BYTES`); `disclosure.test.ts` passes incl. new budget assertion |
+| R3 (session/subprocess boundaries) | MET | `packages/domain/src/envelope/boundary.ts:52-121` (InlineContext), `:152-157` (verifySubprocessArtifact), `:170-174` (createBoundaryContext); `boundary.test.ts` 13 tests pass |
+| R4 (fresh-vs-reused attribution, no fabrication) | MET | `packages/domain/src/envelope/attribution.ts:117-185` (attributeFreshVsReused + empty-hash guard), `:199-210` (attributeWithoutTelemetry), `:32` (EvidenceKind); `attribution.test.ts` 15 tests pass |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| R5: per-trigger fingerprints (corpus/git/config/version/gate); tool-output null | MET | test | `invalidation.test.ts:16-98` |
-| R5: stale layer reported with named reason | MET | test | `invalidation.test.ts:102-121` |
+| R5: per-trigger fingerprints (corpus/git/config/version/gate); tool-output null | MET | test | `packages/domain/tests/envelope/invalidation.test.ts:16-98` |
+| R5: stale layer reported with named reason | MET | test | `packages/domain/tests/envelope/invalidation.test.ts:102-121` |
 | R5: inline reuse while fresh; volatile never captured; subprocess artifact match | MET | test | `boundary.test.ts` (InlineContext capture/freshness/reset + verifySubprocessArtifact) |
-| Progressive disclosure: mandatory-inline contracts survive | MET | test | `disclosure.test.ts:24-56` (required/optional split, no-overlap, unknown-stage-fails-closed) |
-| Progressive disclosure: optional layers carry explicit trigger + size budget | MET | test | `disclosure.test.ts:82-95` (handle + `size_budget.max_bytes > 0` assertion) |
+| Progressive disclosure: mandatory-inline contracts survive | MET | test | `packages/domain/tests/envelope/disclosure.test.ts:24-56` (required/optional split, no-overlap, unknown-stage-fails-closed) |
+| Progressive disclosure: optional layers carry explicit trigger + size budget | MET | test | `packages/domain/tests/envelope/disclosure.test.ts:82-95` (handle + `size_budget.max_bytes > 0` assertion) |
 | Progressive disclosure: fresh-vs-reused attribution; telemetry unavailable not fabricated | MET | test | `attribution.test.ts` (classification, empty-hash guard, `providerCacheHit` `'unavailable'`, `attributeWithoutTelemetry`) |
 
 **Coverage**

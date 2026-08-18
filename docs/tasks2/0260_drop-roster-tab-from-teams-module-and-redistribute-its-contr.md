@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.327Z"
-updated_at: "2026-07-15T21:17:57.104Z"
+updated_at: "2026-08-18T04:42:47.378Z"
 ---
 
 ## 0260. Drop Roster tab from Teams module and redistribute its controls
@@ -233,9 +233,9 @@ above; `tabs.ts` reports 100% line/function.
 | Claim | Confidence | Basis |
 |-------|-----------|-------|
 | Roster was the sole writer of the `TeamsContext` selection | **HIGH** | Direct: `git show a70165f1~1:…/RosterTab.tsx` → `select(...)` at :171; `rg "\bselect\(\|\bclear\("` over `apps/web/src` → zero production callers now. |
-| Pre-fix, Messages was permanently stuck on its placeholder | **HIGH** (code-deduction, **not** browser-observed) | Chain, each link file-referenced: `TeamsShell.tsx:12` renders a real `<TeamsProvider>`; `TeamsContext.tsx:15-16` inits `selectedMemberId = null`; sole writer deleted; old `MessagesTab.tsx:90` returns the placeholder when falsy. Production therefore rendered the placeholder — it did **not** throw. |
+| Pre-fix, Messages was permanently stuck on its placeholder | **HIGH** (code-deduction, **not** browser-observed) | Chain, each link file-referenced: `apps/web/src/modules/teams/TeamsShell.tsx:12` renders a real `<TeamsProvider>`; `TeamsContext.tsx:15-16` inits `selectedMemberId = null`; sole writer deleted; old `MessagesTab.tsx:90` returns the placeholder when falsy. Production therefore rendered the placeholder — it did **not** throw. |
 | The two new regression tests fail against the pre-fix component | **HIGH** | Observed this run: both `(fail)` with `useTeamsSelection must be used within TeamsProvider`. Note this exercises the *no-provider* path, which proves the coupling exists but is **not** the production path (see row above). |
-| Post-fix Messages renders the unfiltered feed correctly | **MEDIUM-HIGH** | Deterministic: 42 pass / 0 fail; lint + 7× tsc exit 0; response shape matched to `team-service.ts:266-281` (`listRecent`). **Not** browser-verified — see limitation below. |
+| Post-fix Messages renders the unfiltered feed correctly | **MEDIUM-HIGH** | Deterministic: 42 pass / 0 fail; lint + 7× tsc exit 0; response shape matched to `packages/app/src/services/team-service.ts:266-281` (`listRecent`). **Not** browser-verified — see limitation below. |
 | The 3 full-suite failures are environmental, not regressions | **HIGH** | Observed: `Failed to start server. Is port 0 in use?`, syscall `listen`; in `rpc-client`/server-context files untouched by this task. |
 | The TerminalTab localStorage flake is pre-existing | **HIGH** | Measured: 3/6 failures on stashed `HEAD` vs 1/5 with this change. |
 

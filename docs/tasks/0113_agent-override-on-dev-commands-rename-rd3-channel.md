@@ -4,7 +4,7 @@ name: "--agent override on dev-* commands (rename rd3 --channel)"
 status: done
 template: feature-impl
 created_at: 2026-06-24T03:52:29.296Z
-updated_at: 2026-06-25T06:36:41.647Z
+updated_at: "2026-08-18T04:42:46.836Z"
 feature_id: H2
 parent_wbs: "0109"
 priority: P2
@@ -156,9 +156,9 @@ Covers 0109 R5. Spur dev-* commands have NO agent override — only the clunky `
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — Add `--agent` to dev-* commands | **MET** | `dev-run.md:3`, `dev-verify.md:3`, `dev-review.md:3`, `dev-unit.md:3` — all four arg-hints include `--agent <name\|inherit\|auto>`; all four argument tables include the `--agent` row |
-| R2 — Thread override to pipeline/agent.run | **MET** | `sp:spur-dev SKILL.md:252-256` — full mode merges `--agent` into `--vars` for pipeline; `dev-run.md:69-71` — passthrough via `$ARGUMENTS`; backing skills (`sp:spur-dev:207`, `sp:spur-dev:232`, `sp:code-verification:76-78`) document `--agent` handling |
-| R3 — Declare flag in arg-hints + document | **MET** | `dev-operations.md:33-36` — operation map arg-hints updated for all four ops; detail sections (#1 unit, #2 review, #3 verify, #4 run) all document `--agent` input |
+| R1 — Add `--agent` to dev-* commands | **MET** | `plugins/sp/commands/dev-run.md:3`, `plugins/sp/commands/dev-verify.md:3`, `plugins/sp/commands/dev-review.md:3`, `plugins/sp/commands/dev-unit.md:3` — all four arg-hints include `--agent <name\|inherit\|auto>`; all four argument tables include the `--agent` row |
+| R2 — Thread override to pipeline/agent.run | **MET** | `sp:spur-dev SKILL.md:252-256` — full mode merges `--agent` into `--vars` for pipeline; `plugins/sp/commands/dev-run.md:69-71` — passthrough via `$ARGUMENTS`; backing skills (`sp:spur-dev:207`, `sp:spur-dev:232`, `sp:code-verification:76-78`) document `--agent` handling |
+| R3 — Declare flag in arg-hints + document | **MET** | `plugins/sp/skills/spur-dev/references/dev-operations.md:33-36` — operation map arg-hints updated for all four ops; detail sections (#1 unit, #2 review, #3 verify, #4 run) all document `--agent` input |
 | R4 — Lint green + override correctness + surface sync | **MET** | `bun run lint` → 0 errors; `--agent` semantics (`name\|inherit\|auto`) documented consistently across all surfaces; `04_DESIGN.md:449` delegates dev-* surfaces to `dev-operations.md` (updated) |
 
 ### Review

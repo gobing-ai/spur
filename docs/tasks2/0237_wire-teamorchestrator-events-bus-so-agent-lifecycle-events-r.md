@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "agent", "team", "wiring", "server"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.995Z"
-updated_at: "2026-07-28T00:32:05.628Z"
+updated_at: "2026-08-18T04:42:47.184Z"
 ---
 
 ## 0237. Wire TeamOrchestrator events bus so agent lifecycle events reach system event tap
@@ -58,7 +58,7 @@ Wire `TeamOrchestrator` lifecycle events onto the server EventBus so `agent.star
 2. **`packages/app/src/services/team-service.ts:386-390`** — `orchestrator()` constructs `new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events })`; when `events` is undefined (CLI), orchestrator falls back to its throwaway bus.
 3. **`apps/server/src/context.ts:359-362`** — `teamService()` injects `events: eventsBus as unknown as never` (same cast pattern as `eventBus` and workflow buses).
 
-`message.sent` / `message.replied` remain on `TeamServiceContext.eventBus` (`team-service.ts:371-379`) — unchanged path (R5).
+`message.sent` / `message.replied` remain on `TeamServiceContext.eventBus` (`packages/app/src/services/team-service.ts:371-379`) — unchanged path (R5).
 ### Testing
 **Verify run:** 2026-07-11 — `/sp:dev-verify 0237 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
@@ -85,8 +85,8 @@ bunx tsc --noEmit -p apps/server    # exit 0
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `team-service.ts:55` `events?: EventBus<AgentEvents>` |
-| R2 | MET | `team-service.ts:388` `{ events: this.ctx.events }` to TeamOrchestrator |
+| R1 | MET | `packages/app/src/services/team-service.ts:55` `events?: EventBus<AgentEvents>` |
+| R2 | MET | `packages/app/src/services/team-service.ts:388` `{ events: this.ctx.events }` to TeamOrchestrator |
 | R3 | MET | `context.ts:362` `events: eventsBus as unknown as never` in `teamService()` |
 | R4 | MET | App: orchestrator start/send/stop emits three events; Server: same bus → system_events rows (`[0237 R4]`) |
 | R5 | MET | `R5: message.sent still fires when both eventBus and events are wired` — message path unchanged |

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:09.688Z"
-updated_at: "2026-07-14T23:53:48.885Z"
+updated_at: "2026-08-18T04:42:47.336Z"
 ---
 
 ## 0255. Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints
@@ -109,7 +109,7 @@ nice-to-have (client-dedupe otherwise).
 - `apps/web/src/modules/teams/MemberTerminal.tsx:140` — `MemberTerminal` component: EventSource subscribe at line 189, frame rendering in `<pre>` with stdout/stderr distinction, auto-scroll, status poll every 3s, stdin POST on Enter, reconnect with backoff on error.
 - `apps/web/tests/modules/teams/MemberTerminal.test.tsx:1` — new test file: 24 tests covering pure functions (parseFrame, parseProcessList, appendFrame, nextBackoff, stdinUrl, streamUrl) + component rendering (AC1, AC3, AC4, AC5, AC6, AC2 input-enabled, DOM order).
 
-**Rationale:** the `seq` is the stable cursor — array index is NOT (ring-buffer overflow splices from front, `supervisor-service.ts:14`). The client tracks `lastSeq` via a ref and dedupes frames with `seq <= lastSeq`. Reconnect resumes from `lastSeqRef.current` via `streamUrl(agentId, sinceSeq)`. The `?sinceSeq=` parameter is constructed for backend resume support (0256 may add this); client-side dedup is the fallback.
+**Rationale:** the `seq` is the stable cursor — array index is NOT (ring-buffer overflow splices from front, `packages/app/src/services/supervisor-service.ts:14`). The client tracks `lastSeq` via a ref and dedupes frames with `seq <= lastSeq`. Reconnect resumes from `lastSeqRef.current` via `streamUrl(agentId, sinceSeq)`. The `?sinceSeq=` parameter is constructed for backend resume support (0256 may add this); client-side dedup is the fallback.
 
 ### Testing
 
@@ -130,7 +130,7 @@ handlers (happy-dom#856 — matching the sibling `components.test.tsx` conventio
 
 | Req | Status | Evidence                                                                                                                                                                                                                                                                                                                       |
 | --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| R1  | MET    | `MemberTerminal.tsx:136` component; `:189` `EventSource` subscribe; `:295-319` scrolling `<pre>`; `:307` stderr `text-error` distinct from stdout; `lastSeqRef` at `:144,199`. Tests: `AC1: mounting opens an EventSource`, `AC6`.                                                                                             |
+| R1  | MET    | `apps/web/src/modules/teams/MemberTerminal.tsx:136` component; `:189` `EventSource` subscribe; `:295-319` scrolling `<pre>`; `:307` stderr `text-error` distinct from stdout; `lastSeqRef` at `:144,199`. Tests: `AC1: mounting opens an EventSource`, `AC6`.                                                                                             |
 | R2  | MET    | `:240-263` `sendInput` POSTs `{line}` on Enter (`:266-271`); `:258` clears on 200; `:255-256,260-261` retains text + surfaces error on failure; `:333` disabled unless `running`. Tests: `AC2: typing a line + Enter POSTs…`, `AC2: on a failed stdin POST…`, `AC3`.                                                           |
 | R3  | MET    | `:222-230` `useEffect` opens `EventSource` on mount, `esRef.close()` on unmount (no leak); backfill via server ring-buffer replay. Test: `AC5`.                                                                                                                                                                                |
 | R4  | MET    | `:210-219` `onerror` → `close` → `nextBackoff` → reopen; `:189` resumes from `lastSeqRef` via `streamUrl(agentId, sinceSeq)`; dedup in `appendFrame`. Tests: `AC4: on EventSource error, retries with backoff` (component), `nextBackoff` (4 units), `streamUrl … sinceSeq` (unit), `appendFrame drops seq <= lastSeq` (unit). |

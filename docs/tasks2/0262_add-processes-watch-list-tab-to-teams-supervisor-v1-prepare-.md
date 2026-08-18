@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.619Z"
-updated_at: "2026-07-15T21:46:18.350Z"
+updated_at: "2026-08-18T04:42:47.401Z"
 ---
 
 ## 0262. Add Processes watch-list tab to Teams (supervisor v1, prepare for full ProcessExecutor registry)
@@ -195,10 +195,10 @@ No changes to server, supervisor, or upstream ProcessExecutor yet (that's 0264).
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 TEAMS_TABS entry `processes` | MET | `tabs.ts:17`; `tabs.test.ts:26-29` expects `['terminal','processes','messages','activity']` |
-| R2 ProcessesTab table (agentId, pid, status, startedAt, actions) | MET | `ProcessesTab.tsx:138-197`; test `components.test.tsx` “renders supervised process rows” |
-| R3 supervisor-focused v1 label/filter | MET | Header “Supervised Processes” + “v1 supervisor only” (`ProcessesTab.tsx:140-141`); polls `/team/processes` only |
-| R4 Attach loose coupling | MET | `attachToTerminal` dispatches `teams:attach-process` (`ProcessesTab.tsx:106-110`); test “Attach dispatches…” |
-| R5 0264 extension points | MET | TODO comments `ProcessesTab.tsx:25-26`, header note `:141` |
+| R2 ProcessesTab table (agentId, pid, status, startedAt, actions) | MET | `apps/web/src/modules/teams/ProcessesTab.tsx:138-197`; test `components.test.tsx` “renders supervised process rows” |
+| R3 supervisor-focused v1 label/filter | MET | Header “Supervised Processes” + “v1 supervisor only” (`apps/web/src/modules/teams/ProcessesTab.tsx:140-141`); polls `/team/processes` only |
+| R4 Attach loose coupling | MET | `attachToTerminal` dispatches `teams:attach-process` (`apps/web/src/modules/teams/ProcessesTab.tsx:106-110`); test “Attach dispatches…” |
+| R5 0264 extension points | MET | TODO comments `apps/web/src/modules/teams/ProcessesTab.tsx:25-26`, header note `:141` |
 | R6 shell/module registration | MET | `tabs.ts` + TeamsShell dynamic map; shell test 4 tabs including Processes |
 
 **Acceptance Criteria Verification**
@@ -208,7 +208,7 @@ No changes to server, supervisor, or upstream ProcessExecutor yet (that's 0264).
 | Scenario: R5 Processes tab renders watch list of supervised processes (v1) | MET | test | `components.test.tsx` ProcessesTab rows test — agentId/pid/status, Supervised Processes header, Badge via status text |
 | Scenario: Attach action available (loose coupling to Terminal) | MET | test | `components.test.tsx` Attach dispatches `teams:attach-process` with agentId |
 | Scenario: Empty state when no supervised processes | MET | test | `components.test.tsx` empty state — “No supervised processes”, `[data-processes-tab-empty]` |
-| Scenario: Preparation for full registry visible | MET | static-ref + test | `ProcessesTab.tsx:25-26` TODO 0264; header + test asserts “0264” / “v1 supervisor only” |
+| Scenario: Preparation for full registry visible | MET | static-ref + test | `apps/web/src/modules/teams/ProcessesTab.tsx:25-26` TODO 0264; header + test asserts “0264” / “v1 supervisor only” |
 
 **Design conformance:** DONE — new ProcessesTab, TEAMS_TABS registration (terminal first), poll 3s, Badge status, Attach custom event, Start/Stop actions, no server changes, 0264 TODOs.
 

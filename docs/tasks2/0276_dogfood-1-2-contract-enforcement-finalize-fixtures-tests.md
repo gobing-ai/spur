@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0274"]
 created_at: "2026-07-17T01:13:58.102Z"
-updated_at: "2026-07-28T00:32:17.832Z"
+updated_at: "2026-08-18T04:42:47.509Z"
 ---
 
 ## 0276. Dogfood @1.2 contract enforcement (finalize, fixtures, tests)
@@ -71,7 +71,7 @@ Shipped dogfood `sp:dogfood-testing@1.2` contract enforcement (Impl A of 0274: W
 | `plugins/sp/skills/dogfood-testing/SKILL.md:7-8,124-145` | **W1:** `metadata.version` 1.1→1.2, `protocol: sp:dogfood-testing@1.2` (frontmatter + Phase 1 + Platform Notes). **W2:** Phase 4 finalize-or-abort expanded to 7 checks — structure scrub (unique `### 1.`–`### 6.`; Issues requires `#### Fixed` + `#### Unresolved`; no leftover "run in progress"), ledger cardinality, mandatory footer mirrored at report end, refusal rule (any failed check ⇒ `status: aborted` + failures listed under `#### Unresolved`). **W3:** Phase 3 cardinality sentence (`SKILL.md:120`). |
 | `plugins/sp/skills/dogfood-testing/references/report-template.md:16-21,265-285` | **W1:** protocol frontmatter + version line + canonical frontmatter block → @1.2; @1.2 changelog bullets; dash form `sp-dogfood-testing@…` rejected. **W2:** Phase 4 checklist expanded (same 7 checks as SKILL). **W3:** §3 ledger rules + cardinality line. |
 | `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:36-40` | **W1:** protocol frontmatter + "Disk SSOT (protocol @1.2)". **W3:** live-ledger rule 5 — data rows == `Steps: N executed`; N/A steps get explicit `Outcome: N/A` rows; mismatch refuses `complete`. |
-| `plugins/sp/scripts/dogfood-testing/validate-report.ts:44` | **New (W6).** Pure `validateReport(markdown) → { ok, errors[] }` with stable codes: `missing_footer`, `missing_live_path`, `missing_report_path`, `missing_section:n`, `duplicate_section:n`, `missing_issues_subheads`, `missing_steps_declared`, `ledger_cardinality`, `protocol_string`. Ledger body extracted by deterministic slice (`validate-report.ts:24-37`) — the first draft's `/m` regex lookahead `\s*$` matched every line boundary; caught by the pass-fixture test. |
+| `plugins/sp/scripts/dogfood-testing/validate-report.ts:44` | **New (W6).** Pure `validateReport(markdown) → { ok, errors[] }` with stable codes: `missing_footer`, `missing_live_path`, `missing_report_path`, `missing_section:n`, `duplicate_section:n`, `missing_issues_subheads`, `missing_steps_declared`, `ledger_cardinality`, `protocol_string`. Ledger body extracted by deterministic slice (`plugins/sp/scripts/dogfood-testing/validate-report.ts:24-37`) — the first draft's `/m` regex lookahead `\s*$` matched every line boundary; caught by the pass-fixture test. |
 | `plugins/sp/tests/dogfood-testing/fixtures/report-complete.md:1-82` | **New (W4).** Golden pass fixture: @1.2 frontmatter, six unique headings, both Issues subheads, 2-row ledger matching `Steps: 2 executed`, footer with `[Live:]`/`[Report:]`. |
 | `plugins/sp/tests/dogfood-testing/fixtures/report-missing-footer.md:1-75` | **New (W4).** Negative fixture — identical minus the footer block. |
 | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:12-119` | **New (W5).** 12 tests: fixture-pass (golden shape + validator clean), fixture-fail-footer (`missing_footer`), protocol-string pins across the three skill files, and 9 validator mutation cases (duplicate/missing section, Issues subheads, cardinality mismatch, missing ledger, undeclared Steps, dash-form/absent protocol, missing `[Live:]`). Validator coverage 100% fn/lines. |
@@ -90,9 +90,9 @@ Shipped dogfood `sp:dogfood-testing@1.2` contract enforcement (Impl A of 0274: W
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `SKILL.md:7-8` `version: "1.2"` + `protocol: "sp:dogfood-testing@1.2"`; `report-template.md:7,16-21,51` + `monitor-ledger.md:7`; `dogfood-protocol-string` test green. `dev-dogfood.md` has no protocol string (rg) — N/A bump surface. |
+| R1 | MET | `SKILL.md:7-8` `version: "1.2"` + `protocol: "sp:dogfood-testing@1.2"`; `report-template.md:7,16-21,51` + `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:7`; `dogfood-protocol-string` test green. `dev-dogfood.md` has no protocol string (rg) — N/A bump surface. |
 | R2 | MET | `SKILL.md:127-148` Phase 4: structure scrub (unique `### 1.`–`### 6.`; Issues `#### Fixed`/`#### Unresolved`); footer mandatory + mirrored; refusal rule blocks `complete` on fail. Mirrored in `report-template.md` Phase 4. |
-| R3 | MET | `monitor-ledger.md:36-39` cardinality rule 5; `SKILL.md:118-120`; `report-template.md` §3 + Phase 4 check 3; validator `ledger_cardinality` tests green. |
+| R3 | MET | `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:36-39` cardinality rule 5; `SKILL.md:118-120`; `report-template.md` §3 + Phase 4 check 3; validator `ledger_cardinality` tests green. |
 | R4 | MET | Pass + fail fixtures at `plugins/sp/tests/dogfood-testing/fixtures/{report-complete,report-missing-footer}.md` (monorepo test layout; Solution change-map). |
 | R5 | MET | `bun test plugins/sp/tests/dogfood-testing/report-contract.test.ts` → 12 pass / 0 fail this run (`dogfood-fixture-pass` + `dogfood-fixture-fail-footer`). |
 | R6 | MET | `plugins/sp/scripts/dogfood-testing/validate-report.ts:44` pure `validateReport`; imported by test file. |
@@ -108,7 +108,7 @@ Shipped dogfood `sp:dogfood-testing@1.2` contract enforcement (Impl A of 0274: W
 
 **Design conformance:** task `### Design` bare; implementation follows 0274 W1–W6 (Solution change-map). W6 chose standalone script over inline (both acceptable). Fixtures path under `plugins/sp/tests/` (not skill-local `tests/`) for bun workspace layout — goal-equivalent, documented in Solution. Claims: DONE (W1–W6).
 
-**SECUA (focus=all):** no blockers/majors this re-verify. Prior minor (`/m` regex lookahead ledger truncate) fixed pre-ship at `validate-report.ts:24-37` + regression covered. Advisory: complete-report scope only — documented module header. Pure string checks; no secrets/injection surface.
+**SECUA (focus=all):** no blockers/majors this re-verify. Prior minor (`/m` regex lookahead ledger truncate) fixed pre-ship at `plugins/sp/scripts/dogfood-testing/validate-report.ts:24-37` + regression covered. Advisory: complete-report scope only — documented module header. Pure string checks; no secrets/injection surface.
 
 **Coverage:** `validate-report.ts` 100% functions / 100% lines (bun coverage this run). Fixtures markdown coverage-ignored per bunfig.
 

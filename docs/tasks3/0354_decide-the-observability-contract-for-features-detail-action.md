@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0352"]
 created_at: "2026-07-27T17:49:50.605Z"
-updated_at: "2026-07-27T22:43:03.128Z"
+updated_at: "2026-08-18T04:42:48.218Z"
 ---
 
 ## 0354. Decide the observability contract for Features detail action lifecycle
@@ -87,10 +87,10 @@ Decision only — no implementation (R5). All path:line anchors re-verified this
 
 | State | Source of truth | Where stored | Surfaced to Board via |
 |---|---|---|---|
-| **confirmed** | client click handler resolves `POST /features/{id}/action` with `status: 'queued'` (`FeatureActionResponse` from 0352) | client-only (transient; not persisted) | per-button spinner (`actionLoading` in `FeatureDetail.tsx:56`) flips from "clicking" to "queued" |
+| **confirmed** | client click handler resolves `POST /features/{id}/action` with `status: 'queued'` (`FeatureActionResponse` from 0352) | client-only (transient; not persisted) | per-button spinner (`actionLoading` in `apps/web/src/modules/features/FeatureDetail.tsx:56`) flips from "clicking" to "queued" |
 | **queued** | job row inserted into `queue_jobs` by the server handler | **job row** (durable) | `queue.job.enqueued` system event (`db-job-queue.ts:30,39`; catalog `packages/app/src/services/event-names.ts:87`) — already in `SYSTEM_EVENT_STREAMED_NAMES` and already streamed over `/api/events/planning` |
 | **running** | job row transitions to in-flight when the worker consumer picks it up | **job row** (durable) | worker consumption is implicit — there is no dedicated `queue.job.started` event today, so "running" is derived client-side as "queued seen, terminal not yet seen". `queue.stats` periodic snapshots (`event-names.ts:91`) corroborate. A future `queue.job.started` is a non-blocking enhancement, not required for ship. |
-| **succeeded** | job row reaches terminal success; `runTaskActionJob` returns exit code 0 (`apps/server/src/serve.ts:156-187`) | **job row** (durable) + the resulting feature mutation emits `feature.updated`/`feature.transitioned` through `PlanningWriteService` (`packages/app/src/services/planning-write-service.ts:443-452,549-557`) | `queue.job.completed` (`db-job-queue.ts:189`; catalog `event-names.ts:88`) **and** the derived `feature.*` event. The feature-side refresh is what bumps `detailRefreshKey` (`FeaturesShell.tsx:99-100`). |
+| **succeeded** | job row reaches terminal success; `runTaskActionJob` returns exit code 0 (`apps/server/src/serve.ts:156-187`) | **job row** (durable) + the resulting feature mutation emits `feature.updated`/`feature.transitioned` through `PlanningWriteService` (`packages/app/src/services/planning-write-service.ts:443-452,549-557`) | `queue.job.completed` (`db-job-queue.ts:189`; catalog `event-names.ts:88`) **and** the derived `feature.*` event. The feature-side refresh is what bumps `detailRefreshKey` (`apps/web/src/modules/features/FeaturesShell.tsx:99-100`). |
 | **failed** | `runTaskActionJob` throws on non-zero exit (`serve.ts:184-186`); job row marked failed | **job row** (durable) | `queue.job.failed` (`db-job-queue.ts:206`; catalog `event-names.ts:89`) |
 | **cancelled** | user-initiated cancel of an in-flight job (if/when supported) | **job row** (durable) | `queue.job.failed` with a cancellation discriminator in the payload, **or** a future `queue.job.cancelled`. **Today there is no cancel affordance on feature actions**, so `cancelled` is a reserved state in the contract — it is named here so the implementing UI does not need to re-derive the state space, but no ship-path surfaces it yet. |
 
@@ -105,7 +105,7 @@ Inventory of surfaces that exist today:
 | Surface | Exists? | Where |
 |---|---|---|
 | Per-button spinner (`actionLoading`) | ✅ ships | `FeatureDetail.tsx:56,274,306,336` |
-| Global `api-error` CustomEvent | ⚠️ fires but **has no production listener** — dead-letter today | dispatched at `rpc-client.ts:75-79` and `FeatureDetail.tsx:212,271,303,333`; the only `addEventListener('api-error', …)` calls are in **test files** (`rpc-client.test.ts:85`, `new-task-panel.test.tsx:196`, `task-detail.test.tsx:177,470`, `index.test.tsx:29`). `grep` of `apps/web/src` for a production listener returns nothing. |
+| Global `api-error` CustomEvent | ⚠️ fires but **has no production listener** — dead-letter today | dispatched at `apps/web/src/lib/rpc-client.ts:75-79` and `FeatureDetail.tsx:212,271,303,333`; the only `addEventListener('api-error', …)` calls are in **test files** (`rpc-client.test.ts:85`, `apps/web/tests/modules/task-kanban/new-task-panel.test.tsx:196`, `task-detail.test.tsx:177,470`, `apps/web/tests/modules/task-kanban/index.test.tsx:29`). `grep` of `apps/web/src` for a production listener returns nothing. |
 | System Events tab (live tail + history) | ✅ ships | `apps/web/src/modules/observability/SystemEventsTab.tsx` — full ledger, color-coded by prefix, filterable |
 | Jobs tab (job stats + event history) | ✅ ships | `apps/web/src/modules/observability/JobsTab.tsx` |
 | Activity timeline / Teams Activity | ✅ ships | observability `InboxTab.tsx` (SSE-driven refetch) |
@@ -146,7 +146,7 @@ click
 
 **Critical reuse rule (carried forward from 0352 R2):** the client does **not** need to track `runId` for correctness. The job is server-durable; on re-entry the feature loads its post-action state regardless of whether the client still holds the runId. runId is retained for two narrow purposes only: (1) **scoping the status chip** while the user remains on the detail page (so an event for feature A doesn't flip the chip on feature B when two details are mounted — currently only one detail is mounted at a time, but the contract is forward-compatible); (2) **log/event correlation** in the System Events and Jobs tabs (the drill-down surfaces from R2).
 
-**What changes server-side: nothing.** `queue.*` events already carry `jobId` and are already streamed (R1 finding). **What changes client-side:** (a) the `FeaturesShell.tsx:94` filter widens to admit `queue.*` (and/or a derived `feature.action.*` re-emission if the implementing ticket prefers a feature-namespaced event — either is conformant, the contract does not mandate which); (b) the detail panel keeps the most-recent `runId` per action in a `useRef`/local state to match incoming events.
+**What changes server-side: nothing.** `queue.*` events already carry `jobId` and are already streamed (R1 finding). **What changes client-side:** (a) the `apps/web/src/modules/features/FeaturesShell.tsx:94` filter widens to admit `queue.*` (and/or a derived `feature.action.*` re-emission if the implementing ticket prefers a feature-namespaced event — either is conformant, the contract does not mandate which); (b) the detail panel keeps the most-recent `runId` per action in a `useRef`/local state to match incoming events.
 
 **Non-goal:** end-to-end distributed tracing (W3C traceparent / OpenTelemetry). The Board is a single-process local server; a job id is a sufficient correlation token. A trace-id layer can be layered on later without contract change.
 
@@ -181,7 +181,7 @@ Partial results of `sync` / `check`:
 
 Decision only. No code is changed by this ticket. Implementation is sequenced into later tickets under F81:
 
-- client filter widening in `FeaturesShell.tsx:94` (admit `queue.*`);
+- client filter widening in `apps/web/src/modules/features/FeaturesShell.tsx:94` (admit `queue.*`);
 - per-action `runId` ref + status chip in `FeatureDetail.tsx`;
 - one global `api-error` listener mounted at the Board shell (closes the dead-letter gap from R2);
 - `FeatureActionResponse` adoption (the `{ ok: true }` → `{ runId, action, status }` cutover owned by 0352's implementation tickets);
@@ -201,7 +201,7 @@ This Solution records the state space (R1), the minimum-viable surface set (R2),
 |-----|--------|----------|
 | R1 | MET | Solution §R1 six states confirmed→queued→running→succeeded|failed|cancelled with storage mapping; `event-names.ts:85-91` queue.* catalog; `events/index.ts:66` SSE; `serve.ts` success/fail paths |
 | R2 | MET | Solution §R2 min-viable: status chip + global error toast + existing observability tab drill-down; in-panel strip optional |
-| R3 | MET | Solution §R3 runId = job id = queue.job.*.payload.jobId; client filter widen `FeaturesShell.tsx:94`; mirrors `task-service.ts:319-322` |
+| R3 | MET | Solution §R3 runId = job id = queue.job.*.payload.jobId; client filter widen `apps/web/src/modules/features/FeaturesShell.tsx:94`; mirrors `packages/app/src/services/task-service.ts:319-322` |
 | R4 | MET | Solution §R4 recoverable (retrying chip-only) vs terminal (chip+toast); partial results never for check/sync/agent per contract |
 | R5 | MET | Decision only; depends on 0352 |
 
@@ -217,7 +217,7 @@ This Solution records the state space (R1), the minimum-viable surface set (R2),
 
 **SECUA (`--focus all`):** N/A decision-only. Load-bearing finding: server already streams queue.*; only client filter blocks Board observation.
 
-**`--fix all`:** corrected stale `task-service.ts:300-305` → `:319-322` in Solution/Testing prose.
+**`--fix all`:** corrected stale `packages/app/src/services/task-service.ts:300-305` → `:319-322` in Solution/Testing prose.
 
 **`--next`:** no-op — already terminal (`done`).
 

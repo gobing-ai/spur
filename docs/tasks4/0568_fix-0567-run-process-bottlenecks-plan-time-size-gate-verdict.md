@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:37:16.435Z"
-updated_at: "2026-08-17T01:59:39.054Z"
+updated_at: "2026-08-18T04:42:48.771Z"
 ---
 
 ## 0568. Fix 0567-run process bottlenecks: plan-time size gate, verdict/record contract docs, stale spur PATH, dogfood discipline
@@ -221,7 +221,7 @@ Five independent fixes (R4+R6 pair naturally in one pass). Premises re-verified 
 | R3 | MET | `plugins/sp/skills/code-verification/SKILL.md:242-246` — "Corrections: the answer file is the source of truth" note (answer file → `spur task verdict --from-answer` → re-record; `--section` initial authorship only). Re-read this run; Step 10 happy path unchanged. |
 | R4 | MET | Resolver prelude at `plugins/sp/skills/issue-finding/SKILL.md:142-150` (SPUR_BIN env > local CLI > PATH) — re-read this run; resolver expression executed from repo root → `bun apps/cli/src/index.ts` (this run). |
 | R5 | MET | `plugins/sp/skills/code-implementation/SKILL.md` — "Full-suite budget: at most 2 per task (task 0436 R2)" and "Consolidate dogfood runs" bullets present (re-read `:85-100`); targeted-probe guidance at `:88-89` unchanged, no duplication. |
-| R6 | MET | Frozen-triage hits all resolver-routed (re-read): `issue-finding/SKILL.md:142`, `next-feature/references/signal-derivation.md:10-13` (§0 defines, §1 reuses `$SPUR_BIN`), `code-verification/SKILL.md:383-390`. **Fix pass (this run):** audit re-scan found one missed in-scope hit — the selected-file bridge block in `issue-finding/references/session-formats.md:87-88` (`spur history import/analyze` first-commands, PATH-fragile class); routed through the same `$SPUR_BIN` prelude. Pin updated: `plugins/sp/tests/skill-structure.test.ts:364` now asserts `$SPUR_BIN history import` (test's own intent comment said "source-local CLI"). Post-fix scan: zero bare `spur history` first-commands outside `spur-cli/`; `git diff -- plugins/sp/skills/spur-cli/` empty. |
+| R6 | MET | Frozen-triage hits all resolver-routed (re-read): `issue-finding/SKILL.md:142`, `plugins/sp/skills/next-feature/references/signal-derivation.md:10-13` (§0 defines, §1 reuses `$SPUR_BIN`), `code-verification/SKILL.md:383-390`. **Fix pass (this run):** audit re-scan found one missed in-scope hit — the selected-file bridge block in `plugins/sp/skills/issue-finding/references/session-formats.md:87-88` (`spur history import/analyze` first-commands, PATH-fragile class); routed through the same `$SPUR_BIN` prelude. Pin updated: `plugins/sp/tests/skill-structure.test.ts:364` now asserts `$SPUR_BIN history import` (test's own intent comment said "source-local CLI"). Post-fix scan: zero bare `spur history` first-commands outside `spur-cli/`; `git diff -- plugins/sp/skills/spur-cli/` empty. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

@@ -12,7 +12,7 @@ priority: P2
 tags: ["wayfinder:research", "backward-compat"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.150Z"
-updated_at: "2026-07-27T06:45:23.431Z"
+updated_at: "2026-08-18T04:42:48.093Z"
 ---
 
 ## 0347. Inventory the backward-compatibility surface before any agent-config redesign
@@ -118,7 +118,7 @@ No defect to fix — research ticket. The risk being mitigated is **unscoped red
 **Summary (post verify fix-pass):**
 - **~16 operator-visible contracts** — zod (`packages/config/src/index.ts:126-372`), published JSON schema (`apps/cli/schemas/spur-config.schema.json:101-217`), primary CLI (`apps/cli/src/commands/agent.ts:37`), 12 plugin commands with `--agent`, surface docs (`docs/04_DESIGN.md`), example configs (`config/config.example.yaml:38-64` + `apps/cli/config/config.example.yaml`), `vars.agent` in 7 workflow YAMLs.
 - **~24 internal implementation items** — `AgentService` (`packages/app/src/services/agent-service.ts`), stage-registry (`packages/domain/src/stage-registry/`), parallel adapter (`plugins/sp/scripts/stage-registry-adapter.ts:225`).
-- **2 deprecated/retired items** — `default-by-phase` shim (runtime warning `agent-service.ts:649-651`, ADR-033 `docs/00_ADR.md:782`), legacy Tier-1 priority (`resolveAgentPriority` `:745`).
+- **2 deprecated/retired items** — `default-by-phase` shim (runtime warning `packages/app/src/services/agent-service.ts:649-651`, ADR-033 `docs/00_ADR.md:782`), legacy Tier-1 priority (`resolveAgentPriority` `:745`).
 
 **Headline findings (see inventory §4):**
 1. Two parallel stage registries (domain `REGISTERED_CANONICAL_STAGES` `:655` vs adapter `REGISTERED_STAGES` `:225`).
@@ -128,7 +128,7 @@ No defect to fix — research ticket. The risk being mitigated is **unscoped red
 5. `tier` enum dual-published; 0343 sub-tiers need synonym window.
 6. `--agent` namespace unified by 0346 (executor-first).
 7. `extractPhase` retirement owned by 0344; registry fate by 0348.
-8. `TeamService` second executor consumer (`team-service.ts:585`).
+8. `TeamService` second executor consumer (`packages/app/src/services/team-service.ts:585`).
 9. `packages/contracts/` zero agent/executor DTOs — out of scope.
 10. `spur init` seeds only `bootstrap:`; example yaml is de-facto contract.
 11. **Primary CLI is `apps/cli/src/commands/agent.ts`, not only plugin command docs** (verify fix-pass).

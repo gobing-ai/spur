@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0350"]
 created_at: "2026-07-27T17:49:46.654Z"
-updated_at: "2026-07-27T22:37:59.746Z"
+updated_at: "2026-08-18T04:42:48.186Z"
 ---
 
 ## 0352. Decide the unified async action-runner model for Features detail actions
@@ -129,14 +129,14 @@ The only op that currently qualifies:
 
 Rationale, in priority order:
 
-1. **The inject-`enqueue` seam is already the right abstraction.** `fulfillAction(wbs, action, enqueue, options)` (`task-service.ts:1016`) is deliberately queue-agnostic: the service owns *domain validation* (does this entity exist, is this action supported) and the handler owns *transport* (how the job is persisted). `FeatureService.fulfillAction` reuses this seam by structural copy, not by inheritance — feature validation differs (entity is a feature ID, action set is the feature action catalog from 0349/0351).
+1. **The inject-`enqueue` seam is already the right abstraction.** `fulfillAction(wbs, action, enqueue, options)` (`packages/app/src/services/task-service.ts:1016`) is deliberately queue-agnostic: the service owns *domain validation* (does this entity exist, is this action supported) and the handler owns *transport* (how the job is persisted). `FeatureService.fulfillAction` reuses this seam by structural copy, not by inheritance — feature validation differs (entity is a feature ID, action set is the feature action catalog from 0349/0351).
 
 2. **Premature shared `ActionRunner` is the wrong move now.** A generic `ActionRunner<TEntity, TAction>` would today have exactly two specializations (Task, Feature) and a divergent pair of validation rule sets. Two similar lines beat a premature abstraction (per house style). The feature map explicitly lists "Shared abstraction with Task detail action group now vs Features-only first, extract later" under *Not yet specified* and resolves it: **Features-only first, extract later** when a third consumer appears.
 
 3. **What *is* shared, and where it lives:**
    - **`FeatureActionResponse` type** — same shape as `TaskActionResult` (`{ runId, action, status: 'queued' }`). Define in `packages/contracts/src/feature.ts` (the transport DTO home per AGENTS.md oRPC rules). Do **not** import `TaskActionResult` across domains.
    - **Worker consumer registration** — one new `registry.register('feature-action', …)` line in `apps/server/src/serve.ts` next to the existing `TASK_ACTION_JOB` registration (322-325). Same pattern, new kind.
-   - **SSE widening** — FeaturesShell's `name.startsWith('feature.')` filter (`FeaturesShell.tsx:94`) gains `queue.job.*` (decided shape in 0354). Shared infra, feature-side config.
+   - **SSE widening** — FeaturesShell's `name.startsWith('feature.')` filter (`apps/web/src/modules/features/FeaturesShell.tsx:94`) gains `queue.job.*` (decided shape in 0354). Shared infra, feature-side config.
    - **Job payload shape** — `{ featureId, action, command }` mirroring `{ wbs, action, command }`. The `command` field keeps the same "precompiled CLI invocation" contract so the worker can dispatch through the same AgentService facade (`createTaskActionAgentService` pattern, `serve.ts:129-135`).
 
 **Boundary statement (the R4 deliverable):** `TaskService.fulfillAction` is **not** extended to take features. A new `FeatureService.fulfillAction` is added with the same signature shape but feature-domain validation. The queue, the worker registry, the SSE tap, and the `FeatureActionResponse` shape are reused. A shared `ActionRunner` is an explicit follow-up, gated on a third consumer — not in scope for F81's Features-first delivery.
@@ -153,8 +153,8 @@ Rationale, in priority order:
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Solution names **Option A** (job-queue extension) with Why A/B/C table; anchors: `apps/server/src/context.ts:98` `ServerJobQueue = JobQueue<unknown>`; `:205` jobQueue(); `:489-503` createJobQueue; `task-service.ts:1016-1035` inject-enqueue fulfillAction; `handlers.ts:95-100` open stub; `serve.ts:322-325` TASK_ACTION_JOB registry pattern |
-| R2 | MET | Solution §R2 `FeatureActionResponse { runId, action, status: 'queued' }` mirrors `TaskActionResult` `task-service.ts:319-322`; on-page done via SSE widen (FeaturesShell currently `feature.*` only `:94-99`); navigated-away via durable queue + `planning-write-service.ts:443-452` emit / `:549-557` resolveEventName |
+| R1 | MET | Solution names **Option A** (job-queue extension) with Why A/B/C table; anchors: `apps/server/src/context.ts:98` `ServerJobQueue = JobQueue<unknown>`; `:205` jobQueue(); `:489-503` createJobQueue; `packages/app/src/services/task-service.ts:1016-1035` inject-enqueue fulfillAction; `handlers.ts:95-100` open stub; `serve.ts:322-325` TASK_ACTION_JOB registry pattern |
+| R2 | MET | Solution §R2 `FeatureActionResponse { runId, action, status: 'queued' }` mirrors `TaskActionResult` `packages/app/src/services/task-service.ts:319-322`; on-page done via SSE widen (FeaturesShell currently `feature.*` only `:94-99`); navigated-away via durable queue + `packages/app/src/services/planning-write-service.ts:443-452` emit / `:549-557` resolveEventName |
 | R3 | MET | Default all-async; sole sync exception **check** `handlers.ts:74-87` pure FeatureCheckService read; push remains broken until impl (`handlers.ts:122-124`) |
 | R4 | MET | FeatureService.fulfillAction mirrors TaskService; TaskService NOT extended; ActionRunner deferred; queue/registry/SSE/`FeatureActionResponse` in contracts reused |
 | R5 | MET | Decision only; no production code by this ticket; depends on 0350 (done); F81 map Decisions gist recorded this run |
@@ -172,7 +172,7 @@ Rationale, in priority order:
 **SECUA (`--focus all`):** N/A decision-only. Architecture note: one transport (queue) + closed sync exception list is the correct axis vs hybrid dual-contract (documented in Solution Why C rejected).
 
 **`--fix all`:**
-1. Corrected stale Solution anchors `task-service.ts:300-305` → `:319-322`, `:998-1018` → `:1016-1035` (line drift).
+1. Corrected stale Solution anchors `packages/app/src/services/task-service.ts:300-305` → `:319-322`, `:998-1018` → `:1016-1035` (line drift).
 2. Added F81 Notes Decisions one-line gist for Option A.
 
 **`--next`:** no-op — task already terminal (`done`).

@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0466"]
 ac_numbering: task-local
 created_at: "2026-08-07T06:45:01.675Z"
-updated_at: "2026-08-08T12:42:50.815Z"
+updated_at: "2026-08-18T04:42:48.569Z"
 done_forced: "true"
 done_reason: "verify agent.run killed by context compaction before verdict capture (run d60821d4); recovered manually per F6: lint clean, 4616 tests pass, Solution/Testing/Review(P1-P4) authored, verdict regenerated from authored answer"
 ---
@@ -419,12 +419,12 @@ tables (`history_message` / `history_tool_call`), emitting a versioned JSON arti
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | `packages/domain/src/analytics/forensic-query.ts` — Q1–Q10 as typed fns: `messageRollup` :132, `toolRollup` :154, `byTool` :167, `bySession` :190, `loops` (HAVING COUNT(*)>=3) :275, `drift` :292, `sourceSummary` :306. `bun test packages/domain/tests/analytics/forensic-query.test.ts` → 15 pass / 0 fail (this turn). |
-| R2 | MET | Structural guard `forensic-query.test.ts:495` ("every corpus query carries GROUP BY or LIMIT") + `:500` ("no query SELECTs a bare corpus table") → pass this turn (`--test-name-pattern "every corpus query carries"`, 0 fail). `foldTotals`/`foldGrouped` (`history-service.ts:478,486`) fold only rollup rows bounded by (sources × models × days). |
-| R3 | MET | `buildMessageWhere` (`forensic-query.ts:96`) composes six selectors as AND; `drizzle/0009_spur_cli_history_message_run_idx.sql` + `migrations.ts:233` (CLI_MIGRATIONS entry). Tests: "selectors compose as AND" and "--run/--task selectors resolve against the (provenance, run_id) index" → both pass this turn. |
-| R4 | MET | `artifact.ts:9` `HISTORY_ARTIFACT_SCHEMA_VERSION = 1`; 13-field `HistoryArtifact` (`artifact.ts:98`); `selectorDigest` sha256/8-hex canonicalized (`artifact.ts:121`). Live: `spur history analyze --json` in a temp project → exit 0, wrote `.spur/reports/history/2026-08-08/analyze-38efcab3.json` + `latest.json` symlink; re-run produced the identical path. `artifact.test.ts` 7 pass / 0 fail this turn. |
-| R5 | MET | `recordsWithUsage`/`durationUnmeasured` threaded through `foldMessage`/`foldTool` (`history-service.ts:454-470`); `cacheHitRatio` returns `null` never 0 (`costs.ts:22`). Live human run printed `Cache hit: n/a` (never-fabricate render). history-service test "NULL durations → durationUnmeasured" among 17 pass / 0 fail this turn. |
-| R6 | MET | `MAX_ERROR_SAMPLES = 20` (`history-service.ts:162`); `boundCoverage` caps samples + overflow to `.errors.jsonl` sidecar (`history-service.ts:652`); sidecar path beside artifact (`:648`). Sidecar-bounding tests among 17 pass / 0 fail this turn. |
-| R7 | MET | `grep queryAllEtlRecords\|etlToCostRecord\|aggregateCosts\|accumulate` over packages/+apps/ → zero production refs (only retirement comments in `run-cost.ts:204-241`). `cacheHitRatio`/`formatRatio` verbatim, `formatRatio` exported (`costs.ts:72`). `TokenTotals` extended + `cacheWriteTokens` rename (`types.ts:40-62`); `CostRecord.cacheCreationTokens` retained. |
+| R2 | MET | Structural guard `packages/domain/tests/analytics/forensic-query.test.ts:495` ("every corpus query carries GROUP BY or LIMIT") + `:500` ("no query SELECTs a bare corpus table") → pass this turn (`--test-name-pattern "every corpus query carries"`, 0 fail). `foldTotals`/`foldGrouped` (`history-service.ts:478,486`) fold only rollup rows bounded by (sources × models × days). |
+| R3 | MET | `buildMessageWhere` (`packages/domain/src/analytics/forensic-query.ts:96`) composes six selectors as AND; `drizzle/0009_spur_cli_history_message_run_idx.sql` + `packages/domain/src/migrations.ts:233` (CLI_MIGRATIONS entry). Tests: "selectors compose as AND" and "--run/--task selectors resolve against the (provenance, run_id) index" → both pass this turn. |
+| R4 | MET | `packages/domain/src/analytics/artifact.ts:9` `HISTORY_ARTIFACT_SCHEMA_VERSION = 1`; 13-field `HistoryArtifact` (`packages/domain/src/analytics/artifact.ts:98`); `selectorDigest` sha256/8-hex canonicalized (`packages/domain/src/analytics/artifact.ts:121`). Live: `spur history analyze --json` in a temp project → exit 0, wrote `.spur/reports/history/2026-08-08/analyze-38efcab3.json` + `latest.json` symlink; re-run produced the identical path. `artifact.test.ts` 7 pass / 0 fail this turn. |
+| R5 | MET | `recordsWithUsage`/`durationUnmeasured` threaded through `foldMessage`/`foldTool` (`packages/app/src/services/history-service.ts:454-470`); `cacheHitRatio` returns `null` never 0 (`packages/domain/src/analytics/costs.ts:22`). Live human run printed `Cache hit: n/a` (never-fabricate render). history-service test "NULL durations → durationUnmeasured" among 17 pass / 0 fail this turn. |
+| R6 | MET | `MAX_ERROR_SAMPLES = 20` (`packages/app/src/services/history-service.ts:162`); `boundCoverage` caps samples + overflow to `.errors.jsonl` sidecar (`packages/app/src/services/history-service.ts:652`); sidecar path beside artifact (`:648`). Sidecar-bounding tests among 17 pass / 0 fail this turn. |
+| R7 | MET | `grep queryAllEtlRecords\|etlToCostRecord\|aggregateCosts\|accumulate` over packages/+apps/ → zero production refs (only retirement comments in `packages/domain/src/analytics/run-cost.ts:204-241`). `cacheHitRatio`/`formatRatio` verbatim, `formatRatio` exported (`packages/domain/src/analytics/costs.ts:72`). `TokenTotals` extended + `cacheWriteTokens` rename (`types.ts:40-62`); `CostRecord.cacheCreationTokens` retained. |
 | R8 | MET | Nine flags on `analyze` (`apps/cli/src/commands/history.ts:78-86`, `--top` default 20); no flags → `formatSummary` from artifact totals (`:106-111`); `--json` → `toJson(artifact)` (`:106`). Live: text run printed `Total:`/`By source:`/`By model:`; `--json` run emitted the artifact shape; both exit 0. |
 
 **Acceptance Criteria Verification**
@@ -435,12 +435,12 @@ tables (`history_message` / `history_tool_call`), emitting a versioned JSON arti
 | Scenario: R2 — aggregation does not scale in memory | MET | test | `forensic-query.test.ts:495,500` structural source-inspection tests pass this turn; every aggregate is GROUP BY/LIMIT-bounded |
 | Scenario: R4 — the artifact is a contract | MET | command | Live `spur history analyze --json` (temp project, exit 0): artifact at `.spur/reports/history/2026-08-08/analyze-38efcab3.json` with `schemaVersion: 1`; identical path on re-run; `latest.json` symlink verified via `readlink` |
 | Scenario: R5 — unavailable is never rendered as zero | MET | test | history-service.test.ts R5 tests (NULL duration_ms ⇒ durationUnmeasured == toolCalls, no zero total) pass; live text output rendered `Cache hit: n/a` |
-| Scenario: R6 — a mapping regression cannot produce an unbounded artifact | MET | test | history-service.test.ts R6 bounding tests (25 errors ⇒ 20 samples + sidecar) pass this turn; `boundCoverage` at `history-service.ts:652` |
-| Scenario: R3 — selectors compose and resolve against indexes | MET | test | "selectors compose as AND (R3)" + EXPLAIN QUERY PLAN index test (`forensic-query.test.ts:412`) pass this turn |
+| Scenario: R6 — a mapping regression cannot produce an unbounded artifact | MET | test | history-service.test.ts R6 bounding tests (25 errors ⇒ 20 samples + sidecar) pass this turn; `boundCoverage` at `packages/app/src/services/history-service.ts:652` |
+| Scenario: R3 — selectors compose and resolve against indexes | MET | test | "selectors compose as AND (R3)" + EXPLAIN QUERY PLAN index test (`packages/domain/tests/analytics/forensic-query.test.ts:412`) pass this turn |
 | Scenario: R7 — retired helpers are gone and reused helpers are unchanged | MET | command | `grep` over packages/+apps/: no prod refs to retired helpers (exit-clean); `cacheHitRatio`/`formatRatio` unchanged at `costs.ts:22,72` |
-| Scenario: R8 — the existing human surface still works | MET | test | `migrate-stubs.test.ts:184` "runs history analyze with --json and text output" (0468 pin removed, `--source claude`) → pass this turn; live text + `--json` runs both exit 0 |
+| Scenario: R8 — the existing human surface still works | MET | test | `apps/cli/tests/commands/migrate-stubs.test.ts:184` "runs history analyze with --json and text output" (0468 pin removed, `--source claude`) → pass this turn; live text + `--json` runs both exit 0 |
 
-**Design conformance:** 10/10 frozen claims DONE — forensic-query.ts/artifact.ts new files, TokenTotals extension + rename, costs.ts deletions with cacheHitRatio/formatRatio kept verbatim, query.ts survivor set, analyze() cut-over (`history-service.ts:204`), nine CLI flags, 0009 migration in both `drizzle/` and `CLI_MIGRATIONS`, `docs/04_DESIGN.md:389` surface update, 0468 pin removal. No silent deviations; run-cost.ts local fold documented in Solution (goal-equivalent).
+**Design conformance:** 10/10 frozen claims DONE — forensic-query.ts/artifact.ts new files, TokenTotals extension + rename, costs.ts deletions with cacheHitRatio/formatRatio kept verbatim, query.ts survivor set, analyze() cut-over (`packages/app/src/services/history-service.ts:204`), nine CLI flags, 0009 migration in both `drizzle/` and `CLI_MIGRATIONS`, `docs/04_DESIGN.md:389` surface update, 0468 pin removal. No silent deviations; run-cost.ts local fold documented in Solution (goal-equivalent).
 
 **Fresh gate evidence (this turn):**
 
@@ -450,7 +450,7 @@ tables (`history_message` / `history_tool_call`), emitting a versioned JSON arti
 - `bunx biome check` on the 7 task-owned source files — clean, 0 errors.
 - Live CLI golden path (temp project): `history analyze --json` → exit 0, artifact + latest.json written; `history analyze` → human summary exit 0; same-selector re-run → identical digest path `analyze-38efcab3.json`.
 
-**SECUA findings:** no blocker/major. Advisory (minor): `bySession`'s per-(session,tool) rollup (`forensic-query.ts:220-228`) is GROUP BY-bounded but carries no LIMIT — group cardinality is selector-bounded per the Design's algorithm rule, so this is informational only. Prior F1 (bySession selector scoping) re-verified fixed via the two F1-regression tests passing this turn.
+**SECUA findings:** no blocker/major. Advisory (minor): `bySession`'s per-(session,tool) rollup (`packages/domain/src/analytics/forensic-query.ts:220-228`) is GROUP BY-bounded but carries no LIMIT — group cardinality is selector-bounded per the Design's algorithm rule, so this is informational only. Prior F1 (bySession selector scoping) re-verified fixed via the two F1-regression tests passing this turn.
 
 Coverage: per-file line coverage for `forensic-query.ts`/`artifact.ts`/`costs.ts`/`query.ts` previously measured at 100% (see prior run); not re-measured this turn (targeted runs only, no repo-wide coverage pass).
 ### Review

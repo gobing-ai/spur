@@ -11,7 +11,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-06-27T00:26:38.054Z
-updated_at: 2026-06-27T00:55:00.501Z
+updated_at: "2026-08-18T04:42:46.950Z"
 ---
 
 ## 0133. Realign sp:dev-* --next step-chain so refine/run/verify reach done
@@ -105,7 +105,7 @@ SSOT reference docs, and removed the stale YAML drift.
 | `plugins/sp/skills/spur-dev/references/execution-workflow.md:98-105` | Replaced the "full-mode `--next` is a usage error" block with the chain-link contract. |
 | `plugins/sp/skills/spur-dev/references/dev-operations.md:76-94` | §3 verify / §4 run / §5 refine `--next` descriptions updated; `--auto` propagation noted. |
 | `plugins/sp/skills/spur-dev/references/cross-cutting.md:62-74` | New subsection: `--no-lifecycle` is pipeline-only; interactive chains honor the FSM. |
-| `.spur/config/workflows/task-pipeline.yaml:59-70` | Synced from canonical — removed stale `/sp:dev-implement` reference and old inline-grep verdict logic. |
+| `config/workflows/task-pipeline.yaml:59-70` | Synced from canonical — removed stale `/sp:dev-implement` reference and old inline-grep verdict logic. |
 
 Notes:
 - `apps/cli/spur-cli/config/workflows/` is a gitignored build artifact (`build:bundle` regenerates
@@ -120,12 +120,12 @@ both task-pipeline and task-lifecycle; 16/16 init+scaffold tests pass.
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — chain coherence (refine→run→verify→done) | MET | `dev-refine.md:31` → `dev-run.md:34` → `dev-verify.md:33`; targets line up |
-| R2 — dev-run --next implies --mode implement (no usage error) | MET | `dev-run.md:34`, `dev-run.md:81-99` |
-| R3 — dev-refine --next chains to dev-run --auto --next | MET | `dev-refine.md:31`, `dev-refine.md:75` |
-| R4 — chains honor FSM (no --no-lifecycle in transitions) | MET | `cross-cutting.md:65`, `dev-run.md:81`, `dev-refine.md:74`, `dev-verify.md:61` |
-| R5 — guard failure stops as review-pending | MET | `dev-run.md:92`, `dev-refine.md:76`, `dev-verify.md:65` |
-| R6 — --auto propagates down the chain | MET | `dev-run.md:84`, `dev-operations.md:84,94` |
+| R1 — chain coherence (refine→run→verify→done) | MET | `plugins/sp/commands/dev-refine.md:31` → `plugins/sp/commands/dev-run.md:34` → `plugins/sp/commands/dev-verify.md:33`; targets line up |
+| R2 — dev-run --next implies --mode implement (no usage error) | MET | `plugins/sp/commands/dev-run.md:34`, `plugins/sp/commands/dev-run.md:81-99` |
+| R3 — dev-refine --next chains to dev-run --auto --next | MET | `plugins/sp/commands/dev-refine.md:31`, `plugins/sp/commands/dev-refine.md:75` |
+| R4 — chains honor FSM (no --no-lifecycle in transitions) | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:65`, `plugins/sp/commands/dev-run.md:81`, `plugins/sp/commands/dev-refine.md:74`, `plugins/sp/commands/dev-verify.md:61` |
+| R5 — guard failure stops as review-pending | MET | `plugins/sp/commands/dev-run.md:92`, `plugins/sp/commands/dev-refine.md:76`, `plugins/sp/commands/dev-verify.md:65` |
+| R6 — --auto propagates down the chain | MET | `plugins/sp/commands/dev-run.md:84`, `dev-operations.md:84,94` |
 | R7 — verify acts on post-fix verdict | MET | `dev-verify.md:33,53,58` |
 | R8 — no /sp:dev-implement reference in config/ or .spur/ | MET | grep CLEAN across both trees |
 | R9 — SSOT docs updated same commit | MET | `git show 0b0f22a`: execution-workflow.md, dev-operations.md, cross-cutting.md |

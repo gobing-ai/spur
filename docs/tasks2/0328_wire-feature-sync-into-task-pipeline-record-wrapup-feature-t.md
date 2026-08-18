@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0327"]
 created_at: "2026-07-25T00:27:48.753Z"
-updated_at: "2026-07-28T00:33:19.057Z"
+updated_at: "2026-08-18T04:42:47.864Z"
 ---
 
 ## 0328. Wire feature sync into task-pipeline record, wrapup feature-transition, and dev-verify PASS
@@ -47,9 +47,9 @@ Terrain: wrapup feature-transition step at `.spur/workflows/wrapup-pipeline.yaml
 ### Solution
 | File:line | Change |
 | --- | --- |
-| [`.spur/workflows/task-pipeline.yaml:174`](file:///Users/robin/xprojects/spur-new/.spur/workflows/task-pipeline.yaml#L174) | Added conditional post-record step executing `spur feature sync <id> --json` if task has `feature_id`, or appending orphan link proposal to run report if unlinked. |
+| [`config/workflows/task-pipeline.yaml:174`](file:///Users/robin/xprojects/spur-new/.spur/workflows/task-pipeline.yaml#L174) | Added conditional post-record step executing `spur feature sync <id> --json` if task has `feature_id`, or appending orphan link proposal to run report if unlinked. |
 | [`config/workflows/task-pipeline.yaml:174`](file:///Users/robin/xprojects/spur-new/config/workflows/task-pipeline.yaml#L174) | Aligned bundled preset `task-pipeline.yaml` with the post-record feature sync step. |
-| [`.spur/workflows/wrapup-pipeline.yaml:126`](file:///Users/robin/xprojects/spur-new/.spur/workflows/wrapup-pipeline.yaml#L126) | Replaced `spur feature advance ${vars.feature}` with `spur feature sync ${vars.feature} --json` in `feature-transition` state. |
+| [`config/workflows/wrapup-pipeline.yaml:126`](file:///Users/robin/xprojects/spur-new/.spur/workflows/wrapup-pipeline.yaml#L126) | Replaced `spur feature advance ${vars.feature}` with `spur feature sync ${vars.feature} --json` in `feature-transition` state. |
 | [`config/workflows/wrapup-pipeline.yaml:126`](file:///Users/robin/xprojects/spur-new/config/workflows/wrapup-pipeline.yaml#L126) | Aligned bundled preset `wrapup-pipeline.yaml` with `spur feature sync`. |
 | [`packages/domain/src/planning/schema.ts:274`](file:///Users/robin/xprojects/spur-new/packages/domain/src/planning/schema.ts#L274) | Added `feature_link_declined` optional boolean field to `taskFrontmatterSchema`. |
 | [`plugins/sp/skills/spur-dev/references/feature-link-helper.md:37`](file:///Users/robin/xprojects/spur-new/plugins/sp/skills/spur-dev/references/feature-link-helper.md#L37) | Documented post-PASS verification feature sync derivation prompt, candidate feature proposal for unlinked tasks, and `feature_link_declined: true` persistence. |
@@ -95,7 +95,7 @@ Residual risk: first real pipeline run with a linked task exercises the record-s
 - `bun run lint` — clean (biome + all 5 workspace typechecks exit 0)
 - Smoke: orphan-task FID extraction (`spur task show 0300 --json` ⇒ `feature_id=null`) confirms the record-step orphan branch logic against real data
 - Coverage: N/A (configuration/documentation change; schema field covered by packages/domain tests)
-- Line-anchor rule: `task-pipeline.yaml:164-176`, `wrapup-pipeline.yaml:117-129`, `schema.ts:269-276`, link-helper block re-read this run; cited lines name the requirement subjects
+- Line-anchor rule: `config/workflows/task-pipeline.yaml:164-176`, `config/workflows/wrapup-pipeline.yaml:117-129`, `schema.ts:269-276`, link-helper block re-read this run; cited lines name the requirement subjects
 - Fix-pass disclosure: the fix pass touched `plugins/sp/commands/dev-verify.md` (added Post-PASS feature sync section); untracked artifact updated at `.spur/run/0328-verdict.json`
 - Verdict artifact: `.spur/run/0328-verdict.json` (written last, standalone path)
 ### Review

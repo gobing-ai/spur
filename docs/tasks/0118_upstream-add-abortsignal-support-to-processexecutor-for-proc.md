@@ -4,7 +4,7 @@ name: "Upstream: add AbortSignal support to ProcessExecutor for process-group si
 status: done
 template: review
 created_at: 2026-06-24T22:55:48.629Z
-updated_at: 2026-06-25T03:37:07.982Z
+updated_at: "2026-08-18T04:42:46.859Z"
 feature_id: B1
 ---
 
@@ -46,7 +46,7 @@ These three changes form a vertical: ts-runtime (lowest) → ts-ai-runner (middl
 |-----|--------|----------|
 | P2-1a: ts-runtime `ProcessOptions.signal` → execa `cancelSignal` | **MET** | `process-executor.ts:30` — `signal?: AbortSignal` field; `process-executor.ts:464` — `cancelSignal: opts.signal` in execa options; `process-executor.ts:133` — threaded through `runUntraced` |
 | P2-1b: ts-ai-runner `AgentRunOptions.signal` → `processExecutor.run()` | **MET** | `ai-runner.ts:35` — `signal?: AbortSignal` field; `ai-runner.ts:147` — `options.signal` threaded to `processExecutor.run()` in `invoke()` |
-| P2-1c: spur-app `AbortController` wiring | **MET** | `agent-service.ts:276` — `new AbortController()`; `agent-service.ts:279-280` — `process.on('SIGTERM'/'SIGINT')` handlers; `agent-service.ts:284` — `signal: controller.signal` passed to `runPromptCommand()`; `agent-service.ts:289-290` — `process.off` cleanup in `finally` block |
+| P2-1c: spur-app `AbortController` wiring | **MET** | `packages/app/src/services/agent-service.ts:276` — `new AbortController()`; `packages/app/src/services/agent-service.ts:279-280` — `process.on('SIGTERM'/'SIGINT')` handlers; `packages/app/src/services/agent-service.ts:284` — `signal: controller.signal` passed to `runPromptCommand()`; `packages/app/src/services/agent-service.ts:289-290` — `process.off` cleanup in `finally` block |
 
 Coverage: 99.07% lines, 99.54% funcs (spur-new); ts-libs gate passes (1516 tests, 0 fail).
 

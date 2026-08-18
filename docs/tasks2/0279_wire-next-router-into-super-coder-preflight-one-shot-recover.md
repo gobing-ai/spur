@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: ["0275"]
 created_at: "2026-07-17T06:34:53.279Z"
-updated_at: "2026-07-28T00:32:09.626Z"
+updated_at: "2026-08-18T04:42:47.548Z"
 ---
 
 ## 0279. Wire next-router into super-coder (preflight + one-shot recovery)
@@ -160,7 +160,7 @@ Scenario: Multi-candidate router stop is not auto-picked
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | `super-coder.md` boundary: batch vs status-routing; pipeline happy path; deep-merge forbidden |
-| R2 | MET | `super-coder.md:22` `skills: […, sp:next-router]` |
+| R2 | MET | `plugins/sp/agents/super-coder.md:22` `skills: […, sp:next-router]` |
 | R3 | MET | `preflightTask` A2/A7/A8/A9 + test "A2 — todo with unmet dep is skipped"; CLI exit 2 this run |
 | R4 | MET | ready todo → `action: run` (test + CLI); docs: never substitute pipeline with dev-next loop |
 | R5 | MET | `recoveryHint` + CLI `--recovery`; execution-batch §3.3b budget ≤1 |

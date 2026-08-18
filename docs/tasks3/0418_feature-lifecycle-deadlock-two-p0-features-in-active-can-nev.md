@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-03T00:40:11.223Z"
-updated_at: "2026-08-03T03:16:18.154Z"
+updated_at: "2026-08-18T04:42:48.443Z"
 ---
 
 ## 0418. Feature lifecycle deadlock: two P0 features in active can never transition out
@@ -164,7 +164,7 @@ done`; F4 remains the single active goal. Both checks drop the `L3.one-active-go
   - `check()` accepts `asStatus` (`packages/app/src/services/feature-check.ts:165`, `:198`); `checkOneActiveGoal` evaluates the checked feature's *post-transition* status, so a transition that exits the active set (`active → verifying`, `verifying → done`) is never denied by the rule it relieves.
   - `verifying` no longer counts as a blocking goal status (terminal-bound, DD-13); entering `active` while another P0 is active is still an error.
   - Extracted the shared corpus scan `findOtherP0InStatus` (`packages/app/src/services/feature-check.ts:716`, exported) so the L3 rule and the R3 activation guard enforce one WIP-limit definition.
-- `.spur/workflows/feature-lifecycle.yaml:52` + `config/workflows/feature-lifecycle.yaml` + `apps/cli/config/workflows/feature-lifecycle.yaml` (kept byte-identical) — FSM guards pass the edge target: `active→verifying` runs `feature check <id> --as verifying`; `verifying→done` runs `feature check <id> --strict --as done`.
+- `config/workflows/feature-lifecycle.yaml:52` + `config/workflows/feature-lifecycle.yaml` + `apps/cli/config/workflows/feature-lifecycle.yaml` (kept byte-identical) — FSM guards pass the edge target: `active→verifying` runs `feature check <id> --as verifying`; `verifying→done` runs `feature check <id> --strict --as done`.
 - `apps/cli/src/commands/feature.ts:344` — `spur feature check` gains `--as <status>`; `spur feature advance` passes the hop target through `assertFeatureCheckPass`; `spur feature sync` tags blocked activations `[GOAL-CONFLICT]`.
 - `packages/app/src/services/feature-service.ts:523` — R3 activation guard: `syncFeature` refuses a P0 hop into `active` while another P0 is active and returns `goalConflict: { featureId, status }` (surfaced in the sync result / CLI output); the lifecycle no longer manufactures a forbidden two-active corpus silently.
 - `docs/04_DESIGN.md` — `spur feature check` row (added `--as`, goal set now `active`-only) and `feature-lifecycle.yaml` row (guards pass the target).

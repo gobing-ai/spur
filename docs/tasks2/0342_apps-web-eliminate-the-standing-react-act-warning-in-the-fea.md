@@ -12,7 +12,7 @@ priority: P3
 tags: ["web", "tests", "hygiene", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.207Z"
-updated_at: "2026-07-27T07:12:33.025Z"
+updated_at: "2026-08-18T04:42:48.048Z"
 ---
 
 ## 0342. apps/web: eliminate the standing React act() warning in the features test suite
@@ -156,7 +156,7 @@ The fix mirrors the sibling `unrelated SSE` test's settling pattern (`:626`): af
 
 **Why this works**
 
-The SSE `onmessage` handler in `FeaturesShell.tsx:90-101` fires `void load()` (an async tree refetch) and `setDetailRefreshKey((n) => n + 1)`. The `load()` fetch resolves as a chain of microtasks (`fetchWithTimeout` → `.finally` → `await res.json()` → `setFeatures`). Without `act`, the test's `waitFor` passes as soon as the *detail panel* shows 'verifying', but the tree `load()` fetch is still in flight — its `setFeatures(data)` lands after the test returns and fires outside `act`, producing the warning.
+The SSE `onmessage` handler in `apps/web/src/modules/features/FeaturesShell.tsx:90-101` fires `void load()` (an async tree refetch) and `setDetailRefreshKey((n) => n + 1)`. The `load()` fetch resolves as a chain of microtasks (`fetchWithTimeout` → `.finally` → `await res.json()` → `setFeatures`). Without `act`, the test's `waitFor` passes as soon as the *detail panel* shows 'verifying', but the tree `load()` fetch is still in flight — its `setFeatures(data)` lands after the test returns and fires outside `act`, producing the warning.
 
 `await act(async () => { ... })` flushes all pending microtasks (including the fetch chain) after the sync `onmessage` dispatch returns, so `setFeatures` lands inside the test boundary. The subsequent `waitFor` still asserts the detail panel refreshed to 'verifying'.
 

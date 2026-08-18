@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0276"]
 created_at: "2026-07-17T01:13:59.542Z"
-updated_at: "2026-07-28T00:32:12.422Z"
+updated_at: "2026-08-18T04:42:47.520Z"
 ---
 
 ## 0277. Dogfood @1.2 meta-run detector and token policy
@@ -78,10 +78,10 @@ Scenario: Implement-heavy pipeline dogfood warns
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `detect-pipeline-driving.ts:37-76` word-boundary `(?<![\w-])…(?![\w-])`; tokens include `--next`, `dev-run*`, bare `run`/`wrap`/`idea`. Slash form `/sp:dev-run` detected without leading space. |
+| R1 | MET | `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:37-76` word-boundary `(?<![\w-])…(?![\w-])`; tokens include `--next`, `dev-run*`, bare `run`/`wrap`/`idea`. Slash form `/sp:dev-run` detected without leading space. |
 | R2 | MET | `pipeline-detect.test.ts` — 30 tests: positives, true negatives, false-positive guards, leading-space invariance, PIPELINE_TOKENS pin. `bun test plugins/sp/tests/dogfood-testing/` → 42/42 this run. |
 | R3 | MET | `SKILL.md:112-118` Phase 2 implement-heavy advisory; Gotcha 9 (`SKILL.md:235-243`) recommend observe-only or step-split. |
-| R4 | MET | `SKILL.md:253-274` Cost segmentation table (driver vs chained-step); `report-template.md:129-133`; `monitor-ledger.md:97-112` chained-step rows. |
+| R4 | MET | `SKILL.md:253-274` Cost segmentation table (driver vs chained-step); `plugins/sp/skills/dogfood-testing/references/report-template.md:129-133`; `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:97-112` chained-step rows. |
 | R5 | MET | `SKILL.md:276-302` `--next` chain stop-at-testing when provenance missing; no lifecycle code changed (R5). |
 | R6 | MET | `bun test plugins/sp/tests/dogfood-testing/` 42 pass; `bun test plugins/sp` 219 pass; 0276 report-contract fixtures still green. |
 

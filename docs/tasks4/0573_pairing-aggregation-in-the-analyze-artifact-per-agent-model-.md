@@ -13,7 +13,7 @@ tags: ["history", "analytics", "pairings"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T18:47:41.892Z"
-updated_at: "2026-08-17T07:41:50.443Z"
+updated_at: "2026-08-18T04:42:48.785Z"
 ---
 
 ## 0573. Pairing aggregation in the analyze artifact: per-(agent,model,role) stats
@@ -114,8 +114,8 @@ Scenario: R6 — The pairings section is additive and old artifacts degrade grac
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/analytics/pairings.ts:22` — PairingStat; `pairings.ts:84` — pairingSummary (dispatch×exit join, escalation attribution, run→session cost fold, absence-not-zero). `bun test packages/domain/tests/analytics/pairings.test.ts` → 11 pass, 0 fail (rerun this run). |
-| R2 | MET | `packages/domain/src/analytics/artifact.ts:128` — LadderEntry; `artifact.ts:163` — pairings?; `artifact.ts:168` — ladderSnapshot?; `artifact.ts:13` — version stays 1. `bun run typecheck` → all packages exit 0 (rerun this run). |
+| R1 | MET | `packages/domain/src/analytics/pairings.ts:22` — PairingStat; `packages/domain/src/analytics/pairings.ts:84` — pairingSummary (dispatch×exit join, escalation attribution, run→session cost fold, absence-not-zero). `bun test packages/domain/tests/analytics/pairings.test.ts` → 11 pass, 0 fail (rerun this run). |
+| R2 | MET | `packages/domain/src/analytics/artifact.ts:128` — LadderEntry; `packages/domain/src/analytics/artifact.ts:163` — pairings?; `packages/domain/src/analytics/artifact.ts:168` — ladderSnapshot?; `packages/domain/src/analytics/artifact.ts:13` — version stays 1. `bun run typecheck` → all packages exit 0 (rerun this run). |
 | R3 | MET | `packages/app/src/services/history-service.ts:342` — pairingSummary in rollup; `:380` — ladderSnapshot; `:422` — embedded; `:803` — buildLadderSnapshot; `apps/cli/src/commands/history.ts:140,234` — agentConfig; `packages/app/src/services/agent-service.ts:2209` — getExecutorTier export; `packages/domain/src/analytics/index.ts:62` — exports. `bun test packages/app/tests/services/history-service.test.ts` → 31 pass; `bun test packages/domain/tests/analytics/` → 179 pass (rerun this run). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
