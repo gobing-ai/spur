@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.52] — 2026-08-18
+
+### Added
+
+- feat(app): centralize task-completion contract, canonical verdict, target-aware check (5f0663b5)
+
+### Fixed
+
+- fix(app): honor escaped pipes and section bounds in verdict table parsing (0590) (2e966025)
+
+### Changed
+
+- docs: add I6 harness self-improvement program and planning tasks (b90cfc3f)
+- docs: add F92 task-completion contract centralization feature with planned tasks (e032b181)
+- docs(tasks): update task status after implementation (0d3c7326)
+
 ## [0.3.51] — 2026-08-18
 
 ### Added
