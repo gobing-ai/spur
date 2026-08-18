@@ -9,10 +9,11 @@
 
 import { afterEach, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { CmdResult, CommandRunner } from '../scripts/pr-reviewing';
 import {
     buildRequestBody,
     extractSeverity,
@@ -26,6 +27,8 @@ import {
     parseArgs,
     renderFindings,
     scanHygiene,
+    setCommandRunner,
+    spawnRunner,
 } from '../scripts/pr-reviewing';
 
 // ─── Pure: argument parsing ─────────────────────────────────────────────────
@@ -50,6 +53,18 @@ describe('parseArgs', () => {
         });
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('Installed usage: bun');
+    });
+
+    test('the default runner really spawns, and reports a missing binary instead of throwing', () => {
+        // The other CLI cases inject an in-process stub, so this is what keeps the real
+        // PATH-resolving spawn path covered.
+        const okResult = spawnRunner(['/bin/sh', '-c', 'printf hi']);
+        expect(okResult.code).toBe(0);
+        expect(okResult.stdout).toBe('hi');
+
+        const missing = spawnRunner(['spur-no-such-binary-xyz']);
+        expect(missing.code).not.toBe(0);
+        expect(missing.error ?? '').not.toBe('');
     });
 
     test('workflow carries request freshness through wait/collect and records composite status', () => {
@@ -285,70 +300,104 @@ let errs: string[] = [];
 let logSpy: Mock<(...data: unknown[]) => void>;
 let errSpy: Mock<(...data: unknown[]) => void>;
 
-function writeStubBins(dir: string): void {
-    const git = `#!/bin/sh
-FIX="${dir}"
-printf 'git %s\\n' "$*" >> "$FIX/calls.txt"
-[ -f "$FIX/git_fail" ] && { printf '%s\\n' 'git fixture failure' >&2; exit 1; }
-case "$*" in
-  "rev-parse --show-toplevel") printf '%s\\n' "$FIX/repo" ;;
-  "branch --show-current") cat "$FIX/branch" 2>/dev/null || true ;;
-  "rev-parse HEAD") cat "$FIX/head" ;;
-  "status --porcelain")
-    if [ -f "$FIX/git_status_fail" ]; then printf '%s\\n' 'status failure' >&2; exit 1; fi
-    cat "$FIX/dirty" 2>/dev/null || true ;;
-  "rev-parse --abbrev-ref --symbolic-full-name @{u}")
-    if [ -f "$FIX/upstream" ]; then cat "$FIX/upstream"; else exit 1; fi ;;
-  "rev-list --count @{u}..HEAD") cat "$FIX/ahead" 2>/dev/null || printf '0\n' ;;
-  "rev-list --count HEAD..@{u}") cat "$FIX/behind" 2>/dev/null || printf '0\n' ;;
-  "rev-parse @{u}") cat "$FIX/remotehead" ;;
-  "push -u origin HEAD") printf '%s\\n' HEAD > "$FIX/remotehead"; printf '%s\\n' 'origin/main' > "$FIX/upstream" ;;
-  "push") cat "$FIX/head" > "$FIX/remotehead" ;;
-  "log --oneline "*)
-    if [ -f "$FIX/git_log_fail" ]; then printf '%s\\n' 'log failure' >&2; exit 1; fi
-    cat "$FIX/commits" 2>/dev/null || true ;;
-  "diff --name-only --diff-filter=AMCR "*)
-    if [ -f "$FIX/diff_files_fail" ]; then printf '%s\\n' 'diff files failure' >&2; exit 1; fi
-    cat "$FIX/diff_files" 2>/dev/null || true ;;
-  "diff "*)
-    if [ -f "$FIX/diff_text_fail" ]; then printf '%s\\n' 'diff text failure' >&2; exit 1; fi
-    cat "$FIX/diff_text" 2>/dev/null || true ;;
-  *) exit 1 ;;
-esac
-`;
-    const gh = `#!/bin/sh
-FIX="${dir}"
-printf 'gh %s\\n' "$*" >> "$FIX/calls.txt"
-case "$*" in
-  "auth status")
-    if [ -f "$FIX/no_auth" ]; then exit 1; fi
-    printf 'Logged in\\n' ;;
-  "repo view --json nameWithOwner,defaultBranchRef")
-    printf '%s\\n' '{"nameWithOwner":"octo/repo","defaultBranchRef":{"name":"main"}}' ;;
-  "pr view --json number,url,state,isDraft,headRefName,baseRefName,title,headRefOid")
-    if [ -f "$FIX/pr.json" ]; then cat "$FIX/pr.json"; else printf '%s\\n' 'no pull requests found for branch' >&2; exit 1; fi ;;
-  "pr create --fill --base "*)
-    cp "$FIX/pr_created.json" "$FIX/pr.json"
-    printf '%s\\n' 'https://github.com/octo/repo/pull/7' ;;
-  "pr comment "*)
-    printf '%s\\n' "$*" >> "$FIX/comments_posted.txt" ;;
-  "pr checks "*)
-    cat "$FIX/checks" 2>/dev/null || exit 1
-    if [ -f "$FIX/checks_exit" ]; then exit "$(cat "$FIX/checks_exit")"; fi ;;
-  "api user --jq .login") printf '%s\n' 'robin' ;;
-  "api --method GET repos/octo/repo/pulls/"*"/reviews --paginate --slurp")
-    printf '['; cat "$FIX/reviews.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
-  "api --method GET repos/octo/repo/pulls/"*"/comments --paginate --slurp")
-    printf '['; cat "$FIX/inline.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
-  "api --method GET repos/octo/repo/issues/"*"/comments --paginate --slurp")
-    printf '['; cat "$FIX/issue_comments.json" 2>/dev/null || printf '[]'; printf ']\\n' ;;
-  *) exit 1 ;;
-esac
-`;
-    writeFileSync(join(dir, 'git'), git);
-    writeFileSync(join(dir, 'gh'), gh);
-    chmodSync(join(dir, 'git'), 0o755);
-    chmodSync(join(dir, 'gh'), 0o755);
+/**
+ * In-process stand-in for the fixture `git`/`gh` binaries.
+ *
+ * Reads exactly the same fixture files the old shell stubs did (`$FIX/branch`, `$FIX/head`,
+ * sentinel files like `$FIX/git_fail`, …) and appends to the same `calls.txt`, so every test body
+ * and `calls()` assertion is unchanged. Replacing the shell scripts removes ~2 subprocess spawns
+ * per git/gh call across 37 CLI cases — the dominant cost of this file.
+ */
+function makeStubRunner(dir: string): CommandRunner {
+    const fixPath = (name: string): string => join(dir, name);
+    const has = (name: string): boolean => existsSync(fixPath(name));
+    const read = (name: string, fallback = ''): string => (has(name) ? readFileSync(fixPath(name), 'utf8') : fallback);
+    const ok = (stdout = ''): CmdResult => ({ code: 0, stdout, stderr: '' });
+    const fail = (stderr: string): CmdResult => ({ code: 1, stdout: '', stderr });
+
+    const git = (argv: string): CmdResult => {
+        if (has('git_fail')) return fail('git fixture failure\n');
+        if (argv === 'rev-parse --show-toplevel') return ok(`${fixPath('repo')}\n`);
+        if (argv === 'branch --show-current') return ok(read('branch'));
+        if (argv === 'rev-parse HEAD') return ok(read('head'));
+        if (argv === 'status --porcelain') {
+            if (has('git_status_fail')) return fail('status failure\n');
+            return ok(read('dirty'));
+        }
+        if (argv === 'rev-parse --abbrev-ref --symbolic-full-name @{u}') {
+            return has('upstream') ? ok(read('upstream')) : fail('');
+        }
+        if (argv === 'rev-list --count @{u}..HEAD') return ok(read('ahead', '0\n'));
+        if (argv === 'rev-list --count HEAD..@{u}') return ok(read('behind', '0\n'));
+        if (argv === 'rev-parse @{u}') return ok(read('remotehead'));
+        if (argv === 'push -u origin HEAD') {
+            writeFileSync(fixPath('remotehead'), 'HEAD\n');
+            writeFileSync(fixPath('upstream'), 'origin/main\n');
+            return ok();
+        }
+        if (argv === 'push') {
+            writeFileSync(fixPath('remotehead'), read('head'));
+            return ok();
+        }
+        if (argv.startsWith('log --oneline ')) {
+            if (has('git_log_fail')) return fail('log failure\n');
+            return ok(read('commits'));
+        }
+        if (argv.startsWith('diff --name-only --diff-filter=AMCR ')) {
+            if (has('diff_files_fail')) return fail('diff files failure\n');
+            return ok(read('diff_files'));
+        }
+        if (argv.startsWith('diff ')) {
+            if (has('diff_text_fail')) return fail('diff text failure\n');
+            return ok(read('diff_text'));
+        }
+        return fail('');
+    };
+
+    const gh = (argv: string): CmdResult => {
+        if (argv === 'auth status') return has('no_auth') ? fail('') : ok('Logged in\n');
+        if (argv === 'repo view --json nameWithOwner,defaultBranchRef') {
+            return ok('{"nameWithOwner":"octo/repo","defaultBranchRef":{"name":"main"}}\n');
+        }
+        if (argv === 'pr view --json number,url,state,isDraft,headRefName,baseRefName,title,headRefOid') {
+            return has('pr.json') ? ok(read('pr.json')) : fail('no pull requests found for branch\n');
+        }
+        if (argv.startsWith('pr create --fill --base ')) {
+            writeFileSync(fixPath('pr.json'), read('pr_created.json'));
+            return ok('https://github.com/octo/repo/pull/7\n');
+        }
+        if (argv.startsWith('pr comment ')) {
+            appendFileSync(fixPath('comments_posted.txt'), `${argv}\n`);
+            return ok();
+        }
+        if (argv.startsWith('pr checks ')) {
+            if (!has('checks')) return fail('');
+            const out = read('checks');
+            const code = has('checks_exit') ? Number.parseInt(read('checks_exit').trim(), 10) : 0;
+            return { code, stdout: out, stderr: '' };
+        }
+        if (argv === 'api user --jq .login') return ok('robin\n');
+        const slurp = (file: string): CmdResult => ok(`[${read(file, '[]').trim() || '[]'}]\n`);
+        if (/^api --method GET repos\/octo\/repo\/pulls\/.*\/reviews --paginate --slurp$/.test(argv)) {
+            return slurp('reviews.json');
+        }
+        if (/^api --method GET repos\/octo\/repo\/pulls\/.*\/comments --paginate --slurp$/.test(argv)) {
+            return slurp('inline.json');
+        }
+        if (/^api --method GET repos\/octo\/repo\/issues\/.*\/comments --paginate --slurp$/.test(argv)) {
+            return slurp('issue_comments.json');
+        }
+        return fail('');
+    };
+
+    return (cmd) => {
+        const [bin, ...rest] = cmd;
+        const argv = rest.join(' ');
+        appendFileSync(fixPath('calls.txt'), `${bin} ${argv}\n`);
+        if (bin === 'git') return git(argv);
+        if (bin === 'gh') return gh(argv);
+        return fail('');
+    };
 }
 
 /** Seed the default healthy fixture state; individual tests override pieces. */
@@ -389,7 +438,8 @@ function calls(): string {
 
 beforeEach(() => {
     fix = mkdtempSync(join(tmpdir(), 'pr-review-'));
-    writeStubBins(fix);
+    writeFileSync(join(fix, 'calls.txt'), '');
+    setCommandRunner(makeStubRunner(fix));
     seedHealthy(fix);
     origPath = process.env.PATH ?? '';
     process.env.PATH = `${fix}:${origPath}`;
@@ -404,6 +454,7 @@ beforeEach(() => {
 afterEach(() => {
     logSpy.mockRestore();
     errSpy.mockRestore();
+    setCommandRunner();
     process.env.PATH = origPath;
     rmSync(fix, { recursive: true, force: true });
 });

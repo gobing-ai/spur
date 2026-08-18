@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface CmdResult {
+export interface CmdResult {
     code: number;
     stdout: string;
     stderr: string;
@@ -110,10 +110,14 @@ interface ParsedArgs {
     booleans: Set<string>;
 }
 
-// ─── Process runner (git/gh resolved from PATH so tests can stub them) ──────
+// ─── Process runner (single seam; every git/gh call routes through run) ─────
 
-function run(cmd: readonly string[]): CmdResult {
-    // Pass env explicitly so both Node and Bun resolve git/gh against the test fixture PATH.
+/** How an external command is executed. The only seam between this script and git/gh. */
+export type CommandRunner = (cmd: readonly string[]) => CmdResult;
+
+/** Real execution: resolve the binary from PATH and capture its output. The default runner. */
+export const spawnRunner: CommandRunner = (cmd) => {
+    // Pass env explicitly so both Node and Bun resolve git/gh against the caller's PATH.
     const proc = spawnSync(cmd[0] ?? '', [...cmd.slice(1)], { encoding: 'utf8', env: process.env });
     return {
         code: proc.status ?? 1,
@@ -121,6 +125,20 @@ function run(cmd: readonly string[]): CmdResult {
         stderr: proc.stderr ?? '',
         error: proc.error?.message,
     };
+};
+
+let runner: CommandRunner = spawnRunner;
+
+/**
+ * Swap the git/gh runner. Tests inject an in-process stub so a suite of CLI cases costs no
+ * subprocess spawns; call with no argument to restore real execution.
+ */
+export function setCommandRunner(next?: CommandRunner): void {
+    runner = next ?? spawnRunner;
+}
+
+function run(cmd: readonly string[]): CmdResult {
+    return runner(cmd);
 }
 
 function runOk(cmd: readonly string[], what: string): string {
