@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-18T00:10:12.783Z"
+updated_at: "2026-08-18T05:04:52.893Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -75,7 +75,8 @@ Feature: Corpus gate integrity
     Given an anchor whose line resolves but whose content does not name the cited requirement
     When spur task check runs
     Then the anchor is reported
-    And the finding is a warning until the R4 migration has landed, an error after
+    And the finding stays a warning while historical drift is merely baselined
+    And it is promoted to error only once that drift is repaired, not accepted
 
   Scenario: R6 — A task declares its AC altitude instead of having one assumed
     Given a task whose acceptance criteria are finer-grained than its feature's ship contract
