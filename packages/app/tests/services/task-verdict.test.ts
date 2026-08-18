@@ -422,3 +422,112 @@ describe('AC evidence-type vocabulary (task 0398 R6)', () => {
         expect(result.acceptanceCriteria?.[0]?.status).toBe('PARTIAL');
     });
 });
+
+describe('answer parser fixes (0590)', () => {
+    // The documented answer-file schema: Verdict line + per-requirement table,
+    // AC table, then the 4-column SECUA Review table directly after (no heading
+    // between AC and SECUA in schema — but the SECUA section is introduced by its
+    // `### SECUA Review` heading, which must close the AC scanner's table).
+    const schemaConformant = [
+        'Verdict: PASS',
+        '',
+        '| Req | Status | Evidence |',
+        '|-----|--------|----------|',
+        '| R1 | MET | `src/foo.ts:10` |',
+        '',
+        '| AC | Status | Evidence Type | Evidence |',
+        '|----|--------|---------------|----------|',
+        '| AC1: verdict derivable | MET | test | `task-verdict.test.ts:1` |',
+        '| AC2: traceability mapped | MET | command | `bun test task-verdict.test.ts` |',
+        '',
+        '### SECUA Review',
+        '',
+        '| Priority | Dimension | Location | Finding |',
+        '|----------|-----------|----------|---------|',
+        '| P1 | Correctness | task-verdict.ts:180 | heading swallowed before boundary logic |',
+        '| P2 | Correctness | task-verdict.ts:183 | GFM cell escape ignored |',
+        '| P3 | Usability | SKILL.md | documented schema unparseable |',
+    ].join('\n');
+
+    test('(a) schema-conformant file with SECUA table parses all AC rows and emits no ac-row-dropped', () => {
+        const result = deriveVerdict(schemaConformant, true);
+        expect(result.acceptanceCriteria).toHaveLength(2);
+        expect(result.acceptanceCriteria?.map((row) => row.id)).toEqual([
+            'AC1: verdict derivable',
+            'AC2: traceability mapped',
+        ]);
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+        expect(result.verdict).toBe('PASS');
+    });
+
+    test('(b) escaped pipe in AC evidence keeps full evidence text and stays out of ac-row-dropped', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| AC1 | MET | command | `rg -c "^\\| \\*\\*x"` returns 3 and exits 0 |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        // Only the pipe escape is unescaped; other GFM escapes (\* ) are preserved verbatim.
+        expect(result.acceptanceCriteria?.[0]?.evidence).toBe('`rg -c "^| \\*\\*x"` returns 3 and exits 0');
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+    });
+
+    test('(c) escaped pipe in an early AC column keeps status/evidenceType alignment', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| AC1 — pipe \\| in id | MET | command | `x` |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        expect(result.acceptanceCriteria?.[0]?.id).toBe('AC1 — pipe | in id');
+        expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
+        expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe('command');
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+    });
+
+    test('(d) escaped pipe in requirement evidence keeps full evidence text', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `rg -c "^\\| \\*\\*x"` returns 3 and exits 0 |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.requirements).toHaveLength(1);
+        expect(result.requirements[0]?.evidence).toBe('`rg -c "^| \\*\\*x"` returns 3 and exits 0');
+    });
+
+    test('(e) a genuinely malformed row inside the AC table still reports ac-row-dropped', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| AC1 | MET | test | `x` |',
+            '| AC2 | PROBABLY | test | `y` |',
+            '',
+            '### SECUA Review',
+            '| Priority | Dimension | Location | Finding |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        const dropped = result.checks.find((c) => c.name === 'ac-row-dropped');
+        expect(dropped).toBeDefined();
+        expect(dropped?.status).toBe('fail');
+        expect(dropped?.evidence).toContain('AC2');
+        expect(dropped?.evidence).toContain('PROBABLY');
+        // The SECUA heading closed the table, so the SECUA header row is not consumed as an AC row.
+        expect(dropped?.evidence).not.toContain('Dimension');
+    });
+});

@@ -128,12 +128,12 @@ describe('LifecycleAdapter (engine integration)', () => {
         // Insert a pipeline link — simulates a task-pipeline.yaml run.
         await new TaskRunLinkDao(db).insert({
             id: 'trl_pipe',
-            wbs: '0011',
+            wbs: '9998',
             run_id: 'run_pipe',
             kind: 'pipeline',
             created_at: new Date().toISOString(),
         });
-        const result = await adapter.requestTransition(makeRef('0011'), 'testing', 'done');
+        const result = await adapter.requestTransition(makeRef('9998'), 'testing', 'done');
         // Provenance passes; the shell guard (spur task check --strict-core) fires.
         expect(result.allowed).toBe(false);
         if (result.allowed) throw new Error('expected guard denial');
@@ -146,13 +146,13 @@ describe('LifecycleAdapter (engine integration)', () => {
         const saved = process.env.SPUR_PROVENANCE_OVERRIDE;
         process.env.SPUR_PROVENANCE_OVERRIDE = '1';
         try {
-            const result = await adapter.requestTransition(makeRef('0012'), 'testing', 'done');
+            const result = await adapter.requestTransition(makeRef('9997'), 'testing', 'done');
             // Provenance bypass recorded; shell guard fires.
             expect(result.allowed).toBe(false);
             if (result.allowed) throw new Error('expected guard denial');
             expect(result.report ?? '').toMatch(/guard/i);
             // The bypass row was inserted.
-            const links = await new TaskRunLinkDao(db).listByWbs('0012', 20);
+            const links = await new TaskRunLinkDao(db).listByWbs('9997', 20);
             const bypass = links.filter((l) => l.kind === 'provenance_bypass');
             expect(bypass).toHaveLength(1);
             expect(bypass[0]?.run_id).toBe('manual');
@@ -168,18 +168,18 @@ describe('LifecycleAdapter (engine integration)', () => {
         // Insert a prior bypass — simulates a previous override.
         await new TaskRunLinkDao(db).insert({
             id: 'trl_prior',
-            wbs: '0013',
+            wbs: '9996',
             run_id: 'manual',
             kind: 'provenance_bypass',
             created_at: new Date().toISOString(),
         });
-        const result = await adapter.requestTransition(makeRef('0013'), 'testing', 'done');
+        const result = await adapter.requestTransition(makeRef('9996'), 'testing', 'done');
         // Provenance passes (prior bypass); shell guard fires.
         expect(result.allowed).toBe(false);
         if (result.allowed) throw new Error('expected guard denial');
         expect(result.report ?? '').toMatch(/guard/i);
         // No NEW bypass row inserted — still just the one.
-        const links = await new TaskRunLinkDao(db).listByWbs('0013', 20);
+        const links = await new TaskRunLinkDao(db).listByWbs('9996', 20);
         const bypass = links.filter((l) => l.kind === 'provenance_bypass');
         expect(bypass).toHaveLength(1);
         db.close();

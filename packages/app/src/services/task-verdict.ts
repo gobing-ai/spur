@@ -104,10 +104,7 @@ function extractRequirements(text: string): VerdictRequirement[] {
         const trimmed = line.trim();
         if (!trimmed.startsWith('|')) continue;
 
-        const cells = trimmed
-            .split('|')
-            .map((c) => c.trim())
-            .filter(Boolean);
+        const cells = splitTableCells(trimmed);
 
         // Detect header row: first cell must be id-like
         if (!inTable && cells.length >= 2) {
@@ -166,6 +163,20 @@ function normalizeStatus(raw: string): 'MET' | 'PARTIAL' | 'UNMET' | null {
 }
 
 /**
+ * Split a markdown table row into cells, honoring the GFM cell escape: a pipe
+ * preceded by a backslash (`\|` literal) is a pipe inside a cell, not a column
+ * separator (task 0590 R2). Leading/trailing empty pieces from the outer pipes
+ * are dropped exactly like the former `.split('|').filter(Boolean)`, so cell
+ * indices are unchanged for every escape-free row.
+ */
+function splitTableCells(row: string): string[] {
+    return row
+        .split(/(?<!\\)\|/)
+        .map((c) => c.replace(/\\\|/g, '|').trim())
+        .filter(Boolean);
+}
+
+/**
  * Parse the AC table. Returns the accepted rows plus a description of any row that could not be
  * normalized, so the caller can surface a diagnostic instead of dropping it silently (0398 R6).
  */
@@ -177,12 +188,16 @@ function extractAcceptanceCriteria(text: string): { rows: VerdictAcceptanceCrite
 
     for (const line of lines) {
         const trimmed = line.trim();
+        // Section boundary (R1): a markdown heading after the AC table opened closes it.
+        // Must run before the non-table guard below, which would otherwise swallow the
+        // heading before the flag could ever reset.
+        if (inTable && /^#{1,6}\s/.test(trimmed)) {
+            inTable = false;
+            continue;
+        }
         if (!trimmed.startsWith('|')) continue;
 
-        const cells = trimmed
-            .split('|')
-            .map((c) => c.trim())
-            .filter(Boolean);
+        const cells = splitTableCells(trimmed);
 
         if (!inTable && cells.length >= 4) {
             const h0 = (cells[0] ?? '').toLowerCase();
@@ -315,10 +330,7 @@ function extractChecks(
     for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith('|')) continue;
-        const cells = trimmed
-            .split('|')
-            .map((c) => c.trim())
-            .filter(Boolean);
+        const cells = splitTableCells(trimmed);
         if (cells.length >= 2) {
             const h0 = (cells[0] ?? '').toLowerCase();
             const h1 = (cells[1] ?? '').toLowerCase();
