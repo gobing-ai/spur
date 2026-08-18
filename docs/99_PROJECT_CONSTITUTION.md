@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.3.3
+version: 1.3.4
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-08-16T00:00:00.000Z
+updated_at: 2026-08-18T00:00:00.000Z
 ---
 
 # Project Constitution — How to Organize the Project
@@ -547,6 +547,14 @@ if it recurs, a new rule in §6.
   new projects missed the coordination rule until a follow-up pass. When a convention change has
   portable reach, propagate it to the template in the same change, or it silently forks the derived
   `AGENTS.md` surface (§4.4 / §6.7).
+- [2026-08-18] spur-new: Task 0587 R4 turned `bunfig.toml [test] coverage` off and routed the
+  enforcing chains through a new `bun test --coverage` script — but in Bun `1.3.14` the bunfig key
+  **overrides** the CLI flag, so the "coverage" script collected nothing and the 90/90 gate silently
+  vanished from CI. Two compounding errors: an *assumed* precedence between a config file and a CLI
+  flag that was never probed, and a performance premise ("coverage roughly doubles the suite") copied
+  from a dogfood report that had never timed a controlled plain run — the real cost measured 1.1s on
+  65s (1.7%). Before disabling a gate for speed: probe the precedence in a two-arm scratch run, and
+  measure both arms yourself. A gate removed on an unverified premise is worse than the cost it saved.
 
 ### Lessons for this file (`99`)
 

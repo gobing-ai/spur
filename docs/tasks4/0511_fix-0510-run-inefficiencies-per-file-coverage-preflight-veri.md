@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: ["0510"]
 ac_numbering: task-local
 created_at: "2026-08-11T17:09:57.558Z"
-updated_at: "2026-08-11T17:56:13.446Z"
+updated_at: "2026-08-18T17:16:05.305Z"
 ---
 
 ## 0511. Fix 0510-run inefficiencies: per-file coverage preflight, verify anchor hygiene, coverage-diagnosis protocol, mocking conventions, precheck corpus-dirt note
@@ -105,10 +105,9 @@ Do not introduce a helper or edit the generated `apps/cli/config/` bundle.
       strict task checks for 0511.
 
 ### Solution
-
 **R1 — task-corpus dirt advisory in the precheck dirty-tree action (advisory only, never a block).**
 
-- `config/workflows/task-pipeline.yaml:191-209` — extended the existing precheck dirty-tree shell
+- `config/workflows/task-pipeline.yaml:197-215` — extended the existing precheck dirty-tree shell
   action (R6/0487). The original non-corpus `git status --porcelain -- . ':(exclude)docs/tasks*'
 ':(exclude)docs/features'` WARNING query is unchanged. Added a second bounded query,
   `git status --porcelain -- ':(glob)docs/tasks*/**'`, that prints a distinct `precheck: NOTE` with
@@ -128,16 +127,14 @@ Verification (targeted probes only; the pipeline `test` hop runs the full gate):
 - `bun test plugins/sp/tests/task-pipeline-resilience.test.ts` — 7 pass / 0 fail (5 existing + 2 new).
 - `spur workflow validate config/workflows/task-pipeline.yaml` — `valid: true`.
 - `spur task check 0511` — PASS.
-
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ----------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1          | MET    | `config/workflows/task-pipeline.yaml:204-208` (bounded `git status --porcelain -- ':(glob)docs/tasks*/**'` query + `precheck: NOTE` advisory naming exact porcelain rows); `config/workflows/task-pipeline.yaml:209` (`exit 0` preserved); `config/workflows/task-pipeline.yaml:196-202` (non-corpus WARNING + exclusions byte-identical); regression tests `plugins/sp/tests/task-pipeline-resilience.test.ts:197-219` |
+| R1          | MET    | `config/workflows/task-pipeline.yaml:210-214` (bounded `git status --porcelain -- ':(glob)docs/tasks*/**'` query + `precheck: NOTE` advisory naming exact porcelain rows); `config/workflows/task-pipeline.yaml:215` (`exit 0` preserved); `config/workflows/task-pipeline.yaml:202-208` (non-corpus WARNING + exclusions byte-identical); regression tests `plugins/sp/tests/task-pipeline-resilience.test.ts:197-219` |
 
 | Acceptance Criteria                                               | Status | Evidence Type | Evidence                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------------------------------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -146,13 +143,11 @@ Verification (targeted probes only; the pipeline `test` hop runs the full gate):
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
-- Re-audit 2026-08-11 (--force, --fix all): anchors re-read live (`config/workflows/task-pipeline.yaml:188-209`, resilience tests `:44-58,197-219`); resilience suite 7 pass / 0 fail; `spur workflow validate` valid:true; 4 unchecked boxes flipped; shippable gate `spur feature check H` pass=true, tasks 0500/0510/0511 done. Verdict artifact `.spur/run/0511-verdict.json`.
-
+- Re-audit 2026-08-11 (--force, --fix all): anchors re-read live (`config/workflows/task-pipeline.yaml:194-215`, resilience tests `:44-58,197-219`); resilience suite 7 pass / 0 fail; `spur workflow validate` valid:true; 4 unchecked boxes flipped; shippable gate `spur feature check H` pass=true, tasks 0500/0510/0511 done. Verdict artifact `.spur/run/0511-verdict.json`.
 ### Review
-
 **Functional traceability** — R1 MET.
 
-- `config/workflows/task-pipeline.yaml:204-208` — new bounded query `git status --porcelain -- ':(glob)docs/tasks*/**'` prints a distinct `precheck: NOTE - task corpus has uncommitted changes` with the exact porcelain rows only when task-corpus dirt exists; `exit 0` preserved at `config/workflows/task-pipeline.yaml:209`; the non-corpus WARNING query (`:196-202`) and its exclusions (`:(exclude)docs/tasks*`, `:(exclude)docs/features`) are byte-identical to the pre-change action; lifecycle behavior and task statuses untouched (status transition is the separate `spur task update <wbs> wip` action).
+- `config/workflows/task-pipeline.yaml:210-214` — new bounded query `git status --porcelain -- ':(glob)docs/tasks*/**'` prints a distinct `precheck: NOTE - task corpus has uncommitted changes` with the exact porcelain rows only when task-corpus dirt exists; `exit 0` preserved at `config/workflows/task-pipeline.yaml:215`; the non-corpus WARNING query (`:196-202`) and its exclusions (`:(exclude)docs/tasks*`, `:(exclude)docs/features`) are byte-identical to the pre-change action; lifecycle behavior and task statuses untouched (status transition is the separate `spur task update <wbs> wip` action).
 
 **Acceptance Criteria** — both scenarios MET with executable evidence in `plugins/sp/tests/task-pipeline-resilience.test.ts` (temp Git repo harness, `commandFor('precheck', 1)` executes the real YAML action):
 
@@ -173,7 +168,6 @@ Verification (targeted probes only; the pipeline `test` hop runs the full gate):
 - Deviation (CHANGED): added a test-local `initGitRepo` scaffolding function (`plugins/sp/tests/task-pipeline-resilience.test.ts:44-58`). The Non-goals' "reusable helper" is read as a product-surface helper (the same sentence enumerates command/flag/config-key/hook); the test file already hosts local helpers (`executable`, `runShell`), so the addition follows the file's established pattern and adds no reusable product code. A seeded tracked file is required so git lists untracked corpus files individually instead of collapsing the directory.
 
 **Disposition** — PASS. No P1–P3 findings; residual risk none beyond the advisory noted above.
-
 ### References
 
 - `config/workflows/task-pipeline.yaml` — precheck dirty-tree action; current task-corpus exclusion.
