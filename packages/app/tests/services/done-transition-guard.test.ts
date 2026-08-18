@@ -223,6 +223,78 @@ describe('evaluateDoneTransition', () => {
             expect(out.verdict).toBe('FAIL');
         }
     });
+
+    // ── 0592 R2: check-severity policy at the authoritative done gate ──
+    test('R2: non-pass blocker finding → deny FAIL (rows otherwise MET)', () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            acceptanceCriteria: [],
+            checks: [{ name: 'SECU review', status: 'fail', severity: 'blocker', evidence: 'leak' }],
+            source: 'spur task verdict',
+        };
+        const out = evaluateDoneTransition(baseInput({ artifact }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') expect(out.verdict).toBe('FAIL');
+    });
+
+    test('R2: non-pass major finding → deny PARTIAL', () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            acceptanceCriteria: [],
+            checks: [{ name: 'SECU review', status: 'fail', severity: 'major', evidence: 'debt' }],
+            source: 'spur task verdict',
+        };
+        const out = evaluateDoneTransition(baseInput({ artifact }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') expect(out.verdict).toBe('PARTIAL');
+    });
+
+    test('R2: minor/advisory finding does not block a PASS', () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            acceptanceCriteria: [],
+            checks: [
+                { name: 'SECU review', status: 'fail', severity: 'minor', evidence: 'nit' },
+                { name: 'coverage', status: 'warn', severity: 'advisory', evidence: 'near-miss' },
+            ],
+            source: 'spur task verdict',
+        };
+        const out = evaluateDoneTransition(baseInput({ artifact }));
+        expect(out.kind).toBe('allow');
+    });
+
+    test('R2: independent task-check failure cannot produce PASS (all rows MET)', () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
+            acceptanceCriteria: [],
+            checks: [{ name: 'spur task check', status: 'fail', evidence: 'task check failed' }],
+            source: 'spur task verdict',
+        };
+        const out = evaluateDoneTransition(baseInput({ artifact }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') expect(out.verdict).toBe('PARTIAL');
+    });
+
+    test('R3: stored PASS with zero coverage rows is not internally consistent → deny UNKNOWN', () => {
+        const artifact: VerdictArtifact = {
+            wbs: '0299',
+            verdict: 'PASS',
+            requirements: [],
+            acceptanceCriteria: [],
+            source: 'spur task verdict',
+        };
+        const out = evaluateDoneTransition(baseInput({ artifact }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') expect(out.verdict).toBe('UNKNOWN');
+    });
 });
 
 // ─── computeAggregate ──────────────────────────────────────────────────

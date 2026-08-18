@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0583"]
 ac_numbering: task-local
 created_at: "2026-08-18T05:05:25.709Z"
-updated_at: "2026-08-18T06:17:45.653Z"
+updated_at: "2026-08-18T22:39:12.093Z"
 ---
 
 ## 0586. Honor accepted baseline debt in the per-task gate, then promote anchor-subject-mismatch to error
@@ -257,8 +257,8 @@ one copy command — the pattern feature F91 used four times.
 
 - Ordering verified by reading `packages/app/src/services/planning-check-base.ts:217-234`: override → `strict` elevation → acceptance. Accepting before elevation would let a warning entry cover an error; it does not.
 - Degradation verified at `packages/app/src/services/corpus-check.ts:679-691`: missing **or unparseable** baseline yields an empty map (no exemptions). Both cases carry tests.
-- Wiring verified at all three CLI sites, including `runDoneGateCheck` (`apps/cli/src/commands/task.ts:1473-1494`) — the site this task's Design flagged as the likeliest half-ship.
-- **AC5 proven live on this task.** The first write of this Testing section carried four unqualified basenames and one citation whose lines did not name its row subject; `spur task check 0586 --strict-core` failed with 1 error + 4 warnings under the promotion. Qualifying the paths and re-pointing the `runDoneGateCheck` citation at `apps/cli/src/commands/task.ts:1473-1494` cleared it to 0/0. The ratchet caught the verifier.
+- Wiring verified at all three CLI sites, including `runDoneGateCheck` (`apps/cli/src/commands/task.ts:1456-1481`) — the site this task's Design flagged as the likeliest half-ship.
+- **AC5 proven live on this task.** The first write of this Testing section carried four unqualified basenames and one citation whose lines did not name its row subject; `spur task check 0586 --strict-core` failed with 1 error + 4 warnings under the promotion. Qualifying the paths and re-pointing the `runDoneGateCheck` citation at `apps/cli/src/commands/task.ts:1456-1481` cleared it to 0/0. The ratchet caught the verifier.
 - `bun run lint` exit 0 · `bun run build` exit 0 · `bun run test` **5766 pass / 0 fail**
 - `spur task check 0586 --strict-core` → 0 errors, 0 warnings
 

@@ -183,8 +183,9 @@ When you fan out or dispatch a subagent, apply the four disciplines the SSOT
 - [ ] Never replace yourself as orchestrator when `--agent` is set - it pins the step executor, not you.
 - [ ] Never auto-approve a HITL gate inside a task unless `--auto` was passed (it sets `profile=auto`).
 - [ ] Never silent-pick multi-candidate router stops; surface HITL (batch `--auto` does not break ties).
-- [ ] Never mutate the corpus - the pipeline's `record` step writes per-task `## Testing` / `## Review`
-      sections; your sole output is the batch report (+ optional recovery dispatch of an existing
+- [ ] Never mutate the corpus - the review coordinator writes `## Review`, the pipeline's `record`
+      step writes `## Testing` deterministically (bare-`## Review` fallback only — never an
+      overwrite of authored Review, F92 0593 R1); your sole output is the batch report (+ optional recovery dispatch of an existing
       `/sp:dev-*` command).
 - [ ] Never run tasks in parallel unless the operator requested parallel mode and the
       `sp:parallel-execution` checks pass. If checks fail, serialize and report why.

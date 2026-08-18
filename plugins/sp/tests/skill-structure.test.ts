@@ -1309,12 +1309,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const spine = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
         expect(spine).toContain('references/section-batching.md');
         const batching = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'section-batching.md'), 'utf8');
-        const stageIndex = batching.indexOf('Stage complete, body-only `Solution`, `Testing`, and `Review`');
-        const firstCheckIndex = batching.indexOf('Run `spur task check <wbs> --json` once');
-        expect(stageIndex).toBeGreaterThan(-1);
-        expect(firstCheckIndex).toBeGreaterThan(stageIndex);
-        // Budget prose pin deleted as redundant — the stage-then-single-check ordering
-        // asserted above is the batching discipline this test guards.
+        // F92 0593 R2: trio section-batching is removed — the protocol is one writer per
+        // evidence section, and writes are sequenced against the runtime contract.
+        expect(batching.indexOf('Stage complete, body-only')).toBe(-1);
+        expect(batching).toContain('| `## Solution` | **implement**');
+        expect(batching).toContain('| `## Review` | **review coordinator**');
+        expect(batching).toContain('| `## Testing` | **`spur task record`**');
+        expect(batching).toContain('spur task sections <wbs> list --json');
+        expect(batching).toContain('spur task check <wbs> --json');
 
         const pipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
         expect(pipeline).toContain('normal: backlog → todo → wip → testing → done');

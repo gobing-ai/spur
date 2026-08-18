@@ -49,7 +49,7 @@ function tableAResolve(overrides: {
 // ─── Registry structure ───────────────────────────────────────────────────
 
 describe('stage registry — record structure', () => {
-    test('REGISTERED_STAGES contains all 13 canonical stages', () => {
+    test('REGISTERED_STAGES contains all 14 canonical stages', () => {
         const ids = REGISTERED_STAGES.map((s) => s.id).sort();
         expect(ids).toEqual([
             'brainstorm',
@@ -60,6 +60,7 @@ describe('stage registry — record structure', () => {
             'implement',
             'plan',
             'quality-gate',
+            'record',
             'refine',
             'review',
             'test',
@@ -109,7 +110,7 @@ describe('stage registry — record structure', () => {
 
     test('listStages returns correct shape', () => {
         const stages = listStages();
-        expect(stages.length).toBe(13);
+        expect(stages.length).toBe(14);
         expect(stages[0]).toHaveProperty('stage_id');
         expect(stages[0]).toHaveProperty('command');
         expect(stages[0]).toHaveProperty('skill');
@@ -419,7 +420,7 @@ describe('discoverability and error behavior (R4)', () => {
         const r = runCli(['--list-stages']);
         expect(r.exitCode).toBe(0);
         const lines = r.stdout.trim().split('\n');
-        expect(lines.length).toBe(13);
+        expect(lines.length).toBe(14);
         const first = lines[0];
         expect(first).toBeDefined();
         expect(first).toContain('\t');
@@ -476,18 +477,62 @@ describe('stage record invariants', () => {
         expect(postGates.some((g) => g.name === 'verdict-artifact')).toBe(true);
     });
 
-    test('test stage has coverage-floor gate', () => {
-        const test = getStage('test');
-        expect(test).toBeDefined();
-        const postGates = (test?.gates ?? []).filter((g) => g.timing === 'post');
-        expect(postGates.some((g) => g.name === 'coverage-floor')).toBe(true);
+    test('shared stages declare no ad-hoc gates beyond the canonical registry (0593 R2)', () => {
+        // The mirror must not independently invent gate identifiers on stages the
+        // canonical registry also models: every such gate is either a real CLI
+        // check (feature-check, batch-create, verdict-artifact, strict-core,
+        // task-check) or absent. Adapter-only convenience stages (quality-gate,
+        // handover, fixall) have no domain record and are out of the parity scope.
+        const SHARED = new Set([
+            'refine',
+            'plan',
+            'implement',
+            'test',
+            'verify',
+            'wrap',
+            'review',
+            'record',
+            'dogfood',
+            'brainstorm',
+            'changelog',
+        ]);
+        const REAL_CHECK_IDS = new Set([
+            'feature-check',
+            'batch-create',
+            'verdict-artifact',
+            'strict-core',
+            'task-check',
+        ]);
+        for (const s of REGISTERED_STAGES) {
+            if (!SHARED.has(s.id)) continue;
+            for (const g of s.gates ?? []) {
+                expect(
+                    REAL_CHECK_IDS.has(g.name),
+                    `stage "${s.id}" declares gate "${g.name}" — no runtime check identifier exists for it; remove or promote via the canonical registry`,
+                ).toBe(true);
+            }
+        }
     });
 
-    test('dogfood stage has detect-pipeline-driving pre-gate', () => {
-        const dogfood = getStage('dogfood');
-        expect(dogfood).toBeDefined();
-        const preGates = (dogfood?.gates ?? []).filter((g) => g.timing === 'pre');
-        expect(preGates.some((g) => g.name === 'detect-pipeline-driving')).toBe(true);
+    test('record stage owns Testing with fallback-only Review (0593 R1)', () => {
+        const record = getStage('record');
+        expect(record).toBeDefined();
+        const outputs = record?.artifacts.filter((a) => a.direction === 'output') ?? [];
+        const testing = outputs.find((a) => a.identity === 'Testing');
+        expect(testing).toBeDefined();
+        expect(testing?.required).toBe(true);
+        const review = outputs.find((a) => a.identity === 'Review');
+        expect(review).toBeDefined();
+        expect(review?.required).toBe(false); // fallback-only, never authored overwrite
+    });
+
+    test('implement has Solution identity and review has Review identity (0593 R2 projection)', () => {
+        const implement = getStage('implement');
+        expect(implement?.artifacts.some((a) => a.identity === 'Solution')).toBe(true);
+        const review = getStage('review');
+        expect(review?.artifacts.some((a) => a.identity === 'Review')).toBe(true);
+        const verify = getStage('verify');
+        expect(verify?.artifacts.some((a) => a.identity === '<wbs>-verdict.json')).toBe(true);
     });
 });
 

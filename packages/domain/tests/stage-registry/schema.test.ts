@@ -13,10 +13,12 @@ import {
     isTierEligible,
     objectiveEscalationTriggerSchema,
     parseStageRecord,
+    REGISTERED_CANONICAL_STAGES as REGISTERED_CANONICAL_STAGES_REF,
     STAGE_ID_PATTERN,
     STAGE_REGISTRY_SCHEMA_VERSION,
     type StageRecord,
     StageRegistryError,
+    stageArtifactSchema as stageArtifactSchemaRef,
     stageModelPolicySchema,
     stageRecordSchema,
     TIER_RANK,
@@ -79,7 +81,7 @@ describe('stage-registry vocabulary exports (R1)', () => {
     });
 
     test('exposes the current schema version', () => {
-        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 2 });
+        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 3 });
     });
 
     test('exposes the stage-id pattern', () => {
@@ -645,5 +647,60 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
             throw new Error('expected plan and refine stages to define min_tier');
         }
         expect(TIER_RANK[planTier]).toBeGreaterThan(TIER_RANK[refineTier]);
+    });
+});
+
+describe('stage artifact identity (0593 R2 projection)', () => {
+    test('artifact schema accepts an optional identity and defaults required', () => {
+        const parsed = stageArtifactSchemaRef.parse({
+            kind: 'task-section',
+            direction: 'output',
+            identity: 'Solution',
+        });
+        expect(parsed.identity).toBe('Solution');
+        expect(parsed.required).toBe(true);
+    });
+
+    test('one-writer-per-section projection: shared stages carry exact artifact identity', () => {
+        const implement = getCanonicalStage('implement');
+        expect(implement?.artifacts.some((a) => a.identity === 'Solution')).toBe(true);
+
+        const review = getCanonicalStage('review');
+        expect(review?.artifacts.some((a) => a.identity === 'Review')).toBe(true);
+
+        const verify = getCanonicalStage('verify');
+        expect(verify?.artifacts.some((a) => a.identity === '<wbs>-verdict.json')).toBe(true);
+    });
+
+    test('record stage owns Testing and claims Review only as a bare fallback', () => {
+        const record = getCanonicalStage('record');
+        expect(record).toBeDefined();
+        expect(record?.execution.kind).toBe('deterministic');
+        expect(record?.mutation_class).toBe('corpus');
+        const testing = record?.artifacts.find((a) => a.identity === 'Testing');
+        expect(testing).toBeDefined();
+        expect(testing?.required).toBe(true);
+        const review = record?.artifacts.find((a) => a.identity === 'Review');
+        expect(review).toBeDefined();
+        expect(review?.required).toBe(false);
+    });
+
+    test('verify and wrap carry the real transition check identifiers (0593 R2)', () => {
+        const verify = getCanonicalStage('verify');
+        const gateNames = (verify?.gates ?? []).map((g) => g.name).sort();
+        expect(gateNames).toEqual(['strict-core', 'verdict-artifact']);
+        for (const g of verify?.gates ?? []) {
+            expect(g.timing).toBe('post');
+            expect(g.min_verdict).toBe('pass');
+        }
+
+        const wrap = getCanonicalStage('wrap');
+        expect(wrap?.gates.some((g) => g.name === 'task-check' && g.timing === 'pre')).toBe(true);
+        expect(wrap?.execution.kind).toBe('hitl');
+    });
+
+    test('registered canonical stages remain a valid registry with the record stage added', () => {
+        expect(() => validateStageRegistry(REGISTERED_CANONICAL_STAGES_REF)).not.toThrow();
+        expect(getCanonicalStage('dev-record')?.id).toBe('record');
     });
 });

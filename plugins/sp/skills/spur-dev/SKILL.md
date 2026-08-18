@@ -122,7 +122,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
 | Batch run | execution | `sp:super-planner` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
 | Parallel fan-out | execution | `sp:parallel-execution` decision framework | [execution-batch.md](references/execution-batch.md) |
-| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) |
+| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) (one-writer protocol, F92 0593) |
 
 ## When to use
 
@@ -156,8 +156,11 @@ CLI does.
 1. **Never skip a gate.** A clean `feature check` is the only proof the AC is valid; a
    passing `batch-create` is the only proof the decomposition is well-formed. Skip either and
    you ship corrupted corpus.
-2. **The pipeline, not you, writes results.** `## Testing` and `## Review` sections are
-   filled by the pipeline's `record` step. Do not edit them directly during execution.
+2. **One writer per evidence section (F92 0593 R1).** `## Solution` is authored by the
+   implement step; `## Review` by the review coordinator (`/sp:dev-review`); `## Testing` by the
+   deterministic `record` step from the verdict artifact (`record` backfills `## Review` only when
+   bare — fallback-only, never an overwrite). During execution, do not hand-edit another stage's
+   section.
 3. **Resolve task IDs through the CLI.** Read a known WBS with `spur task show <wbs> --json`; it
    returns metadata, full content, and `filePath` across configured task folders. Use `spur task
    path <wbs> --json` only when another tool needs the absolute path. Never search `docs/tasks*` or
@@ -189,8 +192,10 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
   five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
   `- [ ]` list of prerequisites an agent verifies before entering the gate.
-- [references/section-batching.md](references/section-batching.md) — first-write protocol for
-  staging Solution, Testing, and Review together before one task check.
+- [references/section-batching.md](references/section-batching.md) — the evidence-section
+  **one-writer protocol** (F92 0593 R1/R2): implement owns `Solution`, the review coordinator owns
+  `Review`, deterministic `record` owns `Testing`; skills query `spur task sections` /
+  `spur task check` instead of static section tables.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
 - [references/feature-link-helper.md](references/feature-link-helper.md) — opt-in,

@@ -31,6 +31,8 @@
  */
 
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import type { CheckSeverity } from './verify-verdict';
+import { aggregateVerifyVerdict, checkRowName } from './verify-verdict';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -51,7 +53,14 @@ export interface VerdictArtifact {
         evidenceType?: string;
         evidence?: string;
     }[];
-    checks?: { name?: string; status: string; evidence?: string }[];
+    checks?: {
+        name?: string;
+        check?: string;
+        id?: string;
+        status: string;
+        severity?: CheckSeverity;
+        evidence?: string;
+    }[];
     source?: string;
 }
 
@@ -143,16 +152,24 @@ export function computeAggregate(artifact: VerdictArtifact): VerdictAggregate {
     if (reqs.length === 0 && acs.length === 0) {
         // No rows means the verify leg never produced a real verdict — keep
         // the stored aggregate (typically UNKNOWN) rather than fabricating one.
+        // An empty PASS here is still caught by hardPassRecompute (see
+        // evaluateDoneTransition), so a row-less artifact can never slide to done.
         return artifact.verdict;
     }
 
-    if (reqs.some((r) => r.status === 'UNMET') || acs.some((a) => a.status === 'UNMET')) {
-        return 'FAIL';
-    }
-    if (reqs.some((r) => r.status === 'PARTIAL') || acs.some((a) => a.status === 'PARTIAL')) {
-        return 'PARTIAL';
-    }
-    return 'PASS';
+    // Task 0592 R2: delegate to the single shared aggregation policy. This adds
+    // check-severity handling (blocker → FAIL, major → PARTIAL, minor/advisory
+    // non-blocking; legacy fail/warn map FAIL/PARTIAL) and the rule that an
+    // independent task-check failure can never yield PASS. The R10 cross-check
+    // test pins this to `deriveVerdict` on every row shape.
+    const taskCheck = (artifact.checks ?? []).find((c) => /task[ _-]?check/i.test(checkRowName(c)));
+    const taskCheckPassed = taskCheck === undefined ? true : String(taskCheck.status).toLowerCase() !== 'fail';
+    return aggregateVerifyVerdict({
+        requirements: reqs,
+        acceptanceCriteria: acs,
+        checks: artifact.checks ?? [],
+        taskCheckPassed,
+    });
 }
 
 // ─── Denial message (R2) ───────────────────────────────────────────────
@@ -282,7 +299,14 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     // `verdict`, use the harsher of the two and name the inconsistency in the
     // denial. PASS is only PASS if both stored and computed agree.
     const computed = computeAggregate(artifact);
-    const effective: VerdictAggregate = harshnessMax(artifact.verdict, computed);
+    const reqs = artifact.requirements ?? [];
+    const acs = artifact.acceptanceCriteria ?? [];
+    // Task 0592 R3: PASS must be internally consistent — a stored PASS with zero
+    // coverage rows (requirements AND AC empty) cannot clear done, because PASS
+    // derivation always emits requirement rows. A row-less "PASS" is treated as
+    // UNKNOWN (deny), closing the "vacuously PASS" softening at the done boundary.
+    const internallyConsistentPass = artifact.verdict !== 'PASS' || reqs.length > 0 || acs.length > 0;
+    const effective: VerdictAggregate = internallyConsistentPass ? harshnessMax(artifact.verdict, computed) : 'UNKNOWN';
 
     if (effective === 'PASS') {
         return { kind: 'allow', reason: 'pass' };

@@ -7,6 +7,7 @@
 
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
+import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -51,24 +52,19 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
         return { verdict: 'UNKNOWN', requirements, acceptanceCriteria, checks };
     }
 
-    const hasUnmet = requirements.some((r) => r.status === 'UNMET');
-    const hasUnmetAc = acceptanceCriteria.some((ac) => ac.status === 'UNMET');
-    if (hasUnmet || hasUnmetAc) {
-        return { verdict: 'FAIL', requirements, acceptanceCriteria, checks };
-    }
-
-    const hasPartial = requirements.some((r) => r.status === 'PARTIAL');
-    const hasPartialAc = acceptanceCriteria.some((ac) => ac.status === 'PARTIAL');
-    if (hasPartial || hasPartialAc) {
-        return { verdict: 'PARTIAL', requirements, acceptanceCriteria, checks };
-    }
-
-    // All MET: gate on task check.
-    if (!taskCheckPassed) {
-        return { verdict: 'PARTIAL', requirements, acceptanceCriteria, checks };
-    }
-
-    return { verdict: 'PASS', requirements, acceptanceCriteria, checks };
+    // Task 0592 R2: derive the aggregate with the one shared aggregation policy so
+    // answer derivation, persisted-artifact consistency (done guard), task/feature
+    // validation, record rendering, and done enforcement cannot drift apart.
+    const aggregate = aggregateVerifyVerdict({
+        requirements,
+        acceptanceCriteria,
+        // The checks table is authored as output for record/rendering; the done
+        // gate re-parses the persisted artifact and applies check severities there
+        // (the authoritative re-evaluation, per the task's completion ordering).
+        checks: [],
+        taskCheckPassed,
+    });
+    return { verdict: aggregate, requirements, acceptanceCriteria, checks };
 }
 
 // ─── Parsers ────────────────────────────────────────────────────────────

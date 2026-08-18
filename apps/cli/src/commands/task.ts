@@ -273,7 +273,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             [
                 'Lifecycle: `task update <wbs> <status>` moves a task through',
                 'backlog → todo → wip → testing → done, running the lifecycle guards on',
-                '`wip → testing` (`spur task check`) and `testing → done` (`--strict-core`).',
+                '`wip → testing` (`spur task check --as testing`) and `testing → done`',
+                '(`spur task check --as done`) — each guard evaluates the transition target (F92 R3).',
                 'A GuardDeniedError on `testing → done` means no pipeline run is recorded for the',
                 'task: run `/sp:dev-verify <wbs> --next` to PASS it, or record the audited bypass with',
                 '`SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done --reason "…"`.',
@@ -376,7 +377,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                         'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
                                 );
                             }
-                            const ok = await runDoneGateCheck(context, wbs, options.folder);
+                            const ok = await runDoneGateCheck(context, wbs, options.folder, status);
                             if (!ok) {
                                 context.output.error(
                                     `Lifecycle transition blocked: \`spur task check ${wbs}\` failed. Fix the findings before transitioning to ${status}.`,
@@ -1021,7 +1022,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Validate a task file through the four-layer check (design §3).')
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
         .option('--strict', 'Elevate ALL warnings to failures')
-        .option('--strict-core', 'Gate variant: fail only on hard-core errors (the testing→done guard)')
+        .option(
+            '--strict-core',
+            'Compatibility alias (F92 R2): historically the done-gate label; kept so installed plugins/workflows that call it keep working. No longer meaningful on its own — target-state selection (`--as`) supplies the real done semantics.',
+        )
+        .option(
+            '--as <status>',
+            'Evaluate the task AS if it were in <status> (F92 R2): the lifecycle guards pass the transition target so testing→done checks the done row. Validate against canonical task statuses. Omitted → current-status diagnostics.',
+        )
         .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
         .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
         .option('--folder <path>', 'Custom tasks folder')
@@ -1034,6 +1042,21 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // the default severity computation (no blanket elevation). The flag
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
+            // F92 R2: `--as <status>` — a target status projection. Validate against
+            // canonical task statuses; reject contradictory combinations explicitly.
+            const asStatus = options.as === undefined ? undefined : canonicalStatusOrRaw(options.as);
+            if (options.as !== undefined && !(TASK_STATUSES as readonly string[]).includes(asStatus ?? '')) {
+                context.output.error(`invalid --as status "${options.as}" (canonical: ${TASK_STATUSES.join(', ')})`);
+                context.setExitCode(2);
+                return;
+            }
+            if (asStatus !== undefined && options.corpus === true) {
+                context.output.error(
+                    '--as <status> is a single-task target projection and cannot be combined with --corpus',
+                );
+                context.setExitCode(2);
+                return;
+            }
             try {
                 if (options.corpus === true) {
                     if (wbs !== undefined) {
@@ -1148,6 +1171,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     } else {
                         const result = await svc.check(hit.filePath, wbs, {
                             strict,
+                            asStatus,
                             severityOverrides: planningFolders.severityOverrides,
                             accepted,
                         });
@@ -1170,6 +1194,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                         const result = await svc.check(`${tasksDir}/${fileName}`, w, {
                             strict,
+                            asStatus,
                             severityOverrides: planningFolders.severityOverrides,
                             accepted,
                         });
@@ -1354,52 +1379,9 @@ async function makeService(context: CliContext, folderOverride?: string, noLifec
         writeService,
         getDb: () => context.getDb(),
         sectionMatrix: await loadSectionMatrix(context.cwd),
-        resolveTemplate: (variant: string) => loadTemplateContent(context.cwd, variant),
         resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
         foldersConfig,
     });
-}
-
-/** Cache of per-variant raw template content (read once per process). */
-const templateContentCache = new Map<string, string>();
-/** Variants we've already checked and confirmed have no template file. */
-const templateMissSet = new Set<string>();
-
-/**
- * Read a variant's template file and return its raw markdown content.
- * Resolution order:
- *   1. `.spur/templates/task/<variant>.md` (project-local, seeded by `spur init`)
- *   2. bundled template fallback (`templates/task/<variant>.md`)
- * Returns the raw file content (with `{{ PLACEHOLDERS }}` intact) so
- * `renderTaskTemplate` can substitute real values. Returns `undefined`
- * when no template file is found — callers fall back to the legacy
- * `buildTaskSkeleton` path.
- */
-function loadTemplateContent(projectRoot: string, variant: string): string | undefined {
-    if (templateContentCache.has(variant)) return templateContentCache.get(variant);
-    if (templateMissSet.has(variant)) return undefined;
-
-    // 1. Project-local
-    const localPath = join(projectRoot, '.spur', 'tasks', 'templates', `${variant}.md`);
-    if (existsSync(localPath)) {
-        const content = readFileSync(localPath, 'utf8');
-        templateContentCache.set(variant, content);
-        return content;
-    }
-
-    // 2. Bundled fallback
-    const root = bundledConfigRoot();
-    if (root !== null) {
-        const templatePath = join(root, 'templates', 'task', `${variant}.md`);
-        if (existsSync(templatePath)) {
-            const content = readFileSync(templatePath, 'utf8');
-            templateContentCache.set(variant, content);
-            return content;
-        }
-    }
-
-    templateMissSet.add(variant);
-    return undefined;
 }
 
 /** Cache of per-variant template bodies (read once per process from bundled config). */
@@ -1457,23 +1439,25 @@ async function makeCheckService(context: CliContext): Promise<TaskCheckService> 
 
 /**
  * Inline lifecycle-gate backstop (P3, task 0130 retrospective). Runs the same
- * `spur task check` the lifecycle YAML guard runs, used ONLY when the lifecycle
+ * `spur task check` guard the lifecycle YAML runs, used ONLY when the lifecycle
  * adapter is unavailable and the transition targets a guarded state (`testing`
  * or `done`). Returns `true` iff the check passes.
  *
- * Both guarded transitions use default severity (no blanket warning elevation):
- *   - wip→testing: `spur task check <wbs>` (plain default)
- *   - testing→done: `spur task check <wbs> --strict-core` (same as default — hard-core
- *     L3/L2-gate errors are already errors; `--strict-core` adds no blanket elevation)
+ * Target-aware (F92 R3): the check is evaluated AS the transition target —
+ *   - wip→testing: `spur task check <wbs> --as testing`
+ *   - testing→done: `spur task check <wbs> --as done`
+ * so the matrix and status-dependent rules see the target status, matching the
+ * lifecycle FSM exactly. Both use default severity (no blanket warning elevation).
  *
  * Bug fixed (0147): the original implementation passed `strict: status === 'done'`, which
- * elevated ALL warnings to errors for the done gate — stricter than the real FSM guard
- * that uses `--strict-core` (no blanket elevation). The fix: always pass `strict: false`.
+ * elevated ALL warnings to errors for the done gate — stricter than the real FSM guard.
+ * Previous fix: always pass `strict: false`. (--strict-core never added blanket elevation.)
  */
 async function runDoneGateCheck(
     context: CliContext,
     wbs: string,
     folderOverride: string | undefined,
+    targetStatus: string,
 ): Promise<boolean> {
     const planningFolders = await resolvePlanningFolders(context.fs);
     const foldersConfig = planningFolders.foldersConfig;
@@ -1484,23 +1468,25 @@ async function runDoneGateCheck(
     }
     const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
     const accepted = await loadAcceptedFindings(context.cwd);
-    // Both the wip→testing and testing→done guards use default severity (not --strict, not
-    // --strict-core — both are equivalent here: hard-core L3/L2-gate errors are already
-    // errors in the base computation). Never pass strict:true here — that would block a
-    // `pass:True`-with-warnings task that the real FSM guard would allow through.
+    // Default severity (not --strict, not --strict-core) — hard-core L3/L2-gate
+    // errors are already errors in the base computation. Never pass strict:true.
     const result = await svc.check(hit.filePath, wbs, {
         strict: false,
+        asStatus: targetStatus,
         severityOverrides: planningFolders.severityOverrides,
         accepted,
     });
     return result.pass;
 }
 /**
- * Load the Section-Status-Matrix (design §3.2, R2). Resolution order:
+ * Load the Section-Status-Matrix (design §3.2, R2) — the SOLE section authority
+ * for both creation and check (F92 R1). Resolution order:
  *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur init`)
- *   2. bundled section-matrix fallback (`tasks/section-matrix.yaml`)
- * Falls back to a minimal permissive built-in only when both sources are
- * unreachable (e.g. a `bun build --compile` single binary with no project-local seed).
+ *   2. bundled / packaged `tasks/section-matrix.yaml` (data copied/generated from
+ *      the canonical build-time matrix asset under the repo `config` `tasks` tree)
+ * Fails loudly with the attempted paths when neither asset is reachable — there
+ * is NO hand-maintained permissive built-in (one would make the same task
+ * validate/render differently by installation layout).
  */
 const sectionMatrixCache = new Map<string, Promise<SectionMatrix>>();
 
@@ -1525,7 +1511,7 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
         });
         return data as unknown as SectionMatrix;
     }
-    // 2. Bundled fallback: tasks/section-matrix.yaml
+    // 2. Bundled / packaged fallback: tasks/section-matrix.yaml
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
@@ -1537,15 +1523,13 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
             return data as unknown as SectionMatrix;
         }
     }
-    return FALLBACK_MATRIX;
+    // No hand-maintained fallback (F92 R1): the matrix is the sole section
+    // authority. A permissive built-in here would make the same task validate /
+    // render differently by installation layout. Fail loudly with the paths tried.
+    throw new Error(
+        `no canonical section-matrix found for task section authority (F92 R1); tried:\n` +
+            `  - ${localPath}\n` +
+            (root !== null ? `  - ${join(root, 'tasks', 'section-matrix.yaml')}\n` : '') +
+            'copy/generate section-matrix.yaml from the canonical build-time matrix asset (repo `config` `tasks` tree) into one of those paths',
+    );
 }
-
-/** Minimal permissive matrix used only when the bundled YAML is unreachable. */
-const FALLBACK_MATRIX: SectionMatrix = {
-    variants: {
-        standard: {
-            backlog: { required: ['Background'], forbidden: ['Solution', 'Review', 'Testing'] },
-            done: { required: ['Solution', 'Testing', 'Review'], gate: true },
-        },
-    },
-};

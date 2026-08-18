@@ -30,7 +30,7 @@ import { join } from 'node:path';
 // ─── Inline type definitions (mirrors packages/domain/src/stage-registry/) ─
 
 export type SchemaVersion = { major: number; minor: number };
-export const CURRENT_SCHEMA_VERSION: SchemaVersion = { major: 1, minor: 0 };
+export const CURRENT_SCHEMA_VERSION: SchemaVersion = { major: 1, minor: 3 };
 export const AUTHORITY_LANES = ['registry', 'workflow', 'skill', 'cli', 'adapter'] as const;
 export type AuthorityLane = (typeof AUTHORITY_LANES)[number];
 // Mirrors packages/domain/src/stage-registry/schema.ts MUTATION_CLASSES. Pinned by
@@ -65,6 +65,8 @@ export type ContextLayerName = (typeof CONTEXT_LAYER_NAMES)[number];
 export interface StageArtifact {
     kind: string;
     direction: ArtifactDirection;
+    /** Exact artifact identity (F92 0593 R2): task-section name or artifact file basename. */
+    identity?: string;
     description?: string;
     required?: boolean;
 }
@@ -308,10 +310,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         reasoning_skill: 'sp:spur-dev',
         required_references: ['references/dev-operations.md', 'spur-dev/references/decision-brief.md'],
-        gates: [
-            { name: 'refine-skip-gate', timing: 'pre', description: 'Skip sections that already meet L3' },
-            { name: 'l4-advisory', timing: 'post', min_verdict: 'pass', description: 'L4 advisory surface' },
-        ],
+        gates: [],
         mutation_class: 'corpus',
         retry: defaultRetry,
         model_policy: policy('refine', ['capable-2']),
@@ -346,7 +345,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         description: 'dev-run --mode implement: code edits in worktree',
         artifacts: [
             { kind: 'worktree-diff', direction: 'output', required: true },
-            { kind: 'task-section', direction: 'input', description: 'Solution section constraints' },
+            { kind: 'task-section', direction: 'output', required: true, identity: 'Solution' },
         ],
         reasoning_skill: 'sp:code-implementation',
         gates: [],
@@ -370,7 +369,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
             { kind: 'coverage-report', direction: 'output', required: false },
         ],
         reasoning_skill: 'sp:code-testing',
-        gates: [{ name: 'coverage-floor', timing: 'post', min_verdict: 'pass', description: '≥90% function coverage' }],
+        gates: [],
         mutation_class: 'tests',
         retry: defaultRetry,
         model_policy: policy('test', ['capable-1']),
@@ -403,13 +402,13 @@ export const REGISTERED_STAGES: StageRecord[] = [
         id: 'verify',
         description: 'dev-verify: SECUA review + requirements traceability',
         artifacts: [
-            { kind: 'verdict-artifact', direction: 'output', required: true },
-            { kind: 'task-section', direction: 'output', description: 'Testing/Review sections' },
+            { kind: 'worktree-diff', direction: 'input', required: true },
+            { kind: 'verdict-artifact', direction: 'output', required: true, identity: '<wbs>-verdict.json' },
         ],
         reasoning_skill: 'sp:code-verification',
         gates: [
             { name: 'verdict-artifact', timing: 'post', min_verdict: 'pass' },
-            { name: 'strict-core', timing: 'post', description: 'L3 core findings must pass' },
+            { name: 'strict-core', timing: 'post', min_verdict: 'pass', description: 'L3 core findings must pass' },
         ],
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'escalate', timeout_seconds: 600 },
@@ -423,10 +422,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         id: 'wrap',
         aliases: ['dev-wrap'],
         description: 'dev-wrap: learnings/doc-sync/feature transition',
-        artifacts: [
-            { kind: 'learning-entry', direction: 'output' },
-            { kind: 'task-section', direction: 'output', description: 'Testing/Review updated' },
-        ],
+        artifacts: [{ kind: 'learning-entry', direction: 'output' }],
         reasoning_skill: 'sp:spur-dev',
         gates: [
             {
@@ -447,15 +443,41 @@ export const REGISTERED_STAGES: StageRecord[] = [
         schema_version: CURRENT_SCHEMA_VERSION,
         id: 'review',
         description: 'dev-review: multi-dimensional code review (functional/SECUA/architecture)',
-        artifacts: [{ kind: 'review-findings', direction: 'output', required: true }],
+        artifacts: [{ kind: 'review-findings', direction: 'output', required: true, identity: 'Review' }],
         reasoning_skill: 'sp:code-verification',
-        gates: [{ name: 'review-guard', timing: 'post', min_verdict: 'pass', description: 'No P1 findings blocking' }],
+        gates: [],
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
         model_policy: policy('review', ['capable-1']),
         context_layers: [layer('task-state'), layer('run-state')],
         observability: [event('stage-started'), event('findings-produced')],
         execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'record',
+        aliases: ['dev-record'],
+        description: 'record: deterministic Testing write-back from the verdict artifact; bare-Review fallback only',
+        artifacts: [
+            { kind: 'verdict-artifact', direction: 'input', required: true, identity: '<wbs>-verdict.json' },
+            { kind: 'task-section', direction: 'output', required: true, identity: 'Testing' },
+            {
+                kind: 'task-section',
+                direction: 'output',
+                required: false,
+                identity: 'Review',
+                description:
+                    'fallback-only: backfills Review only when the section is bare; never overwrites authored Review',
+            },
+        ],
+        reasoning_skill: 'inline',
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
+        model_policy: policy('record'),
+        context_layers: [layer('task-state')],
+        observability: [event('stage-started')],
+        execution: inlineDeterministic('cli'),
     },
     {
         schema_version: CURRENT_SCHEMA_VERSION,
@@ -467,15 +489,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         reasoning_skill: 'sp:dogfood-testing',
         required_references: ['references/monitor-ledger.md', 'references/report-template.md'],
-        gates: [
-            { name: 'detect-pipeline-driving', timing: 'pre', description: 'Refuse dogfood when driving a pipeline' },
-            {
-                name: 'report-validate',
-                timing: 'post',
-                min_verdict: 'pass',
-                description: 'Report must pass schema validation',
-            },
-        ],
+        gates: [],
         mutation_class: 'driver',
         retry: { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 600 },
         model_policy: policy('dogfood'),
@@ -568,6 +582,7 @@ export function listStages(): StageLookupEntry[] {
         'quality-gate': '/sp:dev-fixall',
         verify: '/sp:dev-verify',
         wrap: '/sp:dev-wrap',
+        record: 'spur task record',
         review: '/sp:dev-review',
         dogfood: '/sp:dev-dogfood',
         handover: 'inline (dev-handover)',

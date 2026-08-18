@@ -12,15 +12,16 @@ name: task-lifecycle
 description: >
   Task lifecycle FSM (design §2.3, §5.1). States are the canonical TaskStatus
   vocabulary (DD-01); transitions encode the §2.3 graph; guards invoke
-  `${vars.spurBin} task check` at the wip→testing and testing→done placements.
+  `${vars.spurBin} task check --as <target>` at the wip→testing and testing→done
+  placements (F92 R3): each guard evaluates the task AS the transition target so
+  testing→done checks the `done` row instead of the current `testing` row.
   `done` is re-enterable (reopen with a warning); `cancelled` is terminal.
-  Guard commands reference the check verb (0051) — structural validation passes
-  today, behavioral wiring activates as the verb ships. Unconditional transitions
+  Guard commands reference the check verb (0051). Unconditional transitions
   use the `always` guard (externally-driven via `requestTransition`, not
   auto-advance).
 
   Two-layer done gate (task 0292): this workflow's testing→done guard
-  (`spur task check --strict-core`) is the FIRST gate. The CLI verdict guard
+  (`spur task check --as done`, F92 R3 — target-aware) is the FIRST gate. The CLI verdict guard
   (`packages/app/src/services/done-transition-guard.ts`) is the SECOND gate,
   invoked by `apps/cli/src/commands/task.ts` for every `spur task update <wbs>
   done` call — it reads `.spur/run/<wbs>-verdict.json` and blocks non-PASS
@@ -69,14 +70,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '$spurBin task check $wbs'
+        command: '$spurBin task check $wbs --as testing'
   - from: testing
     to: done
     description: Testing passed — task complete
     guard:
       kind: shell
       options:
-        command: '$spurBin task check $wbs --strict-core'
+        command: '$spurBin task check $wbs --as done'
 
   # Reopen: done → wip (warned, mandatory History entry)
   - from: done

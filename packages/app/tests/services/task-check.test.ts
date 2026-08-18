@@ -3108,3 +3108,134 @@ describe('accepted baseline debt in TaskCheckService.check (0586 R1, R2, R5)', (
         expect(result.pass).toBe(false);
     });
 });
+
+describe('F92 R2 — target-status (asStatus) validation projection', () => {
+    // A task currently at `wip` (matrix wip row requires Background/AC/Design/Plan,
+    // NOT Solution/Testing/Review). Evaluating it AS `testing` / `done` must apply
+    // the TARGET row: missing Solution becomes a finding only when projected.
+    const wipTaskMissingSolution = [
+        '---',
+        'schema_version: 1',
+        'name: "F92 wip task"',
+        'status: wip',
+        'template: standard',
+        'created_at: 2026-08-18T00:00:00.000Z',
+        'updated_at: 2026-08-18T00:00:00.000Z',
+        '---',
+        '',
+        '## 0001. F92 wip task',
+        '',
+        '### Background',
+        '',
+        'Text',
+        '',
+        '### Acceptance Criteria',
+        '',
+        '- [x] AC1',
+        '',
+        '### Design',
+        '',
+        'Chosen approach.',
+        '',
+        '### Plan',
+        '',
+        '- step',
+    ].join('\n');
+
+    test('omitted asStatus evaluates the CURRENT wip row (behavior-compatible)', async () => {
+        const { fs, path, cleanup } = seedFile(wipTaskMissingSolution);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        // wip does not require Solution — omitted --as must not flag it.
+        expect(result.pass).toBe(true);
+        expect(result.status).toBe('wip');
+        expect(result.missingSections).not.toContain('Solution');
+    });
+
+    test("asStatus: 'testing' projects the missing Solution (from the current wip row)", async () => {
+        const { fs, path, cleanup } = seedFile(wipTaskMissingSolution);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001', { asStatus: 'testing' });
+        cleanup();
+        expect(result.status).toBe('testing');
+        expect(result.missingSections).toContain('Solution');
+        expect(
+            result.findings.some(
+                (f) => f.code === FINDING_CODES.L2_MISSING_REQUIRED_SECTION && f.section === 'Solution',
+            ),
+        ).toBe(true);
+    });
+
+    test('R3: a testing task checks the CURRENT row but --as done checks the done row', async () => {
+        // The R3 defect: testing→done guard historically evaluated the CURRENT
+        // (testing) row, whose matrix entry does NOT require Review — so a task
+        // missing the done-required Review could reach done. With --as done the
+        // done (gate:true) row is evaluated and the transition must be denied.
+        const testingTaskMissingReview = [
+            '---',
+            'schema_version: 1',
+            'name: "F92 testing task"',
+            'status: testing',
+            'template: standard',
+            'created_at: 2026-08-18T00:00:00.000Z',
+            'updated_at: 2026-08-18T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. F92 testing task',
+            '',
+            '### Solution',
+            '',
+            '`packages/app/src/services/x.ts:12` — change.',
+            '',
+            '### Testing',
+            '',
+            '`bun test` passed.',
+            '',
+            '### Background',
+            '',
+            'Text',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(testingTaskMissingReview);
+        const svc = new TaskCheckService(fs, matrix);
+
+        // Plain check (current status = testing): testing requires Solution+Testing
+        // only — Review is optional, so this passes and no done-row findings appear.
+        const current = await svc.check(path, '0001');
+        expect(current.status).toBe('testing');
+        expect(current.pass).toBe(true);
+
+        // Projected as done: done requires Review (gate:true) -> denial.
+        const projected = await svc.check(path, '0001', { asStatus: 'done' });
+        expect(projected.status).toBe('done');
+        expect(projected.missingSections).toContain('Review');
+        expect(projected.pass).toBe(false);
+
+        cleanup();
+    });
+
+    test('asStatus is read-only: the task file stays byte-identical after projection', async () => {
+        const { fs, path, cleanup } = seedFile(wipTaskMissingSolution);
+        const before = require('node:fs').readFileSync(path, 'utf8');
+        const svc = new TaskCheckService(fs, matrix);
+        await svc.check(path, '0001', { asStatus: 'done' });
+        await svc.check(path, '0001', { asStatus: 'testing' });
+        const after = require('node:fs').readFileSync(path, 'utf8');
+        cleanup();
+        expect(after).toBe(before);
+    });
+
+    test("asStatus: 'done' flags the done-gate required trio as missing", async () => {
+        const { fs, path, cleanup } = seedFile(wipTaskMissingSolution);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001', { asStatus: 'done' });
+        cleanup();
+        expect(result.status).toBe('done');
+        for (const s of ['Solution', 'Testing', 'Review']) {
+            expect(result.missingSections).toContain(s);
+        }
+        // done row is gate:true -> missing sections are hard errors -> projection fails.
+        expect(result.pass).toBe(false);
+    });
+});

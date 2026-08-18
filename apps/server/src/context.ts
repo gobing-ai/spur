@@ -7,6 +7,7 @@ import type {
     ProcessInventoryService,
     RuleService,
     RunStoreService,
+    SectionMatrix,
     SupervisorService,
     TaskService,
     TeamService,
@@ -265,6 +266,14 @@ export interface CreateServerContextOptions {
      */
     folders?: PlanningFolders;
     /**
+     * Pre-resolved Section-Status-Matrix (the SOLE section authority, F92 R1).
+     * `serve.ts` loads it async (project-local → bundled canonical) and passes it
+     * so the sync service accessors never block. Omitted → the TaskService has no
+     * matrix and task creation fails loudly (a permissive fallback would defeat
+     * the SSOT). Tests that call create must pass one.
+     */
+    sectionMatrix?: SectionMatrix;
+    /**
      * Agent spec ids for autostart (task 0195/0207). The supervisor spawns these
      * at serve boot; a missing spec id fails loud. Omitted → no autostart.
      */
@@ -368,6 +377,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     tasksDir: folders.tasksDir,
                     foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
+                    ...(options.sectionMatrix !== undefined ? { sectionMatrix: options.sectionMatrix } : {}),
                 });
             }
             return taskSvc;

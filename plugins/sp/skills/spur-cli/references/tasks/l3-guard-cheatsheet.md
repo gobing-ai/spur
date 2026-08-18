@@ -8,7 +8,10 @@ see_also:
 
 # Task L3 guard cheat sheet
 
-Read this before writing `Solution`, `Testing`, or `Review`. The owning implementations are
+Read this before writing `Solution`, `Testing`, or `Review`. Section **writers** are one per
+evidence section (F92 0593 R1): implement owns `Solution`, the review coordinator
+(`/sp:dev-review`) owns `Review`, and `spur task record` owns `Testing` (bare-`## Review`
+backfill is fallback-only). The owning implementations are
 `.spur/workflows/task-lifecycle.yaml`, `hasPopulatedPriorityTable()` in
 `packages/app/src/services/task-check.ts`, the verdict normalizers in
 `packages/app/src/services/task-record.ts`, and `TASK_CANONICAL_SECTIONS` in
@@ -25,8 +28,9 @@ done → wip
 backlog|todo|wip|testing|blocked → cancelled
 ```
 
-- `wip → testing` runs `spur task check <wbs>`.
-- `testing → done` runs `spur task check <wbs> --strict-core`, followed by the PASS-verdict gate.
+- `wip → testing` runs `spur task check <wbs> --as testing` (F92 R3 — target-aware).
+- `testing → done` runs `spur task check <wbs> --as done` (evaluates the `done` row incl. `gate:true`),
+  followed by the PASS-verdict gate. `--strict-core` remains as a compatibility alias only.
 - Invalid: `todo → testing`, `todo → done`, and `wip → done`.
 - Normal path: `backlog → todo → wip → testing → done`.
 

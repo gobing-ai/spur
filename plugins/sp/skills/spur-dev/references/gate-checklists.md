@@ -93,8 +93,10 @@ Entered before `task-pipeline.yaml` `verify` state produces a task verdict.
 - [ ] `spur task check <wbs> --strict-core --json` returns PASS.
 - [ ] Every AC scenario has a corresponding verify command that exited 0.
 - [ ] The `## Solution` section is filled (not the placeholder comment).
-- [ ] The `## Testing` section records the commands run and their outcomes.
-- [ ] The `## Review` section records findings (or explicitly states "no findings").
+- [ ] The `## Testing` evidence (commands run + outcomes) is present in the verdict artifact —
+      `spur task record` transcribes it deterministically (F92 0593 R1).
+- [ ] The `## Review` section carries the review coordinator's findings table (or is bare for the
+      record fallback) — verify never writes `## Review`.
 - [ ] No gate was bypassed with `--no-verify`, `--force`, or a suppression comment.
 - [ ] If `--auto` is set: the verdict is `PASS` (not `PARTIAL` or `FAIL`) — `--auto` does not auto-advance a failed verify.
 - [ ] The task is ready for `spur task record <wbs>` and legal transition to `done`.

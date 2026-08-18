@@ -60,7 +60,13 @@ default. See the [inline-default execution-surface contract](cross-cutting.md#in
 
 > **Single-run & parse discipline (suite run cost control).** Run full quality/test suites (`bun run check` / `spur-check`) at most ONCE per task iteration (task 0436 R2). Parse failure details from the single retained command output rather than re-running full suites repeatedly to inspect errors. Re-run targeted/narrow test files (e.g. `bun test <file> --test-name-pattern <pattern>`) while iterating on fixes, and re-run the full suite only when all targeted fixes pass.
 
-## Section ownership — `## Solution`
+## Section ownership — one writer per evidence section (F92 0593 R1)
+
+| Section | Writer |
+| --- | --- |
+| `## Solution` | **implement** step (`sp:code-implementation`) |
+| `## Review` | **review coordinator** (`/sp:dev-review` → `sp:super-reviewer`, merged fragments) |
+| `## Testing` | **`spur task record`** (deterministic, from the verdict artifact) |
 
 The implement step **owns** `## Solution` (the change-map). After writing code, before
 yielding, the implement agent authors the `## Solution` section — a markdown table listing
@@ -163,9 +169,10 @@ The `test` hop is primarily
   resume the host driver with the operator's answer.
 - **On guard failure** (`precheck`): the task's check findings block progress — fix the
   task first.
-- **On completion** (`done`): the pipeline's `record` step has already written results into
-  the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
-  matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
+- **On completion** (`done`): the pipeline's `record` step has already written the verdict
+  transcript into the task's `## Testing` via `spur task record <wbs>` (matrix-compliant tables;
+  `## Review` was authored by the review step and is only backfilled bare, never overwritten —
+  F92 0593 R1; never transitions to `done` — the gate stays in the workflow).
 
 ## `--next` chain — advance to the next step
 

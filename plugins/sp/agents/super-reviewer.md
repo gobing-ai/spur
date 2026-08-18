@@ -38,6 +38,11 @@ You are a **thin delegator**. You do not own the review logic; the three skills 
 | SECUA quality | `sp:code-verification` (review mode) | Is the code correct/secure/efficient/usable? |
 | Architectural depth | `sp:code-improvement` | Is the architecture deep / testable? |
 
+**Section ownership (F92 0593 R1).** Component skills **return review fragments only** — never
+write `## Review`. This coordinator is the single `## Review` writer in coordinated/pipeline mode
+(combined fragment merge). `spur task record`'s bare-Review backfill is a standalone compatibility
+fallback only and never overwrites authored Review.
+
 Your job: establish scope, dispatch each requested dimension to its skill, collect findings, merge
 them into a ranked report, and write the report to the task's `## Review` section (pipeline mode) or
 emit it as advisory output (standalone mode).

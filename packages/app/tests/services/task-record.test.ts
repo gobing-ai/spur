@@ -14,6 +14,7 @@ import { applyCliMigrations, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
+import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import {
     escapeTablePipe,
@@ -370,6 +371,29 @@ describe('renderSolutionFromDiff', () => {
 
 describe('TaskService.record', () => {
     let tasksDir: string;
+    const RECORD_SECTION_MATRIX: SectionMatrix = {
+        variants: {
+            standard: {
+                backlog: {
+                    required: ['Background'],
+                    optional: [
+                        'Requirements',
+                        'Acceptance Criteria',
+                        'Design',
+                        'Plan',
+                        'Solution',
+                        'Testing',
+                        'Review',
+                    ],
+                },
+                todo: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+                wip: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+                testing: { required: ['Solution', 'Testing'] },
+                done: { required: ['Solution', 'Testing', 'Review'], gate: true },
+            },
+        },
+    };
+
     let svc: TaskService;
 
     beforeAll(async () => {
@@ -380,7 +404,7 @@ describe('TaskService.record', () => {
         // Ensure .spur/run directory exists
         await fs.ensureDir(join(root, '.spur', 'run'));
         const writeService = new PlanningWriteService({ fs });
-        svc = new TaskService({ fs, tasksDir, writeService });
+        svc = new TaskService({ fs, tasksDir, writeService, sectionMatrix: RECORD_SECTION_MATRIX });
     });
 
     afterAll(() => {
@@ -535,6 +559,7 @@ describe('TaskService.record', () => {
             tasksDir: dir,
             writeService,
             getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
         });
         try {
             // Create + move to wip (as the pipeline's implement step does).
@@ -578,6 +603,7 @@ describe('TaskService.record', () => {
             tasksDir: dir,
             writeService,
             getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
         });
         try {
             const created = await svcWithDb.create({ title: 'Record R4 idempotent' });
@@ -611,6 +637,7 @@ describe('TaskService.record', () => {
             tasksDir: dir,
             writeService,
             getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
         });
         try {
             const created = await svcWithDb.create({ title: 'Record R4 non-pass' });
@@ -667,6 +694,7 @@ describe('TaskService.record', () => {
             tasksDir: dir,
             writeService,
             getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
         });
         try {
             const created = await svcWithDb.create({ title: 'Record R4 deferred link' });

@@ -13,11 +13,9 @@ import {
     checkAcCoverage,
     type DbAdapter,
     DEFAULT_TASK_VARIANT,
-    escapeYamlValue,
     MarkdownDocument,
     normalizeAcFence,
     parseChecklist,
-    renderTaskTemplate,
     SECTION_GUIDANCE,
     stripAcFence,
     TASK_CANONICAL_SECTIONS,
@@ -44,47 +42,6 @@ import {
     renderTesting,
 } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
-
-/**
- * Replace or add a frontmatter field in rendered markdown.
- * The rendered template carries placeholder defaults (e.g. `feature_id: null`,
- * `status: backlog`); this patches them to the create-time resolved values
- * before the file is written.
- *
- * Matching is constrained to the YAML frontmatter block (between the opening
- * and closing `---` fences) so a `key:`-shaped line in the rendered body is
- * never rewritten. A missing key is inserted after the opening fence.
- * The caller owns YAML formatting ({@link escapeYamlValue}) — do not re-format here.
- */
-function patchFrontmatterField(rendered: string, key: string, value: string): string {
-    const openIdx = rendered.indexOf('---');
-    if (openIdx === -1) return rendered;
-
-    // Content after the opening fence line (`---` + optional newline).
-    let fmStart = openIdx + 3;
-    if (rendered[fmStart] === '\r') fmStart += 1;
-    if (rendered[fmStart] === '\n') fmStart += 1;
-
-    const closeRel = rendered.indexOf('\n---', fmStart);
-    if (closeRel === -1) return rendered;
-
-    const before = rendered.slice(0, fmStart);
-    const fm = rendered.slice(fmStart, closeRel);
-    const after = rendered.slice(closeRel); // starts with \n---
-
-    const existingRe = new RegExp(`^${escapeRegex(key)}:.*$`, 'm');
-    if (existingRe.test(fm)) {
-        // Replacer function: a value containing `$&`/`$1` must stay literal.
-        const newFm = fm.replace(existingRe, () => `${key}: ${value}`);
-        return before + newFm + after;
-    }
-    // Key not present — insert after the opening fence.
-    return `${before}${key}: ${value}\n${fm}${after}`;
-}
-
-function escapeRegex(s: string): string {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Error thrown by `mutateDependencies` for any validation failure (R2).
@@ -198,80 +155,6 @@ export interface SectionMutationResult {
     readonly missing?: string[];
 }
 
-/**
- * Render a new task file from the skeleton template + post-render
- * frontmatter patching. Used by both {@link TaskService.create} and
- * {@link TaskService.createBatchItem} to avoid duplicating the
- * template-render → patch flow (~80 lines each).
- *
- * Callers own the legacy `buildTaskSkeleton` fallback when no template
- * resolver is configured.
- */
-function renderCreatedTaskContent(params: {
-    rawTemplate: string;
-    name: string;
-    wbs: string;
-    background: string;
-    createdAt: string;
-    status: string;
-    variant: string;
-    featureId?: string;
-    parentWbs?: string;
-    priority?: string;
-    tags?: string[];
-    requirements?: string;
-    design?: string;
-    plan?: string;
-    acceptanceCriteria?: string;
-}): string {
-    let content = renderTaskTemplate(params.rawTemplate, {
-        NAME: params.name,
-        WBS: params.wbs,
-        BACKGROUND: params.background,
-        CREATED_AT: params.createdAt,
-        ...(params.featureId !== undefined ? { FEATURE_ID: params.featureId } : {}),
-    });
-    content = patchFrontmatterField(content, 'status', params.status);
-    content = patchFrontmatterField(content, 'template', params.variant);
-    if (params.featureId !== undefined) {
-        content = patchFrontmatterField(content, 'feature_id', escapeYamlValue(params.featureId));
-    }
-    if (params.parentWbs !== undefined) {
-        content = patchFrontmatterField(content, 'parent_wbs', escapeYamlValue(params.parentWbs));
-    }
-    if (params.priority !== undefined) {
-        content = patchFrontmatterField(content, 'priority', params.priority);
-    }
-    if (params.tags !== undefined && params.tags.length > 0) {
-        content = patchFrontmatterField(
-            content,
-            'tags',
-            `[${params.tags.map((tag) => JSON.stringify(tag)).join(', ')}]`,
-        );
-    }
-    const sectionPatches: Partial<Record<TaskSection, string>> = {};
-    if ((params.requirements ?? '').trim() !== '') {
-        sectionPatches.Requirements = bulletizeRequirements(params.requirements ?? '');
-    }
-    if ((params.design ?? '').trim() !== '') {
-        sectionPatches.Design = (params.design ?? '').trim();
-    }
-    if ((params.plan ?? '').trim() !== '') {
-        sectionPatches.Plan = (params.plan ?? '').trim();
-    }
-    if ((params.acceptanceCriteria ?? '').trim() !== '') {
-        sectionPatches['Acceptance Criteria'] = normalizeAcFence((params.acceptanceCriteria ?? '').trim());
-    }
-    if (Object.keys(sectionPatches).length > 0) {
-        const doc = MarkdownDocument.parse(content, 'task');
-        for (const [section, body] of Object.entries(sectionPatches)) {
-            doc.replaceSection(section as TaskSection, body);
-        }
-        content = doc.serialize();
-    }
-    return content;
-}
-
 // ─── Sub-task roster (0123) ───────────────────────────────────────────────
 
 /** Auto-gen markers for the parent `## Plan` sub-task roster block. */
@@ -327,25 +210,19 @@ export interface TaskServiceContext {
      */
     onTaskReachedDone?: (wbs: string) => Promise<void>;
     /**
-     * Section-Status-Matrix. Drives which sections a newly created task carries
-     * for its creation status (§3.2). When absent, a built-in default is used so
-     * creation never hard-depends on a loadable matrix.
+     * Section-Status-Matrix — the SOLE semantic authority for which sections a
+     * newly created task carries for its creation status (§3.2, F92). Creation
+     * always resolves the matrix entry and builds through `buildTaskSkeleton`;
+     * there is no hand-maintained creation fallback (fails loudly on a missing
+     * entry — see {@link sectionsForStatus}).
      */
     sectionMatrix?: SectionMatrix;
     /**
-     * Resolve raw template content for a variant. Returns the template
-     * markdown as-is (with `{{ PLACEHOLDERS }}` intact) so the create path
-     * can render it with real values via `renderTaskTemplate`. When present,
-     * `create()` uses template-as-skeleton rendering; when absent, creation
-     * falls back to the legacy `buildTaskSkeleton` path.
-     */
-    resolveTemplate?: (variant: string) => string | undefined;
-    /**
      * Resolve per-variant section-body overrides from the variant's template
-     * file. Used by the legacy `buildTaskSkeleton` path (fallback when
-     * `resolveTemplate` is absent) and by `batchCreate`. The caller (CLI)
-     * owns file reading; returning `{}` (or omitting this) means matrix +
-     * guidance only.
+     * file (e.g. `review`'s P1–P4 table). Templates supply BODY content + guidance
+     * only — the heading list always comes from the matrix via `buildTaskSkeleton`
+     * (F92 R1). The caller (CLI) owns file reading; returning `{}` (or omitting
+     * this) means matrix + guidance only.
      */
     resolveTemplateBodies?: (variant: string) => Partial<Record<TaskSection, string>>;
     /**
@@ -431,16 +308,6 @@ export interface TaskListFilters {
     /** Legacy alias: 'phase' maps to status filter for backward compat. */
     phase?: string;
 }
-
-/**
- * Built-in section sets per creation status, used only when no Section-Status-
- * Matrix is injected (mirrors the shipped `tasks/section-matrix.yaml`
- * standard variant — keep in sync). `History` is appended by the resolver.
- */
-const DEFAULT_CREATION_SECTIONS: Record<string, string[]> = {
-    backlog: ['Background'],
-    todo: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan'],
-};
 
 /**
  * Normalize a Requirements body to a bulleted markdown list. R-numbered items
@@ -536,20 +403,35 @@ export class TaskService {
     }
 
     /**
-     * Resolve which sections a newly created task carries for `status`, from the
-     * injected Section-Status-Matrix (`required ∪ optional`, §3.2). Falls back to
-     * a built-in default when no matrix is available so creation never depends on
-     * a loadable config (e.g. a `--compile` single binary). `History` is always
-     * appended (the machine-owned transition log).
+     * Resolve which sections a newly created task carries for `status`, solely
+     * from the Section-Status-Matrix (`required ∪ optional`, §3.2) — the SINGLE
+     * semantic authority for creation layout (F92 R1). The variant resolves to
+     * its own entry, falling back to the `standard` variant for unknown variants.
+     * A missing matrix (or a missing entry for the status) is a hard error:
+     * there is no hand-maintained creation fallback — a permissive default here
+     * would make the same task render differently by installation layout and
+     * defeat the SSOT. `History` is always appended (the machine-owned log).
      */
     private sectionsForStatus(variant: string, status: string): string[] {
         const matrix = this.ctx.sectionMatrix;
-        const entry = matrix?.variants[variant]?.[status] ?? matrix?.variants.standard?.[status];
-        if (entry !== undefined) {
-            return [...(entry.required ?? []), ...(entry.optional ?? []), 'History'];
+        if (matrix === undefined) {
+            throw new Error(
+                `no section-matrix available for create (variant=${variant}, status=${status}); ` +
+                    'a canonical section-matrix.yaml is required for task creation (F92 R1)',
+            );
         }
-        const fallback = DEFAULT_CREATION_SECTIONS[status] ?? ['Background'];
-        return [...fallback, 'History'];
+        const entry = matrix.variants[variant]?.[status] ?? matrix.variants.standard?.[status];
+        if (entry === undefined) {
+            throw new Error(
+                `no section-matrix entry for variant="${variant}" status="${status}" during create; ` +
+                    'resolve the canonical section-matrix.yaml',
+            );
+        }
+        // Append the universal sections every task file structurally carries
+        // (History — machine-appended log; References — the closed-world link
+        // section present in every file, matching the shipped template scaffold).
+        // These are structural/closed-world, not per-status section policy.
+        return [...(entry.required ?? []), ...(entry.optional ?? []), 'References', 'History'];
     }
 
     /**
@@ -663,25 +545,10 @@ export class TaskService {
 
             const now = new Date().toISOString();
 
-            // ── template-as-skeleton path (preferred) ──
-            const rawTemplate = this.ctx.resolveTemplate?.(variant);
-            if (rawTemplate !== undefined) {
-                const content = renderCreatedTaskContent({
-                    rawTemplate,
-                    name: params.title,
-                    wbs,
-                    background,
-                    createdAt: now,
-                    status,
-                    variant,
-                    featureId: params.featureId,
-                    parentWbs: params.parentWbs,
-                });
-                const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
-                return { ref, content };
-            }
-
-            // ── legacy buildTaskSkeleton fallback ──
+            // Matrix + buildTaskSkeleton is the ONE creation layout producer (F92 R1):
+            // the section headings come from the canonical section-matrix entry and
+            // template bodies (if any) come via bodiesFor — the template never owns
+            // document layout.
             const frontmatter = [
                 'schema_version: 1',
                 `name: "${params.title}"`,
@@ -1257,10 +1124,11 @@ export class TaskService {
         await this.writeService.updateSection(ref, 'Testing', testingBody);
         result.testingWritten = true;
 
-        // ── Review section (R2) — preserve existing review content ──
-        // The review agent writes a detailed SECU Review during the `review` step.
-        // Only overwrite with the verdict-rendered summary when the section is bare
-        // (absent/placeholder), matching the Solution safety-net pattern.
+        // ── Review section (R2) — fallback-only (F92 0593 R1) ──
+        // The review coordinator (super-reviewer /dev-review) writes the authored
+        // `## Review`. This bare-Review backfill is a standalone compatibility
+        // fallback ONLY: it fires when the section is bare (absent/placeholder),
+        // never overwrites authored Review, and is not normal ownership.
         if (sectionIsBare(doc, 'Review')) {
             const reviewBody = renderReview(verdict);
             await this.writeService.updateSection(ref, 'Review', reviewBody);
@@ -1509,31 +1377,9 @@ export class TaskService {
 
             const now = new Date().toISOString();
 
-            // ── template-as-skeleton path (preferred) ──
-            const rawTemplate = this.ctx.resolveTemplate?.(variant);
-            if (rawTemplate !== undefined) {
-                const content = renderCreatedTaskContent({
-                    rawTemplate,
-                    name: item.name,
-                    wbs,
-                    background,
-                    createdAt: now,
-                    status,
-                    variant,
-                    featureId: item.feature_id ?? undefined,
-                    parentWbs: item.parent_wbs ?? undefined,
-                    priority: item.priority,
-                    tags: item.tags,
-                    requirements: item.requirements,
-                    design: item.design,
-                    plan: item.plan,
-                    acceptanceCriteria: item.acceptance_criteria,
-                });
-                const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
-                return { ref, content };
-            }
-
-            // ── legacy buildTaskSkeleton fallback ──
+            // Matrix + buildTaskSkeleton is the ONE creation layout producer (F92 R1):
+            // headings come from the matrix entry; template bodies (if any) come via
+            // bodiesFor — never template-as-skeleton rendering.
             const fmLines = [
                 'schema_version: 1',
                 `name: "${item.name}"`,

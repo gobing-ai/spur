@@ -643,6 +643,38 @@ describe('spur task CLI', () => {
         expect(parsed[0].findings.length).toBeGreaterThan(0);
     });
 
+    test('check --as <status> projects the target row (F92 R2): result.status is the target', async () => {
+        // A freshly-created backlog task. Plain check reports the CURRENT status
+        // (backlog); check --as done must report the TARGET status (done) in the
+        // JSON, proving the lifecycle guard evaluates the done row.
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Check as done'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const plain = createCapturedOutput();
+        await main(['task', 'check', wbs, '--json'], { cwd, output: plain });
+        expect(JSON.parse(lastMessage(plain))[0].status).toBe('backlog');
+
+        // Target projection: the reported status is the TARGET.
+        const output = createCapturedOutput();
+        await main(['task', 'check', wbs, '--as', 'done', '--json'], { cwd, output });
+        expect(JSON.parse(lastMessage(output))[0].status).toBe('done');
+    });
+
+    test('check --as rejects an unknown status (exit 2)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', '--as', 'BOGUS'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('\n')).toContain('invalid --as status');
+    });
+
+    test('check --as contradicts --corpus and is rejected (exit 2)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', '--as', 'done', '--corpus'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('\n')).toContain('cannot be combined with --corpus');
+    });
+
     test('check --strict elevates warnings and can exit 1 on missing sections', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Check strict'], { cwd, output: cOut });

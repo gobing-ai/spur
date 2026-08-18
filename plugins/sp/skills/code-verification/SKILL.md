@@ -27,15 +27,16 @@ metadata:
 
 The **verifier** in the Spur execution loop. A coding agent reports "done" with overconfidence;
 this skill is the deterministic counterweight that proves — or disproves — the claim against the
-task's own requirements and Acceptance Criteria, then writes the evidence back to the corpus
-through CLI verbs.
+task's own requirements and Acceptance Criteria, then emits the canonical verdict artifact
+through CLI verbs (section writes are owned by the review coordinator and the deterministic
+`record` step — F92 0593 R1).
 
 It backs two commands:
 
 | Command | Mode | Input | Output |
 |---------|------|-------|--------|
-| `/sp:dev-verify <wbs>` | **verify** | a task WBS | per-requirement verdict → `## Testing`; `.spur/run/<wbs>-verdict.json` |
-| `/sp:dev-review <wbs>` | **review** | a task WBS (diff scope) | three-dimensional findings → `## Review` (functional + SECUA + architecture) |
+| `/sp:dev-verify <wbs>` | **verify** | a task WBS | `.spur/run/<wbs>-verdict.json`; `record` transcribes `## Testing` |
+| `/sp:dev-review <wbs>` | **review** (coordinator) | a task WBS (diff scope) | merged three-dimensional findings → `## Review` |
 
 The verify mode is the **completion gate's evidence source**: it emits a machine verdict the
 `task-pipeline.yaml` workflow reads before allowing `record → done`. A `PASS` clears the gate; a
@@ -243,34 +244,32 @@ blocker finding → FAIL; core PARTIAL or an unresolved major finding (no FAIL) 
 MET or justified N/A → PASS. Minor/advisory findings do not block. Only `PASS` clears the pipeline
 completion gate (`PARTIAL`/`FAIL` route the pipeline to `failed`).
 
-### Step 10 — Write findings to the task
+### Step 10 — Emit the verdict artifact (the only verify output)
 
-Assemble the evidence and write via CLI verbs (temp-file → `--section`):
+Assemble the evidence and **emit the canonical verdict artifact** — verification writes no task
+section (F92 0593 R1). Under the pipeline, the output is captured as
+`.spur/run/<wbs>-verify-answer.txt`; a deterministic shell step derives
+`.spur/run/<wbs>-verdict.json`, and the `record` step transcribes `## Testing` from it.
+
+**Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself, then invoke
+the deterministic Testing writer `spur task record` (section authorship never happens here):
 
 ```bash
-# Testing section: per-requirement and per-AC verdict tables + evidence
-printf '...' > /tmp/<wbs>-testing.md
-spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
+# write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
+spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing
 ```
 
 > **Corrections: the answer file is the source of truth.** `spur task record` re-transcribes
-> `## Testing` from the verdict artifact, overwriting `--section Testing` writes — direct section
-> fixes are futile. Fix `.spur/run/<wbs>-verify-answer.txt` → `spur task verdict <wbs>
-> --from-answer <file>` → re-record. `--section` is initial authorship only.
+> `## Testing` from the verdict artifact — direct `--section Testing` writes are futile. Fix
+> `.spur/run/<wbs>-verify-answer.txt` → `spur task verdict <wbs> --from-answer <file>` → re-record.
 
-> **Do not write `## Review` directly in verify mode.** The `## Review` section is owned by the
-> `review` step (`/sp:dev-review`), which dispatches `functional-review` + `code-verification`
-> review mode + `code-improvement`. The `record` step backfills `## Review` from the verdict
-> artifact only if the section is bare (`sectionIsBare` guard, `task-service.ts:485`). Writing
-> `## Review` here bypasses that guard and destroys the review step's three-dimensional findings.
-
-Section bodies passed to `spur task update --section` must be **body-only**. Do not put a same-level
-heading inside any section body; the task writer strips same-level headings to prevent phantom
-sections. Concretely:
-
-- **Testing section:** do not put `### Acceptance Criteria Verification`, `### Per-Requirement
-  Traceability`, or any `###` heading inside the Testing body. Use bold labels
-  (`**Acceptance Criteria Verification**`) or tables instead.
+> **Do not write `## Review` directly, ever.** The `## Review` section is owned by the
+> `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
+> `functional-review` + `code-verification` review mode + `code-improvement` fragments. The
+> `record` step backfills `## Review` from the verdict artifact **only** if the section is bare
+> (`sectionIsBare` guard, `task-service.ts`) — a standalone compatibility fallback, never an
+> overwrite of authored Review. Writing `## Review` here destroys the review step's
+> three-dimensional findings.
 
 ### Step 11 — State the verdict and hand off (the gate contract)
 
@@ -311,10 +310,8 @@ canonical.
 `.spur/run/<wbs>-verify-answer.txt`. A deterministic shell step then derives
 `.spur/run/<wbs>-verdict.json` from it plus an independent `spur task check` (R9; the agent
 reporting PASS in prose is necessary but not sufficient — the artifact is never left to the agent's
-discretion). The **record** step transcribes only `## Testing` from the verdict — verdict + per-
-requirement/AC tables + evidence. `## Review` is owned by the review step (`/sp:dev-review`) and
-the record step's `sectionIsBare` guard (`task-service.ts:485`) preserves any non-bare Review
-content. Verify mode never writes `## Review`.
+discretion). Section transcription follows the Step 10 contract (record → `## Testing`; bare-only
+Review fallback; verify never writes sections).
 
 **Standalone** (`/sp:dev-verify` outside the pipeline — no answer-file capture exists), write the
 artifact yourself; shape and field-by-field contract in
@@ -455,8 +452,8 @@ re-audit is never misread as a successful `testing -> done` (dev-verify.md `--ne
 ## Mode: review (`/sp:dev-review`)
 
 The source-oriented path: SECUA review of a task's diff without the full traceability verdict. Runs
-Steps 3 + 7 + 10 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
-quality/security audit of changes when the full verify isn't wanted.
+Steps 3 + 7 and returns a **review fragment** — no verdict artifact, no section write, no `done`
+gate (F92 0593 R1); the coordinator (`sp:super-reviewer`) merges fragments into `## Review`.
 
 Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), `--fix <none|blockers-first|all>` (post-review repair), and `--focus <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
 

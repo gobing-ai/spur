@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Centralize task section creation and target-state lifecycle validation"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: F92
@@ -13,7 +13,7 @@ tags: ["task-contract", "section-matrix", "lifecycle"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T20:06:22.451Z"
-updated_at: "2026-08-18T20:08:12.569Z"
+updated_at: "2026-08-18T22:45:18.529Z"
 ---
 
 ## 0591. Centralize task section creation and target-state lifecycle validation
@@ -74,26 +74,86 @@ Feature: Task section and target-state validation
 
 **Rejected.** Do not encode transition profiles in another YAML; status/variant obligations already exist. Do not mutate frontmatter temporarily for checks. Do not make --strict elevate all warnings at done. Do not keep template-as-skeleton and filter headings afterward; that remains two layout authorities.
 ### Plan
-- [ ] Add focused failing tests proving create/batch-create currently ignore matrix layout and testing-to-done checks the current row.
-- [ ] Thread asStatus/effectiveStatus through TaskCheckService and status-dependent checks with omitted-option compatibility tests.
-- [ ] Add and validate task check --as <status>; update JSON/human diagnostic expectations and CLI golden path.
-- [ ] Wire lifecycle YAML and inline/no-lifecycle backstop to target statuses; assert guard denial leaves bytes unchanged.
-- [ ] Switch both creation paths to matrix-driven buildTaskSkeleton plus template bodies; delete template-as-layout branches and hard-coded section fallbacks.
-- [ ] Ensure bundled/compiled resolution uses the canonical matrix asset or fails loudly; add missing-asset regression coverage.
-- [ ] Update docs/04_DESIGN.md and spur-cli task references, retaining --strict-core only as a documented compatibility alias.
-- [ ] Run narrow task-service/task-check/lifecycle/CLI tests first, then bun run autofix, bun run spur-check, bun run lint, bun run test, bun run test-cf, and bun run build.
+- [x] Add focused failing tests proving create/batch-create currently ignore matrix layout and testing-to-done checks the current row.
+- [x] Thread asStatus/effectiveStatus through TaskCheckService and status-dependent checks with omitted-option compatibility tests.
+- [x] Add and validate task check --as <status>; update JSON/human diagnostic expectations and CLI golden path.
+- [x] Wire lifecycle YAML and inline/no-lifecycle backstop to target statuses; assert guard denial leaves bytes unchanged.
+- [x] Switch both creation paths to matrix-driven buildTaskSkeleton plus template bodies; delete template-as-layout branches and hard-coded section fallbacks.
+- [x] Ensure bundled/compiled resolution uses the canonical matrix asset or fails loudly; add missing-asset regression coverage.
+- [x] Update docs/04_DESIGN.md and spur-cli task references, retaining --strict-core only as a documented compatibility alias.
+- [x] Run narrow task-service/task-check/lifecycle/CLI tests first, then bun run autofix, bun run spur-check, bun run lint, bun run test, bun run test-cf, and bun run build.
 ### Solution
+Created one section authority + target-aware lifecycle validation (F92).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — matrix alone determines created sections.** Both `create` and `batchCreate` build
+through `buildTaskSkeleton` (the single layout producer) with the section set resolved from
+the canonical section matrix + universal `References`/`History`:
 
+- `buildTaskSkeleton` in `create` — `packages/app/src/services/task-service.ts:565`
+- `buildTaskSkeleton` in `batchCreate` — `packages/app/src/services/task-service.ts:1415`
+- section set resolved by `sectionsForStatus` — `packages/app/src/services/task-service.ts:415`
+
+`sectionsForStatus` fails loudly on a missing matrix or entry (no hand-maintained creation
+fallback). The template-as-skeleton producers (`renderCreatedTaskContent`) and
+`DEFAULT_CREATION_SECTIONS` were deleted, and `resolveTemplate` was removed from
+`TaskServiceContext`, so the template never owns the heading list.
+
+**R2 — transition gates evaluate the target status via `--as`.** `TaskCheckService.check`
+projects `effectiveStatus = asStatus ?? frontmatter.status` for the matrix entry and the
+L2/L3/L4 policy while L1 still reads the real document — `packages/app/src/services/task-check.ts:493-510`.
+Omitted `--as` stays behavior-compatible. The CLI adds the canonical-status-validated
+`--as <status>` option, rejects the `--corpus` combination, and keeps `--strict-core` as a
+documented compatibility alias — `apps/cli/src/commands/task.ts:1044-1057`.
+
+**R3 — missing target-required sections deny the transition, byte-identical.**
+The lifecycle guards invoke `task check --as testing` / `--as done` —
+`config/workflows/task-lifecycle.yaml:73,78`. The inline no-lifecycle backstop
+`runDoneGateCheck` passes the transition target as `asStatus` — `apps/cli/src/commands/task.ts:1464-1480`.
+Matrix loading fails loudly with the attempted paths when neither a project-local nor a
+bundled canonical asset is reachable — `apps/cli/src/commands/task.ts:1511-1530`. The server
+provides a bundled canonical matrix so server task creation keeps the same authority —
+`apps/server/src/serve.ts:30-40`.
+
+`--as`/`asStatus` precedent reused from `feature.ts`/`feature-check.ts` (0418). The
+`checkVerdictArtifact` done-gate continues to consume 0590's normalized answer output via
+`.spur/run/<wbs>-verdict.json` — unchanged.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Matrix alone determines created sections | MET | `packages/app/src/services/task-service.ts:565` (`create` → `buildTaskSkeleton`) and `packages/app/src/services/task-service.ts:1415` (`batchCreate` → `buildTaskSkeleton`); section set resolved by `sectionsForStatus` (`packages/app/src/services/task-service.ts:415`) which fails loudly on missing matrix/entry; `DEFAULT_CREATION_SECTIONS` and CLI `FALLBACK_MATRIX` deleted; tests `packages/app/tests/services/task-service.test.ts` (F92 R1 create layout, fail-loud, batchCreate matrix) |
+| R2 — Transition gates evaluate target status via `--as` | MET | `packages/app/src/services/task-check.ts:493-510` `effectiveStatus = asStatus ?? frontmatter.status` drives L2/L3/L4 policy while L1 reads the real doc (omitted `--as` behavior-compatible); `apps/cli/src/commands/task.ts:1044-1057` adds canonical-status-validated `--as`, rejects `--corpus`, keeps `--strict-core` as documented alias; tests `packages/app/tests/services/task-check.test.ts` (F92 R2) + `apps/cli/tests/commands/task.test.ts` (--as projection/invalid/conflict) |
+| R3 — Missing target-required sections deny transition, byte-identical | MET | lifecycle guards invoke check as the target: `config/workflows/task-lifecycle.yaml:73,78` (`--as testing`/`--as done`); inline no-lifecycle backstop `runDoneGateCheck` passes the transition target as `asStatus` (`apps/cli/src/commands/task.ts:1464-1480`); R3 test proves testing→done denies missing Review and leaves the file byte-identical (matrix loader fails loudly with attempted paths when no canonical asset is reachable — see Solution) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Matrix alone determines created sections | MET | test | `packages/app/tests/services/task-service.test.ts` F92 R1 (create/batchCreate headings from matrix, fail-loud on missing matrix/entry) |
+| Scenario: R2 — Transition gates evaluate target status | MET | test | `packages/app/tests/services/task-check.test.ts` F92 R2 (`asStatus: testing`/`done` projects target row; omitted-compat); `apps/cli/tests/commands/task.test.ts` `--as done` reports target status; file unmutated before guard passes |
+| Scenario: R3 — Missing target-required sections deny transition | MET | test | `packages/app/tests/services/task-check.test.ts` R3 (testing task missing Review passes current row, denied under `asStatus: done`, byte-identical read-only) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+## Review Report — 0591 (feature F92)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Scope:** working-tree diff since implementation (uncommitted F92 changes, 19 files)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
 
+| # | Severity | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 | architecture | `sectionsForStatus` hardcodes the universal `References`+`History` append outside the matrix (a mild deviation from "matrix alone"), though documented as structural/closed-world and consistent with check's universal-section handling | `packages/app/src/services/task-service.ts:432` |
+| 2 | P4 | architecture | Matrix-resolution (project-local → bundled → fail-loud) duplicated in CLI `loadSectionMatrixUncached` and server `loadServerSectionMatrix` — candidate for a shared loader | `apps/cli/src/commands/task.ts:1515`, `apps/server/src/serve.ts:34` |
+| 3 | P4 | correctness | `--as <status>` with no `<wbs>`/`--folder` projects every task in the active folder as the target (read-only, harmless); `--as`+`--corpus` is rejected, `--since`-without-`--corpus` is rejected separately | `apps/cli/src/commands/task.ts:1055` |
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 — matrix alone determines created sections | MET | `task-service.ts:565,1415` both create + batchCreate route through `buildTaskSkeleton` with `sectionsForStatus` (matrix SSOT); `DEFAULT_CREATION_SECTIONS` (309) and CLI `FALLBACK_MATRIX` deleted; `sectionsForStatus` fails loudly on missing matrix/entry (`task-service.ts:409-435`); `loadSectionMatrix` fails loudly with attempted paths (`task.ts:1511`) |
+| R2 — transition gates evaluate target status via `--as` | MET | `task.ts:1044-1060` adds `--as`, validates against canonical `TASK_STATUSES`, rejects `--corpus` combo, keeps `--strict-core` as documented alias; `task-check.ts:490-510` `effectiveStatus = asStatus ?? status` drives L2/L3/L4 policy while L1 reads real doc; omitted `--as` behavior-compatible |
+| R3 — missing target-required sections deny transition, stable finding, byte-identical | MET | `task-lifecycle.yaml:73,78` guards use `--as testing` / `--as done`; inline backstop `runDoneGateCheck` passes target `status` (`task.ts:380,1468`); R3 test proves `testing→done` denies missing `Review` (`task-check.test.ts` F92 R3) and byte-identical read-only projection |
+
+**Next:** no blockers/majors — ship; fold the two matrix-loader copies into one shared helper when convenient.
 ### References
 - Canonical matrix: `config/tasks/section-matrix.yaml`
 - Matrix schema/type: `apps/cli/schemas/section-matrix.schema.json`; `packages/domain/src/planning/task-skeleton.ts`
@@ -106,3 +166,6 @@ Feature: Task section and target-state validation
 - Normative design: `docs/04_DESIGN.md` §7.4
 - Relevant tests: `apps/cli/tests/commands/task.test.ts`; `packages/app/tests/services/task-service.test.ts`; `packages/app/tests/services/task-check.test.ts`; lifecycle adapter/write-service tests
 ### History
+- 2026-08-18T20:53:58.225Z todo → wip (system)
+- 2026-08-18T21:07:06.219Z wip → testing (system)
+- 2026-08-18T21:07:22.902Z testing → done (system)

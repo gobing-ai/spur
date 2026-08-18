@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "verify", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.199Z"
-updated_at: "2026-07-28T00:32:11.104Z"
+updated_at: "2026-08-18T22:39:12.884Z"
 ---
 
 ## 0341. dev-verify/verifyall: no 'not started' verdict cell, and duplicate follow-up task creation
@@ -166,7 +166,7 @@ spur task verifyall-aggregate --from-file .spur/run/<feature>-batch-input.json -
 - CLI: `--dedupe-within <seconds>` enables guard; `--allow-duplicate-name` overrides (passes `dedupeWithinSec: undefined`). Error → exit code 3.
 - `DuplicateFollowUpError` exported from barrel; static import in `task.ts` (rule `ts-no-dynamic-import`).
 
-**R5 — `verifyall-aggregate` CLI verb (`apps/cli/src/commands/task.ts:738-801`):**
+**R5 — `verifyall-aggregate` CLI verb (`apps/cli/src/commands/task.ts:956-1019`):**
 - Reads JSON array of `{wbs, outcome[, reason]}` rows from `--from-file` (default `.spur/run/verifyall-batch-input.json`).
 - Validates outcome ∈ {PASS,PARTIAL,FAIL,NOT-STARTED,UNKNOWN}; maps to `BatchTaskResult[]`; calls `aggregateBatchVerdicts`.
 - `--json` emits the `BatchAggregation`; human path prints `Batch verdict: <V>`, summary, and explicit NOT-STARTED WBS list.

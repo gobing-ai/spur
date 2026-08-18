@@ -27,6 +27,6 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- WBS mode (`<wbs>`): `Skill(skill="sp:functional-review", args="<wbs> $ARGUMENTS")` + `Skill(skill="sp:code-verification", args="review $ARGUMENTS")` + `Skill(skill="sp:code-improvement", args="<wbs> $ARGUMENTS")` (functional traceability + SECUA framework + architectural depth; may write `Review` section to task)
+- WBS mode (`<wbs>`): `Skill(skill="sp:functional-review", args="<wbs> $ARGUMENTS")` + `Skill(skill="sp:code-verification", args="review $ARGUMENTS")` + `Skill(skill="sp:code-improvement", args="<wbs> $ARGUMENTS")` (functional traceability + SECUA framework + architectural depth; the three skills return review fragments and the coordinator (`sp:super-reviewer`) writes the combined `## Review` — F92 0593 R1)
 - Path mode (`<path>`): `Skill(skill="sp:code-verification", args="review $ARGUMENTS")` + `Skill(skill="sp:code-improvement", args="<path> $ARGUMENTS")` (advisory SECUA quality + architectural depth; performs no task mutation)
 - `--fix`: Deprecated (no-op + warning message; route remediation to `/sp:dev-verify --fix`). **`--next` removed** (feature H8, 2026-07-31) — it was a deprecated no-op; route progression to `/sp:dev-next`. **was: `--next` deprecated no-op.**

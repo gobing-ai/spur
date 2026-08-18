@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:14.986Z"
-updated_at: "2026-08-15T16:48:02.131Z"
+updated_at: "2026-08-18T22:39:11.303Z"
 ---
 
 ## 0561. Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate
@@ -164,7 +164,7 @@ Rationale: the mismatch lived in the matcher, not the parser — verdict artifac
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons, additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:200-207` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 9 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression and the alias-path pin added this run). |
+| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons, additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:196-203` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 9 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression and the alias-path pin added this run). |
 | R2 | MET | Additive-only design confirmed by re-read: the four pre-existing comparisons are intact and evaluated; legitimately parenthesized titles match on the raw form — asserted by the 0561 R2 tests in both the e2e and direct-matcher blocks (pass this run). |
 | R3 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116` — subsection "The id is exactly the scenario title — no Gherkin body appended" present (re-read this run): id = scenario title exactly, body never appended, verifier-verbatim + gate-backstop rationale. |
 

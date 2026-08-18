@@ -49,9 +49,9 @@ re-reading or re-tokenizing the task.
 | `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3) | `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--folder` `--json` |
-| `record <wbs>` | Write Testing/Review from a verify verdict; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
+| `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON; see [answer-file shape](tasks/verbs.md#answer-file-shape-what---from-answer-parses) | `--from-answer <path>` `--folder` `--json` |
-| `check [wbs]` | Four-layer validation; the readiness matrix | `--strict` `--strict-core` `--folder` `--json` |
+| `check [wbs]` | Four-layer validation; the readiness matrix | `--strict` `--as <status>` `--strict-core` `--folder` `--json` |
 | `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
 | `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |
 | `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |
@@ -120,7 +120,8 @@ spur task update 0040 wip
 
 Valid statuses: `backlog · todo · wip · testing · blocked · done · cancelled` (the lifecycle engine
 enforces legal transitions). Two transitions are **guarded by `check`**: `wip→testing` runs
-`spur task check <wbs>`, and `testing→done` runs `spur task check <wbs> --strict-core` — a failing
+`spur task check <wbs> --as testing`, and `testing→done` runs `spur task check <wbs> --as done`
+(F92 R3 — target-aware guards) — a failing
 gate blocks the transition (§7.5).
 
 **`--no-lifecycle`** suppresses lifecycle workflow *run record* creation (use during pipeline-driven
@@ -166,12 +167,14 @@ spur task update 0040 --priority P1
 The section-write-then-replace pattern is the workflow agents use to fill in `Plan` / `Solution` /
 `Testing` / `Review` during a run. See
 [tasks/section-editing.md](tasks/section-editing.md) for the full recipe. For pipeline
-output specifically, prefer **`record`** (below) over hand-assembling Testing/Review files.
+output specifically, prefer **`record`** for `Testing` (below) over hand-assembling section files; `Review` is authored by the review coordinator (`/sp:dev-review`), not hand-filled.
 
 ## Recording pipeline results — `record`
 
-`spur task record <wbs>` writes the `Testing` and `Review` sections **from a verify verdict**, so the
-pipeline's record step is one CLI call instead of awk/sed/jq plumbing:
+`spur task record <wbs>` writes the `Testing` section **from a verify verdict artifact** (the
+deterministic Testing writer — F92 0593 R1) and backfills `Review` **only when the section is
+bare** (standalone compatibility fallback; never overwrites authored Review), so the pipeline's
+record step is one CLI call instead of awk/sed/jq plumbing:
 
 ```bash
 spur task record 0040 --transition testing
@@ -179,8 +182,8 @@ spur task record 0040 --verdict-file .spur/run/0040-verdict.json --solution-from
 ```
 
 - Reads the verdict JSON (default `.spur/run/<wbs>-verdict.json`); renders `Testing` as a
-  per-requirement table and `Review` as a P1–P4 findings table. A missing/malformed verdict degrades
-  to an `UNKNOWN` verdict — it never throws.
+  per-requirement table and, when the `Review` section is bare, backfills a P1–P4 findings table.
+  A missing/malformed verdict degrades to an `UNKNOWN` verdict — it never throws.
 - **`--solution-from-diff`** backfills `Solution` from `git diff -U0` hunk headers **only when the
   Solution section is still bare** — a safety net, not an overwrite.
 - **`--transition <status>`** optionally advances the lifecycle after writing (e.g. `testing`).
@@ -235,7 +238,8 @@ corpus, or with a WBS for one task:
 spur task check --json              # whole corpus
 spur task check 0040 --json         # one task
 spur task check --strict --json     # elevate ALL warnings to failures
-spur task check 0040 --strict-core  # the testing→done gate variant
+spur task check 0040 --as done        # evaluate as the done row (lifecycle target, F92 R2)
+spur task check 0040 --strict-core    # temporary compatibility alias
 ```
 
 **Folder resolution (task 0522):** a WBS-targeted check (`<wbs>` present, no `--folder`) resolves
@@ -253,7 +257,9 @@ or "are there orphaned scenarios?" rather than reading task files and re-impleme
 The two flags are distinct gate profiles:
 
 - **`--strict`** elevates *all* warnings to failures (the strictest reading).
-- **`--strict-core`** fails only on hard-core errors — Solution `file:line`, Review P1–P4, and
+- **`--as <status>`** evaluates the task as if it were already in `<status>` (F92 R2); the lifecycle
+  guards pass the transition target. Validated against canonical task statuses; excluded with `--corpus`.
+- **`--strict-core`** is a **temporary compatibility alias** (F92 R2). Fails only on hard-core errors — Solution `file:line`, Review P1–P4, and
   `gate:true` required-section misses — *without* the blanket elevation. This is the variant wired
   as the `testing→done` lifecycle guard.
 

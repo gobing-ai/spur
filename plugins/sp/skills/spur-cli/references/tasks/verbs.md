@@ -35,8 +35,9 @@ and its scaffold body. **Default:** `feature-impl` when `--feature` is given, el
 unknown variant is exit `2`.
 
 **Creation status** follows the matrix: a spec'd task (a `--feature` link, or a batch item with
-`background`/`requirements`) is created at **`todo`** ("ready to execute"); a bare capture is created
-at **`backlog`** ("still preparing"). `Solution` first appears at `wip`.
+`background`/`requirements`) is created at **`todo`**; a bare capture is created at
+**`backlog`** ("still preparing"). Which sections a status carries is a runtime contract — query
+`spur task sections <wbs> list --json` or `spur task check <wbs> --json`; do not restate the matrix.
 
 ## `show <wbs>` / `list`
 
@@ -50,8 +51,10 @@ Multi-mode. Status and `--section` are **mutually exclusive**; `--feature`/`--pr
 frontmatter scalar.
 
 - **Status** (positional): legal transition over `backlog → todo → wip → testing → blocked → done →
-  cancelled`. Two transitions run a `check` guard (§7.5): `wip→testing` → `spur task check <wbs>`;
-  `testing→done` → `spur task check <wbs> --strict-core`. A failing gate blocks the transition.
+  cancelled`. Two transitions run a target-aware `check` guard (§7.5): `wip→testing` →
+  `spur task check <wbs> --as testing`; `testing→done` → `spur task check <wbs> --as done`
+  (F92 R3 — each evaluates the transition target, so `testing→done` checks the `done` row).
+  A failing gate blocks the transition.
 - **`--no-lifecycle`**: suppress lifecycle workflow *run record* creation (use inside pipeline runs
   to avoid orphaned nested lifecycle runs). **It is not a guard bypass** — the `wip→testing` and
   `testing→done` `check` gates above still run; the CLI evaluates them inline when the FSM guard
@@ -127,8 +130,9 @@ in `sp:spur-dev`.
 
 ## `record <wbs>`
 
-Write `Testing` + `Review` from a verify verdict, with optional `Solution` backfill and a lifecycle
-transition. Collapses the pipeline's record step to one call.
+Write `Testing` from a verify verdict artifact — the **deterministic Testing writer** (F92 0593 R1) —
+with a **bare-only `Review` backfill** (never overwrites authored Review), optional `Solution`
+backfill, and a lifecycle transition. Collapses the pipeline's record step to one call.
 
 | Flag | Effect |
 | ---- | ------ |
@@ -149,9 +153,11 @@ transition. Collapses the pipeline's record step to one call.
 
 - `verdict`: `PASS` | `PARTIAL` | `FAIL` | `UNKNOWN`. A missing/malformed/empty file degrades to
   `UNKNOWN` (empty arrays) — `record` never throws.
-- `requirements[]` → the `Testing` per-requirement table. `checks[]` → the `Review` P1–P4 findings
-  table. With no requirements/checks, each renders exactly one "none recorded" row (a clean verify is
-  a valid outcome; the matrix requires a table, not an empty section).
+- `requirements[]` → the `Testing` per-requirement table (deterministic transcript).
+- `checks[]` → the P1–P4 findings table used for the **bare-only `Review` backfill** — the done-gate's
+  `## Review` L3 layer is satisfied by the `review` coordinator's authored table; `record` writes the
+  fallback shape only when the section is bare. With no requirements/checks, each renders exactly one
+  "none recorded" row (a clean verify is a valid outcome; the matrix requires a table, not an empty section).
 - `--solution-from-diff` parses `+++ b/<path>` + `@@ +new @@` hunk headers into sorted, unique
   `` `file:line` `` rows; falls back to `--name-only` at `:1` when there are no hunk lines.
 
@@ -162,7 +168,12 @@ traceability. Bare = whole corpus; with a WBS = one task. The matrix is loaded f
 `.spur/tasks/section-matrix.yaml`.
 
 - **`--strict`** elevates *all* warnings to failures.
-- **`--strict-core`** is the `testing→done` gate variant: fails only on **hard-core errors** —
+- **`--as <status>`** evaluates the task as if it were already in `<status>` (F92 R2 — the lifecycle
+  guards pass the transition target). Validated against canonical task statuses; mutually exclusive
+  with `--corpus`. Omitted `--as` uses current-status diagnostics.
+- **`--strict-core`** is a **temporary compatibility alias** (F92 R2), retained so installed
+  plugins/workflows that call it keep working; target-state selection (`--as`) supplies the real
+  done semantics. Fails only on **hard-core errors** —
   Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — *without* the blanket
   warning elevation.
 
@@ -354,7 +365,7 @@ spur task refresh-roster <wbs> [--folder] [--json]
 spur task batch-create --file <path> [--folder] [--json]
 spur task record   <wbs> [--verdict-file <p>] [--solution-from-diff] [--transition <s>] [--folder] [--json]
 spur task verdict  <wbs> [--from-answer <p>] [--folder] [--json]
-spur task check    [wbs] [--strict] [--strict-core] [--folder] [--json]
+spur task check    [wbs] [--strict] [--as <status>] [--strict-core] [--folder] [--json]
 spur task resolve  <file-path> [--strict] [--folder] [--json]
 spur task path     <wbs> [--folder] [--json]
 spur task run-link <wbs> [--source <src>] [--run-id <id>] [--json]

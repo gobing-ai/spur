@@ -241,16 +241,16 @@ all core requirements MET                          → PASS
 `PARTIAL` blocks the gate exactly like `FAIL` — the distinction only tells the operator *how far
 off* delivery is.
 
-### Step 7 — Write findings to the task
+### Step 7 — Return the review fragment (no section write)
 
-Write the review body to the task's `## Review` section via CLI verbs. The body MUST lead with a
-`| Priority | Dimension | Location | Finding |` table (the L3 `hasPopulatedPriorityTable` gate at
+Assemble the findings into a **review fragment** — the priority-table lead + the per-requirement
+traceability table. The fragment MUST lead with a `| Priority | Dimension | Location | Finding |`
+table (the L3 `hasPopulatedPriorityTable` gate at
 `task-check.ts:96-106` requires at least one `P[1-4]` row with non-placeholder siblings — any other
 shape, e.g. `| Req | Status | Evidence |` alone, is structurally rejected and denies the
 `wip→testing` transition). Use the same canonical shape as `sp:code-verification`:
 
-```bash
-cat > /tmp/<wbs>-functional.md <<'BODY'
+```markdown
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
 | P4 | — | — | No P1–P3 findings; functional verdict PASS |
@@ -260,16 +260,17 @@ cat > /tmp/<wbs>-functional.md <<'BODY'
 | R1  | MET     | `src/api/users.ts:42` — `createUser()` |
 | R2  | PARTIAL | `src/api/users.ts:42` — basic only; MISSING duplicate-email handling |
 | R3  | UNMET   | no implementation found; searched src/api/, src/services/ |
-BODY
-spur task update <wbs> --section Review --from-file /tmp/<wbs>-functional.md
-rm /tmp/<wbs>-functional.md
 ```
 
 For a PARTIAL/FAIL verdict, replace the P4 row with the actual P1–P3 findings ranked by severity.
 The priority table leads; the traceability table follows for per-requirement detail.
 
-Section bodies passed to `spur task update --section` must be **body-only** — no same-level (`##`)
-headings inside the body. Tables and bold labels are fine.
+**Fragment-only discipline (F92 0593 R1).** In coordinated mode (dispatched by `/sp:dev-review` /
+`sp:super-reviewer`), do **not** write `## Review` — return the fragment to the coordinator, which
+merges the functional + SECUA + architecture fragments into the combined `## Review` section. Only
+`sp:super-reviewer` (the review coordinator) writes `## Review`; direct component-skill use is
+advisory output. `spur task record` backfills a **bare** `## Review` from the verdict artifact as a
+standalone compatibility fallback only and never overwrites authored Review (F92 0593 R1).
 
 ### Step 8 — Report
 
@@ -289,11 +290,11 @@ Include the per-requirement traceability table in the report:
 | R3  | UNMET  | no implementation found; searched src/api/, src/services/ |
 ```
 
-**Under the pipeline**, `sp:functional-review` is the review step dispatched by `/sp:dev-review`,
-so it owns `## Review` — its `--section Review` write is the authoritative source. The pipeline's
-`record` step transcribes only `## Testing` from the verify verdict (`code-verification/SKILL.md`,
-`task-record.ts:226-247`); it does not overwrite a non-bare `## Review` thanks to the
-`sectionIsBare` guard (`task-service.ts:485`). Keep the priority-table lead stable so the L3 gate
+**Under the pipeline**, `sp:functional-review` is a component of `/sp:dev-review`: it returns its
+fragment to the coordinator (`sp:super-reviewer`), which writes the combined `## Review`. The
+`record` step transcribes only `## Testing` from the verdict artifact and backfills `## Review`
+only when the section is bare (`sectionIsBare` guard, `task-service.ts`); it never overwrites the
+coordinator's authored Review. Keep the priority-table lead stable in the fragment so the L3 gate
 stays satisfied through `record` → `done`.
 
 ---

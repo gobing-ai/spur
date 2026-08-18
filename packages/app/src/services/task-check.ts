@@ -19,7 +19,6 @@ import {
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { CorpusSeverity } from './corpus-check';
-import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -29,6 +28,7 @@ import {
     type Severity,
 } from './planning-check-base';
 import { TaskLocator } from './task-locator';
+import { readVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -461,6 +461,16 @@ export class TaskCheckService extends PlanningCheckService {
         wbs: string,
         options?: {
             strict?: boolean;
+            /**
+             * Optional target status to evaluate the task AS (F92 R2) — the
+             * lifecycle guards pass the transition target so testing→done checks
+             * the `done` row instead of the current `testing` row. Frontmatter
+             * schema validation (L1) still reads the REAL document; only the
+             * lifecycle-dependent L2/L3/L4 policy evaluates as `effectiveStatus =
+             * asStatus ?? frontmatter.status`. Omitted `--as` is fully
+             * behavior-compatible (current-status diagnostics).
+             */
+            asStatus?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
             accepted?: ReadonlyMap<string, CorpusSeverity>;
         },
@@ -469,7 +479,7 @@ export class TaskCheckService extends PlanningCheckService {
         const raw = await this.fs.readFile(filePath);
         const findings: CheckFindings[] = [];
 
-        // ── L1: Schema validation (hard) ──
+        // ── L1: Schema validation (hard) — always reads the REAL frontmatter ──
         const doc = this.runL1(raw, wbs, findings);
         if (doc === null) {
             return {
@@ -480,35 +490,46 @@ export class TaskCheckService extends PlanningCheckService {
 
         const fm = doc.frontmatterData ?? {};
         const status = (fm.status as string) ?? 'backlog';
+        // Target-aware policy status (F92 R2): `asStatus` (the transition target)
+        // overrides the on-disk status for matrix + status-dependent rules, so a
+        // lifecycle guard evaluates the rules the target status will require.
+        const effectiveStatus = options?.asStatus ?? status;
         // The template variant is the unified section-layout axis (§3.2); `template`
         // frontmatter selects it, defaulting to `default`. (`type` is the orthogonal
         // task/brainstorm corpus-compat field, not the matrix key.)
         const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
-        const entry = this.resolveMatrixEntry(variant, status);
+        const entry = this.resolveMatrixEntry(variant, effectiveStatus);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
         this.runL2(doc, entry, findings);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
-        this.runL3(doc, entry, status, findings);
+        this.runL3(doc, entry, effectiveStatus, findings);
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(doc, fm, status, findings, featuresDir, tasksDir, wbs);
+        await this.runL4(doc, fm, effectiveStatus, findings, featuresDir, tasksDir, wbs);
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
-        await this.runL4Rollup(doc, wbs, status, findings, tasksDir);
+        await this.runL4Rollup(doc, wbs, effectiveStatus, findings, tasksDir);
 
         // ── L4 readiness (0211/R4): dependencies and gate-like prose are prerequisites.
         // Terminal tasks are completion records, not readiness candidates.
-        if (status !== 'done' && status !== 'cancelled') {
-            await this.runL4Readiness(doc, fm, wbs, status, findings, tasksDir);
+        if (effectiveStatus !== 'done' && effectiveStatus !== 'cancelled') {
+            await this.runL4Readiness(doc, fm, wbs, effectiveStatus, findings, tasksDir);
         }
 
         return {
             wbs,
-            ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides, options?.accepted, wbs),
+            ...this.summarizeWithStatus(
+                effectiveStatus,
+                findings,
+                strict,
+                options?.severityOverrides,
+                options?.accepted,
+                wbs,
+            ),
         };
     }
 
@@ -1465,24 +1486,39 @@ export class TaskCheckService extends PlanningCheckService {
     private async checkVerdictArtifact(wbs: string, tasksDir: string, findings: CheckFindings[]): Promise<void> {
         const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         const runDir = join(projectRoot, '.spur', 'run');
-        const loaded = await readGuardVerdictArtifact(this.fs, runDir, wbs);
+        const verdictPath = `${runDir}/${wbs}-verdict.json`;
+        // Task 0592 R1: consume via the single canonical parser so task validation,
+        // feature validation, record rendering, and the done gate all read the same
+        // validity verdict (missing / malformed / invalid / valid non-PASS).
+        const outcome = await readVerifyVerdict(this.fs, verdictPath, wbs);
 
-        if (loaded.artifact === undefined) {
-            if (loaded.readError && loaded.readError !== 'artifact is missing') {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                    severity: 'error',
-                    section: 'Testing',
-                    message: `Verdict artifact at ${loaded.path} is malformed: ${loaded.readError}`,
-                });
-            }
+        if (outcome.kind === 'missing') return;
+
+        if (outcome.kind === 'malformed') {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                severity: 'error',
+                section: 'Testing',
+                message: `Verdict artifact at ${verdictPath} is malformed: ${outcome.message}`,
+            });
             return;
         }
 
-        const artifact = loaded.artifact;
-        const reqs = artifact.requirements ?? [];
-        const acs = artifact.acceptanceCriteria ?? [];
+        if (outcome.kind === 'invalid') {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                severity: 'error',
+                section: 'Testing',
+                message: `Verdict artifact at ${verdictPath} is invalid: ${outcome.reason}`,
+            });
+            return;
+        }
+
+        const artifact = outcome.verdict;
+        const reqs = artifact.requirements;
+        const acs = artifact.acceptanceCriteria;
         const isUnknown = artifact.verdict === 'UNKNOWN';
         const isEmpty = reqs.length === 0 && acs.length === 0;
 
@@ -1493,7 +1529,7 @@ export class TaskCheckService extends PlanningCheckService {
                 code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
                 severity: 'error',
                 section: 'Testing',
-                message: `Verdict artifact at ${loaded.path} is malformed: ${reason}`,
+                message: `Verdict artifact at ${verdictPath} is malformed: ${reason}`,
             });
         }
     }

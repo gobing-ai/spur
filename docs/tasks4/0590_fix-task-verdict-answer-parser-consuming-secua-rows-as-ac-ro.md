@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T17:17:41.364Z"
-updated_at: "2026-08-18T20:23:55.782Z"
+updated_at: "2026-08-18T22:34:25.958Z"
 ---
 
 ## 0590. Fix task-verdict answer parser consuming SECUA rows as AC rows
@@ -294,11 +294,11 @@ all.
 ### Solution
 | File | Change |
 |---|---|
-| `packages/app/src/services/task-verdict.ts:172-177` | Add module-private `splitTableCells(row: string): string[]` — splits on unescaped pipes (`/(?<!\\\\)\\|/`) then unescapes `\\|` to `|`, preserving the old `.filter(Boolean)` drop-in index semantics (R2). |
-| `packages/app/src/services/task-verdict.ts:107` (`extractRequirements`) | Replace `.split('|').map(trim).filter(Boolean)` with `splitTableCells(trimmed)` so requirement evidence with a GFM-escaped pipe keeps full text (R2). |
-| `packages/app/src/services/task-verdict.ts:200` (`extractAcceptanceCriteria`) | Replace the same split chain with `splitTableCells(trimmed)` (R2). |
+| `packages/app/src/services/task-verdict.ts:168-173` | Add module-private `splitTableCells(row: string): string[]` — splits on unescaped pipes (`/(?<!\\\\)\\|/`) then unescapes `\\|` to `|`, preserving the old `.filter(Boolean)` drop-in index semantics (R2). |
+| `packages/app/src/services/task-verdict.ts:103` (`extractRequirements`) | Replace `.split('|').map(trim).filter(Boolean)` with `splitTableCells(trimmed)` so requirement evidence with a GFM-escaped pipe keeps full text (R2). |
+| `packages/app/src/services/task-verdict.ts:196` (`extractAcceptanceCriteria`) | Replace the same split chain with `splitTableCells(trimmed)` (R2). |
 | `packages/app/src/services/task-verdict.ts:191-197` (`extractAcceptanceCriteria`) | Add heading boundary `if (inTable && /^#{1,6}\\s/.test(trimmed)) { inTable = false; continue; }` as the first statement of the loop body, before the `!startsWith('|')` guard — closes the AC table at `### SECUA Review` so its rows never read as AC rows (R1). |
-| `packages/app/src/services/task-verdict.ts:333` (`extractChecks`) | Replace the split chain with `splitTableCells(trimmed)` (R2, shared defect). |
+| `packages/app/src/services/task-verdict.ts:329` (`extractChecks`) | Replace the split chain with `splitTableCells(trimmed)` (R2, shared defect). |
 | `packages/app/tests/services/task-verdict.test.ts:426-533` | Add `describe('answer parser fixes (0590)')` covering R3 a–e: schema-conformant SECUA file → no `ac-row-dropped`; `\\|` in AC evidence intact; `\\|` in early AC column keeps status/evidenceType alignment; `\\|` in requirement evidence intact; malformed row inside AC table still reports `ac-row-dropped`. |
 
 Rationale: one shared escape-aware splitter is the root fix for all three scanners (each re-implemented the same `trimmed.split('|')`), and the heading-boundary reset addresses the only scanner with no table-close mechanism. No new API, no schema/contract change, no `ac-row-dropped` weakening (0398 R6 silence guard intact).
@@ -310,7 +310,7 @@ Rationale: one shared escape-aware splitter is the root fix for all three scanne
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | Heading boundary implemented at `packages/app/src/services/task-verdict.ts:191-197` — `if (inTable && /^#{1,6}\s/.test(trimmed)) { inTable = false; continue; }` placed as the first statement of the `extractAcceptanceCriteria` loop body, ahead of the `!startsWith('\|')` guard exactly as the frozen Design required. Re-read this run. Effect proven end-to-end: `.spur/run/0588-verify-answer.txt` re-derived via `bun run apps/cli/src/index.ts task verdict 0588 --from-answer` yields 4 AC rows and **no** `ac-row-dropped`, against 6 spurious SECUA drops before |
-| R2 | MET | `splitTableCells` added at `packages/app/src/services/task-verdict.ts:172-177` (module-private, not exported) and wired at all three former `split('\|')` sites — `:107` `extractRequirements`, `:200` `extractAcceptanceCriteria`, `:333` `extractChecks`. All four anchors re-read this run. Behaviour proven by probe: a requirement row whose evidence is `` `jq -r '.a \| .b'` `` now parses to the full text with the escape resolved to a literal pipe |
+| R2 | MET | `splitTableCells` added at `packages/app/src/services/task-verdict.ts:168-173` (module-private, not exported) and wired at all three former `split('\|')` sites — `:103` `extractRequirements`, `:196` `extractAcceptanceCriteria`, `:329` `extractChecks`. All four anchors re-read this run. Behaviour proven by probe: a requirement row whose evidence is `` `jq -r '.a \| .b'` `` now parses to the full text with the escape resolved to a literal pipe |
 | R3 | MET | `describe('answer parser fixes (0590)')` at `packages/app/tests/services/task-verdict.test.ts:426-533` with sub-tests (a)–(e) matching the Plan one-for-one. `bun test packages/app/tests/services/task-verdict.test.ts` → **44 pass, 0 fail, 138 expect()** (was 34 tests before this task) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

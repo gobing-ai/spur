@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import { TaskLocator } from '../../src/services/task-locator';
 import {
@@ -15,6 +16,134 @@ import {
     WbsCollisionError,
 } from '../../src/services/task-service';
 
+/**
+ * Canonical-standard section matrix mirroring the build-time matrix asset
+ * (standard + feature-impl variants), injected into create/batch fixtures so
+ * creation resolves the matrix as the sole section authority (F92 R1).
+ */
+const TEST_SECTION_MATRIX: SectionMatrix = {
+    variants: {
+        standard: {
+            backlog: {
+                required: ['Background'],
+                optional: [
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+            todo: {
+                required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'],
+                optional: ['Q&A', 'Requirements', 'Solution', 'Testing', 'Review'],
+            },
+            wip: {
+                required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'],
+                optional: ['Q&A', 'Requirements', 'Solution', 'Testing', 'Review'],
+            },
+            testing: {
+                required: ['Solution', 'Testing'],
+                optional: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan', 'Review'],
+            },
+            done: {
+                required: ['Solution', 'Testing', 'Review'],
+                optional: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan'],
+                gate: true,
+            },
+            blocked: {
+                required: ['Background'],
+                optional: [
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+            cancelled: {
+                required: [],
+                optional: [
+                    'Background',
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+        },
+        'feature-impl': {
+            backlog: {
+                required: ['Background'],
+                optional: [
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+            todo: {
+                required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'],
+                optional: ['Q&A', 'Requirements', 'Solution', 'Testing', 'Review'],
+            },
+            wip: {
+                required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'],
+                optional: ['Q&A', 'Requirements', 'Solution', 'Testing', 'Review'],
+            },
+            testing: {
+                required: ['Solution', 'Testing'],
+                optional: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan', 'Review'],
+            },
+            done: {
+                required: ['Solution', 'Testing', 'Review'],
+                optional: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan'],
+                gate: true,
+            },
+            blocked: {
+                required: ['Background'],
+                optional: [
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+            cancelled: {
+                required: [],
+                optional: [
+                    'Background',
+                    'Requirements',
+                    'Acceptance Criteria',
+                    'Q&A',
+                    'Design',
+                    'Plan',
+                    'Solution',
+                    'Testing',
+                    'Review',
+                ],
+            },
+        },
+    },
+};
+
 let tasksDir: string;
 let svc: TaskService;
 
@@ -24,7 +153,7 @@ beforeAll(async () => {
     const fs = createNodeFileSystem(root);
     await fs.ensureDir(tasksDir);
     const writeService = new PlanningWriteService({ fs });
-    svc = new TaskService({ fs, tasksDir, writeService });
+    svc = new TaskService({ fs, tasksDir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
 });
 
 afterAll(() => {
@@ -70,16 +199,19 @@ describe('TaskService', () => {
             expect(doc.frontmatterData?.status).toBe('backlog');
         });
 
-        test('a bare task carries only Background + History (backlog section set)', async () => {
-            // WHY: a not-yet-prepared task should not ship empty Design/Solution
-            // headings that would trip the format gate (the original dogfood bug).
+        test('a bare task carries the matrix scaffold for backlog (F92 R1)', async () => {
+            // WHY: F92 R1 makes the section-matrix the SOLE section authority. The
+            // canonical backlog entry's required ∪ optional = the full lifecycle
+            // scaffold (Background through Review), matching the shipped template.
             const result = await svc.create({ title: 'Bare sections' });
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             const raw = await fs.readFile(result.ref.filePath);
             expect(raw).toContain('### Background');
             expect(raw).toContain('### History');
-            expect(raw).not.toContain('### Solution');
-            expect(raw).not.toContain('### Design');
+            // The scaffold carries the future-stage headings (tolerated as empty
+            // optional placeholders) — the matrix, not a hand-written list, decides.
+            expect(raw).toContain('### Solution');
+            expect(raw).toContain('### Design');
         });
 
         test('a feature-spec task is created at todo with the HITL-review sections', async () => {
@@ -94,8 +226,10 @@ describe('TaskService', () => {
             expect(raw).toContain('### Acceptance Criteria');
             expect(raw).toContain('### Design');
             expect(raw).toContain('### Plan');
-            // Solution is the implementation change-map — not present until wip.
-            expect(raw).not.toContain('### Solution');
+            // F92 R1: todo's matrix entry (required ∪ optional) carries the full
+            // scaffold, so Solution is present as an empty optional placeholder —
+            // the matrix, not a hand-authored creation list, decides the headings.
+            expect(raw).toContain('### Solution');
         });
 
         test('writes the template variant to frontmatter; bare → standard, feature → feature-impl', async () => {
@@ -139,6 +273,39 @@ describe('TaskService', () => {
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
+        });
+
+        test('create fails loudly with no section-matrix entry (F92 R1 — no hand-maintained fallback)', async () => {
+            // WHY: R1 deletes DEFAULT_CREATION_SECTIONS. A missing matrix (or a
+            // missing entry for the variant/status) must be a hard error, not a
+            // silent permissive default — a fallback would make the same task
+            // render differently by installation layout and defeat the SSOT.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-nomat-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const rootFs = createNodeFileSystem(root);
+            // No sectionMatrix injected at all -> create must reject loudly.
+            const noMatrix = new TaskService({ fs: rootFs, tasksDir: dir, writeService });
+            await expect(noMatrix.create({ title: 'No matrix' })).rejects.toThrow('section-matrix');
+            rmSync(root, { recursive: true, force: true });
+
+            // A matrix that lacks the requested variant/status entry -> also loud.
+            const root2 = mkdtempSync(join(tmpdir(), 'spur-task-svc-nomat2-'));
+            const dir2 = join(root2, 'tasks');
+            const isolateFs2 = createNodeFileSystem(root2);
+            await isolateFs2.ensureDir(dir2);
+            const writeService2 = new PlanningWriteService({ fs: isolateFs2 });
+            const svc2 = new TaskService({
+                fs: isolateFs2,
+                tasksDir: dir2,
+                writeService: writeService2,
+                // standard.wip is undeclared -> entry missing.
+                sectionMatrix: { variants: { standard: { backlog: { required: ['Background'] } } } },
+            });
+            await expect(svc2.create({ title: 'No entry', status: 'wip' })).rejects.toThrow('no section-matrix entry');
+            rmSync(root2, { recursive: true, force: true });
         });
     });
 
@@ -221,6 +388,7 @@ describe('TaskService', () => {
                 fs,
                 tasksDir: join(root, 'tasks'),
                 writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: TEST_SECTION_MATRIX,
             });
             await fs.writeFile(
                 join(root, 'archive', '0001_archived.md'),
@@ -335,56 +503,102 @@ describe('TaskService', () => {
             expect(parentsWired[0]?.errors.length).toBeGreaterThan(0);
         });
 
-        test('does not rewrite body lines that look like frontmatter keys (R2)', async () => {
-            // WHY: patchFrontmatterField once matched the whole file; a body line
-            // `priority: must-not-be-patched` would be rewritten when the key was
-            // absent from frontmatter. Matching is constrained to the FM block.
-            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-r2-'));
+        test('batch-create headings come from the matrix entry, not a template (F92 R1)', async () => {
+            // WHY: R1 makes the matrix the sole creator of section headings. A
+            // variant whose todo entry carries only Background + Plan must NOT
+            // emit the full template scaffold — template files supply bodies, not
+            // document layout.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-mat-'));
             const dir = join(root, 'tasks');
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const rawTemplate = [
-                '---',
-                'schema_version: 1',
-                'name: "{{ NAME }}"',
-                'description: ""',
-                'status: backlog',
-                'type: task',
-                'template: standard',
-                'feature_id: null',
-                'parent_wbs: null',
-                'tags: []',
-                'dependencies: []',
-                'created_at: "{{ CREATED_AT }}"',
-                'updated_at: "{{ CREATED_AT }}"',
-                '---',
-                '',
-                '### Background',
-                '{{ BACKGROUND }}',
-                '',
-                '### Requirements',
-                'priority: must-not-be-patched',
-                '',
-            ].join('\n');
             const isolateSvc = new TaskService({
                 fs: isolateFs,
                 tasksDir: dir,
                 writeService,
-                resolveTemplate: () => rawTemplate,
+                // `standard` variant, but a deliberately sparse todo entry —
+                // proves headings come from the matrix, not a template scaffold.
+                sectionMatrix: {
+                    variants: {
+                        standard: { todo: { required: ['Background', 'Plan'] } },
+                    },
+                },
             });
-
             try {
-                const batchFile = join(dir, 'batch-r2.json');
-                await isolateFs.writeFile(batchFile, JSON.stringify([{ name: 'R2 body-key guard', priority: 'P0' }]));
+                const batchFile = join(dir, 'batch-mat.json');
+                // A background makes the item a spec'd task -> created at `todo`,
+                // the only status the `slim` variant declares.
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([{ name: 'Mat header', background: 'Spec body.' }]),
+                );
                 const { children } = await isolateSvc.batchCreate(batchFile);
                 expect(children).toHaveLength(1);
                 const first = children[0];
                 if (first === undefined) throw new Error('expected batch child');
                 const raw = await isolateFs.readFile(first.ref.filePath);
-                expect(raw).toContain('priority: must-not-be-patched');
+                // Matrix entry (required ∪ optional) + universal sections.
+                expect(raw).toContain('### Background');
+                expect(raw).toContain('### Plan');
+                expect(raw).toContain('### References');
+                expect(raw).toContain('### History');
+                // Not the full scaffold — Design/AC are absent because the slim
+                // todo entry does not declare them.
+                expect(raw).not.toContain('### Design');
+                expect(raw).not.toContain('### Acceptance Criteria');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('does not rewrite body lines that look like frontmatter keys (R2)', async () => {
+            // WHY: R1 removed template-as-skeleton rendering — the body is authored
+            // directly through buildTaskSkeleton, so a body line that *looks* like a
+            // frontmatter key can never be rewritten into the frontmatter block. The
+            // matrix decides the headings; bodies stay where they were authored.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-r2-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: {
+                    variants: {
+                        standard: {
+                            todo: { required: ['Background', 'Requirements'], forbidden: ['Review'] },
+                            backlog: { required: ['Background', 'Requirements'] },
+                        },
+                    },
+                },
+            });
+
+            try {
+                const batchFile = join(dir, 'batch-r2.json');
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([
+                        {
+                            name: 'R2 body-key guard',
+                            priority: 'P0',
+                            requirements: 'R1. priority: must-not-be-patched stays a body line',
+                        },
+                    ]),
+                );
+                const { children } = await isolateSvc.batchCreate(batchFile);
+                expect(children).toHaveLength(1);
+                const first = children[0];
+                if (first === undefined) throw new Error('expected batch child');
+                const raw = await isolateFs.readFile(first.ref.filePath);
+                // The body line stays under ### Requirements — not rewritten into FM.
+                expect(raw).toContain('priority: must-not-be-patched stays a body line');
                 const doc = MarkdownDocument.parse(raw, 'task');
+                // Frontmatter carries its own priority; the body only holds content.
                 expect(doc.frontmatterData?.priority).toBe('P0');
+                expect(doc.getSection('Requirements')).toContain('must-not-be-patched');
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
@@ -397,7 +611,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 const batchFile = join(dir, 'batch-rollback.json');
@@ -438,7 +657,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 const batchFile = join(dir, 'batch-sections.json');
@@ -472,7 +696,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 const batchFile = join(dir, 'batch-design.json');
@@ -512,7 +741,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 const batchFile = join(dir, 'batch-bullet.json');
@@ -567,7 +801,12 @@ describe('TaskService', () => {
                 }
             }
             const writeService = new FailOnSecondCreate({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 const batchFile = join(dir, 'batch-midfail.json');
@@ -594,7 +833,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 // Use the service to allocate a valid parent. The create path
@@ -689,7 +933,12 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
             const writeService = new PlanningWriteService({ fs: isolateFs });
-            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
 
             try {
                 await isolateSvc.create({ title: 'Backlog item', status: 'backlog' });
@@ -729,6 +978,7 @@ describe('TaskService', () => {
                 fs: isolateFs,
                 tasksDir: primary,
                 writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
                 foldersConfig: {
                     active_folder: primary,
                     folders: {
@@ -768,6 +1018,7 @@ describe('TaskService', () => {
                 fs: isolateFs,
                 tasksDir: primary,
                 writeService,
+                sectionMatrix: TEST_SECTION_MATRIX,
                 foldersConfig: {
                     active_folder: primary,
                     folders: {
@@ -1329,7 +1580,7 @@ describe('TaskService — dedup guard (task 0341 R4)', () => {
         const fs = createNodeFileSystem(dir);
         await fs.ensureDir(localTasksDir);
         const writeService = new PlanningWriteService({ fs });
-        localSvc = new TaskService({ fs, tasksDir: localTasksDir, writeService });
+        localSvc = new TaskService({ fs, tasksDir: localTasksDir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
     });
 
     afterAll(() => {
@@ -1480,7 +1731,12 @@ describe('sectionIsBare', () => {
             const dir = join(root, 'tasks');
             const fs = createNodeFileSystem(root);
             await fs.ensureDir(dir);
-            const svc = new TaskService({ fs, tasksDir: dir, writeService: new PlanningWriteService({ fs }) });
+            const svc = new TaskService({
+                fs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
             await fs.writeFile(
                 join(dir, '0001_parent.md'),
                 `---\nname: "Parent"\nstatus: wip\n---\n\n## 0001. Parent\n\n### Plan\n\n${opts.parentPlan}\n`,
@@ -1557,7 +1813,12 @@ describe('sectionIsBare', () => {
             const dir = join(root, 'tasks');
             const fs = createNodeFileSystem(root);
             await fs.ensureDir(dir);
-            const svc = new TaskService({ fs, tasksDir: dir, writeService: new PlanningWriteService({ fs }) });
+            const svc = new TaskService({
+                fs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
             await fs.writeFile(
                 join(dir, '0001_parent.md'),
                 '---\nname: "Parent"\nstatus: wip\n---\n\n## 0001. Parent\n',
@@ -1590,7 +1851,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         const fs = createNodeFileSystem(root);
         await fs.ensureDir(dir);
         const writeService = new PlanningWriteService({ fs });
-        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
 
         try {
             // Pre-seed a file with WBS 0500.
@@ -1617,7 +1878,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         const fs = createNodeFileSystem(root);
         await fs.ensureDir(dir);
         const writeService = new PlanningWriteService({ fs });
-        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
 
         try {
             await fs.writeFile(
@@ -1648,7 +1909,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         const fs = createNodeFileSystem(root);
         await fs.ensureDir(dir);
         const writeService = new PlanningWriteService({ fs });
-        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: TEST_SECTION_MATRIX });
 
         try {
             await fs.writeFile(
@@ -1685,6 +1946,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             fs,
             tasksDir: dir,
             writeService,
+            sectionMatrix: TEST_SECTION_MATRIX,
             foldersConfig: {
                 active_folder: dir,
                 folders: {
@@ -1712,6 +1974,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             fs,
             tasksDir: dir,
             writeService,
+            sectionMatrix: TEST_SECTION_MATRIX,
             foldersConfig: {
                 active_folder: dir,
                 folders: {
@@ -1751,6 +2014,7 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             fs,
             tasksDir: primary,
             writeService,
+            sectionMatrix: TEST_SECTION_MATRIX,
             foldersConfig: {
                 active_folder: primary,
                 folders: {

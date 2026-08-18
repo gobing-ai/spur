@@ -12,10 +12,12 @@ Task bodies are edited section-by-section through `spur task update --section <n
 replaced wholesale from the file you point at. There is no inline-body flag — always stage the new
 body in a file first.
 
-For **pipeline output** (`Testing` / `Review` / safety-net `Solution`), prefer `spur task record`
-over hand-assembling files — it renders the matrix-compliant tables from a verify verdict for you.
-Use the manual recipe below for `Plan`, `Acceptance Criteria`, hand-authored `Solution`, and any
-narrative section.
+For **pipeline output**, section authorship is one-writer-per-section (F92 0593 R1):
+`Testing` comes from `spur task record` (deterministic, from a verify verdict artifact — the
+matrix-compliant tables are rendered for you); `Review` is authored by the review coordinator
+(`/sp:dev-review`), with `record` backfilling it only when bare; `Solution` is authored by the
+implement step (record safety-nets a bare `Solution` from the diff). Use the manual recipe below
+for `Plan`, `Acceptance Criteria`, hand-authored `Solution`, and any narrative section.
 
 ## The recipe
 
@@ -47,16 +49,19 @@ exactly: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `
 
 ## `record` vs. hand-editing
 
-`spur task record 0040 --transition testing` reads `.spur/run/0040-verdict.json` and writes both
-`Testing` (per-requirement table) and `Review` (P1–P4 findings table) in the matrix-required shape,
-optionally backfilling a bare `Solution` from `git diff -U0`. It never transitions to `done`.
+`spur task record 0040 --transition testing` reads `.spur/run/0040-verdict.json`, writes
+`Testing` (per-requirement table), and backfills `Review` (P1–P4 findings table) **only when the
+section is bare** — a standalone compatibility fallback, never an overwrite of the review
+coordinator's authored Review — optionally backfilling a bare `Solution` from `git diff -U0`. It
+never transitions to `done`.
 
-- **Use `record`** when a verify step produced a verdict artifact — it is the pipeline's record step.
+- **Use `record`** when a verify step produced a verdict artifact — it is the pipeline's record step
+  and the deterministic `Testing` writer.
 - **Use `update --section`** when you are authoring a section by hand (planning, design, narrative
   solution) or amending one `record` already wrote.
 
-The two are interchangeable on the same section: `record` writes `Review`, a later
-`update --section Review` overwrites it. Both go through the same file-wins atomic write.
+`record` writes `Testing` unconditionally and `Review` only when bare; a later
+`update --section` overwrites either (file-wins). Both go through the same file-wins atomic write.
 
 ## Which section, when
 
@@ -68,9 +73,13 @@ LLM's job (orchestrated by `sp:spur-dev`); this skill only owns the *mechanism*:
 | `Background` | at create (derived from feature `Goal` if `--feature`) | why this task exists |
 | `Acceptance Criteria` | planning (present at `todo` for spec'd tasks) | the scenarios this task satisfies (matched to feature AC by title) |
 | `Plan` | before `wip` | the step list |
-| `Solution` | during impl (first appears at `wip`) | the approach actually taken; L3 `file:line` rule fires once it has real content |
-| `Testing` | testing phase (via `record`) | what was verified and how — gated at `wip→testing` by `check` |
-| `Review` | review phase (via `record`) | SECU findings + verdict — gated at `testing→done` by `check --strict-core` |
+| `Solution` | during impl (implement step) | the approach actually taken; L3 `file:line` rule fires once it has real content |
+| `Testing` | testing phase (`record` — deterministic writer) | what was verified and how — gated at `wip→testing` by `check` |
+| `Review` | review phase (`/sp:dev-review` coordinator) | merged SECU findings + verdict — gated at `testing→done` by `check --strict-core` |
+
+Section presence per status is a **runtime contract**, not a table: query
+`spur task sections <wbs> list --json` (permitted present sections) and `spur task check <wbs> --json`
+(required sections at the current status) before writing.
 
 A spec'd task (`--feature` link or batch item with `background`/`requirements`) is created at `todo`
 with Acceptance Criteria + Plan scaffolding present; a bare capture is created at `backlog` with

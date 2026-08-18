@@ -187,9 +187,11 @@ When invoked as the `--focus architecture` dimension of `/sp:dev-review`:
 - The scope is the task's diff (pipeline) or the `path` arg (standalone).
 - `blocker`/`major` candidates block the `approve(HITL)` gate alongside any SECUA blockers from
   `sp:code-verification`.
-- The candidate list is recorded in the task's `## Review` section (written by the pipeline's
-  `record` step via `spur task update --section`).
-- This skill does **not** write to the task file directly — the pipeline (or the operator) does.
+- The candidate list is returned as a **review fragment**; the review coordinator
+  (`sp:super-reviewer` under `/sp:dev-review`) merges it into the combined `## Review` section —
+  it is never written by `record`, which backfills `## Review` only when the section is bare
+  (fallback-only, F92 0593 R1).
+- This skill does **not** write to the task file directly — the coordinator (or the operator) does.
 
 Standalone, the skill emits the candidate list as advisory output; the operator acts on it.
 

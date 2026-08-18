@@ -147,8 +147,9 @@ blank Design before implement (`/sp:dev-refine` / `dev-refineall`).
 The `template` field is the **single variant axis** (TASK_VARIANTS): it selects the section
 layout (the `section-matrix.yaml` variant), the scaffold body file
 (`.spur/templates/task/<variant>.md`), and is written to the task's `template:` frontmatter.
-Which sections actually appear is **stage-driven** by the matrix (e.g. `Solution` only from `wip`),
-not a fixed list — pick the variant by *purpose*, not by a section checklist.
+Which sections actually appear is **status-driven** by the runtime matrix — query
+`spur task sections <wbs> list --json` rather than assuming a fixed list — pick the variant by
+*purpose*, not by a section checklist.
 
 | Variant | When to use |
 |---------|-------------|
@@ -464,18 +465,16 @@ with research/design/implement/integrate/test as `## Plan` steps.
 
 A task created with a spec (a `--feature` link, or a batch item carrying `background`/
 `requirements`) lands at **`todo`** — "ready to execute" (§2.3). A bare capture lands at
-**`backlog`** — "still preparing". The Section-Status-Matrix
-(`.spur/tasks/section-matrix.yaml`) decides which sections a task carries at each stage; the
-producer renders them with invisible HTML guidance comments. You do **not** hand-build the section
-list — `spur task create` / `batch-create` does it from the matrix.
+**`backlog`** — "still preparing". The runtime section matrix decides which sections a task
+carries at each status; the producer renders them with invisible HTML guidance comments. You do
+**not** hand-build the section list — `spur task create` / `batch-create` does it from the matrix.
 
-| Stage | Means | Sections present |
-|-------|-------|------------------|
-| `backlog` | still preparing | Background |
-| `todo` | ready to execute — the **HITL review gate** | Background, Acceptance Criteria, Design, Plan (+ Q&A/Requirements optional) |
-| `wip` | implementing | + Solution (the change-map starts here) |
-| `testing` | verifying | Solution, Testing |
-| `done` | shipped | Solution, Testing, Review (gated) |
+**Query the runtime contract — never restate a status-to-section table (F92 0593 R2).**
+`spur task sections <wbs> list --json` returns the matrix required/optional/forbidden sections
+per status; `spur task check <wbs> --json` returns what the gate requires at the current status.
+Both replace any static "sections present at stage X" projection. The section *content* guidance
+below (Design = the decision record, Solution = the change-map) is prose ownership, not a
+section-layout authority.
 
 **Design (written at `todo`, for HITL review) = the decision record — WHAT/WHY:**
 the chosen approach + a one-line reason, rejected alternatives, key interface/type **signatures**

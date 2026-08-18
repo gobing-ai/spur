@@ -40,7 +40,7 @@ import { z } from 'zod';
  */
 export const STAGE_REGISTRY_SCHEMA_VERSION = {
     major: 1,
-    minor: 2,
+    minor: 3,
 } as const;
 
 /** Schema version shape used by records and consumers. */
@@ -253,6 +253,15 @@ export const stageArtifactSchema = z
         kind: z.string().min(1),
         /** Direction relative to the stage. */
         direction: z.enum(ARTIFACT_DIRECTIONS),
+        /**
+         * Exact artifact identity (F92 0593 R2): the task-section name this
+         * stage owns (`Solution`, `Testing`, `Review`) or the artifact file
+         * basename (`<wbs>-verdict.json`). Optional — carried only where a
+         * stage's evidence-section output is part of the one-writer-per-section
+         * contract. Skills and the plugin mirror project from this field; they
+         * never restate ownership as prose policy.
+         */
+        identity: z.string().optional(),
         /** Optional human-readable description. */
         description: z.string().optional(),
         /** False marks an optional artifact; defaults to true. */
@@ -720,7 +729,15 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         id: 'refine',
         aliases: ['dev-refine'],
         description: 'dev-refine: Q&A refinement, section filling, AC tightening',
-        artifacts: [{ kind: 'task-section', direction: 'output', required: true }],
+        artifacts: [
+            {
+                kind: 'task-section',
+                direction: 'input',
+                required: true,
+                description: 'Background/Requirements sections',
+            },
+            { kind: 'task-section', direction: 'output', required: true, description: 'Q&A/Design/Plan/AC sections' },
+        ],
         reasoning_skill: 'sp:spur-dev',
         required_references: [],
         gates: [],
@@ -746,10 +763,16 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         id: 'plan',
         aliases: ['dev-plan'],
         description: 'dev-plan: feature intake -> AC generation -> decomposition',
-        artifacts: [{ kind: 'task-batch', direction: 'output', required: true }],
+        artifacts: [
+            { kind: 'feature-frontmatter', direction: 'input', required: true },
+            { kind: 'task-batch', direction: 'output', required: true },
+        ],
         reasoning_skill: 'sp:spur-dev',
         required_references: [],
-        gates: [],
+        gates: [
+            { name: 'feature-check', timing: 'post', min_verdict: 'pass' },
+            { name: 'batch-create', timing: 'post', min_verdict: 'pass' },
+        ],
         mutation_class: 'corpus',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
@@ -770,7 +793,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         id: 'implement',
         aliases: ['dev-run'],
         description: 'dev-run --mode implement: code edits in worktree',
-        artifacts: [{ kind: 'worktree-diff', direction: 'output', required: true }],
+        artifacts: [
+            { kind: 'worktree-diff', direction: 'output', required: true },
+            { kind: 'task-section', direction: 'output', required: true, identity: 'Solution' },
+        ],
         reasoning_skill: 'sp:code-implementation',
         required_references: [],
         gates: [],
@@ -794,7 +820,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         id: 'test',
         aliases: ['dev-unit', 'dev-fixall'],
         description: 'dev-unit: generate/extend tests to coverage target',
-        artifacts: [{ kind: 'test-file', direction: 'output', required: true }],
+        artifacts: [
+            { kind: 'test-file', direction: 'output', required: true },
+            { kind: 'coverage-report', direction: 'output', required: false },
+        ],
         reasoning_skill: 'sp:code-testing',
         required_references: [],
         gates: [],
@@ -817,10 +846,16 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         id: 'verify',
         aliases: ['dev-verify'],
         description: 'dev-verify: SECUA review + requirements traceability',
-        artifacts: [{ kind: 'verdict-artifact', direction: 'output', required: true }],
+        artifacts: [
+            { kind: 'worktree-diff', direction: 'input', required: true },
+            { kind: 'verdict-artifact', direction: 'output', required: true, identity: '<wbs>-verdict.json' },
+        ],
         reasoning_skill: 'sp:code-verification',
         required_references: [],
-        gates: [],
+        gates: [
+            { name: 'verdict-artifact', timing: 'post', min_verdict: 'pass' },
+            { name: 'strict-core', timing: 'post', min_verdict: 'pass' },
+        ],
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'escalate' },
         model_policy: {
@@ -843,7 +878,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         artifacts: [{ kind: 'learning-entry', direction: 'output', required: true }],
         reasoning_skill: 'sp:spur-dev',
         required_references: [],
-        gates: [],
+        gates: [{ name: 'task-check', timing: 'pre', min_verdict: 'pass' }],
         mutation_class: 'learnings',
         retry: { max_attempts: 2, terminal_stop: 'block' },
         model_policy: {
@@ -856,14 +891,14 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         },
         context_layers: [],
         observability: [],
-        execution: { kind: 'inline', current_agent_allowed: true },
+        execution: { kind: 'hitl', current_agent_allowed: true, gate_timing: 'both' },
     },
     {
         schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
         id: 'review',
         aliases: ['dev-review'],
-        description: 'dev-review: multi-dimensional code review',
-        artifacts: [{ kind: 'review-findings', direction: 'output', required: true }],
+        description: 'dev-review: multi-dimensional code review (coordinator writes the combined Review)',
+        artifacts: [{ kind: 'review-findings', direction: 'output', required: true, identity: 'Review' }],
         reasoning_skill: 'sp:code-verification',
         required_references: [],
         gates: [],
@@ -883,10 +918,40 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
     },
     {
         schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'record',
+        aliases: ['dev-record'],
+        description: 'record: deterministic Testing write-back from the verdict artifact; bare-Review fallback only',
+        artifacts: [
+            { kind: 'verdict-artifact', direction: 'input', required: true, identity: '<wbs>-verdict.json' },
+            { kind: 'task-section', direction: 'output', required: true, identity: 'Testing' },
+            {
+                kind: 'task-section',
+                direction: 'output',
+                required: false,
+                identity: 'Review',
+                description:
+                    'fallback-only: backfills Review only when the section is bare; never overwrites authored Review',
+            },
+        ],
+        reasoning_skill: 'inline',
+        required_references: [],
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 1, terminal_stop: 'block' },
+        model_policy: { min_tier: 'cheap', fallback: [] },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'deterministic', current_agent_allowed: false, executor: 'cli' },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
         id: 'dogfood',
         aliases: ['dev-dogfood'],
         description: 'dev-dogfood: end-to-end driver test',
-        artifacts: [{ kind: 'dogfood-report', direction: 'output', required: true }],
+        artifacts: [
+            { kind: 'dogfood-report', direction: 'output', required: true },
+            { kind: 'monitor-ledger', direction: 'output', required: false },
+        ],
         reasoning_skill: 'sp:dogfood-testing',
         required_references: [],
         gates: [],

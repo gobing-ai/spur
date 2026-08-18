@@ -338,6 +338,14 @@ describe('createServerContext', () => {
                 featuresDir,
                 foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { baseCounter: 0 } } },
             },
+            // F92 R1: the section matrix is now required for task creation — provide one.
+            sectionMatrix: {
+                variants: {
+                    standard: {
+                        backlog: { required: ['Background'], optional: ['Requirements', 'Acceptance Criteria'] },
+                    },
+                },
+            },
         });
 
         const taskSvc = ctx.taskService();

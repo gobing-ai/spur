@@ -4,12 +4,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FeatureService } from '../../src/services/feature-service';
+import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import { TaskService } from '../../src/services/task-service';
 
 let featuresDir: string;
 let tasksDir: string;
 let root: string;
+const F_SECTION_MATRIX: SectionMatrix = {
+    variants: {
+        standard: {
+            backlog: {
+                required: ['Background'],
+                optional: ['Requirements', 'Acceptance Criteria', 'Design', 'Plan', 'Solution', 'Testing', 'Review'],
+            },
+            todo: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            wip: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            testing: { required: ['Solution', 'Testing'] },
+            done: { required: ['Solution', 'Testing', 'Review'], gate: true },
+        },
+    },
+};
+
 let svc: FeatureService;
 
 beforeAll(async () => {
@@ -281,7 +297,7 @@ describe('FeatureService', () => {
             await s.create('Sub', 'A'); // A1
             await s.create('Agents'); // B
             // A task linked to feature A.
-            await new TaskService({ fs, tasksDir: tdir, writeService: write }).create({
+            await new TaskService({ fs, tasksDir: tdir, writeService: write, sectionMatrix: F_SECTION_MATRIX }).create({
                 title: 'Impl foundation',
                 featureId: 'A',
                 status: 'backlog',
@@ -467,7 +483,7 @@ describe('FeatureService', () => {
             await s.create('Sub', 'A'); // A1
             await s.create('Deep', 'A1'); // A11
             await s.create('Other'); // B
-            await new TaskService({ fs, tasksDir: tdir, writeService: write }).create({
+            await new TaskService({ fs, tasksDir: tdir, writeService: write, sectionMatrix: F_SECTION_MATRIX }).create({
                 title: 'impl sub',
                 featureId: 'A1',
             });

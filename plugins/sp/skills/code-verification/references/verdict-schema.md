@@ -139,3 +139,50 @@ completion without an explicit PASS artifact.
 - **Read:** by the workflow gate on the `verify → record` transition.
 - **Location:** `.spur/run/` (the run-scratch dir the pipeline's `record` step also uses).
 - **Lifetime:** per execution attempt; overwritten on the next verify of the same WBS.
+
+## Optional check severity (task 0592, feature F92)
+
+`checks[]` rows may carry an optional `severity` field so the aggregation policy can distinguish a
+blocking review finding from a non-blocking one:
+
+```typescript
+checks: Array<{
+  name: string;                                // aliases accepted on read: `check`, `id`
+  status: 'pass' | 'fail' | 'warn';
+  evidence: string;
+  severity?: 'blocker' | 'major' | 'minor' | 'advisory';
+}>;
+```
+
+### Compatibility aliases: check label key
+
+Producers SHOULD write the check label as `name`. Consumers ALSO accept `check` and `id` as
+aliases, normalized to `name` in the same single place the `scenario`→`id` coverage alias is
+normalized (`checkSchema` in `verify-verdict.ts`). A row carrying none of the three is
+**structurally invalid** — an unnamed check cannot be matched by the aggregation policy's
+`task-check` detection, so it would silently exempt a failed task-check from the completion rule.
+
+The alias resolves for raw rows as well as parsed ones (`checkRowName`), because
+`aggregateVerifyVerdict` and the done guard's task-check lookup both run over unparsed artifacts.
+Precedence is `name` → `check` → `id`, first non-empty string wins.
+
+## Canonical runtime contract + one aggregation policy (task 0592)
+
+The prose shape above is executed by a single runtime-validated contract:
+`packages/app/src/services/verify-verdict.ts`. It owns:
+
+- **`verifyVerdictSchema`** (Zod) — validates the persisted artifact and distinguishes
+  **missing** (file absent / empty), **malformed** (bad JSON), **structurally invalid**
+  (`invalid` outcome), and **valid** (with case-normalized `verdict`). The `scenario`→`id` coverage
+  alias and the `check`/`id`→`name` check-label alias are both normalized here, in exactly one place.
+- **`aggregateVerifyVerdict`** — the ONE aggregation policy every verdict consumer uses (answer
+  derivation, persisted-artifact consistency checks, task/feature validation, record rendering,
+  and the done-transition gate). Requirements/AC use `MET`/`PARTIAL`/`UNMET`/`N/A`. Checks:
+  non-pass **blocker** → FAIL, non-pass **major** → PARTIAL, **minor**/**advisory** do not block;
+  legacy rows without a severity map `fail` → FAIL and `warn` → PARTIAL. An independent task-check
+  failure can never yield PASS.
+- A row-less artifact aggregates to UNKNOWN — a stored PASS that does not recompute to PASS
+  (including a row-less PASS) is treated as non-PASS at the done gate. The done-transition choke
+  point (`done-transition-guard.ts` `evaluateDoneTransition`) is the final authority; workflow JSON
+  routing may select `verify → record/failed` but cannot weaken the final transition.
+- `--force-done --reason` on `spur task update <wbs> done` remains the sole auditable override.

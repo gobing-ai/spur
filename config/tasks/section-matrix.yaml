@@ -1,12 +1,17 @@
 # Section-Status-Matrix: which sections are required/optional/forbidden per task status.
-# Design §3.2 — evaluated CLI-side only. Ships permissive; tightened by compliance data.
+# Design §3.2 — the SOLE semantic authority for task section layout (F92 R1):
+#   * VALIDATION (`spur task check`, incl. target-aware `--as <status>` lifecycle guard)
+#   * CREATION (`spur task create` / `spur task batch-create` -> `buildTaskSkeleton`)
+# There is NO hand-maintained creation or matrix fallback — packaged/compiled
+# execution loads data copied/generated from THIS canonical file and fails loudly
+# if no asset is reachable. Template files supply section BODY content + guidance
+# only; they never own the heading list (which comes from this matrix).
 #
 # Each VARIANT (the unified template axis — TASK_VARIANTS) maps status →
 # { required, optional, forbidden } section lists. Sections reference the canonical
 # section vocabulary (§2.1). `gate: true` on a status makes L2 violations hard errors.
 #
 # The variant is selected by a task's `template:` frontmatter (default: `standard`).
-# It drives BOTH validation (`spur task check`) AND creation (`buildTaskSkeleton`).
 $schema: "@gobing-ai/spur/schemas/section-matrix.schema.json"
 
 variants:
