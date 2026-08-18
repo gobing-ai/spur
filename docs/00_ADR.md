@@ -750,3 +750,30 @@ alone, when it is the one placement decision that is effectively permanent.
 
 **Detail:** DD-14 ID rules and `spur feature move` in `04 §7.2`; ADR-051 noun discipline as the
 parallel rule for the CLI surface.
+
+## ADR-064: Pin the Implement Executor Per-Hop via `implementAgent`
+
+**Status:** Accepted (design) · **Date:** 2026-08-18 · **Feature:** H1
+
+**Decision.** Model-hop wall-clock is the long pole of a `task-pipeline.yaml` task run — measured at
+91–97% of pipeline wall-clock across 3 real runs (task 0588, source artifacts
+`.spur/run/08d76749*/` `7831bfc8*/` `97e7a2a6*/`), with implement the dominant single hop
+(12–28 min, 40–95% of its 30-min budget). The practical latency lever is **pinning a faster
+executor/model for the implement hop through the existing `implementAgent` per-hop pin**
+(`config/workflows/task-pipeline.yaml:65`), not raising the `stepTimeoutMs`/`implementTimeoutMs`
+budgets and not narrowing the deterministic gate.
+
+**Why.** The 30-min timeouts are headroom, not measured latency — setting them higher without
+measurement is how they grew from 600s. The measured bottleneck is inside the implement hop's
+generation loop, so the lever belongs on the hop's executor, not on the budget or the gate.
+
+**Constraints (binding).** (1) Keep the size↔capability gate (task 0487 R3) authoritative: a pinned
+executor below the `reviewer`-role floor must never receive an oversized task — the pin is a
+per-task choice, not a blanket downgrade. (2) Confirm on a same-task A/B (default `omp` →
+`zai/glm-5.2` vs the pinned executor) before adopting; option (ii) narrow-hop-scope is rejected as
+optimizing a non-bottleneck; option (iii) review∥verify parallelization is deferred as a real FSM
+change with structurally-dependent hops.
+
+**Detail:** task 0588 `### Design` (full evidence table + attribution + option matrix);
+`config/workflows/task-pipeline.yaml:65` (`implementAgent`), `:269` (implement `agent.run`
+`agent: ${vars.implementAgent}`).
