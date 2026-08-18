@@ -19,8 +19,10 @@ mock.module('@uiw/react-md-editor', () => ({
         },
     ),
 }));
+
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
 import '../../test-helpers/rpc-client-mock';
+
 mock.module('@dnd-kit/core', () => ({
     DndContext: ({ children }: { children: unknown }) => children,
     DragOverlay: ({ children }: { children: unknown }) => children,

@@ -438,9 +438,9 @@ describe('HttpRequestActionRunner', () => {
             makeContext({ apiToken: 'super-secret' }),
         );
 
-        const sent = (fake.calls[0]?.opts as Record<string, unknown>).headers as Record<string, string>;
-        expect(sent['X-Token']).toBe(untrusted);
-        expect(sent['X-Token']).not.toContain('super-secret');
+        const opts = fake.calls[0]?.opts as { headers?: Record<string, string> } | undefined;
+        expect(opts?.headers?.['X-Token']).toBe(untrusted);
+        expect(opts?.headers?.['X-Token']).not.toContain('super-secret');
     });
 
     // --- Required options ---

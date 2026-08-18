@@ -190,17 +190,20 @@ describe('runRuleCommand dispatch', () => {
     });
 
     test('run subcommand with bare --stop-on-first defaults to error', async () => {
-        const code = await main(['rule', 'run', '--stop-on-first'], { output: nullOutput() });
+        const cwd = await createTempProject();
+        const code = await main(['rule', 'run', '--stop-on-first'], { cwd, output: nullOutput() });
         expect(typeof code).toBe('number');
     });
 
     test('run subcommand with --stop-on-first warning parses valid severity', async () => {
-        const code = await main(['rule', 'run', '--stop-on-first', 'warning'], { output: nullOutput() });
+        const cwd = await createTempProject();
+        const code = await main(['rule', 'run', '--stop-on-first', 'warning'], { cwd, output: nullOutput() });
         expect(typeof code).toBe('number');
     });
 
     test('run subcommand with invalid --stop-on-first throws', async () => {
-        const exitCode = await main(['rule', 'run', '--stop-on-first', 'bogus'], { output: nullOutput() });
+        const cwd = await createTempProject();
+        const exitCode = await main(['rule', 'run', '--stop-on-first', 'bogus'], { cwd, output: nullOutput() });
         expect(exitCode).toBe(1);
     });
 

@@ -118,11 +118,13 @@ describe('withInvokeRouting (task 0545 R1)', () => {
         const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => current);
 
         await wrapped.emit('agent.invoke.start', { agent: 'pi' });
-        expect((calls[0]?.args[0] as Record<string, unknown>).routing).toEqual(routing);
+        const firstArg = calls[0]?.args[0] as Record<string, unknown> | undefined;
+        expect(firstArg?.routing).toEqual(routing);
 
         current = { tier: 'capable-1', executor: 'capable-exec', source: 'stage' };
         await wrapped.emit('agent.invoke.start', { agent: 'claude' });
-        expect((calls[1]?.args[0] as Record<string, unknown>).routing).toEqual(current);
+        const secondArg = calls[1]?.args[0] as Record<string, unknown> | undefined;
+        expect(secondArg?.routing).toEqual(current);
     });
 
     test('passes non-invoke events through untouched', async () => {
