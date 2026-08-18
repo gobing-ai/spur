@@ -679,6 +679,13 @@ shape was frozen by a test inside the plugin, i.e. the plugin tested the CLI's d
 2. **The two-sided ratchet extends to warning severity.** A warning outside the baseline fails
    the gate, and a baseline entry that no longer reproduces fails it too — the same
    cannot-rot property errors already have (ADR-050) and tracked shims already have (ADR-058).
+   **One key, one entry.** Reconciliation is key-addressed, so a second entry for a
+   `<kind>:<id>:<code>` key is unreachable: it can never be matched or reported stale on its
+   own, and the extras silently over-cover. A key emitting 33 findings that later emits 1 would
+   still reconcile clean, so the ratchet would see only total disappearance, never a partial
+   reduction. A duplicated key fails the gate outright. (Added 2026-08-17 during 0582's verify:
+   the first generated warning baseline held 2,541 entries over 903 keys and reintroduced exactly
+   the rot this ADR exists to end.)
 3. **An evidence anchor must name its requirement's subject, not merely resolve.** Existence +
    line bounds stop being sufficient. Ships as a warning; promotes to error once the
    qualification migration (below) has landed.

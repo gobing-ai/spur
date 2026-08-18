@@ -88,6 +88,12 @@ export interface CorpusCheckResult {
         error: SeverityCounts;
         warning: SeverityCounts;
     };
+    /**
+     * Baseline keys carrying more than one entry. Non-empty means the baseline
+     * over-covers and the ratchet cannot see a partial reduction — a gate failure,
+     * not a warning (see {@link duplicateBaselineKeys}).
+     */
+    duplicateKeys: Array<{ key: string; count: number }>;
     ok: boolean;
 }
 
@@ -557,6 +563,26 @@ export async function collectObservedFindings(projectRoot: string, since?: strin
 }
 
 /**
+ * Baseline keys that appear more than once, with their repeat count.
+ *
+ * WHY this is a defect and not bookkeeping: reconciliation is key-addressed, so a
+ * second entry for a key can never be matched independently — it silently over-covers.
+ * A task emitting 33 findings for one key that later emits 1 still reconciles clean,
+ * because 1 observation satisfies the key and the other 32 entries are unreachable. The
+ * ratchet then detects only a key's *total* disappearance, never a partial reduction —
+ * which is the suppression-list rot the two-sided design exists to prevent (ADR-050,
+ * ADR-062). One key, one entry, one diagnosis.
+ */
+export function duplicateBaselineKeys(baseline: Baseline): Array<{ key: string; count: number }> {
+    const counts = new Map<string, number>();
+    for (const e of baseline.entries) counts.set(key(e), (counts.get(key(e)) ?? 0) + 1);
+    return [...counts]
+        .filter(([, n]) => n > 1)
+        .map(([k, count]) => ({ key: k, count }))
+        .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+/**
  * The two-sided per-severity reconciliation — shared by the gate (`runCorpusCheck`)
  * and by baseline generation/verification tooling (task 0582 R5), so a staged
  * baseline is verified by the exact logic the gate will run against it.
@@ -595,6 +621,8 @@ export function reconcileBaseline(observed: CorpusError[], baseline: Baseline): 
         },
     };
 
+    const duplicateKeys = duplicateBaselineKeys(baseline);
+
     return {
         observed: observed.length,
         baselined: baseline.entries.length,
@@ -602,7 +630,8 @@ export function reconcileBaseline(observed: CorpusError[], baseline: Baseline): 
         newWarnings,
         staleEntries,
         bySeverity,
-        ok: unexpected.length === 0 && staleEntries.length === 0,
+        duplicateKeys,
+        ok: unexpected.length === 0 && staleEntries.length === 0 && duplicateKeys.length === 0,
     };
 }
 
@@ -633,7 +662,11 @@ export async function runCorpusCheck(cwd: string, since?: string): Promise<Corpu
         result.staleEntries.push(...retained);
         result.bySeverity.error.staleCount = retained.filter((e) => baselineSeverity(e) === 'error').length;
         result.bySeverity.warning.staleCount = retained.filter((e) => baselineSeverity(e) === 'warning').length;
-        result.ok = result.newErrors.length === 0 && result.newWarnings.length === 0 && retained.length === 0;
+        result.ok =
+            result.newErrors.length === 0 &&
+            result.newWarnings.length === 0 &&
+            retained.length === 0 &&
+            result.duplicateKeys.length === 0;
     }
 
     return result;

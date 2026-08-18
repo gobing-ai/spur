@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-17T22:49:05.671Z"
+updated_at: "2026-08-18T00:10:12.783Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -98,3 +98,4 @@ Feature: Corpus gate integrity
 ## History
 
 - 2026-08-17T22:49:05.671Z moved L → F91 (system)
+- 2026-08-18T00:10:12.783Z backlog → active (system)

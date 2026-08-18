@@ -121,8 +121,61 @@ describe('runCorpusCheck', () => {
                     staleCount: 0,
                 },
             },
+            duplicateKeys: [],
             ok: true,
         });
+    });
+
+    test('a duplicated baseline key fails the gate — extras over-cover and hide a partial reduction', async () => {
+        const root = corpusFixture();
+        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
+
+        const first = await runCorpusCheck(root);
+        const entries = uniqueBaseline(first);
+        const duplicated = entries[0];
+        expect(duplicated).toBeDefined();
+        if (duplicated === undefined) throw new Error('expected at least one baseline entry');
+
+        // Emit the SAME key twice — exactly what per-finding (rather than per-key)
+        // baseline generation produces. Reconciliation is key-addressed, so the second
+        // entry can never match independently.
+        writeBaseline(root, [...entries, duplicated]);
+
+        const result = await runCorpusCheck(root);
+        expect(result.duplicateKeys).toHaveLength(1);
+        expect(result.duplicateKeys[0]?.count).toBe(2);
+        // No new findings and nothing stale — the gate must still fail, on the duplicate alone.
+        expect(result.newErrors).toEqual([]);
+        expect(result.newWarnings).toEqual([]);
+        expect(result.staleEntries).toEqual([]);
+        expect(result.ok).toBe(false);
+    });
+
+    test('sweeps every configured task folder, not only the active one', async () => {
+        const root = corpusFixture();
+        // docs/tasks is active; docs/tasks2 is configured but inactive. Before ADR-062
+        // the per-file check ran only over the active folder, so a structural error here
+        // was invisible to the gate — which is how 404 errors accumulated across 84% of
+        // the corpus (task 0582 R1).
+        write(
+            root,
+            '.spur/config.yaml',
+            [
+                'tasks:',
+                '  active: docs/tasks',
+                '  folders:',
+                '    docs/tasks:',
+                '      baseCounter: 0',
+                '    docs/tasks2:',
+                '      baseCounter: 100',
+                '',
+            ].join('\n'),
+        );
+        write(root, 'docs/tasks2/0101_broken.md', 'not task markdown\n');
+
+        const result = await runCorpusCheck(root);
+        expect(result.newErrors.some((e) => e.id === '0101')).toBe(true);
+        expect(result.ok).toBe(false);
     });
 
     test('returns new findings and stale baseline entries as failures', async () => {

@@ -1027,10 +1027,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                 `  STALE  ${entry.kind} ${entry.id}: ${entry.code} — fixed; remove this baseline entry`,
                             );
                         }
+                        for (const dup of result.duplicateKeys) {
+                            context.output.error(
+                                `  DUP    ${dup.key} — ${dup.count} entries for one key; reconciliation is key-addressed, ` +
+                                    'so the extras over-cover and hide a partial reduction. Keep one entry per key.',
+                            );
+                        }
                         context.output.write(
                             result.ok
                                 ? 'corpus-check OK — no corpus errors or warnings outside the accepted baseline.'
-                                : 'corpus-check FAILED — reconcile new and stale findings in config/corpus-baseline.json.',
+                                : 'corpus-check FAILED — reconcile new, stale, and duplicate entries in config/corpus-baseline.json.',
                         );
                     }
                     if (!result.ok) context.setExitCode(1);

@@ -406,6 +406,8 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
  * tokens. Adjust only with new evidence.
  */
 export const CACHE_WASTE_MIN_INPUT_TOKENS = 100_000;
+
+/** Max share of fresh input the provider may serve from cache for a step to count as waste (0581 I4). */
 export const CACHE_WASTE_MAX_REUSE_FRACTION = 0.1;
 
 /** One assistant step in the 0581 rankings - raw `history_message` columns, nulls preserved. */
