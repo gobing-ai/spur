@@ -31,12 +31,11 @@ import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-confi
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
 import { FeatureCheckService } from './feature-check';
-import type { SectionMatrix } from './planning-check-base';
+import { type CorpusSeverity, key, type SectionMatrix } from './planning-check-base';
 import { TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
 
-/** Finding severity level — the gate ratchets every severity (ADR-062). */
-export type CorpusSeverity = 'error' | 'warning';
+export type { CorpusSeverity };
 
 /** One accepted-finding record from `config/corpus-baseline.json`. */
 export interface BaselineEntry {
@@ -104,10 +103,7 @@ export function baselineSeverity(e: Pick<BaselineEntry, 'severity'>): CorpusSeve
     return e.severity ?? 'error';
 }
 
-/** `<kind>:<id>:<code>` — the identity a baseline entry and an observed error share. */
-export function key(e: { kind: string; id: string; code: string }): string {
-    return `${e.kind}:${e.id}:${e.code}`;
-}
+export { key };
 
 function resolveProjectRoot(cwd: string): string {
     const fs = createNodeFileSystem(cwd);
@@ -670,4 +666,27 @@ export async function runCorpusCheck(cwd: string, since?: string): Promise<Corpu
     }
 
     return result;
+}
+
+/**
+ * Load accepted findings from `config/corpus-baseline.json` as a Map of `<kind>:<id>:<code>` -> severity.
+ * A missing or unparseable baseline degrades to an empty map (strictest behavior, no exemptions).
+ */
+export async function loadAcceptedFindings(cwd: string): Promise<Map<string, CorpusSeverity>> {
+    const projectRoot = resolveProjectRoot(cwd);
+    const baselineFile = join(projectRoot, 'config', 'corpus-baseline.json');
+    const accepted = new Map<string, CorpusSeverity>();
+    try {
+        if (await Bun.file(baselineFile).exists()) {
+            const baseline: Baseline = await Bun.file(baselineFile).json();
+            if (Array.isArray(baseline?.entries)) {
+                for (const e of baseline.entries) {
+                    accepted.set(key(e), baselineSeverity(e));
+                }
+            }
+        }
+    } catch {
+        // Missing or unparseable baseline degrades to an empty map (no exemptions).
+    }
+    return accepted;
 }

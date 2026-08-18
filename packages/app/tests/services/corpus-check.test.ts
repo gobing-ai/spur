@@ -17,7 +17,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { key, resolveFogRange, runCorpusCheck, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
+import {
+    key,
+    loadAcceptedFindings,
+    resolveFogRange,
+    runCorpusCheck,
+    sectionLabels,
+    ungraduatedFog,
+} from '../../src/services/corpus-check';
 
 const FOG = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE = /^###\s+Out of scope\b/;
@@ -687,4 +694,47 @@ describe('replay of the E1 graduation', () => {
         },
         30000,
     );
+});
+
+describe('loadAcceptedFindings', () => {
+    test('missing baseline file degrades to an empty map (no exemptions)', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-baseline-missing-'));
+        const accepted = await loadAcceptedFindings(root);
+        expect(accepted.size).toBe(0);
+    });
+
+    test('malformed json degrades to an empty map', async () => {
+        const root = corpusFixture();
+        writeFileSync(join(root, 'config', 'corpus-baseline.json'), '{ not valid json');
+        const accepted = await loadAcceptedFindings(root);
+        expect(accepted.size).toBe(0);
+    });
+
+    test('loads baseline entries and maps key to baselineSeverity', async () => {
+        const root = corpusFixture();
+        writeBaseline(root, [
+            { kind: 'task', id: '0001', code: 'L1.schema-validation', reason: 'legacy', since: '2026-08-10' },
+            {
+                kind: 'task',
+                id: '0002',
+                code: 'L4.anchor-subject-mismatch',
+                severity: 'warning',
+                reason: 'warning debt',
+                since: '2026-08-18',
+            },
+            {
+                kind: 'feature',
+                id: 'F1',
+                code: 'L3.scope-delineation',
+                severity: 'error',
+                reason: 'error debt',
+                since: '2026-08-18',
+            },
+        ]);
+        const accepted = await loadAcceptedFindings(root);
+        expect(accepted.size).toBe(3);
+        expect(accepted.get('task:0001:L1.schema-validation')).toBe('error'); // default legacy to error
+        expect(accepted.get('task:0002:L4.anchor-subject-mismatch')).toBe('warning');
+        expect(accepted.get('feature:F1:L3.scope-delineation')).toBe('error');
+    });
 });

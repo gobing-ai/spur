@@ -208,8 +208,8 @@ tasks:
     docs/tasks4:
       baseCounter: 488
       label: Phase 4
-  # severity:
-  #   L3.plan-format: off
+  severity:
+    L4.anchor-subject-mismatch: error
 
 features:
   dir: docs/features

@@ -10,6 +10,7 @@ import {
     type EntityRef,
     ensurePipelineRunLink,
     evaluateDoneTransition,
+    loadAcceptedFindings,
     type MigrationReport,
     PlanningWriteService,
     readVerdictArtifact,
@@ -1113,6 +1114,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
                 const svc = await makeCheckService(context);
                 const planningFolders = await resolvePlanningFolders(context.fs);
+                const accepted = await loadAcceptedFindings(context.cwd);
                 const activeFolder = planningFolders.foldersConfig.active_folder;
                 // Normalize every explicit override so relative and absolute spellings of the
                 // same folder are identical downstream (project-root derivation, line anchors) —
@@ -1147,6 +1149,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const result = await svc.check(hit.filePath, wbs, {
                             strict,
                             severityOverrides: planningFolders.severityOverrides,
+                            accepted,
                         });
                         results.push(result);
                         printResult(result);
@@ -1168,6 +1171,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const result = await svc.check(`${tasksDir}/${fileName}`, w, {
                             strict,
                             severityOverrides: planningFolders.severityOverrides,
+                            accepted,
                         });
                         results.push(result);
                         printResult(result);
@@ -1471,18 +1475,24 @@ async function runDoneGateCheck(
     wbs: string,
     folderOverride: string | undefined,
 ): Promise<boolean> {
-    const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
+    const planningFolders = await resolvePlanningFolders(context.fs);
+    const foldersConfig = planningFolders.foldersConfig;
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
     const hit = await new TaskLocator({ fs: context.fs, tasksDir, foldersConfig }).findByWbs(wbs);
     if (!hit) {
         return false; // missing task — let updateStatus throw the real error
     }
     const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
+    const accepted = await loadAcceptedFindings(context.cwd);
     // Both the wip→testing and testing→done guards use default severity (not --strict, not
     // --strict-core — both are equivalent here: hard-core L3/L2-gate errors are already
     // errors in the base computation). Never pass strict:true here — that would block a
     // `pass:True`-with-warnings task that the real FSM guard would allow through.
-    const result = await svc.check(hit.filePath, wbs, { strict: false });
+    const result = await svc.check(hit.filePath, wbs, {
+        strict: false,
+        severityOverrides: planningFolders.severityOverrides,
+        accepted,
+    });
     return result.pass;
 }
 /**

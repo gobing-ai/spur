@@ -18,6 +18,7 @@ import {
     WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import type { CorpusSeverity } from './corpus-check';
 import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
@@ -458,7 +459,11 @@ export class TaskCheckService extends PlanningCheckService {
     async check(
         filePath: string,
         wbs: string,
-        options?: { strict?: boolean; severityOverrides?: Record<string, 'error' | 'warning' | 'off'> },
+        options?: {
+            strict?: boolean;
+            severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
+            accepted?: ReadonlyMap<string, CorpusSeverity>;
+        },
     ): Promise<CheckResult> {
         const strict = options?.strict === true;
         const raw = await this.fs.readFile(filePath);
@@ -467,7 +472,10 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, wbs, findings);
         if (doc === null) {
-            return { wbs, ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides) };
+            return {
+                wbs,
+                ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides, options?.accepted, wbs),
+            };
         }
 
         const fm = doc.frontmatterData ?? {};
@@ -498,7 +506,10 @@ export class TaskCheckService extends PlanningCheckService {
             await this.runL4Readiness(doc, fm, wbs, status, findings, tasksDir);
         }
 
-        return { wbs, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
+        return {
+            wbs,
+            ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides, options?.accepted, wbs),
+        };
     }
 
     // ── L3: Format rules ──

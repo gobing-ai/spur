@@ -55,10 +55,11 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
-export type { CorpusCheckResult } from './services/corpus-check';
+export type { BaselineEntry, CorpusCheckResult, CorpusSeverity } from './services/corpus-check';
 export {
     baselineSeverity,
     collectObservedFindings,
+    loadAcceptedFindings,
     reconcileBaseline,
     resolveFogRange,
     runCorpusCheck,

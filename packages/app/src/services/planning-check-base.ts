@@ -21,6 +21,14 @@ import { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode } fro
 
 export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
 
+/** Finding severity level in corpus / planning checks. */
+export type CorpusSeverity = 'error' | 'warning';
+
+/** `<kind>:<id>:<code>` — the identity a baseline entry and an observed error share. */
+export function key(e: { kind: string; id: string; code: string }): string {
+    return `${e.kind}:${e.id}:${e.code}`;
+}
+
 // ─── Shared types ─────────────────────────────────────────────────────────
 
 // `UNIVERSAL_SECTIONS` (the closed-world relaxation: History/References/Notes)
@@ -194,6 +202,7 @@ export abstract class PlanningCheckService {
     /**
      * Apply config severity overrides (R3/R4) and `--strict` elevation, compute
      * the pass gate, and derive the required/missing section lists from L2 findings.
+     * Drops accepted baseline debt whose severity matches post-elevation (R1, R2).
      * Returns the outcome fields common to every check result.
      */
     protected summarizeWithStatus(
@@ -201,6 +210,8 @@ export abstract class PlanningCheckService {
         findings: CheckFindings[],
         strict?: boolean,
         overrides?: Record<string, 'error' | 'warning' | 'off'>,
+        accepted?: ReadonlyMap<string, CorpusSeverity>,
+        id?: string,
     ): CheckResultBase {
         const effectiveFindings: CheckFindings[] = [];
         for (const f of findings) {
@@ -213,6 +224,13 @@ export abstract class PlanningCheckService {
             }
             if (strict && f.severity === 'warning') {
                 f.severity = 'error';
+            }
+            if (accepted && id) {
+                const k = key({ kind: this.docKind, id, code: f.code });
+                const acceptedSev = accepted.get(k);
+                if (acceptedSev !== undefined && acceptedSev === f.severity) {
+                    continue; // accepted debt at matching severity dropped after overrides & strict elevation (R1, R2)
+                }
             }
             effectiveFindings.push(f);
         }

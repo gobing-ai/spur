@@ -1,58 +1,72 @@
 ---
 schema_version: 1
 id: "F61"
-name: "Corpus citation repair: pay down the anchor drift the content gate revealed"
-status: backlog
+name: "Corpus gate acceptance parity: the per-task gate honors accepted baseline debt"
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-18T05:12:01.296Z"
-updated_at: "2026-08-18T05:12:21.537Z"
+updated_at: "2026-08-18T06:21:21.921Z"
 ---
 
-# F61: Corpus citation repair: pay down the anchor drift the content gate revealed
+# F61: Corpus gate acceptance parity: the per-task gate honors accepted baseline debt
 
 ## Goal
-Repair the historical citation drift that feature F91's content-matching gate revealed, then close
-the ratchet by promoting `L4.anchor-subject-mismatch` to error.
+Close the anchor-drift ratchet: make `L4.anchor-subject-mismatch` an **error** for new work, without
+holding 364 already-closed tasks hostage to a citation-repair campaign.
 
-F91 made the gates tell the truth about evidence; it deliberately did **not** re-author the
-citations that truth exposed — its Scope excludes "re-authoring the ambiguous bare-filename anchors,
-which need an author's judgment, not a migration". This feature owns that judgment work.
+Feature F91 made the gates tell the truth about evidence and accepted the historical drift into the
+two-sided corpus baseline with a written diagnosis. What it could not do is promote the finding to
+error, because **`spur task check <wbs>` never consults `config/corpus-baseline.json`** — the
+baseline is a corpus-sweep input only. So a finding that is formally *accepted* still fails the
+per-task `--strict-core` done-gate.
 
-Measured 2026-08-18: **332 of 586 tasks** carry at least one anchor whose cited lines no longer name
-their row's subject. The finding is held at warning severity because `spur task check <wbs>
---strict-core` never reads `config/corpus-baseline.json` — baselining does not reach the per-task
-done-gate, so promoting before repair would block `testing → done` for 57% of the corpus.
+Measured 2026-08-18 on the released 0.3.50 corpus: **1,583 findings across 364 tasks** — of which
+**361 are `done`**, 2 cancelled, 1 blocked. Promoting without fixing the gate would block
+`testing → done` for all of them; repairing them first means re-pointing 1,583 citations inside
+closed historical records, which buys nothing forward.
+
+The defect is the gate, not the corpus. Teach the per-task check to honor accepted debt on the same
+`kind:id:code` + severity contract the corpus sweep already uses, and the promotion becomes safe
+immediately: new drift errors from day one, accepted history stays accepted, and the two-sided
+ratchet still forces reconciliation when an entry stops reproducing.
 ## Scope
-**In:** repairing `L4.anchor-subject-mismatch` citations across `docs/tasks{,2,3,4}`;
-disambiguating the basenames the qualification pass reported rather than guessed; resolving the 3
-files it skipped as unwritable; the final `tasks.severity` promotion in `.spur/config.yaml`; and
-shrinking `config/corpus-baseline.json` as repairs land.
+**In:** baseline-aware acceptance in the per-task check path (`TaskCheckService` + its CLI caller),
+reusing the corpus-check identity helpers rather than a second matcher; the `tasks.severity`
+promotion of `L4.anchor-subject-mismatch` to error; and the tests that prove new drift still fails.
 
-**Out:** the matcher and the qualification pass (feature **F91**, shipped) — extending the matcher to
-excuse a bad citation is explicitly forbidden. The 80 legacy `L1.schema-validation` tasks beyond the
-3 that block this pass. Any change to the `--strict-core` gate layers themselves.
+**Out:** the matcher itself (feature **F91**, shipped — loosening it to excuse a bad citation is
+forbidden). The qualification pass (F91, applied and idempotent). Repairing the 1,583 historical
+citations — optional cleanup once the gate is correct, no longer a prerequisite. `spur feature check`
+baseline-awareness (feature-level codes are not promoted here). The 80 legacy
+`L1.schema-validation` tasks, including the 3 that remain unwritable.
 ## Acceptance Criteria
 ```gherkin
 Feature: Corpus citation repair
 
-  Scenario: R1 — Drift is repaired, not re-accepted
-    Given the corpus after the repair campaign
-    When spur task check --corpus runs
-    Then it observes zero anchor-subject-mismatch findings
-    And no baseline entry for that code remains
+  Scenario: R1 — Accepted debt does not block the per-task gate
+    Given a finding accepted in the corpus baseline at the same severity
+    When spur task check <wbs> --strict-core runs on that task
+    Then the finding does not block the task
+    And the corpus sweep still fails if that baseline entry stops reproducing
 
   Scenario: R2 — The gate is closed for new work
     Given the finding promoted to error severity
-    When a task cites lines that do not name its row's subject
+    When a task cites lines that do not name its row's subject and is not baselined
     Then spur task check --strict-core fails for that task
     And the matcher is unchanged from the shape feature F91 shipped
 ```
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0586 | Honor accepted baseline debt in the per-task gate, then promote anchor-subject-mismatch to error | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+- 2026-08-18T06:21:20.972Z backlog → active (system)
+- 2026-08-18T06:21:21.445Z active → verifying (system)
+- 2026-08-18T06:21:21.921Z verifying → done (system)
