@@ -103,7 +103,7 @@ omission is now reported as an `ac-row-dropped` check naming the row and the unr
 `rowMatchesScenario` accepts any of these as naming the feature scenario `R3 — Foo`:
 
 | Form | Example |
-|------|---------|
+| ------ | --------- |
 | Exact title | `R3 — Foo` |
 | Bare title (R-prefix dropped) | `Foo` |
 | `Scenario:` prefix | `Scenario: R3 — Foo` |
@@ -201,7 +201,7 @@ regenerates the `## Tasks` block.
 Each resolved decision from a grilling interview (Phase 1) becomes one or more Gherkin scenarios:
 
 | Decision-tree element | Becomes |
-|-----------------------|---------|
+| ----------------------- | --------- |
 | A **locked decision** (a capability the feature commits to) | A `@core` scenario — the must-ship behavior it enables |
 | The decision's **observable outcome** (why it was chosen) | The scenario's `Then` — assert the observable, not the mechanism |
 | A decision's **preconditions / constraints** | The scenario's `Given` |
@@ -211,3 +211,19 @@ Each resolved decision from a grilling interview (Phase 1) becomes one or more G
 
 Number scenarios `R1, R2, …` sequentially, stable forever (the title is the traceability identity
 key). Use the Gherkin template at `.spur/templates/bdd/gherkin.md`.
+
+## AC altitude (task 0584 / ADR-062)
+
+A task must declare, via the `ac_altitude` frontmatter field, whether its AC scenarios are the
+feature's ship contract or a finer-grained local contract. The field is the **only** input — it is
+never inferred from `template`, `status`, or whether the AC uses Gherkin (R4).
+
+| `ac_altitude` | Meaning | DD-09 subset rule |
+| --- | --- | --- |
+| `graduating` (or absent) | Task scenarios are ship-contract criteria that graduate the feature's AC | Enforced — every task scenario must match a linked-feature scenario by normalized title. Drifted titles still report (R5). |
+| `task-local` | Task criteria sit at a finer altitude than the feature's ship contract (fix-task regression criteria, per-defect cases) | Skipped — no uncovered-scenario findings regardless of title drift (R3) |
+
+Use `task-local` for a fix/refactor task whose regression criteria are not the feature's ship
+contract. Keep a `graduating` task's scenario titles identical to the feature's so DD-09 stays
+satisfied. Absent-altitude is `graduating` — set `task-local` explicitly only where the subset rule
+truly does not apply (do not silently default new tasks to it).

@@ -127,6 +127,20 @@ heading/comment unrelated to the requirement fails the row to UNMET and surfaces
 a finding (severity >= P2). This closes the gap where a verify run certified a task `done` citing
 `evidence:134` that was actually a sibling ticket's telemetry text (0299 R1, from the 0282 re-audit).
 
+**External evidence (task 0584 / ADR-062) — legal citation form.** Evidence that lives OUTSIDE this
+repository has a frozen non-anchor form: a named origin plus a backticked path with the line number
+**outside** the backticks.
+
+```
+Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp call_id write
+```
+
+Use this form ONLY when the evidence genuinely lives outside `spur`'s working tree (a `@gobing-ai/ts-*`
+source under `~/xprojects/ts-libs`, or a gitignored `.spur/run/**` artifact). `checkLineAnchors`
+classifies it as external and never raises `L4.stale-line-anchor` for it (R1). Do NOT use it for a file
+that lives in this repo — in-repo evidence MUST use the repo-relative backtick form
+`` `path:line` `` / `` `path:start-end` ``, and citing it in the external form still reports (R2).
+
 ### Step 5 — Acceptance Criteria guard
 
 If the task has a non-empty Acceptance Criteria section, evaluate every checklist item and every

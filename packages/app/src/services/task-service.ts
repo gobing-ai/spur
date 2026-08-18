@@ -1168,6 +1168,11 @@ export class TaskService {
     /**
      * R3 (0479): DD-09 subset warning on section write.
      * When writing Acceptance Criteria, warn if task scenarios are not a subset of feature AC.
+     *
+     * Honors the declared `ac_altitude` (task 0584 R3/R4) exactly as `task check` does. This is
+     * the SECOND surface that enforces DD-09 — if only the checker honored the field, an author
+     * who correctly declared `task-local` would still be warned every time they wrote their AC,
+     * which is the notation-switching pressure 0584 exists to remove.
      */
     private async checkAcSubsetWarning(taskFilePath: string, acBody: string): Promise<string[]> {
         try {
@@ -1203,7 +1208,8 @@ export class TaskService {
 
             const taskAc = stripAcFence(acBody);
             const taskChecklist = parseChecklist(taskAc);
-            const coverage = checkAcCoverage(featureAc, taskAc, taskChecklist);
+            const acAltitude = fm.ac_altitude as 'graduating' | 'task-local' | undefined;
+            const coverage = checkAcCoverage(featureAc, taskAc, taskChecklist, acAltitude);
 
             const warnings: string[] = [];
             for (const scenario of coverage.uncovered) {

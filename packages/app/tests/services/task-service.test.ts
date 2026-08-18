@@ -1867,6 +1867,42 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             expect((result.warnings ?? [])[0]).toContain('DD-09 subset rule');
         });
 
+        // Regression (0584 R3/R4 verify): the altitude field was honored by `task check` but NOT
+        // here, so an author who correctly declared `task-local` was still warned on every AC
+        // write — the notation-switching pressure 0584 exists to remove.
+        test('respects ac_altitude: task-local — no subset warning on write (0584 R3)', async () => {
+            await seedFeature('Y3', 'altitude-write', ['Covered scenario']);
+            const created = await svc.create({ title: 'DD-09 task-local write', featureId: 'Y3' });
+            const fs = createNodeFileSystem(root());
+            const taskRaw = await fs.readFile(created.ref.filePath);
+            await fs.writeFile(
+                created.ref.filePath,
+                taskRaw.replace(/^feature_id:.*$/m, (m) => `${m}\nac_altitude: task-local`),
+            );
+            const src = await writeAc('y3-local', ['Covered scenario', 'Finer-altitude regression case']);
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+
+            expect(result.warnings ?? []).toHaveLength(0);
+        });
+
+        test('still warns when altitude is graduating and a title drifts (0584 R5)', async () => {
+            await seedFeature('Y4', 'altitude-grad', ['Covered scenario']);
+            const created = await svc.create({ title: 'DD-09 graduating write', featureId: 'Y4' });
+            const fs = createNodeFileSystem(root());
+            const taskRaw = await fs.readFile(created.ref.filePath);
+            await fs.writeFile(
+                created.ref.filePath,
+                taskRaw.replace(/^feature_id:.*$/m, (m) => `${m}\nac_altitude: graduating`),
+            );
+            const src = await writeAc('y4-grad', ['Covered scenario', 'Drifted scenario']);
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+
+            expect(result.warnings ?? []).toHaveLength(1);
+            expect((result.warnings ?? [])[0]).toContain('Drifted scenario');
+        });
+
         test('stays silent when every task scenario is in the feature AC', async () => {
             await seedFeature('Y2', 'subset-clean', ['Alpha', 'Beta']);
             const created = await svc.create({ title: 'DD-09 subset', featureId: 'Y2' });

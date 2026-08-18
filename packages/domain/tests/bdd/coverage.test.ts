@@ -155,6 +155,61 @@ Scenario: User can log in
         expect(result.orphans).toEqual(['User can reset password']);
         expect(result.uncovered).toHaveLength(0);
     });
+
+    test('task-local altitude skips the subset rule even when scenarios drift (0584 R3)', () => {
+        // A fix task's regression criteria are not the feature's ship contract:
+        // `task-local` must skip DD-09 no matter how far the titles drift.
+        const taskAc = `Feature: User Management
+  Scenario: Fix duplicate login error flash on slow network
+    Given a deliberately slow connection
+    When login fails with a timeout
+    Then exactly one error flash is shown`;
+        const result = checkAcCoverage(featureAc, taskAc, undefined, 'task-local');
+        expect(result.covered).toBe(true);
+        expect(result.uncovered).toHaveLength(0);
+        expect(result.orphans).toHaveLength(0);
+        expect(result.issues).toHaveLength(0);
+    });
+
+    test('altitude is field-only: Gherkin notation does not change behavior (0584 R4)', () => {
+        // Same drifted Gherkin AC: task-local skips, graduating enforces — the
+        // field, not the notation, decides.
+        const taskAc = `Feature: User Management
+  Scenario: Reset password while account is locked
+    Given a locked account
+    When reset is requested
+    Then the lock persists`;
+        const local = checkAcCoverage(featureAc, taskAc, undefined, 'task-local');
+        expect(local.uncovered).toHaveLength(0);
+        const graded = checkAcCoverage(featureAc, taskAc, undefined, 'graduating');
+        expect(graded.uncovered).toEqual(['Reset password while account is locked']);
+        expect(graded.covered).toBe(false);
+    });
+
+    test('graduating altitude still enforces the subset rule on drifted titles (0584 R5)', () => {
+        const taskAc = `Feature: User Management
+  Scenario: User can log in
+    Given a registered user
+    When they submit credentials
+    Then they are authenticated
+  Scenario: Forgot password sends SMS instead of email
+    Given a registered user
+    When they request a reset
+    Then an SMS is sent`;
+        const result = checkAcCoverage(featureAc, taskAc, undefined, 'graduating');
+        expect(result.uncovered).toEqual(['Forgot password sends SMS instead of email']);
+        expect(result.covered).toBe(false);
+    });
+
+    test('absent altitude keeps legacy behavior — subset rule enforced (0584 R3)', () => {
+        const taskAc = `Feature: User Management
+  Scenario: User can log in
+    Given a registered user
+    When they submit credentials
+    Then they are authenticated`;
+        const result = checkAcCoverage(featureAc, taskAc);
+        expect(result.covered).toBe(true);
+    });
 });
 
 describe('normalizeTitle — bracket tags (task 0398 R7)', () => {

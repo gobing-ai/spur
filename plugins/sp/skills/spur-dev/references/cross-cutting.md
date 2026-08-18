@@ -24,7 +24,6 @@ not redefine it.
 > does not restate the contract. The value table below is authoritative; parity with it is
 > enforced by `validate-flag-contracts.ts` (C3a/C3b).
 
-
 ### The one rule
 
 > **`--agent <value>` names *who* does the model-bearing work. The execution surface is derived from
@@ -49,7 +48,7 @@ selects the zero-dispatch carve-out below.
 > fallback.**
 
 | Value | Who does the work | Derived surface |
-|---|---|---|
+| --- | --- | --- |
 | `(omitted)` | The agent running this session | Host session — host-controlled; eligible model stages may use a native subagent (0508) |
 | `inline` | The agent running this session | Host session — hard guarantee: zero dispatch, never a subprocess, never a workflow hop; headless surfaces reject `inline` (exit 2, stable special error) |
 | `auto` | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
@@ -219,7 +218,7 @@ stage is required, select the subprocess path (`--agent auto` or `--agent <name>
 Never edit a task or feature file directly. Every mutation goes through:
 
 | Intent | CLI verb |
-|--------|----------|
+| -------- | ---------- |
 | Create a task | `spur task create` |
 | Change status | `spur task update <wbs> <status>` |
 | Edit a section | `spur task update <wbs> --section <name> --from-file <path>` |
@@ -329,6 +328,15 @@ loop?**
   operator, and the *answer* is recorded where the decision belongs — the feature body, an ADR
   (`docs/00_ADR.md`), or the design doc. A task may then be created for the work the answer implies.
 
+**Authoring-contract decisions (task 0584 / ADR-062).** Two fields a task author must get right:
+
+- **External evidence** — evidence that lives outside `spur`'s working tree uses the frozen non-anchor
+  form `origin`path`line N` (line OUTSIDE the backticks), e.g.
+  `@gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 481`. It is classified external, never
+  `L4.stale-line-anchor`. In-repo evidence MUST use the repo-relative backtick form `path:line` —
+  citing an in-repo file in the external form still reports (R1/R2). See `ac-style-guide.md` and the
+  `code-verification` skill for when each applies.
+
 **Why this is a rule and not a preference.** A decision filed as a task sits in `spur task list` and
 in a feature's Tasks table looking like queued work. It gets handed to an implementing agent, which
 either stalls or invents the decision and calls it done. It also inflates task counts, which is how
@@ -432,7 +440,7 @@ line is a claim to re-verify, not evidence to forward. Re-run and paste.
 **Red Flags — an unverified claim is usually hiding behind one of these:**
 
 | Red flag | What it usually means |
-|---|---|
+| --- | --- |
 | "This should work" / "this will pass" / "probably fine" | You are predicting, not reporting. Run it and paste the result. |
 | Expressing satisfaction ("great, that's done!") before any check ran | Relief is not evidence — the check has not been run this turn. |
 | Forwarding a subagent's "success" without re-running its gate | You are trusting a claim, not verifying it. Re-run the check yourself. |
@@ -529,7 +537,7 @@ invariants that keep the pipeline set coherent as new ones are added.
 ### Pipeline phase table
 
 | Pipeline | Lifecycle phase | Entry point | Terminal states |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `idea-pipeline.yaml` | Ideation (vague idea → feature + AC + task batch) | `/sp:dev-idea` | `handoff`, `cancelled` |
 | `planning-pipeline.yaml` | Design (known slug/task → design handoff) | `/sp:dev-plan` | `handoff`, `cancelled` |
 | `task-pipeline.yaml` | Execution (one task → done) | `/sp:dev-run` | `done`, `failed` |
@@ -691,7 +699,7 @@ The signal is emitted by the `discovery` state's brainstorm dispatch and written
 determine routing:
 
 | `design` var | `needs_design` signal | Route |
-|---|---|---|
+| --- | --- | --- |
 | `skip` | (ignored) | `decompose` (skip system-design; brainstorm summary still recorded) |
 | `auto` | `true` | `system-design` -> `design-approval` -> `decompose` |
 | `auto` | `false` | `decompose` (skip system-design) |

@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     aggregateBatchVerdicts,
+    anchorQualify,
     CorpusMigrator,
     DependencyMutationError,
     DuplicateFollowUpError,
+    type EntityRef,
     ensurePipelineRunLink,
     evaluateDoneTransition,
     type MigrationReport,
@@ -702,6 +704,58 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(toJson({ ok: true, dryRun, corpusDir, ...report }));
                 } else {
                     context.output.write(renderMigrationReport(report, dryRun, corpusDir));
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
+    // ── migrate-anchors ──
+    task.command('migrate-anchors')
+        .summary('Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3).')
+        .option('--dry-run', 'Produce the full report without writing files')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            try {
+                const dryRun = options.dryRun === true;
+                const report = await anchorQualify(context.fs, {
+                    dryRun,
+                    // Scope the tracked-file index to THIS invocation's project rather
+                    // than letting it fall back to `process.cwd()`.
+                    projectRoot: context.cwd,
+                    write: async (filePath, wbs, section, newBody) => {
+                        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: dirname(filePath) };
+                        const ws = new PlanningWriteService({ fs: context.fs, emitter: makePlanningEmitter(context) });
+                        await ws.updateSection(ref, section, newBody);
+                    },
+                });
+                const qualified = report.fileReports.flatMap((r) =>
+                    r.qualified.map((q) => `${r.wbs}: \`${q.raw}\` → \`${q.newPath}:${q.lineSpec}\``),
+                );
+                const ambiguous = report.fileReports.flatMap((r) =>
+                    r.ambiguous.map((a) => `${r.wbs}: ${a.cited} → candidates: ${a.candidates.join(', ')}`),
+                );
+                if (options.json) {
+                    context.output.write(toJson({ ok: true, dryRun, qualified, ambiguous, ...report }));
+                } else if (dryRun) {
+                    const lines = [
+                        `Anchor qualification ${dryRun ? 'dry-run' : 'apply'} complete`,
+                        '',
+                        `Files scanned: ${report.filesScanned}`,
+                        `Files modified (${dryRun ? 'would be' : ''}): ${report.filesModified}`,
+                        '',
+                        'Rewrites:',
+                        ...(qualified.length ? qualified : ['  none']),
+                        '',
+                        'Ambiguous (reported, not rewritten):',
+                        ...(ambiguous.length ? ambiguous : ['  none']),
+                    ];
+                    context.output.write(lines.join('\n'));
+                } else {
+                    context.output.write(
+                        `Anchor qualification apply complete — ${report.filesModified} file(s) modified.`,
+                    );
                 }
             } catch (err) {
                 context.output.error(String(err));

@@ -57,6 +57,7 @@ export const ALL_FINDING_CODES = [
     'L4.verifying-incomplete-tasks',
     'L4.dogfood-missing',
     'L4.stale-line-anchor',
+    'L4.anchor-subject-mismatch',
     'L4.malformed-verdict-artifact',
     'L4.scenario-unverified',
 ] as const;
@@ -121,6 +122,7 @@ export const FINDING_CODES = {
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
     L4_STALE_LINE_ANCHOR: 'L4.stale-line-anchor',
+    L4_ANCHOR_SUBJECT_MISMATCH: 'L4.anchor-subject-mismatch',
     L4_MALFORMED_VERDICT_ARTIFACT: 'L4.malformed-verdict-artifact',
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
 } as const satisfies Record<string, FindingCode>;

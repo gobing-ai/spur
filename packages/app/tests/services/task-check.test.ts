@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FINDING_CODES } from '../../src/services/finding-codes';
-import { extractReviewSectionBody, hasPopulatedPriorityTable, TaskCheckService } from '../../src/services/task-check';
+import {
+    citedLinesNameSubject,
+    classifyExternalEvidence,
+    extractReviewSectionBody,
+    extractSubjectTokens,
+    hasPopulatedPriorityTable,
+    TaskCheckService,
+} from '../../src/services/task-check';
 import { TaskLocator } from '../../src/services/task-locator';
 
 const matrix = {
@@ -1979,6 +1986,69 @@ describe('TaskCheckService', () => {
         expect(formatFindings.length).toBeGreaterThanOrEqual(1);
     });
 
+    // ── AC altitude: ac_altitude: task-local skips DD-09 (0584 R3/R4) ──
+
+    /** Task with a declared AC altitude and a scenario that drifts from its feature. */
+    function taskWithAltitude(altitude: 'graduating' | 'task-local' | undefined, scenario = 'rogue scenario'): string {
+        const fm = taskFm({ feature_id: 'F1', status: 'backlog', name: 'Altitude task', ac_altitude: altitude });
+        return [
+            fm,
+            '',
+            '### Acceptance Criteria',
+            '',
+            '```gherkin',
+            'Feature: T',
+            `  Scenario: ${scenario}`,
+            '    Given x',
+            '```',
+        ].join('\n');
+    }
+
+    test('R3: ac_altitude: task-local skips the DD-09 subset rule entirely', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAltitude('task-local'),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    test('R4: altitude is field-only — a task-local task written in Gherkin does not warn', async () => {
+        // Same drifted Gherkin scenario as the graduating case below; only the
+        // declared field differs. Notation must not decide the rule (R4).
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAltitude('task-local', 'R99: local regression bullet case'),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    test('R4/R5: a graduating task with drifted titles still reports (field, not notation)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAltitude('graduating', 'Drifted title that matches nothing'),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1);
+        expect(cov[0]?.message).toContain('Drifted title that matches nothing');
+    });
+
+    test('R3: absent altitude keeps legacy behavior — subset rule still enforced', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAltitude(undefined, 'rogue scenario'),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1);
+    });
+
     // ── L4 roll-up (0121): parent↔child status drift + roster presence ──
 
     /** A parent task body with a Plan; `withRoster` controls whether the Plan table names a child WBS. */
@@ -2795,5 +2865,147 @@ describe('R7 (0487): Review gate robustness', () => {
 
     test('an absent Review section still returns null', () => {
         expect(extractReviewSectionBody('### Design\n\nd\n')).toBeNull();
+    });
+});
+
+describe('subject-token exclusion (0583 R5 verify)', () => {
+    const cite = 'packages/app/src/services/project-registry.ts:357-378';
+    const cited = 'let sawInUse = false;\nlet probedAny = false;\nconst probe = await probePort(port);';
+
+    // Regression: the extractor fed the citation itself and the verdict-table status
+    // word in as "subject" tokens. Neither can ever appear in cited source, so a
+    // minimal, correct evidence row reported every time — 262 of the corpus's
+    // anchor-subject warnings were this shape.
+    test('a minimal correct evidence row does not report', () => {
+        const tokens = extractSubjectTokens(`| R1 | MET | \`${cite}\` |`, cite);
+        expect(tokens).not.toContain(cite.toLowerCase());
+        expect(tokens).not.toContain('met');
+        expect(citedLinesNameSubject(tokens, cited)).toBe(true);
+    });
+
+    test('a row naming an identifier present in the cited lines does not report', () => {
+        const row = `| R1 | MET | \`${cite}\` (\`probedAny\` separates denied from exhaustion) |`;
+        expect(citedLinesNameSubject(extractSubjectTokens(row, cite), cited)).toBe(true);
+    });
+
+    // The rule must stay sharp: a real subject that is absent still reports.
+    test('a row naming an identifier absent from the cited lines still reports', () => {
+        const row = `| R1 | MET | \`${cite}\` (\`renderForensics\` builds the report) |`;
+        expect(citedLinesNameSubject(extractSubjectTokens(row, cite), cited)).toBe(false);
+    });
+});
+
+describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () => {
+    test('R1: recognizes a named origin + backticked path + line number outside the backticks', () => {
+        const body = 'Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp call_id write';
+        const cites = classifyExternalEvidence(body);
+        expect(cites).toHaveLength(1);
+        expect(cites[0]).toMatchObject({
+            origin: '@gobing-ai/ts-llm-jsonl-importer',
+            path: 'src/mappers.ts',
+            startLine: 481,
+        });
+    });
+
+    test('R1: accepts a line range and plural line wording', () => {
+        const body = 'See @some-org/lib `src/mappers.ts` lines 481-483 — float path';
+        const cites = classifyExternalEvidence(body);
+        expect(cites).toHaveLength(1);
+        expect(cites[0]?.path).toBe('src/mappers.ts');
+        expect(cites[0]?.startLine).toBe(481);
+        expect(cites[0]?.endLine).toBe(483);
+    });
+
+    test('R1: a repo-root backtick anchor (line inside backticks) is NOT external evidence', () => {
+        const body = 'Verified: `packages/app/src/services/task-check.ts:207` still matches';
+        expect(classifyExternalEvidence(body)).toHaveLength(0);
+    });
+
+    test('R1: prose line numbers without a named-origin are not classified', () => {
+        // Same shape as 0494/0493 corpus prose — a path and line number in the
+        // same sentence but NOT the frozen form; must stay invisible (no new
+        // baseline debt).
+        const body =
+            'Anchors re-read at their cited lines: `plugins/sp/skills/next-router/references/routing-table.md` line 32 now sits at line 33';
+        const cites = classifyExternalEvidence(body);
+        // The frozen form requires the line number OUTSIDE backticks AND a named
+        // origin directly before the path — bare path-cell prose has neither
+        // structure guaranteed, and extracting an origin from free prose is
+        // exactly the re-interpretation 0583 must not do. The classifier is
+        // deliberately the classification, not a parser: any backtick+line
+        // adjacency that came from prose should not be promoted to external.
+        expect(cites).toHaveLength(0);
+    });
+
+    test('R2: an in-repo path cited in external form is flagged by checkLineAnchors', async () => {
+        // The frozen form names an in-repo file with the line outside backticks.
+        // R2: it is in-repo evidence and must use a repo-relative anchor, so the
+        // checker still reports it (recognized as external-form → reclassified).
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Ext task"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Ext task',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Solution',
+            '',
+            'Evidence: @local/repo `README.md` line 3 — advisory, in-repo path in external form',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({ taskContent: content });
+        // The repo root resolves one level up from tasksDir; seed README.md there.
+        const root = join(path, '..', '..');
+        const { writeFileSync: w } = await import('node:fs');
+        w(join(root, 'README.md'), 'a\nb\nc\n');
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+        expect(stale.length).toBeGreaterThanOrEqual(1);
+        expect(stale[0]?.message).toContain('R2');
+    });
+
+    // Regression (0584 R2 verify): the in-repo test was a single boolean over the whole
+    // set, so ONE resolvable basename flagged EVERY external citation in the section —
+    // each with a message naming its own path as in-repo, false for all but one.
+    test('R2: only the citation that resolves in-repo is flagged, not its external siblings', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Mixed ext task"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Mixed ext task',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Solution',
+            '',
+            'Evidence: @local/repo `README.md` line 3 — in-repo, must be repo-relative',
+            '',
+            'Evidence: @gobing-ai/ts-llm-jsonl-importer `src/never-in-this-repo.ts` line 481 — genuinely external',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({ taskContent: content });
+        const root = join(path, '..', '..');
+        const { writeFileSync: w } = await import('node:fs');
+        w(join(root, 'README.md'), 'a\nb\nc\n');
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+        expect(stale).toHaveLength(1);
+        expect(stale[0]?.message).toContain('README.md');
+        expect(stale[0]?.message).not.toContain('never-in-this-repo.ts');
     });
 });

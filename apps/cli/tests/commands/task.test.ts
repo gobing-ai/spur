@@ -663,6 +663,219 @@ describe('spur task CLI', () => {
         expect(output.messages.join('')).toMatch(/\d{4}/);
     });
 
+    // The `--corpus` HUMAN reporter had no coverage — only the `--json` branch did.
+    // Each finding class prints a distinct prefix, and a reader triages by that prefix,
+    // so a silently-dropped loop would be invisible until someone diffed two runs.
+    function corpusTaskMd(wbs: string, featureId?: string): string {
+        return [
+            '---',
+            'template: standard',
+            'schema_version: 1',
+            `name: "Fixture ${wbs}"`,
+            'description: "fixture"',
+            'status: todo',
+            'type: task',
+            'profile: standard',
+            ...(featureId === undefined ? [] : [`feature_id: ${featureId}`]),
+            'parent_wbs: null',
+            'priority: P3',
+            'tags: []',
+            'dependencies: []',
+            'created_at: "2026-08-10T00:00:00.000Z"',
+            'updated_at: "2026-08-10T00:00:00.000Z"',
+            '---',
+            '',
+            `## ${wbs}. Fixture ${wbs}`,
+            '',
+            '### Background',
+            'fixture',
+            '',
+            '### Acceptance Criteria',
+            'Acceptance criteria fixture.',
+            '',
+            '### Design',
+            'Design fixture.',
+            '',
+            '### Plan',
+            '- [x] done fixture item',
+            '',
+        ].join('\n');
+    }
+
+    async function corpusFixture(baselineEntries: unknown[]): Promise<string> {
+        const isoCwd = await mkdtemp(join(tmpdir(), 'spur-corpus-report-'));
+        await mkdir(join(isoCwd, 'config'), { recursive: true });
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await writeFile(join(isoCwd, 'config', 'corpus-baseline.json'), JSON.stringify({ entries: baselineEntries }));
+        return isoCwd;
+    }
+
+    // `migrate-anchors` rewrites task BODIES through PlanningWriteService — the one
+    // write path in this command that mutates the corpus. Its report arrows and write
+    // callback were unreachable from any test until `anchorQualify` forwarded
+    // `projectRoot`: without it `resolveRepoRoot` fell back to `process.cwd()`, so the
+    // pass indexed the real repo and reported `Files scanned: 0` for every fixture.
+    async function gitFixture(taskBody: string): Promise<string> {
+        const root = await mkdtemp(join(tmpdir(), 'spur-anchors-cli-'));
+        await mkdir(join(root, 'docs', 'tasks'), { recursive: true });
+        await mkdir(join(root, 'packages', 'app', 'src'), { recursive: true });
+        await writeFile(join(root, 'packages', 'app', 'src', 'widget-unique.ts'), 'export const widget = 1;\n');
+        await writeFile(join(root, 'docs', 'tasks', '0001_anchors.md'), taskBody);
+        Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: root });
+        Bun.spawnSync(['git', 'add', '-A'], { cwd: root });
+        return root;
+    }
+
+    /** A task whose Testing cites a bare filename that resolves uniquely in the fixture. */
+    function anchorTaskMd(): string {
+        return [
+            '---',
+            'template: standard',
+            'schema_version: 1',
+            'name: "Anchor fixture"',
+            'description: "fixture"',
+            'status: done',
+            'type: task',
+            'profile: standard',
+            'parent_wbs: null',
+            'priority: P3',
+            'tags: []',
+            'dependencies: []',
+            'created_at: "2026-08-10T00:00:00.000Z"',
+            'updated_at: "2026-08-10T00:00:00.000Z"',
+            '---',
+            '',
+            '## 0001. Anchor fixture',
+            '',
+            '### Background',
+            'fixture',
+            '',
+            '### Testing',
+            'Evidence: `widget-unique.ts:1` — the bare filename resolves to exactly one tracked path.',
+            '',
+        ].join('\n');
+    }
+
+    test('migrate-anchors --dry-run reports the rewrite and writes nothing', async () => {
+        const root = await gitFixture(anchorTaskMd());
+        try {
+            const before = await readFile(join(root, 'docs', 'tasks', '0001_anchors.md'), 'utf8');
+            const out = createCapturedOutput();
+            expect(await main(['task', 'migrate-anchors', '--dry-run'], { cwd: root, output: out })).toBe(0);
+            const all = out.messages.join('\n');
+            expect(all).toContain('Anchor qualification dry-run complete');
+            expect(all).toContain('packages/app/src/widget-unique.ts:1');
+            // Dry-run purity: the corpus is byte-identical.
+            expect(await readFile(join(root, 'docs', 'tasks', '0001_anchors.md'), 'utf8')).toBe(before);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('migrate-anchors apply rewrites the citation path and preserves the line number', async () => {
+        const root = await gitFixture(anchorTaskMd());
+        try {
+            const out = createCapturedOutput();
+            expect(await main(['task', 'migrate-anchors'], { cwd: root, output: out })).toBe(0);
+            expect(out.messages.join('\n')).toContain('Anchor qualification apply complete');
+            const after = await readFile(join(root, 'docs', 'tasks', '0001_anchors.md'), 'utf8');
+            expect(after).toContain('`packages/app/src/widget-unique.ts:1`');
+            // R3: the path is qualified, the line number is untouched.
+            expect(after).not.toContain('`widget-unique.ts:1`');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('migrate-anchors --json emits the machine report', async () => {
+        const root = await gitFixture(anchorTaskMd());
+        try {
+            const out = createCapturedOutput();
+            expect(await main(['task', 'migrate-anchors', '--dry-run', '--json'], { cwd: root, output: out })).toBe(0);
+            const report = JSON.parse(lastMessage(out));
+            expect(report.ok).toBe(true);
+            expect(report.dryRun).toBe(true);
+            expect(Array.isArray(report.qualified)).toBe(true);
+            expect(Array.isArray(report.ambiguous)).toBe(true);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('check --corpus human reporter prints the OK line and exits 0 on a clean corpus', async () => {
+        const isoCwd = await corpusFixture([]);
+        try {
+            const out = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(0);
+            const all = out.messages.join('\n');
+            expect(all).toContain('corpus-check: swept tasks + features — errors 0 observed');
+            expect(all).toContain('warnings 0 observed');
+            expect(all).toContain('corpus-check OK');
+            expect(out.errors).toEqual([]);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('check --corpus human reporter prints NEW [error] and fails', async () => {
+        const isoCwd = await corpusFixture([]);
+        try {
+            await writeFile(join(isoCwd, 'docs', 'tasks', '0001_broken.md'), 'not task markdown\n');
+            const out = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(1);
+            expect(out.errors.join('\n')).toContain('NEW    [error]');
+            expect(out.messages.join('\n')).toContain('corpus-check FAILED');
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('check --corpus human reporter prints NEW [warning] separately from errors', async () => {
+        const isoCwd = await corpusFixture([]);
+        try {
+            // A schema-valid task with no feature_id emits warning severity only.
+            await writeFile(join(isoCwd, 'docs', 'tasks', '0002_warn.md'), corpusTaskMd('0002'));
+            const out = createCapturedOutput();
+            const code = await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out });
+            const errs = out.errors.join('\n');
+            expect(errs).toContain('NEW    [warning]');
+            expect(errs).not.toContain('NEW    [error]');
+            expect(code).toBe(1);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('check --corpus human reporter prints STALE for a baseline entry that no longer reproduces', async () => {
+        const isoCwd = await corpusFixture([
+            { kind: 'task', id: '9999', code: 'L1.schema-validation', reason: 'fixture', since: '2026-08-10' },
+        ]);
+        try {
+            const out = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(1);
+            expect(out.errors.join('\n')).toContain('STALE  task 9999');
+            expect(out.messages.join('\n')).toContain('corpus-check FAILED');
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('check --corpus human reporter prints DUP for a repeated baseline key', async () => {
+        const dup = { kind: 'task', id: '0001', code: 'L1.schema-validation', reason: 'fixture', since: '2026-08-10' };
+        const isoCwd = await corpusFixture([dup, dup]);
+        try {
+            await writeFile(join(isoCwd, 'docs', 'tasks', '0001_broken.md'), 'not task markdown\n');
+            const out = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(1);
+            const errs = out.errors.join('\n');
+            expect(errs).toContain('DUP    task:0001:L1.schema-validation');
+            expect(errs).toContain('2 entries for one key');
+            expect(out.messages.join('\n')).toContain('corpus-check FAILED');
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
     test('check --corpus preserves JSON, exit, and usage contracts', async () => {
         const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-corpus-cli-'));
         await mkdir(join(isoCwd, 'config'), { recursive: true });
@@ -2812,5 +3025,96 @@ Only this section exists.
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
         }
+    });
+
+    describe('migrate-anchors', () => {
+        test('runs with --json and --dry-run', async () => {
+            const isoCwd = join(import.meta.dir, '..', `.tmp-task-migrate-anchors-${Date.now()}`);
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            try {
+                const output = createCapturedOutput();
+                const exitCode = await main(['task', 'migrate-anchors', '--json', '--dry-run'], {
+                    cwd: isoCwd,
+                    output,
+                });
+                expect(exitCode).toBe(0);
+                const parsed = JSON.parse(output.messages[0] ?? '{}');
+                expect(parsed.ok).toBe(true);
+                expect(parsed.dryRun).toBe(true);
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
+
+        test('runs in non-json mode with --dry-run and apply', async () => {
+            // OUTSIDE the repo: this fixture runs `git init`, and a nested `.git` inside
+            // the working tree pollutes `git status` and makes `git rev-parse
+            // --show-toplevel` order-dependent for anything that still resolves a repo
+            // root from cwd. The rest of this file's in-repo `.tmp-*` fixtures are fine
+            // because they never create a repo.
+            const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-migrate-anchors-apply-'));
+            await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+            await mkdir(join(isoCwd, 'src'), { recursive: true });
+            await writeFile(join(isoCwd, 'src', 'bar.ts'), 'export const bar = 1;\n');
+            // Schema-valid frontmatter is REQUIRED here: apply writes through
+            // PlanningWriteService.updateSection, which validates before writing. The
+            // earlier minimal fixture made the apply fail with "Frontmatter validation
+            // failed", and that was invisible only because the pass was not yet scoped
+            // to the fixture and so never attempted a write.
+            const taskContent = `---
+template: standard
+schema_version: 1
+name: "Anchor task"
+description: "fixture"
+status: todo
+type: task
+profile: standard
+parent_wbs: null
+priority: P3
+tags: []
+dependencies: []
+created_at: "2026-08-10T00:00:00.000Z"
+updated_at: "2026-08-10T00:00:00.000Z"
+---
+
+## 0001. Anchor task
+
+### Testing
+
+- Evidence: \`bar.ts:1\`
+`;
+            await writeFile(join(isoCwd, 'docs', 'tasks', '0001_anchor-task.md'), taskContent);
+            Bun.spawnSync(['git', 'init'], { cwd: isoCwd });
+            Bun.spawnSync(['git', 'add', '.'], { cwd: isoCwd });
+            try {
+                const dryOut = createCapturedOutput();
+                const dryCode = await main(['task', 'migrate-anchors', '--dry-run', '--json'], {
+                    cwd: isoCwd,
+                    output: dryOut,
+                });
+                expect(dryCode).toBe(0);
+
+                const dryOutText = createCapturedOutput();
+                const dryCodeText = await main(['task', 'migrate-anchors', '--dry-run'], {
+                    cwd: isoCwd,
+                    output: dryOutText,
+                });
+                expect(dryCodeText).toBe(0);
+                expect(dryOutText.messages[0]).toContain('Anchor qualification dry-run complete');
+
+                const applyOut = createCapturedOutput();
+                const applyCode = await main(['task', 'migrate-anchors'], { cwd: isoCwd, output: applyOut });
+                expect(applyCode).toBe(0);
+                expect(applyOut.messages[0]).toContain('Anchor qualification apply complete');
+                // Non-vacuous: assert the citation was actually qualified. Without this
+                // the test passes when the pass rewrites NOTHING, which is exactly how a
+                // broken apply path stayed green.
+                const applied = await readFile(join(isoCwd, 'docs', 'tasks', '0001_anchor-task.md'), 'utf8');
+                expect(applied).toContain('`src/bar.ts:1`');
+                expect(applied).not.toContain('`bar.ts:1`');
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
     });
 });

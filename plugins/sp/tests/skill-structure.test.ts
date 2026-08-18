@@ -769,7 +769,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const BODY_BUDGET = 20_000;
         const BASELINE: Record<string, number> = {
             'dogfood-testing': 37_452,
-            'code-verification': 29_670,
+            'code-verification': 30_488,
             wayfinder: 26_264,
             'issue-finding': 26_139,
         };

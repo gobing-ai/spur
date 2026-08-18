@@ -7,7 +7,7 @@
  * L4: Traceability (warning-first).
  */
 
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
     checkAcCoverage,
     DEFAULT_TASK_VARIANT,
@@ -229,6 +229,145 @@ export function extractBacktickLineAnchors(
         m = re.exec(body);
     }
     return out;
+}
+
+/**
+ * Frozen external-evidence form (task 0584 / ADR-062): a named origin plus a * backticked path with the line number OUTSIDE the backticks.
+ *
+ *   Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — …
+ *
+ * The frozen shape keeps the line number outside the backticks so
+ * `extractBacktickLineAnchors` (whose regex requires `path:NN` inside the
+ * backticks) can never match it — the work here is classification, not
+ * parsing (task 0584 Design decision 1). Reported: external citations whose
+ * path is NOT a uniquely-resolvable in-repo basename (R1); if the path
+ * resolves in-repo, the citation is in-repo evidence and must use a
+ * repo-relative anchor instead — it still reports (R2).
+ */
+const EXTERNAL_EVIDENCE_RE = /`([^`\n]+?)`\s+(?:line|lines?)\s+(\d+)(?:-(\d+))?/g;
+
+/**
+ * Classify frozen external-evidence citations in a body.
+ *
+ * Returns citations (named origin + backticked path + line number outside the
+ * backticks) for `checkLineAnchors` so external evidence never emits
+ * `L4.stale-line-anchor` (R1). The origin must be package/project-like (bear a
+ * structural separator — `/`, `@`, `.`, `_`, `-`) so sentence prose like
+ * "at `path` line N" is never promoted to external evidence: classifying prose
+ * would put pre-existing corpus text into the R2 in-repo net and manufacture
+ * new gate debt. Consumed by task 0583's subject-matching rule — it must not
+ * re-implement or re-interpret this classification.
+ */
+export function classifyExternalEvidence(
+    body: string,
+): Array<{ origin: string; path: string; startLine: number; endLine?: number }> {
+    const out: Array<{ origin: string; path: string; startLine: number; endLine?: number }> = [];
+    const re = new RegExp(EXTERNAL_EVIDENCE_RE.source, 'g');
+    let m: RegExpExecArray | null = re.exec(body);
+    while (m !== null) {
+        const raw = m[0] ?? '';
+        const path = m[1] ?? '';
+        if (!path) {
+            m = re.exec(body);
+            continue;
+        }
+        // The frozen shape is origin + `path` + line N — no colon-line inside the
+        // backticks, so no `:line` suffix to strip.
+        const before = body.slice(Math.max(0, re.lastIndex - raw.length - 80), re.lastIndex - raw.length);
+        const originMatch = /([^\s`]+)\s*$/.exec(before);
+        const origin = originMatch?.[1] ?? '';
+        // Named-origin gate: only package/project-like tokens count. Prepositions
+        // and sentence words ("at", "in", "lines:") are prose, not origins.
+        if (!/[/@._-]/.test(origin)) {
+            m = re.exec(body);
+            continue;
+        }
+        const startLine = Number(m[2]);
+        const endLine = m[3] !== undefined ? Number(m[3]) : undefined;
+        if (Number.isFinite(startLine) && startLine >= 1) {
+            out.push({ origin, path, startLine, endLine });
+        }
+        m = re.exec(body);
+    }
+    return out;
+}
+
+/**
+ * Subject-matching for in-repo evidence anchors (task 0583 R4/R5).
+ *
+ * Given the requirement/AC row that names an anchor and the cited source text,
+ * decide whether the cited lines really address the citing requirement's subject.
+ * The subject is the row's noun — prefer symbols/identifiers over free text so a
+ * citation whose line content names the same symbol passes even under ordinary
+ * wording drift (R5): a test whose identifier paraphrases the requirement counts.
+ *
+ * Extracts candidate subject tokens from the citing row (backticked symbols,
+ * PascalCase/camelCase identifiers, and the R-/AC-n API), then checks whether any
+ * appears in the cited window. If none does, the anchor's lines do not name the
+ * requirement's subject → mismatch (R4). Never re-reads the whole file: the caller
+ * already holds the in-range window.
+ */
+export function extractSubjectTokens(row: string, excludeCitation?: string): string[] {
+    const tokens = new Set<string>();
+    // Tokens that can never appear in cited SOURCE lines, so keeping them only
+    // guarantees a mismatch on well-formed rows:
+    //   - the citation itself — code never contains its own `path:line`;
+    //   - verdict-table metadata (`MET`, `PARTIAL`, …) — row status, not subject.
+    // A minimal, correct evidence row (`| R1 | MET | \`path.ts:12-20\` |`) yields
+    // exactly these and nothing else, so without the exclusion every such row
+    // reports (task 0583 R5 verify).
+    const ROW_METADATA = new Set(['met', 'partial', 'unmet', 'n/a', 'na', 'pass', 'fail', 'todo', 'done']);
+    const excluded = new Set<string>();
+    if (excludeCitation !== undefined && excludeCitation !== '') {
+        excluded.add(excludeCitation.toLowerCase());
+        excluded.add(excludeCitation.replace(/:(\d+)(?:-(\d+))?$/, '').toLowerCase());
+    }
+    // Backticked symbols/identifiers in the row (the strongest subject signal).
+    for (const m of row.matchAll(/`([^`]+)`/g)) {
+        const t = m[1]?.trim();
+        if (!t || !/[A-Za-z0-9_./-]+/.test(t)) continue;
+        tokens.add(t.toLowerCase());
+        // A backticked PHRASE (`spur task migrate-anchors --dry-run`) is one atomic
+        // token that source can never contain verbatim, even when the code plainly
+        // names the verb. Contribute its identifier-ish words too, so the phrase
+        // still carries a matchable subject instead of guaranteeing a mismatch.
+        if (/\s/.test(t)) {
+            for (const part of t.split(/\s+/)) {
+                const word = part.replace(/^-+/, '').replace(/[^A-Za-z0-9_./-]+$/, '');
+                if (word.length >= 3 && /[A-Za-z]/.test(word)) tokens.add(word.toLowerCase());
+            }
+        }
+    }
+    // CamelCase / PascalCase / snake_case identifiers (bare symbols).
+    for (const m of row.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*\b/g)) {
+        if (m[0]) tokens.add(m[0].toLowerCase());
+    }
+    for (const m of row.matchAll(/\b[a-z0-9_]+_[a-z0-9_]+\b/g)) {
+        if (m[0]) tokens.add(m[0].toLowerCase());
+    }
+    // R-/AC- references.
+    for (const m of row.matchAll(/\b(R|AC)-?\d+\b/g)) {
+        if (m[0]) tokens.add(m[0].toLowerCase());
+    }
+    return [...tokens].filter((t) => !excluded.has(t) && !ROW_METADATA.has(t));
+}
+
+/**
+ * Whether the cited lines name the requirement's subject (R5 paraphrase-tolerance).
+ * True when any extracted subject token appears in the cited window. An empty
+ * token set (no identifiable subject) counts as matching — we only report a
+ * mismatch when we know what the subject should be and it is absent.
+ */
+export function citedLinesNameSubject(subjectTokens: string[], cited: string): boolean {
+    if (subjectTokens.length === 0) return true;
+    const lower = cited.toLowerCase();
+    if (subjectTokens.some((t) => lower.includes(t))) return true;
+    // An `R3`/`AC-2` id is matchable evidence when a code comment cites it, but it is
+    // not a SUBJECT: a row whose only remaining token is its own requirement id names
+    // nothing to look for in the code, so demanding a match there reports every
+    // correctly-cited minimal row. Absence of a real identifier ⇒ nothing to assert.
+    const isRowId = (t: string) => /^(r|ac)-?\d+$/.test(t);
+    return subjectTokens.every(isRowId);
 }
 
 function hasAdjacentFileLineColumns(body: string): boolean {
@@ -706,7 +845,10 @@ export class TaskCheckService extends PlanningCheckService {
                     });
                 }
                 // ── AC coverage (R1, DD-09): task AC ⊆ linked feature AC ──
-                await this.checkAcCoverage(doc, featurePath, featureId, findings);
+                // Declared altitude (task 0584 R3): `task-local` skips the subset
+                // rule; absent/`graduating` enforces it. Field-only — never inferred.
+                const acAltitude = fm.ac_altitude as 'graduating' | 'task-local' | undefined;
+                await this.checkAcCoverage(doc, featurePath, featureId, acAltitude, findings);
             }
         } else {
             findings.push({
@@ -1030,9 +1172,31 @@ export class TaskCheckService extends PlanningCheckService {
         const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         for (const section of ['Testing', 'Solution'] as const) {
             const body = doc.getSection(section);
-            if (body === null || isPlaceholderBody(body)) continue;
-            const citations = extractBacktickLineAnchors(body);
+            if (body === null || isPlaceholderBody(body)) continue; // External-evidence form (task 0584 R1): a named origin + backticked
+            // path + line number OUTSIDE the backticks is evidence that lives
+            // outside this repo — never a repo-root anchor, never stale. R2: a
+            // citation whose basename resolves uniquely inside this repo is NOT
+            // eligible for the external form — it is in-repo evidence and must
+            // use a repo-relative anchor; the external form still reports.
+            const external = classifyExternalEvidence(body);
             let reported = 0;
+            if (external.length > 0) {
+                const uniqueInRepo = await this.uniqueRepoBasenames(projectRoot, external);
+                for (const e of external) {
+                    if (reported >= 5) break;
+                    // Only THIS citation resolving uniquely in-repo disqualifies it.
+                    if (!uniqueInRepo.has(basename(e.path).toLowerCase())) continue;
+                    reported++;
+                    findings.push({
+                        layer: 'L4',
+                        code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
+                        severity: 'warning',
+                        section,
+                        message: `External evidence form used for in-repo path \`${e.path}\` (origin ${e.origin}, line ${e.startLine}) — resolve it repo-relative instead (task 0584 R2)`,
+                    });
+                }
+            }
+            const citations = extractBacktickLineAnchors(body);
             for (const cite of citations) {
                 if (reported >= 5) break;
                 const abs = join(projectRoot, cite.path);
@@ -1067,12 +1231,92 @@ export class TaskCheckService extends PlanningCheckService {
                             message: `Stale line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines)`,
                         });
                         reported++;
+                    } else {
+                        // R4/R5 (task 0583): subject matching — the cited lines must
+                        // name the requirement/AC row's subject. Extract subject tokens
+                        // from the citing row (the line that carries this citation) and
+                        // require one to appear in the cited window. Warning until the
+                        // R1 qualification pass has landed (severity-override promotes).
+                        const rawLow = raw.toLowerCase();
+                        const basename = cite.path.split('/').pop() ?? '';
+                        const citedWindow =
+                            (raw
+                                .split('\n')
+                                .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
+                                .join('\n') || '') + (rawLow.includes(basename.toLowerCase()) ? ` ${basename}` : '');
+                        const citingRow =
+                            body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
+                            body.split('\n').find((l) => l.includes(cite.raw)) ??
+                            '';
+                        const tokens = extractSubjectTokens(citingRow, cite.raw);
+                        if (!citedLinesNameSubject(tokens, citedWindow)) {
+                            findings.push({
+                                layer: 'L4',
+                                code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+                                severity: 'warning',
+                                section,
+                                message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${tokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
+                            });
+                            reported++;
+                        }
                     }
                 } catch {
                     // Unreadable — skip bounds; existence already passed.
                 }
             }
         }
+    }
+
+    /**
+     * R2 (task 0584): true when any external-form citation's basename resolves
+     * uniquely inside this repo — i.e. exactly one file in the tree (excluding
+     * gitignored/build/generated surfaces) shares the basename. Unique resolution
+     * means the citation is in-repo evidence, so the external form is ineligible.
+     */
+    /**
+     * Basenames from `external` that resolve to EXACTLY ONE file in the repo.
+     *
+     * Per-citation, deliberately: an earlier shape answered a single boolean for the
+     * whole set, so one in-repo basename flagged every external citation in the
+     * section — each with a message naming ITS path as in-repo, which was false for
+     * all but one. One tree walk still serves the whole set.
+     */
+    private async uniqueRepoBasenames(projectRoot: string, external: Array<{ path: string }>): Promise<Set<string>> {
+        const toMatch = new Set(external.map((e) => basename(e.path).toLowerCase()).filter(Boolean));
+        if (toMatch.size === 0) return new Set();
+        const counts = new Map<string, number>();
+        const stack = [projectRoot];
+        while (stack.length > 0) {
+            const dir = stack.pop();
+            if (!dir) continue;
+            if (/\.spur$/.test(dir) || /(^|\/)(node_modules|\.git|dist|build|coverage)(\/|$)/.test(dir)) continue;
+            let entries: string[];
+            try {
+                entries = await this.fs.readDir(dir);
+            } catch {
+                continue;
+            }
+            for (const name of entries) {
+                const lower = name.toLowerCase();
+                if (toMatch.has(lower)) {
+                    counts.set(lower, (counts.get(lower) ?? 0) + 1);
+                    continue;
+                }
+                try {
+                    const abs = join(dir, name);
+                    const stat = await this.fs.stat(abs);
+                    if (
+                        stat !== null &&
+                        stat !== undefined &&
+                        (stat as { isDirectory?: () => boolean }).isDirectory?.()
+                    )
+                        stack.push(abs);
+                } catch {
+                    // unreadable entry — skip
+                }
+            }
+        }
+        return new Set([...counts].filter(([, n]) => n === 1).map(([k]) => k));
     }
 
     /**
@@ -1128,15 +1372,21 @@ export class TaskCheckService extends PlanningCheckService {
      * by normalized title (subset rule). Uncovered task scenarios are warnings by
      * default (C04: errors only if the hard core elevates; `--strict` does that).
      * Uses the shared 0043 `checkAcCoverage` — never a private matcher.
+     * Declared `ac_altitude: task-local` (task 0584 / ADR-062) skips the subset
+     * rule entirely; the field is the only input, never inferred from notation.
      */
     private async checkAcCoverage(
         taskDoc: MarkdownDocument,
         featurePath: string,
         featureId: string,
+        acAltitude: 'graduating' | 'task-local' | undefined,
         findings: CheckFindings[],
     ): Promise<void> {
         const taskAc = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
         if (taskAc.trim().length === 0) return; // no task AC → nothing to cover
+        // task-local: criteria sit at a finer altitude than the feature's ship
+        // contract — the DD-09 subset rule does not apply (task 0584 R3).
+        if (acAltitude === 'task-local') return;
 
         let featureAc: string;
         let featureTags: string[] = [];
@@ -1157,7 +1407,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (featureAc.trim().length === 0) return;
 
         const taskChecklist = parseChecklist(taskAc);
-        const result = checkAcCoverage(featureAc, taskAc, taskChecklist);
+        const result = checkAcCoverage(featureAc, taskAc, taskChecklist, acAltitude);
         for (const scenario of result.uncovered) {
             findings.push({
                 layer: 'L4',

@@ -287,6 +287,22 @@ export const taskFrontmatterSchema = z.object({
      */
     ac_numbering: z.literal('task-local').optional(),
     /**
+     * AC altitude contract (DD-09, task 0584 / ADR-062).
+     *
+     * `graduating` — this task's AC scenarios are ship-contract scenarios that
+     * graduate the linked feature's AC, so the DD-09 subset rule (every task
+     * scenario must match a feature scenario by normalized title) is enforced.
+     *
+     * `task-local` — the task's criteria sit at a finer altitude than the
+     * feature's ship contract (fix-task regression criteria, etc.), so the
+     * subset rule is skipped.
+     *
+     * **Optional, no default.** Absent keeps today's behavior (rule enforced,
+     * `graduating`). The field is the ONLY altitude input — never inferred from
+     * `template`, `status`, or whether AC uses Gherkin (R4).
+     */
+    ac_altitude: z.enum(['graduating', 'task-local']).optional(),
+    /**
      * Operator override of the verdict gate (R3, task 0292). `done_forced=true`
      * records that a non-PASS verdict was advanced to `done` deliberately;
      * `done_reason` carries the operator rationale. Accepts the YAML boolean
