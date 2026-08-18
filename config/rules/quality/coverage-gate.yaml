@@ -1,8 +1,9 @@
 # Coverage gate — per-file line coverage meets threshold from Bun's lcov output.
 # Absorbed from ts-libs/.spur/rules/quality/coverage-gate.yaml, re-scoped to
 # Spur's monorepo layout:
-#   - lcovPath kept at .coverage/lcov.info (Spur's `bun run test` writes
-#     coverage there via --coverage-dir=.coverage)
+#   - lcovPath kept at .coverage/lcov.info (Spur's `bun run test:coverage` —
+#     what `bun run check` and the `*:full` chains run — writes coverage there
+#     via --coverage-dir=.coverage; plain `bun run test` skips coverage)
 #   - include expanded to apps/** + packages/** (Spur tests cover both;
 #     ts-libs only covers packages/**)
 #   - threshold kept at 90 matching bunfig.toml coverageThreshold

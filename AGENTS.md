@@ -196,7 +196,7 @@ Monorepo scripts (not product verbs):
 ```bash
 bun run lint       # biome + per-workspace tsc --noEmit
 bun run format     # biome --write
-bun run test       # bun test --coverage (all workspaces)
+bun run test       # bun test (all workspaces; coverage via bun run test:coverage)
 bun run test-cf    # Cloudflare Workers Vitest against the real Worker entry
 bunx wrangler deploy --dry-run --config apps/server/wrangler.toml  # Worker bundle + dist/web asset-path gate
 bun run clean && bun run build
@@ -344,8 +344,9 @@ when the task used the pipeline.
 ## Testing
 
 - Location: `<workspace>/tests/**/*.test.ts` (`bun:test`); `plugins/sp` chained in root `test`.
-- Coverage: per-file line/function ≥ 90% aggregate (`bunfig.toml`); React `.tsx` excluded from
-  per-file gate (happy-dom).
+- Coverage: per-file line/function ≥ 90% aggregate, enforced via `bun run test:coverage`
+  (what `bun run check` and the `*:full` chains run; plain `bun run test` skips coverage
+  measurement); React `.tsx` excluded from the per-file gate (happy-dom).
 - DAOs: in-memory SQLite (`:memory:`), fresh adapter per test.
 - Names describe behavior under conditions; assert the requirement, not the implementation.
 - Extension path: `/sp:dev-unit`; evidence path: `/sp:dev-verify`.

@@ -88,6 +88,12 @@ interface PreflightContext {
     defaultBranch: string;
 }
 
+interface Upstream {
+    ref: string;
+    ahead: number;
+    behind: number;
+}
+
 interface Finding {
     kind: 'review' | 'inline' | 'comment';
     severity: string;
@@ -433,6 +439,22 @@ function preflightContext(): PreflightContext {
     };
 }
 
+/** Upstream divergence, non-fatal: a missing upstream is a normal state, not an error. */
+function resolveUpstream(): Upstream | null {
+    const refRes = run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    if (refRes.code !== 0) return null;
+    const ref = refRes.stdout.trim();
+    const count = (res: CmdResult): number => {
+        const n = Number(res.stdout.trim());
+        return res.code === 0 && Number.isFinite(n) ? n : 0;
+    };
+    return {
+        ref,
+        ahead: count(run(['git', 'rev-list', '--count', '@{u}..HEAD'])),
+        behind: count(run(['git', 'rev-list', '--count', 'HEAD..@{u}'])),
+    };
+}
+
 function viewPr(): GhPr | null {
     const res = run([
         'gh',
@@ -507,15 +529,27 @@ function cmdPreflight(args: ParsedArgs): void {
             2,
         );
     }
+    const base = (args.flags.get('--base') ?? '').trim() || ctx.defaultBranch;
+    const upstream = resolveUpstream();
+    if (ctx.branch === base) {
+        writeStatus(args, 'FAIL');
+        fail(
+            args,
+            `current branch is the base branch (${base}) — a PR reviews a feature branch against it; ` +
+                'check out a feature branch (nothing on the base branch is reviewable)',
+            2,
+        );
+    }
     writeStatus(args, 'PASS');
     emit(
         args,
-        { ok: true, ...ctx },
+        { ok: true, ...ctx, upstream },
         [
             `Repository: ${ctx.nameWithOwner}`,
             `Branch:     ${ctx.branch}`,
             `HEAD:       ${ctx.shortHead}`,
             `Default:    ${ctx.defaultBranch}`,
+            `Upstream:   ${upstream ? `${upstream.ref} (ahead ${upstream.ahead}, behind ${upstream.behind})` : `none (publishing would create origin/${ctx.branch})`}`,
             'Local:      clean',
         ].join('\n'),
     );

@@ -43,19 +43,21 @@ terminalStates:
 failureStates:
   - failed
 vars:
-  mode: 'full'
-  baseBranch: ''
-  focus: ''
-  noWait: 'false'
-  waitTimeoutSec: '600'
-  waitIntervalSec: '30'
-  preReviewCmd: ''
-  __runId: ''
+  mode: "full"
+  baseBranch: ""
+  focus: ""
+  noWait: "false"
+  waitTimeoutSec: "600"
+  waitIntervalSec: "30"
+  preReviewCmd: ""
+  __runId: ""
 
 states:
   - id: preflight
     description: >
-      Soft probe: git/gh/repo checks (detached HEAD, dirty tree, gh auth, GitHub remote).
+      Soft probe: git/gh/repo checks (detached HEAD, dirty tree, gh auth, GitHub remote,
+      base-branch refusal — preflight refuses when the current branch IS the resolved base,
+      before any push can publish it).
       Writes PASS|FAIL to .spur/run/${vars.__runId}-pr-preflight.status; always exit 0.
     onEnter:
       - kind: shell
@@ -64,7 +66,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-preflight.status" &&
             set +e &&
-            bun "$(superskill script path sp pr-reviewing.ts)" preflight --json > ".spur/run/$__runId-pr-context.json";
+            bun "$(superskill script path sp pr-reviewing.ts)" preflight --base "$baseBranch" --json > ".spur/run/$__runId-pr-context.json";
             rc=$?; set -e &&
             if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi &&
             exit 0
@@ -212,7 +214,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-pr-preflight.status 2>/dev/null)" = PASS'
   - from: preflight
     to: failed
-    description: Preflight red (detached HEAD, dirty tree, gh auth, no GitHub remote) — stop before any publishing
+    description: Preflight red (detached HEAD, dirty tree, gh auth, no GitHub remote, or the current branch being the base branch) — stop before any publishing
     guard:
       kind: always
 

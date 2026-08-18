@@ -299,6 +299,8 @@ case "$*" in
     cat "$FIX/dirty" 2>/dev/null || true ;;
   "rev-parse --abbrev-ref --symbolic-full-name @{u}")
     if [ -f "$FIX/upstream" ]; then cat "$FIX/upstream"; else exit 1; fi ;;
+  "rev-list --count @{u}..HEAD") cat "$FIX/ahead" 2>/dev/null || printf '0\n' ;;
+  "rev-list --count HEAD..@{u}") cat "$FIX/behind" 2>/dev/null || printf '0\n' ;;
   "rev-parse @{u}") cat "$FIX/remotehead" ;;
   "push -u origin HEAD") printf '%s\\n' HEAD > "$FIX/remotehead"; printf '%s\\n' 'origin/main' > "$FIX/upstream" ;;
   "push") cat "$FIX/head" > "$FIX/remotehead" ;;
@@ -355,6 +357,8 @@ function seedHealthy(dir: string): void {
     writeFileSync(join(dir, 'head'), 'aaaa1111bbbb2222cccc3333dddd4444eeee5555\n');
     writeFileSync(join(dir, 'remotehead'), 'aaaa1111bbbb2222cccc3333dddd4444eeee5555\n');
     writeFileSync(join(dir, 'upstream'), 'origin/feat/x\n');
+    writeFileSync(join(dir, 'ahead'), '0\n');
+    writeFileSync(join(dir, 'behind'), '0\n');
     writeFileSync(join(dir, 'commits'), 'aaaa111 feat: x\n');
     writeFileSync(
         join(dir, 'pr.json'),
@@ -432,6 +436,61 @@ describe('CLI subcommands over stubbed git/gh', () => {
         const res = runScript(['preflight']);
         expect(res.code).toBe(2);
         expect(res.stderr).toContain('gh auth login');
+    });
+
+    test('preflight refuses on the base branch in all three sub-states, before any push', () => {
+        // (a) commits ahead of upstream on the default branch — the dogfood P1
+        writeFileSync(join(fix, 'branch'), 'main\n');
+        writeFileSync(join(fix, 'upstream'), 'origin/main\n');
+        writeFileSync(join(fix, 'ahead'), '2\n');
+        const ahead = runScript(['preflight', '--json']);
+        expect(ahead.code).toBe(2);
+        expect(ahead.stderr).toContain('base branch');
+        expect(JSON.parse(ahead.stdout).error).toContain('base branch');
+        expect(calls()).not.toContain('git push');
+
+        // (b) no upstream on the default branch
+        rmSync(join(fix, 'upstream'));
+        const noUp = runScript(['preflight']);
+        expect(noUp.code).toBe(2);
+        expect(noUp.stderr).toContain('base branch');
+
+        // (c) up to date with upstream on the default branch
+        writeFileSync(join(fix, 'upstream'), 'origin/main\n');
+        writeFileSync(join(fix, 'ahead'), '0\n');
+        const upToDate = runScript(['preflight']);
+        expect(upToDate.code).toBe(2);
+        expect(upToDate.stderr).toContain('base branch');
+    });
+
+    test('preflight refuses when the resolved --base equals the current branch', () => {
+        // Branch is not the repo default, but the overridden base matches it — the
+        // same refusal ensure-pr applies, now before any push can fire (R1 override path).
+        const res = runScript(['preflight', '--base', 'feat/x', '--json']);
+        expect(res.code).toBe(2);
+        expect(res.stderr).toContain('base branch');
+        expect(calls()).not.toContain('git push');
+    });
+
+    test('preflight passes on a feature branch and reports upstream divergence', () => {
+        writeFileSync(join(fix, 'ahead'), '2\n');
+        writeFileSync(join(fix, 'behind'), '1\n');
+        const res = runScript(['preflight', '--json']);
+        expect(res.code).toBe(0);
+        const payload = JSON.parse(res.stdout);
+        expect(payload.upstream).toEqual({ ref: 'origin/feat/x', ahead: 2, behind: 1 });
+        const human = runScript(['preflight']);
+        expect(human.code).toBe(0);
+        expect(human.stdout).toContain('ahead 2, behind 1');
+    });
+
+    test('preflight reports a missing upstream as none', () => {
+        rmSync(join(fix, 'upstream'));
+        const res = runScript(['preflight']);
+        expect(res.code).toBe(0);
+        const payload = JSON.parse(runScript(['preflight', '--json']).stdout);
+        expect(payload.upstream).toBeNull();
+        expect(res.stdout).toContain('Upstream:   none');
     });
 
     test('preflight fails closed when git status cannot be read', () => {

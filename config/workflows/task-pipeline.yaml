@@ -85,6 +85,12 @@ vars:
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
   # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
   qualityGateCmd: "bun run format && bun run spur-check"
+  # Cheap red-detector run before the full gate on **recheck only**; empty ⇒ no probe
+  # (full gate every recheck — the pre-0587 behavior). A project overriding qualityGateCmd
+  # should override this too. TRUSTED CONFIG ONLY — executed via `sh -c` (same surface as
+  # qualityGateCmd). Invariant: `review` is only ever entered through a full green
+  # qualityGateCmd — only the full gate writes PASS to <wbs>-test-gate.status.
+  gateProbeCmd: "bun run lint"
   # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
   # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
   qualityGateMaxFixAttempts: "2"
@@ -300,7 +306,7 @@ states:
       # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
       - kind: shell
         options:
-          command: '$formatCmd ; exit 0'
+          command: "$formatCmd ; exit 0"
 
   # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
   # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
@@ -389,28 +395,43 @@ states:
       or the pipeline `failed` state (FAIL and attempts exhausted) — never a
       raw lifecycle abort that skips the terminal `failed` state.
     onEnter:
+      # 0587 R3: probe-then-full recheck. A red gateProbeCmd records FAIL and skips the full
+      # gate (the measured waste is re-running a 110–140s gate to learn the tree is still red);
+      # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
+      # Only the full gate writes PASS, so the `test-recheck → review` guard (reads PASS)
+      # still means a full green qualityGateCmd ran — invariant preserved by construction.
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
             LOG_FILE=".spur/run/$wbs-test-gate.log" &&
-            : > "$LOG_FILE" &&
-            gate_attempt=1;
-            while [ "$gate_attempt" -le 5 ]; do
-              ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
-              sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
-              gate_locked=0;
-              grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
-              cat "$ATTEMPT_LOG" >> "$LOG_FILE";
-              rm -f "$ATTEMPT_LOG";
-              if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
-              printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
-              sleep 10;
-              gate_attempt=$((gate_attempt + 1));
-            done &&
-            cat "$LOG_FILE" &&
             FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
+            : > "$LOG_FILE" &&
+            probe_rc=0;
+            if [ -n "$gateProbeCmd" ]; then
+              sh -c "$gateProbeCmd" > "$LOG_FILE.probe" 2>&1; probe_rc=$?;
+              cat "$LOG_FILE.probe" >> "$LOG_FILE";
+              rm -f "$LOG_FILE.probe";
+            fi;
+            if [ "$probe_rc" -ne 0 ]; then
+              gate_rc=$probe_rc;
+            else
+              gate_attempt=1;
+              while [ "$gate_attempt" -le 5 ]; do
+                ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
+                sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
+                gate_locked=0;
+                grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+                cat "$ATTEMPT_LOG" >> "$LOG_FILE";
+                rm -f "$ATTEMPT_LOG";
+                if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
+                printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
+                sleep 10;
+                gate_attempt=$((gate_attempt + 1));
+              done;
+            fi &&
+            cat "$LOG_FILE" &&
             set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
@@ -709,4 +730,4 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '! $spurBin task check $wbs'
+        command: "! $spurBin task check $wbs"

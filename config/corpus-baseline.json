@@ -12187,6 +12187,46 @@
             "severity": "error",
             "reason": "Accumulated anchor drift, surfaced by promotion of anchor-subject matching rule following later file edits.",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0587",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "DD-09 subset rule: 0587's AC are command-level verification steps for a script/config fix, one altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0588",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "DD-09 subset rule: 0588 is an investigation whose AC are evidence-and-decision checks, an altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0587",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "One box stays unchecked on purpose: AC4 (live preflight repro on the base branch) is PARTIAL, not MET — `gh auth status` fails against the keyring in the sandbox and the tree is dirty, so both earlier preflight guards fire before the base-branch check is reached. The behaviour is proven by the in-process tests under AC1. Remove this entry once AC4 is run on a clean tree with working `gh` auth.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0589",
+            "code": "L3.requirements-format",
+            "severity": "warning",
+            "reason": "Task cancelled 2026-08-18 as a false finding (the coverage gap it was opened for is a sandbox artifact of the [SKIP:spawn-denied] guard in apps/server/tests/context.test.ts). Requirements and AC are voided to 'N/A — task cancelled', so there are no R-numbered items to format. The file is kept as a record of the diagnosis.",
+            "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0590",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "DD-09 subset rule: 0590's AC are parser-behaviour checks for a verdict-tooling defect, an altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
+            "since": "2026-08-18"
         }
     ]
 }

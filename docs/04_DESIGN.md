@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.36.0
+version: 1.37.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-16
+updated_at: 2026-08-18
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -1604,11 +1604,14 @@ through `spur task record` (0108) / `spur task update --section`, so the lifecyc
 identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
-`maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`,
-`formatCmd`, `implementScopeGuard`, `__hitlAnswer`. The three command-shaped vars are the per-project override surface:
-`qualityGateCmd` (default `bun run autofix && bun run spur-check`) is single-sourced across the soft
+`maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
+`formatCmd`, `implementScopeGuard`, `__hitlAnswer`. Three are command-shaped (the per-project override
+surface): `qualityGateCmd` (default `bun run format && bun run spur-check`) is single-sourced across the soft
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
-post-implement auto-format. `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
+post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
+the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
+behavior, full gate every recheck). `review` is only ever entered through a **full green** `qualityGateCmd` —
+only the full gate writes `PASS` (task 0587 R3). `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
 that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the
 implement `agent.run` hop; override with `--vars '{"implementAgent":"omp-zai"}'` without retargeting

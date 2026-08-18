@@ -135,9 +135,12 @@ bun "$(superskill script path sp pr-reviewing.ts)" <subcommand> [flags]
 Installed targets resolve the staged TypeScript source and execute it with Bun, matching the rest
 of `plugins/sp/scripts`.
 
-1. **Preflight** — `<script> preflight --json`. Hard-fails on a
-   detached HEAD, missing `gh` auth, no GitHub remote, or a dirty tree. On a dirty tree, triage
-   with the user (commit/stash/exclude) before continuing — the workflow refuses to guess.
+1. **Preflight** — `<script> preflight --base "$base" --json`. Hard-fails on a
+   detached HEAD, missing `gh` auth, no GitHub remote, a dirty tree, or the current branch
+   being the base branch (a PR reviews a feature branch against the base; nothing on the
+   base branch is reviewable, and the guard runs before any push can publish it). On a
+   dirty tree, triage with the user (commit/stash/exclude) before continuing — the
+   workflow refuses to guess.
 2. **Hygiene** — `<script> hygiene --base "$base" --json`. `BLOCK` (secrets, `.env`, conflict markers,
    private keys) stops the run — never submit a tainted diff. `WARN` (debug residue) rides along
    into the report. This is a submission sanity check, not a second local review.
