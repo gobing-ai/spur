@@ -66,3 +66,10 @@ Captured to `.spur/run/wrapup-metrics.jsonl` — jq-validated, 2 rows:
 {"wbs":"0580","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
 {"wbs":"0579","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
 {"wbs":"0581","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
+Validated, 3 rows in `.spur/run/wrapup-metrics.jsonl`:
+
+```jsonl
+{"wbs":"0587","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-18T16:49:45.000Z"}
+```
+
+Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing → Pipeline verify results`); `status: done`, `feature_id: H1`. Appended to the existing 2-row file.

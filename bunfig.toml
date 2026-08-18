@@ -5,7 +5,7 @@ smol = true
 exact = true
 
 [test]
-coverage = false
+coverage = true
 coverageReporter = ["text", "lcov"]
 coverageDir = ".coverage"
 coverageThreshold = { lines = 0.9, functions = 0.9 }

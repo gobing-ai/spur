@@ -768,3 +768,28 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after the 0569 entry, same
 - **0581**: the R2 structural scanner matches SQL by backtick-span, so a shared `STEP_SELECT` const (single-quoted!) still trips it when its `FROM history_message` text lands inside a span — inline projections per query, matching file convention.
 - **0581**: raw (non-watermarked) sqlite reproduces the AC4 baseline exactly (2,478 / 354,130,045); the analyze path applies watermark exclusion (task 0550) so rendered numbers drift — record which plane a baseline was measured on.
 - **0581**: edit-tool hazard repeated: `PUT N.=N` replaces, not inserts; and a replaced block leaves stale shifted lines below that must be CUT. Re-read the region after every batch edit.
+Captured to `.spur/run/wrapup-learnings.md` (appended after the 0575 entry, same format).
+
+Extracted working learnings from task **0587** grouped by date/WBS:
+
+**Conventions**
+- Refuse a harmful action at the earliest spine state that can observe it (`cmdPreflight`, pre-push) — preflight FAIL routes straight to `failed` before `push` fires; keep the later guard as defense-in-depth.
+- Guard on the resolved base (`--base` override, else default) via one shared `resolveUpstream()` that feeds both refusal message and divergence output — two outputs can never disagree.
+- Drive product changes through existing script surfaces: retarget `package.json`'s `check` (what CI runs) instead of touching the CRITICAL `.github/workflows/` path; drop not defer now-unneeded approval gates.
+
+**Errors fixed**
+- R3 as first written ("targeted intermediate rechecks, full gate on final") was unimplementable — `test-recheck` is one state whose `→ review` fires on `PASS`. Restructured as **probe-then-full**: only the full gate writes `PASS`, so the invariant holds by construction.
+- Flipping coverage off red-gated the repo: `test-post-check`'s preset `extends: [quality]` pulls in `coverage-gate` reading `.coverage/lcov.info`. Fixed by filtering the fast script to `--rule every-export-has-tsdoc`.
+- R5 split to 0588 — open-ended measurement blocked `done`, pinned the 5-R-item cap.
+
+**Patterns**
+- Non-fatal `run()` never `runOk()` for a normal-state condition; `0` fallback on non-numeric `rev-list --count`.
+- When a git-stub fixture has a `*) exit 1` default, every new git call needs a stub case + fixture seed or the suite fails.
+- Don't add a new engine action (`file.read.into-var`) — engine drops non-final `setVars` (0571); read in-shell instead.
+- Prefer an under-inclusive probe (safe by construction — only falls through to existing behavior).
+
+**Gotchas**
+- Installed `~/.agents/scripts/sp/pr-reviewing.ts` ≠ in-repo source: `superskill install sp` rewrites the namespace prefix. Fix in-repo (SSOT); re-run install to deploy.
+- Exact branch-name match is the contract; detached HEAD fails earlier in `preflightContext`.
+- Re-derive line refs against the live tree — the original draft's `task-pipeline.yaml` refs were ~150 lines stale.
+- Left recorded back-notes: `preflight` HELP text omits the new hard-fail (deferred); R3 shell has no automated test (AC6 smoke covers it).
