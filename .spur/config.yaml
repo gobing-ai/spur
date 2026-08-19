@@ -208,11 +208,6 @@ tasks:
     docs/tasks4:
       baseCounter: 488
       label: Phase 4
-    # Pipeline eval fixtures (task 0595) — generated and cleaned by
-    # `scripts/spur-dev.ts eval-pipeline`, never by hand; WBS 95xx.
-    tests/fixtures/pipeline-eval/tasks:
-      baseCounter: 9499
-      label: Pipeline Eval Fixtures
   severity:
     L4.anchor-subject-mismatch: error
 

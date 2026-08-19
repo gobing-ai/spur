@@ -8,21 +8,22 @@ comparator that measures a task pipeline (R1–R7 of task 0595).
 | Path | Role |
 | --- | --- |
 | `templates/` | Fixture task bodies (checked in). `fixture-minimal.md` is the single-task set. |
-| `tasks/` | Generated fixture task files (runtime, gitignored). Registered in `.spur/config.yaml` as a task folder with `baseCounter: 9499` → fixture WBS is always **95xx**. |
-| `scratch/` | Deliverables fixture tasks write (runtime). NOT gitignored: the pipeline implement no-op guard is git-based, so the scratch file must be a visible working-tree change during the run; cleanup deletes it after. |
+| `.spur/tmp/eval-pipeline-*/worktree` | One disposable detached Git worktree per pipeline invocation. It contains the run-local config, task folder, database/run artifacts, and scratch tree. |
 
 ## Lifecycle (R4 — no corpus pollution)
 
-1. **Create** — the comparator allocates each fixture via
-   `spur task create "<title>" --folder tests/fixtures/pipeline-eval/tasks --json`
-   (respects the WBS allocator; 95xx range is disjoint from every production folder),
-   then fills `Background` / `Requirements` / `Acceptance Criteria` / `Q&A` / `Design` /
-   `Plan` sections via `spur task update <wbs> --section <name> --from-file`.
-2. **Run** — `spur workflow run <pipeline> --vars '{"wbs":"95xx",...}'` against the
-   pipeline under test. Fixtures never enter `docs/tasks*`.
-3. **Cleanup** — the comparator deletes `tasks/*.md` and `scratch/*` in a `finally`
-   block (also on failure), unless `--keep` is passed to inspect a post-mortem.
-   Manual sweep for an aborted run: `rm tests/fixtures/pipeline-eval/tasks/*.md`.
+1. **Create** — the comparator creates an isolated detached Git worktree and writes a
+   worktree-local task config with `baseCounter: 9499`. The real source-local `spur task
+   create --json` / `task update` commands then allocate deterministic **95xx** WBS values
+   and fill the template sections. This floor exists only inside that disposable project;
+   normal project allocation reads only the repository's production folders.
+2. **Run** — `spur workflow run <pipeline> --vars '{"wbs":"95xx",...}'` executes from the
+   worktree. Pipeline task lookup, Git diff guards, task files, scratch, `.spur/run`, and the
+   database are all private to that run. Concurrent evals cannot overwrite or clean one another.
+3. **Cleanup** — the comparator removes only its own worktree in a `finally` block, including
+   after a failed run. `--keep` retains the worktree and prints its absolute path for post-mortem
+   inspection; remove it later with `git worktree remove --force <reported-path>`.
 
-Because cleanup removes the files, `spur task check --corpus` never sees them; an
-aborted run leaves at most 95xx files whose removal is the documented sweep above.
+No fixture task or scratch file is written under the repository's configured task folders or
+the shared `tests/fixtures/pipeline-eval/scratch` path, so an eval run cannot affect the normal
+task corpus or another eval run.

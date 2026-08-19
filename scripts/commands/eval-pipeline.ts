@@ -5,29 +5,45 @@
  *        [--pipeline <yaml>]... [--fixture <template-name>]...
  *        [--runs <n>] [--keep] [--dry]
  *
- * For each pipeline under test: create fixture tasks under
- * tests/fixtures/pipeline-eval/tasks (WBS 95xx), run them through
- * `spur workflow run <pipeline> --vars {"wbs":...}`, and emit one record per
- * fixture task: { wbs, pipeline, verdict, gateOutcomes[], artifactsWritten[],
- * tokenCost, wallClockMs, exitCode }. Verdict comes from `spur task verdict
- * --json` (never re-implemented). With two pipelines a per-field diff is
- * emitted. Determinism is not assumed: the report carries runCount and
- * variance, and a single run is labelled as such (R3).
+ * For each pipeline under test: create fixture tasks in a detached run-local
+ * worktree (WBS 95xx), run them through `spur workflow run <pipeline>
+ * --vars {"wbs":...}`, and emit one record per fixture task: { wbs, pipeline,
+ * verdict, gateOutcomes[], artifactsWritten[], tokenCost, wallClockMs, exitCode
+ * }. Verdict comes from `spur task verdict --json` (never re-implemented). With
+ * two pipelines a per-field diff is emitted. Determinism is not assumed: the
+ * report carries runCount and variance, and a single run is labelled as such
+ * (R3).
  *
  * Fixtures are cleaned up in a finally block (R4) — see
  * tests/fixtures/pipeline-eval/README.md for the documented lifecycle.
  */
 import { Database } from 'bun:sqlite';
-import { readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');
-const FIXTURE_TASKS_DIR = join(FIXTURE_DIR, 'tasks');
-const RUN_DIR = join(REPO_ROOT, '.spur/run');
 const REPORT_DIR = join(REPO_ROOT, '.spur/reports/pipeline-eval');
 const DEFAULT_PIPELINE = join(REPO_ROOT, 'config/workflows/task-pipeline.yaml');
-const SPUR_BIN = join(RUN_DIR, 'spur-bin.sh');
+const SPUR_BIN = join(REPO_ROOT, '.spur/run/spur-bin.sh');
+const FIXTURE_BASE_COUNTER = 9499;
+
+function git(args: string[], cwd = REPO_ROOT): { exitCode: number; stdout: string; stderr: string } {
+    const proc = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    return {
+        exitCode: proc.exitCode ?? 1,
+        stdout: proc.stdout?.toString() ?? '',
+        stderr: proc.stderr?.toString() ?? '',
+    };
+}
+
+export interface EvalRun {
+    projectDir: string;
+    tasksDir: string;
+    runDir: string;
+    dbPath: string;
+    tempParent: string;
+}
 
 /** Frozen record shape — [0596]'s only interface. Do not change after 0596 starts. */
 export interface EvalRecord {
@@ -50,6 +66,69 @@ export interface EvalReport {
     records: EvalRecord[];
     variance: { wallClockMs: Record<string, number> } | null;
     promotionBarProposal: string;
+}
+
+/**
+ * Create a disposable detached worktree for one pipeline run.
+ *
+ * The worktree starts at HEAD, giving workflow actions real Git context. Its
+ * local config preserves the repository settings (including agent executors)
+ * and adds only the fixture folder/floor; the production config is untouched.
+ */
+export async function createEvalRun(): Promise<EvalRun> {
+    await mkdir(join(REPO_ROOT, '.spur/tmp'), { recursive: true });
+    const tempParent = await mkdtemp(join(REPO_ROOT, '.spur/tmp/eval-pipeline-'));
+    const projectDir = join(tempParent, 'worktree');
+    let worktreeAdded = false;
+    try {
+        const created = git(['worktree', 'add', '--detach', projectDir, 'HEAD']);
+        if (created.exitCode !== 0) {
+            throw new Error(`eval-pipeline: worktree create failed: ${created.stderr || created.stdout}`);
+        }
+        worktreeAdded = true;
+
+        const fixtureDir = join(projectDir, 'tests/fixtures/pipeline-eval');
+        const tasksDir = join(fixtureDir, 'tasks');
+        await mkdir(tasksDir, { recursive: true });
+        await mkdir(join(fixtureDir, 'scratch'), { recursive: true });
+
+        const configPath = join(REPO_ROOT, '.spur/config.yaml');
+        const config = await readFile(configPath, 'utf-8');
+        const fixturePath = 'tests/fixtures/pipeline-eval/tasks';
+        const fixtureConfig = [
+            `    ${fixturePath}:`,
+            `      baseCounter: ${FIXTURE_BASE_COUNTER}`,
+            '      label: Pipeline Eval Fixtures',
+        ].join('\n');
+        const localConfig = config.includes(`${fixturePath}:`)
+            ? config
+            : config.replace('  severity:\n', `${fixtureConfig}\n  severity:\n`);
+        if (localConfig === config && !config.includes(`${fixturePath}:`)) {
+            throw new Error('eval-pipeline: could not inject fixture task folder into worktree config');
+        }
+        await writeFile(join(projectDir, '.spur/config.yaml'), localConfig);
+
+        return {
+            projectDir,
+            tasksDir,
+            runDir: join(projectDir, '.spur/run'),
+            dbPath: join(projectDir, '.spur/spur.db'),
+            tempParent,
+        };
+    } catch (error) {
+        if (worktreeAdded) git(['worktree', 'remove', '--force', projectDir]);
+        await rm(tempParent, { recursive: true, force: true }).catch(() => {});
+        throw error;
+    }
+}
+
+/** Remove the worktree and its private mutable state. */
+export async function removeEvalRun(run: EvalRun): Promise<void> {
+    const removed = git(['worktree', 'remove', '--force', run.projectDir]);
+    if (removed.exitCode !== 0) {
+        throw new Error(`eval-pipeline: worktree cleanup failed: ${removed.stderr || removed.stdout}`);
+    }
+    await rm(run.tempParent, { recursive: true, force: true });
 }
 
 interface Args {
@@ -161,10 +240,10 @@ const GATE_FILES = [
     '{wbs}-verdict.json',
 ];
 
-export async function readGateOutcomes(wbs: string): Promise<string[]> {
+export async function readGateOutcomes(wbs: string, runDir = join(REPO_ROOT, '.spur/run')): Promise<string[]> {
     const out: string[] = [];
     for (const f of GATE_FILES) {
-        const p = join(RUN_DIR, f.replace('{wbs}', wbs));
+        const p = join(runDir, f.replace('{wbs}', wbs));
         let content: string;
         try {
             content = await readFile(p, 'utf-8');
@@ -190,9 +269,9 @@ function jsonGateVerdict(content: string): string {
     }
 }
 
-function spur(args: string[], opts: { timeoutMs?: number } = {}) {
+function spur(args: string[], opts: { cwd?: string; timeoutMs?: number } = {}) {
     const proc = Bun.spawnSync([SPUR_BIN, ...args], {
-        cwd: REPO_ROOT,
+        cwd: opts.cwd ?? REPO_ROOT,
         timeout: opts.timeoutMs ?? 60_000,
         stdout: 'pipe',
         stderr: 'pipe',
@@ -201,16 +280,23 @@ function spur(args: string[], opts: { timeoutMs?: number } = {}) {
 }
 
 /** Create one fixture task from a template; returns its WBS. */
-async function createFixture(templateName: string): Promise<string> {
+async function createFixture(templateName: string, run: EvalRun): Promise<string> {
     const body = await readFile(join(FIXTURE_DIR, 'templates', `${templateName}.md`), 'utf-8');
-    const created = spur([
-        'task',
-        'create',
-        `pipeline-eval fixture ${templateName}`,
-        '--folder',
-        FIXTURE_TASKS_DIR,
-        '--json',
-    ]);
+    const created = spur(
+        [
+            'task',
+            'create',
+            `pipeline-eval fixture ${templateName}`,
+            '--folder',
+            run.tasksDir,
+            '--allow-duplicate-name',
+            '--json',
+        ],
+        { cwd: run.projectDir },
+    );
+    if (created.exitCode !== 0) {
+        throw new Error(`eval-pipeline: fixture create failed for ${templateName}: ${created.stdout}`);
+    }
     const wbs = (JSON.parse(created.stdout) as { wbs: string }).wbs;
     // Fill sections by splitting the template on its ### headings.
     const sections = body.split(/^### /m).slice(1);
@@ -218,31 +304,25 @@ async function createFixture(templateName: string): Promise<string> {
         const nl = section.indexOf('\n');
         const name = section.slice(0, nl).trim();
         const content = section.slice(nl + 1).replace(/\n+$/, '');
-        const tmp = join(REPO_ROOT, '.spur/tmp', `eval-${wbs}-${name.replace(/\s+/g, '-')}.md`);
+        const tmp = join(run.projectDir, '.spur', `eval-${wbs}-${name.replace(/\s+/g, '-')}.md`);
         await Bun.write(tmp, `${content}\n`);
-        const r = spur(['task', 'update', wbs, '--section', name, '--from-file', tmp]);
+        const r = spur(['task', 'update', wbs, '--section', name, '--from-file', tmp], {
+            cwd: run.projectDir,
+        });
         if (r.exitCode !== 0) throw new Error(`eval-pipeline: section ${name} write failed for ${wbs}`);
     }
     return wbs;
 }
 
-async function cleanupFixtures(): Promise<void> {
-    await rm(FIXTURE_TASKS_DIR, { recursive: true, force: true }).catch(() => {});
-    await rm(join(FIXTURE_DIR, 'scratch'), { recursive: true, force: true }).catch(() => {});
-    // tasks/ keeps a gitignore skeleton (fixture .md files are runtime-only);
-    // scratch/ stays fully git-visible — the implement no-op guard probes git
-    // (task 0595), and the run's deliverable must be a visible tree change.
-    await Bun.write(join(FIXTURE_TASKS_DIR, '.gitignore'), '*.md\n!.gitignore\n');
-}
-
 /** Run the fixture set against one pipeline once; returns records. */
 async function runOnce(pipeline: string, fixtures: string[], args: Args): Promise<EvalRecord[]> {
+    const run = await createEvalRun();
     const wbsList: string[] = [];
     let before: Record<string, number> = {};
     const records: EvalRecord[] = [];
     try {
-        before = await snapshotDir(RUN_DIR);
-        for (const f of fixtures) wbsList.push(await createFixture(f));
+        before = await snapshotDir(run.runDir);
+        for (const f of fixtures) wbsList.push(await createFixture(f, run));
         for (const wbs of wbsList) {
             const t0 = Date.now();
             const fromIso = new Date(t0).toISOString();
@@ -255,30 +335,41 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                         'run',
                         pipeline,
                         '--vars',
-                        JSON.stringify({ wbs, profile: 'auto', ...args.vars }),
+                        JSON.stringify({
+                            wbs,
+                            profile: 'auto',
+                            spurBin: SPUR_BIN,
+                            ...args.vars,
+                        }),
                     ],
-                    { cwd: REPO_ROOT, timeout: 45 * 60_000, stdout: 'pipe', stderr: 'pipe' },
+                    {
+                        cwd: run.projectDir,
+                        timeout: 45 * 60_000,
+                        stdout: 'pipe',
+                        stderr: 'pipe',
+                    },
                 );
                 exitCode = proc.exitCode ?? 1;
             }
             const t1 = Date.now();
-            const after = await snapshotDir(RUN_DIR);
-            const verdictJson = spur(['task', 'verdict', wbs, '--json']);
+            const after = await snapshotDir(run.runDir);
+            const verdictJson = spur(['task', 'verdict', wbs, '--json'], {
+                cwd: run.projectDir,
+            });
             records.push({
                 wbs,
                 pipeline,
                 verdict: parseVerdict(verdictJson.stdout),
-                gateOutcomes: await readGateOutcomes(wbs),
+                gateOutcomes: await readGateOutcomes(wbs, run.runDir),
                 artifactsWritten: diffSnapshot(before, after),
-                tokenCost: args.dry
-                    ? null
-                    : extractTokenCost(join(REPO_ROOT, '.spur/spur.db'), fromIso, new Date(t1).toISOString()),
+                tokenCost: args.dry ? null : extractTokenCost(run.dbPath, fromIso, new Date(t1).toISOString()),
                 wallClockMs: t1 - t0,
                 exitCode,
             });
         }
     } finally {
-        if (!args.keep) await cleanupFixtures();
+        if (args.keep) console.log(`fixture run kept: ${run.projectDir}`);
+        else await removeEvalRun(run);
     }
     return records;
 }

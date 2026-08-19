@@ -2,13 +2,48 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+    createEvalRun,
     diffRecords,
     diffSnapshot,
     type EvalRecord,
+    type EvalRun,
     extractTokenCost,
     parseVerdict,
     readGateOutcomes,
+    removeEvalRun,
 } from './eval-pipeline';
+
+describe('isolated eval project', () => {
+    const runs: EvalRun[] = [];
+
+    afterAll(async () => {
+        for (const run of runs) await removeEvalRun(run);
+    });
+
+    test('uses real, isolated worktrees with a run-local fixture floor', async () => {
+        const first = await createEvalRun();
+        const second = await createEvalRun();
+        runs.push(first, second);
+
+        expect(first.projectDir).not.toBe(second.projectDir);
+        expect(first.tasksDir).not.toBe(second.tasksDir);
+        expect(first.tasksDir).toContain(`${first.projectDir}/tests/fixtures/pipeline-eval/tasks`);
+
+        const localConfig = await Bun.file(join(first.projectDir, '.spur/config.yaml')).text();
+        const repositoryConfig = await Bun.file('.spur/config.yaml').text();
+        expect(localConfig).toContain('tests/fixtures/pipeline-eval/tasks:');
+        expect(localConfig).toContain('baseCounter: 9499');
+        expect(repositoryConfig).not.toContain('tests/fixtures/pipeline-eval/tasks:');
+
+        await writeFile(join(first.tasksDir, '9500_fixture.md'), 'first\n');
+        expect(await Bun.file(join(second.tasksDir, '9500_fixture.md')).exists()).toBeFalse();
+
+        await writeFile(join(first.projectDir, 'tests/fixtures/pipeline-eval/scratch/9500.md'), 'fixture 9500 ok\n');
+        const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: first.projectDir });
+        expect(status.exitCode).toBe(0);
+        expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/');
+    });
+});
 
 describe('diffSnapshot', () => {
     test('reports created and modified files, ignores unchanged', () => {
