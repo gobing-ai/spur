@@ -4,23 +4,25 @@ name: "Run-record consolidation + the History/Observability read plane"
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:30.496Z
-updated_at: "2026-08-18T22:34:56.902Z"
+updated_at: "2026-08-19T00:11:24.752Z"
 feature_id: I6
 ---
 
 ## 0598. Run-record consolidation + the History/Observability read plane
 
 ### Background
-
 `wayfinder:research` — ticket on map **[I6]** (Spur harness self-improvement program).
 
+#### The sharp question
 **What is the durable record of one workflow run, and what does the Observability module need to read
 so its History-facing tabs are backed by the right source?**
 
+#### Why these are one ticket
 The operator's two-file rule exists *in order to* make an execution-log / audit-trail tab possible —
 the run record and the surface that reads it are one contract seen from two ends. Splitting them means
 designing a file format blind to its only consumer, or a UI blind to what it can actually get.
 
+#### Operator rulings (settled at charting; do not re-open)
 1. **No new board module.** History-related surfaces stay in the existing `modules/observability/`.
 2. **`Tool Using` must be sourced from the conversation-history plane** — the rows imported by
    `spur history import` and aggregated by `spur history analyze` — **not** from event tracking,
@@ -29,6 +31,7 @@ designing a file format blind to its only consumer, or a UI blind to what it can
 3. **`Tasks` and `Jobs` tabs are deferred.** Their backends do not carry enough data to be useful yet.
    Inventory them, state what data each would need, and stop. **No refactor design for them.**
 
+#### Ground truth established at charting (do not re-derive)
 - **`.spur/run` holds 1,518 files, flat** (1,512 at charting — it grew during the session, which is
   itself the retention evidence), in ~30 artifact kinds per run: `-verdict.json` ×248,
   `.log` ×177, `-verify-answer.txt` ×115, `-precheck-doctor.status` ×78, `-precheck-size.status` ×73,
@@ -51,6 +54,7 @@ designing a file format blind to its only consumer, or a UI blind to what it can
 - Feature **E1** (history data plane) and **E2** (session forensics) already own the ETL side. Read
   them before proposing anything on the data plane — this ticket owns the *read* side.
 
+#### What to produce
 1. **The run-record contract.** Per workflow-run instance, exactly two files — one **append-only
    markdown** capturing every input and output in sequence (no reads without an explicit order), and
    one **JSON state cache** (read/write). Specify what each holds, who writes them, how the ~30
@@ -82,9 +86,9 @@ designing a file format blind to its only consumer, or a UI blind to what it can
    contract first) and size each piece S/M/L. This is the largest build in the program; the plan needs
    an honest number.
 
+#### Out of scope for this ticket
 Writing the contract package, the server route, or any React. Any `TasksTab` / `JobsTab` refactor
 design. A new board module. Anything under `spur task` (feature F92, concurrent agent).
-
 ### Requirements
 
 - R1 — Specify the run-record contract: exactly two files per workflow-run instance — an append-only markdown of every input and output in sequence, and a read/write JSON state cache — stating what each holds and who writes them.
@@ -151,15 +155,12 @@ Feature: Run-record consolidation and the Observability read plane
 ```
 
 ### Q&A
-
 **Closed at charting (operator rulings — do not re-open).**
-
 - No new History board module; History-facing surfaces stay in `modules/observability/`.
 - `Tool Using` must be sourced from the `spur history import` → `analyze` plane.
 - `TasksTab` / `JobsTab` are deferred: inventory the data gap, no refactor design.
 
 **Closed during refine (premise verification).**
-
 - `.spur/runs/workflow/` **does not exist** — `--trace-file` declares it but is never used. The
   "two directories" framing was wrong; it is a dead facility needing a disposition.
 - `ToolUsingTab`'s source **is** the token ledger (`TokenLedgerWatcher` over a JSONL `ledgerPath`,
@@ -172,14 +173,11 @@ The retention window for run artifacts. This task proposes with the forensic cos
 decide, and it deletes nothing.
 
 **Open, resolvable by the implementer.**
-
 - Whether the live tail survives the `ToolUsing` migration. If the history plane cannot support it,
   say so and propose the overlay or on-demand-import alternative — do not drop liveness silently.
 - Whether any current mid-run reader (R3) makes the strict append-only rule impossible. If so, report
   the conflict and propose the minimal relaxation rather than declaring a rule the pipeline violates.
-
 ### Design
-
 **WHAT.** Two specifications and an inventory. **No code ships.** No new API, no new module.
 
 **WHY.** The operator's two-file rule and the Observability read plane are one contract seen from both
@@ -200,7 +198,6 @@ migration rather than hunting for it.
 | Prior art | features `E1` (history data plane), `E2` (session forensics), `J3` (observability data plane) |
 
 **Output artifacts — frozen paths.**
-
 - `docs/design/run-record-contract.md` — the two-file rule.
 - `docs/design/observability-read-plane.md` — tab dispositions + required contracts.
 
@@ -216,7 +213,6 @@ for reads of `.spur/run/*` (`-verdict.json`, `-verify-answer.txt`, `*.status`, `
 are the known suspects), and list them before writing the contract.
 
 **Anti-patterns — do not do these.**
-
 - Do not implement the contract package, a server route, or any React.
 - Do not propose a new board module. Operator ruling: History lives inside `modules/observability/`.
 - Do not design a `TasksTab` / `JobsTab` refactor. Inventory their data gaps and stop (R6).
@@ -227,9 +223,7 @@ are the known suspects), and list them before writing the contract.
 
 **Handoff.** This is the largest build in the program. R8's sizing is the input to how many features it
 graduates into and in what order; treat the sizing as a deliverable, not a footnote.
-
 ### Plan
-
 - [ ] Inventory `.spur/run` by artifact kind with counts and the writing stage for each of the ~30 kinds (R2)
 - [ ] Grep every workflow stage, skill, and CLI path for **reads** of `.spur/run/*`; list each reader with `path:line` (R3)
 - [ ] Decide the disposition of the declared-but-dead `--trace-file` / `.spur/runs/workflow/` facility: adopt, or remove the flag (R2)
@@ -245,7 +239,6 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 - [ ] Name every required contract, history first, and size each piece S/M/L (R8)
 - [ ] Write `docs/design/observability-read-plane.md` (R5, R6, R7, R8)
 - [ ] Verification: zero source files modified; every source claim carries `path:line`; both design docs routed per constitution §4.1 and `sp:doc-evolve` sync-check clean
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -259,7 +252,6 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (data plane — this task owns the **read** side): [E1](../features/E1_history-data-plane-trustworthy-end-to-end-forensic-etl-verified-incremental-import-analyze-report-one-scheduled-loop.md), [E2](../features/E2_session-forensics-extension-of-the-history-plane-forensic-primitives-derived-variable-analyze-multi-mode-report-rewritten-find-issue.md)
 - Prior art (board): [J3](../features/J3_observability-data-plane-event-ingestion-retention-correlation-and-run-team-read-apis.md), [J4](../features/J4_board-observability-and-teams-supervisor-surfaces.md)
@@ -270,5 +262,4 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 - `AGENTS.md` § oRPC — contracts live in `packages/contracts/src` only; domain types stay in owning packages
 - `docs/99_PROJECT_CONSTITUTION.md` §4.1 / §4.5 — doc routing and satellites
 - CLI: `spur history import | analyze | report | daily`
-
 ### History

@@ -4,7 +4,7 @@ name: "task-pipeline2.yaml: two-layer plan from workflow --dry-run --json + resi
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:30.009Z
-updated_at: "2026-08-18T22:31:55.801Z"
+updated_at: "2026-08-19T00:11:22.468Z"
 feature_id: I6
 dependencies: ["0595"]
 ---
@@ -12,18 +12,20 @@ dependencies: ["0595"]
 ## 0596. task-pipeline2.yaml: two-layer plan from workflow --dry-run --json + residual-sweep stage
 
 ### Background
-
 `wayfinder:prototype` — ticket on map **[I6]** (Spur harness self-improvement program).
 **Blocked on [0595]** (the eval suite must exist and hold a baseline before a rival pipeline is authored).
 
+#### The sharp question
 **Can a two-layer execution plan and a residual-sweep stage be added to the task pipeline using only
 what `spur workflow` already exposes — and does the result beat the baseline?**
 
+#### Ground truth already established (do not re-derive)
 `spur workflow run` **already ships** `--dry-run` ("Validate and walk transitions without executing
 actions"), `--json`, a run-start plan preview suppressible with `--no-plan`, and
 `--detail minimal|invocation|full`. The transparency gap is **consumption**, not capability: no
 `/sp:dev-*` turns that plan into the coding agent's todo list. Confirm this before designing anything.
 
+#### What to produce
 1. **`config/workflows/task-pipeline2.yaml`** — a new file beside the live one. `config/workflows/` is
    the tracked SSOT; `.spur/workflows/` symlinks to it. Never edit `task-pipeline.yaml` in place, never
    hand-`cp` into `apps/cli/config/`. Both pipelines stay runnable throughout.
@@ -45,6 +47,7 @@ actions"), `--json`, a run-start plan preview suppressible with `--no-plan`, and
    dry-run source to plan from. State the pattern for both classes: what a two-layer plan means for a
    command with no workflow behind it, and whether that is worth doing or is a scope cut.
 
+#### The operator's residual-sweep prompts, verbatim
 Wire these, do not paraphrase them into something weaker. This is the exact fallback typed by hand
 today after `/sp:dev-verify` / `/sp:dev-verifyall`:
 
@@ -60,15 +63,16 @@ The point is not the wording but the position: it runs **after** a PASS verdict 
 and it catches what the verdict's per-requirement traceability structurally cannot. Any redesign must
 preserve that position.
 
+#### The question to answer, not just the code to write
 Whether the operator's actual daily loop — strong model plans, normal model implements
 (`/sp:dev-run --auto --next`), strong model verifies (`/sp:dev-verify --auto --next --force --focus all
 --fix all`), then the manual residual sweep — is expressible as **one** workflow with declared
 per-stage executor tiers, or whether it is irreducibly three sessions. This is the largest open item in
 the map's fog; answering it is worth as much as the YAML.
 
+#### Out of scope for this ticket
 Promoting `task-pipeline2.yaml` over `task-pipeline.yaml`. Promotion needs the bar from open question 1.
 Touching `spur task` (feature F92, concurrent agent).
-
 ### Requirements
 
 - R1 — Confirm empirically that `spur workflow run --dry-run --json` already yields a walkable step plan with no engine change, before designing any new mechanism.
@@ -126,9 +130,7 @@ Feature: task-pipeline2 two-layer plan and residual sweep
 ```
 
 ### Q&A
-
 **Closed at charting / in Design.**
-
 - New workflow behavior lands as a **parallel file**, never an in-place edit (operator, 2026-08-18).
 - No new `spur workflow` flag — the existing `--dry-run --json` surface is the source, or the task stops.
 - Residual-sweep **position** is fixed (after PASS verify, before commit); mechanism is the implementer's, with written justification.
@@ -139,7 +141,6 @@ Feature: task-pipeline2 two-layer plan and residual sweep
 The promotion bar for replacing `task-pipeline.yaml`. This task does not promote anything.
 
 **Open, resolvable by the implementer.**
-
 - Whether the workflow engine can bind an executor tier per stage (R6). If it cannot, name the missing
   mechanism precisely — that becomes a graduated feature, and "no" is a complete answer.
 - Whether skill-dispatch commands with no FSM can carry a meaningful two-layer plan at all (R7).
@@ -148,9 +149,7 @@ The promotion bar for replacing `task-pipeline.yaml`. This task does not promote
 **Blocked-on note.** `dependencies: ["0595"]`. Do not start the parity run (R5) before [0595]'s
 baseline artifact exists. R1–R4 and R7 are workable earlier if the operator releases the block, but
 R5 is not.
-
 ### Design
-
 **WHAT.** A new workflow definition plus the driver change that renders its plan. Ships code and YAML.
 
 **WHY.** Two operator asks share one mechanism: seeing the plan before execution, and never losing the
@@ -192,7 +191,6 @@ strong-model plan → normal-model implement (`/sp:dev-run --auto --next`) → s
 Answering "no, and here is the missing mechanism" is a complete answer.
 
 **Anti-patterns — do not do these.**
-
 - Do not edit `task-pipeline.yaml`. Both pipelines stay runnable for the whole task.
 - Do not `cp` workflows into `apps/cli/config/` — that tree is a gitignored `build:bundle` artifact.
 - Do not add a `spur workflow` flag; the dry-run surface is sufficient or the task stops (R1).
@@ -206,9 +204,7 @@ Answering "no, and here is the missing mechanism" is a complete answer.
 and the baseline artifact path, all stable. This task does **not** re-own or modify the comparator; if
 the record shape is wrong for parity, raise it rather than editing it. R5's parity run is read-only
 against [0595]'s output.
-
 ### Plan
-
 - [ ] Run `spur workflow run config/workflows/task-pipeline.yaml --dry-run --json` and confirm it yields a walkable stage+step plan with no engine change; if not, stop and raise an ADR-051 consent item (R1)
 - [ ] Copy `task-pipeline.yaml` to `task-pipeline2.yaml` as the starting point; confirm both validate via `spur workflow validate` (R2)
 - [ ] Confirm `.spur/workflows/` resolves to `config/workflows/` and that both pipelines run from the runtime path (R2)
@@ -223,7 +219,6 @@ against [0595]'s output.
 - [ ] Classify each `/sp:dev-*` entry point as workflow-backed or skill-dispatch; state the plan pattern for each class (R7)
 - [ ] State whether a two-layer plan for skill-dispatch commands is worth doing or is a scope cut (R7)
 - [ ] Verification: `git diff --stat config/workflows/task-pipeline.yaml` is empty; `spur workflow validate` green on both; `bun run lint` + `bun run test` green
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -237,7 +232,6 @@ against [0595]'s output.
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Depends on: [0595] (eval suite — comparator, fixtures, baseline)
 - ADR-051 — CLI surface consent gate (why no new `spur workflow` flag lands here)
@@ -246,5 +240,4 @@ against [0595]'s output.
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table (R6 input)
 - `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`, `execution-workflow.md` — the driver this task extends
 - CLI: `spur workflow run --dry-run --json --detail`, `spur workflow validate`
-
 ### History

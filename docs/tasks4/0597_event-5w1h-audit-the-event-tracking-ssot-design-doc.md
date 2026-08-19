@@ -4,19 +4,20 @@ name: "Event 5W1H audit + the event-tracking SSOT design doc"
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:30.250Z
-updated_at: "2026-08-18T22:33:50.259Z"
+updated_at: "2026-08-19T00:11:23.629Z"
 feature_id: I6
 ---
 
 ## 0597. Event 5W1H audit + the event-tracking SSOT design doc
 
 ### Background
-
 `wayfinder:research` — ticket on map **[I6]** (Spur harness self-improvement program).
 
+#### The sharp question
 **Which of the 71 cataloged system events actually answer who / what / when / where / why / how — and
 what contract closes the gaps, on both the emit side and the Board side?**
 
+#### Ground truth already established (do not re-derive)
 The premise "status-change events are missing" is **false**, and the correction matters because it
 changes this ticket from a build into an audit:
 
@@ -36,12 +37,12 @@ In short: the catalog is *source*-parameterized rather than *event*-parameterize
 **12** distinct `metadataFields` shapes), descriptions are string-mangled from the event name, and the
 planning emitter never populates a what-changed payload at all. It is mis-parameterized, not empty. The two concrete symptoms
 the operator reported map onto that:
-
 - `task.updated` fires constantly but never says **what** changed (no field-level diff in the payload).
 - `workflow.*` events render as raw uuids — the reader cannot tell **which** workflow ran **which**
   kind of step. `workflow.node.enter`, `workflow.action.start`, `workflow.phase` and siblings all carry
   ids where a human needs names.
 
+#### What to produce
 1. **A per-event 5W1H matrix.** Every cataloged event × {who (actor/executor/role), what (the specific
    change, not the noun), when (timestamp + duration), where (project/run/task/feature correlation),
    why (the trigger — command, guard, schedule, human), how (the mechanism/stage)}. Mark each cell
@@ -60,9 +61,9 @@ the operator reported map onto that:
    *checked against* it (a `spur rule`, a corpus-style two-sided gate)? A doc nothing enforces drifts
    back within a quarter. This answers a live fog item on the map.
 
+#### Out of scope for this ticket
 Changing any emitter or Board component. This ticket produces the audit and the SSOT; the remediation
 graduates into its own feature. Anything under `spur task` (feature F92, concurrent agent).
-
 ### Requirements
 
 - R1 — Produce a per-event 5W1H matrix over every cataloged system event, marking who / what / when / where / why / how as present, partial, or absent, with the emitter's `path:line` for each row.
@@ -111,9 +112,7 @@ Feature: Event 5W1H audit and SSOT
 ```
 
 ### Q&A
-
 **Closed during refine (premise verification — do not re-open).**
-
 - Catalog size is **71** entries, not ~55.
 - `metadataFields` is populated on **all 71** — the defect is that only **12 distinct shapes** exist,
   inherited per *source*, not per *event*.
@@ -129,14 +128,11 @@ override or the catalog moves to per-event declarations. Both are stated as opti
 is implemented here.
 
 **Open, resolvable by the implementer.**
-
 - Whether `docs/04_DESIGN.md` §7.9 should shrink to a pointer once `event-tracking.md` exists, or stay
   authoritative with the design doc as elaboration. Constitution §4.1 governs; decide and state it.
 - Whether the `workflow.*` id-only problem is one defect or two (engine-side naming vs Board-side
   rendering). Split the finding if the evidence splits.
-
 ### Design
-
 **WHAT.** An audit matrix plus one design doc. **No emitter or Board change ships from this task** —
 remediation graduates into its own feature. No new API.
 
@@ -181,7 +177,6 @@ The catalog therefore promises a field the payload type cannot carry — a contr
 **Output artifact — frozen path:** `docs/design/event-tracking.md`.
 
 **Anti-patterns — do not do these.**
-
 - Do not change an emitter, the catalog, or a Board component. Audit + doc only.
 - Do not fork the three existing observability docs. `docs/04_DESIGN.md` §7.9 already owns the System
   Event catalog surface; per the constitution, lower-numbered docs win on content. Reconcile and
@@ -194,9 +189,7 @@ The catalog therefore promises a field the payload type cannot carry — a contr
 **Handoff.** The remediation feature this spawns will need to decide payload-type changes
 (`PlanningEvent.field` / `data`) and whether `event()` gains a per-event override. State both as
 options in the doc; do not implement either.
-
 ### Plan
-
 - [ ] Enumerate all 71 `SYSTEM_EVENT_CATALOG` entries programmatically; do not hand-list (R1)
 - [ ] For each, locate the emit site and record its actual payload shape with `path:line` (R1)
 - [ ] Score each event on who/what/when/where/why/how as present, partial, or absent (R1)
@@ -207,7 +200,6 @@ options in the doc; do not implement either.
 - [ ] Write `docs/design/event-tracking.md`: 5W1H contract, diff convention, workflow naming, tier/policy rules, emitter checklist; cross-reference rather than restate (R5)
 - [ ] Assess whether the catalog can be generated from the SSOT or must be gate-checked against it; recommend one with reasoning (R6)
 - [ ] Verification: the matrix covers all 71 entries; every root-cause claim carries `path:line`; zero source files modified; `sp:doc-evolve` sync-check clean
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -221,7 +213,6 @@ options in the doc; do not implement either.
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - `docs/04_DESIGN.md` §7.9 (line 1883) — System Event catalog; **authoritative surface, reconcile with it**
 - `docs/design/actionable-observability-context.md` — v2 envelope + actionable context policy
@@ -231,5 +222,4 @@ options in the doc; do not implement either.
 - Source: `packages/app/src/services/planning-write-service.ts:115` (`PlanningEvent`), `:441` (emit site — the root cause)
 - Related features: J1–J5 (observability data plane + board surfaces)
 - Skill: `sp:doc-evolve` (sync-check, contract-verify)
-
 ### History

@@ -4,19 +4,20 @@ name: "Workspace / Inbox / Teams responsibility boundary under the agent-role me
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:30.748Z
-updated_at: "2026-08-18T22:35:54.344Z"
+updated_at: "2026-08-19T00:11:26.163Z"
 feature_id: I6
 ---
 
 ## 0599. Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism
 
 ### Background
-
 `wayfinder:research` — ticket on map **[I6]** (Spur harness self-improvement program).
 
+#### The sharp question
 **After the agent-role mechanism, what are Workspace, Inbox, and Teams actually for — and which of the
 three should still exist?**
 
+#### Ground truth established at charting (do not re-derive)
 - `apps/web/src/modules/workspace/` — **240 lines**, 3 components (`WorkspaceShell`, `OverviewTab`, index).
 - `apps/web/src/modules/inbox/` — **514 lines**, 5 components (`InboxShell`, `SupervisorTab`, `AgentTab`,
   `AllTab`, index).
@@ -28,10 +29,12 @@ three should still exist?**
   **M5** (Teams declared by role — a member is a role plus an executor), **M1/M2/M3** (Teams fine-tune
   passes). Read those before proposing anything; several answers may already be half-decided there.
 
+#### The operator's ruling (settled at charting)
 **Full latitude, including deletion.** Modules may be merged or removed outright if the role mechanism
 makes them redundant. Teams absorbing Workspace and Inbox is a live outcome, not a straw man — the line
 counts make it the obvious hypothesis to test first.
 
+#### What to produce
 1. **Concept boundary, before any UI.** One sentence each for what Workspace / Inbox / Teams *is*, such
    that no two overlap. If a clean sentence cannot be written for one of them, that is the finding —
    say so and recommend deletion or absorption.
@@ -45,8 +48,8 @@ counts make it the obvious hypothesis to test first.
 5. **A recommendation on open question 4**: does this need a first-class `role` noun on the `spur` CLI?
    Recommend with reasoning; adding a noun is ADR-051-gated and the operator decides.
 
+#### Out of scope for this ticket
 Writing React or moving files. Anything under `spur task` (F92, concurrent agent).
-
 ### Requirements
 
 - R1 — Write a one-sentence definition of what Workspace, Inbox, and Teams each *is*, such that no two overlap; if no clean sentence exists for one, report that as the finding and recommend absorption or deletion.
@@ -96,13 +99,11 @@ Feature: Workspace Inbox Teams boundary under the role mechanism
 ```
 
 ### Q&A
-
 **Closed at charting (operator ruling — do not re-open).**
 Full latitude including deletion: modules may be merged or removed outright if the role mechanism makes
 them redundant.
 
 **Closed during refine (premise verification).**
-
 - M4 and M5 are both `done` — the role foundation has landed; this is cleanup, not speculative design.
 - `SupervisorTab.tsx` in `inbox/` is 50 lines vs `teams/` at 502 — asymmetric, so establish the
   relationship before calling it duplication.
@@ -114,14 +115,11 @@ Whether the role mechanism warrants a first-class `role` noun on the `spur` CLI.
 noun addition; this task recommends only.
 
 **Open, resolvable by the implementer.**
-
 - Whether a clean three-way boundary exists at all. "No — Teams absorbs both" is a valid and expected
   outcome; so is "yes, here are the three sentences". Both must be *argued*, not asserted.
 - Whether the `RightPanel` / `MainWorkspace` shell split constrains the possible information
   architectures. If the shell forces a structure, say so — that is a constraint on R5, not a detail.
-
 ### Design
-
 **WHAT.** A boundary specification and a per-module disposition. **No code ships, no files move.**
 No new API.
 
@@ -143,7 +141,6 @@ overlap.
 | Prior art | features `M`, `M1`, `M2`, `M3`, `M4` (`done`), `M5` (`done`) | — |
 
 **Verified during refine — start from these, do not re-derive.**
-
 - `SupervisorTab.tsx` exists in **both** `inbox/` (50 lines) and `teams/` (502 lines). The asymmetry
   matters: this is not symmetric duplication but likely a stub-vs-real pair or a delegation. Establish
   which before calling it duplication.
@@ -166,7 +163,6 @@ seriously rather than dismissed. "All three survive" is an acceptable conclusion
 three non-overlapping sentences.
 
 **Anti-patterns — do not do these.**
-
 - Do not write React, move files, or change nav.
 - Do not re-decide what M4/M5 already settled — report what they settled and build on it.
 - Do not propose a `role` CLI noun. R6 recommends; ADR-051 and map open question 4 decide.
@@ -175,9 +171,7 @@ three non-overlapping sentences.
 
 **Handoff.** The dispositions become the graduated feature(s) under `M` (or `J`/`K` if the answer
 reassigns surfaces). Migration cost per disposition is what sequences that work — carry it.
-
 ### Plan
-
 - [ ] Read features M, M1, M2, M3, M4, M5 and record which boundary questions they already answered (R4)
 - [ ] Write one non-overlapping sentence per module for Workspace, Inbox, Teams; if one cannot be written without referencing another, record that as the finding (R1)
 - [ ] Compare `inbox/SupervisorTab.tsx` (50) against `teams/SupervisorTab.tsx` (502); establish stub / delegation / duplication before labelling it (R2)
@@ -189,7 +183,6 @@ reassigns surfaces). Migration cost per disposition is what sequences that work 
 - [ ] Recommend on the `role` CLI noun, framed as promote-value-to-noun or not; mark it a recommendation against map open question 4 (R6)
 - [ ] Write `docs/design/board-module-boundaries.md` (R1–R6)
 - [ ] Verification: zero source files modified; every overlap claim carries `path:line`; every module has an explicit disposition; `sp:doc-evolve` sync-check clean
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -203,7 +196,6 @@ reassigns surfaces). Migration cost per disposition is what sequences that work 
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (read first): [M](../features/M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md), [M1](../features/M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md), [M2](../features/M2_teams-residual-polish-for-release-post-m1.md), [M3](../features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md), [M4](../features/M4_inbox-board-module-unified-agent-message-plane-all-supervisor-per-agent-tabs.md), [M5](../features/M5_teams-declared-by-role-a-member-is-a-role-plus-an-executor.md)
 - ADR-051 — CLI noun/verb consent gate (governs the R6 recommendation)
@@ -212,5 +204,4 @@ reassigns surfaces). Migration cost per disposition is what sequences that work 
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table
 - CLI: `spur agent run --agent <role|executor|binary|auto|inline>`, `spur team`, `spur message`
 - Root `DESIGN.md` if present — UI/UX SSOT for any information-architecture proposal
-
 ### History

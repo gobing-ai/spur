@@ -4,24 +4,26 @@ name: "dev-* spine cost + drift inventory: measure the bootstrap, attribute it, 
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:29.506Z
-updated_at: "2026-08-18T22:30:18.812Z"
+updated_at: "2026-08-19T00:11:20.219Z"
 feature_id: I6
 ---
 
 ## 0594. dev-* spine cost + drift inventory: measure the bootstrap, attribute it, name the fix path
 
 ### Background
-
 `wayfinder:research` — ticket on map **[I6]** (Spur harness self-improvement program).
 
+#### The sharp question
 **Where does a `/sp:dev-*` invocation actually spend its bootstrap tokens and wall-clock, and how much
 of that spend is drift — capability the `spur` CLI already provides that `plugins/sp` or the workflow
 YAML re-implements in prose?**
 
+#### Why this is one ticket, not two
 Measuring the cost without attributing it to specific loads produces a number nobody can act on;
 inventorying the drift without the cost data produces a list nobody can rank. Both read the same
 files. One session, one ranked table.
 
+#### Ground truth already established (do not re-derive)
 - `plugins/sp/commands/dev-*.md` are thin: 32–128 lines, 1,622 total. Not the weight.
 - `plugins/sp` total markdown: **25,088 lines**. `skills/spur-dev/references/`: 4,577
   (`execution-batch.md` 799, `cross-cutting.md` 709, `dev-operations.md` 549, `flag-glossary.md` 439,
@@ -30,6 +32,7 @@ files. One session, one ranked table.
 - `config/workflows/`: 3,410 lines across 11 YAMLs; `task-pipeline.yaml` 733, `idea-pipeline.yaml` 732,
   `planning-pipeline.yaml` 249.
 
+#### Prior art — this is a delta-audit, not a first pass
 Two closed features already did this exact inventory. **Read them before re-deriving anything:**
 
 - **I2 — spur-dev/spur-cli parity-first drift audit and harness refinement** (`done`). Goal: make
@@ -47,6 +50,7 @@ I2/I3 finding is a signal that the fix was documentation-only and needs enforcem
 audit is thorough. Report re-drift rate as a first-class result — it is the argument for whether any
 of this can stay prose.
 
+#### What to produce
 1. **Cost attribution table.** Per `/sp:dev-*` entry point, what loads and in what order: command md →
    `Skill()` → SKILL.md → which `references/*.md`. Measure tokens per load and identify which are
    loaded unconditionally vs on demand. Use `spur history analyze` over recent real sessions plus
@@ -64,18 +68,20 @@ of this can stay prose.
    recommendation on **open question 2** (should `plugins/sp` prose relocate into the CLI's
    `--help`/`--json`?). Recommend; do not decide — the operator answers that on the map.
 
+#### Known live discrepancy to fold in
 `sp:wayfinder` documents `spur feature update <id> --section tags --from-file <(...)` for tagging a
 map. That is wrong — `tags` is frontmatter, not a section; the CLI rejects it and the correct form is
 `--field tags --value wayfinder-map`. Found while charting this map. Exactly the class of drift this
 ticket inventories; include it and look for siblings.
 
+#### Workflow YAML consolidation (operator item 2)
 `config/workflows/` is 3,410 lines across 11 files, with `task-pipeline.yaml` (733),
 `idea-pipeline.yaml` (732), and `planning-pipeline.yaml` (249) the bulk. Size how much is duplicated
 across them and whether a shared-fragment mechanism exists in the engine or would have to be invented.
 This rides along with R3 because it reads the same files — it is not a separate investigation.
 
+#### Out of scope for this ticket
 Applying any fix. This is measurement and inventory only — the fix path graduates into a feature.
-
 ### Requirements
 
 - R1 — Produce a cost-attribution table for each `/sp:dev-*` entry point: what loads, in what order, how many tokens, and whether the load is unconditional or on demand. Measured from `spur history analyze` over real sessions and `.spur/context/token-ledger.jsonl` — not estimated from file sizes.
@@ -134,9 +140,7 @@ Feature: dev-* spine cost and drift inventory
 ```
 
 ### Q&A
-
 **Closed at charting.**
-
 - Scope of the per-noun review — `spur feature`, `spur agent`, `spur workflow` only; `spur task` is excluded (feature F92, concurrent agent in this tree).
 - Whether this is a first audit or a re-audit — re-audit. I2 and I3 are `done`; the delta is the deliverable.
 
@@ -145,13 +149,10 @@ Whether `plugins/sp` prose should relocate into the CLI's `--help` / `--json`. T
 recommendation with evidence; it does not decide. Do not implement either side.
 
 **Open, resolvable by the implementer.**
-
 - Whether enough `/sp:dev-*` sessions exist in the history plane to measure at all. If the usable
   session set is too small, say so explicitly and report R1/R2 as **unmeasurable with current data**
   plus what import would be needed — do not substitute file-size estimates.
-
 ### Design
-
 **WHAT.** A measurement + inventory report. No production code ships from this task — **no new API,
 no new CLI flag, no source change.** The deliverable is a markdown artifact plus the task's own
 Solution section.
@@ -185,7 +186,6 @@ against it in both directions — *asserted but absent* and *available but unuse
 both sides of every row. Classify each finding as **new** or **re-drift** against I2/I3.
 
 **Anti-patterns — do not do these.**
-
 - Do not fix anything found. This is inventory; a fix here is out of scope and pollutes the delta.
 - Do not estimate token cost from line counts and present it as measurement.
 - Do not touch `spur task`, `packages/app/src/services/task-*`, or the section matrix — feature F92 is
@@ -195,9 +195,7 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 
 **Handoff.** No dependent task. Findings graduate into features under `I` (spine), `D` (workflows),
 `C` (rules, if enforcement is the answer). The ranked fix path in R5 is the input to that graduation.
-
 ### Plan
-
 - [ ] Read `docs/features/I2_*.md` and `I3_*.md` plus their linked tasks; extract their finding lists as the delta baseline (R6)
 - [ ] Import + analyze history over sessions that invoked `/sp:dev-*`; identify the usable session set and record its size (R1)
 - [ ] Build the per-entry-point load chain: command md → Skill() → SKILL.md → references, marking each load unconditional or on-demand (R1)
@@ -212,7 +210,6 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 - [ ] Write `docs/design/dev-spine-cost-and-drift.md`; emit the ranked fix path with S/M/L sizes and expected cost deltas (R5)
 - [ ] Record the open-question-2 recommendation explicitly as a recommendation, not a decision (R5)
 - [ ] Verification: every drift row carries two `path:line` citations; every cost figure traces to a history artifact; zero source files modified
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -226,12 +223,10 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (delta baseline): [I2](../features/I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md), [I3](../features/I3_harness-surface-reconciliation-plugins-sp-and-workflow-yaml-against-the-live-spur-cli.md)
 - ADR-051 — CLI surface consent gate (any noun/verb change needs operator consent)
 - ADR-028 — skill decomposition by function (why the spine dispatches competencies)
 - `AGENTS.md` § Verification gate — the targeted-test-first rule and the `spur-check` cost contract
 - Sibling tickets: [0595] (eval suite — consumes this task's cost baseline), [0596] (pipeline2)
-
 ### History

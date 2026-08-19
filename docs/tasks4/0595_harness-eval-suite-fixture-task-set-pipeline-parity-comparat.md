@@ -4,19 +4,20 @@ name: "Harness eval suite: fixture task set + pipeline parity comparator"
 status: todo
 template: brainstorm
 created_at: 2026-08-18T22:01:29.766Z
-updated_at: "2026-08-18T22:31:05.740Z"
+updated_at: "2026-08-19T00:11:21.337Z"
 feature_id: I6
 ---
 
 ## 0595. Harness eval suite: fixture task set + pipeline parity comparator
 
 ### Background
-
 `wayfinder:prototype` — ticket on map **[I6]** (Spur harness self-improvement program).
 
+#### The sharp question
 **What is the smallest harness that can prove one task pipeline is not worse than another — and what
 does it show about `task-pipeline.yaml` today?**
 
+#### Why this exists
 The operator ratified at charting that a harness eval suite is in scope **and gates promotion of
 `task-pipeline2.yaml`**. "Once it's mature enough" is not a bar until something measures maturity. You
 cannot refactor 3,410 lines of workflow YAML and 25,088 lines of plugin prose on inspection.
@@ -24,6 +25,7 @@ cannot refactor 3,410 lines of workflow YAML and 25,088 lines of plugin prose on
 This ticket runs **before** [0596] deliberately: build the comparator against the *existing* pipeline
 first and capture the baseline, so the new pipeline has a target to hit rather than a story to tell.
 
+#### What to produce
 1. **A fixture task set.** Small, deterministic, real enough to exercise precheck → implement → test →
    review → verify → done. Seeded from `sp:dogfood-testing`, which already drives a testee end-to-end
    with a bounded retry budget and a live ledger — extend it rather than building a parallel runner.
@@ -35,14 +37,15 @@ first and capture the baseline, so the new pipeline has a target to hit rather t
    consecutive green tasks?). **Propose only.** Ratifying the bar is open question 1 on the map and
    belongs to the operator.
 
+#### Constraints
 - Uses `spur workflow run` as-is. If the comparator wants a CLI flag that does not exist, that is an
   ADR-051 consent gate — surface it to the operator, do not add it.
 - Must not require the fixture tasks to pollute the real corpus. Decide and document where fixture
   tasks live and how they are cleaned up.
 - Do not touch `spur task` (feature F92, concurrent agent).
 
+#### Out of scope for this ticket
 Authoring `task-pipeline2.yaml` — that is [0596].
-
 ### Requirements
 
 - R1 — Build a deterministic fixture task set that exercises the full pipeline path (precheck → implement → test → review → verify → done), extending `sp:dogfood-testing` rather than standing up a parallel runner.
@@ -92,9 +95,7 @@ Feature: Harness eval suite
 ```
 
 ### Q&A
-
 **Closed at charting / in Design.**
-
 - Eval suite is in scope and gates pipeline2 promotion (operator, 2026-08-18).
 - Surface is `scripts/spur-dev.ts`, not the `spur` CLI — ADR-051 puts self-dev tooling on the internal
   surface with no consent gate.
@@ -105,15 +106,12 @@ Feature: Harness eval suite
 The promotion bar itself. This task proposes; the operator ratifies.
 
 **Open, resolvable by the implementer.**
-
 - Whether the fixture set can be made deterministic enough for parity to mean anything, given the
   pipeline invokes a model. If not, the honest answer is a variance band rather than an equality
   test — report which, with the measured variance, rather than forcing a binary.
 - Whether token cost is recoverable per run from existing artifacts. If not, record `null` and state
   the gap; do not silently drop the field.
-
 ### Design
-
 **WHAT.** A runnable comparator plus a recorded baseline. This task **does ship code** — the first in
 the map that does.
 
@@ -157,7 +155,6 @@ repeat for pipeline B → emit both record sets and a per-field diff. Determinis
 report states run count and variance, and a single run is labelled as such.
 
 **Anti-patterns — do not do these.**
-
 - Do not add a `spur` CLI noun or verb. That is an ADR-051 consent gate; surface it instead (R6).
 - Do not create fixture tasks in `docs/tasks*`. They collide with the live WBS allocator and would be
   swept by `spur task check --corpus`.
@@ -169,9 +166,7 @@ report states run count and variance, and a single run is labelled as such.
 **Handoff to [0596].** [0596] consumes: the `eval-pipeline` command, the fixture set location, and
 the baseline artifact path. This task must leave those three stable — they are [0596]'s only
 interface to it. Any change to the record shape after [0596] starts breaks its parity run.
-
 ### Plan
-
 - [ ] Read `sp:dogfood-testing` and decide precisely which of its protocol to extend vs re-use as-is; record the seam (R1)
 - [ ] Design the fixture task set: minimal, deterministic, exercising precheck→implement→test→review→verify→done (R1)
 - [ ] Place fixtures under `tests/fixtures/pipeline-eval/` and document the create/cleanup lifecycle so no fixture reaches the real corpus (R4)
@@ -184,7 +179,6 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 - [ ] Draft the proposed promotion bar from what the comparator actually measures; mark it a proposal against map open question 1 (R5)
 - [ ] If any needed `spur` CLI flag is absent, write it up as an ADR-051 consent item and stop there (R6)
 - [ ] Verification: `bun run lint`, `bun run test`, `bun run build` green; `spur task check --corpus` shows no new fixture-induced findings; `git status` intentional
-
 ### Solution
 
 <!-- Final synthesized recommendation or output from the brainstorm. -->
@@ -198,7 +192,6 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 <!-- Risks, open concerns, and follow-up review notes. -->
 
 ### References
-
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - ADR-051 — two command surfaces: public `spur` CLI (consent-gated) vs internal `scripts/spur-dev.ts`
 - `AGENTS.md` § Spur CLI surface — the surface-choice table this Design applies
@@ -206,5 +199,4 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 - Skill `sp:dogfood-testing` — the protocol this task extends
 - CLI: `spur task verdict --json`, `spur workflow run --dry-run --json`
 - Dependent: [0596] (consumes the command, fixture location, and baseline artifact)
-
 ### History
