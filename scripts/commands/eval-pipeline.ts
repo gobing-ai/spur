@@ -172,9 +172,22 @@ export async function readGateOutcomes(wbs: string): Promise<string[]> {
             continue;
         }
         const label = f.replace('{wbs}-', '').replace('.status', '').replace('.json', '');
-        out.push(`${label}=${content.trim().slice(0, 40) || '(empty)'}`);
+        // A .json gate carries a document, not a status token: slicing its raw text
+        // leaks a multi-line JSON blob into the outcome array (task 0595 residual).
+        const value = f.endsWith('.json') ? jsonGateVerdict(content) : content.trim().slice(0, 40);
+        out.push(`${label}=${value || '(empty)'}`);
     }
     return out;
+}
+
+/** Reduce a JSON gate artifact to its verdict token. */
+function jsonGateVerdict(content: string): string {
+    try {
+        const parsed = JSON.parse(content) as { verdict?: unknown };
+        return typeof parsed.verdict === 'string' ? parsed.verdict : '(no-verdict)';
+    } catch {
+        return '(malformed)';
+    }
 }
 
 function spur(args: string[], opts: { timeoutMs?: number } = {}) {

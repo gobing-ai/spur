@@ -1,5 +1,14 @@
-import { describe, expect, test } from 'bun:test';
-import { diffRecords, diffSnapshot, type EvalRecord, extractTokenCost, parseVerdict } from './eval-pipeline';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+    diffRecords,
+    diffSnapshot,
+    type EvalRecord,
+    extractTokenCost,
+    parseVerdict,
+    readGateOutcomes,
+} from './eval-pipeline';
 
 describe('diffSnapshot', () => {
     test('reports created and modified files, ignores unchanged', () => {
@@ -27,6 +36,37 @@ describe('extractTokenCost', () => {
     test('returns null when no agent.run rows carry token data (never zero)', () => {
         // No agent.run rows exist at unix epoch — guaranteed empty window.
         expect(extractTokenCost('.spur/spur.db', '1970-01-01T00:00:00Z', '1970-01-01T00:00:01Z')).toBeNull();
+    });
+});
+
+describe('readGateOutcomes', () => {
+    const runDir = join(new URL('../../', import.meta.url).pathname, '.spur/run');
+    const wbs = '99991';
+    const files = [`${wbs}-precheck-doctor.status`, `${wbs}-test-gate.status`, `${wbs}-verdict.json`];
+
+    afterAll(async () => {
+        await Promise.all(files.map((f) => rm(join(runDir, f), { force: true })));
+    });
+
+    test('reduces a JSON gate to its verdict token, never a raw blob', async () => {
+        await mkdir(runDir, { recursive: true });
+        await writeFile(join(runDir, `${wbs}-precheck-doctor.status`), 'PASS\n');
+        await writeFile(join(runDir, `${wbs}-test-gate.status`), 'PASS\n');
+        // A real verdict artifact is a multi-line document — the outcome must not carry its text.
+        await writeFile(join(runDir, `${wbs}-verdict.json`), JSON.stringify({ wbs, verdict: 'PASS' }, null, 2));
+
+        const outcomes = await readGateOutcomes(wbs);
+
+        expect(outcomes).toContain('verdict=PASS');
+        expect(outcomes.some((o) => o.includes('{') || o.includes('\n'))).toBeFalse();
+        // Missing gate files are skipped, not reported as empty.
+        expect(outcomes).toEqual(['precheck-doctor=PASS', 'test-gate=PASS', 'verdict=PASS']);
+    });
+
+    test('malformed JSON is labelled, not silently passed through', async () => {
+        await mkdir(runDir, { recursive: true });
+        await writeFile(join(runDir, `${wbs}-verdict.json`), 'not json');
+        expect(await readGateOutcomes(wbs)).toContain('verdict=(malformed)');
     });
 });
 
