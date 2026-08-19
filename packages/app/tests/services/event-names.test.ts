@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { SystemEventCatalogEntry } from '../../src/services/event-names';
 import {
     normalizeSystemEventPayload,
@@ -10,6 +12,7 @@ import {
     SYSTEM_EVENT_NAMES,
     SYSTEM_EVENT_PERSISTED_NAMES,
     SYSTEM_EVENT_PREFIXES,
+    SYSTEM_EVENT_PRESENTERS,
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
 } from '../../src/services/event-names';
@@ -271,7 +274,10 @@ describe('SYSTEM_EVENT_CATALOG', () => {
     });
 
     test('agent.invoke.* entries admit routing decision metadata (task 0545 R1)', () => {
-        for (const name of ['agent.invoke.start', 'agent.invoke.exit', 'agent.invoke.escalated']) {
+        // The routing decision rides invoke.start/exit payloads (the bridge
+        // stamps it only on those two names). escalated/exhausted carry
+        // from/to executor+tier escalation facts instead — per the §11 matrix.
+        for (const name of ['agent.invoke.start', 'agent.invoke.exit']) {
             const entry = requireEntry(name);
             for (const path of ['routing.role', 'routing.tier', 'routing.executor', 'routing.source']) {
                 expect(
@@ -311,7 +317,6 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         expect(result?.runId).toBe('run-001');
         expect(result?.executionId).toBe('exec-001');
         expect(result?.actionId).toBe('act-001');
-        expect(result?.node).toBe('step-3');
         expect(result?.kind).toBe('started');
         expect(result?.metadata).toEqual({ correlationId: 'corr-1' });
         expect(result?.durationMs).toBe(1500);
@@ -542,5 +547,79 @@ describe('normalizeSystemEventPayload — history.* (task 0471 R1/R2)', () => {
         expect(result?.exitCode).toBe(2);
         expect(result?.detail).toBe('codex import timed out after 600000ms');
         expect(result?.message).toBeUndefined();
+    });
+});
+
+describe('SYSTEM_EVENT_PRESENTERS two-sided semantic gate (R1/R8/R10)', () => {
+    const docPath = join(import.meta.dir, '..', '..', '..', '..', 'docs', 'design', 'event-tracking.md');
+    const doc = readFileSync(docPath, 'utf8');
+
+    /** Isolate the §11 presenter-matrix table and extract its backticked first-column event names. */
+    function section11EventNames(markdown: string): string[] {
+        const start = markdown.indexOf('## 11.');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const rest = markdown.slice(start);
+        const nextSection = rest.indexOf('\n## ', 6);
+        const section = nextSection === -1 ? rest : rest.slice(0, nextSection);
+        const names: string[] = [];
+        for (const line of section.split('\n')) {
+            const match = line.match(/^\| `([^`]+)` \|/);
+            if (match !== null && match[1] !== undefined) names.push(match[1]);
+        }
+        return names;
+    }
+
+    test('every §11 matrix event resolves to a live catalog name and vice versa', () => {
+        const matrixNames = section11EventNames(doc);
+        expect(matrixNames.length).toBeGreaterThan(0);
+        const matrixSet = new Set(matrixNames);
+        const catalogSet = new Set(SYSTEM_EVENT_NAMES);
+        // Both directions — the doc cannot rot into a silent list and the catalog
+        // cannot drift beyond the accepted matrix (no hard-coded count).
+        const missingFromCatalog = matrixNames.filter((name) => !catalogSet.has(name));
+        const missingFromMatrix = SYSTEM_EVENT_NAMES.filter((name) => !matrixSet.has(name));
+        expect(missingFromCatalog).toEqual([]);
+        expect(missingFromMatrix).toEqual([]);
+    });
+
+    test('every catalog entry resolves to a fully authored, bounded, single-outcome presenter', () => {
+        for (const entry of SYSTEM_EVENT_CATALOG) {
+            const presenter = SYSTEM_EVENT_PRESENTERS[entry.name as keyof typeof SYSTEM_EVENT_PRESENTERS];
+            expect(presenter, entry.name).toBeDefined();
+            // Authored description — never the generated `describeEvent` mangle.
+            expect(presenter.description.length).toBeGreaterThan(10);
+            expect(presenter.description).not.toMatch(/ lifecycle event\.$/);
+            // Explicit event-specific field list, at most eight entries.
+            expect(Array.isArray(presenter.fields), entry.name).toBe(true);
+            expect(presenter.fields.length, entry.name).toBeLessThanOrEqual(8);
+            expect(presenter.fields.length, entry.name).toBeGreaterThan(0);
+            // A callable summary bound to the presenter contract.
+            expect(typeof presenter.summary, entry.name).toBe('function');
+            // Exactly one valid outcome branch.
+            expect(presenter.outcome.support === 'derived' || presenter.outcome.support === 'unsupported').toBe(true);
+            if (presenter.outcome.support === 'derived') {
+                expect(typeof presenter.outcome.derive, entry.name).toBe('function');
+            }
+            // Invoke the summary (populated + empty data) and any derived outcome so
+            // presenter bodies are exercised and cannot crash on either shape (R1).
+            const input = {
+                data: Object.fromEntries(presenter.fields.map((f) => [f.path, 'value'])),
+                correlation: {},
+            };
+            expect(typeof presenter.summary(input), entry.name).toBe('string');
+            expect(typeof presenter.summary({ data: null, correlation: {} }), entry.name).toBe('string');
+            if (presenter.outcome.support === 'derived') {
+                const derived = presenter.outcome.derive(input);
+                expect(derived === undefined || typeof derived === 'string', entry.name).toBe(true);
+            }
+        }
+    });
+
+    test('catalog description and metadata fields come from the presenter, not a source family', () => {
+        for (const entry of SYSTEM_EVENT_CATALOG) {
+            const presenter = SYSTEM_EVENT_PRESENTERS[entry.name as keyof typeof SYSTEM_EVENT_PRESENTERS];
+            expect(entry.description).toBe(presenter.description);
+            expect(entry.metadataFields).toEqual(presenter.fields);
+        }
     });
 });

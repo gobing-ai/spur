@@ -137,14 +137,22 @@ describe('buildSystemEventEnvelope', () => {
         expect(envelope.data?.env).toBeUndefined();
     });
 
-    test('keeps a valid persisted v2 envelope stable on history projection', () => {
+    test('re-projects only the derived presentation on a valid v2 history row (R1/R9)', () => {
         const original = buildSystemEventEnvelope(
             requireEntry('task.updated'),
             { entity: { kind: 'task', id: '0526' } },
             project,
         );
         expect(isSystemEventEnvelopeV2(original)).toBe(true);
-        expect(projectStoredSystemEventEnvelope(requireEntry('task.updated'), original, project)).toBe(original);
+        const projected = projectStoredSystemEventEnvelope(requireEntry('task.updated'), original, project);
+        // schemaVersion, data, and context are preserved byte-for-byte; only the
+        // derived presentation is recomputed by the current exhaustive presenter.
+        expect(projected.schemaVersion).toBe(original.schemaVersion);
+        expect(projected.data).toBe(original.data);
+        expect(projected.context).toBe(original.context);
+        expect(projected.presentation.summary).toBe('[task] 0526'); // old-row fallback without mutation data
+        expect(projected.presentation.description).toBe(original.presentation.description);
+        expect(projected.presentation.severity).toBe(original.presentation.severity);
     });
 
     test('0545 R3 — rows written before routing attribution project cleanly without it', () => {
@@ -166,7 +174,9 @@ describe('buildSystemEventEnvelope', () => {
         const storedV2 = buildSystemEventEnvelope(requireEntry('agent.invoke.start'), legacyRaw, project);
         expect(isSystemEventEnvelopeV2(storedV2)).toBe(true);
         const projected = projectStoredSystemEventEnvelope(requireEntry('agent.invoke.start'), storedV2, project);
-        expect(projected).toBe(storedV2);
+        // Stored data/context survive byte-for-byte; absence of routing stays absent.
+        expect(projected.data).toBe(storedV2.data);
+        expect(projected.context).toBe(storedV2.context);
         expect((projected.data as Record<string, unknown> | null)?.routing).toBeUndefined();
     });
 

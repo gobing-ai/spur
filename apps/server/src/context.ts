@@ -562,7 +562,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             queueConsumerPromise ??= (async () => {
                 const { createQueueConsumer } = await import('@gobing-ai/spur-domain');
                 const db = await this.getDb();
-                return createQueueConsumer(db, { events: eventsBus as never });
+                return createQueueConsumer(db, { events: eventsBus as never, queueName: 'server-jobs' });
             })();
             return queueConsumerPromise;
         },

@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import type { WorkflowPersistenceAdapter, WorkflowRunRecord } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
+    createWorkflowEventIdentity,
+    decorateWorkflowEvent,
     ObservableWorkflowAdapter,
     projectActionMetadata,
     type WorkflowObservabilityEventMap,
@@ -252,5 +254,74 @@ describe('projectActionMetadata', () => {
         });
         expect(metadata?.role).toBe('coder');
         expect(projectActionMetadata('shell', { command: 'true', role: 'coder' })?.role).toBeUndefined();
+    });
+});
+
+describe('workflow identity (R3)', () => {
+    test('createWorkflowEventIdentity derives name + description-first labels from a state-machine def', () => {
+        const identity = createWorkflowEventIdentity({
+            name: 'task-pipeline',
+            kind: 'state-machine',
+            initialState: 'precheck',
+            terminalStates: ['done', 'failed'],
+            states: [
+                { id: 'precheck', description: '  Pre-flight checks  ', onEnter: [] },
+                { id: 'implement', onEnter: [] },
+            ],
+        } as never);
+        expect(identity.workflowName).toBe('task-pipeline');
+        expect(identity.nodeLabels.get('precheck')).toBe('Pre-flight checks');
+        expect(identity.nodeLabels.get('implement')).toBe('implement');
+    });
+
+    test('createWorkflowEventIdentity derives labels from a transition-flow def', () => {
+        const identity = createWorkflowEventIdentity({
+            name: 'idea-pipeline',
+            kind: 'transition-flow',
+            nodes: [{ id: 'ingest', description: 'Intake & clarify' }, { id: 'decompose' }],
+        } as never);
+        expect(identity.workflowName).toBe('idea-pipeline');
+        expect(identity.nodeLabels.get('ingest')).toBe('Intake & clarify');
+        expect(identity.nodeLabels.get('decompose')).toBe('decompose');
+    });
+
+    test('decorateWorkflowEvent always stamps workflowName; nodeLabel resolves node/phase/from', () => {
+        const identity = createWorkflowEventIdentity({
+            name: 'pipeline',
+            kind: 'state-machine',
+            states: [{ id: 'precheck', description: 'Pre-check' }, { id: 'review' }],
+        } as never);
+        const phase = decorateWorkflowEvent(identity, 'workflow.phase', { phase: 'precheck', status: 'entered' });
+        expect(phase).toMatchObject({ workflowName: 'pipeline', nodeLabel: 'Pre-check', phase: 'precheck' });
+        const transition = decorateWorkflowEvent(identity, 'workflow.transition', { from: 'review', to: 'done' });
+        expect(transition).toMatchObject({ workflowName: 'pipeline', nodeLabel: 'review' });
+        const runStarted = decorateWorkflowEvent(identity, 'workflow.run.started', { runId: 'r1' });
+        expect(runStarted).toMatchObject({ workflowName: 'pipeline', runId: 'r1' });
+        expect(runStarted).not.toHaveProperty('nodeLabel');
+    });
+
+    test('decorateWorkflowEvent prefers description over id and skips unknown ids', () => {
+        const identity = createWorkflowEventIdentity({
+            name: 'p',
+            kind: 'state-machine',
+            states: [{ id: 'a', description: 'Alpha' }],
+        } as never);
+        expect(decorateWorkflowEvent(identity, 'workflow.phase', { phase: 'unknown' })).toMatchObject({
+            workflowName: 'p',
+            phase: 'unknown',
+        });
+        expect(decorateWorkflowEvent(identity, 'workflow.phase', { phase: 'unknown' })).not.toHaveProperty('nodeLabel');
+        expect(decorateWorkflowEvent(identity, 'workflow.phase', { phase: 'a' })).toHaveProperty('nodeLabel', 'Alpha');
+    });
+
+    test('decorateWorkflowEvent passes malformed/non-object payloads through untouched', () => {
+        const identity = createWorkflowEventIdentity({
+            name: 'p',
+            kind: 'state-machine',
+            states: [],
+        } as never);
+        expect(decorateWorkflowEvent(identity, 'workflow.x', null)).toBeNull();
+        expect(decorateWorkflowEvent(identity, 'workflow.x', 'raw')).toBe('raw');
+        expect(decorateWorkflowEvent(identity, 'workflow.x', undefined)).toBeUndefined();
     });
 });

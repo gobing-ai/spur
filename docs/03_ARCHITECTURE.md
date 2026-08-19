@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.25.0
+version: 1.26.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-19
@@ -685,7 +685,7 @@ Invariants:
 
 Shapes: `docs/design/actionable-observability-context.md`.
 
-### 16.1 J9 semantic presentation (accepted design — ADR-066/067/068; not yet built)
+### 16.1 J9 semantic presentation (built — ADR-066/067/068; tasks 0601/0602)
 
 J9 deepens the existing observability seam instead of adding a client or transport seam. Catalog membership and
 operational policy remain in `event-names.ts`; an exhaustive presenter registry owns event-specific description,

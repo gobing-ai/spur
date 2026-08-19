@@ -1,5 +1,7 @@
+import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus, EventMap } from '@gobing-ai/ts-infra';
 import type { AgentRoutingAttribution } from '../observability/agent-execution';
+import { createWorkflowEventIdentity, decorateWorkflowEvent } from '../workflow/observability';
 
 /**
  * Wrap a server EventBus into a typed EventBus shape.
@@ -21,6 +23,26 @@ export function bridgeEventBus<T extends EventMap>(
     };
     // Single cast site for all EventBus structural mismatches (server→service maps).
     return bridge as unknown as EventBus<T>;
+}
+
+/**
+ * Wrap a typed bridge so every `workflow.*` payload carries deterministic
+ * workflow identity (task 0601 R3): `workflowName` always, plus `nodeLabel`
+ * when the payload's step-bearing identifier resolves in the loaded definition.
+ * Identity is derived once from the parsed `WorkflowDef` at the producer
+ * fan-in — never per event, never from history. Non-object payloads pass
+ * through untouched for the existing failure isolation.
+ */
+export function withWorkflowIdentity<T extends EventMap>(bridge: EventBus<T>, def: WorkflowDef): EventBus<T> {
+    const identity = createWorkflowEventIdentity(def);
+    const loose = bridge as unknown as EventBus<Record<string, (event: unknown) => void>>;
+    const wrapped = {
+        on: (event: string, listener: (event: unknown) => void) => loose.on(event, listener),
+        off: (event: string, listener: (event: unknown) => void) => loose.off(event, listener),
+        emit: (event: string, detail: unknown) =>
+            Promise.resolve(loose.emit(event, decorateWorkflowEvent(identity, event, detail))),
+    };
+    return wrapped as unknown as EventBus<T>;
 }
 
 /**

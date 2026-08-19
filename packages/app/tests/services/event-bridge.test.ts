@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentRoutingAttribution } from '../../src/observability/agent-execution';
-import { bridgeEventBus, withInvokeRouting } from '../../src/services/event-bridge';
+import { bridgeEventBus, withInvokeRouting, withWorkflowIdentity } from '../../src/services/event-bridge';
 
 /** Event map for bridge tests — concrete payload types (not the open `EventMap` never default). */
 type TestEvents = {
@@ -153,6 +153,65 @@ describe('withInvokeRouting (task 0545 R1)', () => {
         const listener = (_e: Record<string, unknown>) => {};
         wrapped.on('agent.invoke.start', listener);
         wrapped.off('agent.invoke.start', listener);
+
+        expect(calls.map((c) => c.method)).toEqual(['on', 'off']);
+    });
+});
+
+describe('withWorkflowIdentity (0601 R3)', () => {
+    const def = {
+        name: 'task-pipeline',
+        kind: 'state-machine',
+        states: [{ id: 'precheck', description: '  Pre-flight  ' }, { id: 'implement' }],
+    } as never;
+
+    test('stamps workflowName and resolves nodeLabel from the loaded def', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withWorkflowIdentity<TestEvents>(bridgeEventBus<TestEvents>(bus), def);
+
+        await wrapped.emit('task.created', { wbs: '0601' });
+
+        expect(calls[0]?.args[0]).toEqual({ wbs: '0601', workflowName: 'task-pipeline' });
+    });
+
+    test('stamps nodeLabel for phase events whose id resolves (description-first)', async () => {
+        const { bus, calls } = stubEventBus();
+        type WorkflowEvents = { 'workflow.phase': (e: Record<string, unknown>) => void };
+        const wrapped = withWorkflowIdentity<WorkflowEvents>(bridgeEventBus<WorkflowEvents>(bus), def);
+
+        await wrapped.emit('workflow.phase', { phase: 'precheck', status: 'entered' });
+        expect(calls[0]?.args[0]).toEqual({
+            phase: 'precheck',
+            status: 'entered',
+            workflowName: 'task-pipeline',
+            nodeLabel: 'Pre-flight',
+        });
+
+        await wrapped.emit('workflow.phase', { phase: 'implement', status: 'entered' });
+        expect(calls[1]?.args[0]).toEqual({
+            phase: 'implement',
+            status: 'entered',
+            workflowName: 'task-pipeline',
+            nodeLabel: 'implement',
+        });
+    });
+
+    test('passes non-object payloads through untouched', async () => {
+        const { bus, calls } = stubEventBus();
+        type RawEvents = { 'workflow.x': (e: unknown) => void };
+        const wrapped = withWorkflowIdentity<RawEvents>(bridgeEventBus<RawEvents>(bus), def);
+
+        await wrapped.emit('workflow.x', null);
+        expect(calls[0]?.args[0]).toBeNull();
+    });
+
+    test('forwards on() and off() to the underlying bridge', () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withWorkflowIdentity<TestEvents>(bridgeEventBus<TestEvents>(bus), def);
+
+        const listener = (_e: { wbs: string }) => {};
+        wrapped.on('task.created', listener);
+        wrapped.off('task.created', listener);
 
         expect(calls.map((c) => c.method)).toEqual(['on', 'off']);
     });

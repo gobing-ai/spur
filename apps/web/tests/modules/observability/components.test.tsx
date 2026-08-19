@@ -4,7 +4,12 @@ import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-c
 import JobsTab from '../../../src/modules/observability/JobsTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
-import SystemEventsTab, { historyUrl, serializeFilter } from '../../../src/modules/observability/SystemEventsTab';
+import SystemEventsTab, {
+    historyUrl,
+    type SystemEventRow,
+    serializeFilter,
+    tooltipTitle,
+} from '../../../src/modules/observability/SystemEventsTab';
 import TasksTab from '../../../src/modules/observability/TasksTab';
 import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
 import { OBSERVABILITY_TABS } from '../../../src/modules/observability/tabs';
@@ -891,7 +896,7 @@ describe('observability components', () => {
         const pinnedTip = document.querySelector('[data-testid="system-event-payload-tooltip"]') as HTMLElement;
         expect(pinnedTip.className).toContain('pointer-events-auto');
         expect(pinnedTip.textContent).toContain('job-pin-1');
-        expect(pinnedTip.textContent).toContain('select to copy');
+        expect(pinnedTip.textContent).toContain('Select to copy · Esc or outside click to close');
 
         await act(async () => {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -1787,5 +1792,126 @@ describe('observability components', () => {
         const tasksTab = OBSERVABILITY_TABS.find((t) => t.id === 'tasks');
         expect(tasksTab).toBeDefined();
         expect(tasksTab?.label).toBe('Tasks');
+    });
+});
+
+describe('system event tooltip title (R5, 0601)', () => {
+    const view = (correlationFields: { label: string; value: string }[]): Parameters<typeof tooltipTitle>[1] => ({
+        severity: 'info',
+        summary: 's',
+        description: 'd',
+        fields: [],
+        projectName: 'p',
+        projectRoot: 'r',
+        producer: 'spur',
+        correlation: '',
+        correlationFields,
+        outcome: 'o',
+        action: null,
+    });
+
+    test('correlator precedence: entity before run before execution before action before job', () => {
+        const row = { id: 'evt-1', eventName: 'task.transitioned' } as SystemEventRow;
+        const title = tooltipTitle(
+            row,
+            view([
+                { label: 'Job', value: 'job-1' },
+                { label: 'Action', value: 'action-1' },
+                { label: 'Execution', value: 'exec-1' },
+                { label: 'Run', value: 'run-1' },
+                { label: 'Entity', value: 'task:0601' },
+            ]),
+        );
+        expect(title).toBe('task.transitioned · task:0601');
+        expect(
+            tooltipTitle(
+                row,
+                view([
+                    { label: 'Run', value: 'run-1' },
+                    { label: 'Job', value: 'job-1' },
+                ]),
+            ),
+        ).toBe('task.transitioned · run-1');
+        expect(tooltipTitle(row, view([{ label: 'Job', value: 'job-1' }]))).toBe('task.transitioned · job-1');
+    });
+
+    test('persisted history-row ID is the fallback when no semantic correlator exists', () => {
+        const row = { id: 'evt-42', eventName: 'rule.eval' } as SystemEventRow;
+        expect(tooltipTitle(row, view([]))).toBe('rule.eval · evt-42');
+    });
+
+    test('a live SSE row with a synthetic key renders the event name alone', () => {
+        const row = { id: 'live-2026-07-29T17:02:26.000Z-task.updated', eventName: 'task.updated' } as SystemEventRow;
+        expect(tooltipTitle(row, view([]))).toBe('task.updated');
+    });
+
+    test('empty correlation values are skipped in favor of a lower-precedence non-empty one', () => {
+        const row = { id: 'evt-9', eventName: 'workflow.phase' } as SystemEventRow;
+        expect(
+            tooltipTitle(
+                row,
+                view([
+                    { label: 'Entity', value: '' },
+                    { label: 'Run', value: 'run-9' },
+                ]),
+            ),
+        ).toBe('workflow.phase · run-9');
+    });
+});
+
+describe('system event tooltip footer (R5, 0601)', () => {
+    test('hover mode shows guidance to click or Pin; pinned mode shows copy/close guidance', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-footer',
+                            eventName: 'queue.job.completed',
+                            occurredAt: '2026-07-29T17:02:26.000Z',
+                            actor: null,
+                            runId: null,
+                            payload: eventEnvelope({
+                                data: { jobId: 'job-footer-1' },
+                                fields: [{ label: 'Job', value: 'job-footer-1' }],
+                                correlation: { jobId: 'job-footer-1' },
+                            }),
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'queue.job.completed',
+                            prefix: 'queue',
+                            source: 'queue',
+                            renderer: 'metadata-only',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
+        fireEvent.mouseEnter(view.getByTestId('system-event-name'));
+        const hoverTip = await waitFor(() => view.getByTestId('system-event-payload-tooltip'));
+        expect(hoverTip.getAttribute('data-pinned')).toBe('false');
+        // Hover footer: click-to-lock guidance; title identifies the row by correlator.
+        expect(view.getByTestId('system-event-tooltip-title').textContent).toBe('queue.job.completed · job-footer-1');
+        expect(view.getByTestId('system-event-tooltip-footer').textContent).toBe(
+            'Click event name or Pin to lock for copy',
+        );
+
+        fireEvent.click(view.getByTestId('system-event-payload-tooltip-pin'));
+        await waitFor(() => {
+            const tip = document.querySelector('[data-testid="system-event-payload-tooltip"]');
+            expect(tip?.getAttribute('data-pinned')).toBe('true');
+        });
+        const pinnedTip = document.querySelector('[data-testid="system-event-payload-tooltip"]') as HTMLElement;
+        expect(pinnedTip.textContent).toContain('Select to copy · Esc or outside click to close');
     });
 });

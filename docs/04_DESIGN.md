@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.38.0
+version: 1.39.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-19
@@ -52,10 +52,10 @@ When collaborating with the design team:
 | [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
-| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event envelope and projection paths, including J9's accepted derived-presentation reprojection (ADR-056/067)                                                                     | J5 implemented; J9 design accepted |
+| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event envelope and projection paths, including J9 derived-presentation reprojection (ADR-056/067)                                                                                | J5 implemented; J9 built (0601/0602) |
 | [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); `--spec` carrier + executor-binding rewrite landed (0537/0542); first-class `blocked` remains |
 | [`dev-spine-cost-and-drift.md`](design/dev-spine-cost-and-drift.md)                                     | `/sp:dev-*` spine cost attribution from history data, prefix-cache breakers, `feature`/`agent`/`workflow` drift table vs I2/I3, ranked fix path (feature I6, task 0594)                            | measurement + inventory (analysis only)                                                                                                                        |
-| [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 design accepted |
+| [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602) |
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
 
@@ -1960,7 +1960,7 @@ Unknown names and malformed optional payloads degrade to a bounded generic envel
 the product operation. Canonical shape, projection paths, and pending consumer contracts live in
 [`actionable-observability-context.md`](design/actionable-observability-context.md).
 
-**J9 semantic presentation (accepted design; not yet built).** Event-specific presenter shapes, outcome support,
+**J9 semantic presentation (built — tasks 0601/0602).** Event-specific presenter shapes, outcome support,
 producer enrichment, exact planning/workflow/queue summaries, and the two-sided 71-event matrix live in
 [`event-tracking.md`](design/event-tracking.md). History reprojection and generic tooltip identity live in
 [`actionable-observability-context.md`](design/actionable-observability-context.md); visual tooltip placement lives

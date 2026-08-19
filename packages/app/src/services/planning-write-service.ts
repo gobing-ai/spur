@@ -192,6 +192,19 @@ interface MutationDescriptor {
     actor?: string;
 }
 
+/**
+ * Canonical planning section mutation carried on the `*.updated` event payload
+ * (J9 R2 / design §6). Only the section name is emitted today: the write boundary
+ * has no content-redaction/diff policy yet, so raw task/feature section bodies
+ * must never enter the event bus. `after`/`diff` stay optional contract fields
+ * for a future safe producer (ADR-066/067).
+ */
+export interface PlanningSectionMutationData {
+    mutation: { kind: 'section'; name: string };
+    after?: string;
+    diff?: string;
+}
+
 // ─── PlanningWriteService ───────────────────────────────────────────────
 
 /** Context injected into PlanningWriteService. */
@@ -450,6 +463,13 @@ export class PlanningWriteService {
             at: now,
             ...(fromStatus !== undefined ? { from: fromStatus } : {}),
             ...(toStatus !== undefined ? { to: toStatus } : {}),
+            ...(mutation.kind === 'updateSection' && mutation.sectionName !== undefined
+                ? {
+                      data: {
+                          mutation: { kind: 'section', name: mutation.sectionName },
+                      } satisfies PlanningSectionMutationData,
+                  }
+                : {}),
         };
         await this.emitter.emit(event);
 

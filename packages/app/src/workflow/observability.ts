@@ -14,6 +14,7 @@
 
 import type {
     ActionRedactor,
+    WorkflowDef,
     WorkflowPersistenceAdapter,
     WorkflowRunRecord,
     WorkflowStatus,
@@ -143,6 +144,55 @@ export type WorkflowObservabilityBus = EventBus<WorkflowObservabilityEventMap>;
 const now = (): string => new Date().toISOString();
 const MAX_FIELD_LENGTH = 256;
 const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
+
+// ─── Workflow identity (R3) ──────────────────────────────────────────────
+
+/**
+ * Deterministic workflow identity derived once from a loaded definition (R3).
+ * `workflowName` is the definition name; `nodeLabels` maps every declared
+ * step-bearing id (state-machine `states` / transition-flow `nodes`) to its
+ * non-empty trimmed description, falling back to the declared id itself.
+ */
+export interface WorkflowEventIdentity {
+    workflowName: string;
+    nodeLabels: ReadonlyMap<string, string>;
+}
+
+/** Build the identity from a parsed `WorkflowDef`; no history/DB lookup. */
+export function createWorkflowEventIdentity(def: WorkflowDef): WorkflowEventIdentity {
+    const nodeLabels = new Map<string, string>();
+    const entries = 'states' in def ? def.states : def.nodes;
+    for (const step of entries) {
+        const description = step.description?.trim();
+        nodeLabels.set(step.id, description !== undefined && description !== '' ? description : step.id);
+    }
+    return { workflowName: def.name, nodeLabels };
+}
+
+/**
+ * Stamp workflow identity onto one payload: always `workflowName`, plus `nodeLabel`
+ * when the payload carries a step-bearing identifier (`node` / `phase` / `from`)
+ * that resolves in the identity map. Shallow-copies object payloads; malformed or
+ * non-object payloads pass through untouched for the existing failure isolation.
+ * `eventName` is accepted for signature symmetry with the bus decorator; decoration
+ * is uniform across every `workflow.*` event, so it is not branched on.
+ */
+export function decorateWorkflowEvent(identity: WorkflowEventIdentity, _eventName: string, payload: unknown): unknown {
+    if (typeof payload !== 'object' || payload === null) return payload;
+    const source = payload as Record<string, unknown>;
+    const decorated: Record<string, unknown> = { ...source, workflowName: identity.workflowName };
+    for (const key of ['node', 'phase', 'from'] as const) {
+        const id = source[key];
+        if (typeof id === 'string') {
+            const label = identity.nodeLabels.get(id);
+            if (label !== undefined) {
+                decorated.nodeLabel = label;
+                break;
+            }
+        }
+    }
+    return decorated;
+}
 
 /** Bound a string to a max length, redacting secret-like patterns, for trace-safe event fields. */
 export function bounded(value: string, maxLength = MAX_FIELD_LENGTH): string {

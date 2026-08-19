@@ -46,7 +46,7 @@ import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import type { AgentService } from './agent-service';
-import { bridgeEventBus } from './event-bridge';
+import { bridgeEventBus, withWorkflowIdentity } from './event-bridge';
 import type { RuleService } from './rule-service';
 import {
     type SystemEventAction,
@@ -560,7 +560,12 @@ export class WorkflowAppService {
             runId,
             vars: runVars,
             ...(isDry ? { dryRun: true } : {}),
-            ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
+            ...(eventsBus !== undefined
+                ? {
+                      // R3 (0601): engine-native events also carry workflow identity.
+                      events: withWorkflowIdentity(bridgeEventBus(eventsBus), workflow),
+                  }
+                : {}),
         });
         // Stamp dryRun into metadata_json so trace can label dry runs
         if (isDry) {
@@ -809,7 +814,12 @@ export class WorkflowAppService {
         const result = await svc.resumeRun(workflow, runId, {
             workdir: this.ctx.cwd,
             ...(resumeVars !== undefined ? { vars: resumeVars } : {}),
-            ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
+            ...(eventsBus !== undefined
+                ? {
+                      // R3 (0601): engine-native resume events carry workflow identity.
+                      events: withWorkflowIdentity(bridgeEventBus(eventsBus), workflow),
+                  }
+                : {}),
         });
         await this.stampFailureReason(runId, result);
         return result as WorkflowRunResult;
@@ -1086,7 +1096,15 @@ export class WorkflowAppService {
         if (opts.recordSelfPid === true) {
             persistence = withSelfPidRecording(persistence, db);
         }
-        const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
+        const adapter = bus
+            ? new ObservableWorkflowAdapter(
+                  persistence,
+                  // R3 (0601): decorate the observability bus with workflow identity so
+                  // every adapter event carries workflowName + nodeLabel. The def is
+                  // available here via the extension registration seam (0533).
+                  opts.extensions !== undefined ? withWorkflowIdentity(bus, opts.extensions.workflow) : bus,
+              )
+            : persistence;
         return new EngineWorkflowService(host, adapter);
     }
 

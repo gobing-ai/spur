@@ -1,7 +1,7 @@
 # Event tracking — System Event 5W1H SSOT
 
 **Area:** System Event catalog (`SYSTEM_EVENT_CATALOG`), 5W1H payload contract, `*.updated` field-level diff, `workflow.*` legibility.
-**Status:** current audit baseline (task 0597) + J9 accepted design (ADR-066/067/068; not yet built).
+**Status:** current audit baseline (task 0597) + J9 built (tasks 0601/0602, ADR-066/067/068).
 **Authority:** elaborates `docs/04_DESIGN.md` §7.9 (authoritative on the catalog surface) and `docs/design/actionable-observability-context.md` (authoritative on the v2 envelope and projection policy). This doc does **not** restate their contracts — it defines the *per-event* contract the other two deliberately leave abstract. On conflict, `04_DESIGN.md` §7.9 wins (lower number wins on content, constitution §4.1); on envelope mechanics, `actionable-observability-context.md` wins.
 
 ## 1. Scope and non-goals
@@ -11,7 +11,7 @@ The task-0597 baseline is an **audit + SSOT only**: it changed no emitter, catal
 1. Which of the 71 cataloged events actually answer who/what/when/where/why/how?
 2. What convention closes the two concrete operator complaints — `task.updated` never says *what* changed, and `workflow.*` renders raw ids?
 
-Implementation remains out of scope for this design pass. The accepted shape enriches producer data, replaces source-family presentation with event-specific presenters, reprojects derived presentation on history reads, and keeps the Board free of event-specific switches.
+J9 (0601/0602) shipped that shape: producer enrichment, event-specific presenters, history-read reprojection, and a Board free of event-specific switches. This document remains the per-event SSOT; it is not a second implementation.
 
 ## 2. Root cause (verified — do not re-derive)
 
@@ -217,7 +217,7 @@ This is enforceable today as a `spur rule` or a small script the same way `trans
 - `docs/design/actionable-observability-context.md` owns the v2 envelope and projection policy. This doc's diff convention (§6) and naming convention (§7) operate **inside** the envelope `data`/`presentation` it defines; no envelope shape change is proposed here.
 - `docs/design/workflow-observability.md` owns the workflow runtime contract and envelope-v1 fields (`workflowName`, `runId`, `sequence`). §7 of this doc is the Board-legibility convention layered on top of that runtime contract, not a replacement.
 
-## 11. J9 semantic presenter contract (accepted design — not yet built)
+## 11. J9 semantic presenter contract (built — tasks 0601/0602)
 
 `SYSTEM_EVENT_PRESENTERS` is a typed record over `SystemEventName`. The catalog resolves each name to one presenter;
 source profiles may still supply producer attribution or remediation defaults, but may not supply descriptions,

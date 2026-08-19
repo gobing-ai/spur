@@ -5,11 +5,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
 import {
     configuredSecretValues,
+    createWorkflowEventIdentity,
+    decorateWorkflowEvent,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
     resolveOutputLogConfig,
     resolveWorkflowLogRetentionDays,
+    type SteeringAck,
     type StepEvent,
     type SystemEventBus,
     type TimelineEvent,
@@ -433,23 +436,42 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             }
             const steeringController =
                 options.steer === true
-                    ? new WorkflowSteeringController(
-                          (ack) => {
-                              void bus.emit('workflow.steering', ack);
-                              context.output.write(
-                                  `[steer] ${ack.accepted ? 'ack' : 'nack'} ${ack.operation} · ${ack.reason ?? `version=${ack.version}`}`,
-                              );
-                          },
-                          configuredSecretValues(context.env),
-                          new Set(['operator']),
-                          (snapshot) => {
-                              if (snapshot.state === 'boundary') {
-                                  context.output.write(
-                                      `[steer] boundary action=${snapshot.actionId} version=${snapshot.version} · commands: continue | note <text> | retry | abort`,
+                    ? await (async () => {
+                          // R3 (0601): identity is derived once from the parsed def so
+                          // steering acks carry workflowName + nodeLabel. A parse failure
+                          // degrades to undecorated acks (steering must still work).
+                          let identity: { workflowName: string; nodeLabels: ReadonlyMap<string, string> } | undefined;
+                          try {
+                              const def = await loadWorkflowDef(resolve(context.cwd, file), {
+                                  validateSchema: false,
+                              });
+                              identity = createWorkflowEventIdentity(def);
+                          } catch {
+                              // steering identity is advisory, never a blocker
+                          }
+                          return new WorkflowSteeringController(
+                              (ack) => {
+                                  void bus.emit(
+                                      'workflow.steering',
+                                      identity === undefined
+                                          ? ack
+                                          : (decorateWorkflowEvent(identity, 'workflow.steering', ack) as SteeringAck),
                                   );
-                              }
-                          },
-                      )
+                                  context.output.write(
+                                      `[steer] ${ack.accepted ? 'ack' : 'nack'} ${ack.operation} · ${ack.reason ?? `version=${ack.version}`}`,
+                                  );
+                              },
+                              configuredSecretValues(context.env),
+                              new Set(['operator']),
+                              (snapshot) => {
+                                  if (snapshot.state === 'boundary') {
+                                      context.output.write(
+                                          `[steer] boundary action=${snapshot.actionId} version=${snapshot.version} · commands: continue | note <text> | retry | abort`,
+                                      );
+                                  }
+                              },
+                          );
+                      })()
                     : undefined;
             const steeringInput =
                 steeringController === undefined

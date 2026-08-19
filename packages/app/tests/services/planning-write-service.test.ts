@@ -214,9 +214,9 @@ describe('PlanningWriteService', () => {
 
         test('emits task.updated event (non-status change)', async () => {
             const fs = makeFs();
-            const events: { event: string }[] = [];
+            const events: Array<{ event: string; data?: unknown }> = [];
             const emitter = {
-                emit: (e: { event: string }) => {
+                emit: (e: { event: string; data?: unknown }) => {
                     events.push(e);
                 },
             };
@@ -228,6 +228,70 @@ describe('PlanningWriteService', () => {
 
             expect(result.eventName).toBe('task.updated');
             expect(events[0]?.event).toBe('task.updated');
+        });
+
+        test('carries the canonical section mutation name on task.updated (J9 R2)', async () => {
+            const fs = makeFs();
+            const events: Array<{ event: string; data?: unknown }> = [];
+            const emitter = {
+                emit: (e: { event: string; data?: unknown }) => {
+                    events.push(e);
+                },
+            };
+            const svc = new PlanningWriteService({ fs, emitter });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Solution', 'Updated.\n');
+
+            expect(events[0]).toEqual(
+                expect.objectContaining({
+                    event: 'task.updated',
+                    data: { mutation: { kind: 'section', name: 'Solution' } },
+                }),
+            );
+            // after/diff stay absent — raw section bodies must not enter the bus.
+            expect(events[0]?.data).toEqual({ mutation: { kind: 'section', name: 'Solution' } });
+        });
+
+        test('carries the canonical section mutation name on feature.updated (J9 R2)', async () => {
+            const fs = makeFs();
+            const events: Array<{ event: string; data?: unknown }> = [];
+            const emitter = {
+                emit: (e: { event: string; data?: unknown }) => {
+                    events.push(e);
+                },
+            };
+            const svc = new PlanningWriteService({ fs, emitter });
+            const ref = makeFeatureRef();
+            await fs.writeFile(ref.filePath, makeFeatureContent());
+
+            await svc.updateSection(ref, 'Goal', 'Updated.\n');
+
+            expect(events[0]).toEqual(
+                expect.objectContaining({
+                    event: 'feature.updated',
+                    data: { mutation: { kind: 'section', name: 'Goal' } },
+                }),
+            );
+        });
+
+        test('non-section updates do not carry section mutation data (J9 R2)', async () => {
+            const fs = makeFs();
+            const events: Array<{ event: string; data?: unknown }> = [];
+            const emitter = {
+                emit: (e: { event: string; data?: unknown }) => {
+                    events.push(e);
+                },
+            };
+            const svc = new PlanningWriteService({ fs, emitter });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateFrontmatter(ref, 'priority', 'P1');
+
+            expect(events[0]?.event).toBe('task.updated');
+            expect(events[0]?.data).toBeUndefined();
         });
 
         test('updates updated_at timestamp', async () => {

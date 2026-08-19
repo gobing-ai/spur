@@ -492,10 +492,13 @@ export {
 } from './workflow/lifecycle-adapter';
 // Workflow observability — per-step event stream for the board / live consumers
 export {
+    createWorkflowEventIdentity,
+    decorateWorkflowEvent,
     ObservableWorkflowAdapter,
     type WorkflowActionFinishedEvent,
     type WorkflowActionMetadata,
     type WorkflowActionStartedEvent,
+    type WorkflowEventIdentity,
     type WorkflowObservabilityBus,
     type WorkflowObservabilityEventMap,
     type WorkflowPhaseEvent,

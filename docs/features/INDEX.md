@@ -85,7 +85,7 @@
     ├── [active] **J6**: Role routing attribution: record and query which executor served which role ([J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md](./J6_role-routing-attribution-record-and-query-which-executor-served-which-role.md))
     ├── [active] **J7**: Board surfaces for role routing and token consumption ([J7_board-surfaces-for-role-routing-and-token-consumption.md](./J7_board-surfaces-for-role-routing-and-token-consumption.md))
     ├── [done] **J8**: Pairing evidence: agent×model×role measurement and ladder recommendation from the history plane ([J8_pairing-evidence-agent-model-role-measurement-and-ladder-recommendation-from-the-history-plane.md](./J8_pairing-evidence-agent-model-role-measurement-and-ladder-recommendation-from-the-history-plane.md))
-    └── [backlog] **J9**: Event 5W1H payload and catalog remediation ([J9_event-5w1h-payload-and-catalog-remediation.md](./J9_event-5w1h-payload-and-catalog-remediation.md))
+    └── [done] **J9**: Event 5W1H payload and catalog remediation ([J9_event-5w1h-payload-and-catalog-remediation.md](./J9_event-5w1h-payload-and-catalog-remediation.md))
 [verifying] **K**: Features module (Spur Board) ([K_features-module-spur-board.md](./K_features-module-spur-board.md))
     ├── [done] **K1**: Project switcher ([K1_project-switcher.md](./K1_project-switcher.md))
     └── [done] **K2**: Project runtime robustness: port-probe error classification and bind-free test seams ([K2_project-runtime-robustness-port-probe-error-classification-and-bind-free-test-seams.md](./K2_project-runtime-robustness-port-probe-error-classification-and-bind-free-test-seams.md))

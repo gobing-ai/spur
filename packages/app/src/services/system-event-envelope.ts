@@ -1,6 +1,12 @@
 import type { EventSeverity } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
-import type { SystemEventCatalogEntry } from './event-names';
+import {
+    SYSTEM_EVENT_PRESENTERS,
+    type SystemEventCatalogEntry,
+    type SystemEventName,
+    type SystemEventPresentationInput,
+    type SystemEventPresenterSpec,
+} from './event-names';
 
 /** Schema version emitted by the canonical System Event envelope builder. */
 export const SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION = 2 as const;
@@ -183,15 +189,7 @@ export function buildSystemEventEnvelope(
         const data = projectSystemEventData(entry, eventPayload, secretValues);
         const correlation = extractEnvelopeCorrelation(eventPayload, secretValues);
         const severity = extractSeverity(eventPayload) ?? entry?.severity ?? 'warning';
-        const outcome = firstBoundedString(eventPayload, ['outcome', 'status', 'reason'], secretValues);
-        const presentation = {
-            severity,
-            summary: buildSummary(entry, correlation, outcome),
-            description: entry?.description ?? 'Unknown system event with bounded metadata.',
-            fields: buildPresentationFields(entry, data),
-            ...(outcome !== undefined ? { outcome } : {}),
-            ...buildAction(entry, correlation),
-        };
+        const presentation = buildPresentation(entry, data, correlation, severity);
 
         return {
             schemaVersion: SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
@@ -219,11 +217,22 @@ export function projectStoredSystemEventEnvelope(
     secretValues: readonly string[] = [],
 ): SystemEventEnvelopeV2 {
     try {
-        if (isSystemEventEnvelopeV2(storedPayload)) return storedPayload;
         if (!isRecord(storedPayload) || storedPayload.schemaVersion !== SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION) {
             return buildSystemEventEnvelope(entry, storedPayload, project, secretValues);
         }
-        return genericEnvelope(project, secretValues);
+        if (!isSystemEventEnvelopeV2(storedPayload)) return genericEnvelope(project, secretValues);
+        const stored = storedPayload as SystemEventEnvelopeV2;
+        // Valid v2 rows keep their stored schemaVersion, data, and context
+        // byte-for-byte; only the derived presentation is recomputed from the
+        // current exhaustive presenter over the stored bounded data (R1/R9).
+        // The DAO is never written here.
+        const presentation = buildPresentation(
+            entry,
+            stored.data,
+            stored.context.correlation,
+            stored.presentation.severity,
+        );
+        return { ...stored, presentation };
     } catch {
         return genericEnvelope(project, secretValues);
     }
@@ -335,13 +344,58 @@ function assignString(
     target[key] = redactAndBound(value, secretValues, 128);
 }
 
-function buildPresentationFields(
+/**
+ * Build the presentation block for a system event from its exhaustive presenter.
+ *
+ * Every cataloged name resolves to one presenter; unknown names and presenter
+ * exceptions fall back to the bounded generic presentation (failure isolation).
+ * Presenter outputs (summary/description/outcome) are bounded again here before
+ * they enter the envelope so hostile or oversized output can never escape the
+ * persisted/streamed bounds (R1).
+ */
+function buildPresentation(
     entry: SystemEventCatalogEntry | undefined,
     data: Record<string, unknown> | null,
+    correlation: SystemEventCorrelationContext,
+    severity: SystemEventSeverity,
+): SystemEventEnvelopeV2['presentation'] {
+    const presenter = entry === undefined ? undefined : SYSTEM_EVENT_PRESENTERS[entry.name as SystemEventName];
+    if (entry === undefined || presenter === undefined) {
+        return genericPresentation(severity);
+    }
+    const input: SystemEventPresentationInput = { data, correlation };
+    let summary: string;
+    let description: string;
+    let outcome: string | undefined;
+    let fields: SystemEventPresentationField[];
+    try {
+        summary = presenter.summary(input);
+        description = presenter.description;
+        fields = buildPresenterFields(presenter, data);
+        if (presenter.outcome.support === 'derived') {
+            outcome = presenter.outcome.derive(input);
+        }
+    } catch {
+        return genericPresentation(severity);
+    }
+    return {
+        severity,
+        summary: boundPresentationString(summary, 512) ?? 'System event',
+        description: boundPresentationString(description, 512) ?? 'System event.',
+        fields,
+        ...(outcome !== undefined ? { outcome: boundPresentationString(outcome, 128) } : {}),
+        ...buildAction(entry, correlation),
+    };
+}
+
+/** Render the presenter's ordered field allow-list against the bounded data. */
+function buildPresenterFields(
+    presenter: SystemEventPresenterSpec,
+    data: Record<string, unknown> | null,
 ): SystemEventPresentationField[] {
-    if (!entry || !data) return [];
+    if (!data) return [];
     const fields: SystemEventPresentationField[] = [];
-    for (const field of entry.metadataFields.slice(0, 8)) {
+    for (const field of presenter.fields.slice(0, 8)) {
         const value = getPath(data, field.path);
         const rendered = renderFieldValue(value);
         if (rendered !== undefined) fields.push({ label: field.label, value: rendered });
@@ -349,14 +403,20 @@ function buildPresentationFields(
     return fields;
 }
 
-function buildSummary(
-    entry: SystemEventCatalogEntry | undefined,
-    correlation: SystemEventCorrelationContext,
-    outcome: string | undefined,
-): string {
-    const label = entry ? humanizeEventName(entry.name) : 'Unknown system event';
-    const identity = correlation.entityId ?? correlation.runId ?? correlation.jobId;
-    return [label, identity, outcome].filter((part): part is string => Boolean(part)).join(' · ');
+/** Bound a presenter-produced string, truncating to the given maximum length. */
+function boundPresentationString(value: unknown, maxLength: number): string | undefined {
+    if (typeof value !== 'string' || value.length === 0) return undefined;
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
+}
+
+/** The generic presentation fallback for unknown/malformed events (R1). */
+function genericPresentation(severity: SystemEventSeverity): SystemEventEnvelopeV2['presentation'] {
+    return {
+        severity,
+        summary: 'Unknown system event',
+        description: 'Unknown system event with bounded metadata.',
+        fields: [],
+    };
 }
 
 function buildAction(
@@ -395,20 +455,6 @@ function extractSeverity(eventPayload: unknown): SystemEventSeverity | undefined
     return eventPayload.severity === 'info' || eventPayload.severity === 'warning' || eventPayload.severity === 'error'
         ? eventPayload.severity
         : undefined;
-}
-
-function firstBoundedString(
-    eventPayload: unknown,
-    keys: readonly string[],
-    secretValues: readonly string[],
-): string | undefined {
-    if (!isRecord(eventPayload)) return undefined;
-    for (const key of keys) {
-        const value = eventPayload[key];
-        if (typeof value === 'string' && value.length > 0) return redactAndBound(value, secretValues, 128);
-        if (typeof value === 'boolean' || typeof value === 'number') return String(value);
-    }
-    return undefined;
 }
 
 function boundedProjectContext(
@@ -453,11 +499,6 @@ function renderFieldValue(value: unknown): string | undefined {
     if (typeof value === 'number' && Number.isFinite(value)) return String(value);
     if (typeof value === 'boolean') return String(value);
     return undefined;
-}
-
-function humanizeEventName(name: string): string {
-    const words = name.replaceAll('.', ' ').replaceAll('_', ' ');
-    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
 function isSafeIdentifier(value: string | undefined): value is string {

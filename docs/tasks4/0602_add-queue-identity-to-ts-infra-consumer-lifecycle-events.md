@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Add queue identity to ts-infra consumer lifecycle events"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-19T15:25:16.660Z
-updated_at: "2026-08-19T17:16:36.004Z"
+updated_at: "2026-08-19T19:45:02.981Z"
 feature_id: J9
 priority: P2
 tags: ["system-events", "queue", "ts-infra", "cross-repo"]
@@ -28,28 +28,28 @@ The compatibility boundary is deliberate: a consumer that does not configure `ev
 
 Out of scope: changing queue job events or adding `queueName` to `QueueJobRef`, renaming event keys, changing job payload/storage/DAO behavior, adding a queue registry, modifying Spur code or dependency pins, editing publish workflows, manual npm publishing, or refactoring unrelated ts-libs packages.
 ### Requirements
-- [ ] R1. Add a truthful queue identity at the existing consumer configuration boundary.
+- [x] R1. Add a truthful queue identity at the existing consumer configuration boundary.
   - Add `queueName?: string` to `QueueConsumerConfig` with JSDoc stating that it is runtime-required whenever `events` is configured.
   - Validate any supplied name as a non-empty, already-trimmed string. When `events` is present, reject a missing or invalid name synchronously during `DBQueueConsumer` construction with a `TypeError` whose message begins `Queue consumer queueName`.
   - Preserve the silent-consumer contract: `{}` remains valid when `events` is absent. Do not synthesize a default, trim/normalize a supplied value, or infer identity from a job type, database table, project, or event name.
 
-- [ ] R2. Make queue identity required on both emitted lifecycle detail contracts.
+- [x] R2. Make queue identity required on both emitted lifecycle detail contracts.
   - Add required `queueName: string` to `QueueConsumerStartedDetail` and `QueueConsumerStoppedDetail` and emit the validated configured value unchanged from both `start()` and `stop()`.
   - Preserve existing emission cardinality and state semantics: repeated `start()` emits nothing after the first effective start; `stop()` emits only when the consumer was running; successful drain reports `drained: true`; deadline expiry reports `drained: false` with warning severity.
   - Preserve every existing started/stopped field and unit: `startedAt`, `pollInterval`, `batchSize`, `maxConcurrency`, `visibilityTimeout`, `stoppedAt`, `drainTimeoutMs`, `inFlightAtStop`, `drained`, and `severity`.
 
-- [ ] R3. Keep the public/package boundary surgical and document the compatibility change.
+- [x] R3. Keep the public/package boundary surgical and document the compatibility change.
   - Retain the existing `queue.consumer.started` and `queue.consumer.stopped` names, `QueueEvents` map, portable type exports, and `/job-queue-db` value subpath. No new export, package, dependency, event version, or adapter is introduced.
   - Do not add queue identity to `queue.job.*`; those events continue using `jobId` and handler `type` as job correlators and never carry business payload `T`.
   - Update the event-enabled README example to configure `queueName`, document the conditional requirement, and add a dated lockstep changelog entry with a Breaking Changes note for event-enabled constructors/manual lifecycle detail emitters.
 
-- [ ] R4. Extend upstream tests at the owning seams.
+- [x] R4. Extend upstream tests at the owning seams.
   - Add constructor cases for missing, empty, whitespace-only, and padded names with `events`; add a control proving a silent consumer may still omit the field.
   - Assert the exact configured name on started, successfully drained stopped, and timed-out stopped details; retain assertions for all pre-existing fields and severities.
   - Update typed manual emits and every event-enabled `DBQueueConsumer` fixture to supply a name, while leaving silent fixtures unchanged where they exercise backward compatibility.
   - Keep main-barrel/subpath tests green and add no skipped tests, broad mocks, fixtures, or new test framework.
 
-- [ ] R5. Produce and record a consumable lockstep release for task 0601.
+- [x] R5. Produce and record a consumable lockstep release for task 0601.
   - Run targeted infra tests, `bun run spur-check`, and `bun run build` in the ts-libs repository; commit the implementation and changelog before release.
   - Use the next unused lockstep patch (`0.4.39` while local/npm remain `0.4.38`). The operator owns `bun run bump-ver <version> --push`; do not hand-edit package versions, tags, publish workflows, or invoke `npm publish`.
   - Confirm the aggregate Publish workflow and `npm view @gobing-ai/ts-infra@<version> version`, then record the ts-libs implementation commit, release commit/tag, workflow evidence, and exact published version in this task's Solution/Testing sections.
@@ -97,26 +97,61 @@ Store the bus only together with its validated name (an internal object/tuple is
 
 **Rejected approaches.** A global required name would break silent consumers that emit no lifecycle rows; an optional emitted detail field would permit anonymous rows; a conditional config union adds composition friction without replacing runtime validation; defaulting to `default`, a table name, project name, or job `type` fabricates identity; adding the field to all job events is unrelated churn; a new event version, queue registry, schema migration, local Spur shim, manual package-version edit, or manual npm publish is out of scope.
 ### Plan
-- [ ] 1. R1/R4 — Add failing constructor tests for event-enabled missing/invalid names and the silent-consumer compatibility control in `packages/infra/tests/job-queue/db-job-queue.test.ts`.
-- [ ] 2. R1/R2/R3 — Add the config/detail fields and constructor invariant, then stamp the validated name onto the existing start/stop literals without changing event names, job events, scheduling, or drain behavior.
-- [ ] 3. R2/R4 — Update typed manual emits and event-enabled fixtures; assert identity on started, normally drained stopped, and timed-out stopped paths while retaining all prior fact/severity assertions.
-- [ ] 4. R3 — Update the ts-infra README event-enabled example/contract and add the candidate release changelog entry with explicit migration/breaking notes; leave barrels/export maps unchanged unless typecheck proves an actual gap.
-- [ ] 5. R4/R5 — Run targeted tests: `bun test packages/infra/tests/job-queue/db-job-queue.test.ts packages/infra/tests/events.test.ts packages/infra/tests/job-queue-db.test.ts packages/infra/tests/subpaths.test.ts`.
-- [ ] 6. R5 — Run upstream verification from the ts-libs root: `bun run spur-check`, `bun run build`, and intentional `git status`; commit the implementation on its isolated branch/worktree.
-- [ ] 7. R5 — Reconfirm the next patch is unused (`package.json`, tags, and `npm view`), then hand the clean commit to the operator for `bun run bump-ver <version> --push`; do not create/push tags or publish manually.
-- [ ] 8. R5 — Confirm the aggregate Publish run and npm version, then use Spur's CLI-owned section-update path to record the ts-libs implementation/release commits, tag/version, workflow evidence, and checks. Mark 0602 done only after publication; 0601 then consumes the recorded version.
+- [x] 1. R1/R4 — Add failing constructor tests for event-enabled missing/invalid names and the silent-consumer compatibility control in `packages/infra/tests/job-queue/db-job-queue.test.ts`.
+- [x] 2. R1/R2/R3 — Add the config/detail fields and constructor invariant, then stamp the validated name onto the existing start/stop literals without changing event names, job events, scheduling, or drain behavior.
+- [x] 3. R2/R4 — Update typed manual emits and event-enabled fixtures; assert identity on started, normally drained stopped, and timed-out stopped paths while retaining all prior fact/severity assertions.
+- [x] 4. R3 — Update the ts-infra README event-enabled example/contract and add the candidate release changelog entry with explicit migration/breaking notes; leave barrels/export maps unchanged unless typecheck proves an actual gap.
+- [x] 5. R4/R5 — Run targeted tests: `bun test packages/infra/tests/job-queue/db-job-queue.test.ts packages/infra/tests/events.test.ts packages/infra/tests/job-queue-db.test.ts packages/infra/tests/subpaths.test.ts`.
+- [x] 6. R5 — Run upstream verification from the ts-libs root: `bun run spur-check`, `bun run build`, and intentional `git status`; commit the implementation on its isolated branch/worktree.
+- [x] 7. R5 — Reconfirm the next patch is unused (`package.json`, tags, and `npm view`), then hand the clean commit to the operator for `bun run bump-ver <version> --push`; do not create/push tags or publish manually.
+- [x] 8. R5 — Confirm the aggregate Publish run and npm version, then use Spur's CLI-owned section-update path to record the ts-libs implementation/release commits, tag/version, workflow evidence, and checks. Mark 0602 done only after publication; 0601 then consumes the recorded version.
 ### Solution
+Implemented in `/Users/robin/xprojects/ts-libs` on branch `feat/0602-queue-identity`, commit `75f943d`.
+Spur-side assignment of this fact to the upstream producer is `docs/00_ADR.md:834-838` (ADR-068).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map (external ts-libs evidence — ADR-062 form):**
+- @gobing-ai/ts-infra `src/job-queue/types.ts` line 69 — `queueName?: string` on `QueueConsumerConfig`; JSDoc states runtime-required whenever `events` is configured; validated, never normalized.
+- @gobing-ai/ts-infra `src/events.ts` line 58-59 — required `queueName: string` on `QueueConsumerStartedDetail`.
+- @gobing-ai/ts-infra `src/events.ts` line 74-75 — required `queueName: string` on `QueueConsumerStoppedDetail`.
+- @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 84 — `DBQueueConsumer` stores one validated `eventSink { bus, queueName }`.
+- @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 360-373 — `resolveEventSink(config)` validates: supplied name must be non-empty and already-trimmed; event-enabled consumers must supply one; throws `TypeError('Queue consumer queueName …')`; silent consumers may omit identity.
+- @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 112-125 — `start()` emits `queueName` byte-for-byte; no normalization.
+- @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 151-163 — `stop()` emits `queueName` byte-for-byte; no normalization.
+- @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 262 — `queue.job.*` emits unchanged (no queue identity; job `type` is never substituted).
+- @gobing-ai/ts-infra `tests/job-queue/db-job-queue.test.ts` — constructor validation table (missing/empty/whitespace/padded) + silent-consumer control; every event-enabled fixture supplies `test-jobs`; `queueName` asserted on started, normally-drained stopped, and timed-out stopped paths.
+- @gobing-ai/ts-infra `tests/events.test.ts` — manual lifecycle emits carry `queueName` and it survives the typed EventBus.
+- @gobing-ai/ts-infra `README.md` — event-enabled example passes `queueName: 'email-jobs'`; lifecycle section documents the conditional requirement.
+- ts-libs `CHANGELOG.md` — `0.4.39` dated section (Added/Changed/Breaking Changes).
 
+**Design notes:** the identity invariant is enforced at construction (event sink carries its validated name), no non-null assertions, no abstraction. Queue identity deliberately NOT added to `queue.job.*`; no default/table/project/type substitution.
+
+**Release status:** published `@gobing-ai/ts-infra@0.4.39` (release commit `04f9e99`, tag `@gobing-ai/ts-infra-v0.4.39`, workflow 32286294512). This verify re-confirmed `npm view @gobing-ai/ts-infra version` → `0.4.39`.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-infra `src/job-queue/types.ts` line 69 `queueName?: string` with JSDoc runtime-required when events configured; @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 360-373 `resolveEventSink` TypeError prefix `Queue consumer queueName`; silent `{}` still valid. Re-read this run. |
+| R2 | MET | @gobing-ai/ts-infra `src/events.ts` line 58-59 and line 74-75 required `queueName: string`; start/stop emit at `src/job-queue/db-job-queue.ts` line 112-125 and line 151-163. This run: `bun test` ts-infra db-job-queue+events+subpaths **35 pass**. |
+| R3 | MET | Event names unchanged; no queueName on `queue.job.*` (`db-job-queue.ts` line 262). README + CHANGELOG 0.4.39 Breaking Changes recorded in Solution. |
+| R4 | MET | This run: constructor invalid-name + silent-control tests pass (`rejects missing or invalid queue names`, `a silent consumer may still omit queue identity`); start/stop drain/timeout suites pass. |
+| R5 | MET | This run: `npm view @gobing-ai/ts-infra version` → **0.4.39**. Testing records impl `75f943d`, release `04f9e99`, workflow 32286294512. Spur pin left to 0601 (`package.json` catalog 0.4.39). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R6 — Queue consumer lifecycle rows identify the queue and result | MET | test | ts-libs `bun test packages/infra/tests/job-queue/db-job-queue.test.ts packages/infra/tests/events.test.ts packages/infra/tests/job-queue-db.test.ts packages/infra/tests/subpaths.test.ts` this run: 35 pass / 0 fail; `npm view` 0.4.39 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECUA review (P1–P4):**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | Correctness | @gobing-ai/ts-infra `src/job-queue/db-job-queue.ts` line 360-373 | Event-enabled consumer without a non-empty trimmed `queueName` throws `TypeError('Queue consumer queueName …')` at construction, before polling — an anonymous lifecycle row is impossible. Silent consumers retain the `{}` contract. |
+| P4 | Correctness | @gobing-ai/ts-infra `src/events.ts` line 59,75 | `queueName` is a required field on both lifecycle detail types, so manual emitters must supply it (breaking-change documented in CHANGELOG). |
+| P4 | Usability | @gobing-ai/ts-infra `README.md` | Event-enabled example documents the conditional requirement; the name is validated, never normalized, never substituted from job `type`/table/project. |
+| — | — | — | No P1–P3 findings. Downstream Spur `server-jobs` wiring landed in 0601 (`apps/server/src/context.ts:565`, catalog pin 0.4.39). Final disposition: **Approved** — upstream gates green, release published, consumer landed. |
 ### References
 - Feature and exact scenario: `docs/features/J9_event-5w1h-payload-and-catalog-remediation.md` → R6
 - Dependent Spur work: task 0601, `docs/tasks4/0601_implement-exhaustive-system-event-presenters-and-history-rep.md`
@@ -128,3 +163,6 @@ Store the bus only together with its validated name (an internal object/tuple is
 - Primary upstream verification/docs: `/Users/robin/xprojects/ts-libs/packages/infra/tests/job-queue/db-job-queue.test.ts`, `tests/events.test.ts`, `tests/job-queue-db.test.ts`, `tests/subpaths.test.ts`, `packages/infra/README.md`, root `CHANGELOG.md`
 - Premise evidence (2026-08-19): local manifests/tags and `npm view @gobing-ai/ts-infra version --json` reported `0.4.38`
 ### History
+- 2026-08-19T18:07:10.838Z todo → wip (system)
+- 2026-08-19T18:23:41.551Z wip → testing (system)
+- 2026-08-19T18:23:41.920Z testing → done (system)

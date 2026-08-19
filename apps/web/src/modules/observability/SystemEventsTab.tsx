@@ -485,6 +485,23 @@ function joinEntity(kind: unknown, id: unknown): string | null {
     return safeKind ?? safeId;
 }
 
+/**
+ * Correlator precedence for the tooltip title (R5, 0601): entity, run,
+ * execution, action, then job identity. The persisted history-row ID is used
+ * only when no semantic correlator exists — and never for a synthetic live
+ * SSE row (`live-` prefix), which renders the event name alone.
+ */
+const CORRELATOR_PRECEDENCE = ['Entity', 'Run', 'Execution', 'Action', 'Job'] as const;
+
+export function tooltipTitle(event: SystemEventRow, view: SystemEventView): string {
+    for (const label of CORRELATOR_PRECEDENCE) {
+        const field = view.correlationFields.find((f) => f.label === label);
+        if (field !== undefined && field.value !== '') return `${event.eventName} · ${field.value}`;
+    }
+    if (event.id !== '' && !event.id.startsWith('live-')) return `${event.eventName} · ${event.id}`;
+    return event.eventName;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
         ? (value as Record<string, unknown>)
@@ -1374,11 +1391,11 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             }}
         >
             <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="text-[10px] text-[#8b949e] font-sans">
-                    event context
-                    {pinned
-                        ? ' · select to copy · Esc / outside click to close'
-                        : ' · click event name or Pin to lock for copy'}
+                <div
+                    className="text-[11px] font-sans font-semibold text-[#c9d1d9] truncate"
+                    data-testid="system-event-tooltip-title"
+                >
+                    {tooltipTitle(event, view)}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                     {!pinned && (
@@ -1455,6 +1472,12 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                     <code className="block mt-0.5 font-mono break-all select-text">{view.action.value}</code>
                 </div>
             )}
+            <div
+                className="mt-2 border-t border-[#30363d] pt-1.5 text-[10px] text-[#8b949e] font-sans"
+                data-testid="system-event-tooltip-footer"
+            >
+                {pinned ? 'Select to copy · Esc or outside click to close' : 'Click event name or Pin to lock for copy'}
+            </div>
         </div>
     ) : null;
 

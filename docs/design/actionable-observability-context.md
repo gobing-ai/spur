@@ -2,7 +2,7 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** J5 foundation implemented (tasks 0526–0528); J9 semantic presentation accepted design, not yet built.
+**Status:** J5 foundation implemented (tasks 0526–0528); J9 semantic presentation built (tasks 0601/0602).
 **Decision:** ADR-056, amended by ADR-066/067/068.
 
 ## System Event envelope
@@ -48,7 +48,7 @@ metadata and bounded nested metadata objects; message bodies, prompts, command e
 business payloads, complete rule finding arrays, and stdout/stderr are excluded. Configured secrets
 and credential patterns are redacted before the per-string and aggregate bounds.
 
-## System Event semantic presentation (accepted design — J9; not yet built)
+## System Event semantic presentation (built — J9)
 
 The v2 envelope shape does not change. The presentation step changes from generic source-family formatting to the
 exhaustive event-name presenter contract in [`event-tracking.md`](event-tracking.md) §11.
