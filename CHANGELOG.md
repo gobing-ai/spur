@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.53] — 2026-08-18
+
+### Added
+
+- feat(task): expose --ac-altitude flag on task update (7c19007b)
+- feat(i6): task 0599 - Workspace/Inbox/Teams module boundary design (b3a9dbdb)
+- feat(i6): task 0598 - run-record contract + History/Observability read plane (1299819c)
+- feat(i6): task 0597 - event 5W1H audit + event-tracking SSOT (ed31c0c8)
+- feat(i6): task 0596 - task-pipeline2.yaml (two-layer plan + residual-sweep stage) (fd7f81e3)
+- feat(i6): task 0595 — pipeline eval suite (eval-pipeline comparator, fixture set, PASS baseline) (37d9305c)
+
+### Fixed
+
+- fix(corpus): reconcile pre-existing L3/L4 findings (d17acd9e)
+
+### Changed
+
+- ci(lefthook): post-merge corpus-check gate for sync landings (14df39c5)
+- chore: executor pool - retire pi-k3, omp-deepseek to standard tier (3460cd97)
+- docs(i6): feature I6 done - batch wrap + dogfood report (141e9b71)
+- docs: 0594 dev-spine cost + drift inventory (I6) (2b949d8f)
+
 ## [0.3.52] — 2026-08-18
 
 ### Added
