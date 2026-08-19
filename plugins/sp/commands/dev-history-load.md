@@ -59,5 +59,5 @@ Run the load-then-analyze sequence per `plugins/sp/scripts/history-load.ts` — 
 only after import exits 0, narrowing forwarded to `analyze` only:
 
 ```
-bun plugins/sp/scripts/history-load.ts $ARGUMENTS
+node "$(superskill script path sp history-load.mjs)" $ARGUMENTS
 ```

@@ -197,7 +197,7 @@ export function runPreflightCli(argv: string[]): { exitCode: number; stdout: str
 }
 
 if (import.meta.main) {
-    const { exitCode, stdout, stderr } = runPreflightCli(Bun.argv.slice(2));
+    const { exitCode, stdout, stderr } = runPreflightCli(process.argv.slice(2));
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(`${stderr}\n`);
     process.exit(exitCode);

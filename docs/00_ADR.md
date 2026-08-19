@@ -777,3 +777,36 @@ change with structurally-dependent hops.
 **Detail:** task 0588 `### Design` (full evidence table + attribution + option matrix);
 `config/workflows/task-pipeline.yaml:65` (`implementAgent`), `:269` (implement `agent.run`
 `agent: ${vars.implementAgent}`).
+
+## ADR-065: Align plugins/sp Scripts to the Superskill Entrypoint Contract
+
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** I
+
+**Decision.** All scripts in `plugins/sp/scripts/` follow an explicit two-category contract recorded in
+`config/plugin-scripts.json`:
+
+1. **Standard shipping scripts (7):** `batch-preflight.ts`, `feature-sync-bounded.ts`,
+   `history-load.ts`, `pr-reviewing.ts`, `daily-summary/daily-summary.ts`,
+   `dogfood-testing/detect-pipeline-driving.ts`, `dogfood-testing/validate-report.ts`.
+   - Each carries no Bun-specific globals (`Bun.argv` → `process.argv.slice(2)`, `Bun.file` → `node:fs`,
+     `Bun.spawn`/`Bun.spawnSync` → `node:child_process`).
+   - Each carries a committed, portable `.mjs` twin generated via `superskill script convert sp <rel>`,
+     executable under bare `node` on any install target (Claude Code, Codex, Pi, OpenCode, Antigravity, Hermes, Grok).
+   - All shipped surfaces (`plugins/sp/{commands,skills,agents}`, `README.md`) invoke these scripts exclusively
+     via the canonical substitution `node "$(superskill script path sp <rel>.mjs)" <args>`.
+   - The repo-relative form `bun plugins/sp/scripts/<rel>` is forbidden across all shipped surfaces.
+2. **Repo-only scripts (8):** `task-size-precheck.ts`, `transition-shim-check.ts`,
+   `script-contract-check.ts`, `validate-commands.ts`, `validate-flag-contracts.ts`,
+   `surface-drift-inventory.ts`, `stage-registry-adapter.ts`, `daily-summary/logger.ts`.
+   - Remain on `bun`, never generate `.mjs` twins, and are invoked only in monorepo workflows and quality gates.
+   - `task-size-precheck.ts` is guarded in `task-pipeline.yaml` so seeded external projects without `plugins/sp`
+     degrade cleanly with a skip notice rather than failing.
+3. **Continuous mechanical enforcement:** `bun run script-contract-check` runs in `spur-check` (third,
+   after `transition-shim-check` and before `lint`). The check is two-sided: missing/stale twins, unexpected twins
+   on repo-only scripts, unlisted disk scripts, and forbidden `bun plugins/sp/scripts/` references all fail the gate.
+4. **Build integration:** `npm run build:scripts` regenerates all twins and is chained into `npm run build`.
+
+**Authority.** Superskill ADR-015 (plugin script layout) and ADR-022 (script entrypoint staging & version coupling)
+define the upstream standard contract.
+
+**Detail:** task 0600; `config/plugin-scripts.json`; `plugins/sp/scripts/script-contract-check.ts`.

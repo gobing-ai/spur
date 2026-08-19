@@ -52,13 +52,13 @@ The daily-summary skill:
 
 ```bash
 # Generate summary for today
-bun plugins/sp/scripts/daily-summary/daily-summary.ts
+node "$(superskill script path sp daily-summary/daily-summary.mjs)"
 
 # Generate summary for a specific date
-bun plugins/sp/scripts/daily-summary/daily-summary.ts --date 2026-04-17
+node "$(superskill script path sp daily-summary/daily-summary.mjs)" --date 2026-04-17
 
 # Show summary without writing file
-bun plugins/sp/scripts/daily-summary/daily-summary.ts --dry-run
+node "$(superskill script path sp daily-summary/daily-summary.mjs)" --dry-run
 ```
 
 ## Workflows

@@ -278,7 +278,7 @@ Before the skill may stop (success, partial, fail, observe-only end, or abort), 
    and mirror the footer block at the **end of the report file**. A report whose body lacks the
    footer cannot set `status: complete`.
 8. **Self-validate (task 0278 R6):** run
-   `bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report-path>` before
+   `node "$(superskill script path sp dogfood-testing/validate-report.mjs)" --file <report-path>` before
    claiming `status: complete`. Exit 2 → `status: aborted` + list error codes under
    `#### Unresolved` (never force complete on a non-@1.2 shape).
 9. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every

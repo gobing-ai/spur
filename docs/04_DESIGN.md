@@ -1227,6 +1227,25 @@ tasks that create them: the mechanism shipped seeded empty with 0541; 0536/0537/
 registered the four agent-role entries now in the manifest (`agent-bare-binary-name`,
 `spec-without-executor-field`, `agent-flag-spec-id`, `agent-default-executor`).
 
+### 2.6 Plugin-script contract manifest & gate (task 0600, ADR-065)
+
+**Manifest.** `config/plugin-scripts.json` records one entry per file under `plugins/sp/scripts/`:
+`rel`, `contract` (`standard` | `repo-only`), and for `standard` entries the `twin` path (a
+committed `.mjs` beside the `.ts` source).
+
+**Gate.** `bun run script-contract-check` runs **third** in `spur-check` / `spur-check-new` (after
+`transition-shim-check`, before `lint`). It is two-sided against the manifest:
+
+1. a `standard` entry whose `.mjs` twin is missing or older than its `.ts` source fails;
+2. a committed `.mjs` with no `standard` entry (or belonging to a `repo-only` entry) fails;
+3. a script file on disk with no manifest entry fails;
+4. the string `bun plugins/sp/scripts/` in `plugins/sp/{commands,skills,agents}` or
+   `plugins/sp/README.md` fails.
+
+Generated twins are excluded from Biome (`plugins/sp/scripts/**/*.mjs`). Shipped surfaces invoke
+standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only scripts stay on
+`bun` and are monorepo/gate-only.
+
 ## 3. Data Shapes
 
 ### 3.1 Tables (composed package-owned schema, ADR-007)

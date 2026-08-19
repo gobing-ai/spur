@@ -8,6 +8,7 @@
  * - User annotations (learnings, issues, pending)
  */
 
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { logger } from './logger';
@@ -149,26 +150,28 @@ Examples:
 
 // ─── Date Helpers ─────────────────────────────────────────────────────────────
 
+// ─── Date Helpers ─────────────────────────────────────────────────────────────
+
 /** Return today's date as YYYY-MM-DD in the system (git) timezone. */
 export function todayLocal(): string {
     // Spawn 'date' to get system timezone date, since JS runtime
     // may have a different TZ (e.g. bun test forces UTC).
-    const proc = Bun.spawnSync(['date', '+%Y-%m-%d']);
-    return proc.stdout.toString().trim();
+    const proc = spawnSync('date', ['+%Y-%m-%d'], { encoding: 'utf8' });
+    return (proc.stdout ?? '').trim();
 }
 
 /** Return yesterday's date as YYYY-MM-DD in the system (git) timezone. */
 export function yesterdayLocal(): string {
     // Use portable epoch math via date command
-    const epochProc = Bun.spawnSync(['date', '+%s']);
-    const epoch = parseInt(epochProc.stdout.toString().trim(), 10);
+    const epochProc = spawnSync('date', ['+%s'], { encoding: 'utf8' });
+    const epoch = parseInt((epochProc.stdout ?? '').trim(), 10);
     const yesterdayEpoch = epoch - 86400;
     // Try BSD -r first, then GNU -d @
-    let proc = Bun.spawnSync(['date', '-r', String(yesterdayEpoch), '+%Y-%m-%d']);
-    if (proc.exitCode !== 0) {
-        proc = Bun.spawnSync(['date', '-d', `@${yesterdayEpoch}`, '+%Y-%m-%d']);
+    let proc = spawnSync('date', ['-r', String(yesterdayEpoch), '+%Y-%m-%d'], { encoding: 'utf8' });
+    if ((proc.status ?? 1) !== 0) {
+        proc = spawnSync('date', ['-d', `@${yesterdayEpoch}`, '+%Y-%m-%d'], { encoding: 'utf8' });
     }
-    return proc.stdout.toString().trim();
+    return (proc.stdout ?? '').trim();
 }
 
 export function getDateRange(dateStr: string): { start: string; end: string } {
@@ -181,40 +184,72 @@ export function getDateRange(dateStr: string): { start: string; end: string } {
     return { start, end };
 }
 
+// ─── Subprocess Spawner ──────────────────────────────────────────────────────
+
+export interface ProcessSpawnResult {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+}
+
+export type ProcessSpawner = (cmd: string, args: string[], env?: NodeJS.ProcessEnv) => Promise<ProcessSpawnResult>;
+
+export const defaultProcessSpawner: ProcessSpawner = (cmd, args, env) => {
+    return new Promise((resolve, reject) => {
+        try {
+            const proc = spawn(cmd, args, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: env ?? process.env,
+            });
+            const stdoutChunks: Buffer[] = [];
+            const stderrChunks: Buffer[] = [];
+            proc.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)));
+            proc.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
+            proc.on('close', (exitCode) => {
+                resolve({
+                    stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+                    stderr: Buffer.concat(stderrChunks).toString('utf8'),
+                    exitCode: exitCode ?? 0,
+                });
+            });
+            proc.on('error', (err) => {
+                reject(err);
+            });
+        } catch (err) {
+            reject(err);
+        }
+    });
+};
+
+let processSpawner: ProcessSpawner = defaultProcessSpawner;
+
+export function setProcessSpawner(next?: ProcessSpawner): void {
+    processSpawner = next ?? defaultProcessSpawner;
+}
+
 // ─── Ccusage Integration ─────────────────────────────────────────────────────
 
 export async function getCcusageData(date: string): Promise<CcusageData | null> {
     try {
         // Check if ccusage is available
         const env = { ...process.env };
-        const ccusageCheck = Bun.spawn(['ccusage', '--version'], {
-            stdout: 'pipe',
-            stderr: 'pipe',
-            env,
-        });
-        await new Response(ccusageCheck.stdout).text();
-        await ccusageCheck.exited;
+        const ccusageCheck = await processSpawner('ccusage', ['--version'], env);
+        if (ccusageCheck.exitCode !== 0) {
+            return null;
+        }
 
         // Get daily data for the date
         const since = `${date}T00:00:00`;
         const until = `${date}T23:59:59`;
 
-        const proc = Bun.spawn(['ccusage', 'daily', '--since', since, '--until', until, '--json'], {
-            stdout: 'pipe',
-            stderr: 'pipe',
-            env,
-        });
+        const proc = await processSpawner('ccusage', ['daily', '--since', since, '--until', until, '--json'], env);
 
-        const output = await new Response(proc.stdout).text();
-        const exitCode = await proc.exited;
-
-        if (exitCode !== 0) {
-            const errorOutput = await new Response(proc.stderr).text();
-            logger.warn(`ccusage error: ${errorOutput}`);
+        if (proc.exitCode !== 0) {
+            logger.warn(`ccusage error: ${proc.stderr}`);
             return null;
         }
 
-        const data = JSON.parse(output) as CcusageData;
+        const data = JSON.parse(proc.stdout) as CcusageData;
         return data;
     } catch (error) {
         logger.warn(`Failed to get ccusage data: ${error}`);
@@ -228,21 +263,24 @@ export async function getGitCommits(date: string): Promise<GitCommit[]> {
     try {
         const { start, end } = getDateRange(date);
 
-        const proc = Bun.spawn(
-            ['git', 'log', '--since', start, '--until', end, '--pretty=format:%H|%ad|%s', '--date=iso', '--numstat'],
-            { stdout: 'pipe', stderr: 'pipe' },
-        );
+        const proc = await processSpawner('git', [
+            'log',
+            '--since',
+            start,
+            '--until',
+            end,
+            '--pretty=format:%H|%ad|%s',
+            '--date=iso',
+            '--numstat',
+        ]);
 
-        const output = await new Response(proc.stdout).text();
-        const exitCode = await proc.exited;
-
-        if (exitCode !== 0) {
+        if (proc.exitCode !== 0) {
             logger.warn('Failed to get git commits');
             return [];
         }
 
         const commits: GitCommit[] = [];
-        const lines = output.trim().split('\n');
+        const lines = proc.stdout.trim().split('\n');
 
         let currentCommit: Partial<GitCommit> | null = null;
 

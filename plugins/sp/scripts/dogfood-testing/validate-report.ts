@@ -156,7 +156,7 @@ export function runValidateCli(
 }
 
 /** CLI entry for Phase 4 self-validate (import.meta.main). */
-export function mainCli(argv: string[] = Bun.argv.slice(2)): number {
+export function mainCli(argv: string[] = process.argv.slice(2)): number {
     const { exitCode, stdout, stderr } = runValidateCli(argv, (p) => readFileSync(p, 'utf8'));
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(`${stderr}\n`);

@@ -27,4 +27,4 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-Run the generator per [daily-summary/SKILL.md](../skills/daily-summary/SKILL.md): `bun plugins/sp/scripts/daily-summary/daily-summary.ts $ARGUMENTS`.
+Run the generator per [daily-summary/SKILL.md](../skills/daily-summary/SKILL.md): `node "$(superskill script path sp daily-summary/daily-summary.mjs)" $ARGUMENTS`.

@@ -315,9 +315,9 @@ Before “done”:
 7. `git status` intentional only
 
 **Two gate variants.** `spur-check` is the fast gate (~72 s: link-check → transition-shim-check →
-lint → test-pre-check → test → test-post-check). `spur-check-new` is that plus `corpus-check`
+script-contract-check → lint → test-pre-check → test → test-post-check). `spur-check-new` is that plus `corpus-check`
 (~+41 s). The split is deliberate (commit `4b929877`, 2026-08-09) — the corpus sweep costs more than
-half the gate again, so it is opt-in. Both run the sub-second checks first so a link or shim
+half the gate again, so it is opt-in. Both run the sub-second checks first so a link, shim, or script-contract
 violation fails in ~0.3 s instead of after the 63 s test run.
 
 **`spur task check --corpus` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
@@ -334,6 +334,12 @@ tightening a finding code obliges you to reconcile the fallout in the same commi
 `@transition-shim(<id>)` marker with no entry fails, **and** a listed entry whose marker is gone
 from source fails. Emptying the manifest is the definition of the agent-role transition being
 complete. Shapes: `docs/04_DESIGN.md` §2.5.
+
+**`bun run script-contract-check` — plugin script entrypoint contracts.** Runs **third** (after
+`transition-shim-check`, before `lint`) in `spur-check` and `spur-check-new` (task 0600, ADR-065). Two-sided
+against `config/plugin-scripts.json`: standard scripts must have up-to-date `.mjs` twins, repo-only scripts
+must not carry twins, all disk scripts must be declared, and shipped surfaces must not name repo-relative
+`bun plugins/sp/scripts/` paths.
 
 **`--no-lifecycle` is bookkeeping, never a guard bypass.** It suppresses lifecycle *run record*
 creation (the pipeline is already a run; a nested one would orphan). The structural gate

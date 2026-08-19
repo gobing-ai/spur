@@ -19,6 +19,7 @@
  * to avoid importing service packages into the plugin tree.
  */
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -280,14 +281,14 @@ function runSpurJson(spurBin: string, args: string[]): SpawnResult {
     const binParts = spurBin.split(/\s+/).filter(Boolean);
     const cmd = binParts[0] ?? 'spur';
     const cmdArgs = [...binParts.slice(1), ...args];
-    const r = Bun.spawnSync({ cmd: [cmd, ...cmdArgs], stdio: ['ignore', 'pipe', 'pipe'] });
+    const r = spawnSync(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
     const decode = (b: unknown): string =>
         typeof b === 'string' ? b : Buffer.from((b as Uint8Array) ?? []).toString('utf8');
     return {
-        stdout: decode(r.stdout),
-        stderr: decode(r.stderr),
-        exitCode: r.exitCode ?? 0,
-        ok: (r.exitCode ?? 0) === 0,
+        stdout: typeof r.stdout === 'string' ? r.stdout : decode(r.stdout),
+        stderr: typeof r.stderr === 'string' ? r.stderr : decode(r.stderr),
+        exitCode: r.status ?? (r.error ? 1 : 0),
+        ok: (r.status ?? (r.error ? 1 : 0)) === 0,
     };
 }
 
@@ -361,8 +362,8 @@ function writeBlockedState(state: BlockedState, path: string): void {
 
 function readBlockedState(path: string): BlockedState | null {
     try {
-        const f = Bun.file(path);
-        const text = f.size > 0 ? readFileSync(path, 'utf8') : '';
+        if (!existsSync(path)) return null;
+        const text = readFileSync(path, 'utf8');
         return parseBlockedState(text);
     } catch {
         return null;
@@ -470,7 +471,7 @@ function emitResult(result: FeatureSyncResult, annotation: string, json: boolean
 }
 
 if (import.meta.main) {
-    const { exitCode, stdout, stderr } = runBoundedCli(Bun.argv.slice(2));
+    const { exitCode, stdout, stderr } = runBoundedCli(process.argv.slice(2));
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(`${stderr}\n`);
     process.exit(exitCode);

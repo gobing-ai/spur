@@ -360,8 +360,8 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 39 commands
-bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
+bun run validate-commands            # validate all 39 commands
+bun run validate-commands --json     # machine-readable output
 ```
 
 The validator checks five gates. For **non-`dev-*`** commands: (a) heading whitelist — only

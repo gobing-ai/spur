@@ -841,7 +841,7 @@ function cmdStatus(args: ParsedArgs): void {
 
 const HELP = `pr-reviewing.ts — deterministic spine for /sp:dev-pr-review (sp:pr-reviewing)
 
-Installed usage: bun "$(superskill script path sp pr-reviewing.ts)" <subcommand> [flags]
+Installed usage: node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
 Source-tree usage: bun plugins/sp/scripts/pr-reviewing.ts <subcommand> [flags]
 
 Subcommands:

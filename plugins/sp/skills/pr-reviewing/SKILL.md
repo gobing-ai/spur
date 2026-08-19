@@ -129,11 +129,11 @@ staged entrypoint below, supports `--json`, and must be parsed. Stop at the firs
 report its artifact. The canonical installed invocation is:
 
 ```sh
-bun "$(superskill script path sp pr-reviewing.ts)" <subcommand> [flags]
+node "$(superskill script path sp pr-reviewing.mjs)" <subcommand> [flags]
 ```
 
-Installed targets resolve the staged TypeScript source and execute it with Bun, matching the rest
-of `plugins/sp/scripts`.
+Installed targets resolve the staged `.mjs` twin and execute it with Node, matching the standard
+superskill script contract.
 
 1. **Preflight** — `<script> preflight --base "$base" --json`. Hard-fails on a
    detached HEAD, missing `gh` auth, no GitHub remote, a dirty tree, or the current branch

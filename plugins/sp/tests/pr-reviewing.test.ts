@@ -52,7 +52,8 @@ describe('parseArgs', () => {
             encoding: 'utf8',
         });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain('Installed usage: bun');
+        expect(result.stdout).toContain('Installed usage: node "$(superskill script path sp pr-reviewing.mjs)"');
+        expect(result.stdout).toContain('Source-tree usage: bun plugins/sp/scripts/pr-reviewing.ts');
     });
 
     test('the default runner really spawns, and reports a missing binary instead of throwing', () => {

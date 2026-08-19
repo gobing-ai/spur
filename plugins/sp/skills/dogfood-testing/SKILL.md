@@ -96,9 +96,9 @@ The command forwards these via `$ARGUMENTS`:
    in-agent):
 
    ```bash
-   bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
+   node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" \
      --testee "<raw testee string>" \
-     [--max-retry-present]   # pass this flag only when the dogfood invocation included --max-retry
+     [--max-retry-present]
    ```
 
    - Exit **2** → print the stdout refuse line and **stop** (do not plan). The CLI refuses on either
@@ -118,7 +118,7 @@ The command forwards these via `$ARGUMENTS`:
     re-run the gate with the derived step labels:
 
     ```bash
-    bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
+    node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" \
       --testee "<raw testee string>" \
       --max-retry-present \
       --steps "step1 label||step2 label||..."
@@ -226,7 +226,7 @@ contract violation**.
    **before** claiming `status: complete`:
 
    ```bash
-   bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report-path>
+   node "$(superskill script path sp dogfood-testing/validate-report.mjs)" --file <report-path>
    ```
 
    Exit **0** → proceed. Exit **2** → set `status: aborted`, list every error code under §5
@@ -328,7 +328,7 @@ Do **not** use this skill for:
 Pipeline-driving detection is **word-boundary**, not leading-space substring. The live gate is:
 
 ```bash
-bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts --testee "<testee>" [--max-retry-present] [--steps "…"] [--json]
+node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" --testee "<testee>" [--max-retry-present] [--steps "…"] [--json]
 ```
 
 | Token shape | Examples | Matches | Rejects |

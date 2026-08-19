@@ -1114,7 +1114,7 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).toContain('## Implementation');
         // sp:daily-summary carries disable-model-invocation, so a Skill() dispatch would never fire
         // (docs/tasks2/0187 Q&A). dev-daily must run the script directly, not via Skill().
-        expect(implSection(raw)).toContain('scripts/daily-summary/daily-summary.ts');
+        expect(implSection(raw)).toContain('daily-summary/daily-summary.mjs');
         expect(implSection(raw)).toContain('$ARGUMENTS');
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });

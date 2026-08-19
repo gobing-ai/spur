@@ -153,7 +153,7 @@ When you fan out or dispatch a subagent, apply the four disciplines the SSOT
 - [ ] Drive the loop in execution-batch.md - resolve -> freeze -> order -> **preflight** -> run -> inspect
       -> optional recovery -> decide -> report.
 - [ ] **Preflight** each WBS before `workflow run` using
-      `bun plugins/sp/scripts/batch-preflight.ts` (or the pure `preflightTask` helper) with
+      `node "$(superskill script path sp batch-preflight.mjs)"` (or the pure `preflightTask` helper) with
       `spur task show --json` deps. On `action: skip` (A2/A7/A8/A9), do **not** start the pipeline;
       record skip in the batch report with the reason string.
 - [ ] Launch each **ready** per-task pipeline with `--async`. The command/script layer polls

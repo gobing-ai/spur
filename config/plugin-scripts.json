@@ -1,0 +1,73 @@
+{
+    "schema_version": 1,
+    "description": "Registry of plugin sp scripts and their entrypoint contracts (standard with .mjs twin vs repo-only).",
+    "entries": [
+        {
+            "rel": "batch-preflight.ts",
+            "contract": "standard",
+            "twin": "batch-preflight.mjs"
+        },
+        {
+            "rel": "daily-summary/daily-summary.ts",
+            "contract": "standard",
+            "twin": "daily-summary/daily-summary.mjs"
+        },
+        {
+            "rel": "daily-summary/logger.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "dogfood-testing/detect-pipeline-driving.ts",
+            "contract": "standard",
+            "twin": "dogfood-testing/detect-pipeline-driving.mjs"
+        },
+        {
+            "rel": "dogfood-testing/validate-report.ts",
+            "contract": "standard",
+            "twin": "dogfood-testing/validate-report.mjs"
+        },
+        {
+            "rel": "feature-sync-bounded.ts",
+            "contract": "standard",
+            "twin": "feature-sync-bounded.mjs"
+        },
+        {
+            "rel": "history-load.ts",
+            "contract": "standard",
+            "twin": "history-load.mjs"
+        },
+        {
+            "rel": "pr-reviewing.ts",
+            "contract": "standard",
+            "twin": "pr-reviewing.mjs"
+        },
+        {
+            "rel": "script-contract-check.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "stage-registry-adapter.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "surface-drift-inventory.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "task-size-precheck.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "transition-shim-check.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "validate-commands.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "validate-flag-contracts.ts",
+            "contract": "repo-only"
+        }
+    ]
+}

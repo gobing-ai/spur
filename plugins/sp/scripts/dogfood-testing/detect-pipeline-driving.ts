@@ -356,7 +356,7 @@ export function runCli(argv: string[]): { exitCode: number; stdout: string; stde
 }
 
 if (import.meta.main) {
-    const { exitCode, stdout, stderr } = runCli(Bun.argv.slice(2));
+    const { exitCode, stdout, stderr } = runCli(process.argv.slice(2));
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(`${stderr}\n`);
     process.exit(exitCode);

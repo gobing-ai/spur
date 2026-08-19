@@ -179,7 +179,7 @@ The ordered execution plan: a WBS-ascending-topological list of tasks to run, pl
 helper (preferred) or `sp:next-router` dry-run:
 
 ```bash
-bun plugins/sp/scripts/batch-preflight.ts \
+node "$(superskill script path sp batch-preflight.mjs)" \
   --wbs <wbs> --status <status> \
   --deps <comma-deps> --dep-status <wbs:status,...> --json
 ```
@@ -278,7 +278,7 @@ After a non-PASS terminal state (or when the task status is stuck at `wip`/`test
 verdict), consult **one** recovery hop:
 
 ```bash
-bun plugins/sp/scripts/batch-preflight.ts --wbs <wbs> --status <status> --recovery
+node "$(superskill script path sp batch-preflight.mjs)" --wbs <wbs> --status <status> --recovery
 # → e.g. /sp:dev-verify 0042 --auto --next
 ```
 
@@ -306,7 +306,7 @@ Both `task-pipeline.yaml` (`record` step) and `wrapup-pipeline.yaml` (`feature-t
 invoke the bounded wrapper instead of raw `feature sync`:
 
 ```bash
-bun plugins/sp/scripts/feature-sync-bounded.ts <feature-id> --spur-bin "<spurBin>" --json
+node "$(superskill script path sp feature-sync-bounded.mjs)" <feature-id> --spur-bin "<spurBin>" --json
 ```
 
 The wrapper:

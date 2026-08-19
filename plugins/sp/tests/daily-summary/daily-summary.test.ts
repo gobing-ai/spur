@@ -1,14 +1,14 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const originalSpawn = Bun.spawn;
 
 import {
     buildDailySummary,
     type CliOptions,
     type DailySummary,
+    defaultProcessSpawner,
     ensureDir,
     generateMarkdown,
     getCcusageData,
@@ -18,6 +18,7 @@ import {
     parseArgs,
     printUsage,
     promptUser,
+    setProcessSpawner,
     todayLocal,
     writeSummary,
 } from '../../scripts/daily-summary/daily-summary';
@@ -507,18 +508,16 @@ describe('writeSummary and ensureDir', () => {
 // ───────── getCcusageData ─────────
 
 describe('getCcusageData', () => {
-    let spawnSpy: ReturnType<typeof spyOn> | undefined;
-
     afterEach(() => {
-        spawnSpy?.mockRestore();
+        setProcessSpawner();
     });
 
     test('returns null when ccusage binary is missing', async () => {
-        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
+        setProcessSpawner(async (cmd) => {
+            if (cmd === 'ccusage') {
                 throw new Error('ccusage not found');
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
         const result = await getCcusageData('2026-04-17');
         expect(result).toBeNull();
@@ -535,18 +534,17 @@ describe('getCcusageData', () => {
                 totalCost: 0.5,
             },
         };
-        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
-                const isVersion = args[1] === '--version';
+        setProcessSpawner(async (cmd, args) => {
+            if (cmd === 'ccusage') {
+                const isVersion = args[0] === '--version';
                 const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
                 return {
-                    stdout: new Response(stdoutText).body,
-                    stderr: new Response('').body,
-                    exited: Promise.resolve(0),
+                    stdout: stdoutText,
+                    stderr: '',
                     exitCode: 0,
-                } as unknown as ReturnType<typeof Bun.spawn>;
+                };
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
 
         const result = await getCcusageData('2026-04-17');
@@ -556,26 +554,24 @@ describe('getCcusageData', () => {
     });
 
     test('returns null when ccusage exits non-zero', async () => {
-        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
-                const isVersion = args[1] === '--version';
+        setProcessSpawner(async (cmd, args) => {
+            if (cmd === 'ccusage') {
+                const isVersion = args[0] === '--version';
                 if (isVersion) {
                     return {
-                        stdout: new Response('1.0.0').body,
-                        stderr: new Response('').body,
-                        exited: Promise.resolve(0),
+                        stdout: '1.0.0',
+                        stderr: '',
                         exitCode: 0,
-                    } as unknown as ReturnType<typeof Bun.spawn>;
+                    };
                 } else {
                     return {
-                        stdout: new Response('').body,
-                        stderr: new Response('boom').body,
-                        exited: Promise.resolve(1),
+                        stdout: '',
+                        stderr: 'boom',
                         exitCode: 1,
-                    } as unknown as ReturnType<typeof Bun.spawn>;
+                    };
                 }
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
 
         const result = await getCcusageData('2026-04-17');
@@ -583,18 +579,17 @@ describe('getCcusageData', () => {
     });
 
     test('returns null when ccusage produces invalid JSON', async () => {
-        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
-                const isVersion = args[1] === '--version';
+        setProcessSpawner(async (cmd, args) => {
+            if (cmd === 'ccusage') {
+                const isVersion = args[0] === '--version';
                 const stdoutText = isVersion ? '1.0.0' : 'not json';
                 return {
-                    stdout: new Response(stdoutText).body,
-                    stderr: new Response('').body,
-                    exited: Promise.resolve(0),
+                    stdout: stdoutText,
+                    stderr: '',
                     exitCode: 0,
-                } as unknown as ReturnType<typeof Bun.spawn>;
+                };
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
 
         const result = await getCcusageData('2026-04-17');
@@ -612,13 +607,13 @@ describe('git-backed integration', () => {
         originalCwd = process.cwd();
         tmpRepo = mkdtempSync(join(tmpdir(), 'daily-summary-git-'));
         process.chdir(tmpRepo);
-        Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'user.email', 'test@example.com'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'user.name', 'Tester'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'commit.gpgsign', 'false'], { cwd: tmpRepo });
+        spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'user.name', 'Tester'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: tmpRepo });
         writeFileSync(join(tmpRepo, 'a.txt'), 'hello\nworld\n');
-        Bun.spawnSync(['git', 'add', '.'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'commit', '-q', '-m', 'feat: initial'], { cwd: tmpRepo });
+        spawnSync('git', ['add', '.'], { cwd: tmpRepo });
+        spawnSync('git', ['commit', '-q', '-m', 'feat: initial'], { cwd: tmpRepo });
     });
 
     afterEach(() => {
@@ -657,11 +652,11 @@ describe('git-backed integration', () => {
 
     test('getGitCommits accumulates multiple commits within range', async () => {
         writeFileSync(join(tmpRepo, 'b.txt'), 'second\n');
-        Bun.spawnSync(['git', 'add', '.'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'commit', '-q', '-m', 'feat: add b'], { cwd: tmpRepo });
+        spawnSync('git', ['add', '.'], { cwd: tmpRepo });
+        spawnSync('git', ['commit', '-q', '-m', 'feat: add b'], { cwd: tmpRepo });
         writeFileSync(join(tmpRepo, 'c.txt'), 'third\n');
-        Bun.spawnSync(['git', 'add', '.'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'commit', '-q', '-m', 'feat: add c'], { cwd: tmpRepo });
+        spawnSync('git', ['add', '.'], { cwd: tmpRepo });
+        spawnSync('git', ['commit', '-q', '-m', 'feat: add c'], { cwd: tmpRepo });
 
         const today = todayLocal();
         const commits = await getGitCommits(today);
@@ -725,18 +720,17 @@ describe('git-backed integration', () => {
                 totalCost: 1.25,
             },
         };
-        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
-                const isVersion = args[1] === '--version';
+        setProcessSpawner(async (cmd, args) => {
+            if (cmd === 'ccusage') {
+                const isVersion = args[0] === '--version';
                 const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
                 return {
-                    stdout: new Response(stdoutText).body,
-                    stderr: new Response('').body,
-                    exited: Promise.resolve(0),
+                    stdout: stdoutText,
+                    stderr: '',
                     exitCode: 0,
-                } as unknown as ReturnType<typeof Bun.spawn>;
+                };
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
         try {
             const summary = await buildDailySummary({
@@ -750,17 +744,17 @@ describe('git-backed integration', () => {
             expect(summary.tokenUsage?.cacheTokens).toBe(100);
             expect(summary.platforms).toContain('Claude Code');
         } finally {
-            spawnSpy.mockRestore();
+            setProcessSpawner();
         }
     });
 
     test('buildDailySummary handles missing ccusage gracefully (skipCcusage=false)', async () => {
         const today = todayLocal();
-        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
+        setProcessSpawner(async (cmd) => {
+            if (cmd === 'ccusage') {
                 throw new Error('ccusage not found');
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
         try {
             const summary = await buildDailySummary({
@@ -772,7 +766,7 @@ describe('git-backed integration', () => {
             expect(summary.tokenUsage).toBeUndefined();
             expect(summary.platforms).not.toContain('Claude Code');
         } finally {
-            spawnSpy.mockRestore();
+            setProcessSpawner();
         }
     });
     test('buildDailySummary surfaces history report path via latest.json symlink (R7)', async () => {
@@ -814,13 +808,13 @@ describe('main entrypoint (in-process)', () => {
         originalArgv = process.argv;
         tmpRepo = mkdtempSync(join(tmpdir(), 'daily-summary-main-'));
         process.chdir(tmpRepo);
-        Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'user.email', 'test@example.com'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'user.name', 'Tester'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'config', 'commit.gpgsign', 'false'], { cwd: tmpRepo });
+        spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'user.name', 'Tester'], { cwd: tmpRepo });
+        spawnSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: tmpRepo });
         writeFileSync(join(tmpRepo, 'README.md'), '# repo\n');
-        Bun.spawnSync(['git', 'add', '.'], { cwd: tmpRepo });
-        Bun.spawnSync(['git', 'commit', '-q', '-m', 'chore: seed'], { cwd: tmpRepo });
+        spawnSync('git', ['add', '.'], { cwd: tmpRepo });
+        spawnSync('git', ['commit', '-q', '-m', 'chore: seed'], { cwd: tmpRepo });
     });
 
     afterEach(() => {
@@ -868,18 +862,17 @@ describe('main entrypoint (in-process)', () => {
                 totalCost: 0.0123,
             },
         };
-        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
-            if (args[0] === 'ccusage') {
-                const isVersion = args[1] === '--version';
+        setProcessSpawner(async (cmd, args) => {
+            if (cmd === 'ccusage') {
+                const isVersion = args[0] === '--version';
                 const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
                 return {
-                    stdout: new Response(stdoutText).body,
-                    stderr: new Response('').body,
-                    exited: Promise.resolve(0),
+                    stdout: stdoutText,
+                    stderr: '',
                     exitCode: 0,
-                } as unknown as ReturnType<typeof Bun.spawn>;
+                };
             }
-            return originalSpawn(args, options);
+            return { stdout: '', stderr: '', exitCode: 0 };
         });
         process.argv = ['bun', 'script', '--date', today, '--dry-run', '--no-git'];
         try {
@@ -889,7 +882,7 @@ describe('main entrypoint (in-process)', () => {
             expect(output).toContain('Cost: $0.0123');
             expect(output).toContain('Claude Code');
         } finally {
-            spawnSpy.mockRestore();
+            setProcessSpawner();
         }
     });
 
@@ -924,5 +917,13 @@ describe('main entrypoint (in-process)', () => {
             exitSpy.mockRestore();
             process.chdir(tmpRepo);
         }
+    });
+
+    test('defaultProcessSpawner executes process and handles error', async () => {
+        const ok = await defaultProcessSpawner('echo', ['hello'], process.env);
+        expect(ok.exitCode).toBe(0);
+        expect(ok.stdout.trim()).toBe('hello');
+
+        await expect(defaultProcessSpawner('__non_existent_binary_for_test__', [], process.env)).rejects.toThrow();
     });
 });

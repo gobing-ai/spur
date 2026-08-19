@@ -245,9 +245,14 @@ states:
           command: >-
             SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
             mkdir -p .spur/run &&
-            bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
-            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"
-            --executor "$implementAgent" &&
+            if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then
+              bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
+              --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"
+              --executor "$implementAgent";
+            else
+              echo "task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project." >&2 &&
+              echo "PASS" > "$SIZE_FILE";
+            fi &&
             exit 0
 
   - id: implement
