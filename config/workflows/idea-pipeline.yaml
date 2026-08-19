@@ -382,10 +382,6 @@ states:
       - kind: shell
         options:
           command: >-
-            if [ -f packages/app/src/workflow/idea-handoff-cli.ts ]; then
-              bun packages/app/src/workflow/idea-handoff-cli.ts;
-              exit $?;
-            fi;
             BATCH=".spur/run/$__runId-idea-task-batch.json" &&
             RESULT=".spur/run/$__runId-idea-batch-create-result.json" &&
             ORDER=".spur/run/$__runId-idea-task-order.json" &&

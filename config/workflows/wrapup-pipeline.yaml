@@ -120,27 +120,23 @@ states:
         options:
           command: >-
             mkdir -p .spur/memory &&
-            if [ -f packages/app/src/workflow/wrapup-metrics-cli.ts ]; then
-              bun packages/app/src/workflow/wrapup-metrics-cli.ts;
-            else
-              printf '%s' "$tasks" | jq -r '(if type == "string" then (try fromjson catch .) else . end) | if type == "array" then .[] else empty end' |
-              while IFS= read -r wbs; do
-                if [ -n "$wbs" ]; then
-                  task_json=$($spurBin task show "$wbs" --json 2>/dev/null || true);
-                  if [ -n "$task_json" ]; then
-                    feat=$(printf '%s' "$task_json" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);
-                    stat=$(printf '%s' "$task_json" | jq -r '.frontmatter.status // .status // "unknown"' 2>/dev/null || true);
-                    verdict="UNKNOWN";
-                    if [ -f ".spur/run/$wbs-verdict.json" ]; then
-                      v=$(jq -r '.verdict // "UNKNOWN"' ".spur/run/$wbs-verdict.json" 2>/dev/null || true);
-                      if [ -n "$v" ]; then verdict="$v"; fi;
-                    fi;
-                    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
-                    printf '{"wbs":"%s","feature_id":"%s","status":"%s","verdict":"%s","timestamp":"%s"}\n' "$wbs" "$feat" "$stat" "$verdict" "$ts" >> .spur/memory/wrapup-metrics.jsonl;
+            printf '%s' "$tasks" | jq -r '(if type == "string" then (try fromjson catch .) else . end) | if type == "array" then .[] else empty end' |
+            while IFS= read -r wbs; do
+              if [ -n "$wbs" ]; then
+                task_json=$($spurBin task show "$wbs" --json 2>/dev/null || true);
+                if [ -n "$task_json" ]; then
+                  feat=$(printf '%s' "$task_json" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);
+                  stat=$(printf '%s' "$task_json" | jq -r '.frontmatter.status // .status // "unknown"' 2>/dev/null || true);
+                  verdict="UNKNOWN";
+                  if [ -f ".spur/run/$wbs-verdict.json" ]; then
+                    v=$(jq -r '.verdict // "UNKNOWN"' ".spur/run/$wbs-verdict.json" 2>/dev/null || true);
+                    if [ -n "$v" ]; then verdict="$v"; fi;
                   fi;
+                  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
+                  printf '{"wbs":"%s","feature_id":"%s","status":"%s","verdict":"%s","timestamp":"%s"}\n' "$wbs" "$feat" "$stat" "$verdict" "$ts" >> .spur/memory/wrapup-metrics.jsonl;
                 fi;
-              done;
-            fi;
+              fi;
+            done &&
             exit 0
 
   - id: feature-transition
