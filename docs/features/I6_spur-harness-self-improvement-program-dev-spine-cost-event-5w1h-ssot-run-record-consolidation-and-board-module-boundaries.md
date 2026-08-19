@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I6"
 name: "Spur harness self-improvement program: dev-* spine cost, event 5W1H SSOT, run-record consolidation, and board module boundaries"
-status: backlog
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-18T21:59:52.680Z"
-updated_at: "2026-08-18T22:36:15.228Z"
+updated_at: "2026-08-19T03:27:25.496Z"
 ---
 
 # I6: Spur harness self-improvement program: dev-* spine cost, event 5W1H SSOT, run-record consolidation, and board module boundaries
@@ -232,3 +232,6 @@ The fog: in-scope questions visible from here but not yet sharp enough to ticket
 ## History
 
 - 2026-08-18T22:20:29.866Z moved L → I6 (system)
+- 2026-08-19T03:25:18.880Z backlog → active (system)
+- 2026-08-19T03:25:19.136Z active → verifying (system)
+- 2026-08-19T03:27:25.496Z verifying → done (system)
