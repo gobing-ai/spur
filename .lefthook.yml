@@ -11,6 +11,22 @@ pre-commit:
       run: bunx biome check --staged --write --no-errors-on-unmatched
       stage_fixed: true
 
+post-merge:
+  commands:
+    corpus-check:
+      # Multi-machine sync (git-sync pulls) bypasses pre-commit gates;
+      # catch corpus drift at landing time. Warn-only: the merge already
+      # happened, but reconcile before further corpus writes.
+      run: >
+        if git diff --name-only 'HEAD@{1}'..HEAD 2>/dev/null
+        | grep -qE '^docs/(tasks|features)/|^\.spur/config\.yaml|config/corpus';
+        then echo 'corpus files changed in this merge -
+        running corpus-check (~40s)';
+        bun run corpus-check
+        || echo '⚠ CORPUS DEBT DETECTED - reconcile findings
+        (fix content, do not blanket-baseline) before writing corpus files';
+        fi
+
 pre-push:
   commands:
     cog:
