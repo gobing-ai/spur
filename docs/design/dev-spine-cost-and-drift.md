@@ -22,8 +22,8 @@ call. The one measurable cache-miss concentration is **cold subagent launches**.
 Drift: I2/I3's existence-check parity (is this verb/flag real?) largely **held** — every
 `feature`/`agent`/`workflow` verb the plugin asserts still exists live and vice versa. The drift
 that survived is **semantic-class**: a valid flag applied to the wrong operand. Exactly one live
-instance confirmed (`sp:wayfinder` `--section tags`), zero siblings. Re-drift rate: **0 / 8
-surface rows** (I3's 8 unverified items remain unverified, none surfaced to mismatch; I2/I3's
+instance confirmed (`sp:wayfinder` `--section tags`), zero siblings. Re-drift rate: **0 / 7
+surface rows** (I3's 7 unverified items remain unverified, none surfaced to mismatch; I2/I3's
 verb/flag inventories all still resolve).
 
 ---
@@ -160,13 +160,13 @@ map.
 
 **Re-audit result (this task):**
 
-- Of the **8 I3 unverified items**: 0 surfaced to mismatch (still unverified/no contradiction).
+- Of the **7 I3 unverified items**: 0 surfaced to mismatch (still unverified/no contradiction).
 - Of the **verb/flag inventories I2/I3 reconciled**: 0 re-drifted — every asserted noun/verb/flag
   still resolves against the live source-local CLI.
 - Confirmed drift found: **1 new semantic finding (D1)** — not present in I2/I3's finding set
   because their existence-check method could not see a valid-flag-wrong-operand.
 
-**Re-drift rate = 0 / 8 (0 %)** for the reconciliation surface.
+**Re-drift rate = 0 / 7 (0 %)** for the reconciliation surface.
 **Why I3's fix did not hold for the one finding that survived:** it was never in I3's *visible*
 scope — I3 checked *surface existence* (flag present); D1 is a *semantic* misuse (flag valid,
 operand wrong). Mechanism mismatch, not a fix that rotted. F2 is the enforcement that closes the

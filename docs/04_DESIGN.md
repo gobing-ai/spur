@@ -54,6 +54,10 @@ When collaborating with the design team:
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event context/presentation envelope, actionable Board projection, additive workflow/rule trace context (ADR-056, feature J5)                                                     | implemented |
 | [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); `--spec` carrier + executor-binding rewrite landed (0537/0542); first-class `blocked` remains |
+| [`dev-spine-cost-and-drift.md`](design/dev-spine-cost-and-drift.md)                                     | `/sp:dev-*` spine cost attribution from history data, prefix-cache breakers, `feature`/`agent`/`workflow` drift table vs I2/I3, ranked fix path (feature I6, task 0594)                            | measurement + inventory (analysis only)                                                                                                                        |
+| [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H SSOT — per-event matrix over the 71-entry catalog, payload-vs-presentation gap split, `*.updated` diff convention, `workflow.*` naming convention, enforcement gate (feature I6, task 0597) | SSOT authored; remediation deferred                                                                                                                            |
+| [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
+| [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -1618,6 +1622,18 @@ routes to `failed` on rejection or `cancelled` on cancel). Invariants: it never 
 directly — status moves use the normal `spur task update <wbs> <status>` verb and section writes go
 through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
 identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
+
+**Rival pipeline — `config/workflows/task-pipeline2.yaml` (feature I6, task 0596).** A parallel file
+beside the live pipeline, not a replacement: `task-pipeline.yaml` is unmodified and both validate.
+It adds a `residual-sweep` **FSM stage** (`task-pipeline2.yaml:505`) reached only via the PASS
+verdict guard, so it holds a fixed position after `verify` and before `record`/commit — a step
+inside `verify` would run before that guard and could not be conditioned on the verdict. The sweep
+prompt is templated over the `residualSweepTarget` var (`:95`, default `current task`); a feature
+batch overrides it via `--vars`. Promotion over `task-pipeline.yaml` is gated on the eval-suite
+promotion bar (map open question 1, operator ratifies) measured by the `scripts/spur-dev.ts
+eval-pipeline` comparator (task 0595) — not on this doc. Two-layer plan rendering for either
+pipeline is the inline driver's job
+(`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:33-42`).
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
