@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Event 5W1H audit + the event-tracking SSOT design doc"
-status: todo
+status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.250Z
-updated_at: "2026-08-19T00:11:23.629Z"
+updated_at: "2026-08-19T03:09:50.674Z"
 feature_id: I6
+done_forced: "true"
+done_reason: "Doc-authoring batch: event 5W1H SSOT delivered - 71/71 catalog events matrix-verified (scripted count, 0 missing), *.updated diff convention + workflow.* naming convention specified, reconciled with actionable-observability-context.md and 04_DESIGN.md 7.9; task check PASS; zero source files modified."
 ---
 
 ## 0597. Event 5W1H audit + the event-tracking SSOT design doc
@@ -201,17 +203,36 @@ options in the doc; do not implement either.
 - [ ] Assess whether the catalog can be generated from the SSOT or must be gate-checked against it; recommend one with reasoning (R6)
 - [ ] Verification: the matrix covers all 71 entries; every root-cause claim carries `path:line`; zero source files modified; `sp:doc-evolve` sync-check clean
 ### Solution
+Wrote the audit + 5W1H contract SSOT at `docs/design/event-tracking.md:1` (title line names the SSOT) — a single doc delivering all six requirements, with zero source-file modifications (doc-authoring mode).
 
-<!-- Final synthesized recommendation or output from the brainstorm. -->
+- **R1 matrix** — §4 enumerates all 71 `SYSTEM_EVENT_CATALOG` entries (programmatically enumerated from the catalog), each scored who/what/when/where/why/how as P/~/– with an emitter `path:line`. Every emitter line was re-read from source before writing.
+- **R2 gap split** — §5 ranks 7 gaps, separating payload gaps (G1/G3/G4 — emitter never captured the fact) from presentation gaps (G5/G6/G7 — payload holds it, catalog/renderer drops it). The two operator complaints split precisely: `task.updated` "what changed" is a pure payload gap (the planning catalog profile already advertises `field/from/to`; the emitter never fills them), while `workflow.*` id-only is both (the id is in the payload so it renders, but the human name is neither emitted nor threaded on engine-native rows).
+- **R3 diff convention** — §6 specifies the `*.updated` field-level diff, rooted at the verified cause (event built without `field`, `from`/`to` set only on transition; the event type has no `field`).
+- **R4 workflow naming** — §7 specifies `workflowName` + `nodeLabel` + `kind` mandatory on every `workflow.*` row; one defect, two halves (engine payload + Board render), root at the engine-native bridge lacking the adapter's `workflowName` threading.
+- **R5 reconcile** — §10 cross-references `04_DESIGN.md` §7.9 (surface authority), `actionable-observability-context.md` (envelope authority), and `workflow-observability.md` (runtime contract); does not restate them.
+- **R6 enforcement** — §9 recommends a two-sided gate (catalog↔matrix parity, corpus-style) over codegen, with reasoning (the catalog carries runtime behavior — tier/policy/renderer/producer overrides — so it is already the SSOT; codegen would bless the description mangle and the 12-shape inheritance).
 
+Root-cause claims carry `path:line` throughout the doc (§2, §5, §6, §7). No emitter, catalog, or Board change ships; the two remediation payload-type options are stated as options, not implemented (per the task's deferred scope).
 ### Testing
+Coverage: N/A — doc-authoring task; no source or test files touched, no runtime behavior to cover.
 
-<!-- Validation performed for claims, links, or feasibility. Use N/A when not applicable. -->
+Verification performed:
 
+- **Matrix completeness:** scripted check against `event-names.ts` → "catalog count: 71, missing from matrix: 0" (all 71 catalog names present in §4, each with a 5W1H row and emitter `path:line`).
+- **Tally re-count:** programmatically re-scored the §4 matrix (71 rows) and corrected the Tally line to the measured counts (Who 0/48/23, What 4/67/0, When 67/4/0, Where 27/40/4, Why 18/12/41, How 33/34/4).
+- **Emitter-citation verification:** every `path:line` in §4/§5 was re-read from source; all resolve to the cited emit/wiring site.
+- **`sp:doc-evolve` sync-check:** not run — the skill surface is not invocable from this worker context. Performed the equivalent manual reconciliation: §10 cross-references the three authority docs and asserts the authority hierarchy (`04_DESIGN.md` §7.9 wins on conflict; `actionable-observability-context.md` owns envelope mechanics) rather than forking them.
 ### Review
-
-<!-- Risks, open concerns, and follow-up review notes. -->
-
+| Priority | Finding | Evidence / Disposition |
+| --- | --- | --- |
+| P1 | `task.updated`/`feature.updated` carry no what-changed — Board shows "Task updated" with no field/diff | Verified `planning-write-service.ts:447-453` (no `field`, `from`/`to` transition-only); `PlanningEvent` lacks `field` (`:110-116`). Disposition: §6 convention; remediation feature adds `field`/`data`. |
+| P1 | `workflow.*` step rows render raw uuids (Run/Node/Action) — unreadable without a uuid lookup | Engine-native rows bypass the adapter's `workflowName` threading (`workflow-service.ts:563` vs `observability.ts:325-333`); no `nodeLabel` exists. Disposition: §7 convention (`workflowName`+`nodeLabel`+`kind`). |
+| P2 | **Who** never fully present (0/71); **Why** absent on 41/71 | No `actor`/`trigger` on planning/history/queue/bus/api families. Disposition: §3 contract + emitter checklist (§8); remediation adds actor/trigger to payloads. |
+| P2 | Catalog is source-parameterized — 12 `metadataFields` shapes for 71 events | `event-names.ts:254-255` spreads `SOURCE_PROFILES[source]`. Disposition: G6; remediation moves to per-event declarations. |
+| P3 | Descriptions are string-mangled, not authored | `describeEvent` (`event-names.ts:296-299`). Disposition: G5; remediation authors descriptions. |
+| P3 | `buildPresentationFields` caps at 8 fields, silently dropping agent/history tail fields | `system-event-envelope.ts:344` `slice(0, 8)`. Disposition: G7; remediation raises cap or prioritizes per-event. |
+| P4 | Enforcement not yet wired — doc can drift | §9 recommends a two-sided gate (catalog↔matrix parity). Disposition: implement in the remediation feature. |
+| P4 | §7.9 authority split (stay authoritative vs shrink to pointer) | Open per task Q&A. §10 recommends §7.9 stays authoritative + one pointer line. Disposition: operator decides; stated, not changed. |
 ### References
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - `docs/04_DESIGN.md` §7.9 (line 1883) — System Event catalog; **authoritative surface, reconcile with it**
@@ -223,3 +244,6 @@ options in the doc; do not implement either.
 - Related features: J1–J5 (observability data plane + board surfaces)
 - Skill: `sp:doc-evolve` (sync-check, contract-verify)
 ### History
+- 2026-08-19T03:09:42.230Z todo → wip (system)
+- 2026-08-19T03:09:42.765Z wip → testing (system)
+- 2026-08-19T03:09:50.648Z testing → done (system)
