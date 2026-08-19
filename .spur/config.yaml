@@ -137,11 +137,11 @@ agent:
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-flash
-      tier: capable-1
-    - name: pi-k3
-      agent: pi
-      model: "k3"
-      tier: capable-1
+      tier: standard
+    # - name: pi-k3
+    #   agent: pi
+    #   model: "k3"
+    #   tier: capable-1
     - name: grok
       agent: grok
       model: grok-4.6
