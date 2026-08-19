@@ -4,7 +4,7 @@ name: "Event 5W1H audit + the event-tracking SSOT design doc"
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.250Z
-updated_at: "2026-08-19T03:50:00.314Z"
+updated_at: "2026-08-19T05:02:39.752Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring batch: event 5W1H SSOT delivered - 71/71 catalog events matrix-verified (scripted count, 0 missing), *.updated diff convention + workflow.* naming convention specified, reconciled with actionable-observability-context.md and 04_DESIGN.md 7.9; task check PASS; zero source files modified."
@@ -228,7 +228,7 @@ Verification performed:
 | P1 | `task.updated`/`feature.updated` carry no what-changed — Board shows "Task updated" with no field/diff | Verified `planning-write-service.ts:447-453` (no `field`, `from`/`to` transition-only); `PlanningEvent` lacks `field` (`:110-116`). Disposition: §6 convention; remediation feature adds `field`/`data`. |
 | P1 | `workflow.*` step rows render raw uuids (Run/Node/Action) — unreadable without a uuid lookup | Engine-native rows bypass the adapter's `workflowName` threading (`workflow-service.ts:563` vs `observability.ts:325-333`); no `nodeLabel` exists. Disposition: §7 convention (`workflowName`+`nodeLabel`+`kind`). |
 | P2 | **Who** never fully present (0/71); **Why** absent on 41/71 | No `actor`/`trigger` on planning/history/queue/bus/api families. Disposition: §3 contract + emitter checklist (§8); remediation adds actor/trigger to payloads. |
-| P2 | Catalog is source-parameterized — 12 `metadataFields` shapes for 71 events | `event-names.ts:254-255` spreads `SOURCE_PROFILES[source]`. Disposition: G6; remediation moves to per-event declarations. |
+| P2 | Catalog is source-parameterized — 12 `metadataFields` shapes for 71 events | `event-names.ts:262` spreads `SOURCE_PROFILES[source]` (declared at `:254`). Disposition: G6; remediation moves to per-event declarations. |
 | P3 | Descriptions are string-mangled, not authored | `describeEvent` (`event-names.ts:296-299`). Disposition: G5; remediation authors descriptions. |
 | P3 | `buildPresentationFields` caps at 8 fields, silently dropping agent/history tail fields | `system-event-envelope.ts:344` `slice(0, 8)`. Disposition: G7; remediation raises cap or prioritizes per-event. |
 | P4 | Enforcement not yet wired — doc can drift | §9 recommends a two-sided gate (catalog↔matrix parity). Disposition: implement in the remediation feature. |

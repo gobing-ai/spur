@@ -4,7 +4,7 @@ name: "dev-* spine cost + drift inventory: measure the bootstrap, attribute it, 
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.506Z
-updated_at: "2026-08-19T02:33:12.733Z"
+updated_at: "2026-08-19T05:02:30.134Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring mode (operator-selected): deliverable verified against plan checklist; design doc written; zero source files modified; Solution/Testing/Review complete."
@@ -228,9 +228,9 @@ drift inventory; zero source code changed).
   ratio; short runs dip ~85–90 %). `Skill()` reordering ruled out on the common path; SessionStart
   + system-reminder injection listed untested (not asserted).
 - **R3/R4 (drift):** one new **semantic-class** finding — `sp:wayfinder` `--section tags` at
-  `plugins/sp/skills/wayfinder/SKILL.md` (line 123, finding D1 in the design doc) (valid flag, wrong operand; correct route is
+  `plugins/sp/skills/wayfinder/SKILL.md:123` (finding D1 in the design doc) (valid flag, wrong operand; correct route is
   `--field tags --value`). **Zero siblings.** Every I2/I3-reconciled verb/flag still resolves.
-- **R6 (delta):** **re-drift rate = 0 / 8 (0 %)**; the surviving finding was never in I3's visible
+- **R6 (delta):** **re-drift rate = 0 / 7 (0 %)**; the surviving finding was never in I3's visible
   scope (existence-check can't see a wrong-operand misuse).
 - **R7 (YAML):** cross-pipeline duplication is **low**; the only repeated boilerplate is the
   `retry_transient` helper defined 3× inside `task-pipeline.yaml`. Engine has **no shared-fragment
@@ -250,10 +250,10 @@ facade ownership split and add the semantic layer instead.
   2.7 MB `history analyze --json` artifact. All figures are `GROUP BY` aggregates, not file-size
   estimates.
 - **Drift rows carry two sides:** each R3 row names both a CLI `path:line` and a plugin
-  `path:line`; the R4 finding is confirmed at `plugins/sp/skills/wayfinder/SKILL.md` (line 123) and the correct route in
+  `path:line`; the R4 finding is confirmed at `plugins/sp/skills/wayfinder/SKILL.md:123` and the correct route in
   `docs/tasks3/0473…`.
 - **Sibling sweep:** `rg '--section (tags|priority|status|phase|id|parent|name|owner|scope)'` over
-  `plugins/` → exactly one hit (`plugins/sp/skills/wayfinder/SKILL.md` (line 123)); no siblings.
+  `plugins/` → exactly one hit (`plugins/sp/skills/wayfinder/SKILL.md:123`); no siblings.
 - **Zero source files modified:** `git status` shows only `docs/design/dev-spine-cost-and-drift.md`
   + the task corpus sections. `spur task`, `packages/app/src/services/task-*`, and the section
   matrix untouched (F92).

@@ -511,6 +511,10 @@ Feature: spur-dev umbrella skill
 | 0483 | Fix H1 pipeline contract defects: implement scope, agent pin, review table, fixall repeats | done |
 | 0485 | Agent executor exhaustion failover: classifier coverage, implementAgent injection, failover semantics | done |
 | 0496 | Extend --worktree to accept an existing worktree name for batch reuse | done |
+| 0587 | Fix sp-dev-pr-review dogfood findings (P1/P2) + spur-dev slowness levers (P3) | done |
+| 0588 | Measure spur-dev model-hop wall-clock and decide the latency lever | done |
+| 0589 | Raise process-inspector coverage to the 90% gate threshold | cancelled |
+| 0590 | Fix task-verdict answer parser consuming SECUA rows as AC rows | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
