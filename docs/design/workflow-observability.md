@@ -1,7 +1,7 @@
 # Workflow run observability
 
 **Area:** `spur workflow run`, `spur workflow trace`, workflow/agent lifecycle events.
-**Status:** implemented (tasks 0114, 0310, 0365).
+**Status:** implementation foundation built (0114/0310/0365); D5 progress projection proposed, taste gate pending.
 **Authority:** derived; CLI shapes are indexed by `04_DESIGN §1`; ADR-035 owns the control-plane boundary.
 
 ## Runtime contract
@@ -144,3 +144,159 @@ retry boundary; its controls remain ordinary signal cancellation.
 
 Cross-process steering is intentionally disabled. Its required durable protocol is a design-only follow-up:
 [`workflow-steering-control-channel.md`](workflow-steering-control-channel.md).
+
+## D5 detailed progress projection
+
+**Status:** proposed; operator taste gate pending (ADR-070).
+
+`WorkflowProgressProjection` is an internal application DTO. It is derived on demand and is not a
+new table or event payload:
+
+```ts
+interface WorkflowProgressProjection {
+    schemaVersion: 1;
+    runId: string;
+    workflow: string;
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown';
+    definitionDigest: string | null;
+    currentState: string | null;
+    states: WorkflowStateProgress[];
+    transitions: WorkflowTransitionProgress[];
+    artifacts: WorkflowArtifactRef[];
+    nextTransitions: WorkflowNextTransition[];
+    diagnostics: WorkflowProgressDiagnostic[];
+    projectedAt: string;
+}
+
+interface WorkflowStateProgress {
+    state: string;
+    visit: number;
+    status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+    actions: WorkflowActionProgress[];
+}
+
+interface WorkflowActionProgress {
+    actionKey: string;
+    kind: string;
+    stateEffect: 'read' | 'write' | 'may-write';
+    evidenceEffect: 'none' | 'write';
+    status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped' | 'ambiguous';
+    attempts: WorkflowActionAttempt[];
+}
+
+interface WorkflowActionAttempt {
+    actionRunId: string;
+    status: string;
+    ok: boolean | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    durationMs: number | null;
+}
+
+interface WorkflowTransitionProgress {
+    from: string;
+    to: string;
+    trigger: string | null;
+    at: string;
+}
+
+interface WorkflowNextTransition {
+    from: string;
+    to: string;
+    trigger: string | null;
+    eligibility: 'eligible' | 'blocked' | 'unknown';
+}
+
+interface WorkflowArtifactRef {
+    kind: string;
+    path: string;
+}
+
+interface WorkflowProgressDiagnostic {
+    code:
+        | 'definition-unavailable'
+        | 'definition-digest-missing'
+        | 'definition-drift'
+        | 'orphan-row'
+        | 'ambiguous-action';
+    message: string;
+}
+```
+
+The projection maps existing sources as follows:
+
+| Projection field | Persisted/definition source |
+|---|---|
+| workflow, terminal status, launch definition digest | `runs` + merged `runs.metadata_json.definitionDigest` |
+| state visits | resolved definition plus ordered `phase_runs`/transition history |
+| taken edges and current state | ordered `transition_runs` plus run status |
+| action attempts | ordered `action_runs` (`node`, `kind`, attempt id, timing, outcome) |
+| action effect and pending actions | resolved definition plus the composition baseline |
+| artifacts | existing run-linked artifact metadata; path and kind only |
+| next transitions | outgoing resolved-definition edges whose guards are statically reportable |
+
+Definition actions use `<state>:<onEnter|onExit>:<ordinal>` after extensions resolve. Existing
+action rows do not carry that definition key, so the projector matches ordered rows by node/kind
+within a state visit. Zero matches leave the definition action pending; more than one valid mapping
+emits `ambiguous-action` and marks the action `ambiguous`. It never guesses or mutates stored rows.
+
+### Definition digest persistence
+
+The canonical digest is `sha256:<hex>` over UTF-8 canonical JSON of the loaded definition after
+extensions resolve but before per-run vars are injected: object keys sorted recursively, array order
+preserved, and no runtime values or secrets included. The persistence adapter computes it before the
+first action and merges it into the run record:
+
+```json
+{
+    "definitionDigest": "sha256:<hex>"
+}
+```
+
+The merge is atomic and object-preserving. Existing `dryRun`, `failureReason`, `staleReason`, and
+unknown keys remain unchanged; only `definitionDigest` is added. The existing replace-style
+`RunDao.stampMetadata` contract is not used for this write and must be migrated to merge semantics
+before D5 can ship. A continue/replay operation retains the launch digest. If the current resolved
+definition differs, the projection emits `definition-drift`; it never overwrites the launch value.
+Legacy rows without the key return `definitionDigest: null` plus `definition-digest-missing`.
+
+### Snapshot and follow
+
+The read-side follower uses the existing System Event ledger only as a wake-up channel:
+
+```text
+snapshot latest system-event sequence
+  → query definition + workflow/phase/transition/action/artifact rows
+  → return projection
+  → follow system events strictly after the snapshot
+  → on correlated workflow event, re-query persisted truth
+  → on timeout or event gap, bounded poll and re-query
+```
+
+An event payload never advances projected state directly. Reconnect repeats snapshot-then-follow;
+polling remains active at a bounded interval until the run is terminal. The same projection is
+therefore returned after event loss, duplicate events, or process restart.
+
+### Inline record-only journal
+
+Inline task execution remains host-controlled. Its adapter may record run, phase, transition, and
+action observations through the existing workflow persistence interface, but the adapter cannot
+request transitions, execute actions, or infer success. The host owns execution; the journal owns
+only idempotent observation writes. Inline and engine-driven runs therefore share projection rows
+without creating a second controller.
+
+### Contract fixtures
+
+The implementation fixture matrix must cover:
+
+- state machine and transition-flow definitions;
+- repeated state visits and retry attempts;
+- running, failed, cancelled, and clean terminal runs;
+- definition digest drift, missing definition, orphan rows, and ambiguous action mapping;
+- metadata merge preservation across `dryRun`, terminal failure, stale finalization, and unknown keys;
+- event loss, duplicate wakeups, reconnect after snapshot, and poll-only convergence;
+- engine-driven and inline record-only runs producing the same projection shape;
+- artifact path-only projection and recursive secret redaction.
+
+No public `spur workflow trace` JSON or human-output field changes in D5. A future public projection
+requires explicit ADR-051 consent and a same-change `04_DESIGN` surface update.

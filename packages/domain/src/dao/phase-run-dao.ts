@@ -21,6 +21,7 @@ export class PhaseRunDao extends EntityDao<typeof phaseRuns, typeof phaseRuns.id
 
     /** Create a phase run placeholder row. */
     open(input: CreatePhaseRunInput): Promise<PhaseRunRecord> {
+        const now = Date.now();
         return super.create({
             id: createId('phase'),
             runId: input.runId,
@@ -28,6 +29,8 @@ export class PhaseRunDao extends EntityDao<typeof phaseRuns, typeof phaseRuns.id
             status: input.status ?? 'pending',
             startedAt: null,
             completedAt: null,
+            createdAt: now,
+            updatedAt: now,
         });
     }
 

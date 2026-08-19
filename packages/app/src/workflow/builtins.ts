@@ -1,3 +1,4 @@
+import type { ArtifactDao, DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder, WorkflowEngineHost } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     createNodeFileSystem,
@@ -8,6 +9,7 @@ import {
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner, type AgentRunAgentConfig } from './actions/agent-run';
+import { CommandGateActionRunner } from './actions/command-gate';
 import { FileExistsActionRunner } from './actions/file-exists';
 import { FileReadActionRunner } from './actions/file-read';
 import { FileReadIntoVarActionRunner } from './actions/file-read-into-var';
@@ -17,6 +19,7 @@ import { HitlSelectActionRunner } from './actions/hitl-select';
 import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from './actions/http-request';
 import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
+import { RunArtifactActionRunner } from './actions/run-artifact';
 import { StreamingShellActionRunner } from './actions/shell';
 import { EnvShellGuardRunner } from './guards/shell';
 import type { WorkflowObservabilityBus } from './observability';
@@ -36,6 +39,10 @@ export interface SpurWorkflowBuiltinsOptions {
     processExecutor?: ProcessExecutor;
     /** Agent config slice injected at composition root (R1, task 0451). */
     agentConfig?: AgentRunAgentConfig;
+    /** Database getter for database-backed builtins (run.artifact). */
+    getDb?: () => Promise<DbAdapter>;
+    /** Artifact DAO for artifact actions. */
+    artifactDao?: ArtifactDao;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
@@ -68,6 +75,11 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     host.registerAction(new HitlConfirmActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(new HitlSelectActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(new HitlInputActionRunner(options.hitlResponder), 'builtin');
+    host.registerAction(
+        new CommandGateActionRunner(options.processExecutor ?? new NodeProcessExecutor(), fileSystem),
+        'builtin',
+    );
+    host.registerAction(new RunArtifactActionRunner(options.getDb, fileSystem, options.artifactDao), 'builtin');
     if (options.httpRequester) {
         host.registerAction(
             new HttpRequestActionRunner(options.httpRequester, options.hostAllowlist ?? new Set()),

@@ -2488,3 +2488,41 @@ describe('WorkflowAppService — continue loads workflow YAML extensions (0533 /
         }
     });
 });
+
+describe('definitionDigest merge on run creation (task 0603)', () => {
+    test('run merges definitionDigest into runs.metadata_json without clobbering dryRun or failureReason', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-digest-'));
+        const wfPath = join(dir, 'test-digest.yaml');
+        await writeFile(
+            wfPath,
+            [
+                'kind: state-machine',
+                'name: digest-wf',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates:',
+                '  - done',
+            ].join('\n'),
+        );
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const res = await svc.run(wfPath, { runId: 'run-digest-1', dryRun: true });
+            expect(res.status).toBe('done');
+
+            const db = await ctx.getDb();
+            const row = await new RunDao(db).traceRowById('run-digest-1');
+            expect(row).toBeDefined();
+            const meta = JSON.parse(row?.metadata_json ?? '{}');
+            expect(meta.dryRun).toBe(true);
+            expect(meta.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});

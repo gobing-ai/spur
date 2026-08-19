@@ -355,6 +355,23 @@ export class SystemEventDao {
     }
 
     /**
+     * Return the maximum sequence number present in the ledger, or 0 if empty.
+     */
+    async latestSequence(): Promise<number> {
+        try {
+            const rows = await this.db.queryAll<{ max_seq: number | null }>(
+                'SELECT MAX(sequence) as max_seq FROM system_events',
+            );
+            return rows[0]?.max_seq ?? 0;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return 0;
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Aggregate role→executor routing over a bounded window in one indexed
      * round trip (task 0546 R1/R2).
      *

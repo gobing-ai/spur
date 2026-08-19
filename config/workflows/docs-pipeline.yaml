@@ -109,6 +109,10 @@ states:
             mkdir -p .spur/run &&
             printf '%s\n' "{\"wbs\":\"$wbs\",\"verdict\":\"PASS\",\"source\":\"docs-pipeline\",\"requirements\":[{\"id\":\"docs-deliverable\",\"status\":\"MET\",\"evidence\":\"docs-pipeline record step\"}],\"acceptanceCriteria\":[],\"checks\":[{\"name\":\"docs-only\",\"status\":\"pass\",\"evidence\":\"docs-pipeline\"}]}"
             > ".spur/run/$wbs-verdict.json"
+      - kind: run.artifact
+        options:
+          path: .spur/run/${vars.wbs}-verdict.json
+          artifactKind: verify-verdict
       - kind: shell
         options:
           command: "$spurBin task update $wbs done --no-lifecycle"

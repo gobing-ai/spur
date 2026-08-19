@@ -114,27 +114,33 @@ states:
 
   - id: metrics-record
     description: >
-      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl. Soft append
-      (empty capture does not abort wrap-up after learnings already landed).
+      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl deterministically.
     onEnter:
-      - kind: agent.run
-        options:
-          agent: ${vars.agent}
-          input: "For each task in ${vars.tasks}, output one JSONL line (no fences) with fields: wbs, feature_id, status, verdict, timestamp. Captured to .spur/run/wrapup-metrics.jsonl."
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
-          role: scribe
-          answerFile: .spur/run/wrapup-metrics.jsonl
-          expectFile: .spur/run/wrapup-metrics.jsonl
-          timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/memory &&
-            if test -s .spur/run/wrapup-metrics.jsonl; then
-              cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl;
+            if [ -f packages/app/src/workflow/wrapup-metrics-cli.ts ]; then
+              bun packages/app/src/workflow/wrapup-metrics-cli.ts;
             else
-              echo "wrapup: metrics capture missing or empty at $PWD/.spur/run/wrapup-metrics.jsonl - append skipped" >&2;
-            fi &&
+              printf '%s' "$tasks" | jq -r '(if type == "string" then (try fromjson catch .) else . end) | if type == "array" then .[] else empty end' |
+              while IFS= read -r wbs; do
+                if [ -n "$wbs" ]; then
+                  task_json=$($spurBin task show "$wbs" --json 2>/dev/null || true);
+                  if [ -n "$task_json" ]; then
+                    feat=$(printf '%s' "$task_json" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);
+                    stat=$(printf '%s' "$task_json" | jq -r '.frontmatter.status // .status // "unknown"' 2>/dev/null || true);
+                    verdict="UNKNOWN";
+                    if [ -f ".spur/run/$wbs-verdict.json" ]; then
+                      v=$(jq -r '.verdict // "UNKNOWN"' ".spur/run/$wbs-verdict.json" 2>/dev/null || true);
+                      if [ -n "$v" ]; then verdict="$v"; fi;
+                    fi;
+                    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
+                    printf '{"wbs":"%s","feature_id":"%s","status":"%s","verdict":"%s","timestamp":"%s"}\n' "$wbs" "$feat" "$stat" "$verdict" "$ts" >> .spur/memory/wrapup-metrics.jsonl;
+                  fi;
+                fi;
+              done;
+            fi;
             exit 0
 
   - id: feature-transition

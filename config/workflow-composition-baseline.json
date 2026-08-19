@@ -1,0 +1,661 @@
+{
+    "schemaVersion": 1,
+    "proofInputs": {
+        "repository": {
+            "excludeConfiguredCorpusFolders": true
+        },
+        "taskFields": ["wbs", "name", "feature_id", "depends_on"],
+        "taskSections": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"],
+        "featureFields": ["id", "name"],
+        "featureSections": ["Goal", "Scope", "Acceptance Criteria"]
+    },
+    "workflows": {
+        "docs-pipeline": {
+            "definition": "config/workflows/docs-pipeline.yaml",
+            "boundary": "docs-evolution",
+            "disposition": "keep",
+            "callers": ["sp:spur-dev", "/sp:dev-run"],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "artifacts": ["docs-precheck", "docs-verdict"],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["draft"],
+            "actions": {
+                "precheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:1": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "draft:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-run --mode implement ${vars.wbs} --auto",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "draft:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "docs-review:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "record:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "done:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "done:onEnter:1": {
+                    "kind": "run.artifact",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "done:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:3": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                }
+            }
+        },
+        "idea-pipeline": {
+            "definition": "config/workflows/idea-pipeline.yaml",
+            "boundary": "idea-decomposition",
+            "disposition": "keep",
+            "callers": ["sp:spur-dev", "/sp:dev-idea"],
+            "terminalStates": ["handoff", "cancelled", "failed"],
+            "artifacts": [
+                "idea-eval-report",
+                "idea-needs-design",
+                "idea-design-review",
+                "idea-task-batch",
+                "idea-task-order",
+                "idea-handoff"
+            ],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["discovery", "feature-create", "ac-generate", "system-design", "decompose"],
+            "actions": {
+                "start:onEnter:0": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "start:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "discovery:onEnter:0": {
+                    "kind": "agent.run",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "idea-eval:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "feature-create:onEnter:0": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "feature-create:onEnter:1": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "feature-create:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "feature-create:onEnter:3": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "ac-generate:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "ac-generate:onEnter:1": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "ac-generate:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "feature-check:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "system-design:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "system-design:onEnter:1": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "system-design:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "design-approval:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "design-approval:onEnter:1": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "decompose:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "decompose:onEnter:1": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "decompose:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "batch-create:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "batch-create-run:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "handoff-finalize:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "handoff:onEnter:0": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "handoff:onEnter:1": {
+                    "kind": "run.artifact",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "handoff:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                }
+            }
+        },
+        "planning-pipeline": {
+            "definition": "config/workflows/planning-pipeline.yaml",
+            "boundary": "feature-planning",
+            "disposition": "absorb-then-delete",
+            "callers": ["sp:spur-dev", "sp:super-planner"],
+            "terminalStates": ["handoff", "cancelled", "failed"],
+            "artifacts": ["plan-feature-id", "plan-design-doc"],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["feature-id", "design-gen"],
+            "actions": {
+                "start:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "start:onEnter:1": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "phasing:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "feature-id:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "feature-id:onEnter:1": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "design-gen:onEnter:0": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "design-approval:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "handoff:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                }
+            }
+        },
+        "task-pipeline": {
+            "definition": "config/workflows/task-pipeline.yaml",
+            "boundary": "task-execution",
+            "disposition": "canonical",
+            "callers": ["sp:spur-dev", "sp:super-planner"],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "artifacts": ["verify-answer", "verify-verdict", "testing-section", "review-section"],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["implement", "test-fix", "review", "verify"],
+            "actions": {
+                "precheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:2": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:3": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:4": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "implement:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-run --mode implement ${vars.wbs} --auto",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "implement:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "implement:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "test:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "test-fix:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "test-fix:onEnter:1": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "test-fix:onEnter:2": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-fixall \"${vars.qualityGateCmd}\" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings \"${vars.gateFindings}\"",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "test-recheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "review:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-review ${vars.wbs} --auto",
+                    "stateEffect": "may-write",
+                    "evidenceEffect": "write"
+                },
+                "approve:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix all --focus all",
+                    "stateEffect": "may-write",
+                    "evidenceEffect": "write"
+                },
+                "verify:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "record:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "record:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:1": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                }
+            }
+        },
+        "task-pipeline2": {
+            "definition": "config/workflows/task-pipeline2.yaml",
+            "boundary": "task-execution-candidate",
+            "disposition": "candidate-freeze",
+            "callers": ["sp:spur-dev", "sp:super-planner"],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "artifacts": ["verify-answer", "verify-verdict", "testing-section", "review-section"],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["implement", "test-fix", "review", "verify", "residual-sweep"],
+            "actions": {
+                "precheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:2": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:3": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "precheck:onEnter:4": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "implement:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-run --mode implement ${vars.wbs} --auto",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "implement:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "implement:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "test:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "test-fix:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "test-fix:onEnter:1": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "test-fix:onEnter:2": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-fixall \"${vars.qualityGateCmd}\" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings \"${vars.gateFindings}\"",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "test-recheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "review:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-review ${vars.wbs} --auto",
+                    "stateEffect": "may-write",
+                    "evidenceEffect": "write"
+                },
+                "approve:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix all --focus all",
+                    "stateEffect": "may-write",
+                    "evidenceEffect": "write"
+                },
+                "verify:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "residual-sweep:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "Anything remained in ${vars.residualSweepTarget}? if any, you should get all of them done before we commit all the changes in next step",
+                    "stateEffect": "may-write",
+                    "evidenceEffect": "none"
+                },
+                "record:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "record:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:1": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:2": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                }
+            }
+        },
+        "wrapup-pipeline": {
+            "definition": "config/workflows/wrapup-pipeline.yaml",
+            "boundary": "task-wrapup",
+            "disposition": "keep",
+            "callers": ["sp:spur-dev", "/sp:dev-wrap", "/sp:dev-wrapall"],
+            "terminalStates": ["done", "skipped"],
+            "artifacts": ["wrapup-learnings", "wrapup-metrics"],
+            "failurePolicy": "fail-closed",
+            "modelQueries": ["doc-sync", "learning-capture"],
+            "actions": {
+                "start:onEnter:0": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "task-resolve:onEnter:0": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "doc-sync:onEnter:0": {
+                    "kind": "agent.run",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "learning-capture:onEnter:0": {
+                    "kind": "agent.run",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "learning-capture:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "metrics-record:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "feature-transition:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "branch-cleanup:onEnter:0": {
+                    "kind": "hitl.confirm",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:0": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "done:onEnter:1": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                }
+            }
+        },
+        "pr-review": {
+            "definition": "config/workflows/pr-review.yaml",
+            "boundary": "pr-review",
+            "disposition": "keep",
+            "callers": ["sp:spur-dev", "/sp:dev-pr-review"],
+            "terminalStates": ["done", "pending", "failed"],
+            "artifacts": [
+                "pr-context",
+                "pr-hygiene",
+                "pr-push",
+                "pr",
+                "pr-request",
+                "pr-wait",
+                "pr-findings",
+                "pr-status"
+            ],
+            "failurePolicy": "fail-closed",
+            "modelQueries": [],
+            "actions": {
+                "preflight:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "hygiene:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "push:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "ensure-pr:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "request:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "wait:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "collect:onEnter:0": {
+                    "kind": "shell",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                }
+            }
+        }
+    }
+}

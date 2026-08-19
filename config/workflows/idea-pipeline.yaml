@@ -382,6 +382,10 @@ states:
       - kind: shell
         options:
           command: >-
+            if [ -f packages/app/src/workflow/idea-handoff-cli.ts ]; then
+              bun packages/app/src/workflow/idea-handoff-cli.ts;
+              exit $?;
+            fi;
             BATCH=".spur/run/$__runId-idea-task-batch.json" &&
             RESULT=".spur/run/$__runId-idea-batch-create-result.json" &&
             ORDER=".spur/run/$__runId-idea-task-order.json" &&
@@ -452,6 +456,10 @@ states:
       - kind: note
         options:
           message: "Idea pipeline handoff. Feature: ${vars.featureId}. See .spur/run/${vars.__runId}-idea-handoff.md for the created task list and recommended next command."
+      - kind: run.artifact
+        options:
+          path: .spur/run/${vars.__runId}-idea-handoff.md
+          artifactKind: idea-handoff
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:

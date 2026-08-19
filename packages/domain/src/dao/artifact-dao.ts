@@ -28,4 +28,14 @@ export class ArtifactDao extends EntityDao<typeof artifacts, typeof artifacts.id
             kind: input.kind,
         });
     }
+
+    /** Query artifacts by run id. */
+    artifactsByRunId(runId: string): Promise<
+        Array<{
+            path: string;
+            kind: string;
+        }>
+    > {
+        return this.adapter.queryAll('SELECT path, kind FROM artifacts WHERE run_id = ? ORDER BY id', runId);
+    }
 }

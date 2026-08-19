@@ -22,12 +22,15 @@ export class TransitionRunDao extends EntityDao<typeof transitionRuns, typeof tr
 
     /** Create a transition run placeholder row. */
     open(input: CreateTransitionRunInput): Promise<TransitionRunRecord> {
+        const now = Date.now();
         return super.create({
             id: createId('transition'),
             runId: input.runId,
             fromState: input.fromState,
             toState: input.toState,
             status: input.status ?? 'pending',
+            createdAt: now,
+            updatedAt: now,
         });
     }
 

@@ -470,6 +470,7 @@ export {
     WorkflowAppService,
 } from './services/workflow-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
+export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';
 export { FileReadIntoVarActionRunner } from './workflow/actions/file-read-into-var';
@@ -481,8 +482,25 @@ export {
     type ResponseValidateResult,
 } from './workflow/actions/response-validate';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
+export { RunArtifactActionRunner, type RunArtifactOptions } from './workflow/actions/run-artifact';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
+export {
+    type CompositionCheckDiff,
+    type CompositionCheckResult,
+    canonicalJsonStringify,
+    checkWorkflowComposition,
+    computeDefinitionDigest,
+    extractResolvedWorkflowFacts,
+    type WorkflowActionBaseline,
+    type WorkflowCompositionBaseline,
+    type WorkflowEntryBaseline,
+} from './workflow/composition-baseline';
+export {
+    type FinalizeIdeaHandoffOptions,
+    type FinalizeIdeaHandoffResult,
+    finalizeIdeaHandoff,
+} from './workflow/idea-handoff';
 export {
     FEATURE_LIFECYCLE_PROFILE,
     LifecycleAdapter,
@@ -506,6 +524,33 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+export {
+    type FollowWorkflowProgressOptions,
+    followWorkflowProgress,
+    getLatestSystemEventSequence,
+} from './workflow/progress-follow';
+export {
+    type ProjectWorkflowProgressOptions,
+    projectWorkflowProgress,
+    type WorkflowActionAttempt,
+    type WorkflowActionProgress,
+    type WorkflowArtifactRef,
+    type WorkflowNextTransition,
+    type WorkflowProgressDiagnostic,
+    type WorkflowProgressProjection,
+    type WorkflowStateProgress,
+    type WorkflowTransitionProgress,
+} from './workflow/progress-projection';
+export {
+    type ComputeProofInputOptions,
+    computeProofInputFingerprint,
+    createGitAlternateTree,
+    extractFeatureProofData,
+    extractTaskProofData,
+    type FeatureProofData,
+    ProofInputFingerprint,
+    type TaskProofData,
+} from './workflow/proof-input-fingerprint';
 export {
     parseSteeringPolicy,
     type SteeringAck,

@@ -1160,4 +1160,26 @@ describe('SystemEventDao.routingSummary (task 0546)', () => {
 
         adapter.close();
     });
+
+    test('latestSequence returns 0 for empty or unmigrated db and max sequence when rows exist', async () => {
+        const unmigrated = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const unmigratedDao = new SystemEventDao(unmigrated);
+        expect(await unmigratedDao.latestSequence()).toBe(0);
+        unmigrated.close();
+
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+        expect(await dao.latestSequence()).toBe(0);
+
+        await dao.insert({
+            id: 'seq-1',
+            event_name: 'test.seq',
+            occurred_at: '2026-08-19T00:00:00Z',
+            sequence: 42,
+        });
+        expect(await dao.latestSequence()).toBe(42);
+
+        adapter.close();
+    });
 });

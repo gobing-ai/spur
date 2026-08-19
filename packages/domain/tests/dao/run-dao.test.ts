@@ -237,6 +237,26 @@ describe('RunDao', () => {
             adapter.close();
         });
 
+        test('mergeMetadata merges patch and preserves existing keys', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+
+            await dao.mergeMetadata(run.id, { dryRun: true, unknownKey: 'custom-val' });
+            await dao.mergeMetadata(run.id, { definitionDigest: 'sha256:abcd' });
+            await dao.stampFailureReason(run.id, 'no-passing-transition');
+
+            const found = await dao.findById(run.id);
+            const meta = JSON.parse(found?.metadataJson ?? '{}');
+            expect(meta).toEqual({
+                dryRun: true,
+                unknownKey: 'custom-val',
+                definitionDigest: 'sha256:abcd',
+                failureReason: 'no-passing-transition',
+            });
+            adapter.close();
+        });
+
         test('stampFailureReason merges with existing metadata', async () => {
             const adapter = await setup();
             const dao = new RunDao(adapter);

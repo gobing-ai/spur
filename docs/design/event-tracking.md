@@ -1,7 +1,7 @@
 # Event tracking — System Event 5W1H SSOT
 
 **Area:** System Event catalog (`SYSTEM_EVENT_CATALOG`), 5W1H payload contract, `*.updated` field-level diff, `workflow.*` legibility.
-**Status:** current audit baseline (task 0597) + J9 built (tasks 0601/0602, ADR-066/067/068).
+**Status:** current audit baseline (task 0597) + J9 built (tasks 0601/0602, ADR-066/067/068); J91 table-legibility accepted (ADR-073/074; not yet built).
 **Authority:** elaborates `docs/04_DESIGN.md` §7.9 (authoritative on the catalog surface) and `docs/design/actionable-observability-context.md` (authoritative on the v2 envelope and projection policy). This doc does **not** restate their contracts — it defines the *per-event* contract the other two deliberately leave abstract. On conflict, `04_DESIGN.md` §7.9 wins (lower number wins on content, constitution §4.1); on envelope mechanics, `actionable-observability-context.md` wins.
 
 ## 1. Scope and non-goals
@@ -181,7 +181,7 @@ Rules:
 
 1. `WorkflowService` creates one identity decorator from the already-loaded definition and passes it to the typed engine bridge, `ObservableWorkflowAdapter`, built-in action runners, and the steering controller. Thus engine-native events, `workflow.agent`, and `workflow.steering` carry the same `workflowName`; no history lookup occurs per event.
 2. Step-bearing events derive `nodeLabel` from the workflow definition (`description` when non-empty, otherwise the declared state/node id). Missing definitions on legacy rows stay missing.
-3. Action events retain `kind`; transition events retain `from` / `to`. Machine `runId`, `node`, and `actionId` remain fields/correlation but never become the primary summary while a human name or kind exists.
+3. Action events retain `kind`; transition events retain `from` / `to`. Machine `runId`, `node`, and `actionId` remain tooltip fields/correlation. J9: they never become the primary summary while a human name or kind exists. J91 (accepted design): they never become the Summary cell at all — no `runId` / UUID `node` / `kind`-as-step fallback; see [`system-events-human-table.md`](system-events-human-table.md).
 4. Every workflow summary begins `[workflow]` and orders identity as `workflowName`, then `nodeLabel` or transition/action semantics. The Board renders the supplied string.
 
 ## 8. Tier/policy rules and emitter checklist
@@ -215,6 +215,7 @@ This is enforceable today as a `spur rule` or a small script the same way `trans
 
 - `docs/04_DESIGN.md` §7.9 owns the catalog *surface*: tier table, envelope projection, source families, alias policy, producer invariant. This doc adds the per-event 5W1H contract and the two conventions. **Recommendation:** §7.9 stays authoritative; add one line pointing to `design/event-tracking.md` for the per-event contract, rather than shrinking §7.9 to a pointer (the surface rules are still load-bearing for the tap/SSE implementation).
 - `docs/design/actionable-observability-context.md` owns the v2 envelope and projection policy. This doc's diff convention (§6) and naming convention (§7) operate **inside** the envelope `data`/`presentation` it defines; no envelope shape change is proposed here.
+- `docs/design/system-events-human-table.md` owns J91 table-cell keys, opaque-id definition, and Agent projection (ADR-073/074). §12 overlays this matrix; it does not replace it.
 - `docs/design/workflow-observability.md` owns the workflow runtime contract and envelope-v1 fields (`workflowName`, `runId`, `sequence`). §7 of this doc is the Board-legibility convention layered on top of that runtime contract, not a replacement.
 
 ## 11. J9 semantic presenter contract (built — tasks 0601/0602)
@@ -334,3 +335,16 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 The deterministic gate compares matrix event names with `SYSTEM_EVENT_CATALOG` in both directions and validates each
 resolved catalog entry has non-generated description text, an explicit field list, a summary function, and exactly one
 outcome support branch. It does not generate TypeScript or Markdown from the other side.
+
+## 12. J91 table-legibility overlay (accepted design — ADR-073/074; not yet built)
+
+This matrix stays the per-event SSOT for tooltip fields and outcome. J91 overlays three table-cell
+rules without adding events:
+
+1. **SUMMARY** for `workflow.*` uses `{workflowName}` and `{nodeLabel}` only; `{nodeLabel|kind}` in
+   §11 action rows becomes `{nodeLabel}` (kind moves to `presentation.actionLabel`).
+2. **Retain vs fields.** Presenters may declare `retain` paths that join the metadata allow-list
+   without occupying a tooltip slot. `workflow.action.*` retain `metadata.agent`, `metadata.role`,
+   and `routing.executor`.
+3. **Table projector** emits `correlators` / `actionLabel` / `agent`. Shapes:
+   [`system-events-human-table.md`](system-events-human-table.md).

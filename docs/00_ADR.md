@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.22.0
+version: 1.25.0
 owner: Robin Min
 updated_at: 2026-08-19
 read_before: any structural change; before diverging from a decision
@@ -840,3 +840,71 @@ define the upstream standard contract.
 **Why.** Reconstructing identity or outcome from unrelated configuration, job types, or event names would turn diagnostic presentation into a guess.
 
 **Detail:** `03 §16.1`; `docs/design/event-tracking.md` §§6–7/11.
+
+## ADR-069: Workflow YAML Orchestrates Owned Capabilities
+
+**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+
+**Decision.** Workflow YAML selects and orders capabilities; reusable deterministic behavior lives
+in its owning application/CLI module or a capability-specific built-in, workflow extensions own
+only local policy, and `agent.run` remains the judgment boundary.
+
+**Why.** Extending proven seams keeps one behavior owner without inventing a generalized workflow DSL.
+
+**Detail:** `03 §20`; `docs/design/workflow-composition-contract.md`.
+
+## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
+
+**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+
+**Decision.** Workflow progress is a pure read projection of the resolved definition and existing
+persisted run, phase, transition, action, and artifact rows; System Events only wake re-queries, and
+bounded polling remains the convergence fallback.
+
+**Why.** One replay authority avoids an event-derived progress store that can disagree after loss or restart.
+
+**Detail:** `03 §21`; `docs/design/workflow-observability.md` §D5 detailed progress projection.
+
+## ADR-071: Mutation After Verification Invalidates the Proof
+
+**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+
+**Decision.** Every proof-bearing action declares repository/corpus state effects separately from
+evidence writes; `write` or `may-write` invalidates prior proof, and PASS is valid only when the
+quality, review, and observe-only verification evidence names one unchanged final-state digest.
+
+**Why.** A verdict cannot prove tree state that was allowed to change after the verdict was produced.
+
+**Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
+
+## ADR-072: One Canonical Pipeline per Lifecycle Boundary
+
+**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5 · **Would amend:** ADR-029
+
+**Decision.** Keep task execution, idea, docs, wrap-up, and integration-HEAD PR review as distinct
+lifecycle workflows; absorb planning into the canonical idea/dev-plan path, and merge only a
+proof-preserving task-pipeline2 delta into task-pipeline before deleting the duplicate.
+
+**Why.** A single graph per lifecycle boundary removes semantic drift while preserving genuinely independent gates.
+
+**Detail:** `03 §20.4`; `docs/design/workflow-composition-contract.md` §Target workflow inventory.
+
+## ADR-073: System Event Table Cells Project Human Identity
+
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J91
+
+**Decision.** Observability System Events table columns display only human correlators; opaque event ids and remediation commands that embed those ids remain in the tooltip and expanded payload.
+
+**Why.** Operators diagnose from the table; substituting UUIDs and trace commands for workflow, step, and action names hides the facts they need.
+
+**Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
+
+## ADR-074: Coding-Agent Identity Is an Optional Presentation Projection
+
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J91
+
+**Decision.** Coding-agent / executor identity is an optional `presentation.agent` string projected by the envelope from bounded payload facts in a fixed order; it is never `context.producer`, never inferred by the Board, and omitted when the event has no executor.
+
+**Why.** Producer names the emitting package; the diagnostic question is which coding agent executed the request, and that fact already exists on agent-bearing payloads.
+
+**Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.

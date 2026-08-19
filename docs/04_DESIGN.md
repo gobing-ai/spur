@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.39.0
+version: 1.41.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-19
@@ -35,7 +35,8 @@ When collaborating with the design team:
 | [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md)                           | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface                                                                                              | design (in progress)            |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md)     | Server/Web — finalized feature decisions for the above                                                                                                                                                | finalized                       |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md)                                           | Team mode — agent specs, inbox, `TeamService`                                                                                                                                                         | design                          |
-| [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365)                                                               | partial                         |
+| [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability plus D5's proposed persisted progress projection shape                                                                                                                     | foundation built; D5 proposed   |
+| [`workflow-composition-contract.md`](design/workflow-composition-contract.md)                           | D5 workflow composition baseline, split state/evidence effects, structured gate execution, digest-bound proof, and consolidation contract                                                             | proposed; taste gate pending    |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                      | implemented                     |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector, interactive task-pipeline host driver (0503), named escalation triggers, and `sp:dogfood-testing` extraction                | implemented                     |
 | [`agent-inline-host-session.md`](design/agent-inline-host-session.md)                                   | `--agent inline` host-session-only guarantee — headless surfaces reject explicit `inline` with a frozen greppable message; no `agent.default` fallback; 0508 eligibility is omit-only (ADR-047 amendment, feature G5 / task 0565) | implemented (0565)             |
@@ -53,6 +54,7 @@ When collaborating with the design team:
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
 | [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event envelope and projection paths, including J9 derived-presentation reprojection (ADR-056/067)                                                                                | J5 implemented; J9 built (0601/0602) |
+| [`system-events-human-table.md`](design/system-events-human-table.md)                                   | System Events table-legibility contract — human SUMMARY/CORRELATION/ACTION, Agent column, optional presentation keys (ADR-073/074, feature J91)                                                   | accepted design; not yet built      |
 | [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); `--spec` carrier + executor-binding rewrite landed (0537/0542); first-class `blocked` remains |
 | [`dev-spine-cost-and-drift.md`](design/dev-spine-cost-and-drift.md)                                     | `/sp:dev-*` spine cost attribution from history data, prefix-cache breakers, `feature`/`agent`/`workflow` drift table vs I2/I3, ranked fix path (feature I6, task 0594)                            | measurement + inventory (analysis only)                                                                                                                        |
 | [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602) |
@@ -1654,6 +1656,15 @@ eval-pipeline` comparator (task 0595) — not on this doc. Two-layer plan render
 pipeline is the inline driver's job
 (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:33-42`).
 
+**D5 proposed transition (ADR-071/072; taste gate pending).** The current candidate is frozen before
+promotion: `residual-sweep` is an editing-capable `agent.run` after verify PASS, so the proof state
+is invalidated before `record`; the live `/sp:dev-verify --fix all` action is also `may-write` and
+cannot establish final PASS. The proposed replacement separates remediation from a digest-bound
+quality → review → `--fix none` proof chain. Only that proof-preserving delta may merge into the
+canonical `task-pipeline.yaml`; `task-pipeline2.yaml` is deleted after the full promotion contract
+and explicit operator approval. Composition, action, gate, and artifact shapes are in
+[`workflow-composition-contract.md`](design/workflow-composition-contract.md).
+
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
 `formatCmd`, `implementScopeGuard`, `__hitlAnswer`. Three are command-shaped (the per-project override
@@ -1786,6 +1797,11 @@ auto-writes derived docs (`docs/design/*`, `docs/features/*`); **stages** `02_RO
 index edits to `docs/plans/` for human commit. Every authoritative-doc touch invokes `sp:doc-evolve`
 (§5 sync triggers). Terminal at `handoff` (drafted feature list → `sp:spur-dev` steps 7–12) or
 `cancelled`. Validates against the workspace state-machine schema.
+
+**D5 proposed transition (ADR-072; taste gate pending).** This definition remains live until its
+callers, scaffolded copies, bundled copies, graph behavior, artifacts, failure policy, and model-query
+locations have parity with the canonical idea/dev-plan path. It is then removed; no second planning
+graph remains. Acceptance of ADR-072 would resolve ADR-029's deferred consolidation question.
 
 ### 7.6 Task DTOs (oRPC contract)
 
@@ -1965,6 +1981,11 @@ producer enrichment, exact planning/workflow/queue summaries, and the two-sided 
 [`event-tracking.md`](design/event-tracking.md). History reprojection and generic tooltip identity live in
 [`actionable-observability-context.md`](design/actionable-observability-context.md); visual tooltip placement lives
 in root `DESIGN.md`. Envelope v2 and the ledger schema do not change.
+
+**J91 human table projection (accepted design — ADR-073/074; not yet built).** Table cells become
+human-only; optional `presentation.correlators` / `actionLabel` / `agent` and the Agent column live in
+[`system-events-human-table.md`](design/system-events-human-table.md). `context` stays closed. No new CLI
+noun. Tooltip remediation and raw ids stay out of the table.
 
 **Routing decision attribution (task 0545).** Agent-run lifecycle rows carry the routing decision as
 envelope metadata — no new table or column. `agent.invoke.start` / `agent.invoke.exit` payloads gain

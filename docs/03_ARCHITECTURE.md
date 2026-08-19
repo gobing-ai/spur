@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.26.0
+version: 1.28.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-19
@@ -740,6 +740,41 @@ Invariants (enforceable):
 Shapes and the per-event matrix: `docs/design/actionable-observability-context.md` and
 `docs/design/event-tracking.md`.
 
+### 16.2 J91 human table projection (accepted design — ADR-073/074; not yet built)
+
+J91 deepens the existing envelope projector; it does not add a client interpretation seam, an envelope
+v3, or a CLI noun. Event-name presenters keep owning description, tooltip fields, summary, and outcome.
+A single table projector, invoked after the presenter inside `system-event-envelope.ts`, owns the
+opaque-id policy for table cells.
+
+```text
+bounded data + correlation + optional persistence-row actor
+  → event-name presenter (summary, fields, outcome)
+  → table projector (correlators, actionLabel, agent)
+  → canonical presentation (tooltip action / fields unchanged)
+  → Board maps those slots; no payload-key switches
+```
+
+| Module | J91 ownership |
+| --- | --- |
+| Presenter helpers | `humanWorkflowTitle`, `humanStepLabel`, `looksLikeOpaqueId`; workflow summaries never fall back to `runId` / UUID `node` / `kind`-as-step. |
+| Presenter `retain` | Extra allow-list paths (`metadata.agent`, `metadata.role`, `routing.executor`) that are not tooltip fields. Catalog `metadataFields` = `fields` ∪ `retain`. |
+| Table projector | Compose `presentation.correlators`, `presentation.actionLabel`, `presentation.agent` from bounded data + optional row `actor`. |
+| Envelope `context` | Unchanged closed set. Actor is a projector input, never a context key. |
+| Producers | Stamp identity at existing Spur fan-ins (`withWorkflowIdentity` on every engine-native emit, `projectActionMetadata`, invoke routing). ts-libs only if those paths cannot emit the fact. |
+| Board | Render the new slots. Correlation is not `context.correlation` concatenation; Action is not the remediation command. |
+
+Invariants (enforceable):
+
+- Summary, `correlators`, `actionLabel`, and `agent` contain no UUID, no `live-` prefix, and no `eventId` / `runId` / `executionId` / `actionId` used as the cell value.
+- `presentation.action` (remediation) is not the Action column value when its `value` embeds a UUID.
+- `presentation.agent` is omitted when none of `data.routing.executor`, `data.agent`, `data.metadata.agent`, or an executor-shaped row `actor` is present.
+- `context.producer` is never copied into `presentation.agent`.
+- React contains no event-specific recovery of workflow name, step label, or agent identity.
+- Reprojection still never changes stored `data`, stored `context`, indexed correlation columns, or the ledger row.
+
+Shapes: `docs/design/system-events-human-table.md`.
+
 ## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
@@ -873,3 +908,188 @@ dangling executor reference fails loudly at drain, spawning nothing.
 
 Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
 `AgentRoleConfigSchema`); `config/config.example.yaml`; `plugins/sp/references/roles.md` (projection).
+
+## 20. Workflow Composition and Canonical Pipelines (proposed — ADR-069/071/072; taste gate pending)
+
+D5 proposes an existing-seam, infrastructure-first migration. Workflow definitions remain the
+orchestration graph; they do not become a second application layer. Shared deterministic behavior
+is deepened behind existing application and persistence interfaces before any live pipeline moves.
+
+### 20.1 Options and decision
+
+| Option | Coupling and blast radius | Reversibility and cost | Disposition |
+|---|---|---|---|
+| Clean up commands independently inside each YAML/extension | couples policy to callers; drift remains across graphs | cheap initially, expensive to keep aligned | rejected |
+| Add a generalized workflow DSL, progress store, and event-driven controller | duplicates engine, persistence, and replay authority | largest one-way change and migration surface | rejected |
+| Extend existing app capabilities, engine action seam, persistence rows, and read projection | localizes changes behind proven owners | incremental, fixtureable, and reversible per pipeline | recommended |
+
+The proposed option has the smallest new interface: a checked composition baseline, two narrowly
+owned deterministic action capabilities, a proof-input fingerprint, and a read projection. It adds
+no package, transport, data store, or public CLI surface.
+
+The rejected taste-gate details require three narrower decisions:
+
+| Seam | Candidates | Proposed choice | Strongest reason |
+|---|---|---|---|
+| Proof establishment | trust a post-fix verdict; combine mutation and proof in one new capability; split remediation from observe-only proof | split remediation from the final `--fix none` verification | a PASS can name one state without trusting a capability that may edit it |
+| Gate execution | opaque shell string; structured executable/args; new gate DSL | literal executable/args invoking a named project script | it maps directly to `ProcessExecutor` and makes quoting and trust ownership explicit |
+| Definition binding | replace run metadata; add a digest table; merge at run creation | atomically merge into `runs.metadata_json` | it preserves one run authority and every pre-existing metadata key |
+
+### 20.2 Ownership topology
+
+```text
+workflow YAML
+  ├─ graph, guards, retries, failure policy, capability selection
+  ├─ deterministic app/CLI capability ──→ existing application owner
+  ├─ command.gate ──→ literal executable/args + ProcessExecutor + attempt evidence
+  ├─ run.artifact ──→ existing ArtifactDao (run id + kind + path only)
+  ├─ workflow-local extension ──→ policy unique to one graph
+  └─ agent.run ──→ model judgment through existing role/executor resolution
+
+resolved workflow + composition baseline
+  └─ static contract checker ──→ field-level graph/effect/artifact/caller diff
+
+repository snapshot + normative task/feature sections
+  └─ ProofInputFingerprint ──→ digest carried by gate/review/verify evidence
+```
+
+The baseline freezes behavior visible at the pipeline boundary: resolved graph, callers, terminal
+states, artifact owners, failure policy, model-query locations, and every action's two effects:
+`stateEffect: read|write|may-write` for repository/corpus inputs and
+`evidenceEffect: none|write` for declared result artifacts. It is checked data, not another
+executor. Unknown or extension-defined actions fail closed as `stateEffect: may-write` until their
+owning capability declares and enforces a narrower contract. An evidence write is proof-neutral only
+when its target is declared, confined, and tagged with the current proof-input digest.
+
+`ProofInputFingerprint` deepens the existing alternate-index snapshot code used by `agent.run`. It
+hashes the working repository outside configured task/feature folders, then combines that tree with
+a canonical projection of normative corpus input: task identity/dependencies plus Background,
+Requirements, Acceptance Criteria, Design, and Plan; feature identity plus Goal, Scope, and
+Acceptance Criteria. Derived Review/Testing/Solution evidence, lifecycle status, timestamps, and
+`.spur/run` artifacts are not proof inputs; their writers must be explicitly declared as evidence
+writes. A write outside those confined projections changes the digest and invalidates the proof.
+
+`command.gate` owns bounded attempts, process execution, PASS/FAIL normalization, and persisted
+attempt evidence. It accepts literal executable/args only and delegates directly to
+`ProcessExecutor`; a compound gate belongs in the named project script, not a runtime shell string.
+`run.artifact` owns safe `.spur/run` path resolution and path-only artifact metadata. Domain
+mutations continue through the normal application/CLI boundaries so task and feature lifecycle
+guards cannot be bypassed. Exact shapes live in
+`docs/design/workflow-composition-contract.md`.
+
+### 20.3 Proof-state invariant
+
+A verification verdict proves one final proof-input digest. Mutating remediation and proof
+establishment are separate phases:
+
+```text
+remediation write|may-write                         → invalidated
+invalidated + quality PASS(digest D)                → quality-passed(D)
+quality-passed(D) + review PASS(D)                  → reviewed(D)
+reviewed(D) + observe-only verify --fix none PASS(D) → verified(D)
+verified(D) + confined evidence write tagged D      → verified(D)
+any state write|may-write or current digest != D    → invalidated
+```
+
+The live `verify:onEnter:0` action is `/sp:dev-verify ... --fix all`; it is therefore
+`stateEffect: may-write`, not `read`, and cannot establish `verified`. The target flow moves all
+remediation before the proof chain, uses a read-only named project script for `command.gate`, and
+runs final verification with `--fix none`. A failed verification may enter one bounded remediation
+hop, but that hop returns to quality, review, and verification on a fresh digest.
+
+Only `verified(D)` may cross the completion boundary, and the boundary re-captures D immediately
+before transition. This statically disqualifies the current `task-pipeline2.yaml`: both its
+editing-capable verify action and post-PASS residual `agent.run` can mutate proof inputs before
+record. Evaluation quota is not spent on that graph; residual logic must become read-only or loop
+through remediation and the entire proof chain.
+
+Enforceable invariants:
+
+1. Every resolved action in a reviewed pipeline declares both state and evidence effects in the checked baseline.
+2. Unknown action kinds and editing-capable model actions are `stateEffect: may-write`, never implicitly `read`.
+3. Quality, review, and final verification evidence must carry the same current proof-input digest.
+4. Any state write, possible state write, or digest mismatch clears all earlier proof stages.
+5. A gate never accepts missing, malformed, or non-token output as PASS.
+6. Evidence metadata contains bounded references and the proof-input digest; file bodies and raw process output never enter the row.
+7. Workflow actions cannot bypass task/feature lifecycle services or direct-write their corpus files.
+
+### 20.4 Canonical topology and migration
+
+The proposed target retains separate workflows where the lifecycle and rollback boundary is real:
+docs, wrap-up, idea/design review, task execution, and integration-HEAD PR review. Planning is a
+duplicate front half and would be absorbed into the canonical idea/dev-plan path, resolving
+ADR-029's deferral only after the taste gate accepts ADR-072.
+`task-pipeline2.yaml` remains a temporary candidate only; the live task pipeline stays authoritative
+until a redesigned delta passes promotion and receives explicit deletion approval.
+
+The proposed migration order keeps rollback local:
+
+1. Baseline every reviewed graph and freeze pipeline2 promotion.
+2. Build projection, gate, artifact, and proof-state prerequisites without migrating a pipeline.
+3. Migrate wrap-up, then docs, with parity and injected-failure fixtures for each.
+4. Absorb planning; remove it only after caller, scaffold, and bundle parity.
+5. Refactor task execution and redesign residual completeness around proof preservation.
+6. Promote the safe delta only after clean comparator, artifact, gate, query-count, and exit parity plus operator approval.
+7. Migrate idea last and invoke PR review once per stable integration HEAD after local gates.
+
+Role selection stays on `agent.run`. Identity-pinned wait/message operations continue to address an
+exact occupant; a role never becomes a mutable coordination address. PR-review pending/unavailable
+stays advisory unless a later policy decision explicitly makes it blocking.
+
+## 21. Workflow Progress Projection (proposed — ADR-070; taste gate pending)
+
+`WorkflowProgressProjection` is a pure application read module built inside `packages/app` beside
+`WorkflowService`; it is not a new engine, DAO schema, or controller. Its narrow interface accepts a
+run id and returns a projection assembled from the resolved definition and existing persisted truth.
+
+### 21.1 Data flow
+
+```text
+run id
+  ├─ definition resolver ──→ resolved states/actions/edges + definition digest
+  ├─ runs ─────────────────→ workflow identity, terminal status, metadata_json.definitionDigest
+  ├─ PhaseRunDao ──────────→ state visits
+  ├─ TransitionRunDao ─────→ taken edges/current state
+  ├─ ActionRunDao ─────────→ attempts, timing, and outcomes
+  └─ ArtifactDao ──────────→ path-only run artifacts
+           │
+           ▼
+  WorkflowProgressProjection ──→ one internal progress DTO + explicit diagnostics
+```
+
+Before the first action, the persistence composition merges `{ definitionDigest }` into the run
+record's existing `metadata_json`; it never replaces the object. The same atomic merge contract is
+used for `dryRun`, while terminal failure and stale-run finalization retain their current keys.
+Existing and unknown metadata keys survive every write. A continued run retains its launch digest;
+a different currently resolved digest becomes `definition-drift`, never an overwrite.
+
+No schema or second progress store is added. Definition actions receive the stable key
+`<state>:<onEnter|onExit>:<ordinal>` after extensions resolve. Persisted action rows currently carry
+`node` and `kind`, not that key, so mapping uses ordered node/kind occurrences within a state visit.
+An ambiguous mapping is surfaced as a diagnostic and never guessed. Definition drift, missing
+launch digests, orphan rows, and unavailable definitions are explicit degraded states.
+
+### 21.2 Follow model
+
+The follower snapshots the latest System Event sequence, queries the complete persisted projection,
+then follows events strictly after the snapshot. A correlated event only wakes a re-query; it never
+changes progress directly. On timeout, disconnect, or event gap, bounded polling re-queries the same
+sources. Duplicate or lost events therefore affect latency, not truth.
+
+Inline execution remains controlled by the host-session driver. A record-only journal writes the
+same run/phase/transition/action observation shapes through the existing persistence interface, but
+cannot execute an action or request a transition. Engine-driven and inline runs consequently share
+one read model without creating a competing controller.
+
+Enforceable invariants:
+
+1. Projection is deterministic for the same definition digest and persisted row set.
+2. System Event payloads never become projection state; every wake-up re-reads persistence.
+3. Poll fallback remains enabled until a persisted terminal run status is observed.
+4. Ambiguous or orphaned rows produce diagnostics and never synthetic success.
+5. Definition-digest writes merge into `runs.metadata_json`; they never erase `dryRun`, `failureReason`, `staleReason`, or unknown keys.
+6. Inline journaling is record-only and cannot influence host execution semantics.
+7. Public trace JSON/human output stays unchanged until an ADR-051 consent decision lands.
+
+Detailed DTO, source mapping, follower sequence, and fixture matrix:
+`docs/design/workflow-observability.md` §D5 detailed progress projection.

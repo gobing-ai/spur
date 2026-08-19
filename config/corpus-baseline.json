@@ -35,6 +35,14 @@
         },
         {
             "kind": "feature",
+            "id": "D5",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Newly linked tasks 0603/0604 are todo; remove this entry once their D5 requirements have PASS verdict evidence.",
+            "since": "2026-08-19"
+        },
+        {
+            "kind": "feature",
             "id": "E2",
             "code": "L4.dogfood-missing",
             "severity": "warning",
@@ -12211,6 +12219,14 @@
             "severity": "warning",
             "reason": "DD-09 subset rule: 0590's AC are parser-behaviour checks for a verdict-tooling defect, an altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0604",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "Intentional execution order: migration task 0604 remains todo until prerequisite infrastructure task 0603 is done.",
+            "since": "2026-08-19"
         }
     ]
 }

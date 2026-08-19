@@ -96,9 +96,23 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         );
     }
 
-    /** Stamp metadata_json for a run (e.g. dryRun flag). */
+    /** Merge metadata into metadata_json using json_patch without replacing existing keys. */
+    mergeMetadata(runId: string, patch: Record<string, unknown>): Promise<void> {
+        return this.adapter.run(
+            `UPDATE runs
+             SET metadata_json = json_patch(
+                 COALESCE(NULLIF(metadata_json, ''), '{}'),
+                 ?1
+             )
+             WHERE id = ?2`,
+            JSON.stringify(patch),
+            runId,
+        );
+    }
+
+    /** Stamp metadata_json for a run (merges patch into metadata_json). */
     stampMetadata(runId: string, metadata: Record<string, unknown>): Promise<void> {
-        return this.adapter.run('UPDATE runs SET metadata_json = ? WHERE id = ?', JSON.stringify(metadata), runId);
+        return this.mergeMetadata(runId, metadata);
     }
 
     /** Merge a terminal workflow failure reason without replacing existing metadata. */

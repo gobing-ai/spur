@@ -43,6 +43,7 @@ import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
+import { computeDefinitionDigest } from '../workflow/composition-baseline';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import type { AgentService } from './agent-service';
@@ -132,6 +133,43 @@ function withSelfPidRecording(inner: WorkflowPersistenceAdapter, db: DbAdapter):
             await new RunDao(db).setPid(runId, process.pid);
         } catch {
             // pid persistence is best-effort; the run proceeds regardless.
+        }
+    };
+    return new Proxy(inner, {
+        get(target, prop, receiver) {
+            if (prop === 'createRun') {
+                return async (record: Parameters<WorkflowPersistenceAdapter['createRun']>[0]): Promise<void> => {
+                    await target.createRun(record);
+                    await stamp(record.id);
+                };
+            }
+            if (prop === 'createOrAttachRun') {
+                return async (record: Parameters<WorkflowPersistenceAdapter['createOrAttachRun']>[0]) => {
+                    const result = await target.createOrAttachRun(record);
+                    await stamp(result.id);
+                    return result;
+                };
+            }
+            const value = Reflect.get(target, prop, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    });
+}
+
+/**
+ * Merge workflow definition digest onto the run row at creation (task 0603).
+ */
+function withDefinitionDigestRecording(
+    inner: WorkflowPersistenceAdapter,
+    db: DbAdapter,
+    definitionDigest?: string,
+): WorkflowPersistenceAdapter {
+    if (!definitionDigest) return inner;
+    const stamp = async (runId: string): Promise<void> => {
+        try {
+            await new RunDao(db).mergeMetadata(runId, { definitionDigest });
+        } catch {
+            // definition digest persistence is best-effort; the run proceeds regardless.
         }
     };
     return new Proxy(inner, {
@@ -570,7 +608,7 @@ export class WorkflowAppService {
         // Stamp dryRun into metadata_json so trace can label dry runs
         if (isDry) {
             const db = await this.ctx.getDb();
-            await new RunDao(db).stampMetadata(runId, { dryRun: true });
+            await new RunDao(db).mergeMetadata(runId, { dryRun: true });
         }
         // R7 (0366): persist terminal failure reason so `workflow trace` can surface
         // `no-passing-transition` (and siblings) rather than only the command result.
@@ -1081,6 +1119,7 @@ export class WorkflowAppService {
             ...(processExec !== undefined ? { processExecutor: processExec } : {}),
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
             agentConfig: agentSlice,
+            getDb: () => this.ctx.getDb(),
         });
         // 0533 R1/R4: register YAML-declared extensions (actions/guards) on the
         // same host run/continue use, before the service is constructed. The
@@ -1095,6 +1134,10 @@ export class WorkflowAppService {
         // `spur workflow cancel` can SIGTERM the live process group.
         if (opts.recordSelfPid === true) {
             persistence = withSelfPidRecording(persistence, db);
+        }
+        if (opts.extensions !== undefined) {
+            const digest = computeDefinitionDigest(opts.extensions.workflow);
+            persistence = withDefinitionDigestRecording(persistence, db, digest);
         }
         const adapter = bus
             ? new ObservableWorkflowAdapter(
