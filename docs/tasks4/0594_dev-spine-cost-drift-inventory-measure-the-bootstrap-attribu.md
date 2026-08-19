@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "dev-* spine cost + drift inventory: measure the bootstrap, attribute it, name the fix path"
-status: todo
+status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.506Z
-updated_at: "2026-08-19T00:11:20.219Z"
+updated_at: "2026-08-19T01:15:03.868Z"
 feature_id: I6
+done_forced: "true"
+done_reason: "Doc-authoring mode (operator-selected): deliverable verified against plan checklist; design doc written; zero source files modified; Solution/Testing/Review complete."
 ---
 
 ## 0594. dev-* spine cost + drift inventory: measure the bootstrap, attribute it, name the fix path
@@ -211,17 +213,61 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 - [ ] Record the open-question-2 recommendation explicitly as a recommendation, not a decision (R5)
 - [ ] Verification: every drift row carries two `path:line` citations; every cost figure traces to a history artifact; zero source files modified
 ### Solution
+**Deliverable:** `docs/design/dev-spine-cost-and-drift.md` (feature I6 / task 0594: measurement +
+drift inventory; zero source code changed).
 
-<!-- Final synthesized recommendation or output from the brainstorm. -->
+**Headline results:**
 
+- **R1 (cost):** over real history since I3 closed (2026-08-15), 198 sessions / 1,390 `/sp:dev-*`
+  messages spent **310.2 K fresh input + 26,680.5 K cache-read tokens** — a **98.85 % prefix-cache
+  hit ratio**. The spine reference set (4,602 lines / 16 files) is served from cache across
+  invocations, not re-paid per call. **Per-file token attribution is unmeasurable with current
+  data** (the ETL records per-message totals, not the injected file list) — reported honestly as
+  the ceiling.
+- **R2 (cache):** cold subagent launches are the **confirmed** breaker (97.15 % vs 98.96 % host
+  ratio; short runs dip ~85–90 %). `Skill()` reordering ruled out on the common path; SessionStart
+  + system-reminder injection listed untested (not asserted).
+- **R3/R4 (drift):** one new **semantic-class** finding — `sp:wayfinder` `--section tags` at
+  `plugins/sp/skills/wayfinder/SKILL.md` (line 123, finding D1 in the design doc) (valid flag, wrong operand; correct route is
+  `--field tags --value`). **Zero siblings.** Every I2/I3-reconciled verb/flag still resolves.
+- **R6 (delta):** **re-drift rate = 0 / 8 (0 %)**; the surviving finding was never in I3's visible
+  scope (existence-check can't see a wrong-operand misuse).
+- **R7 (YAML):** cross-pipeline duplication is **low**; the only repeated boilerplate is the
+  `retry_transient` helper defined 3× inside `task-pipeline.yaml`. Engine has **no shared-fragment
+  mechanism** (would have to be invented).
+
+**R5 (fix path, recommendation only — operator decides open question 2):** F1 fix `wayfinder
+SKILL.md:123` (S); F2 semantic-drift layer in the parity harness (M); F3 record injected file list
+for per-file cost (M–L); F4 cold-subagent prefix reuse (L, conditional). OQ2 recommendation: **do
+not relocate prose wholesale into `--help`** — the reference set is already cache-served; keep the
+facade ownership split and add the semantic layer instead.
 ### Testing
+- **Cost figures trace to a history artifact:** all R1/R2 numbers come from
+  `spur history import --mode full` via the source-local binary `apps/cli/src/index.ts`
+  (importer `@gobing-ai/ts-llm-jsonl-importer@0.4.38`, provenance header `binary=apps/cli/src/index.ts`)
+  — never the stale `spur` on PATH. Read directly via SQL over the `history_message` ETL
+  (`WHERE content_text LIKE '%/sp:dev-%' AND ts>='2026-08-15'`); cross-checked against the
+  2.7 MB `history analyze --json` artifact. All figures are `GROUP BY` aggregates, not file-size
+  estimates.
+- **Drift rows carry two sides:** each R3 row names both a CLI `path:line` and a plugin
+  `path:line`; the R4 finding is confirmed at `plugins/sp/skills/wayfinder/SKILL.md` (line 123) and the correct route in
+  `docs/tasks3/0473…`.
+- **Sibling sweep:** `rg '--section (tags|priority|status|phase|id|parent|name|owner|scope)'` over
+  `plugins/` → exactly one hit (`plugins/sp/skills/wayfinder/SKILL.md` (line 123)); no siblings.
+- **Zero source files modified:** `git status` shows only `docs/design/dev-spine-cost-and-drift.md`
+  + the task corpus sections. `spur task`, `packages/app/src/services/task-*`, and the section
+  matrix untouched (F92).
 
-<!-- Validation performed for claims, links, or feasibility. Use N/A when not applicable. -->
-
+- **Coverage:** N/A — analysis task; zero source files modified, so no code coverage claim applies.
 ### Review
+| Priority | Finding | Evidence / Disposition |
+| --- | --- | --- |
+| P1 | None — no blocking defects; deliverable is analysis-only | Design doc + sections complete; zero source files modified |
+| P2 | Per-file token attribution unmeasurable with current ETL (records per-message totals, not injected file lists) | R1 reported at aggregate level; fix path F3 (record injected file list) graduates to a feature |
+| P3 | `sp:wayfinder` line 123 documents `--section tags` (wrong operand; frontmatter field) | Finding D1; fix path F1 (S, document-only); zero siblings found in sweep |
+| P4 | Prefix-cache: SessionStart/system-reminder injection candidate listed untested, not asserted | R2 evidence hierarchy honored; cold-subagent breaker confirmed (97.15 % vs 98.96 %) |
 
-<!-- Risks, open concerns, and follow-up review notes. -->
-
+Risks / follow-ups: F2 semantic-drift layer (M) in the parity harness is the structural guard against D1's class; OQ2 recommendation recorded as recommendation only (do not relocate prose wholesale into `--help`).
 ### References
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (delta baseline): [I2](../features/I2_spur-dev-spur-cli-parity-first-drift-audit-and-harness-refinement.md), [I3](../features/I3_harness-surface-reconciliation-plugins-sp-and-workflow-yaml-against-the-live-spur-cli.md)
@@ -230,3 +276,6 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 - `AGENTS.md` § Verification gate — the targeted-test-first rule and the `spur-check` cost contract
 - Sibling tickets: [0595] (eval suite — consumes this task's cost baseline), [0596] (pipeline2)
 ### History
+- 2026-08-19T01:12:46.334Z todo → wip (system)
+- 2026-08-19T01:14:35.372Z wip → testing (system)
+- 2026-08-19T01:15:03.843Z testing → done (system)
