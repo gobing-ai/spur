@@ -1,17 +1,17 @@
 # Event tracking — System Event 5W1H SSOT
 
 **Area:** System Event catalog (`SYSTEM_EVENT_CATALOG`), 5W1H payload contract, `*.updated` field-level diff, `workflow.*` legibility.
-**Status:** audit + SSOT (task 0597); remediation ships in its own feature.
+**Status:** current audit baseline (task 0597) + J9 accepted design (ADR-066/067/068; not yet built).
 **Authority:** elaborates `docs/04_DESIGN.md` §7.9 (authoritative on the catalog surface) and `docs/design/actionable-observability-context.md` (authoritative on the v2 envelope and projection policy). This doc does **not** restate their contracts — it defines the *per-event* contract the other two deliberately leave abstract. On conflict, `04_DESIGN.md` §7.9 wins (lower number wins on content, constitution §4.1); on envelope mechanics, `actionable-observability-context.md` wins.
 
 ## 1. Scope and non-goals
 
-This task is an **audit + SSOT only**. It changes no emitter, no catalog entry, and no Board component. It answers two questions and locks the contract that closes them:
+The task-0597 baseline is an **audit + SSOT only**: it changed no emitter, catalog entry, or Board component. J9 now owns the accepted remediation design in §§6–11. This document answers two questions and locks the contract that closes them:
 
 1. Which of the 71 cataloged events actually answer who/what/when/where/why/how?
 2. What convention closes the two concrete operator complaints — `task.updated` never says *what* changed, and `workflow.*` renders raw ids?
 
-Remediation (adding `PlanningEvent.field` / populated `data`, adding `workflowName`+labels to engine-native payloads, Board label rendering) is **out of scope** and graduates into its own feature. The two payload-type options are stated here as decisions for that feature, not implemented.
+Implementation remains out of scope for this design pass. The accepted shape enriches producer data, replaces source-family presentation with event-specific presenters, reprojects derived presentation on history reads, and keeps the Board free of event-specific switches.
 
 ## 2. Root cause (verified — do not re-derive)
 
@@ -140,54 +140,49 @@ Note the precise split for the two operator complaints: **G1 is purely a payload
 
 **Defect (G1):** `task.updated`/`feature.updated` fire on every non-transition mutation but carry no field-level diff, so the Board shows "Task updated" and nothing else. Root cause at `planning-write-service.ts:447-453`; the catalog already advertises the fields (`event-names.ts` planning profile) but `PlanningEvent` (`planning-write-service.ts:110-116`) cannot carry them.
 
-**Convention (contract for the remediation feature):**
+**Accepted J9 contract:** section writes use the existing `PlanningEvent.data` carrier rather than adding an opaque tagged `field` string. The write service copies the successful mutation descriptor after validation and before emission:
 
 ```ts
-interface PlanningEvent {
-    event: 'task.updated' | 'feature.updated';
-    entity: { kind: MarkdownDomain; id: string };
-    at: string;
-    field: string;                 // NEW — changed locus, one of:
-                                   //   'status' | 'section:<Name>' | 'frontmatter:<key>'
-                                   //   | 'frontmatterArray:<key>' | 'body'
-    from?: string | null;          // previous value (null when the field is first set)
-    to?: string;                   // new value
-    data?: { changes: Array<{ field: string; from?: string | null; to?: string }> }; // multi-field writes
+interface PlanningSectionMutationData {
+    mutation: {
+        kind: 'section';
+        name: string;
+    };
+    after?: string;
+    diff?: string;
 }
 ```
 
 Rules:
 
-1. **Single-locus writes** populate `field` + `from` + `to`. The write service already knows the locus at mutation time (`MutationDescriptor` carries `sectionName`, `fmKey`, `fmArrayValue`, `body` — `planning-write-service.ts:159-188`); it must capture the old value **before** `applyMutation` (`planning-write-service.ts:408`) and the new value after.
-2. **Multi-field writes** (rare) populate `data.changes`; the catalog's planning profile must then add a `changes` field or the envelope's `metadata-only` allow-list drops it (presentation follow-on).
-3. `from`/`to` keep their existing transition meaning (`planning-write-service.ts:451-452`); `field` is the new discriminator that makes `updated` distinct from `transitioned`.
-4. **Do not** reuse `data` as a dumping ground for arbitrary business payload — it stays bounded by the `metadata-only` allow-list and recursive redaction (`system-event-envelope.ts` projection).
-
-Remediation option (stated, not implemented): add `field` to `PlanningEvent` and set it + `from`/`to` in the emit block; OR move the catalog to per-event `metadataFields` declarations and emit a `changes` array. The scalar option is the minimal diff and closes G1 because the fields are already cataloged.
+1. `updateSection` emits `data.mutation.kind = 'section'` and the exact canonical `sectionName` as `data.mutation.name`; presenters never parse a synthetic `section:<name>` token.
+2. The event may carry either `after` or a safe `diff` when the write path can produce it without a second parse. Projection redacts first and applies the existing string/object bounds; absence is valid.
+3. Status transitions keep top-level `from` / `to` and remain `*.transitioned`; J9 does not invent another status event.
+4. Other mutation kinds remain generic until separately scoped. `data` is not an arbitrary document dump, and event-specific allow-lists retain only the paths declared for `task.updated` / `feature.updated`.
+5. Existing rows without mutation data render a truthful generic task/feature update; history projection never fabricates a section name.
 
 ## 7. `workflow.*` naming convention
 
 **Defect (G2):** step events render raw uuids — `Run <runId>` / `Node <node>` / `Action <actionId>`. The adapter threads `workflowName` only for run-start (`observability.ts:222-226`) and resolves it once in `envelope()` (`observability.ts:325-333`), but engine-native rows (`workflow.node.enter`, `workflow.action.start`, `workflow.transition.*`, `workflow.hitl.*`, `workflow.custom`) go straight through `bridgeEventBus` (`workflow-service.ts:563`) without that enrichment, and no `nodeLabel` exists anywhere.
 
-**Convention — every `workflow.*` payload must carry, in addition to the machine id:**
+**Accepted J9 convention — every engine-native and persistence-adapter `workflow.*` payload carries the available human identity in addition to machine correlation:**
 
 ```ts
 interface WorkflowEventBase {
-    runId: string;          // machine id (kept — indexed correlation)
-    workflowName: string;   // REQUIRED — human workflow name, resolved once at run create
-    // step-bearing events additionally:
-    node?: string;          // machine node id (kept)
-    nodeLabel?: string;     // REQUIRED on node/phase/action/transition — human step name from the workflow definition
-    kind?: string;          // REQUIRED on action events — 'agent.run' | 'shell' | 'note' | …
+    runId: string;
+    workflowName: string;
+    node?: string;
+    nodeLabel?: string;
+    kind?: string;
 }
 ```
 
 Rules:
 
-1. `workflowName` is mandatory on every `workflow.*` row. The adapter already resolves it (`observability.ts:221`, `:325`); the engine-native bridge (`workflow-service.ts:563`) must enrich the same way, or the catalog `workflowName` field stays unpopulated on half the family.
-2. `nodeLabel` (human step name) is mandatory wherever `node` (machine id) is present. The workflow definition owns the label; the engine/adapter emits it alongside `node`. `kind` remains the *which-kind-of-step* discriminator and must be populated on node/phase events, not just actions.
-3. The Board summary renders `workflowName · nodeLabel (kind)` — e.g. `plan-pipeline · plan (agent.run)` — not `Run <uuid> · Node <uuid>`. The catalog already exposes `workflowName`/`kind` (`event-names.ts` workflow profile); it must add `nodeLabel`.
-4. The id-only problem is **one defect with two halves**: engine-side naming (payload does not carry `nodeLabel`, `workflowName` is not threaded on engine-native rows) and Board-side rendering (summary concatenates raw ids). Both halves are fixed by the convention above; the payload half is the root, the render half is the symptom.
+1. `WorkflowService` creates one identity decorator from the already-loaded definition and passes it to the typed engine bridge, `ObservableWorkflowAdapter`, built-in action runners, and the steering controller. Thus engine-native events, `workflow.agent`, and `workflow.steering` carry the same `workflowName`; no history lookup occurs per event.
+2. Step-bearing events derive `nodeLabel` from the workflow definition (`description` when non-empty, otherwise the declared state/node id). Missing definitions on legacy rows stay missing.
+3. Action events retain `kind`; transition events retain `from` / `to`. Machine `runId`, `node`, and `actionId` remain fields/correlation but never become the primary summary while a human name or kind exists.
+4. Every workflow summary begins `[workflow]` and orders identity as `workflowName`, then `nodeLabel` or transition/action semantics. The Board renders the supplied string.
 
 ## 8. Tier/policy rules and emitter checklist
 
@@ -221,3 +216,121 @@ This is enforceable today as a `spur rule` or a small script the same way `trans
 - `docs/04_DESIGN.md` §7.9 owns the catalog *surface*: tier table, envelope projection, source families, alias policy, producer invariant. This doc adds the per-event 5W1H contract and the two conventions. **Recommendation:** §7.9 stays authoritative; add one line pointing to `design/event-tracking.md` for the per-event contract, rather than shrinking §7.9 to a pointer (the surface rules are still load-bearing for the tap/SSE implementation).
 - `docs/design/actionable-observability-context.md` owns the v2 envelope and projection policy. This doc's diff convention (§6) and naming convention (§7) operate **inside** the envelope `data`/`presentation` it defines; no envelope shape change is proposed here.
 - `docs/design/workflow-observability.md` owns the workflow runtime contract and envelope-v1 fields (`workflowName`, `runId`, `sequence`). §7 of this doc is the Board-legibility convention layered on top of that runtime contract, not a replacement.
+
+## 11. J9 semantic presenter contract (accepted design — not yet built)
+
+`SYSTEM_EVENT_PRESENTERS` is a typed record over `SystemEventName`. The catalog resolves each name to one presenter;
+source profiles may still supply producer attribution or remediation defaults, but may not supply descriptions,
+retained fields, summaries, or outcome policy.
+
+```ts
+interface SystemEventPresentationInput {
+    data: Readonly<Record<string, unknown>> | null;
+    correlation: Readonly<SystemEventCorrelationContext>;
+}
+
+type SystemEventOutcomeSpec =
+    | { support: 'derived'; derive(input: SystemEventPresentationInput): string | undefined }
+    | { support: 'unsupported' };
+
+interface SystemEventPresenterSpec {
+    description: string;
+    fields: readonly SystemEventMetadataField[];
+    summary(input: SystemEventPresentationInput): string;
+    outcome: SystemEventOutcomeSpec;
+}
+
+const SYSTEM_EVENT_PRESENTERS = {
+    // exactly one entry per SystemEventName
+} satisfies Record<SystemEventName, SystemEventPresenterSpec>;
+```
+
+Rules:
+
+1. Presenters receive only redacted/bounded `data` plus normalized correlation. The envelope applies output bounds
+   again before persistence or response.
+2. `description` is an authored diagnostic sentence. Generated `"<event name> lifecycle event"` text fails the gate.
+3. `fields` is event-specific. Shared field-array helpers are allowed; implicit inheritance from a source family is not.
+4. A `derived` outcome may return `undefined` when an old row lacks its source fact. `unsupported` always omits Outcome.
+5. Unknown, unregistered names use the existing bounded generic fallback outside this registry.
+
+The following matrix fixes summary behavior, retained facts, and outcome support. Braces denote carried bounded data;
+`—` means explicitly unsupported, not missing design.
+
+| Event | Retained facts | Summary | Outcome source |
+| --- | --- | --- | --- |
+| `task.created` | `entity.kind`, `entity.id` | `[task] {id} created` | — |
+| `task.updated` | `entity.*`, `data.mutation.*`, `data.after`, `data.diff` | `[task] {section}`; old-row fallback `[task] {id}` | — |
+| `task.transitioned` | `entity.*`, `from`, `to` | `[task] {id} : {from} -> {to}` | `to` |
+| `feature.created` | `entity.kind`, `entity.id` | `[feature] {id} created` | — |
+| `feature.updated` | `entity.*`, `data.mutation.*`, `data.after`, `data.diff` | `[feature] {section}`; old-row fallback `[feature] {id}` | — |
+| `feature.transitioned` | `entity.*`, `from`, `to` | `[feature] {id} : {from} -> {to}` | `to` |
+| `queue.consumer.started` | `queueName`, `startedAt`, polling/concurrency settings | `[queue] {queueName} : consumer started` | `startedAt` → `running` |
+| `queue.consumer.stopped` | `queueName`, `stoppedAt`, `drainTimeoutMs`, `inFlightAtStop`, `drained` | `[queue] {queueName} : consumer stopped` | `drained` → `drained` / `timeout` |
+| `queue.job.enqueued` | `jobId`, `type`, enqueue/retry timing | `[queue] {type} · job {jobId} enqueued` | — |
+| `queue.job.completed` | `jobId`, `type`, `attempt`, `durationMs` | `[queue] {type} · job {jobId} completed` | — |
+| `queue.job.failed` | `jobId`, `type`, attempts, `durationMs`, `error` | `[queue] {type} · job {jobId} failed` | `error` |
+| `queue.job.retrying` | `jobId`, `type`, attempts, `nextRetryAt`, `error` | `[queue] {type} · job {jobId} retrying` | `attempt` / `maxRetries` |
+| `queue.stats` | ready/running/completed/failed counts | `[queue] stats` | — |
+| `scheduler.job.executed` | `name`, `durationMs`, `error` | `[scheduler] {name}` | `error` when present; otherwise `completed` |
+| `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
+| `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
+| `process.spawned` | `label`, `pid`, `teamId`, `agentId` | `[process] {label|pid} spawned` | — |
+| `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label|pid} exited` | `exitCode` / `signal` / `reason` |
+| `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label|pid} stopped` | `reason` |
+| `process.started` | `label`, `pid`, `timestamp` | `[process] {label|pid} started` | — |
+| `agent.invoke.start` | agent/operation/label, routing, correlation | `[agent] {agent} · {operation}` | — |
+| `agent.invoke.exit` | agent/operation/label, routing, `exitCode`, `signal`, `durationMs` | `[agent] {agent} · {operation} exited` | `exitCode` / `signal` |
+| `agent.invoke.escalated` | from/to executor+tier, `trigger` | `[agent] {fromExecutor} -> {toExecutor}` | `toTier` / `trigger` |
+| `agent.invoke.exhausted` | `stage`, attempted tiers/executors, `attempts` | `[agent] {stage} escalation exhausted` | `attempts` |
+| `agent.started` | `agentId`, `agentType`, `pid` | `[agent] {agentId} started` | — |
+| `agent.stopped` | `agentId`, `exitCode` | `[agent] {agentId} stopped` | `exitCode` |
+| `agent.message.sent` | `agentId`, `ok` | `[agent] message -> {agentId}` | `ok` |
+| `team.up` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} up` | `outcome` |
+| `team.down` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} down` | `outcome` |
+| `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |
+| `team.member.started` | team/member/type, `outcome` | `[team] {teamId} · {memberId} started` | `outcome` |
+| `team.member.stopped` | team/member/type, `outcome` | `[team] {teamId} · {memberId} stopped` | `outcome` |
+| `history.import.completed` | source(s), files/messages, duration, exit code, artifact | `[history] import · {source|sources}` | `exitCode` |
+| `history.analyze.completed` | source(s), duration, exit code, artifact | `[history] analyze · {source|sources}` | `exitCode` |
+| `history.daily.failed` | source(s), `detail`, `reason`, `exitCode` | `[history] daily failed` | `reason` / `exitCode` |
+| `history.refresh.enqueued` | `trigger`, `jobId`, window, coalesced/refreshed/skipped | `[history] refresh · {windowStart} -> {windowEnd}` | `reason` when skipped |
+| `rule.run.start` | `runId`, rule count, evaluator | `[rule] run {runId} started` | — |
+| `rule.eval.start` | `runId`, `ruleId`, evaluator, index/total | `[rule] {ruleId} evaluating` | — |
+| `rule.eval.done` | `runId`, `ruleId`, findings count, duration, severity | `[rule] {ruleId} evaluated` | `findings` |
+| `rule.eval.error` | `runId`, `ruleId`, evaluator, `error` | `[rule] {ruleId} error` | `error` |
+| `rule.run.done` | `runId`, rules/findings, duration, stoppedEarly, severity | `[rule] run {runId} done` | `findings` / `stoppedEarly` |
+| `workflow.run.started` | `runId`, `workflowName`, mode, dryRun | `[workflow] {workflowName} started` | — |
+| `workflow.run.done` | `runId`, `workflowName`, `finalState`, transitionsTaken | `[workflow] {workflowName} done` | `finalState` |
+| `workflow.run.failed` | `runId`, `workflowName`, `finalState`, `reason` | `[workflow] {workflowName} failed` | `reason` |
+| `workflow.run.finalized` | `runId`, `workflowName`, `status` | `[workflow] {workflowName} finalized` | `status` |
+| `workflow.run.paused` | `runId`, `workflowName`, `node`, `nodeLabel`, transitionsTaken | `[workflow] {workflowName} · {nodeLabel} paused` | — |
+| `workflow.run.resumed` | `runId`, `workflowName`, `node`, `nodeLabel` | `[workflow] {workflowName} · {nodeLabel} resumed` | — |
+| `workflow.run.reseeded` | `runId`, `workflowName`, `fromState`, `toState` | `[workflow] {workflowName} : {fromState} -> {toState}` | `toState` |
+| `workflow.node.enter` | `runId`, `workflowName`, `node`, `nodeLabel`, transitionsTaken | `[workflow] {workflowName} · {nodeLabel}` | — |
+| `workflow.phase` | `runId`, `workflowName`, `phase`, `status` | `[workflow] {workflowName} · {phase}` | `status` |
+| `workflow.node.transition` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} : {from} -> {to}` | `to` |
+| `workflow.transition` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} : {from} -> {to}` | `to` |
+| `workflow.transition.requested` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} requested {from} -> {to}` | — |
+| `workflow.transition.denied` | `runId`, `workflowName`, `from`, `to`, `reason` | `[workflow] {workflowName} denied {from} -> {to}` | `reason` |
+| `workflow.action.start` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} started` | — |
+| `workflow.action.started` | `runId`, `workflowName`, node identity, action id, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} started` | — |
+| `workflow.action.done` | run/workflow/node/action identity, `kind`, duration, `ok` | `[workflow] {workflowName} · {nodeLabel|kind} done` | `ok` |
+| `workflow.action.finished` | run/workflow/node/action identity, `kind`, duration, `status`, `ok` | `[workflow] {workflowName} · {nodeLabel|kind} finished` | `status` / `ok` |
+| `workflow.action.failed_continue` | run/workflow/node identity, transitionsTaken, `error` | `[workflow] {workflowName} · {nodeLabel} failed; continuing` | `error` |
+| `workflow.guard.evaluated` | `runId`, `workflowName`, `from`, `to`, `kind`, `passed` | `[workflow] {workflowName} guard {from} -> {to}` | `passed` |
+| `workflow.hitl.ask` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} awaiting input` | — |
+| `workflow.hitl.response` | `runId`, `workflowName`, node identity, `ok` | `[workflow] {workflowName} · {nodeLabel} input received` | `ok` |
+| `workflow.hitl.note` | `runId`, `workflowName`, node identity | `[workflow] {workflowName} · {nodeLabel} note` | — |
+| `workflow.custom` | `runId`, `workflowName`, custom `name` | `[workflow] {workflowName} · {name}` | — |
+| `workflow.agent` | run/execution/action identity, `kind`, agent/model/routing, terminal facts | `[workflow] {workflowName} · agent {kind}` | `outcome` only for `kind=finished` |
+| `workflow.steering` | run/action/command identity, operation, actor, accepted/state/reason | `[workflow] {workflowName} · steering {operation}` | `accepted` / `state` / `reason` |
+| `api.request.error` | `method`, `path`, `status`, `code`, `requestId`, error | `[api] {method} {path}` | `status` / `code` / `error` |
+| `bus.emit.done` | `event`, `handlers`, `durationMs` | `[bus] {event} emitted` | `handlers` |
+| `bus.emit.noop` | `event`, `handlers`, `durationMs` | `[bus] {event} had no handlers` | `handlers` |
+| `bus.handler.error` | `event`, `handlers`, `durationMs`, `error` | `[bus] {event} handler error` | `error` |
+| `bus.handler.async.enqueued` | `event`, `handlers` | `[bus] {event} handlers enqueued` | `handlers` |
+
+The deterministic gate compares matrix event names with `SYSTEM_EVENT_CATALOG` in both directions and validates each
+resolved catalog entry has non-generated description text, an explicit field list, a summary function, and exactly one
+outcome support branch. It does not generate TypeScript or Markdown from the other side.

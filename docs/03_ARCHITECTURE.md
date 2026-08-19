@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.24.0
+version: 1.25.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-16
+updated_at: 2026-08-19
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -684,6 +684,61 @@ Invariants:
 - Trace stores remain replay authority; System Events never reconstruct workflow or rule traces.
 
 Shapes: `docs/design/actionable-observability-context.md`.
+
+### 16.1 J9 semantic presentation (accepted design — ADR-066/067/068; not yet built)
+
+J9 deepens the existing observability seam instead of adding a client or transport seam. Catalog membership and
+operational policy remain in `event-names.ts`; an exhaustive presenter registry owns event-specific description,
+retained fields, summary, and outcome support. `system-event-envelope.ts` remains the only composition boundary for
+redaction, bounds, correlation, remediation, and the canonical v2 envelope. The Board consumes that result and owns
+only generic table/tooltip chrome.
+
+| Module | Ownership |
+| --- | --- |
+| Event producers | Emit facts known at mutation/execution time; never presentation prose. |
+| `SYSTEM_EVENT_CATALOG` | Name, tier, payload policy, producer attribution, remediation policy, and resolved presenter metadata. |
+| `SYSTEM_EVENT_PRESENTERS` | One typed entry per catalog name: authored description, fields, summary function, and derived/unsupported outcome policy. |
+| Envelope projector | Redact and bound facts before invoking a presenter; compose one canonical `presentation`. |
+| History projector | Preserve stored v2 `data`/`context`; recompute only `presentation` without a ledger write. |
+| Board | Render canonical semantics; choose generic tooltip identity from correlation and row id without event-name switches. |
+
+```text
+fresh producer payload
+  → catalog payload policy → redacted/bounded data + correlation
+  → event-name presenter → canonical presentation
+  → same envelope shape → system_events and SSE
+
+stored legacy payload
+  → fresh projection path (response only)
+
+stored canonical v2 envelope
+  → preserve stored data + context
+  → current event-name presenter → replacement presentation (response only)
+```
+
+Producer enrichment stays at the narrowest owner:
+
+- `PlanningWriteService` copies the successful `updateSection` mutation's section name and bounded after-value or safe
+  diff into `task.updated` / `feature.updated`; transitions keep their existing `from` / `to` facts.
+- `WorkflowService` builds one run-scoped identity decorator from the loaded definition and uses it for engine-native
+  events, the persistence adapter, built-in action observability (`workflow.agent`), and steering acknowledgements.
+  It supplies `workflowName`, a definition-derived step label when a step exists, and action `kind` where known;
+  machine ids remain correlation fields, not primary summary text.
+- `@gobing-ai/ts-infra` adds an optional configured queue identity to `QueueConsumerConfig` and both consumer lifecycle
+  details. Spur supplies its real composition-root name and consumes a released dependency version; no local payload
+  cast or job-type substitution stands in for the upstream contract.
+
+Invariants (enforceable):
+
+- Every catalog name has exactly one presenter; unknown out-of-catalog names alone use the bounded generic fallback.
+- Presenters receive only bounded projected data and normalized correlation, never the raw producer payload.
+- A derived outcome is a pure function of carried data; unsupported or missing historical facts omit Outcome.
+- Reprojection never changes stored `data`, stored `context`, indexed correlation columns, or the ledger row.
+- React contains no event-specific summary, outcome, description, or field switch.
+- Catalog names and the `event-tracking.md` semantic matrix are checked in both directions.
+
+Shapes and the per-event matrix: `docs/design/actionable-observability-context.md` and
+`docs/design/event-tracking.md`.
 
 ## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
 

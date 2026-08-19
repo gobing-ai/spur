@@ -2,8 +2,8 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** implemented (tasks 0526–0528).
-**Decision:** ADR-056.
+**Status:** J5 foundation implemented (tasks 0526–0528); J9 semantic presentation accepted design, not yet built.
+**Decision:** ADR-056, amended by ADR-066/067/068.
 
 ## System Event envelope
 
@@ -48,6 +48,23 @@ metadata and bounded nested metadata objects; message bodies, prompts, command e
 business payloads, complete rule finding arrays, and stdout/stderr are excluded. Configured secrets
 and credential patterns are redacted before the per-string and aggregate bounds.
 
+## System Event semantic presentation (accepted design — J9; not yet built)
+
+The v2 envelope shape does not change. The presentation step changes from generic source-family formatting to the
+exhaustive event-name presenter contract in [`event-tracking.md`](event-tracking.md) §11.
+
+Projection order is fixed:
+
+1. apply the event's catalog payload policy, redaction, and recursive bounds;
+2. extract and bound correlation;
+3. pass only bounded `data` and correlation to the event-name presenter;
+4. compose severity, authored description, event-specific fields, summary, optional outcome, and remediation action;
+5. re-apply presentation string/field-count bounds before persistence, streaming, or response.
+
+Each presenter declares at most eight ordered tooltip fields; the list is the intentional display set, not a blind
+slice of a larger source-family list. Lower-value bounded data stays in expanded detail. The generic presenter is
+reserved for unknown out-of-catalog names and failure isolation.
+
 ## Projection paths
 
 | Path | Input | Output |
@@ -56,13 +73,16 @@ and credential patterns are redacted before the per-string and aggregate bounds.
 | CLI planning emitter | catalog entry + planning payload + CLI project context | same envelope persisted to `system_events` |
 | SSE | catalog entry + bus payload + server project context | same envelope in the event frame |
 | History legacy row | catalog entry + raw stored payload + request project context | envelope in the response only |
+| History canonical v2 row (J9 design) | stored bounded `data` + stored `context` | same facts + current `presentation` in the response only |
 
 Envelope construction is failure-isolated. Unknown names use a bounded generic presentation;
 malformed optional values are omitted, never fabricated.
 
-The implementation boundary is `packages/app/src/services/system-event-envelope.ts`:
+The current J5 implementation boundary is `packages/app/src/services/system-event-envelope.ts`:
 `buildSystemEventEnvelope` is the only fresh-write/SSE builder, while
-`projectStoredSystemEventEnvelope` preserves canonical v2 rows and adapts legacy raw rows on read.
+`projectStoredSystemEventEnvelope` preserves canonical v2 rows and adapts legacy raw rows on read. J9 changes the
+second behavior per ADR-067: a valid stored v2 row keeps the exact stored `data` and `context` values and receives a
+new `presentation` from the current presenter. The returned object is response-only; the DAO performs no update.
 Server and CLI composition roots inject the current project and configured secret values. The
 catalog in `event-names.ts` supplies each producer package, subsystem, a last-resort default
 severity, description, retained metadata fields, and remediation kind. Upstream ts-libs
@@ -119,6 +139,12 @@ context and is constant for a Board view.
 The event-name tooltip renders `description`, `fields`, producer, and optional action. It is
 available by hover and focus, can be pinned for selection/copy, and closes with Escape or outside
 activation. Raw redacted JSON stays in expanded detail rather than dominating the tooltip.
+
+J9 changes only the generic tooltip shell. Its title is `eventName · correlator`, choosing entity, run, execution,
+action, then job identity and finally the persisted history-row id. If a live row has none of those stable values, the
+title remains the event name until the persisted row is read; the client never manufactures an id. Copy/pin guidance
+moves from the title to a muted footer whose text reflects hover versus pinned mode. Visual tokens and interaction
+placement remain owned by root `DESIGN.md`.
 
 `parseHistoryRow` and the SSE parser narrow the envelope once at the network boundary. The parsed
 semantic view feeds both table and tooltip; canonical `data` is unwrapped into the existing

@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.21.0
+version: 1.22.0
 owner: Robin Min
-updated_at: 2026-08-16
+updated_at: 2026-08-19
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -810,3 +810,33 @@ change with structurally-dependent hops.
 define the upstream standard contract.
 
 **Detail:** task 0600; `config/plugin-scripts.json`; `plugins/sp/scripts/script-contract-check.ts`.
+
+## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
+
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
+
+**Decision.** Every cataloged System Event resolves through a typed, event-name-keyed server presenter that owns its authored description, retained fields, summary behavior, and explicit outcome derivation or unsupported classification; clients render the canonical result and do not interpret event payloads.
+
+**Why.** One exhaustive event-specific authority prevents source-family defaults and client switches from drifting across persistence, SSE, history, table, and tooltip views.
+
+**Detail:** `03 §16.1`; `docs/design/event-tracking.md` §11; `docs/design/actionable-observability-context.md` §System Event semantic presentation.
+
+## ADR-067: Stored Event Facts Are Stable; Derived Presentation Reprojects on Read
+
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Amends:** ADR-056 · **Feature:** J9
+
+**Decision.** A valid stored canonical v2 System Event keeps its persisted `data` and `context` unchanged, while history reads recompute only `presentation` through the current catalog presenter; no ledger row is rewritten.
+
+**Why.** Stored facts are evidence, while summary, description, fields, outcome, and action are view policy that can improve without mutating that evidence.
+
+**Detail:** `03 §16.1`; `docs/design/actionable-observability-context.md` §Projection paths.
+
+## ADR-068: Missing Event Semantics Are Captured at the Producing Boundary
+
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
+
+**Decision.** Facts absent from bounded event data are added where they are known: planning mutations emit their section locus, workflow composition emits workflow and step identity, and the upstream queue-consumer contract emits its configured queue name; presenters and clients never infer or backfill absent facts.
+
+**Why.** Reconstructing identity or outcome from unrelated configuration, job types, or event names would turn diagnostic presentation into a guess.
+
+**Detail:** `03 §16.1`; `docs/design/event-tracking.md` §§6–7/11.

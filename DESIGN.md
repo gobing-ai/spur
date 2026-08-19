@@ -492,6 +492,9 @@ the shared canvas/surface/hairline/type tokens above.
 - Event-name tooltip uses `surface-3`, a strong hairline, mono value rows, a 400 px minimum when
   space permits, and a viewport-bounded maximum. Hover and keyboard focus open the same content;
   pinning makes it selectable for copy; Escape and outside activation close it.
+- J9 accepted design (not yet built): the tooltip title is `eventName · correlator`, using the best
+  available entity/run/execution/action/job identity and falling back to the persisted history-row
+  id. Copy/pin instructions move to a muted footer; hover and pinned modes use their own guidance.
 - Expanded detail owns raw redacted JSON and lower-value catalog metadata. The tooltip owns what
   happened, why it matters, and the next safe action.
 - Below 640 px, collapse to Time + Event and stack summary, producer/correlation, outcome, and action
