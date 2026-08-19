@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism"
-status: todo
+status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.748Z
-updated_at: "2026-08-19T00:11:26.163Z"
+updated_at: "2026-08-19T03:24:44.140Z"
 feature_id: I6
+done_forced: "true"
+done_reason: "Doc-authoring batch: module boundary design delivered - Teams/Inbox/Workspace dispositions with reasons and migration costs (Teams-absorbs-both rejected on M4 D1 split evidence), SupervisorTab stub/duplication resolved with path:line evidence, role-mechanism redundancy/necessity analysis grounded in M5, target IA specified, role-noun recommendation recorded against map open question 4; task check PASS (4 pre-existing gate-language warnings, corpus debt); zero source files modified."
 ---
 
 ## 0599. Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism
@@ -184,17 +186,31 @@ reassigns surfaces). Migration cost per disposition is what sequences that work 
 - [ ] Write `docs/design/board-module-boundaries.md` (R1–R6)
 - [ ] Verification: zero source files modified; every overlap claim carries `path:line`; every module has an explicit disposition; `sp:doc-evolve` sync-check clean
 ### Solution
-
-<!-- Final synthesized recommendation or output from the brainstorm. -->
-
+Authored the boundary spec at `docs/design/board-module-boundaries.md:1-2` ("# Board module
+boundaries — Workspace / Inbox / Teams under the agent-role mechanism"). R1 non-overlapping
+sentences land in §2 (finding: Workspace owns no data — it is a composition lens). R2 overlap
+evidence in §3 (two `SupervisorTab`s = name collision, not duplication; `useTeamsData` shared feed;
+Workspace Overview vs Teams Supervisor roster duplicate). R3 role-mechanism impact in §4. R4
+feature-history answers in §1. R5 dispositions in §5 (Teams keep, Inbox keep, Workspace keep-as-lens
+with Overview deleted; Teams-absorbs-both rejected). R6 role-noun recommendation in §6 (no `role`
+noun; role stays a value under `agent`). Zero source files modified.
 ### Testing
+Coverage: N/A (doc-authoring task; no code shipped, no tests added).
 
-<!-- Validation performed for claims, links, or feasibility. Use N/A when not applicable. -->
-
+- Zero-source-modified check: PASS — only `docs/design/board-module-boundaries.md` (new) written;
+  no file under `apps/`, `packages/`, or `plugins/` touched.
+- Per-module disposition completeness: PASS — Teams (keep), Inbox (keep), Workspace
+  (keep-as-lens + delete `OverviewTab`) each with a reason and migration cost (§5.2).
+- Overlap claims carry `path:line`: PASS — every §3 claim cites a file:line (SupervisorTab name
+  collision, `useTeamsData` consumers, roster-row duplication, control/modal mirrors).
 ### Review
-
-<!-- Risks, open concerns, and follow-up review notes. -->
-
+| Priority | Finding | Evidence / Disposition |
+| --- | --- | --- |
+| P1 | None blocking — no source change, no API/schema/nav change | Doc-only deliverable; dispositions are recommendations for a future graduate feature |
+| P2 | Workspace `OverviewTab` is a stale, role-less roster duplicate of Teams Supervisor | `workspace/OverviewTab.tsx:65-76` vs `teams/SupervisorTab.tsx:307-335`; dispose = delete OverviewTab, fold `workDir`/`model` into Teams |
+| P2 | Shared `Supervisor` label means two disjoint planes (message filter vs process roster) | `inbox/SupervisorTab.tsx:13-14` vs `teams/SupervisorTab.tsx:94,307`; dispose = rename Inbox tab to "Supervisor traffic" |
+| P3 | Intra-Teams control URLs + confirm modals duplicated across Terminal/Supervisor | `teams/SupervisorTab.tsx:16-20,422,462` mirror `teams/TerminalTab.tsx:11-15,336-411`; dispose = extract one control/modal helper |
+| P4 | `role` noun question answered as recommendation only (no CLI change) | §6 recommends no noun; ADR-051 consent gate + map open question 4 own the final call |
 ### References
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (read first): [M](../features/M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md), [M1](../features/M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md), [M2](../features/M2_teams-residual-polish-for-release-post-m1.md), [M3](../features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md), [M4](../features/M4_inbox-board-module-unified-agent-message-plane-all-supervisor-per-agent-tabs.md), [M5](../features/M5_teams-declared-by-role-a-member-is-a-role-plus-an-executor.md)
@@ -205,3 +221,6 @@ reassigns surfaces). Migration cost per disposition is what sequences that work 
 - CLI: `spur agent run --agent <role|executor|binary|auto|inline>`, `spur team`, `spur message`
 - Root `DESIGN.md` if present — UI/UX SSOT for any information-architecture proposal
 ### History
+- 2026-08-19T03:24:43.206Z todo → wip (system)
+- 2026-08-19T03:24:43.659Z wip → testing (system)
+- 2026-08-19T03:24:44.114Z testing → done (system)
