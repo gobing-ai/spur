@@ -4,7 +4,7 @@ name: "Event 5W1H audit + the event-tracking SSOT design doc"
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.250Z
-updated_at: "2026-08-19T03:09:50.674Z"
+updated_at: "2026-08-19T03:50:00.314Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring batch: event 5W1H SSOT delivered - 71/71 catalog events matrix-verified (scripted count, 0 missing), *.updated diff convention + workflow.* naming convention specified, reconciled with actionable-observability-context.md and 04_DESIGN.md 7.9; task check PASS; zero source files modified."
@@ -192,16 +192,16 @@ The catalog therefore promises a field the payload type cannot carry — a contr
 (`PlanningEvent.field` / `data`) and whether `event()` gains a per-event override. State both as
 options in the doc; do not implement either.
 ### Plan
-- [ ] Enumerate all 71 `SYSTEM_EVENT_CATALOG` entries programmatically; do not hand-list (R1)
-- [ ] For each, locate the emit site and record its actual payload shape with `path:line` (R1)
-- [ ] Score each event on who/what/when/where/why/how as present, partial, or absent (R1)
-- [ ] Classify each gap as payload-side (emitter never captured it) or presentation-side (payload has it, catalog/renderer drops it); rank (R2)
-- [ ] Document the `*.updated` diff gap from the verified root cause at `planning-write-service.ts:441`, and specify the field-level diff convention that closes it (R3)
-- [ ] Audit the `workflow.*` family for id-only rendering; specify the naming convention that makes workflow + step legible without a uuid lookup (R4)
-- [ ] Read `docs/design/actionable-observability-context.md`, `workflow-observability.md`, and `docs/04_DESIGN.md` §7.9; record what each already owns (R5)
-- [ ] Write `docs/design/event-tracking.md`: 5W1H contract, diff convention, workflow naming, tier/policy rules, emitter checklist; cross-reference rather than restate (R5)
-- [ ] Assess whether the catalog can be generated from the SSOT or must be gate-checked against it; recommend one with reasoning (R6)
-- [ ] Verification: the matrix covers all 71 entries; every root-cause claim carries `path:line`; zero source files modified; `sp:doc-evolve` sync-check clean
+- [x] Enumerate all 71 `SYSTEM_EVENT_CATALOG` entries programmatically; do not hand-list (R1)
+- [x] For each, locate the emit site and record its actual payload shape with `path:line` (R1)
+- [x] Score each event on who/what/when/where/why/how as present, partial, or absent (R1)
+- [x] Classify each gap as payload-side (emitter never captured it) or presentation-side (payload has it, catalog/renderer drops it); rank (R2)
+- [x] Document the `*.updated` diff gap from the verified root cause at `planning-write-service.ts:441`, and specify the field-level diff convention that closes it (R3)
+- [x] Audit the `workflow.*` family for id-only rendering; specify the naming convention that makes workflow + step legible without a uuid lookup (R4)
+- [x] Read `docs/design/actionable-observability-context.md`, `workflow-observability.md`, and `docs/04_DESIGN.md` §7.9; record what each already owns (R5)
+- [x] Write `docs/design/event-tracking.md`: 5W1H contract, diff convention, workflow naming, tier/policy rules, emitter checklist; cross-reference rather than restate (R5)
+- [x] Assess whether the catalog can be generated from the SSOT or must be gate-checked against it; recommend one with reasoning (R6)
+- [x] Verification: the matrix covers all 71 entries; every root-cause claim carries `path:line`; zero source files modified
 ### Solution
 Wrote the audit + 5W1H contract SSOT at `docs/design/event-tracking.md:1` (title line names the SSOT) — a single doc delivering all six requirements, with zero source-file modifications (doc-authoring mode).
 

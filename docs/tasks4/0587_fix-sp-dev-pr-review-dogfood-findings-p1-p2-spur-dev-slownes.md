@@ -13,7 +13,7 @@ tags: ["review"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T07:06:36.802Z"
-updated_at: "2026-08-18T17:43:48.541Z"
+updated_at: "2026-08-19T03:45:38.329Z"
 ---
 
 ## 0587. Fix sp-dev-pr-review dogfood findings (P1/P2) + spur-dev slowness levers (P3)
@@ -254,7 +254,7 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `plugins/sp/scripts/pr-reviewing.ts:532-541` — base resolved with the same predicate as `cmdEnsurePr`, refusal placed after the dirty check and before `writeStatus(args,'PASS')`; `config/workflows/pr-review.yaml:69` passes `--base "$baseBranch"` into preflight; `:217` names the refusal in the failure transition; `plugins/sp/skills/pr-reviewing/SKILL.md:138-143` documents it. `bun test plugins/sp/tests/pr-reviewing.test.ts --test-name-pattern preflight` → 8 pass / 0 fail. |
-| R2 | MET | `plugins/sp/scripts/pr-reviewing.ts:443-455` `resolveUpstream()` — non-fatal `run()`, `0` fallback on unparseable counts, resolved once at `:533`, consumed by the human line `:552` and the additive JSON field `:546`. Stub extended at `plugins/sp/tests/pr-reviewing.test.ts:302-303`, seeds at `:360-361`. |
+| R2 | MET | `plugins/sp/scripts/pr-reviewing.ts:443-455` `resolveUpstream()` — non-fatal `run()`, `0` fallback on unparseable counts, resolved once at `:533`, consumed by the human line `:552` and the additive JSON field `:546`. Divergence output asserted at `plugins/sp/tests/pr-reviewing.test.ts:526-536`. |
 | R3 | MET | `config/workflows/task-pipeline.yaml:88-93` (`gateProbeCmd` + invariant comment) and `:398-434` (probe-then-full). `spur workflow validate .spur/workflows/task-pipeline.yaml` → `workflow valid: task-pipeline`, rc 0 this run. Smoke: `.spur/run/0587smoke-red6.log` ends at the lint failure with no `FULL_GATE_RAN` (full gate skipped) and `-red6.findings` holds the anchor; `-green.log` shows probe then `FULL_GATE_RAN`; `-empty.log` is `FULL_GATE_RAN` alone. |
 | R4 | MET | Deliverable is the recorded decision, and both measurements are pasted in the task (`### Requirements` R4, `### Design` D3, `### Q&A`): controlled timing pair 64.68s (`coverage = false`) vs 65.77s (`coverage = true`) → ~1.1s / 1.7%; isolated flag-precedence probe on Bun 1.3.14 → `coverage = false` + `--coverage` yields no reporter output and no `.coverage/lcov.info`, `coverage = true` yields both. Decision "lever dropped" is enacted: `bunfig.toml:8` reads `coverage = true`, `package.json` has no `test:coverage` script, and `git diff HEAD --stat -- package.json AGENTS.md config/rules/quality/coverage-gate.yaml bunfig.toml` is empty. |
 
@@ -262,7 +262,7 @@ Each entry cites the first changed line per file (`file:line`).
 |---------------------|--------|---------------|----------|
 | AC1. Base-branch refusal proven by unit test | MET | test | `plugins/sp/tests/pr-reviewing.test.ts:441` — test covering the base-branch refusal across all three sub-states; the resolved-base override case is the next test in the same file. 8 preflight tests pass / 0 fail this run. |
 | AC2. No push reachable from the refusal | MET | test | `plugins/sp/tests/pr-reviewing.test.ts:450` — the refusal test asserts the fixture call log records no push; the same assertion repeats in the resolved-base override test. |
-| AC3. Divergence output asserted | MET | test | `plugins/sp/tests/pr-reviewing.test.ts:475` — `preflight passes on a feature branch and reports upstream divergence`, asserting ahead 2 / behind 1 in both output forms; the missing-upstream case is the following test in the same file. |
+| AC3. Divergence output asserted | MET | test | `plugins/sp/tests/pr-reviewing.test.ts:526` — `preflight passes on a feature branch and reports upstream divergence`, asserting ahead 2 / behind 1 in both output forms; the missing-upstream case is the following test in the same file. |
 | AC4. Live repro on the base branch | PARTIAL | command | Not executable in this environment: `bun plugins/sp/scripts/pr-reviewing.ts preflight --json` on `main` exits 2 on `gh CLI missing or unauthenticated` — `gh auth status` fails (keyring) in the sandbox — and the tree is dirty, so both earlier guards fire before the base-branch check is reached. Covered instead by AC1's in-process tests, which drive the same `main()` path with stubbed git/gh. |
 | AC5. lint green + pr-reviewing suite green | MET | command | `bun run lint` exit 0 after the reverts; `bun test plugins/sp/tests/pr-reviewing.test.ts` → 56 pass / 0 fail (16.5s) |
 | AC6. workflow validate + red-path smoke | MET | command | `spur workflow validate .spur/workflows/task-pipeline.yaml` rc 0; smoke artifacts `.spur/run/0587smoke-{red6,green,empty}.{log,status,findings}` show probe-only on red, probe+full on green, full-only when `gateProbeCmd` is empty |

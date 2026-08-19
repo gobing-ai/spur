@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T23:28:49.554Z"
-updated_at: "2026-08-17T05:14:14.635Z"
+updated_at: "2026-08-19T04:16:43.495Z"
 ---
 
 ## 0575. Authoring-time task size warning on spur task create / update --section (ADR-051 consent pending)
@@ -98,7 +98,7 @@ Corrected here rather than deferred, per the `--depth ready` premise-verificatio
 **Q12 (refine 2026-08-16): Why the `warnings[]` channel instead of a direct stderr write?** The
 original design said "thin wiring in `apps/cli/src/commands/task.ts`". Reading the current code
 changed the answer: `updateSection` already returns `warnings?: string[]` (`task-service.ts:191`) and
-`checkAcSubsetWarning` (`:1138-1145`) is an existing section-scoped check that folds findings into it.
+`checkAcSubsetWarning` (`:1144-1151`) is an existing section-scoped check that folds findings into it.
 The CLI already renders that channel in both modes — stderr in human mode (`task.ts:315-317`), inside
 the payload under `--json` (`:313`). Riding it means **no `apps/cli` change at all**, automatic
 `--json` correctness, and composition with other warnings. A direct stderr write from the CLI would
@@ -141,7 +141,7 @@ rather than deferred, per the advisory's own second option.
 - `TaskSizeReport` (`:21`) = `{ reqCount, planItemCount, ok, reasons }`. **Emit `report.reasons` verbatim** — it already contains the exact strings (`Task has N R-items (max 5). Consider decomposing…`, `:132-144`). Do not compose new message text; identical wording at authoring time and pipeline time is the point.
 - Emission channel is the existing `warnings?: string[]` on the mutation result (`task-service.ts:191`). **No CLI change is required**: `apps/cli/src/commands/task.ts:315-317` already loops `result.warnings` to `context.output.error` (stderr) in human mode, and `:313` already serialises the whole result — warnings included — under `--json`.
 
-**Precedent to mirror exactly.** `checkAcSubsetWarning` (`task-service.ts:1138-1145`) is the same shape: a section-scoped check that runs after the write and folds its findings into `warnings[]` via `{...result, warnings: [...(result.warnings ?? []), ...extra]}`. Follow that spread pattern so multiple warning sources compose instead of overwriting.
+**Precedent to mirror exactly.** `checkAcSubsetWarning` (`task-service.ts:1144-1151`) is the same shape: a section-scoped check that runs after the write and folds its findings into `warnings[]` via `{...result, warnings: [...(result.warnings ?? []), ...extra]}`. Follow that spread pattern so multiple warning sources compose instead of overwriting.
 
 **Algorithm / precedence.**
 
@@ -163,7 +163,7 @@ rather than deferred, per the advisory's own second option.
 **Handoff.** No `dependencies[]` and no dependents. Split from task 0568 on 2026-08-16 (0568 kept R2–R6 and is unblocked); nothing in 0568 waits on this.
 ### Plan
 - [x] Confirm ADR-051 consent is recorded before writing code — this task is parked; a recorded operator decision is the entry condition, not a formality (R1, R2)
-- [x] Add the size evaluation to `TaskService.updateSection` mirroring `checkAcSubsetWarning` (`task-service.ts:1138-1145`): gate on `sectionName === 'Requirements' || sectionName === 'Plan'`, re-read the post-write body, `evaluateTaskSize(content)`, spread `report.reasons` into `warnings[]` when `!report.ok` (R1)
+- [x] Add the size evaluation to `TaskService.updateSection` mirroring `checkAcSubsetWarning` (`task-service.ts:1144-1151`): gate on `sectionName === 'Requirements' || sectionName === 'Plan'`, re-read the post-write body, `evaluateTaskSize(content)`, spread `report.reasons` into `warnings[]` when `!report.ok` (R1)
 - [x] Unit tests in `packages/app/tests/services/`: a 6-R-item Requirements write returns the `Task has 6 R-items (max 5)` reason in `warnings[]`; a 5-R-item write returns no size warning; a 9-item Plan write warns on plan items; every case still returns a successful mutation result (R1)
 - [x] Verify both output modes against a scratch task: human mode prints the reason on **stderr** via the existing `task.ts:315-317` loop, `--json` carries the identical string inside `warnings[]`, and the exit code is `0` in both (R1)
 - [x] Document the surface in `docs/04_DESIGN.md` under `spur task update` — trigger sections, the `DEFAULT_TASK_SIZE_LIMITS` owner, and the non-blocking contract — in the same commit as the code (T3) (R2)
@@ -171,7 +171,7 @@ rather than deferred, per the advisory's own second option.
 ### Solution
 Implemented R1 + R2 as a single write-seam change; no CLI, plugin, or precheck code touched.
 
-**R1 — service seam.** `TaskService.updateSection` gains one post-write branch (`packages/app/src/services/task-service.ts:1149`): when the section written is `Requirements` or `Plan`, the method re-reads the whole post-write task body via `this.ctx.fs.readFile(filePath)` and calls `evaluateTaskSize(content)` with no `executor` argument (import at `packages/app/src/services/task-service.ts:46`). When `report.ok === false`, `report.reasons` are appended onto the write result's `warnings[]` (`packages/app/src/services/task-service.ts:1156`), composing with — never overwriting — any warnings the write service itself produced. This mirrors the existing DD-09 AC-subset fold (`packages/app/src/services/task-service.ts:1138`) exactly: evaluation runs only after the mutation has landed, so the warning can never block or change the exit code, and the thresholds stay solely owned by `DEFAULT_TASK_SIZE_LIMITS` in `packages/app/src/services/task-size-precheck.ts:33` — no duplicated constants. Whole-body re-read (not the section body) is deliberate: a conforming Plan write onto a task that already carries 6 R-items still surfaces the R-item reason.
+**R1 — service seam.** `TaskService.updateSection` gains one post-write branch (`packages/app/src/services/task-service.ts:1155`): when the section written is `Requirements` or `Plan`, the method re-reads the whole post-write task body via `this.ctx.fs.readFile(filePath)` and calls `evaluateTaskSize(content)` with no `executor` argument (import at `packages/app/src/services/task-service.ts:46`). When `report.ok === false`, `report.reasons` are appended onto the write result's `warnings[]` (`packages/app/src/services/task-service.ts:1162`), composing with — never overwriting — any warnings the write service itself produced. This mirrors the existing DD-09 AC-subset fold (`packages/app/src/services/task-service.ts:1144`) exactly: evaluation runs only after the mutation has landed, so the warning can never block or change the exit code, and the thresholds stay solely owned by `DEFAULT_TASK_SIZE_LIMITS` in `packages/app/src/services/task-size-precheck.ts:33` — no duplicated constants. Whole-body re-read (not the section body) is deliberate: a conforming Plan write onto a task that already carries 6 R-items still surfaces the R-item reason.
 
 **Rendering — zero CLI change.** `task update --section` already prints every `result.warnings[]` entry to stderr in human mode and serializes them inside the JSON payload (`apps/cli/src/commands/task.ts:317`), so both acceptance renderings fall out of the service change; verified end-to-end against a rebuilt `apps/cli/spur.js` in an isolated `--folder` corpus.
 
@@ -187,7 +187,7 @@ Implemented R1 + R2 as a single write-seam change; no CLI, plugin, or precheck c
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/task-service.ts:1150-1163 — post-write advisory branch inside updateSection: gate the Requirements-or-Plan section gate (:1155), whole-post-write-body re-read via `evaluateTaskSize(await this.ctx.fs.readFile(filePath))` (:1156), reasons folded into existing `warnings[]` channel (:1157-1162); import at :46 reuses task-size-precheck (no executor arg, no threshold duplication). Unit: packages/app/tests/services/task-service.test.ts:1883-1954, 5 tests, file suite 106/106 pass re-run this session. E2E this run against real CLI ./apps/cli/spur.js in scratch corpus /tmp/0575v: (P1) 6-R-item Requirements write → exit 0, stderr `Task has 6 R-items (max 5). Consider decomposing into smaller tasks or raise maxImplementReqs via --vars.`, `**R6.**` present on disk after write; (P2) same write --json → identical string inside `warnings[]`, stdout valid JSON per jq -e, stderr empty, exit 0; (P3) conforming 5-R-item Requirements and 8-item Plan writes → no stderr (human) and no `warnings` key (--json); (P4) 1-step Plan write onto the 6-R-item task still warns on R-count (whole-body counting); (P5) Background write on the oversize task → no evaluation, no warning. |
+| R1 | MET | packages/app/src/services/task-service.ts:1156-1169 — post-write advisory branch inside updateSection: gate the Requirements-or-Plan section gate (:1161), whole-post-write-body re-read via `evaluateTaskSize(await this.ctx.fs.readFile(filePath))` (:1162), reasons folded into existing `warnings[]` channel (:1163-1168); import at :46 reuses task-size-precheck (no executor arg, no threshold duplication). Unit: packages/app/tests/services/task-service.test.ts:1883-1954, 5 tests, file suite 106/106 pass re-run this session. E2E this run against real CLI ./apps/cli/spur.js in scratch corpus /tmp/0575v: (P1) 6-R-item Requirements write → exit 0, stderr `Task has 6 R-items (max 5). Consider decomposing into smaller tasks or raise maxImplementReqs via --vars.`, `**R6.**` present on disk after write; (P2) same write --json → identical string inside `warnings[]`, stdout valid JSON per jq -e, stderr empty, exit 0; (P3) conforming 5-R-item Requirements and 8-item Plan writes → no stderr (human) and no `warnings` key (--json); (P4) 1-step Plan write onto the 6-R-item task still warns on R-count (whole-body counting); (P5) Background write on the oversize task → no evaluation, no warning. |
 | R2 | MET | docs/04_DESIGN.md:1330 — `spur task update <wbs> <status>` row now carries "**Authoring-time size warning (0575 R1):** a `--section Requirements` or `--section Plan` write re-evaluates the whole post-write task body via `evaluateTaskSize` against `DEFAULT_TASK_SIZE_LIMITS` (max 5 R-items / max 8 Plan items — the same caps the pipeline precheck enforces, sole owner of the thresholds)" plus the non-blocking warnings[] contract (stderr in human mode, inside payload under --json). Gates re-run this session: `bun run lint` (biome check --error-on-warnings + full typecheck) exit 0; `spur task check 0575` → PASS with 3 pre-accepted L4 advisories (missing feature_id deferred with owner per task Q&A; gate-language warnings accepted deliberately in Q&A). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
@@ -210,7 +210,7 @@ Implemented R1 + R2 as a single write-seam change; no CLI, plugin, or precheck c
 - **ADR-051** — `docs/00_ADR.md:436` "Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate". The consent gate this task is parked behind.
 - **Parent task 0568** — `docs/tasks4/0568_fix-0567-run-process-bottlenecks-plan-time-size-gate-verdict.md`. This task was its R1 until the 2026-08-16 split; 0568 kept R2–R6.
 - **Size service (reuse target)** — `packages/app/src/services/task-size-precheck.ts`: `evaluateTaskSize` `:112`, `TaskSizeReport` `:21`, `DEFAULT_TASK_SIZE_LIMITS` `:33`, `countRItems` `:81`, `countPlanItems` `:91`, reason strings `:132-144`.
-- **Emission precedent** — `packages/app/src/services/task-service.ts`: `warnings?: string[]` `:191`, `checkAcSubsetWarning` fold `:1138-1145`.
+- **Emission precedent** — `packages/app/src/services/task-service.ts`: `warnings?: string[]` `:191`, `checkAcSubsetWarning` fold `:1144-1151`.
 - **CLI render points (no change needed)** — `apps/cli/src/commands/task.ts`: `--json` serialise `:313`, human-mode warning loop `:315-317`.
 - **Parity gate to keep green** — `plugins/sp/tests/task-size-precheck.test.ts:76` ("plugin large-task thresholds stay aligned with the application defaults").
 - **Hard gate that stays authoritative** — `plugins/sp/scripts/task-size-precheck.ts` (pipeline precheck; task 0454 R2, task 0487 R3).

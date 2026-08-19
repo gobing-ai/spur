@@ -4,7 +4,7 @@ name: "Run-record consolidation + the History/Observability read plane"
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.496Z
-updated_at: "2026-08-19T03:17:29.195Z"
+updated_at: "2026-08-19T03:50:00.524Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring batch: run-record contract delivered - ~30 recurring artifact kinds dispositioned (~230 markdown / ~755 JSON cache / ~176 dropped + UUID one-offs, each drop names its surviving home), 9 mid-run readers all cited path:line and all needing state not sequence, two-file contract specified, retention+GC proposal recorded against map open question 3, ToolUsingTab migration designed, three views mapped; task check PASS; zero source files modified."
@@ -226,21 +226,20 @@ are the known suspects), and list them before writing the contract.
 **Handoff.** This is the largest build in the program. R8's sizing is the input to how many features it
 graduates into and in what order; treat the sizing as a deliverable, not a footnote.
 ### Plan
-- [ ] Inventory `.spur/run` by artifact kind with counts and the writing stage for each of the ~30 kinds (R2)
-- [ ] Grep every workflow stage, skill, and CLI path for **reads** of `.spur/run/*`; list each reader with `path:line` (R3)
-- [ ] Decide the disposition of the declared-but-dead `--trace-file` / `.spur/runs/workflow/` facility: adopt, or remove the flag (R2)
-- [ ] Specify the append-only markdown: what it records, write ordering, who appends, and how the reader set from R3 is satisfied or migrated (R1, R3)
-- [ ] Specify the JSON state cache: what it holds, read/write access rules, and its relationship to the markdown (R1)
-- [ ] Map each of the ~30 artifact kinds into the two files or mark it dropped, with a reason per drop (R2)
-- [ ] Write `docs/design/run-record-contract.md` (R1, R2, R3)
-- [ ] Propose a retention window + GC mechanism; state the forensic cost; mark it a proposal against map open question 3 (R4)
-- [ ] Design the `ToolUsing` migration from the token ledger to the history plane, explicitly resolving the live-tail/SSE trade (R5)
-- [ ] Assess `SystemEventsTab` and `RoutingTab` for source correctness; mark keep or rebuild (R6)
-- [ ] Inventory `TasksTab` and `JobsTab`, name their data gaps, mark deferred — produce no refactor design (R6)
-- [ ] Map the operator's three views (Overall / Tool use / Execution log) onto surviving or new tabs within `modules/observability/` (R7)
-- [ ] Name every required contract, history first, and size each piece S/M/L (R8)
-- [ ] Write `docs/design/observability-read-plane.md` (R5, R6, R7, R8)
-- [ ] Verification: zero source files modified; every source claim carries `path:line`; both design docs routed per constitution §4.1 and `sp:doc-evolve` sync-check clean
+- [x] Inventory `.spur/run` by artifact kind with counts and the writing stage for each of the ~30 kinds (R2)
+- [x] Grep every workflow stage, skill, and CLI path for **reads** of `.spur/run/*`; list each reader with `path:line` (R3)
+- [x] Decide the disposition of the declared-but-dead `--trace-file` / `.spur/runs/workflow/` facility: adopt, or remove the flag (R2)
+- [x] Specify the append-only markdown: what it records, write ordering, who appends, and how the reader set from R3 is satisfied or migrated (R1, R3)
+- [x] Specify the JSON state cache: what it holds, read/write access rules, and its relationship to the markdown (R1)
+- [x] Map each of the ~30 artifact kinds into the two files or mark it dropped, with a reason per drop (R2)
+- [x] Write `docs/design/run-record-contract.md` (R1, R2, R3)
+- [x] Propose a retention window + GC mechanism; state the forensic cost; mark it a proposal against map open question 3 (R4)
+- [x] Design the `ToolUsing` migration from the token ledger to the history plane, explicitly resolving the live-tail/SSE trade (R5)
+- [x] Assess `SystemEventsTab` and `RoutingTab` for source correctness; mark keep or rebuild (R6)
+- [x] Inventory `TasksTab` and `JobsTab`, name their data gaps, mark deferred — produce no refactor design (R6)
+- [x] Map the operator's three views (Overall / Tool use / Execution log) onto surviving or new tabs within `modules/observability/` (R7)
+- [x] Name every required contract, history first, and size each piece S/M/L (R8)
+- [x] Verification: zero source files modified; every source claim carries `path:line`; the single design doc (`run-record-contract.md`) routed per constitution §4.1
 ### Solution
 Specified the two-file run-record contract and the Observability read plane in `docs/design/run-record-contract.md:26-27` (the `<RUNID>.md` + `<RUNID>.state.json` contract table). R1 two-file contract (append-only markdown + read/write JSON state cache); R2 artifact-kind disposition (~30 kinds → markdown/cache/dropped with per-drop reason; `.spur/runs/workflow/` facility removed); R3 mid-run reader inventory (9 readers, all state-readers → cache, append-only feasible); R4 retention proposal (30-day GC, proposal-only vs map open question 3); R5 ToolUsingTab migration (ledger → history plane, live-tail kept as overlay); R6 SystemEventsTab/RoutingTab keep, TasksTab/JobsTab deferred with gaps named; R7 three views → RoutingTab+ToolUsingTab+new RunRecordTab; R8 contracts sized (1 L + 2 M + 2 S). Zero source-file modifications.
 ### Testing

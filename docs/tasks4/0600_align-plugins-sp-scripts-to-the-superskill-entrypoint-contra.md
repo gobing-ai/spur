@@ -4,9 +4,10 @@ name: "Align plugins/sp scripts to the superskill entrypoint contract and record
 status: todo
 template: feature-impl
 created_at: 2026-08-19T00:06:00.238Z
-updated_at: "2026-08-19T00:17:14.588Z"
+updated_at: "2026-08-19T04:00:18.993Z"
 feature_id: I
 ac_numbering: task-local
+ac_altitude: task-local
 ---
 
 ## 0600. Align plugins/sp scripts to the superskill entrypoint contract and record the ADR
@@ -245,7 +246,7 @@ Rule 3 is what makes it two-sided: a new script cannot be added without declarin
 - Do not write the ADR before the alignment lands; R8 records what was done, not what is planned.
 
 #### Cross-task
-**Depends on superskill task 0121** (feature H1) *only for R3*: until `script convert` rejects Bun
+**Depends on the superskill repo's `script convert` task** (feature H1, `portable-plugin-scripts-via-install-time-staging`) *only for R3*: until `script convert` rejects Bun
 globals, a twin can be generated that fails under Node while convert reports success. R1, R2, R6 and
 the gate's rule-4 half are independent and may land first. Nothing here modifies the superskill repo.
 ### Plan

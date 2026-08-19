@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0583"]
 ac_numbering: task-local
 created_at: "2026-08-18T05:05:25.709Z"
-updated_at: "2026-08-18T22:39:12.093Z"
+updated_at: "2026-08-19T03:45:52.890Z"
 ---
 
 ## 0586. Honor accepted baseline debt in the per-task gate, then promote anchor-subject-mismatch to error
@@ -220,7 +220,7 @@ one copy command — the pattern feature F91 used four times.
 - `packages/app/src/index.ts:58-66` — exported `BaselineEntry`, `CorpusSeverity`, and `loadAcceptedFindings`.
 - `packages/app/src/services/task-check.ts:458-506` — updated `check()` options to accept `accepted?: ReadonlyMap<string, CorpusSeverity>` and passed it through to `summarizeWithStatus` (R1).
 - `apps/cli/src/commands/task.ts:1114-1175` and `:1473-1492` — imported `loadAcceptedFindings` and passed `accepted` to `svc.check()` in the task check command handler and `runDoneGateCheck` backstop (R1).
-- `.spur/config.yaml:211-213` — promoted `L4.anchor-subject-mismatch: error` under `tasks.severity` (R4).
+- `.spur/config.yaml:216-217` — promoted `L4.anchor-subject-mismatch: error` under `tasks.severity` (R4).
 - `config/corpus-baseline.json` — updated all 364 `L4.anchor-subject-mismatch` entries to `severity: error` matching the promotion contract, plus 4 shifted historical tasks (0476, 0582, 0583, 0584) (R4).
 - `docs/04_DESIGN.md:1374` — updated `spur task check` specification in §7.1 with the accepted baseline debt contract (T3).
 - `packages/app/tests/services/corpus-check.test.ts:699-740` — unit tests for `loadAcceptedFindings` degradation and parsing (R1).
@@ -235,7 +235,7 @@ one copy command — the pattern feature F91 used four times.
 | R1 | MET | `packages/app/src/services/corpus-check.ts:675` (`loadAcceptedFindings(cwd)` → `Map<key, CorpusSeverity>`); consumed at `packages/app/src/services/planning-check-base.ts:213` (`accepted?: ReadonlyMap<…>`) and applied at `:228-233`. Injected, never read from disk by the service — the CLI owns file access. Test: "R1: baselined finding at matching error severity is dropped and passes check" |
 | R2 | MET | Acceptance is severity-matched — `acceptedSev === f.severity` at `packages/app/src/services/planning-check-base.ts:231`. Identity is the shared `key()` (`packages/app/src/services/planning-check-base.ts:28`, re-exported by `packages/app/src/services/corpus-check.ts:106`), so there is exactly one matcher. Tests: "R2: baseline entry at warning does NOT cover an error finding" and "R2: under strict mode, finding elevated to error is not covered by warning baseline" |
 | R3 | MET | `packages/app/tests/services/corpus-check.test.ts` gained tests but **no existing test was modified** — the only deletion across both suites is the import line, reformatted to add `loadAcceptedFindings`. Suites green: 167 pass / 0 fail |
-| R4 | MET | `.spur/config.yaml:212` (`L4.anchor-subject-mismatch: error`); all **368** baseline entries for the code carry `severity: error`. Live gate reconciles clean with the code under the error tally: `error 1996 observed / 733 baselined`, 0 new, 0 stale |
+| R4 | MET | `.spur/config.yaml:216-217` (`L4.anchor-subject-mismatch: error`); all **368** baseline entries for the code carry `severity: error`. Live gate reconciles clean with the code under the error tally: `error 1996 observed / 733 baselined`, 0 new, 0 stale |
 | R5 | MET | Both directions pinned. Forward: "R5: unbaselined mismatch fails the check". Load-bearing proof this run — disabling the acceptance lookup makes the R1 test **fail**, restoring it makes it pass. **AC5 measured live:** ten tasks sampled across `docs/tasks{,2,3,4}` (0020, 0089, 0166, 0232, 0303, 0412, 0496, 0516, 0553, 0583) each report `pass=true, err=0` under the live promotion |
 | R6 | MET | The matcher is untouched — `git diff --stat` on `task-check.test.ts` shows additions only, and every subject-matching test passes unedited within the 167-pass run |
 

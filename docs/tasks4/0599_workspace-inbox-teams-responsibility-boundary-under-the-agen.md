@@ -4,7 +4,7 @@ name: "Workspace / Inbox / Teams responsibility boundary under the agent-role me
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.748Z
-updated_at: "2026-08-19T03:24:44.140Z"
+updated_at: "2026-08-19T03:50:00.726Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring batch: module boundary design delivered - Teams/Inbox/Workspace dispositions with reasons and migration costs (Teams-absorbs-both rejected on M4 D1 split evidence), SupervisorTab stub/duplication resolved with path:line evidence, role-mechanism redundancy/necessity analysis grounded in M5, target IA specified, role-noun recommendation recorded against map open question 4; task check PASS (4 pre-existing gate-language warnings, corpus debt); zero source files modified."
@@ -174,17 +174,17 @@ three non-overlapping sentences.
 **Handoff.** The dispositions become the graduated feature(s) under `M` (or `J`/`K` if the answer
 reassigns surfaces). Migration cost per disposition is what sequences that work — carry it.
 ### Plan
-- [ ] Read features M, M1, M2, M3, M4, M5 and record which boundary questions they already answered (R4)
-- [ ] Write one non-overlapping sentence per module for Workspace, Inbox, Teams; if one cannot be written without referencing another, record that as the finding (R1)
-- [ ] Compare `inbox/SupervisorTab.tsx` (50) against `teams/SupervisorTab.tsx` (502); establish stub / delegation / duplication before labelling it (R2)
-- [ ] Sweep all three modules for shared data sources, duplicated renders, and shared components; cite `path:line` per claim (R2)
-- [ ] State what the role mechanism made redundant and what it made newly necessary, grounded in M5's landed "role plus executor" model (R3)
-- [ ] Evaluate the Teams-absorbs-both hypothesis explicitly; accept or reject with reasons (R5)
-- [ ] Emit a disposition per module — keep / merge into X / delete — each with reason and migration cost (R5)
-- [ ] Specify the target information architecture: nav entries, tabs, and what each answers (R5)
-- [ ] Recommend on the `role` CLI noun, framed as promote-value-to-noun or not; mark it a recommendation against map open question 4 (R6)
-- [ ] Write `docs/design/board-module-boundaries.md` (R1–R6)
-- [ ] Verification: zero source files modified; every overlap claim carries `path:line`; every module has an explicit disposition; `sp:doc-evolve` sync-check clean
+- [x] Read features M, M1, M2, M3, M4, M5 and record which boundary questions they already answered (R4)
+- [x] Write one non-overlapping sentence per module for Workspace, Inbox, Teams; if one cannot be written without referencing another, record that as the finding (R1)
+- [x] Compare `inbox/SupervisorTab.tsx` (50) against `teams/SupervisorTab.tsx` (502); establish stub / delegation / duplication before labelling it (R2)
+- [x] Sweep all three modules for shared data sources, duplicated renders, and shared components; cite `path:line` per claim (R2)
+- [x] State what the role mechanism made redundant and what it made newly necessary, grounded in M5's landed "role plus executor" model (R3)
+- [x] Evaluate the Teams-absorbs-both hypothesis explicitly; accept or reject with reasons (R5)
+- [x] Emit a disposition per module — keep / merge into X / delete — each with reason and migration cost (R5)
+- [x] Specify the target information architecture: nav entries, tabs, and what each answers (R5)
+- [x] Recommend on the `role` CLI noun, framed as promote-value-to-noun or not; mark it a recommendation against map open question 4 (R6)
+- [x] Write `docs/design/board-module-boundaries.md` (R1–R6)
+- [x] Verification: zero source files modified; every overlap claim carries `path:line`; every module has an explicit disposition
 ### Solution
 Authored the boundary spec at `docs/design/board-module-boundaries.md:1-2` ("# Board module
 boundaries — Workspace / Inbox / Teams under the agent-role mechanism"). R1 non-overlapping
