@@ -1,0 +1,778 @@
+# Task execution pipeline 2 — rival pipeline (feature I6, task 0596): task-pipeline.yaml
+# plus a residual-sweep stage. NOT promoted — task-pipeline.yaml stays the default.
+#
+# Delta from task-pipeline.yaml:
+#   1. `verify` PASS now routes to `residual-sweep` (operator's manual fallback, wired
+#      into the FSM) before `record`/commit — it no longer depends on the operator
+#      remembering to type the prompt.
+#   2. The two-layer plan (Layer 1 = stages; Layer 2 = the active stage's onEnter steps)
+#      is sourced from `workflow run --dry-run` + the parsed definition and rendered by
+#      the inline driver (see inline-pipeline-driver.md § Two-layer plan) — zero engine
+#      change, consumption-only.
+#
+# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the existing
+# dual-workflow engine — zero new engine code. The pipeline NEVER touches files
+# directly — `record` writes via `spur task update --section`, and status moves go
+# through the normal `spur task update <wbs> <status>` verb so the lifecycle guards
+# (0055) apply identically. Run linkage is written to `task_run_links` (kind=pipeline).
+#
+# Shape: precheck → implement → test[→test-fix↔test-recheck] → review → approve(HITL)
+#        → verify → record → done
+#        (precheck failure short-circuits to `failed`; approve routes to `failed` on
+#        operator rejection or `cancelled` on operator cancel — R1, bug-750).
+#        `test` is the project quality gate (shell + bounded /sp:dev-fixall), not
+#        /sp:dev-unit (coverage gap-fill; router C3/C5).
+#
+# Vars (passed as a JSON object via `--vars`):
+#   wbs                       — task WBS (required)
+#   profile                   — "auto" skips HITL approve (R4)
+#   agent / spurBin           — executor + spur binary (CLI overrides spurBin)
+#   stepTimeoutMs             — agent.run budget for review/verify/test-fix (ms)
+#   implementTimeoutMs        — implement agent.run budget (ms)
+#   qualityGateCmd            — project gate (default: bun run autofix && bun run spur-check)
+#   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
+#
+# Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
+
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: task-pipeline2
+description: "Rival task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → residual-sweep → record → done"
+# Task entity lifecycle (owned by task-lifecycle.yaml):
+#   normal: backlog → todo → wip → testing → done
+#   blocked is bidirectional with todo/wip/testing; done may reopen to wip.
+#   any non-terminal state may transition to cancelled.
+# Guards:
+#   wip → testing:  spur task check <wbs>
+#   testing → done: spur task check <wbs> --strict-core, then PASS-verdict provenance
+# Invalid: todo → testing, todo → done, and wip → done.
+# Pipeline states below are orchestration states, not task statuses.
+iterationBound: 20
+initialState: precheck
+terminalStates:
+  - done
+  - failed
+  - cancelled
+failureStates:
+  - failed
+  - cancelled
+vars:
+  wbs: "0000"
+  profile: "standard"
+  # PATH-independent spur invocation for shell guards/actions. The CLI overrides this
+  # at run start (resolveSpurBin); the literal default is a safe fallback so direct/dry
+  # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
+  spurBin: "spur"
+  # Agent the pipeline's agent.run steps invoke. Override per run with
+  # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
+  # selection) so a broken/misconfigured agent on the box can't silently capture the run.
+  agent: "omp"
+  # Implement-only executor override (R1, task 0454). Resolves to this YAML literal
+  # unless overridden. The `--agent` flag (execution-batch.md §3.2) forwards into BOTH
+  # `agent` and `implementAgent`, so a pinned `--agent X` reaches implement too. To
+  # pin ONLY implement while other hops keep the default, pass
+  # `--vars '{"implementAgent":"omp-zai"}'`.
+  implementAgent: "omp"
+  # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
+  # Soft quality-gate shells are unbounded by this var (host shell only).
+  # Raised 600s → 1800s (task 0398 R4 / H6 dogfood). Override:
+  # `--vars '{"stepTimeoutMs":"120000"}'`. 30 min is headroom, not a licence to
+  # run unbounded — if a hop still hits this wall, STOP and record it.
+  stepTimeoutMs: "1800000"
+  # Timeout for the `implement` step specifically (R2a). Implementation is the
+  # heaviest agent.run step (full read/write/test-probe loop) and has timed out
+  # at the 600s default in five consecutive dogfood runs (bugs 742/744/746/748),
+  # a 100% failure rate at that budget. 30 min gives real headroom; STOP and
+  # record honestly rather than raising it further without operator sign-off.
+  implementTimeoutMs: "1800000"
+  # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
+  # Empty by default; only meaningful once the approve state has been entered.
+  __hitlAnswer: ""
+  # Residual-sweep prompt subject (R4). The operator's verbatim fallback prompt is
+  # templated over this noun phrase so both forms stay verbatim. Single-task default
+  # "current task"; a feature batch overrides it via `--vars`:
+  #   --vars '{"residualSweepTarget":"these tasks for current feature"}'
+  residualSweepTarget: "current task"
+  # Project quality gate for the `test` hop (probe + fixall + recheck). Override per project
+  # with the same package-manager surface (this monorepo is Bun-only):
+  # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
+  # and the fixall slash input all use this same var so the command stays single-sourced.
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
+  # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
+  qualityGateCmd: "bun run format && bun run spur-check"
+  # Cheap red-detector run before the full gate on **recheck only**; empty ⇒ no probe
+  # (full gate every recheck — the pre-0587 behavior). A project overriding qualityGateCmd
+  # should override this too. TRUSTED CONFIG ONLY — executed via `sh -c` (same surface as
+  # qualityGateCmd). Invariant: `review` is only ever entered through a full green
+  # qualityGateCmd — only the full gate writes PASS to <wbs>-test-gate.status.
+  gateProbeCmd: "bun run lint"
+  # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
+  # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
+  qualityGateMaxFixAttempts: "2"
+  # Post-implement auto-format. Overridable like qualityGateCmd so a non-Bun seeded
+  # project can point it at its own formatter; invoked best-effort (a missing or
+  # failing formatter must never abort a run — the quality gate is the real gate).
+  formatCmd: "bun run format"
+  # Bounded `file:line` anchors extracted from the failing quality-gate log by the
+  # `test` / `test-recheck` hops (deduped, max 20, space-separated on one line).
+  # `test-fix` reads `.spur/run/<wbs>-test-gate.findings` into this var and names the
+  # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
+  # file:line instead of re-deriving it from a fresh gate run (0482 R3).
+  gateFindings: ""
+  # Max R-items in ## Requirements before size precheck fails (R2, task 0454).
+  # Override with `--vars '{"maxImplementReqs":"12"}'`.
+  maxImplementReqs: "5"
+  # Max checklist items under ## Plan before size precheck fails (R2, task 0454).
+  # Override with `--vars '{"maxImplementPlanItems":"15"}'`.
+  maxImplementPlanItems: "8"
+  # Diff-scope guard on the implement hop (R1, task 0487). When the target task
+  # body backticks at least one path, non-corpus changes outside those paths
+  # fail the step by name. New files beside a declared file are allowed. Empty
+  # (default) = on; set to "off" to bypass:
+  # `--vars '{"implementScopeGuard":"off"}'`.
+  implementScopeGuard: ""
+
+states:
+  - id: precheck
+    description: >
+      Pre-flight: soft agent doctor + transition guards for doctor PASS and
+      `spur task check <wbs>`. Failures route to the `failed` terminal state
+      (not a raw lifecycle abort mid-enter).
+    onEnter:
+      # Soft doctor — write status and always exit 0 so transitions can branch to
+      # `failed` cleanly (same pattern as the quality-gate soft probe).
+      #
+      # R2 (0487): probe BOTH resolved executors ($agent and $implementAgent) and
+      # FAIL on `authenticated: unauthenticated`. Previously only $agent was probed
+      # and auth was informational, so a run whose implement executor had no
+      # provider key sailed through precheck into a guaranteed implement failure
+      # (runs e8cb00e7 / b16bfbf4: "auth: no … API key not found for provider
+      # 'volc'" → precheck ✓). `unknown` auth keeps the old soft behavior — some
+      # agents expose no auth-status verb. `spur agent doctor` CLI exit-code
+      # semantics are deliberately untouched; the gate lives here.
+      # R4 (0487): one divergence line when the two executors differ (legitimate
+      # when only implementAgent is pinned, but it must be visible in the log).
+      # R2 (0503): omp/pi env-key probe misses are soft because the CLI process
+      # cannot see relay-owned credentials; explicit non-omp auth failures remain hard.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            DOCTOR_FILE=".spur/run/$wbs-precheck-doctor.status" &&
+            classifyDoctorProbe() {
+              PROBE_DETAIL="$1";
+              PROBE_AGENT="$2";
+              case "$PROBE_AGENT" in
+                omp|omp-*|pi|pi-*)
+                  if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'API key not found for provider|no probe registered'; then
+                    printf 'env-miss\n';
+                    return;
+                  fi;;
+              esac;
+              if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'invalid (API )?key|unauthori[sz]ed|forbidden|authentication failed|credential(s)? rejected'; then
+                printf 'auth-fail\n';
+              else
+                printf 'unknown\n';
+              fi;
+            } &&
+            STATUS=PASS;
+            if [ -n "$implementAgent" ] && [ "$implementAgent" != "$agent" ]; then
+              echo "precheck: agent=$agent implementAgent=$implementAgent (executors diverge)";
+              EXECS="$agent $implementAgent";
+            else
+              EXECS="$agent";
+            fi;
+            for EXE in $EXECS; do
+              OUT=$($spurBin agent doctor "$EXE" --json 2>&1) || {
+                echo "precheck: FAIL - doctor exited non-zero for $EXE";
+                echo "$OUT";
+                STATUS=FAIL;
+                continue;
+              };
+              AUTH=$(printf '%s' "$OUT" | jq -r '.agents[0].authenticated // "unknown"' 2>/dev/null || echo unknown);
+              DETAIL=$(printf '%s' "$OUT" | jq -r '.agents[0].modelStatus.detail // ""' 2>/dev/null || echo "");
+              PROBE=$(classifyDoctorProbe "$DETAIL" "$EXE");
+              echo "precheck: $EXE auth=$AUTH probe=$PROBE $DETAIL";
+              if [ "$AUTH" = unauthenticated ]; then
+                case "$EXE:$PROBE" in
+                  omp*:env-miss|pi*:env-miss|omp*:unknown|pi*:unknown)
+                    echo "precheck: SOFT - executor $EXE auth probe cannot see agent-owned credentials";;
+                  *)
+                    echo "precheck: FAIL - executor $EXE is unauthenticated; fix agent.default or pass --vars '{\"agent\":\"<authenticated-executor>\"}' ($spurBin agent doctor $EXE --json); $DETAIL";
+                    STATUS=FAIL;;
+                esac;
+              fi;
+            done;
+            echo "$STATUS" > "$DOCTOR_FILE";
+            exit 0
+      # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
+      # a tree already dirty with another task's implementation is how 0485's diff
+      # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
+      # those itself.
+      # R1 (0511): task-corpus dirt gets its own advisory NOTE — docs/tasks* is
+      # excluded from the non-corpus warning, so pre-existing task-corpus edits are
+      # invisible at launch yet can be accidentally staged with the current task
+      # later. Advisory only (never a block): the pipeline legitimately updates
+      # task files, so corpus dirt is launch-time visibility, not a lifecycle guard.
+      - kind: shell
+        options:
+          command: >-
+            DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null);
+            if [ -n "$DIRTY" ]; then
+              echo "precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:";
+              echo "$DIRTY";
+            fi;
+            CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null);
+            if [ -n "$CORPUS_DIRTY" ]; then
+              echo "precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:";
+              echo "$CORPUS_DIRTY";
+            fi;
+            exit 0
+      - kind: note
+        options:
+          # R4 task_run_links linkage (kind=pipeline) is written by a WorkflowService
+          # hook at run start — see the 0062 follow-up note; there is no link-writing
+          # CLI verb to call from a shell step, so it cannot live in pure YAML.
+          message: "Pipeline start for task ${vars.wbs}."
+      # R1 (0453): auto-profile precheck reopens a done feature before task check.
+      # Under profile=auto, resolve feature_id, sync (preferred) or update to active.
+      # Under non-auto, leave R4 message to guide the operator.
+      - kind: shell
+        options:
+          command: >-
+            if [ "$profile" = auto ]; then
+              FID=$($spurBin task show $wbs --json 2>/dev/null |
+              jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);
+              if [ -n "$FID" ]; then
+                $spurBin feature sync "$FID" --force --json 2>/dev/null ||
+                $spurBin feature update "$FID" active 2>/dev/null || true;
+              fi;
+            fi;
+            exit 0
+      # R2 (0454): task size precheck — evaluate R-item and Plan-item counts.
+      # Writes PASS/FAIL to .spur/run/<wbs>-precheck-size.status. Always exit 0
+      # (soft check, like doctor). The precheck→implement guard reads the file.
+      # R3 (0487): `--executor` adds the size-vs-capability gate — a task past the
+      # DEFAULT caps routed to a sub-`capable-1` executor blocks here instead of
+      # burning the full implementTimeoutMs and exiting 3 (run ca130182).
+      - kind: shell
+        options:
+          command: >-
+            SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
+            mkdir -p .spur/run &&
+            bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
+            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"
+            --executor "$implementAgent" &&
+            exit 0
+
+  - id: implement
+    description: >
+      Run agent-driven implementation via /sp:dev-run --mode implement, THEN move the
+      task to `wip` via the normal verb. The lifecycle transition fires AFTER the
+      implement agent.run succeeds — onEnter runs in declaration order and the default
+      'fail' policy halts the sequence (routing the run to `failed`) if the agent.run
+      fails or times out, so a halted implement never leaves the task at `wip` with an
+      empty Solution (the F3 half-state). The `--no-lifecycle` flag is correct here: the
+      pipeline owns this transition; the FSM guard would otherwise re-run `spur task
+      check`, which is precheck's job.
+      NOTE: this step must NOT call /sp:dev-run in full mode (the default) —
+      that command DRIVES this pipeline, so calling it here recurses.
+      --mode implement is the single-step implement entry.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.implementAgent}
+          # Pure slash command only (ADR-043). Anti-recursion / implement discipline
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
+          # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
+          input: /sp:dev-run --mode implement ${vars.wbs} --auto
+          timeoutMs: ${vars.implementTimeoutMs}
+          # R3 (task 0424): empty-implement no-op guard — the agent.run action
+          # fails the step when exit 0 produced zero non-corpus file changes, so
+          # a silent no-op routes the run to `failed` here instead of drifting
+          # into test/review and being caught a full pass later.
+          requireDiff: true
+      - kind: shell
+        options:
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task update "$wbs" wip --no-lifecycle
+      # Post-implement cleanup: auto-format any unformatted output the agent produced.
+      # The agent may leave files that don't pass `biome check`, which then fails
+      # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
+      # the test stage from tripping on a purely mechanical formatting defect (dogfood
+      # bug-733 — omp left agent-run.test.ts unformatted, causing a spurious lint gate
+      # failure that the ## Testing section mis-attributed to "pre-existing gaps").
+      # Best-effort: `; exit 0` (not `&&`) so a missing/failing formatter in a seeded
+      # non-Bun project cannot abort a run mid-implement. Formatting is a convenience;
+      # `${vars.qualityGateCmd}` at `test` is the gate that actually decides.
+      - kind: shell
+        options:
+          command: "$formatCmd ; exit 0"
+
+  # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
+  # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
+  # a coverage target; it is not the project quality gate. Coverage gap-fill remains
+  # available via router C3/C5 (`/sp:dev-unit`) or inside implement — not this hop.
+  #
+  # Shape (engine has no per-action "run next only if previous failed" without
+  # `onError`, and Spur's action schema does not expose `onError`):
+  #   test         — soft probe: qualityGateCmd → PASS|FAIL status; always exit 0
+  #                  (green path: one gate run → review; no fixall/recheck tax)
+  #   test-fix     — increment attempt + pure slash /sp:dev-fixall (≤ max attempts)
+  #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
+  - id: test
+    description: >
+      Soft quality-gate probe (single logical gate on the green path; bounded retries only
+      for SQLite lock contention). Runs
+      `${vars.qualityGateCmd}`, records PASS|FAIL under
+      `.spur/run/<wbs>-test-gate.status`, resets the fix attempt counter, always exit 0.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
+            LOG_FILE=".spur/run/$wbs-test-gate.log" &&
+            ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
+            echo 0 > "$ATTEMPT_FILE" &&
+            : > "$LOG_FILE" &&
+            gate_attempt=1;
+            while [ "$gate_attempt" -le 5 ]; do
+              ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
+              sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
+              gate_locked=0;
+              grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+              cat "$ATTEMPT_LOG" >> "$LOG_FILE";
+              rm -f "$ATTEMPT_LOG";
+              if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
+              printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
+              sleep 10;
+              gate_attempt=$((gate_attempt + 1));
+            done &&
+            cat "$LOG_FILE" &&
+            FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
+            set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
+
+  - id: test-fix
+    description: >
+      Bounded auto-fix hop when the quality gate is red. Increments
+      `.spur/run/<wbs>-test-fix-attempt`, then pure slash (ADR-043)
+      `/sp:dev-fixall` against `${vars.qualityGateCmd}`.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
+            n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
+            printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
+      # R3 (0482): project the extracted gate anchors into a var so the dispatch input
+      # can NAME the failing file:line, not merely point at a log. A vars template cannot
+      # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-test-gate.findings
+          var: gateFindings
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: coder
+          # the full-context escape hatch when the digest is not enough.
+          input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: test-recheck
+    description: >
+      Soft recheck after fixall with bounded SQLite-lock retry. Writes PASS|FAIL (always exit 0). Transitions
+      branch to review (PASS), another test-fix (FAIL and under max attempts),
+      or the pipeline `failed` state (FAIL and attempts exhausted) — never a
+      raw lifecycle abort that skips the terminal `failed` state.
+    onEnter:
+      # 0587 R3: probe-then-full recheck. A red gateProbeCmd records FAIL and skips the full
+      # gate (the measured waste is re-running a 110–140s gate to learn the tree is still red);
+      # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
+      # Only the full gate writes PASS, so the `test-recheck → review` guard (reads PASS)
+      # still means a full green qualityGateCmd ran — invariant preserved by construction.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
+            LOG_FILE=".spur/run/$wbs-test-gate.log" &&
+            FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
+            : > "$LOG_FILE" &&
+            probe_rc=0;
+            if [ -n "$gateProbeCmd" ]; then
+              sh -c "$gateProbeCmd" > "$LOG_FILE.probe" 2>&1; probe_rc=$?;
+              cat "$LOG_FILE.probe" >> "$LOG_FILE";
+              rm -f "$LOG_FILE.probe";
+            fi;
+            if [ "$probe_rc" -ne 0 ]; then
+              gate_rc=$probe_rc;
+            else
+              gate_attempt=1;
+              while [ "$gate_attempt" -le 5 ]; do
+                ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
+                sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
+                gate_locked=0;
+                grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+                cat "$ATTEMPT_LOG" >> "$LOG_FILE";
+                rm -f "$ATTEMPT_LOG";
+                if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
+                printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
+                sleep 10;
+                gate_attempt=$((gate_attempt + 1));
+              done;
+            fi &&
+            cat "$LOG_FILE" &&
+            set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
+
+  - id: review
+    description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: /sp:dev-review ${vars.wbs} --auto
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: reviewer
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: approve
+    description: >
+      Human-in-the-loop approval gate. Under `profile=auto` this state is never entered
+      (review routes around it straight to verify). In interactive mode this state pauses
+      the run for `spur workflow continue` (E3), making approval an explicit operator action.
+      The operator's answer is routed (R1, bug-750): yes -> verify; no -> failed (rejection
+      recorded, not silently approved); cancel -> cancelled (a distinct terminal state).
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve task ${vars.wbs} to proceed to verification?"
+
+  - id: verify
+    description: >
+      Functional verification (BDD + traceability) via /sp:dev-verify. The agent's
+      captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
+      the answer-file schema contract (explicit `Verdict: PASS|PARTIAL|FAIL` line plus
+      `| Req | Status | Evidence |` and `| AC | Status | Evidence Type | Evidence |` tables);
+      a deterministic shell step then derives the verdict and writes the gate artifact
+      `.spur/run/<wbs>-verdict.json` (so the completion gate reads a real verdict, not
+      agent discretion — R9). The verdict is PASS only if the agent both reported PASS
+      AND `spur task check` passes; otherwise FAIL.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: /sp:dev-verify ${vars.wbs} --auto --fix all --focus all
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          role: reviewer
+          timeoutMs: ${vars.stepTimeoutMs}
+          answerFile: .spur/run/${vars.wbs}-verify-answer.txt
+      - kind: shell
+        options:
+          command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
+
+  - id: residual-sweep
+    description: >
+      Residual sweep (R4) — the operator's manual fallback, wired into the FSM as
+      its own stage (NOT a step inside verify). Decision: the PASS verdict is a
+      TRANSITION guard (`verify -> record`), evaluated only after verify's onEnter
+      finishes — a step inside verify would run before that guard and could not be
+      conditioned on the verdict. A separate stage reached only via the PASS guard
+      is the only way to hold the fixed position (after PASS, before record/commit).
+      It also makes the per-task sweep free in the `--feature` batch: the batch runs
+      this pipeline once per task, so each task sweeps itself (Q&A: per task, never
+      once per feature). The agent.run prompt is the operator's verbatim fallback,
+      templated over `residualSweepTarget` (single-task vs feature wording).
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          # Post-verification completeness judgment (catch what the per-requirement
+          # verdict structurally misses) — folds the `verify` stage, so it takes the
+          # reviewer role (capable-1), matching the operator's strong-model usage.
+          role: reviewer
+          input: "Anything remained in ${vars.residualSweepTarget}? if any, you should get all of them done before we commit all the changes in next step"
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: record
+    description: >
+      Record pipeline results into the task file via `spur task record` —
+      Testing/Review from the verdict, Solution backfilled from git diff as a
+      safety net, optional transition to testing. Post-record step conditionally syncs
+      feature status via the bounded `feature-sync-bounded` wrapper (task 0411
+      retry-suppression) if `feature_id` is present, or appends an orphan link proposal
+      to the run report if absent (task 0328 / ADR-0322).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task record "$wbs" --solution-from-diff --transition testing
+      # Best-effort, and portable across layouts. `feature-sync-bounded.ts` is a
+      # Spur-monorepo path — `spur init` never scaffolds `plugins/sp/`, so a seeded
+      # project must fall back to the plain `spur feature sync` verb rather than
+      # abort a run that already produced a PASS verdict. Trailing `exit 0` keeps the
+      # whole step advisory for the same reason (feature status sync is a follow-up,
+      # not a completion gate — `record → done` runs `spur task check`).
+      - kind: shell
+        options:
+          command: >-
+            FID=$($spurBin task show $wbs --json 2>/dev/null |
+            jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null);
+            if [ -n "$FID" ]; then
+              if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
+                bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json;
+              else
+                $spurBin feature sync "$FID" --json;
+              fi;
+            else
+              echo "Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt";
+            fi;
+            exit 0
+
+  - id: done
+    description: >
+      Terminal — task executed, verified, and recorded. The `record → done`
+      guard runs `spur task check` before certifying; a genuinely non-compliant
+      task routes to `failed` instead of a silent bad `done`.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            retry_transient() {
+              RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_OUTPUT";
+              if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
+              if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+              sleep 2;
+              RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
+              printf '%s\n' "$RETRY_SECOND_OUTPUT";
+              if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
+                echo "node_modules link/dependency broken — run bun install and retry";
+              fi;
+              return "$RETRY_RC";
+            };
+            retry_transient $spurBin task update "$wbs" done --no-lifecycle
+      - kind: note
+        options:
+          message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
+      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$wbs-checkpoint.md'
+
+  - id: failed
+    description: >
+      Terminal — precheck, quality-gate exhaustion, verify non-PASS, record check
+      failure, or operator rejection; reported, not advanced.
+
+  - id: cancelled
+    description: Terminal — pipeline cancelled by operator at the approval gate (R1).
+
+transitions:
+  # ── precheck: doctor PASS + task check → implement; else → failed ──
+  - from: precheck
+    to: implement
+    description: Agent doctor PASS and task check green — begin implementation.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-precheck-doctor.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
+  - from: precheck
+    to: failed
+    description: Doctor FAIL and/or task check failed — stop before implement.
+    guard:
+      kind: always
+
+  # ── linear body ──
+  - from: implement
+    to: test
+    description: Implementation done — quality-gate probe.
+    guard:
+      kind: always
+  # Soft probe branching (declaration order: PASS first, then FAIL, then defense).
+  - from: test
+    to: review
+    description: Quality gate already green — one gate run only; skip fixall/recheck.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
+  - from: test
+    to: test-fix
+    description: Quality gate red — start bounded fixall loop.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL'
+  # Defense: missing/corrupt status — treat as FAIL path, not silent PASS.
+  - from: test
+    to: test-fix
+    description: Probe status missing/corrupt — attempt fixall then recheck.
+    guard:
+      kind: always
+  - from: test-fix
+    to: test-recheck
+    description: Fixall finished — soft recheck the same quality gate.
+    guard:
+      kind: always
+  # Recheck branching (PASS first; under-max FAIL → fixall again; exhausted → failed).
+  - from: test-recheck
+    to: review
+    description: Quality gate green after fixall — proceed to review.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
+  - from: test-recheck
+    to: test-fix
+    description: Still red and under qualityGateMaxFixAttempts — another fixall hop.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"'
+  - from: test-recheck
+    to: failed
+    description: Still red after max fixall attempts — stop at failed (not silent abort).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -ge "$qualityGateMaxFixAttempts"'
+  # Defense: corrupt recheck status — failed, not review.
+  - from: test-recheck
+    to: failed
+    description: Recheck status missing/corrupt — stop at failed.
+    guard:
+      kind: always
+  # ── review → approve, OR skip the HITL gate entirely when profile=auto (R4) ──
+  # Declaration order matters: the auto-skip guard is tried FIRST, so under
+  # profile=auto the run routes straight to verify and never ENTERS approve
+  # (whose onEnter hitl.confirm would otherwise block). Otherwise fall through
+  # to approve for the human gate.
+  - from: review
+    to: verify
+    description: profile=auto — skip the human approval gate, go straight to verify.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$profile" = auto'
+  - from: review
+    to: approve
+    description: Review done — gate on human approval.
+    guard:
+      kind: always
+
+  # ── approve: HITL gate (reached only when profile != auto). Routed by the
+  # operator's captured answer (R1, bug-750) — three ordered guards, declaration
+  # order matters (yes first, then no, then cancel), mirroring idea-pipeline's
+  # design-approval gate (.spur/workflows/idea-pipeline.yaml:352-366). No
+  # `always` edge remains out of `approve`. ──
+  - from: approve
+    to: verify
+    description: Approved — proceed to verification.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = yes'
+  - from: approve
+    to: failed
+    description: Operator rejected at the approval gate — report and stop.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = no'
+  - from: approve
+    to: cancelled
+    description: Operator cancelled at the approval gate.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = cancel'
+
+  # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
+  # The verify step emits .spur/run/<wbs>-verdict.json. Only `verdict: PASS` clears
+  # the gate to `residual-sweep` (thence `record`); any non-PASS (PARTIAL/FAIL), a
+  # missing file, or malformed JSON routes to `failed`. Declaration order: PASS guard
+  # tried FIRST. The residual sweep therefore runs ONLY on a PASS verdict, before
+  # record/commit — its fixed position is enforced by the FSM, not operator memory.
+  - from: verify
+    to: residual-sweep
+    description: Verification verdict is PASS — sweep residual work before record/commit.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS'
+  - from: verify
+    to: failed
+    description: Verification verdict is not PASS (PARTIAL/FAIL/missing) — block before done.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" != PASS'
+  - from: residual-sweep
+    to: record
+    description: Residual sweep done — record results and proceed to done.
+    guard:
+      kind: always
+  # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23) ──
+  # The record step guarantees every done-required section ([Solution, Testing, Review])
+  # has real content (each owned by its pipeline step). This guard is defense-in-depth —
+  # it certifies the matrix before done; a genuinely non-compliant task routes to failed.
+  # Declaration order: pass guard first.
+  - from: record
+    to: done
+    description: Task check passed — certify done.
+    guard:
+      kind: shell
+      options:
+        command: "$spurBin task check $wbs"
+  - from: record
+    to: failed
+    description: Task check failed — block before done; investigate missing sections.
+    guard:
+      kind: shell
+      options:
+        command: "! $spurBin task check $wbs"

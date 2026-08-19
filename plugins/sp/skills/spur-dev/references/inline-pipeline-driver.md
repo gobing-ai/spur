@@ -30,7 +30,16 @@ command, skill, script, or second workflow.
    `session` and the Codex key `session_id` (in that order). If neither is available, allocate
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
    guessed from an executor subprocess.
-4. Record lifecycle provenance before entering the FSM:
+4. Render the two-layer plan into the host todo list (task 0596):
+   - **Layer 1** = the pipeline's `states` in declaration order, with the active state marked — the
+     same order `renderRunPlan` / `spur workflow run --dry-run` previews.
+   - **Layer 2** = the active state's `onEnter` actions (`kind` + resolved `input`/`command`), shown
+     only for the active state.
+   - **Refresh cadence** = stage boundaries only (when the current state changes after a transition),
+     never per action.
+   - **Source of truth** = the YAML parsed in step 1 plus the dry-run walk — never hand-copy the
+     state list into the driver, a command, a skill, or a script.
+5. Record lifecycle provenance before entering the FSM:
 
    ```bash
    spur task run-link <wbs> --source inline-full --run-id <run-id> --json

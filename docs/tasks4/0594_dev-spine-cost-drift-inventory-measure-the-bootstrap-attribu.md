@@ -4,7 +4,7 @@ name: "dev-* spine cost + drift inventory: measure the bootstrap, attribute it, 
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.506Z
-updated_at: "2026-08-19T01:15:03.868Z"
+updated_at: "2026-08-19T02:33:12.733Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "Doc-authoring mode (operator-selected): deliverable verified against plan checklist; design doc written; zero source files modified; Solution/Testing/Review complete."
@@ -198,20 +198,20 @@ both sides of every row. Classify each finding as **new** or **re-drift** agains
 **Handoff.** No dependent task. Findings graduate into features under `I` (spine), `D` (workflows),
 `C` (rules, if enforcement is the answer). The ranked fix path in R5 is the input to that graduation.
 ### Plan
-- [ ] Read `docs/features/I2_*.md` and `I3_*.md` plus their linked tasks; extract their finding lists as the delta baseline (R6)
-- [ ] Import + analyze history over sessions that invoked `/sp:dev-*`; identify the usable session set and record its size (R1)
-- [ ] Build the per-entry-point load chain: command md → Skill() → SKILL.md → references, marking each load unconditional or on-demand (R1)
-- [ ] Attribute measured tokens to each load; emit the ranked cost table (R1)
-- [ ] Enumerate prefix-cache-break candidates; test each by controlled comparison; record confirmed / ruled-out / untested (R2)
-- [ ] Diff `spur feature` CLI against its plugin prose and workflow usage, both directions, with `path:line` citations (R3)
-- [ ] Repeat for `spur agent` (R3)
-- [ ] Repeat for `spur workflow` (R3)
-- [ ] Add the `sp:wayfinder` `--section tags` vs `--field tags` finding and grep for siblings of that class (R4)
-- [ ] Classify every drift row as new or re-drift vs I2/I3; compute and report the re-drift rate (R6)
-- [ ] Measure cross-YAML duplication across `task-pipeline` / `idea-pipeline` / `planning-pipeline`; check the engine for a shared-fragment mechanism (R7)
-- [ ] Write `docs/design/dev-spine-cost-and-drift.md`; emit the ranked fix path with S/M/L sizes and expected cost deltas (R5)
-- [ ] Record the open-question-2 recommendation explicitly as a recommendation, not a decision (R5)
-- [ ] Verification: every drift row carries two `path:line` citations; every cost figure traces to a history artifact; zero source files modified
+- [x] Read `docs/features/I2_*.md` and `I3_*.md` plus their linked tasks; extract their finding lists as the delta baseline (R6)
+- [x] Import + analyze history over sessions that invoked `/sp:dev-*`; identify the usable session set and record its size (R1)
+- [x] Build the per-entry-point load chain: command md → Skill() → SKILL.md → references, marking each load unconditional or on-demand (R1)
+- [x] Attribute measured tokens to each load; emit the ranked cost table (R1)
+- [x] Enumerate prefix-cache-break candidates; test each by controlled comparison; record confirmed / ruled-out / untested (R2)
+- [x] Diff `spur feature` CLI against its plugin prose and workflow usage, both directions, with `path:line` citations (R3)
+- [x] Repeat for `spur agent` (R3)
+- [x] Repeat for `spur workflow` (R3)
+- [x] Add the `sp:wayfinder` `--section tags` vs `--field tags` finding and grep for siblings of that class (R4)
+- [x] Classify every drift row as new or re-drift vs I2/I3; compute and report the re-drift rate (R6)
+- [x] Measure cross-YAML duplication across `task-pipeline` / `idea-pipeline` / `planning-pipeline`; check the engine for a shared-fragment mechanism (R7)
+- [x] Write `docs/design/dev-spine-cost-and-drift.md`; emit the ranked fix path with S/M/L sizes and expected cost deltas (R5)
+- [x] Record the open-question-2 recommendation explicitly as a recommendation, not a decision (R5)
+- [x] Verification: every drift row carries two `path:line` citations; every cost figure traces to a history artifact; zero source files modified
 ### Solution
 **Deliverable:** `docs/design/dev-spine-cost-and-drift.md` (feature I6 / task 0594: measurement +
 drift inventory; zero source code changed).

@@ -4,7 +4,7 @@ name: "Harness eval suite: fixture task set + pipeline parity comparator"
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.766Z
-updated_at: "2026-08-19T01:44:06.645Z"
+updated_at: "2026-08-19T02:33:12.925Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "doc-authoring batch: deliverables verified (comparator+tests 8/8, PASS baseline 538s, zero fixture-induced corpus findings)"
@@ -169,18 +169,18 @@ report states run count and variance, and a single run is labelled as such.
 the baseline artifact path. This task must leave those three stable — they are [0596]'s only
 interface to it. Any change to the record shape after [0596] starts breaks its parity run.
 ### Plan
-- [ ] Read `sp:dogfood-testing` and decide precisely which of its protocol to extend vs re-use as-is; record the seam (R1)
-- [ ] Design the fixture task set: minimal, deterministic, exercising precheck→implement→test→review→verify→done (R1)
-- [ ] Place fixtures under `tests/fixtures/pipeline-eval/` and document the create/cleanup lifecycle so no fixture reaches the real corpus (R4)
-- [ ] Add `scripts/commands/eval-pipeline.ts` and register the verb in `scripts/spur-dev.ts` (R2)
-- [ ] Implement the record shape: verdict via `spur task verdict --json`, artifacts via `.spur/run` snapshot diff, token cost, wall-clock (R2)
-- [ ] Implement the two-pipeline diff output (R2)
-- [ ] Write `scripts/commands/eval-pipeline.test.ts` covering record shape, snapshot diffing, and the null-token-cost case (R2)
-- [ ] Run the comparator against `config/workflows/task-pipeline.yaml`; write the baseline artifact (R3)
-- [ ] Record run count and variance in the report; label single-run results as such (R3)
-- [ ] Draft the proposed promotion bar from what the comparator actually measures; mark it a proposal against map open question 1 (R5)
-- [ ] If any needed `spur` CLI flag is absent, write it up as an ADR-051 consent item and stop there (R6)
-- [ ] Verification: `bun run lint`, `bun run test`, `bun run build` green; `spur task check --corpus` shows no new fixture-induced findings; `git status` intentional
+- [x] Read `sp:dogfood-testing` and decide precisely which of its protocol to extend vs re-use as-is; record the seam (R1)
+- [x] Design the fixture task set: minimal, deterministic, exercising precheck→implement→test→review→verify→done (R1)
+- [x] Place fixtures under `tests/fixtures/pipeline-eval/` and document the create/cleanup lifecycle so no fixture reaches the real corpus (R4)
+- [x] Add `scripts/commands/eval-pipeline.ts` and register the verb in `scripts/spur-dev.ts` (R2)
+- [x] Implement the record shape: verdict via `spur task verdict --json`, artifacts via `.spur/run` snapshot diff, token cost, wall-clock (R2)
+- [x] Implement the two-pipeline diff output (R2)
+- [x] Write `scripts/commands/eval-pipeline.test.ts` covering record shape, snapshot diffing, and the null-token-cost case (R2)
+- [x] Run the comparator against `config/workflows/task-pipeline.yaml`; write the baseline artifact (R3)
+- [x] Record run count and variance in the report; label single-run results as such (R3)
+- [x] Draft the proposed promotion bar from what the comparator actually measures; mark it a proposal against map open question 1 (R5)
+- [x] If any needed `spur` CLI flag is absent, write it up as an ADR-051 consent item and stop there (R6)
+- [x] Verification: `bun run lint`, `bun run test`, `bun run build` green; `spur task check --corpus` shows no new fixture-induced findings; `git status` intentional
 ### Solution
 **Deliverable:** `scripts/spur-dev.ts eval-pipeline` comparator (`scripts/commands/eval-pipeline.ts:2`, registered at `scripts/spur-dev.ts:95`) + fixture set (`tests/fixtures/pipeline-eval/templates/fixture-minimal.md`) + recorded baseline. Interfaces frozen for [0596]: command `bun scripts/spur-dev.ts eval-pipeline`, fixtures at `tests/fixtures/pipeline-eval/`, baseline at `.spur/reports/pipeline-eval/2026-08-19T01-37-30-846Z-baseline.json`.
 

@@ -241,14 +241,6 @@
         },
         {
             "kind": "feature",
-            "id": "I",
-            "code": "L4.orphan-scenarios",
-            "severity": "warning",
-            "reason": "Feature AC scenarios have no linked task (orphan scenarios) — see note § L4.orphan-scenarios.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "feature",
             "id": "I1",
             "code": "L4.scenario-unverified",
             "severity": "warning",
@@ -270,6 +262,14 @@
             "severity": "warning",
             "reason": "Linked task lacks a PASS verdict with MET requirement — verification pending, see note § L4.scenario-unverified.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "feature",
+            "id": "I",
+            "code": "L4.uncovered-feature-scenario",
+            "severity": "warning",
+            "reason": "Feature I (sp plugin) ownership scenarios (\"Plugin work has one active root\", \"Runtime execution remains separate\", \"Legacy H does not receive new work\") are planning/ownership assertions not covered by any linked task AC. Task 0600 links feature I (superskill-entrypoint alignment) but its AC do not route ownership; the link changed the report from L4.orphan-scenarios to uncovered-feature-scenario (DD-09). Cover by a future feature-I ownership task.",
+            "since": "2026-08-19"
         },
         {
             "kind": "feature",
