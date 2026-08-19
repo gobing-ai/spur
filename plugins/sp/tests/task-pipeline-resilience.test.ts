@@ -180,9 +180,13 @@ describe('0503 task-pipeline resilience', () => {
             `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; echo 'SQLiteError: database is locked' >&2; exit 1`,
         );
         const command = commandFor('test-recheck').replace('sleep 10', 'sleep 0');
+        // Pin the probe off: the workflow engine exports gateProbeCmd into shell-action env,
+        // which leaks into this process — the default probe would run `bun run lint` in the
+        // scratch dir (no package.json), fail, and skip the full-gate loop this test asserts.
         const result = runShell(command, dir, {
             wbs: '0503',
             qualityGateCmd: gate,
+            gateProbeCmd: '',
             COUNTER: counter,
         });
 

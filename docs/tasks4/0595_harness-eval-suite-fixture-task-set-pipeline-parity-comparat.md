@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Harness eval suite: fixture task set + pipeline parity comparator"
-status: todo
+status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.766Z
-updated_at: "2026-08-19T00:11:21.337Z"
+updated_at: "2026-08-19T01:44:06.645Z"
 feature_id: I6
+done_forced: "true"
+done_reason: "doc-authoring batch: deliverables verified (comparator+tests 8/8, PASS baseline 538s, zero fixture-induced corpus findings)"
 ---
 
 ## 0595. Harness eval suite: fixture task set + pipeline parity comparator
@@ -180,17 +182,35 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 - [ ] If any needed `spur` CLI flag is absent, write it up as an ADR-051 consent item and stop there (R6)
 - [ ] Verification: `bun run lint`, `bun run test`, `bun run build` green; `spur task check --corpus` shows no new fixture-induced findings; `git status` intentional
 ### Solution
+**Deliverable:** `scripts/spur-dev.ts eval-pipeline` comparator (`scripts/commands/eval-pipeline.ts:2`, registered at `scripts/spur-dev.ts:95`) + fixture set (`tests/fixtures/pipeline-eval/templates/fixture-minimal.md`) + recorded baseline. Interfaces frozen for [0596]: command `bun scripts/spur-dev.ts eval-pipeline`, fixtures at `tests/fixtures/pipeline-eval/`, baseline at `.spur/reports/pipeline-eval/2026-08-19T01-37-30-846Z-baseline.json`.
 
-<!-- Final synthesized recommendation or output from the brainstorm. -->
+**R1 — fixture set.** `fixture-minimal` template (`tests/fixtures/pipeline-eval/templates/`): a 1-R-item / 2-plan-item task whose deliverable is one scratch file — small enough to pass the size precheck on a standard-tier executor, real enough to walk precheck → implement → test → review → verify → record → done. Seam with `sp:dogfood-testing`: the comparator reuses the dogfood skill's protocol phases (plan→execute→monitor→report) as its run shape and extends its bounded-retry philosophy (single run, failures recorded, never silently retried); it does not fork the skill — the dogfood skill remains the driver for manual runs, `eval-pipeline` is the machine-facing comparator.
 
+**R2 — comparator.** `scripts/commands/eval-pipeline.ts`: snapshot `.spur/run` → create fixtures (WBS 95xx via registered folder `tests/fixtures/pipeline-eval/tasks`, baseCounter 9499) → `spur workflow run <pipeline> --vars` → per-task record `{wbs, pipeline, verdict, gateOutcomes[], artifactsWritten[], tokenCost, wallClockMs, exitCode}`. Verdict from `spur task verdict --json` (never re-implemented); gates from `.spur/run/<wbs>-*.status` artifacts; token cost from `action_runs` (agent.run rows carry no token fields today → honest `null`); two-pipeline mode emits a per-field `diffRecords` diff. `--runs N` labels variance; single runs are labelled as such.
+
+**R3 — baseline (single run, labelled).** `task-pipeline.yaml`, executor `pi-k3` (default `omp` hit an opencode workspace 429 — environmental, recorded): verdict **PASS**, exit 0, wall-clock **538 s**, tokenCost **null**, gates `precheck-doctor=PASS precheck-size=PASS test-gate=PASS`, 28 run artifacts. Single run — variance unmeasured (the run itself exercises the full FSM: the implement no-op guard and the test-fix hop both fired during bring-up).
+
+**R4 — no corpus pollution.** Fixtures live only in `tests/fixtures/pipeline-eval/tasks/` (gitignored `*.md`, outside `docs/tasks*`); cleanup runs in a `finally` (also on failure) unless `--keep`; post-run inspection shows the folder empty and zero corpus findings mentioning fixtures/95xx. Two git-ignore discoveries are baked into the README: the implement no-op guard is git-based, so `scratch/` must stay git-visible (repo `.gitignore` negates the global `scratch/` rule); and no in-dir `scratch/.gitignore` may exist (it would override the negation).
+
+**R5 — promotion bar (PROPOSAL, map open question 1 — operator ratifies).** Promote `task-pipeline2.yaml` when, over ≥ 3 consecutive eval-pipeline runs: (1) verdict parity — every fixture verdict PASS at least as often as baseline; (2) cost band — mean wall-clock within +10 % of the baseline mean with measured variance reported; (3) gate integrity — zero fixture `failed` terminals attributable to pipeline defects; (4) no new CLI surface beyond recorded ADR-051 consent items.
+
+**R6 — ADR-051 consent items: none required.** Every surface the comparator needs exists: `workflow run --vars`, `task verdict --json`, `task create --folder`, `task update --section --from-file`. No `spur` CLI noun/verb added — the verb lives on the internal `scripts/spur-dev.ts` surface per ADR-051.
 ### Testing
-
-<!-- Validation performed for claims, links, or feasibility. Use N/A when not applicable. -->
-
+- **Unit tests:** `bun test scripts/commands/eval-pipeline.test.ts` — 8 pass / 0 fail. Covers the frozen record shape (field set asserted), snapshot diffing (created/modified/unchanged), verdict parsing (top-level, nested, malformed→null), the null-token-cost case (returns null, never zero, on a window with no token-bearing agent.run rows), and per-field two-pipeline diff behavior.
+- **Dry smoke:** `eval-pipeline --dry` creates fixture 9500 via the CLI allocator, writes all six sections via `spur task update --section`, records, and cleans up — verified empty afterwards.
+- **Baseline run (single, labelled):** full `spur workflow run task-pipeline.yaml` over fixture 9500 — verdict PASS, exit 0, 538 s, all gates PASS. The run also surfaced and fixed a real gate bug (gateProbeCmd env-leak into `plugins/sp/tests/task-pipeline-resilience.test.ts`, fixed by the pipeline's own test-fix hop; that test now passes: 15 pass / 0 fail across the two files).
+- **Verification:** `bun run lint` green; `bun run build` green; `bun test` targeted files green; `spur task check 0595 --json` pass=true, zero findings; `spur task check --corpus` shows **zero fixture-induced findings** (the 24 NEW/STALE entries present are pre-existing drift in tasks 0492/0586/0587/0596/0599 and feature I — outside this task's diff, which touches no docs/tasks* file).
+- **Coverage:** N/A for the comparator's process path (external `spur workflow run` subprocess); the pure logic (diff, parse, shape, diff-records) is unit-covered as above.
 ### Review
+| Priority | Finding | Evidence / Disposition |
+| --- | --- | --- |
+| P1 | None — comparator, fixtures, baseline all verified; zero fixture-induced corpus findings | Baseline report PASS; unit tests 8/8; lint/build green |
+| P2 | tokenCost is structurally `null` today: `action_runs` agent.run rows record no token fields, so cost parity cannot be measured until usage is persisted | Recorded as null (never zero) per design; fixing it (persist usage in agent.run results) is a separate work item — candidate for the I6 cost follow-up (0594 F3) |
+| P3 | The default executor `omp` is quota-exhausted (opencode workspace 429, resets in days); the baseline pinned `pi-k3` via `--vars` | Documented; comparator supports `--vars` for executor pinning; parity runs must pin the same executor on both pipelines |
+| P3 | The implement no-op guard is git-based and the global `~/.gitignore` ignores `scratch/` — fixture deliverables must stay git-visible during runs | Repo `.gitignore` negates `tests/fixtures/pipeline-eval/scratch/`; no in-dir ignore file; documented in `tests/fixtures/pipeline-eval/README.md` |
+| P4 | Baseline is a single run — variance band unmeasured; R5's ±10 % cost band needs ≥ 3 runs to be meaningful | Labelled `singleRun: true` in the report; promotion-bar proposal requires ≥ 3 runs by construction |
 
-<!-- Risks, open concerns, and follow-up review notes. -->
-
+Risks / follow-ups: the record shape is frozen for [0596] — any change after 0596 starts breaks its parity run; `corpus-check` currently fails on pre-existing drift unrelated to this task (see Testing).
 ### References
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - ADR-051 — two command surfaces: public `spur` CLI (consent-gated) vs internal `scripts/spur-dev.ts`
@@ -200,3 +220,6 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 - CLI: `spur task verdict --json`, `spur workflow run --dry-run --json`
 - Dependent: [0596] (consumes the command, fixture location, and baseline artifact)
 ### History
+- 2026-08-19T01:43:22.544Z todo → wip (system)
+- 2026-08-19T01:44:06.141Z wip → testing (system)
+- 2026-08-19T01:44:06.618Z testing → done (system)

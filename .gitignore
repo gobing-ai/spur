@@ -181,3 +181,7 @@ docs/.ftree/
 .scratch/
 /.pi-subagents/
 /docs/session-forensics-report-generation.md
+
+# pipeline-eval fixture scratch (task 0595): must stay git-visible during runs —
+# the implement no-op guard probes git, and the global gitignore ignores scratch/
+!tests/fixtures/pipeline-eval/scratch/

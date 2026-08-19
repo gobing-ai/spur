@@ -27,6 +27,7 @@ import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { devAll } from './commands/dev-all';
+import { evalPipeline } from './commands/eval-pipeline';
 import { linkCheck } from './commands/link-check';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
@@ -34,7 +35,7 @@ import { verifyPack } from './commands/verify-pack';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline',
     );
     process.exit(message ? 1 : 0);
 }
@@ -90,6 +91,9 @@ try {
             break;
         case 'dev-all':
             devAll();
+            break;
+        case 'eval-pipeline':
+            process.exit(await evalPipeline(args));
             break;
         case 'link-check':
             process.exit(await linkCheck());
