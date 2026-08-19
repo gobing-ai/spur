@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-18T21:59:52.680Z"
-updated_at: "2026-08-19T03:27:25.496Z"
+updated_at: "2026-08-19T05:37:09.107Z"
 ---
 
 # I6: Spur harness self-improvement program: dev-* spine cost, event 5W1H SSOT, run-record consolidation, and board module boundaries
@@ -45,11 +45,26 @@ in-scope item has either a child `spur feature` with a decided approach or a lin
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-
 ### Destination
 
 A ratified, sequenced program plan in which each of the ten harness self-improvement items is either
 graduated into its own scoped `spur` feature with a decided approach, or recorded as out of scope.
+
+### Graduated features (2026-08-19)
+
+Investigation tickets 0594–0599 are `done`. Implement work lives on these children — this map does
+not implement them.
+
+| Item | Decided approach | Feature |
+| --- | --- | --- |
+| Spine cost remediations + semantic drift (0594 F1–F2) | Fix wayfinder `--section tags`; add a semantic layer to the I2/I3 parity harness. Do not relocate `plugins/sp` prose wholesale. | [I7](./I7_semantic-class-drift-layer-and-wayfinder-section-tags-fix.md) |
+| Eval suite + `task-pipeline2.yaml` (0595, 0596) | Parallel YAML stays; residual-sweep is an FSM stage after verify PASS; promotion is `eval-pipeline` exit-0 + verdict parity + ≤ +10 % of the 538s baseline. | [D5](./D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md) |
+| Event 5W1H SSOT → remediation (0597) | Per-event catalog, `*.updated` diff, `workflow.*` names; two-sided gate against `docs/design/event-tracking.md`, not codegen. | [J9](./J9_event-5w1h-payload-and-catalog-remediation.md) |
+| Run-record + Observability read plane (0598) + per-file cost (0594 F3) | Two-file `<RUNID>.md` + `.state.json`; history oRPC; Tool Using reads the history plane with a ledger overlay; 30-day GC proposed. | [E7](./E7_two-file-run-record-history-orpc-and-tool-using-source-migration.md) |
+| Workspace / Inbox / Teams boundary (0599) | Keep all three; delete Workspace Overview; split the two Supervisor labels; no `role` noun. | [M6](./M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md) |
+
+Design SSOTs: `docs/design/dev-spine-cost-and-drift.md`, `event-tracking.md`,
+`run-record-contract.md`, `board-module-boundaries.md`.
 
 ### Ground truth measured at charting (2026-08-18)
 
@@ -93,12 +108,9 @@ Two facts nobody listed, both material:
 
 Domain context and standing constraints every session on this map must respect.
 
-- **Two writers, one tree.** Feature F92 (`spur task` completion contract) is being implemented by a
-  concurrent agent in this same checkout. Its uncommitted changes are live in `git status`. Do not
-  touch `spur task`, the section matrix, `task-check`, `done-transition-guard`, or verdict
-  canonicalization. Do not `git stash`. Resolution sessions branch (`wayfind/<wbs>-<slug>`); this
-  charting session deliberately did not, because `git checkout -b` would have moved the F92 agent's
-  future commits onto the map's branch.
+- **Two writers, one tree.** Feature F92 (`spur task` completion contract) ran in a concurrent
+  session. Do not touch `spur task`, the section matrix, `task-check`, `done-transition-guard`, or
+  verdict canonicalization from I6 work.
 - **Ten targets, one plugin.** `plugins/sp` ships to Claude Code, Codex, Gemini CLI, pi, omp,
   OpenCode, Antigravity, OpenClaw, Hermes, and Grok via `superskill install`. A fix that only works
   where slash commands and subagents exist is half a fix; every proposal states its fallback.
@@ -106,129 +118,109 @@ Domain context and standing constraints every session on this map must respect.
   (`config/workflows/task-pipeline2.yaml`) beside the live one. `config/workflows/` is the tracked
   SSOT; `.spur/workflows/` is a symlink to it. Never hand-`cp` into `apps/cli/config/`.
 - **ADR-051 consent gate.** Adding, changing, or removing any `spur` CLI noun or verb requires
-  explicit operator consent with design context presented first. Several tickets here will want to;
-  they must ask, not land.
-- **I2 and I3 already did the drift audit and closed.** I2 (spur-dev/spur-cli parity-first drift audit)
-  and I3 (`plugins/sp` + workflow YAML reconciled against the live CLI) are both `done`. The operator's
-  "we had lots of changes" premise is therefore *re-drift*, and [0594] is a **delta-audit**: what
-  re-drifted since they closed, and why the fix did not hold. A finding that merely restates an I2/I3
-  finding means the fix was documentation-only and needs enforcement.
-- **Evidence before optimization.** The cost ticket measures before anything is refactored. A
-  25,088-line prose reduction defended by intuition is how the spine drifted in the first place.
-
-#### Skills every session should consult
-
-| Session | Skills |
-| --- | --- |
-| Any | `sp:spur-cli` (verbs/flags/`--json`), `sp:indexed-context` (`.spur/context/`) |
-| [0594] cost + drift | `sp:issue-finding`, `sp:conflict-finding`, `sp:code-improvement` |
-| [0595] eval harness | `sp:dogfood-testing`, `sp:code-testing` |
-| [0596] pipeline2 | `sp:workflow-add` / `sp:workflow-refine`, `sp:spur-dev` |
-| [0597] event SSOT | `sp:sys-architecture`, `sp:doc-evolve` |
-| [0598] run-record + history | `sp:sys-architecture`, `sp:reverse-engineering` |
-| [0599] Workspace/Inbox/Teams | `sp:sys-architecture`, `sp:code-improvement` |
+  explicit operator consent with design context presented first.
+- **I2 and I3 already did the drift audit and closed.** [0594] re-drift rate = 0 / 7. The one
+  surviving finding (wayfinder `--section tags`) was never in I3's visible scope.
+- **Evidence before optimization.** The cost ticket measured before anything is refactored. Prefix
+  cache already serves the spine at 98.85 %; do not relocate prose on intuition.
 
 #### Standing preferences
 
-- High cohesion internally, low coupling externally — the operator's stated principle for the
-  per-noun reviews. Prefer deleting a shim over adding a layer.
-- Prefer moving prose *out* of `plugins/sp` and *into* the CLI's `--help` / `--json` where the CLI can
-  be the single source — subject to the open question below.
+- High cohesion internally, low coupling externally. Prefer deleting a shim over adding a layer.
 - A design doc as SSOT before code, where the operator asked for one (event tracking).
 
 ### Open questions
 
-Decisions only the operator can settle. **These are never tickets.** Answer them in conversation;
-record the answer in `### Decisions so far`; then create tickets for whatever work the answer implies.
+Ticket recommendations are recorded under Decisions so far. These four stay open until the operator
+ratifies them at the graduated feature's kickoff — they are not silently decided.
 
-1. **What is the "mature enough" bar that promotes `task-pipeline2.yaml` over `task-pipeline.yaml`?**
-   Verdict parity alone? Parity plus cost within N%? K consecutive green real tasks? Only the operator
-   holds the risk tolerance. [0595] will *propose* a bar from what it can actually measure; ratifying
-   it is this question. Blocks: promotion, not development.
-2. **Should `plugins/sp` prose shrink by relocating into the CLI?** ~25,088 lines of markdown load per
-   session against a CLI that could carry the same contract in `--help` / `--json` / exit codes. This
-   is an architecture preference with a real trade: the CLI is authoritative and cheap to read but
-   invisible until invoked; the skill is loaded up front and works on platforms with no shell. Blocks:
-   the fix path [0594] recommends.
-3. **What retention policy applies to `.spur/run`?** 1,512 files and growing, with no GC. Deleting old
-   run artifacts is safe for the pipeline but `spur history` may read them; the operator's tolerance
-   for losing old forensic evidence sets the window. Blocks: the run-record contract in [0598].
-4. **Does the agent-role mechanism deserve a first-class `role` noun on the CLI?** [0599] will surface
-   whether Workspace/Inbox/Teams collapse cleanly without one. Adding a noun is ADR-051-gated and the
-   operator's call. Blocks: the source-side half of [0599].
+1. **What is the "mature enough" bar that promotes `task-pipeline2.yaml`?** Blocks D5 promotion
+   (not D5 development). Recommendation: verdict parity + gate integrity + wall within +10 % of
+   538s + clean exit-0.
+2. **Should `plugins/sp` prose shrink by relocating into the CLI?** Blocks any I7-beyond
+   restructure. Recommendation: no wholesale move.
+3. **What retention policy applies to `.spur/run`?** Blocks E7 GC window. Recommendation: 30 days;
+   reject 0-day delete-on-success.
+4. **Does the agent-role mechanism deserve a first-class `role` noun?** Blocks any CLI noun add.
+   Recommendation: no; keep role as a value on `spur agent`.
 
 ### Decisions so far
 
 - **Harness eval suite is in scope and gates pipeline2.** Promotion of `task-pipeline2.yaml` requires a
   parity PASS from the eval suite, not operator inspection. (Charting interview, 2026-08-18.)
 - **History is a re-cut of Observability, not a second module** — one read plane over the history data.
-  The operator's qualifier: many existing tabs are out of date and the surface deserves a clean-sheet
-  design; treat `ToolUsingTab` / `RoutingTab` / `TasksTab` / `JobsTab` as salvage material, not a
-  baseline to preserve. (Charting interview, 2026-08-18.)
-- **Workspace / Inbox / Teams: full latitude, including deletion.** Modules may be merged or removed
-  outright if the role mechanism makes them redundant. Workspace is 240 lines and Inbox 514 against
-  Teams' 1,931 — absorption is a live outcome, not a straw man. (Charting interview, 2026-08-18.)
-- **Charting runs on `main`; resolution sessions branch.** F92's agent shares this working tree, so
-  branching at charting time would have hijacked its commits. (Charting interview, 2026-08-18.)
-- **This map lives at `I6`, not at the tree root.** Its center of gravity is feature `I` — "the durable
-  agent-facing harness delivered by `plugins/sp` ... and their parity with the current Spur CLI
-  contract". Tickets graduate outward into `D` (workflows), `E`/`J` (history + observability), and `M`
-  (teams) as features; the map stays where the effort is owned. (`F` was the other candidate and is
-  full at F1–F9.) (Operator, 2026-08-18.)
+  (Charting interview, 2026-08-18.)
+- **Workspace / Inbox / Teams: full latitude, including deletion.** (Charting interview, 2026-08-18.)
+  0599 then **rejected** Teams-absorbs-both; the graduated approach is keep-three + delete Overview.
+- **Charting runs on `main`; resolution sessions branch.** (Charting interview, 2026-08-18.)
+- **This map lives at `I6`, not at the tree root.** Tickets graduate outward into `D`, `E`/`J`, `I`,
+  and `M`. (Operator, 2026-08-18.)
 - **No new History board module. History-facing surfaces stay inside `modules/observability/`.**
   (Operator, 2026-08-18.)
-- **`Tool Using` must read the conversation-history plane** — rows from `spur history import`
-  aggregated by `spur history analyze` — **not** event tracking, `system_events`, or any other
-  mechanism. Auditing its current source is [0598]'s primary subject. (Operator, 2026-08-18.)
-- **`TasksTab` and `JobsTab` are deferred.** Their backends do not carry enough data to be useful;
-  they get inventoried with their data gaps named, and no refactor design. (Operator, 2026-08-18.)
-- **All six tickets are implement-ready (`--depth ready`, 2026-08-18).** Design, Plan, Q&A, and
-  References are frozen on each; premises were re-verified against the tree and four corrections
-  landed (table above). Every ticket names its frozen file targets, its anti-patterns, and what it
-  must not decide.
-- **`spur task` is excluded from this map** — owned by F92 in a concurrent session. (Operator, 2026-08-18.)
+- **`Tool Using` must read the conversation-history plane** — `spur history import` → `analyze` —
+  **not** event tracking or `system_events`. (Operator, 2026-08-18.)
+- **`TasksTab` and `JobsTab` are deferred.** (Operator, 2026-08-18.)
+- **All six tickets are implement-ready (`--depth ready`, 2026-08-18).**
+- **`spur task` is excluded from this map** — owned by F92. (Operator, 2026-08-18.)
 - **New workflow behavior lands as parallel YAML files, never as in-place edits to a live pipeline.**
   (Operator, 2026-08-18.)
+- **[0594] spine cost** — 198 sessions / 1,390 `/sp:dev-*` messages, 98.85 % prefix-cache hit;
+  cold subagent launches are the confirmed breaker; re-drift 0 / 7; one semantic finding (D1).
+- **[0595] eval suite** — `eval-pipeline` comparator + fixture set + 538s PASS baseline shipped.
+- **[0596] pipeline2** — residual-sweep FSM stage after verify PASS; verdict parity PASS vs
+  baseline; clean exit-0 re-run is D5's first task (quota aborted the first close).
+- **[0597] event SSOT** — 71/71 matrix in `docs/design/event-tracking.md`; remediation is J9;
+  catalog is **gated against** the doc, not generated from it.
+- **[0598] run-record** — two-file contract + Tool Using migration design in
+  `docs/design/run-record-contract.md`; build is E7.
+- **[0599] module boundary** — keep Teams / Inbox / Workspace-as-lens; delete Overview; no
+  `role` noun. Build is M6.
+- **OQ2 recommendation (0594, not yet ratified):** do not relocate `plugins/sp` prose wholesale
+  into `--help`. Adopted as I7's out-of-scope line.
+- **OQ3 recommendation (0598, not yet ratified):** 30-day GC of the two-file pair. Adopted as E7's
+  default window.
+- **OQ4 recommendation (0599, not yet ratified):** do not add a `role` noun. Adopted as M6 R3.
+- **OQ1 recommendation (0596, not yet ratified):** verdict parity + ≤ +10 % + clean exit-0.
+  Adopted as D5 R3.
 
 ### Not yet specified
 
-The fog: in-scope questions visible from here but not yet sharp enough to ticket.
+Cleared 2026-08-19 — every fog line either graduated or moved to out of scope.
 
-- Whether `--auto --next` chaining across `/sp:dev-run` → `/sp:dev-verify` → residual sweep should
-  become a *workflow* (one FSM, one run record) rather than a command loop the operator drives by
-  hand across three sessions with three different models. The operator's described daily practice is
-  already a pipeline; it just isn't declared as one. [0596] will make this specifiable.
-- Whether the event catalog should be **generated from** the SSOT design doc rather than merely checked
-  against it — a codegen answer changes what [0597]'s deliverable is. Depends on how mechanical the
-  5W1H mapping turns out to be.
-- What the model-tier assignment should be per pipeline stage. The operator runs plan/verify on a
-  strong model and implement on a normal one by hand; whether that belongs in the workflow YAML as
-  declared per-stage executor tiers is unclear until [0596] shows what the pipeline can express.
-- Whether any of this changes the `superskill install` contract for the nine non-Claude-Code targets.
-- Whether `spur rule` should carry gates that today live as prose in skills (a rule can fail a build;
-  prose cannot). Adjacent to open question 2 and may absorb part of it.
+- ~~`--auto --next` chaining as a workflow~~ — 0596 made this the pipeline2 residual-sweep stage
+  (plus the existing FSM). Further chaining work is D5, not fog.
+- ~~Event catalog codegen vs check~~ — 0597 decided two-sided gate, not codegen. J9 R5.
+- ~~Per-stage model-tier assignment in YAML~~ — still not expressible as a decided approach.
+  Parked on D5 as out of scope until the pipeline can name executor tiers.
+- ~~`superskill install` contract for nine non-CC targets~~ — no ticket found a required change.
+  Moved to out of scope.
+- ~~`spur rule` carrying gates that today live as prose~~ — absorbed by OQ2 / I7 (keep the
+  ownership split; add the semantic layer). Not a separate investigation.
 
 ### Out of scope
 
-- **`spur task` CLI, section matrix, target-state validation, canonical verdict** — feature F92, owned
-  by a concurrent agent in this tree. Anything this map discovers about `spur task` is reported to the
-  operator, never edited here.
-- Implementing any graduated feature. This map produces the plan; the features it spawns carry the code.
-- New runtime, package manager, linter, formatter, or Turborepo (`AGENTS.md` standing constraint).
+- **`spur task` CLI, section matrix, target-state validation, canonical verdict** — feature F92.
+- Implementing any graduated feature. This map produced the plan; I7 / D5 / J9 / E7 / M6 carry the code.
+- New runtime, package manager, linter, formatter, or Turborepo.
 - Restructuring the `docs/00`–`05` numbered corpus or the constitution's process rules.
 - `.github/workflows/` changes.
+- Changing the `superskill install` contract (no ticket found a required change).
+- Per-stage executor tiers in workflow YAML (not yet a decided approach; parked on D5).
+- Cold-subagent prefix reuse (0594 F4) — conditional L, only after E7 records per-file cost.
+- `TasksTab` / `JobsTab` refactor.
 
 ### Frontier tickets (feature_id I6)
 
+All six investigation tickets are `done`. No further I6 tickets.
+
 | WBS | Title | Type | Depends |
 | --- | --- | --- | --- |
-| 0594 | dev-* spine cost + drift inventory — measure the bootstrap, attribute it, name the fix path | research | — (frontier, primary subject) |
-| 0595 | Harness eval suite — fixture task set + pipeline parity comparator | prototype | — (frontier) |
-| 0596 | task-pipeline2.yaml — two-layer plan from `--dry-run --json` + residual-sweep stage | prototype | 0595 |
-| 0597 | Event 5W1H audit + the event-tracking SSOT design doc | research | — (frontier) |
-| 0598 | Run-record consolidation + the Observability read plane (no new module) | research | — (frontier) |
-| 0599 | Workspace / Inbox / Teams responsibility boundary under the role mechanism | research | — (frontier) |
-
+| 0594 | dev-* spine cost + drift inventory — measure the bootstrap, attribute it, name the fix path | research | — (done) |
+| 0595 | Harness eval suite — fixture task set + pipeline parity comparator | prototype | — (done) |
+| 0596 | task-pipeline2.yaml — two-layer plan from `--dry-run --json` + residual-sweep stage | prototype | 0595 (done) |
+| 0597 | Event 5W1H audit + the event-tracking SSOT design doc | research | — (done) |
+| 0598 | Run-record consolidation + the Observability read plane (no new module) | research | — (done) |
+| 0599 | Workspace / Inbox / Teams responsibility boundary under the role mechanism | research | — (done) |
 ## History
 
 - 2026-08-18T22:20:29.866Z moved L → I6 (system)
