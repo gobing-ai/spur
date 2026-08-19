@@ -1390,6 +1390,31 @@ describe('spur task CLI', () => {
         expect(output.messages[0] ?? '').toContain('Set priority=P0');
     });
 
+    test('update --ac-altitude sets ac_altitude frontmatter and the field persists (0600 R-fix)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Altitude update'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--ac-altitude', 'task-local'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain('Set ac_altitude=task-local');
+
+        // Field persisted on disk
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${wbs}_altitude-update.md`)).text();
+        expect(content).toContain('ac_altitude: task-local');
+    });
+
+    test('update --ac-altitude with invalid value is rejected by the L1 schema', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Altitude bad'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--ac-altitude', 'bogus'], { cwd, output });
+        expect(exitCode).not.toBe(0);
+    });
+
     test('update --feature --json returns structured output', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Feature JSON'], { cwd, output: cOut });

@@ -627,6 +627,11 @@ export class TaskService {
         // this, a task authored before the standard could never adopt it. Opting in is
         // safe for traceability: `normalizeTitle` strips the `R\d+` prefix before DD-09
         // matching, so renumbering AC scenarios cannot break feature coverage.
+        // `ac_altitude` opts a task out of the DD-09 feature-AC subset rule when its
+        // scenarios are intentionally task-local (task-check.ts:1431). Closes the writer
+        // gap where the checker honors the field but the CLI could not set it — without
+        // this, every intentional task-local task either permanently carries 8 L4
+        // warnings or needs a hook-bypassing raw frontmatter edit.
         const allowed: Record<string, true> = {
             feature_id: true,
             parent_wbs: true,
@@ -634,6 +639,7 @@ export class TaskService {
             done_forced: true,
             done_reason: true,
             ac_numbering: true,
+            ac_altitude: true,
         };
         if (!(key in allowed)) {
             throw new Error(`Field "${key}" is not settable via update; allowed: ${Object.keys(allowed).join(', ')}.`);

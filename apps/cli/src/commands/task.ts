@@ -291,6 +291,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Set the ac_numbering frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check',
         )
         .option(
+            '--ac-altitude <mode>',
+            'Set the ac_altitude frontmatter field. Valid: `graduating` (default; feature-AC subset rule enforced) or `task-local` (skip the DD-09 subset rule — task scenarios are intentionally not feature ship criteria). Mirrors the L1 schema enum (packages/domain/src/planning/schema.ts:304).',
+        )
+        .option(
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
@@ -326,15 +330,19 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 } else if (
                     options.feature !== undefined ||
                     options.priority !== undefined ||
-                    options.acNumbering !== undefined
+                    options.acNumbering !== undefined ||
+                    options.acAltitude !== undefined
                 ) {
                     const key =
                         options.feature !== undefined
                             ? 'feature_id'
                             : options.priority !== undefined
                               ? 'priority'
-                              : 'ac_numbering';
-                    const value = options.feature ?? options.priority ?? options.acNumbering ?? '';
+                              : options.acNumbering !== undefined
+                                ? 'ac_numbering'
+                                : 'ac_altitude';
+                    const value =
+                        options.feature ?? options.priority ?? options.acNumbering ?? options.acAltitude ?? '';
                     const result = await svc.updateField(wbs, key, value);
                     if (options.json) {
                         context.output.write(toJson(result));
