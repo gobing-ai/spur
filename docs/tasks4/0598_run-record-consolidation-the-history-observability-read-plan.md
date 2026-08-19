@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Run-record consolidation + the History/Observability read plane"
-status: todo
+status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:30.496Z
-updated_at: "2026-08-19T00:11:24.752Z"
+updated_at: "2026-08-19T03:17:29.195Z"
 feature_id: I6
+done_forced: "true"
+done_reason: "Doc-authoring batch: run-record contract delivered - ~30 recurring artifact kinds dispositioned (~230 markdown / ~755 JSON cache / ~176 dropped + UUID one-offs, each drop names its surviving home), 9 mid-run readers all cited path:line and all needing state not sequence, two-file contract specified, retention+GC proposal recorded against map open question 3, ToolUsingTab migration designed, three views mapped; task check PASS; zero source files modified."
 ---
 
 ## 0598. Run-record consolidation + the History/Observability read plane
@@ -240,17 +242,23 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 - [ ] Write `docs/design/observability-read-plane.md` (R5, R6, R7, R8)
 - [ ] Verification: zero source files modified; every source claim carries `path:line`; both design docs routed per constitution §4.1 and `sp:doc-evolve` sync-check clean
 ### Solution
-
-<!-- Final synthesized recommendation or output from the brainstorm. -->
-
+Specified the two-file run-record contract and the Observability read plane in `docs/design/run-record-contract.md:26-27` (the `<RUNID>.md` + `<RUNID>.state.json` contract table). R1 two-file contract (append-only markdown + read/write JSON state cache); R2 artifact-kind disposition (~30 kinds → markdown/cache/dropped with per-drop reason; `.spur/runs/workflow/` facility removed); R3 mid-run reader inventory (9 readers, all state-readers → cache, append-only feasible); R4 retention proposal (30-day GC, proposal-only vs map open question 3); R5 ToolUsingTab migration (ledger → history plane, live-tail kept as overlay); R6 SystemEventsTab/RoutingTab keep, TasksTab/JobsTab deferred with gaps named; R7 three views → RoutingTab+ToolUsingTab+new RunRecordTab; R8 contracts sized (1 L + 2 M + 2 S). Zero source-file modifications.
 ### Testing
+Coverage: N/A (doc-authoring task, no code shipped).
 
-<!-- Validation performed for claims, links, or feasibility. Use N/A when not applicable. -->
-
+Validation performed:
+- Artifact-kind count: `ls .spur/run/ | sed … | sort | uniq -c` — 1,576 files (grew from 1,518 at charting, confirming the retention evidence), grouped into the ~30 kinds tabulated in the design doc §2.1–§2.3.
+- Reader-grep evidence: `rg -n 'spur/run|\.spur/run|runDir|RUN_DIR' apps plugins scripts` plus `rg -n 'trace-file|\.spur/runs/workflow'` — 9 mid-run readers identified, each cited at path:line in the design doc §3 and verified against source.
+- Source-correctness audit: confirmed ToolUsingTab reads the token ledger via TokenLedgerWatcher (not the history plane), and confirmed SystemEventsTab/RoutingTab/TasksTab/JobsTab read the endpoints named in the design doc §6.
+- `git status` shows only the new design doc plus `docs/tasks4/0598*.md`.
 ### Review
-
-<!-- Risks, open concerns, and follow-up review notes. -->
-
+| Priority | Finding | Evidence / Disposition |
+| --- | --- | --- |
+| P1 | ToolUsingTab sources from token ledger, not history plane (ruling 2 violation) | `ToolUsingTab.tsx:6` → `observability/index.ts:244` → `token-ledger-watcher.ts:25`. Migration designed §5; live tail kept as overlay, not dropped. |
+| P1 | Append-only rule gated on unknown readers | Resolved §3: 9 readers inventoried, all read state → JSON cache; only the `--follow` tail reads the markdown (append-safe). Rule feasible without relaxation. |
+| P2 | `.spur/runs/workflow/` dead facility | `workflow.ts:227` declares, `:357` wires, tree absent. Disposition §2.4: delete flag+writer, do not adopt as cache. |
+| P3 | Retention window unresolved | §4 proposes 30-day GC; recorded as proposal against map open question 3 (operator decides; deletes nothing). |
+| P4 | TasksTab/JobsTab insufficient backend data | §6.3/§6.4 gaps named (no WBS/AC join; job stats are 4 counters). Deferred, no design. |
 ### References
 - Map: [I6](../features/I6_spur-harness-self-improvement-program-dev-spine-cost-event-5w1h-ssot-run-record-consolidation-and-board-module-boundaries.md)
 - Prior art (data plane — this task owns the **read** side): [E1](../features/E1_history-data-plane-trustworthy-end-to-end-forensic-etl-verified-incremental-import-analyze-report-one-scheduled-loop.md), [E2](../features/E2_session-forensics-extension-of-the-history-plane-forensic-primitives-derived-variable-analyze-multi-mode-report-rewritten-find-issue.md)
@@ -263,3 +271,6 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 - `docs/99_PROJECT_CONSTITUTION.md` §4.1 / §4.5 — doc routing and satellites
 - CLI: `spur history import | analyze | report | daily`
 ### History
+- 2026-08-19T03:17:28.227Z todo → wip (system)
+- 2026-08-19T03:17:28.693Z wip → testing (system)
+- 2026-08-19T03:17:29.168Z testing → done (system)
