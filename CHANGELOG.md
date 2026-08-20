@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.54] — 2026-08-20
+
+### Added
+
+- feat(workflow): land doctor.probe built-in and the shell-ownership surface (04d58d49)
+- feat(scripts): add pipeline cost measurement and budget gate (9e99f6e6)
+- feat(app): wire proof-input digest into the canonical pipeline (e86b128f)
+- feat(app): wire ProofInputFingerprint digest into proof chain (420ec8c4)
+- feat(cli): refuse nested workflow runs while a pipeline is active (9e66c652)
+- feat(workflow): accept ADR-072/075, close composition-baseline invocation gap (2dc86579)
+- feat(app): add softFail option and shell-metacharacter guard to command-gate (1e13ab38)
+- feat(workflow): add integration-review, read-only residual sweep, and run.artifact (0a096277)
+- feat(app): add agent column, correlators, and actionLabel to system event table (d3e6eeb1)
+- feat(workflow): add testable idea-handoff CLI entrypoint and unit tests (d7fa05c3)
+- feat(workflow): establish composition contract, execution infrastructure, and pipeline migrations (5801871d)
+- feat(j9): ship System Event presenters, history reprojection, and queue identity (33c229b0)
+- feat(plugin): align sp scripts to superskill entrypoint contract (2fe845b4)
+
+### Fixed
+
+- fix(scripts): let eval-pipeline fixture worktrees run the quality gate (27dfb749)
+- fix(workflow): make the eval bar reachable — folded-scalar and twin-staleness blockers (40cd5c5b)
+- fix(workflow): remove unused CLI entrypoints from packages/app (596e9f64)
+
+### Changed
+
+- docs: close features D5/D6 and reconcile task-doc verification anchors (b19804a3)
+- chore: drop --verbose from rule gate runs (b49a420d)
+- docs(tasks): record D5 closure — 0604 PASS and cleared scenarios (4fd511ac)
+- docs(tasks): record 0610 verify results and done transitions (bf92f354)
+- test(app): cover defaultRunPs success and error paths (d43d1356)
+- docs: reconcile task-pipeline2 promotion references with ADR-076 (a368fbbd)
+- refactor(workflows): retire D5-N promotion bar and delete task-pipeline2 (ADR-076) (017ac7a3)
+- chore(corpus): drop non-reproducing 0408 stale-anchor baseline entry (609abb15)
+- docs(tasks): reconcile retired planning-pipeline references and ADR-072 status (3378a53b)
+- test(app): capture stdout/stderr in idea-handoff-cli tests (5fbcbe7f)
+- docs: update architecture and help guides for workflow composition (ddbdb7f9)
+- docs(tasks): update task solutions/testing and add D5/D6 feature and task files (b78f2ecd)
+- chore(cli): stop seeding planning-pipeline.yaml into new projects (D5-K) (04532d3a)
+- refactor(dev): isolate pipeline-eval fixtures in run-local worktrees (c7ee24ec)
+- docs(system-events): J9 semantic presentation design accepted + task corpus (da5b0815)
+
 ## [0.3.53] — 2026-08-18
 
 ### Added
