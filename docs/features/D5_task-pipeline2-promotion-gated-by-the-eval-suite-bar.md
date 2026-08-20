@@ -9,7 +9,7 @@ created_at: "2026-08-19T05:34:31.735Z"
 updated_at: "2026-08-20T00:07:13.995Z"
 ---
 
-# D5: task-pipeline2 promotion gated by the eval-suite bar
+# D5: Workflow pipeline contract, progress projection, and staged consolidation
 
 ## Goal
 

@@ -998,10 +998,11 @@ runs final verification with `--fix none`. A failed verification may enter one b
 hop, but that hop returns to quality, review, and verification on a fresh digest.
 
 Only `verified(D)` may cross the completion boundary, and the boundary re-captures D immediately
-before transition. This statically disqualifies the current `task-pipeline2.yaml`: both its
-editing-capable verify action and post-PASS residual `agent.run` can mutate proof inputs before
-record. Evaluation quota is not spent on that graph; residual logic must become read-only or loop
-through remediation and the entire proof chain.
+before transition. This statically disqualified the former `task-pipeline2.yaml`: both its
+editing-capable verify action and post-PASS residual `agent.run` could mutate proof inputs before
+record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The rule stands for any
+future candidate: residual logic must be read-only or loop through remediation and the entire proof
+chain.
 
 Enforceable invariants:
 
@@ -1019,8 +1020,10 @@ The proposed target retains separate workflows where the lifecycle and rollback 
 docs, wrap-up, idea/design review, task execution, and integration-HEAD PR review. Planning is a
 duplicate front half and was absorbed into the canonical idea/dev-plan path, resolving
 ADR-029's deferral (ADR-072 accepted 2026-08-20; `planning-pipeline.yaml` deleted).
-`task-pipeline2.yaml` remains a temporary candidate only; the live task pipeline stays authoritative
-until a redesigned delta passes promotion and receives explicit deletion approval.
+`task-pipeline.yaml` is the single canonical task pipeline. The parallel `task-pipeline2.yaml`
+candidate was **deleted rather than promoted** (ADR-076 accepted 2026-08-20): it had no live caller
+and declared a fifth model query against the canonical pipeline's four, so promoting it would have
+added cost against a goal of reducing it.
 
 The proposed migration order keeps rollback local:
 

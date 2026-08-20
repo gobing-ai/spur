@@ -1644,25 +1644,18 @@ directly — status moves use the normal `spur task update <wbs> <status>` verb 
 through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
 identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 
-**Rival pipeline — `config/workflows/task-pipeline2.yaml` (feature I6, task 0596).** A parallel file
-beside the live pipeline, not a replacement: `task-pipeline.yaml` is unmodified and both validate.
-It adds a `residual-sweep` **FSM stage** (`task-pipeline2.yaml:505`) reached only via the PASS
-verdict guard, so it holds a fixed position after `verify` and before `record`/commit — a step
-inside `verify` would run before that guard and could not be conditioned on the verdict. The sweep
-prompt is templated over the `residualSweepTarget` var (`:95`, default `current task`); a feature
-batch overrides it via `--vars`. Promotion over `task-pipeline.yaml` is gated on the eval-suite
-promotion bar (map open question 1, operator ratifies) measured by the `scripts/spur-dev.ts
-eval-pipeline` comparator (task 0595) — not on this doc. Two-layer plan rendering for either
-pipeline is the inline driver's job
+**Rival pipeline — retired.** `config/workflows/task-pipeline2.yaml` (feature I6, task 0596) was a
+parallel file beside the live pipeline, adding a `residual-sweep` FSM stage reached only via the PASS
+verdict guard. It was **deleted rather than promoted** on 2026-08-20 (ADR-076): it had zero live
+callers, and a resolved-fact comparison showed it declared **5** model queries against the canonical
+pipeline's **4**, so promotion would have raised cost against a goal of lowering it. `task-pipeline.yaml`
+is the single canonical task pipeline. Two-layer plan rendering is the inline driver's job
 (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:33-42`).
 
-**D5 proposed transition (ADR-071/072; taste gate pending).** The current candidate is frozen before
-promotion: `residual-sweep` is an editing-capable `agent.run` after verify PASS, so the proof state
-is invalidated before `record`; the live `/sp:dev-verify --fix all` action is also `may-write` and
-cannot establish final PASS. The proposed replacement separates remediation from a digest-bound
-quality → review → `--fix none` proof chain. Only that proof-preserving delta may merge into the
-canonical `task-pipeline.yaml`; `task-pipeline2.yaml` is deleted after the full promotion contract
-and explicit operator approval. Composition, action, gate, and artifact shapes are in
+**D5 transition (ADR-071/072/076).** The proof-state invariant (ADR-071) requires remediation to be
+separated from a digest-bound quality → review → `--fix none` proof chain. The `task-pipeline2.yaml`
+candidate was retired without promotion (ADR-076, 2026-08-20) — the invariant it was meant to
+demonstrate stands on its own and governs any future candidate. Composition, action, gate, and artifact shapes are in
 [`workflow-composition-contract.md`](design/workflow-composition-contract.md).
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,

@@ -20,7 +20,7 @@ feature is planned and shipped as separate work after this map closes.
 
 ## Scope
 
-- In: the `/sp:dev-*` execution spine (bootstrap cost, cache-hit rate, planning transparency, residual-sweep fallback); `spur feature` / `spur agent` / `spur workflow` CLI-vs-`plugins/sp`-vs-workflow-YAML drift; the system-event 5W1H contract and its SSOT design doc; `.spur/run` run-record consolidation and retention; the Observability module's read plane — including sourcing `Tool Using` from the `spur history` plane (no new board module); the Workspace/Inbox/Teams module boundary under the agent-role mechanism; a harness eval/parity suite that gates promotion of `task-pipeline2.yaml`.
+- In: the `/sp:dev-*` execution spine (bootstrap cost, cache-hit rate, planning transparency, residual-sweep fallback); `spur feature` / `spur agent` / `spur workflow` CLI-vs-`plugins/sp`-vs-workflow-YAML drift; the system-event 5W1H contract and its SSOT design doc; `.spur/run` run-record consolidation and retention; the Observability module's read plane — including sourcing `Tool Using` from the `spur history` plane (no new board module); the Workspace/Inbox/Teams module boundary under the agent-role mechanism; a harness eval/parity suite (originally scoped to gate promotion of `task-pipeline2.yaml`; that gate was retired and the graph deleted — ADR-076, so the suite is a measurement tool only).
 - Out: **`spur task` CLI, section matrix, target-state validation, and canonical verdict — owned by feature F92 in a concurrent agent session.** New runtimes, package managers, linters, or Turborepo. Restructuring the `docs/00`–`05` numbered corpus. Any `TasksTab` / `JobsTab` refactor — deferred by the operator until their backends carry enough data. A new History board module. Implementing any graduated feature (that is post-map work).
 
 ## Acceptance Criteria
@@ -58,7 +58,7 @@ not implement them.
 | Item | Decided approach | Feature |
 | --- | --- | --- |
 | Spine cost remediations + semantic drift (0594 F1–F2) | Fix wayfinder `--section tags`; add a semantic layer to the I2/I3 parity harness. Do not relocate `plugins/sp` prose wholesale. | [I7](./I7_semantic-class-drift-layer-and-wayfinder-section-tags-fix.md) |
-| Eval suite + `task-pipeline2.yaml` (0595, 0596) | Parallel YAML stays; residual-sweep is an FSM stage after verify PASS; promotion is `eval-pipeline` exit-0 + verdict parity + ≤ +10 % of the 538s baseline. | [D5](./D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md) |
+| Eval suite + `task-pipeline2.yaml` (0595, 0596) | **Superseded (ADR-076, 2026-08-20):** the promotion bar was retired and `task-pipeline2.yaml` deleted rather than promoted — zero live callers, and 5 declared model queries against the canonical pipeline's 4. `eval-pipeline` survives as a measurement tool only. | [D5](./D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md) |
 | Event 5W1H SSOT → remediation (0597) | Per-event catalog, `*.updated` diff, `workflow.*` names; two-sided gate against `docs/design/event-tracking.md`, not codegen. | [J9](./J9_event-5w1h-payload-and-catalog-remediation.md) |
 | Run-record + Observability read plane (0598) + per-file cost (0594 F3) | Two-file `<RUNID>.md` + `.state.json`; history oRPC; Tool Using reads the history plane with a ledger overlay; 30-day GC proposed. | [E7](./E7_two-file-run-record-history-orpc-and-tool-using-source-migration.md) |
 | Workspace / Inbox / Teams boundary (0599) | Keep all three; delete Workspace Overview; split the two Supervisor labels; no `role` noun. | [M6](./M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md) |
@@ -114,9 +114,11 @@ Domain context and standing constraints every session on this map must respect.
 - **Ten targets, one plugin.** `plugins/sp` ships to Claude Code, Codex, Gemini CLI, pi, omp,
   OpenCode, Antigravity, OpenClaw, Hermes, and Grok via `superskill install`. A fix that only works
   where slash commands and subagents exist is half a fix; every proposal states its fallback.
-- **Parallel YAML, never in-place.** New workflow behavior lands as a new file
-  (`config/workflows/task-pipeline2.yaml`) beside the live one. `config/workflows/` is the tracked
-  SSOT; `.spur/workflows/` is a symlink to it. Never hand-`cp` into `apps/cli/config/`.
+- **Parallel YAML, never in-place.** New workflow behavior lands as a new file beside the live one
+  rather than editing it (`task-pipeline2.yaml` was the worked example; it was later deleted rather
+  than promoted — ADR-076). `config/workflows/` is the tracked SSOT; `.spur/workflows/` is a symlink
+  to it. Never hand-`cp` into `apps/cli/config/`. **Note the lesson:** a parallel graph that never
+  earns promotion becomes carrying cost, so pair the fork with a decision date.
 - **ADR-051 consent gate.** Adding, changing, or removing any `spur` CLI noun or verb requires
   explicit operator consent with design context presented first.
 - **I2 and I3 already did the drift audit and closed.** [0594] re-drift rate = 0 / 7. The one
@@ -134,9 +136,9 @@ Domain context and standing constraints every session on this map must respect.
 Ticket recommendations are recorded under Decisions so far. These four stay open until the operator
 ratifies them at the graduated feature's kickoff — they are not silently decided.
 
-1. **What is the "mature enough" bar that promotes `task-pipeline2.yaml`?** Blocks D5 promotion
-   (not D5 development). Recommendation: verdict parity + gate integrity + wall within +10 % of
-   538s + clean exit-0.
+1. ~~**What is the "mature enough" bar that promotes `task-pipeline2.yaml`?**~~ **Answered
+   (ADR-076, 2026-08-20):** there is no bar — the candidate was deleted rather than promoted, and the
+   538s figure is retired as unrepresentative (the only other full-depth run measured 2053s).
 2. **Should `plugins/sp` prose shrink by relocating into the CLI?** Blocks any I7-beyond
    restructure. Recommendation: no wholesale move.
 3. **What retention policy applies to `.spur/run`?** Blocks E7 GC window. Recommendation: 30 days;
@@ -146,8 +148,9 @@ ratifies them at the graduated feature's kickoff — they are not silently decid
 
 ### Decisions so far
 
-- **Harness eval suite is in scope and gates pipeline2.** Promotion of `task-pipeline2.yaml` requires a
-  parity PASS from the eval suite, not operator inspection. (Charting interview, 2026-08-18.)
+- ~~**Harness eval suite is in scope and gates pipeline2.**~~ **Reversed (ADR-076, 2026-08-20):** the
+  eval suite gates nothing. `task-pipeline2.yaml` was deleted rather than promoted, and `eval-pipeline`
+  is a measurement tool invoked deliberately. (Original decision: charting interview, 2026-08-18.)
 - **History is a re-cut of Observability, not a second module** — one read plane over the history data.
   (Charting interview, 2026-08-18.)
 - **Workspace / Inbox / Teams: full latitude, including deletion.** (Charting interview, 2026-08-18.)
