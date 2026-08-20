@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { type BufferTarget, createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
 import type { FinalizeIdeaHandoffResult } from '../../src/workflow/idea-handoff';
 import { runIdeaHandoffCli } from '../../src/workflow/idea-handoff-cli';
 
@@ -10,6 +11,22 @@ const ok: FinalizeIdeaHandoffResult = {
 };
 
 describe('runIdeaHandoffCli', () => {
+    let stdout: BufferTarget;
+    let stderr: BufferTarget;
+    let restore: () => void;
+
+    beforeEach(() => {
+        // echo/echoError write process streams by default; capture them so the
+        // CLI operator lines do not leak through bun test's dots reporter.
+        stdout = createBufferTarget();
+        stderr = createBufferTarget();
+        restore = setDefaultOutputTargets({ stdout, stderr });
+    });
+
+    afterEach(() => {
+        restore();
+    });
+
     test('fails closed when __runId is missing rather than finalizing a run it cannot identify', async () => {
         let called = false;
         const outcome = await runIdeaHandoffCli({ featureId: 'D6' }, async () => {
@@ -21,6 +38,8 @@ describe('runIdeaHandoffCli', () => {
         // A missing run id would scope artifacts to the wrong path, so finalization
         // must not run at all — not run-and-then-report.
         expect(called).toBe(false);
+        expect(stderr.text()).toBe('idea-handoff: __runId and featureId env vars are required\n');
+        expect(stdout.text()).toBe('');
     });
 
     test('fails closed when featureId is missing', async () => {
@@ -32,6 +51,8 @@ describe('runIdeaHandoffCli', () => {
 
         expect(outcome.exitCode).toBe(1);
         expect(called).toBe(false);
+        expect(stderr.text()).toBe('idea-handoff: __runId and featureId env vars are required\n');
+        expect(stdout.text()).toBe('');
     });
 
     test('passes the resolved spurBin through so the child CLI is PATH-independent', async () => {
@@ -48,6 +69,10 @@ describe('runIdeaHandoffCli', () => {
         expect(seen?.runId).toBe('run-1');
         expect(seen?.featureId).toBe('D6');
         expect(seen?.spurBin).toBe('/usr/bin/bun /repo/apps/cli/src/index.ts');
+        expect(stdout.text()).toBe(
+            'idea-handoff: wrote .spur/run/run-1-idea-handoff.md (2 task(s))\nidea-handoff: next -> /sp:dev-runall --feature D6 --auto\n',
+        );
+        expect(stderr.text()).toBe('');
     });
 
     test('defaults spurBin to the bare binary when the workflow var is unset', async () => {
@@ -71,6 +96,8 @@ describe('runIdeaHandoffCli', () => {
 
         expect(outcome.exitCode).toBe(1);
         expect(outcome.result?.error).toBe('batch/result length mismatch');
+        expect(stderr.text()).toBe('idea-handoff: batch/result length mismatch\n');
+        expect(stdout.text()).toBe('');
     });
 
     test('returns the finalization result on success', async () => {
@@ -79,5 +106,7 @@ describe('runIdeaHandoffCli', () => {
         expect(outcome.exitCode).toBe(0);
         expect(outcome.result?.wbsList).toEqual(['0701', '0702']);
         expect(outcome.result?.nextCommand).toBe('/sp:dev-runall --feature D6 --auto');
+        expect(stdout.text()).toContain('idea-handoff: next -> /sp:dev-runall --feature D6 --auto');
+        expect(stderr.text()).toBe('');
     });
 });
