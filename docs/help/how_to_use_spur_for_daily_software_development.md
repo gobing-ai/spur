@@ -508,8 +508,7 @@ spur workflow trace --since 2026-06-01 --last 50
 | `task-pipeline.yaml` | Task execution pipeline (precheck → implement → test → review → approve → verify → record → done) | Execution |
 | `docs-pipeline.yaml` | Docs-only execution pipeline (draft → docs-review → record → done) — keeps doc deliverables out of the code gate | Execution (docs) |
 | `feature-dev.yaml` | Feature umbrella (brainstorm → plan → execute-tasks → feature-verify → done) | Umbrella execution |
-| `planning-pipeline.yaml` | Planning pipeline (phasing → feature-id → design-gen → design-approval → handoff) | Planning |
-| `idea-pipeline.yaml` | Idea → feature + AC + task batch (discovery → … → handoff) | Ideation (new 0167) |
+| `idea-pipeline.yaml` | Planning + ideation: idea or known slug → feature + AC + task batch (discovery → … → handoff). Absorbed the retired planning-pipeline in D5-K (ADR-072). | Planning / ideation |
 | `wrapup-pipeline.yaml` | Post-execution wrap-up (task-resolve → doc-sync → learning-capture → metrics-record → feature-transition → branch-cleanup → done) | Wrap-up (new 0167) |
 
 **Workflow action kinds** (run by the engine at state entry): `note`, `shell`, `agent.run`,

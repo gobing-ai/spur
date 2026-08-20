@@ -217,8 +217,7 @@ List available workflow YAML files across project (`.spur/workflows/`) and globa
 | `basic.yaml` | Canonical implement → soft-check → fixall → done loop |
 | `task-pipeline.yaml` | Task execution pipeline (precheck → … → verify → record → done) |
 | `feature-dev.yaml` | Feature umbrella pipeline |
-| `planning-pipeline.yaml` | Front-half planning |
-| `idea-pipeline.yaml` | Idea → feature + AC + task batch |
+| `idea-pipeline.yaml` | Front-half planning: idea → feature + AC + task batch (`/sp:dev-idea`, `/sp:dev-plan`) |
 | `wrapup-pipeline.yaml` | Post-execution wrap-up |
 
 ## spur workflow trace

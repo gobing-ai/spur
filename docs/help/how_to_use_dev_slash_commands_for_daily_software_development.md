@@ -259,8 +259,7 @@ Three bundled workflows cover the altitudes (the two new 0167 workflows are in i
 | ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `task-pipeline.yaml`     | one task               | precheck → implement → test → review → approve → verify → record → done                                                         |
 | `feature-dev.yaml`       | a whole feature        | brainstorm → plan → execute-tasks (loops every task through `task-pipeline`) → feature-verify → done                            |
-| `planning-pipeline.yaml` | front-half only        | phasing → feature-id → design-gen → design-approval → handoff                                                                   |
-| _`idea-pipeline.yaml`_   | unified idea entry     | discovery → feature-create → ac-generate → feature-check → system-design → design-approval → decompose → batch-create → handoff |
+| _`idea-pipeline.yaml`_   | unified front-half     | discovery → feature-create → ac-generate → feature-check → system-design → design-approval → decompose → batch-create → handoff |
 | _`wrapup-pipeline.yaml`_ | post-execution wrap-up | task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done                    |
 
 `feature-dev.yaml` is the one to run when you want a feature taken from idea to verified

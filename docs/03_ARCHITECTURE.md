@@ -740,7 +740,7 @@ Invariants (enforceable):
 Shapes and the per-event matrix: `docs/design/actionable-observability-context.md` and
 `docs/design/event-tracking.md`.
 
-### 16.2 J91 human table projection (accepted design — ADR-073/074; not yet built)
+### 16.2 J91 human table projection (built — ADR-073/074; task 0605)
 
 J91 deepens the existing envelope projector; it does not add a client interpretation seam, an envelope
 v3, or a CLI noun. Event-name presenters keep owning description, tooltip fields, summary, and outcome.
