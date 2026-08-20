@@ -4,7 +4,7 @@ name: "Establish workflow composition contract and shared execution infrastructu
 status: done
 template: feature-impl
 created_at: 2026-08-19T20:03:57.619Z
-updated_at: "2026-08-19T23:43:25.379Z"
+updated_at: "2026-08-20T02:16:40.545Z"
 feature_id: D5
 priority: P2
 tags: ["workflow", "infrastructure", "observability"]
@@ -182,7 +182,7 @@ Feature: Workflow contract and shared execution infrastructure
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/00_ADR.md:844` ADR-069 Proposed (companions ADR-070/071/072 at :856/:868/:880); ADR-029 status line unchanged; mechanism `docs/03_ARCHITECTURE.md:912` §20 Workflow Composition and `docs/03_ARCHITECTURE.md:1039` §21 Workflow Progress Projection; commit 5801871d touched no `apps/cli` surface, so ADR-051 consent was not required |
+| R1 | MET | `docs/00_ADR.md:847` ADR-069 Proposed (companions ADR-070 :859 and ADR-071 :871 also Proposed; ADR-072 :883 was Accepted 2026-08-20 by task 0606 R6, after this task landed); ADR-029 status line unchanged; mechanism `docs/03_ARCHITECTURE.md:912` §20 Workflow Composition and `docs/03_ARCHITECTURE.md:1039` §21 Workflow Progress Projection; commit 5801871d touched no `apps/cli` surface, so ADR-051 consent was not required |
 | R2 | MET | `packages/app/src/workflow/composition-baseline.ts:202` checkWorkflowComposition compares resolved graphs against `config/workflow-composition-baseline.json` (7 workflows); `packages/app/tests/workflow/composition-baseline.test.ts:43` asserts the live repository definitions pass, and `:74`/`:96` assert both drift directions fail |
 | R3 | MET | `packages/app/src/workflow/progress-projection.ts:169` projectWorkflowProgress builds the WorkflowProgressProjection DTO from the resolved definition plus run/phase/transition/action/artifact rows; no new table added; fixture matrix green in `packages/app/tests/workflow/progress-projection.test.ts` |
 | R4 | MET | `packages/app/src/workflow/progress-follow.ts:41` followWorkflowProgress snapshots the sequence then re-projects from persistence on every wakeup; cursor source `packages/domain/src/dao/system-event-dao.ts:360` latestSequence; reconnect/duplicate/missed/poll cases in `packages/app/tests/workflow/progress-follow.test.ts` |
@@ -191,7 +191,7 @@ Feature: Workflow contract and shared execution infrastructure
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — Workflow composition rules are authoritative and enforceable | MET | static-ref | `docs/00_ADR.md:844` names YAML/deterministic ownership in one ADR; `docs/03_ARCHITECTURE.md:912` is the single matching architecture section; ADR-029 status untouched; no `apps/cli` diff in 5801871d |
+| Scenario: R1 — Workflow composition rules are authoritative and enforceable | MET | static-ref | `docs/00_ADR.md:847` names YAML/deterministic ownership in one ADR; `docs/03_ARCHITECTURE.md:912` is the single matching architecture section; ADR-029 status untouched; no `apps/cli` diff in 5801871d |
 | Scenario: R2 — Every shipped pipeline has a reviewed disposition and frozen baseline | MET | test | bun test packages/app/tests/workflow/composition-baseline.test.ts — 15 pass / 0 fail, covering resolved-graph comparison, field-level diff, and both two-sided failure directions |
 | Scenario: R3 — Long runs expose one detailed persisted todo projection | MET | test | bun test packages/app/tests/workflow/ — 369 pass / 0 fail; projection fixtures cover pending/running/passed/failed/skipped/ambiguous plus attempts, diagnostics, and next eligible transitions |
 | Scenario: R4 — Event wakeups cannot become workflow mutation authority | MET | test | bun test packages/app/tests/workflow/progress-follow.test.ts green; `packages/app/src/workflow/progress-follow.ts:87` re-reads persisted rows on each wakeup instead of trusting the event payload |

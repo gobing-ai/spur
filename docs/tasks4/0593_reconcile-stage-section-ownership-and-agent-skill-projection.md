@@ -13,7 +13,7 @@ tags: ["harness", "stage-registry", "skill-parity"]
 dependencies: ["0591", "0592"]
 ac_numbering: task-local
 created_at: "2026-08-18T20:06:22.485Z"
-updated_at: "2026-08-19T04:16:41.921Z"
+updated_at: "2026-08-20T02:31:31.096Z"
 ---
 
 ## 0593. Reconcile stage section ownership and agent-skill projections with runtime contracts
@@ -97,7 +97,7 @@ R1 (one writer per evidence section) + R2 (checked projections) implemented. Run
 - `plugins/sp/tests/stage-registry-parity.test.ts:163-231` — full shared-stage contract parity: artifacts (kind/direction/identity), gates (identifier/timing/min_verdict), reasoning_skill, mutation_class, execution kind; writer-map projection pin (verify emits the artifact only — no task-section identity).
 - `plugins/sp/tests/stage-registry-adapter.test.ts` — 13→14 stage counts; ghost-gate assertions replaced by canonical-check-identifier assertions; record/stage-identity tests.
 - `plugins/sp/tests/section-ownership-projection.test.ts:52-113` (new) — static contradiction scan over the shipped markdown: only the coordinator claims authored Review; record labeled deterministic Testing writer with bare-only Review fallback; verify claims no section write; trio section-batching and static status→section tables gone; skills query `spur task sections`/`spur task check`.
-- `plugins/sp/tests/skill-structure.test.ts:1312` — old trio-batching pin replaced with one-writer + runtime-query pins.
+- `plugins/sp/tests/skill-structure.test.ts:1316-1322` — old trio-batching pin replaced with one-writer + runtime-query pins.
 
 **Prose reconciliation — skills/agents/commands now match the runtime contracts (R1/R2):**
 - `plugins/sp/skills/spur-dev/references/section-batching.md:17-31` — rewritten from trio batching to the one-writer evidence-section protocol (writer map + `spur task sections <wbs> list --json` / `spur task check` sequencing).
@@ -131,7 +131,7 @@ R1 (one writer per evidence section) + R2 (checked projections) implemented. Run
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — Each pipeline stage has one task-section writer | MET | test | implement→Solution / review→Review / record→Testing(+fallback Review) writer-map projection pinned (`packages/domain/tests/stage-registry/schema.test.ts` writer-map projection; `plugins/sp/tests/section-ownership-projection.test.ts:52-113` static contradiction scan: only coordinator claims authored Review, verify claims no section write); runtime fallback guard `sectionIsBare` never overwrites authored Review (`packages/app/src/services/task-service.ts:1138`) |
-| Scenario: R2 — Skills and registry are checked projections | MET | test | full shared-stage contract parity across artifacts/direction/identity, gates identifier/timing/min_verdict, reasoning_skill, mutation_class, execution kind (`plugins/sp/tests/stage-registry-parity.test.ts:163-231`); trio batching + static status→section tables replaced by runtime queries (`plugins/sp/tests/skill-structure.test.ts:1312`, `section-ownership-projection.test.ts`) |
+| Scenario: R2 — Skills and registry are checked projections | MET | test | full shared-stage contract parity across artifacts/direction/identity, gates identifier/timing/min_verdict, reasoning_skill, mutation_class, execution kind (`plugins/sp/tests/stage-registry-parity.test.ts:163-231`); trio batching + static status→section tables replaced by runtime queries — the pin asserts `spur task sections <wbs> list --json` (`plugins/sp/tests/skill-structure.test.ts:1316-1322`, `section-ownership-projection.test.ts`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Dimension | Location | Finding |

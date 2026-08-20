@@ -11,7 +11,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: 2026-07-02T06:29:12.250Z
-updated_at: 2026-07-02T22:20:55.951Z
+updated_at: "2026-08-20T02:32:01.485Z"
 ---
 
 ## 0180. 0176 Wave D: prompt slimming and pipeline consolidation
@@ -268,7 +268,7 @@ skill docs, one reference, no new verbs, no schema changes, one ADR.
 Implemented Wave D by turning the prompt/pipeline audit findings into concrete workflow and CLI changes:
 
 - Slimmed `idea-pipeline` discovery so `sp:brainstorm` owns approach/design/`needs_design` criteria, and aligned decomposition output with the actual task-batch schema fields instead of asking the agent to invent AC/Design/Plan fields that the schema rejects (`config/workflows/idea-pipeline.yaml:68`, `config/workflows/idea-pipeline.yaml:166`).
-- Aligned `planning-pipeline` with the shared dispatch convention (`agent`, `spurBin`, `stepTimeoutMs`) and replaced prose feature-id allocation with an agent instruction that invokes canonical `spur feature create` and writes `.spur/run/plan-feature-id.txt` (`config/workflows/planning-pipeline.yaml:38`, `config/workflows/planning-pipeline.yaml:65`).
+- Aligned `planning-pipeline` with the shared dispatch convention (`agent`, `spurBin`, `stepTimeoutMs`) and replaced prose feature-id allocation with an agent instruction that invokes canonical `spur feature create` and writes `.spur/run/plan-feature-id.txt` (`config/workflows/planning-pipeline.yaml` line 38 (file retired 2026-08-20 by ADR-072 / task 0606), `config/workflows/planning-pipeline.yaml` line 65 (file retired 2026-08-20 by ADR-072 / task 0606)).
 - Recorded ADR-029: planning-pipeline fate is explicitly deferred as an operator/product decision, while Wave D makes only compatibility fixes; the same ADR promotes wrapup's feature status ladder into a CLI verb (`docs/00_ADR.md:771`).
 - Added `spur feature advance <id> [--to <status>]`, which walks the legal forward lifecycle path, runs feature checks before guarded hops, verifies observed status after transitions, and returns `{id,status,hops}` for `--json` (`apps/cli/src/commands/feature.ts:138`, `apps/cli/src/commands/feature.ts:173`, `apps/cli/src/commands/feature.ts:369`).
 - Collapsed `wrapup-pipeline` feature transition from the embedded shell ladder to `${vars.spurBin} feature advance ${vars.feature} --json` (`config/workflows/wrapup-pipeline.yaml:118`).
@@ -279,9 +279,9 @@ Dogfood recovery note: workflow run `4ac8a861-6233-4e19-ad43-595d99bec537` faile
 ### Testing
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Agent prompts are slimmer and delegate criteria to skills/artifact contracts: `config/workflows/idea-pipeline.yaml:68`, `config/workflows/idea-pipeline.yaml:166`, `config/workflows/planning-pipeline.yaml:65`. |
+| R1 | MET | Agent prompts are slimmer and delegate criteria to skills/artifact contracts: `config/workflows/idea-pipeline.yaml:68`, `config/workflows/idea-pipeline.yaml:166`, `config/workflows/planning-pipeline.yaml` line 65 (file retired 2026-08-20 by ADR-072 / task 0606). |
 | R2 | MET | Decomposition prompt lists only task-batch schema fields and says AC/Design/Plan are filled later: `config/workflows/idea-pipeline.yaml:166`; structural invariant at `plugins/sp/tests/skill-structure.test.ts:413`. |
-| R3 | MET | Planning feature-id allocation now invokes canonical `spur feature create` instead of prose ID derivation: `config/workflows/planning-pipeline.yaml:65`. |
+| R3 | MET | Planning feature-id allocation now invokes canonical `spur feature create` instead of prose ID derivation: `config/workflows/planning-pipeline.yaml` line 65 (file retired 2026-08-20 by ADR-072 / task 0606). |
 | R4 | MET | ADR-029 records the planning-pipeline fate as explicitly deferred pending operator decision, avoiding broad behavior edits in this wave: `docs/00_ADR.md:771`. |
 | R5 | MET | Added `spur feature advance` and replaced wrapup's embedded ladder with the verb: `apps/cli/src/commands/feature.ts:138`, `config/workflows/wrapup-pipeline.yaml:118`. |
 | R6 | MET | Stale review/verification references cleaned: `plugins/sp/skills/code-verification/references/secu-review.md:10`, `plugins/sp/skills/code-verification/SKILL.md:358`, `plugins/sp/skills/code-review/SKILL.md:38`. |
