@@ -5,7 +5,7 @@ authority: derived
 version: 1.5.0
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-08-14
+updated_at: 2026-08-19
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]
@@ -66,6 +66,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | Subagent role propagation across fan-out (I4) | ✅ | declared role wins; absent inherits via `SPUR_ROLE` with `roleOrigin` on the `--json` envelope (0551); inventory in `dispatch-surface.md` |
 | Agent-run routing attribution on J5 events (J6/0545) | ✅ | `agent.invoke.start\|exit` carry `role`/`tier`/`executor`/`source`; escalation is its own `agent.invoke.escalated` row; no new table/column (0545) |
 | Role→executor routing query (J6/0546) | ✅ | `SystemEventDao.routingSummary` one indexed round trip (`idx_system_events_name_occurred`); pinned vs role-resolved separate; pre-attribution excluded. Token-join (0547) still open |
+| System Events human-readable table (J91/0605) | ✅ | Board maps server-projected `correlators` / `actionLabel` / `agent`; Agent column after Correlation; cells omit opaque ids; tooltip and expanded detail keep raw ids |
 | Slash-command translation | ✅ | Claude-style `/plugin:cmd` translated per agent via ts-ai-runner `translateSlashCommand` (agent-service) — corrected 2026-06-12 after code verification (was 💤) |
 
 ## 4. Rules (`ts-rule-engine`)
@@ -164,7 +165,7 @@ Decomposition and per-item dispositions live in
 | Spec-driven pipeline (sp planning fat skill / `sp:spur-dev`) | ✅ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
 | Task-pipeline workflow + HITL continue + result writer + record verb (0108) | ✅ | `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'`; `continue` resumes a paused run; `record` verb moves result-write logic from YAML shell to tested service; pipeline-pause integration deferred (task 0071 R4); `task_run_links` kind=pipeline pending (task 0071 R1) |
 | Batch task execution (`/sp:dev-runall` + `sp:super-planner` orchestrator, task 0141) | ✅ | `/sp:dev-runall --tasks <selector>` runs a set through the per-task pipeline in dependency order; selectors: explicit WBS / status pseudo-list / `feature:<id>` / `ready`; set frozen at kickoff, Kahn topo-sort, cycle→abort, unmet out-of-set dep→block subtree; stop-the-batch default + `--keep-going`; orchestration is prose in `execution-batch.md` driven by `sp:super-planner` (ADR-022, zero engine code). Parallel execution + within-step Q&A deferred to task 0142 (the latter blocked on workspace/inbox/team-mode modules) |
-| Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; `sp:spur-plan` skill + `planning-pipeline.yaml` (phasing → feature-ID → design-gen → approval → handoff); validates against workspace schema; hands off to `sp:spur-dev` |
+| Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; front-half planning (phasing → feature-ID → design-gen → approval → handoff) validates against the workspace schema and hands off to `sp:spur-dev`. **D5-K (task 0604):** planning is absorbed into `idea-pipeline.yaml` + `/sp:dev-plan`; `planning-pipeline.yaml` is no longer seeded or referenced and is deleted once ADR-072 is accepted |
 | `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
 | Functional skill split — thin spine + competency skills (ADR-028, task 0161) | 🔶 | `sp:spur-dev` shrunk to a thin orchestration spine that dispatches deep competency skills (`sp:sys-architecture`, `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`; `sp:test-driven-development` referenced discipline); the four `spur-<noun>` skills consolidated into the `sp:spur-cli` facade (one reference per noun); `expert-spur` replaces the four noun-experts; `super-coder` absorbs `expert-dev`. Waves A–C done (facade + competencies + spine shrink + binding proof + R16/R20 assertions in the gate). Plugin self-contained (no vendors/rd3 refs). Remaining: a live full-pipeline binding run |
 | Verifier skill + pipeline completion gate (ADR-026, tasks 0105–0106) | ✅ | `sp:code-verification` (verify + review modes) backs `/sp:dev-verify` / `/sp:dev-review`; emits `.spur/run/<wbs>-verdict.json`; `task-pipeline.yaml` gates `verify → record` on `verdict==PASS` (else `→ failed`); `implement` step split to `/sp:dev-run --mode implement` (de-recurses `/sp:dev-run --mode full`). Done: skill + commands + gate + workflow-validate/lint green, gate logic proven. Gate logic verified end-to-end: dogfood run on 0101 (task 0105 R5) confirmed verify→record gate; done-gate + section-ownership (task 0106) confirmed record→done gate + Solution/Testing/Review auto-population |

@@ -53,11 +53,11 @@ When collaborating with the design team:
 | [`workflow-steering-control-channel.md`](design/workflow-steering-control-channel.md)                   | Cross-process workflow steering control channel — durable command record, CAS-versioned, remote/detached steering (ADR-035 keeps the EventBus read-only)                                              | proposed design only            |
 | [`workspace-design.md`](design/workspace-design.md)                                                     | Workspace Board module — team-scoped composition over existing Teams, Inbox, and Tasks surfaces (ADR-052, feature G3)                                                                                 | approved design                 |
 | [`plugin-surface-parity.md`](design/plugin-surface-parity.md)                                           | `sp:spur-cli` facade / `sp:spur-dev` spine / AGENTS.md noun-table parity harness against the live monorepo CLI (ADR-053/054, feature I2)                                                            | implemented                    |
-| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event envelope and projection paths, including J9 derived-presentation reprojection (ADR-056/067)                                                                                | J5 implemented; J9 built (0601/0602) |
-| [`system-events-human-table.md`](design/system-events-human-table.md)                                   | System Events table-legibility contract — human SUMMARY/CORRELATION/ACTION, Agent column, optional presentation keys (ADR-073/074, feature J91)                                                   | accepted design; not yet built      |
+| [`actionable-observability-context.md`](design/actionable-observability-context.md)                     | Versioned System Event envelope and projection paths, including J9 derived-presentation reprojection (ADR-056/067)                                                                                | J5 implemented; J9 built (0601/0602); J91 built (0605) |
+| [`system-events-human-table.md`](design/system-events-human-table.md)                                   | System Events table-legibility contract — human SUMMARY/CORRELATION/ACTION, Agent column, optional presentation keys (ADR-073/074, feature J91)                                                   | built (0605)                        |
 | [`inter-agent-control-plane.md`](design/inter-agent-control-plane.md)                                   | Occupant identity, coordination-facing run artifacts, pinned wait, caller env (ADR-057, feature G4)                                                                                               | waves 1–2 landed (0529/0530); wave 3 follow helper landed (0531); `--spec` carrier + executor-binding rewrite landed (0537/0542); first-class `blocked` remains |
 | [`dev-spine-cost-and-drift.md`](design/dev-spine-cost-and-drift.md)                                     | `/sp:dev-*` spine cost attribution from history data, prefix-cache breakers, `feature`/`agent`/`workflow` drift table vs I2/I3, ranked fix path (feature I6, task 0594)                            | measurement + inventory (analysis only)                                                                                                                        |
-| [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602) |
+| [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602); J91 built (0605) |
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
 
@@ -1123,7 +1123,7 @@ config/
     task-lifecycle.yaml             # task status state-machine (ADR-022)
     feature-lifecycle.yaml          # feature status state-machine (ADR-022)
     task-pipeline.yaml              # task execution pipeline with guards
-    planning-pipeline.yaml          # front-half planning pipeline (task 0088); companions sp:spur-plan
+    planning-pipeline.yaml          # RETIRED (D5-K): no longer seeded or referenced; deleted on ADR-072 accept
     pr-review.yaml                  # GitHub Codex PR-review spine (/sp:dev-pr-review; skill sp:pr-reviewing)
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
@@ -1798,10 +1798,17 @@ index edits to `docs/plans/` for human commit. Every authoritative-doc touch inv
 (§5 sync triggers). Terminal at `handoff` (drafted feature list → `sp:spur-dev` steps 7–12) or
 `cancelled`. Validates against the workspace state-machine schema.
 
-**D5 proposed transition (ADR-072; taste gate pending).** This definition remains live until its
-callers, scaffolded copies, bundled copies, graph behavior, artifacts, failure policy, and model-query
-locations have parity with the canonical idea/dev-plan path. It is then removed; no second planning
-graph remains. Acceptance of ADR-072 would resolve ADR-029's deferred consolidation question.
+**D5-K caller migration landed (task 0604; ADR-072 still Proposed).** Planning is absorbed into
+the canonical idea/dev-plan path: `/sp:dev-plan` routes through `idea-pipeline.yaml`, the scaffold
+manifest no longer carries a planning row, `listBundledProjectSeedFiles` excludes
+`workflows/planning-pipeline.yaml` (`packages/config/src/bundled-config.ts` —
+`RETIRED_PROJECT_SEEDS`), and no skill, README, or help table points at it. A fresh `spur init`
+therefore never receives a second planning graph.
+
+The **source file is deliberately retained** at `config/workflows/planning-pipeline.yaml`: deleting
+it is gated on operator acceptance of ADR-072, which is also what resolves ADR-029's deferred
+consolidation question. Until then it stays schema-valid and covered by the composition baseline,
+but nothing ships or invokes it.
 
 ### 7.6 Task DTOs (oRPC contract)
 
@@ -1982,7 +1989,7 @@ producer enrichment, exact planning/workflow/queue summaries, and the two-sided 
 [`actionable-observability-context.md`](design/actionable-observability-context.md); visual tooltip placement lives
 in root `DESIGN.md`. Envelope v2 and the ledger schema do not change.
 
-**J91 human table projection (accepted design — ADR-073/074; not yet built).** Table cells become
+**J91 human table projection (built — task 0605; ADR-073/074).** Table cells are
 human-only; optional `presentation.correlators` / `actionLabel` / `agent` and the Agent column live in
 [`system-events-human-table.md`](design/system-events-human-table.md). `context` stays closed. No new CLI
 noun. Tooltip remediation and raw ids stay out of the table.

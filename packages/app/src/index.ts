@@ -95,13 +95,18 @@ export type {
     SystemEventName,
     SystemEventPayloadPolicy,
     SystemEventSource,
+    SystemEventTablePresentationInput,
 } from './services/event-names';
 export {
     buildSystemEventEnvelope,
+    humanStepLabel,
+    humanWorkflowTitle,
     isSystemEventEnvelopeV2,
+    looksLikeOpaqueId,
     normalizeSystemEventPayload,
     PLANNING_EVENT_NAMES,
     projectStoredSystemEventEnvelope,
+    projectTablePresentation,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
     SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
@@ -501,6 +506,11 @@ export {
     type FinalizeIdeaHandoffResult,
     finalizeIdeaHandoff,
 } from './workflow/idea-handoff';
+export {
+    type IdeaHandoffCliEnv,
+    type IdeaHandoffCliOutcome,
+    runIdeaHandoffCli,
+} from './workflow/idea-handoff-cli';
 export {
     FEATURE_LIFECYCLE_PROFILE,
     LifecycleAdapter,

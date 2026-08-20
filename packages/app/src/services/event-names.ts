@@ -114,6 +114,8 @@ export type SystemEventOutcomeSpec =
 export interface SystemEventPresenterSpec {
     description: string;
     fields: readonly SystemEventMetadataField[];
+    /** Additional metadata paths to retain in the projection without promoting to tooltip fields. */
+    retain?: readonly SystemEventMetadataField[];
     summary(input: SystemEventPresentationInput): string;
     outcome: SystemEventOutcomeSpec;
 }
@@ -155,14 +157,45 @@ function entityId(input: SystemEventPresentationInput): string {
     return s(input.data, 'entity.id') ?? input.correlation.entityId ?? '';
 }
 
-/** Workflow human identity: name when present, otherwise the correlation run id. */
-function workflowTitle(input: SystemEventPresentationInput): string {
-    return s(input.data, 'workflowName') ?? input.correlation.runId ?? '';
+/**
+ * Detects whether a string is an opaque machine identifier (UUID, live- token, or exact id name)
+ * rather than human-meaningful text.
+ */
+export function looksLikeOpaqueId(value: string): boolean {
+    if (typeof value !== 'string') return false;
+    const v = value.trim();
+    if (v === '') return false;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return true;
+    if (/^live[-_][a-z0-9._-]+$/i.test(v)) return true;
+    if (/^(?:eventId|rowId|runId|executionId|actionId)$/i.test(v)) return true;
+    return false;
 }
 
-/** Step identity for workflow payloads: nodeLabel, else kind, else the declared node id. */
-function stepName(data: Readonly<Record<string, unknown>> | null): string | undefined {
-    return s(data, 'nodeLabel') ?? s(data, 'kind') ?? s(data, 'node');
+/**
+ * Workflow human identity: workflowName when present and not opaque; never correlation.runId.
+ */
+export function humanWorkflowTitle(input: SystemEventPresentationInput): string {
+    const raw = s(input.data, 'workflowName') ?? s(input.data, 'workflow');
+    if (raw !== undefined && !looksLikeOpaqueId(raw)) {
+        const basename =
+            raw
+                .split('/')
+                .pop()
+                ?.replace(/\.(?:ya?ml|json)$/i, '') ?? raw;
+        return basename.replace(/[._-]+$/, '');
+    }
+    return '';
+}
+
+/**
+ * Step identity for workflow payloads: nodeLabel when present and not opaque; never kind or UUID node.
+ */
+export function humanStepLabel(data: Readonly<Record<string, unknown>> | null): string | undefined {
+    const label = s(data, 'nodeLabel') ?? s(data, 'stepName') ?? s(data, 'step');
+    if (label !== undefined && !looksLikeOpaqueId(label)) return label;
+    const node = s(data, 'node');
+    if (node !== undefined && !looksLikeOpaqueId(node)) return node;
+    return undefined;
 }
 
 /** A derived outcome reading the first present string fact. */
@@ -325,7 +358,7 @@ export type SystemEventName = (typeof BASE_CATALOG)[number]['name'];
  * `data` plus normalized correlation (no history lookups, no emitter access).
  * Outcome derivation returns `undefined` for legacy rows lacking the source fact.
  */
-export const SYSTEM_EVENT_PRESENTERS = {
+export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresenterSpec> = {
     // ── planning ──────────────────────────────────────────────────────────
     'task.created': {
         description: 'A task file was created with a new WBS id.',
@@ -982,7 +1015,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('dryRun', 'Dry run'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             return name !== '' ? `[workflow] ${name} started` : '[workflow] started';
         },
         outcome: unsupported,
@@ -996,7 +1029,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('transitionsTaken', 'Transitions'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             return name !== '' ? `[workflow] ${name} done` : '[workflow] done';
         },
         outcome: derivedFrom('finalState'),
@@ -1010,7 +1043,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('reason', 'Reason'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             return name !== '' ? `[workflow] ${name} failed` : '[workflow] failed';
         },
         outcome: derivedFrom('reason'),
@@ -1019,7 +1052,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
         description: 'A workflow run settled on a terminal status.',
         fields: [field('runId', 'Run'), field('workflowName', 'Workflow'), field('status', 'Status')],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             return name !== '' ? `[workflow] ${name} finalized` : '[workflow] finalized';
         },
         outcome: derivedFrom('status'),
@@ -1034,10 +1067,10 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('transitionsTaken', 'Transitions'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const title = name !== '' ? name : (step ?? '');
-            return title !== '' ? `[workflow] ${title} paused` : '[workflow] paused';
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
+            return parts.length > 0 ? `[workflow] ${parts.join(' · ')} paused` : '[workflow] paused';
         },
         outcome: unsupported,
     },
@@ -1050,10 +1083,10 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('node', 'Node'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const title = name !== '' ? name : (step ?? '');
-            return title !== '' ? `[workflow] ${title} resumed` : '[workflow] resumed';
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
+            return parts.length > 0 ? `[workflow] ${parts.join(' · ')} resumed` : '[workflow] resumed';
         },
         outcome: unsupported,
     },
@@ -1066,7 +1099,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('toState', 'To'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'fromState');
             const to = s(input.data, 'toState');
             if (from !== undefined && to !== undefined) {
@@ -1086,9 +1119,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('transitionsTaken', 'Transitions'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')}` : '[workflow] node entered';
         },
         outcome: unsupported,
@@ -1102,9 +1135,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('status', 'Status'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const phase = s(input.data, 'phase');
-            const parts = [name, phase].filter((part) => part !== '');
+            const parts = [name, phase].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')}` : '[workflow] phase';
         },
         outcome: derivedFrom('status'),
@@ -1119,7 +1152,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('trigger', 'Trigger'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'from');
             const to = s(input.data, 'to');
             if (from !== undefined && to !== undefined) {
@@ -1139,7 +1172,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('trigger', 'Trigger'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'from');
             const to = s(input.data, 'to');
             if (from !== undefined && to !== undefined) {
@@ -1159,7 +1192,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('trigger', 'Trigger'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'from');
             const to = s(input.data, 'to');
             if (from !== undefined && to !== undefined) {
@@ -1181,7 +1214,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('reason', 'Reason'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'from');
             const to = s(input.data, 'to');
             if (from !== undefined && to !== undefined) {
@@ -1202,10 +1235,15 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('node', 'Node'),
             field('kind', 'Kind'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} started` : '[workflow] action started';
         },
         outcome: unsupported,
@@ -1220,10 +1258,15 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('actionId', 'Action'),
             field('kind', 'Kind'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} started` : '[workflow] action started';
         },
         outcome: unsupported,
@@ -1240,10 +1283,15 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('durationMs', 'Duration (ms)'),
             field('ok', 'OK'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} done` : '[workflow] action done';
         },
         outcome: derivedFromValue('ok'),
@@ -1260,10 +1308,15 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('durationMs', 'Duration (ms)'),
             field('status', 'Status'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} finished` : '[workflow] action finished';
         },
         outcome: {
@@ -1281,10 +1334,15 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('transitionsTaken', 'Transitions'),
             field('error', 'Error'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0
                 ? `[workflow] ${parts.join(' · ')} failed; continuing`
                 : '[workflow] action failed; continuing';
@@ -1302,7 +1360,7 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('passed', 'Passed'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const from = s(input.data, 'from');
             const to = s(input.data, 'to');
             if (from !== undefined && to !== undefined) {
@@ -1322,9 +1380,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('kind', 'Kind'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} awaiting input` : '[workflow] awaiting input';
         },
         outcome: unsupported,
@@ -1339,9 +1397,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('ok', 'Accepted'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} input received` : '[workflow] input received';
         },
         outcome: derivedFromValue('ok'),
@@ -1355,9 +1413,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('node', 'Node'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
-            const step = stepName(input.data);
-            const parts = [name, step].filter((part) => part !== '');
+            const name = humanWorkflowTitle(input);
+            const step = humanStepLabel(input.data);
+            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} note` : '[workflow] note';
         },
         outcome: unsupported,
@@ -1366,9 +1424,9 @@ export const SYSTEM_EVENT_PRESENTERS = {
         description: 'A custom workflow event was emitted, naming the custom event.',
         fields: [field('runId', 'Run'), field('workflowName', 'Workflow'), field('name', 'Event')],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const custom = s(input.data, 'name');
-            const parts = [name, custom].filter((part) => part !== '');
+            const parts = [name, custom].filter((part): part is string => typeof part === 'string' && part !== '');
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')}` : '[workflow] custom';
         },
         outcome: unsupported,
@@ -1383,10 +1441,17 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('agent', 'Agent'),
             field('model', 'Model'),
         ],
+        retain: [
+            field('metadata.agent', 'Agent'),
+            field('metadata.role', 'Role'),
+            field('routing.executor', 'Executor'),
+        ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const kind = s(input.data, 'kind');
-            const parts = [name, kind !== undefined ? `agent ${kind}` : 'agent'].filter((part) => part !== '');
+            const parts = [name, kind !== undefined ? `agent ${kind}` : 'agent'].filter(
+                (part): part is string => typeof part === 'string' && part !== '',
+            );
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')}` : '[workflow] agent';
         },
         outcome: {
@@ -1406,10 +1471,10 @@ export const SYSTEM_EVENT_PRESENTERS = {
             field('reason', 'Reason'),
         ],
         summary: (input) => {
-            const name = workflowTitle(input);
+            const name = humanWorkflowTitle(input);
             const operation = s(input.data, 'operation');
             const parts = [name, operation !== undefined ? `steering ${operation}` : 'steering'].filter(
-                (part) => part !== '',
+                (part): part is string => typeof part === 'string' && part !== '',
             );
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')}` : '[workflow] steering';
         },
@@ -1529,7 +1594,9 @@ function resolveCatalogEntry(base: BaseCatalogEntry): SystemEventCatalogEntry {
             : {}),
         severity: inferSeverity(base.name),
         description: presenter.description,
-        metadataFields: presenter.fields,
+        metadataFields: presenter.retain
+            ? [...presenter.fields, ...presenter.retain.filter((r) => !presenter.fields.some((f) => f.path === r.path))]
+            : presenter.fields,
         remediationKind: profile.remediationKind,
     };
 }
@@ -1656,11 +1723,13 @@ export type {
     SystemEventProjectContext,
     SystemEventRemediationKind,
     SystemEventSeverity,
+    SystemEventTablePresentationInput,
 } from './system-event-envelope';
 export {
     buildSystemEventEnvelope,
     isSystemEventEnvelopeV2,
     projectStoredSystemEventEnvelope,
+    projectTablePresentation,
     SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
     systemEventProjectContext,
 } from './system-event-envelope';

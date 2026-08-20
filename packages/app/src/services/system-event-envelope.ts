@@ -1,6 +1,7 @@
 import type { EventSeverity } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
 import {
+    looksLikeOpaqueId,
     SYSTEM_EVENT_PRESENTERS,
     type SystemEventCatalogEntry,
     type SystemEventName,
@@ -76,6 +77,9 @@ export interface SystemEventEnvelopeV2 {
         fields: SystemEventPresentationField[];
         outcome?: string;
         action?: SystemEventAction;
+        correlators?: string;
+        actionLabel?: string;
+        agent?: string;
     };
 }
 
@@ -128,7 +132,17 @@ const PRODUCER_PACKAGES = new Set<SystemEventProducerPackage>([
     '@gobing-ai/ts-dual-workflow-engine',
 ]);
 const CORRELATION_KEYS = new Set(['runId', 'executionId', 'actionId', 'entityKind', 'entityId', 'jobId', 'sequence']);
-const PRESENTATION_KEYS = new Set(['severity', 'summary', 'description', 'fields', 'outcome', 'action']);
+const PRESENTATION_KEYS = new Set([
+    'severity',
+    'summary',
+    'description',
+    'fields',
+    'outcome',
+    'action',
+    'correlators',
+    'actionLabel',
+    'agent',
+]);
 const SAFE_IDENTIFIER = /^[A-Za-z0-9._:-]+$/;
 
 interface ProjectionState {
@@ -184,12 +198,13 @@ export function buildSystemEventEnvelope(
     eventPayload: unknown,
     project: SystemEventProjectContext,
     secretValues: readonly string[] = [],
+    actor?: string | null,
 ): SystemEventEnvelopeV2 {
     try {
         const data = projectSystemEventData(entry, eventPayload, secretValues);
         const correlation = extractEnvelopeCorrelation(eventPayload, secretValues);
         const severity = extractSeverity(eventPayload) ?? entry?.severity ?? 'warning';
-        const presentation = buildPresentation(entry, data, correlation, severity);
+        const presentation = buildPresentation(entry, data, correlation, severity, actor);
 
         return {
             schemaVersion: SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION,
@@ -215,10 +230,11 @@ export function projectStoredSystemEventEnvelope(
     storedPayload: unknown,
     project: SystemEventProjectContext,
     secretValues: readonly string[] = [],
+    actor?: string | null,
 ): SystemEventEnvelopeV2 {
     try {
         if (!isRecord(storedPayload) || storedPayload.schemaVersion !== SYSTEM_EVENT_ENVELOPE_SCHEMA_VERSION) {
-            return buildSystemEventEnvelope(entry, storedPayload, project, secretValues);
+            return buildSystemEventEnvelope(entry, storedPayload, project, secretValues, actor);
         }
         if (!isSystemEventEnvelopeV2(storedPayload)) return genericEnvelope(project, secretValues);
         const stored = storedPayload as SystemEventEnvelopeV2;
@@ -231,6 +247,7 @@ export function projectStoredSystemEventEnvelope(
             stored.data,
             stored.context.correlation,
             stored.presentation.severity,
+            actor,
         );
         return { ...stored, presentation };
     } catch {
@@ -344,6 +361,148 @@ function assignString(
     target[key] = redactAndBound(value, secretValues, 128);
 }
 
+/** Inputs to the server-owned table presentation projector (ADR-073/074). */
+export interface SystemEventTablePresentationInput {
+    entry?: SystemEventCatalogEntry;
+    data: Record<string, unknown> | null;
+    correlation: SystemEventCorrelationContext;
+    presentation: {
+        severity: SystemEventSeverity;
+        summary: string;
+        description: string;
+        fields: SystemEventPresentationField[];
+        outcome?: string;
+        action?: SystemEventAction;
+    };
+    actor?: string | null;
+}
+
+/**
+ * Projects human-readable table presentation strings (correlators, actionLabel, agent)
+ * without opaque identifiers (ADR-073 / ADR-074).
+ */
+export function projectTablePresentation(input: SystemEventTablePresentationInput): {
+    correlators?: string;
+    actionLabel?: string;
+    agent?: string;
+} {
+    const { entry, data, correlation, presentation, actor } = input;
+    const name = entry?.name ?? '';
+
+    // Pure engine rows omit Agent even when producer is @gobing-ai/ts-dual-workflow-engine (ADR-074)
+    const isPureEngineRow =
+        name === 'workflow.node.enter' ||
+        name === 'workflow.transition' ||
+        name === 'workflow.node.transition' ||
+        name === 'workflow.transition.requested' ||
+        name === 'workflow.transition.denied' ||
+        name === 'workflow.run.started' ||
+        name === 'workflow.run.done' ||
+        name === 'workflow.run.failed' ||
+        name === 'workflow.run.finalized' ||
+        name === 'workflow.run.paused' ||
+        name === 'workflow.run.resumed' ||
+        name === 'workflow.run.reseeded';
+
+    // Agent projection precedence:
+    // 1. data.routing.executor
+    // 2. data.agent
+    // 3. data.metadata.agent
+    // 4. persistence-row actor (when matching ^[A-Za-z][A-Za-z0-9._-]*$, not opaque, and not a producer package)
+    let agent: string | undefined;
+    if (!isPureEngineRow && data !== null) {
+        const executor = getPath(data, 'routing.executor');
+        const agentField = getPath(data, 'agent');
+        const metadataAgent = getPath(data, 'metadata.agent');
+        if (typeof executor === 'string' && executor.length > 0 && !looksLikeOpaqueId(executor)) {
+            agent = executor;
+        } else if (typeof agentField === 'string' && agentField.length > 0 && !looksLikeOpaqueId(agentField)) {
+            agent = agentField;
+        } else if (typeof metadataAgent === 'string' && metadataAgent.length > 0 && !looksLikeOpaqueId(metadataAgent)) {
+            agent = metadataAgent;
+        }
+    }
+    if (!isPureEngineRow && agent === undefined && typeof actor === 'string' && actor.length > 0) {
+        if (
+            /^[A-Za-z][A-Za-z0-9._:-]*$/.test(actor) &&
+            !PRODUCER_PACKAGES.has(actor as SystemEventProducerPackage) &&
+            !looksLikeOpaqueId(actor)
+        ) {
+            agent = actor;
+        }
+    }
+
+    // Correlators: join human facts already in bounded data
+    // (workflowName, nodeLabel, action kind, entity kind:id, numeric sequence)
+    // Forbidden: runId, executionId, actionId, eventId, UUID node, live- tokens, context.correlation UUIDs
+    const corrParts: string[] = [];
+    if (data !== null) {
+        const wfName = getPath(data, 'workflowName');
+        if (typeof wfName === 'string' && wfName.length > 0 && !looksLikeOpaqueId(wfName)) {
+            corrParts.push(wfName);
+        }
+        const nodeLabel = getPath(data, 'nodeLabel');
+        if (typeof nodeLabel === 'string' && nodeLabel.length > 0 && !looksLikeOpaqueId(nodeLabel)) {
+            corrParts.push(nodeLabel);
+        }
+        const kind = getPath(data, 'kind');
+        if (
+            typeof kind === 'string' &&
+            kind.length > 0 &&
+            !looksLikeOpaqueId(kind) &&
+            kind !== wfName &&
+            kind !== nodeLabel
+        ) {
+            corrParts.push(kind);
+        }
+        const entityKind = getPath(data, 'entity.kind') ?? getPath(data, 'entityKind') ?? correlation.entityKind;
+        const entityId = getPath(data, 'entity.id') ?? getPath(data, 'entityId') ?? correlation.entityId;
+        if (typeof entityId === 'string' && entityId.length > 0 && !looksLikeOpaqueId(entityId)) {
+            if (typeof entityKind === 'string' && entityKind.length > 0 && !looksLikeOpaqueId(entityKind)) {
+                corrParts.push(`${entityKind}:${entityId}`);
+            } else {
+                corrParts.push(entityId);
+            }
+        }
+    } else {
+        const entityKind = correlation.entityKind;
+        const entityId = correlation.entityId;
+        if (typeof entityId === 'string' && entityId.length > 0 && !looksLikeOpaqueId(entityId)) {
+            if (typeof entityKind === 'string' && entityKind.length > 0 && !looksLikeOpaqueId(entityKind)) {
+                corrParts.push(`${entityKind}:${entityId}`);
+            } else {
+                corrParts.push(entityId);
+            }
+        }
+    }
+    if (typeof correlation.sequence === 'number' && Number.isFinite(correlation.sequence)) {
+        corrParts.push(`#${correlation.sequence}`);
+    }
+    const correlators = corrParts.length > 0 ? corrParts.join(' · ') : undefined;
+
+    // ActionLabel: action kind, entity, or short human verb
+    // Never a remediation command that embeds a UUID
+    let actionLabel: string | undefined;
+    if (data !== null) {
+        const kind = getPath(data, 'kind');
+        const op = getPath(data, 'operation') ?? getPath(data, 'action');
+        if (typeof kind === 'string' && kind.length > 0 && !looksLikeOpaqueId(kind)) {
+            actionLabel = kind;
+        } else if (typeof op === 'string' && op.length > 0 && !looksLikeOpaqueId(op)) {
+            actionLabel = op;
+        }
+    }
+    if (actionLabel === undefined && presentation.action?.kind === 'filter' && presentation.action.label) {
+        actionLabel = presentation.action.label;
+    }
+
+    return {
+        ...(correlators !== undefined ? { correlators: boundPresentationString(correlators, 512) } : {}),
+        ...(actionLabel !== undefined ? { actionLabel: boundPresentationString(actionLabel, 128) } : {}),
+        ...(agent !== undefined ? { agent: boundPresentationString(agent, 128) } : {}),
+    };
+}
+
 /**
  * Build the presentation block for a system event from its exhaustive presenter.
  *
@@ -358,6 +517,7 @@ function buildPresentation(
     data: Record<string, unknown> | null,
     correlation: SystemEventCorrelationContext,
     severity: SystemEventSeverity,
+    actor?: string | null,
 ): SystemEventEnvelopeV2['presentation'] {
     const presenter = entry === undefined ? undefined : SYSTEM_EVENT_PRESENTERS[entry.name as SystemEventName];
     if (entry === undefined || presenter === undefined) {
@@ -378,13 +538,24 @@ function buildPresentation(
     } catch {
         return genericPresentation(severity);
     }
-    return {
+    const basePresentation = {
         severity,
         summary: boundPresentationString(summary, 512) ?? 'System event',
         description: boundPresentationString(description, 512) ?? 'System event.',
         fields,
         ...(outcome !== undefined ? { outcome: boundPresentationString(outcome, 128) } : {}),
         ...buildAction(entry, correlation),
+    };
+    const tablePresentation = projectTablePresentation({
+        entry,
+        data,
+        correlation,
+        presentation: basePresentation,
+        actor,
+    });
+    return {
+        ...basePresentation,
+        ...tablePresentation,
     };
 }
 
@@ -556,6 +727,9 @@ function isValidPresentation(value: Record<string, unknown>): boolean {
     }
     if (value.outcome !== undefined && !isBoundedString(value.outcome, 129)) return false;
     if (value.action !== undefined && !isValidAction(value.action)) return false;
+    if (value.correlators !== undefined && !isBoundedString(value.correlators, 513)) return false;
+    if (value.actionLabel !== undefined && !isBoundedString(value.actionLabel, 129)) return false;
+    if (value.agent !== undefined && !isBoundedString(value.agent, 129)) return false;
     return true;
 }
 

@@ -619,7 +619,49 @@ describe('SYSTEM_EVENT_PRESENTERS two-sided semantic gate (R1/R8/R10)', () => {
         for (const entry of SYSTEM_EVENT_CATALOG) {
             const presenter = SYSTEM_EVENT_PRESENTERS[entry.name as keyof typeof SYSTEM_EVENT_PRESENTERS];
             expect(entry.description).toBe(presenter.description);
-            expect(entry.metadataFields).toEqual(presenter.fields);
+            const expectedFields = [...presenter.fields];
+            for (const retainField of presenter.retain ?? []) {
+                if (!expectedFields.some((f) => f.path === retainField.path)) {
+                    expectedFields.push(retainField);
+                }
+            }
+            expect(entry.metadataFields).toEqual(expectedFields);
         }
+    });
+
+    test('looksLikeOpaqueId identifies UUIDs, live- tokens, and exact identifier labels', async () => {
+        const { looksLikeOpaqueId } = await import('../../src/services/event-names');
+        expect(looksLikeOpaqueId('123e4567-e89b-12d3-a456-426614174000')).toBe(true);
+        expect(looksLikeOpaqueId('live-abc-123')).toBe(true);
+        expect(looksLikeOpaqueId('live_abc_123')).toBe(true);
+        expect(looksLikeOpaqueId('eventId')).toBe(true);
+        expect(looksLikeOpaqueId('rowId')).toBe(true);
+        expect(looksLikeOpaqueId('runId')).toBe(true);
+        expect(looksLikeOpaqueId('executionId')).toBe(true);
+        expect(looksLikeOpaqueId('actionId')).toBe(true);
+        expect(looksLikeOpaqueId('task-pipeline')).toBe(false);
+        expect(looksLikeOpaqueId('sp:super-coder')).toBe(false);
+        expect(looksLikeOpaqueId('precheck')).toBe(false);
+        expect(looksLikeOpaqueId('')).toBe(false);
+    });
+
+    test('humanWorkflowTitle cleans filenames, extensions, and omits opaque identifiers', async () => {
+        const { humanWorkflowTitle } = await import('../../src/services/event-names');
+        expect(
+            humanWorkflowTitle({ data: { workflowName: '.spur/workflows/task-pipeline.yaml' }, correlation: {} }),
+        ).toBe('task-pipeline');
+        expect(humanWorkflowTitle({ data: { workflowName: 'dev-plan.yml' }, correlation: {} })).toBe('dev-plan');
+        expect(
+            humanWorkflowTitle({ data: { workflowName: '123e4567-e89b-12d3-a456-426614174000' }, correlation: {} }),
+        ).toBe('');
+        expect(humanWorkflowTitle({ data: null, correlation: {} })).toBe('');
+    });
+
+    test('humanStepLabel extracts clean step names and node labels without opaque IDs', async () => {
+        const { humanStepLabel } = await import('../../src/services/event-names');
+        expect(humanStepLabel({ nodeLabel: 'Implement Task' })).toBe('Implement Task');
+        expect(humanStepLabel({ stepName: 'verify' })).toBe('verify');
+        expect(humanStepLabel({ node: '123e4567-e89b-12d3-a456-426614174000' })).toBeUndefined();
+        expect(humanStepLabel(null)).toBeUndefined();
     });
 });

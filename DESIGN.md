@@ -495,7 +495,7 @@ the shared canvas/surface/hairline/type tokens above.
 - J9 (built): the tooltip title is `eventName · correlator`, using the best available
   entity/run/execution/action/job identity and falling back to the persisted history-row id.
   Copy/pin instructions live in a muted footer; hover and pinned modes use their own guidance.
-- J91 accepted design (not yet built): insert an Agent column after Correlation
+- J91 (built, 0605): Agent column after Correlation
   (`Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action`).
   Agent is a single truncated identity string; a missing executor is a blank cell (not `-`).
   Correlation, Action, and Agent truncate like Summary; complete values stay in the tooltip.

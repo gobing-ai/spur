@@ -383,7 +383,7 @@ when the task used the pipeline.
 Persisted and SSE System Event payloads use the canonical v2 envelope built in `packages/app`;
 legacy rows are projected on read without rewriting storage. Shape and policy:
 `docs/design/actionable-observability-context.md` and `docs/04_DESIGN.md §7.9`.
-J91 accepted design (not yet built; do not invoke as shipped): table cells are human-only; optional
+J91 table cells are human-only (built, task 0605): optional
 `presentation.correlators` / `actionLabel` / `agent` — `docs/design/system-events-human-table.md`
 (ADR-073/074).
 

@@ -71,6 +71,7 @@ export function registerSystemEventTap(
         // runtime switch — consult it, not the flags.
         if (entry.tier === 'diagnostic' && !diagnosticEnabled) continue;
         const handler = (event: unknown) => {
+            const actor = extractSystemEventActor(event);
             const p = persist(
                 dao,
                 entry.prefix,
@@ -78,13 +79,14 @@ export function registerSystemEventTap(
                     id: createId('sev'),
                     event_name: entry.name,
                     occurred_at: new Date().toISOString(),
-                    actor: extractSystemEventActor(event),
+                    actor,
                     payload_json: safeStringify(
                         buildSystemEventEnvelope(
                             entry,
                             event,
                             options.projectContext ?? systemEventProjectContext(''),
                             options.secretValues,
+                            actor,
                         ),
                     ),
                     // Indexed correlation columns (task 0369): derived from the

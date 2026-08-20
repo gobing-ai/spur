@@ -64,9 +64,13 @@ describe('parseSystemEventView', () => {
             expect(view.summary).toBe('Workflow action failed');
             expect(view.projectName).toBe('spur-new');
             expect(view.producer).toBe('@gobing-ai/ts-dual-workflow-engine / workflow');
-            expect(view.correlation).toContain('run run-42');
+            expect(view.correlation).toBe('unavailable');
+            expect(view.correlation).not.toContain('run-42');
+            expect(view.actionLabel).toBe('unavailable');
+            expect(view.actionLabel).not.toContain('run-42');
             expect(view.fields).toEqual([{ label: 'Node', value: 'verify' }]);
             expect(view.action?.value).toBe('spur workflow trace run-42');
+            expect(view.correlationFields.some((field) => field.value === 'run-42')).toBe(true);
         }
     });
 
@@ -84,6 +88,23 @@ describe('parseSystemEventView', () => {
         expect(view.action).toBeNull();
     });
 
+    test('maps server-projected table presentation fields (correlators, actionLabel, agent)', () => {
+        const view = parseSystemEventView('workflow.action.done', {
+            ...envelope,
+            presentation: {
+                ...envelope.presentation,
+                correlators: 'task-pipeline · Implement · task:0605 · #1',
+                actionLabel: 'agent.run',
+                agent: 'sp:super-coder',
+            },
+        });
+        expect(view.correlation).toBe('task-pipeline · Implement · task:0605 · #1');
+        expect(view.actionLabel).toBe('agent.run');
+        expect(view.agent).toBe('sp:super-coder');
+        expect(view.correlation).not.toContain('run-42');
+        expect(view.actionLabel).not.toBe('Trace workflow run');
+    });
+
     test('returns an explicit unavailable fallback for legacy and malformed envelopes', () => {
         for (const payload of [null, {}, { schemaVersion: 2, context: null, presentation: {} }]) {
             const view = parseSystemEventView('unknown.event', payload);
@@ -92,6 +113,8 @@ describe('parseSystemEventView', () => {
             expect(view.correlation).toBe('unavailable');
             expect(view.outcome).toBe('unavailable');
             expect(view.action).toBeNull();
+            expect(view.actionLabel).toBe('unavailable');
+            expect(view.agent).toBeNull();
         }
     });
 });
@@ -133,7 +156,8 @@ describe('parseHistoryRow', () => {
         expect(row?.payload).toEqual({ jobId: 'job-1', type: 'cleanup' });
         expect(row?.envelope?.schemaVersion).toBe(2);
         expect(row?.view?.summary).toBe('Queue job completed');
-        expect(row?.view?.correlation).toBe('job job-1');
+        expect(row?.view?.correlation).toBe('unavailable');
+        expect(row?.view?.correlationFields.some((field) => field.value === 'job-1')).toBe(true);
     });
 
     test('parses a well-formed row with all fields', () => {

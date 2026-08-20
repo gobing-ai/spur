@@ -2,7 +2,7 @@
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,
 `spur rule trace`.
-**Status:** J5 foundation implemented (tasks 0526–0528); J9 semantic presentation built (tasks 0601/0602); J91 human table projection accepted (ADR-073/074; not yet built).
+**Status:** J5 foundation implemented (tasks 0526–0528); J9 semantic presentation built (tasks 0601/0602); J91 human table projection built (ADR-073/074; task 0605).
 **Decision:** ADR-056, amended by ADR-066/067/068; table-cell contract ADR-073/074.
 
 ## System Event envelope
@@ -152,13 +152,13 @@ semantic view feeds both table and tooltip; canonical `data` is unwrapped into t
 full envelope remains attached only for expanded System Events detail. Legacy or malformed shapes
 produce explicit `unavailable` sentinels and no action. The Board renders those sentinels as `-`.
 
-## J91 human table projection (accepted design — ADR-073/074; not yet built)
+## J91 human table projection (built — ADR-073/074; task 0605)
 
 Table-cell grammar, optional `presentation.correlators` / `actionLabel` / `agent`, Agent column, and
 the envelope table projector live in [`system-events-human-table.md`](system-events-human-table.md).
 This satellite keeps owning the v2 envelope and projection paths; `context` remains
-`{project, producer, correlation}`. The current Board column set above is the shipped J5/J9 layout
-until J91 lands.
+`{project, producer, correlation}`. The Board column set is
+`Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action`.
 
 ## Trace DTO additions (task 0528)
 

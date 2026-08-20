@@ -206,13 +206,14 @@ export const eventsModule: ServerModule = {
                             // task 0226 F5: share the actor extractor with the
                             // persistence tap so the live SSE envelope matches
                             // the persisted history row.
+                            const actor = extractSystemEventActor(event);
                             const envelope = {
                                 eventName: name,
                                 occurredAt: new Date().toISOString(),
-                                actor: extractSystemEventActor(event),
+                                actor,
                                 prefix: entry?.prefix ?? name.split('.')[0],
                                 renderer: entry?.renderer ?? 'generic',
-                                payload: buildSystemEventEnvelope(entry, event, projectContext, secretValues),
+                                payload: buildSystemEventEnvelope(entry, event, projectContext, secretValues, actor),
                             };
                             try {
                                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));
@@ -330,6 +331,7 @@ export const eventsModule: ServerModule = {
                     parseStoredPayload(row.payload_json),
                     projectContext,
                     secretValues,
+                    row.actor,
                 ),
                 // Indexed correlation columns (task 0369). Purely additive: every
                 // existing field keeps its name and meaning, and pre-migration

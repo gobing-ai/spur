@@ -1,7 +1,7 @@
 # Event tracking — System Event 5W1H SSOT
 
 **Area:** System Event catalog (`SYSTEM_EVENT_CATALOG`), 5W1H payload contract, `*.updated` field-level diff, `workflow.*` legibility.
-**Status:** current audit baseline (task 0597) + J9 built (tasks 0601/0602, ADR-066/067/068); J91 table-legibility accepted (ADR-073/074; not yet built).
+**Status:** current audit baseline (task 0597) + J9 built (tasks 0601/0602, ADR-066/067/068); J91 table-legibility built (ADR-073/074; task 0605).
 **Authority:** elaborates `docs/04_DESIGN.md` §7.9 (authoritative on the catalog surface) and `docs/design/actionable-observability-context.md` (authoritative on the v2 envelope and projection policy). This doc does **not** restate their contracts — it defines the *per-event* contract the other two deliberately leave abstract. On conflict, `04_DESIGN.md` §7.9 wins (lower number wins on content, constitution §4.1); on envelope mechanics, `actionable-observability-context.md` wins.
 
 ## 1. Scope and non-goals
@@ -181,7 +181,7 @@ Rules:
 
 1. `WorkflowService` creates one identity decorator from the already-loaded definition and passes it to the typed engine bridge, `ObservableWorkflowAdapter`, built-in action runners, and the steering controller. Thus engine-native events, `workflow.agent`, and `workflow.steering` carry the same `workflowName`; no history lookup occurs per event.
 2. Step-bearing events derive `nodeLabel` from the workflow definition (`description` when non-empty, otherwise the declared state/node id). Missing definitions on legacy rows stay missing.
-3. Action events retain `kind`; transition events retain `from` / `to`. Machine `runId`, `node`, and `actionId` remain tooltip fields/correlation. J9: they never become the primary summary while a human name or kind exists. J91 (accepted design): they never become the Summary cell at all — no `runId` / UUID `node` / `kind`-as-step fallback; see [`system-events-human-table.md`](system-events-human-table.md).
+3. Action events retain `kind`; transition events retain `from` / `to`. Machine `runId`, `node`, and `actionId` remain tooltip fields/correlation. J9: they never become the primary summary while a human name or kind exists. J91 (built, 0605): they never become the Summary cell at all — no `runId` / UUID `node` / `kind`-as-step fallback; see [`system-events-human-table.md`](system-events-human-table.md).
 4. Every workflow summary begins `[workflow]` and orders identity as `workflowName`, then `nodeLabel` or transition/action semantics. The Board renders the supplied string.
 
 ## 8. Tier/policy rules and emitter checklist
@@ -336,7 +336,7 @@ The deterministic gate compares matrix event names with `SYSTEM_EVENT_CATALOG` i
 resolved catalog entry has non-generated description text, an explicit field list, a summary function, and exactly one
 outcome support branch. It does not generate TypeScript or Markdown from the other side.
 
-## 12. J91 table-legibility overlay (accepted design — ADR-073/074; not yet built)
+## 12. J91 table-legibility overlay (built — ADR-073/074; task 0605)
 
 This matrix stays the per-event SSOT for tooltip fields and outcome. J91 overlays three table-cell
 rules without adding events:

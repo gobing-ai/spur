@@ -1,7 +1,7 @@
 # System Events human table projection
 
 **Area:** Observability > System Events table cells, presenter helpers, catalog retention, Board column mapping.
-**Status:** accepted design (J91; ADR-073/074; not yet built).
+**Status:** built (J91; ADR-073/074; task 0605).
 **Authority:** decisions in `00` (ADR-073/074); module boundaries in `03 §16.2`; this satellite owns shapes. Envelope v2 and projection paths remain [`actionable-observability-context.md`](actionable-observability-context.md). Per-event 5W1H / presenter matrix remain [`event-tracking.md`](event-tracking.md).
 
 J9 stays done. J91 extends that presenter registry; it does not reopen J9 or invent envelope v3. Feature id **J91** is the allocated child under J9 because J already has nine children (DD-14); a sibling `J10` is illegal. Scope still forbids rewriting J9's shipped work.

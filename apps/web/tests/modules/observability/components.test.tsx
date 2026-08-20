@@ -48,6 +48,9 @@ function eventEnvelope({
     correlation = {},
     outcome = 'completed',
     action,
+    correlators,
+    actionLabel,
+    agent,
 }: {
     data?: Record<string, unknown>;
     severity?: 'info' | 'warning' | 'error';
@@ -57,6 +60,9 @@ function eventEnvelope({
     correlation?: Record<string, unknown>;
     outcome?: string;
     action?: { label: string; kind: 'command' | 'filter' | 'path'; value: string };
+    correlators?: string;
+    actionLabel?: string;
+    agent?: string;
 } = {}): Record<string, unknown> {
     return {
         schemaVersion: 2,
@@ -73,6 +79,9 @@ function eventEnvelope({
             fields,
             outcome,
             ...(action ? { action } : {}),
+            ...(correlators !== undefined ? { correlators } : {}),
+            ...(actionLabel !== undefined ? { actionLabel } : {}),
+            ...(agent !== undefined ? { agent } : {}),
         },
     };
 }
@@ -320,7 +329,7 @@ describe('observability components', () => {
         expect(getByText('4 of 4 shown')).toBeDefined();
     });
 
-    test('system events tab renders the eight actionable desktop columns', async () => {
+    test('system events tab renders the nine actionable desktop columns', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
 
@@ -339,6 +348,7 @@ describe('observability components', () => {
             'Summary',
             'Producer',
             'Correlation',
+            'Agent',
             'Outcome',
             'Action',
         ]);
@@ -738,11 +748,13 @@ describe('observability components', () => {
                             actor: 'runner',
                             runId: 'run-42',
                             payload: eventEnvelope({
-                                data: { actionId: 'action-7', durationMs: 125, outcome: 'success' },
+                                data: { actionId: 'action-7', durationMs: 125, outcome: 'success', kind: 'agent.run' },
                                 severity: 'info',
                                 summary: 'Workflow action completed',
                                 correlation: { runId: 'run-42', actionId: 'action-7' },
                                 outcome: 'success',
+                                correlators: 'idea-pipeline · verify',
+                                actionLabel: 'agent.run',
                                 action: {
                                     label: 'Trace workflow run',
                                     kind: 'command',
@@ -774,14 +786,18 @@ describe('observability components', () => {
         expect(row.textContent).toContain('Workflow action completed');
         expect(row.textContent).toContain('spur / test');
         expect(row.textContent).not.toContain('spur-new');
-        expect(row.textContent).toContain('run run-42');
+        expect(row.textContent).toContain('idea-pipeline · verify');
+        expect(row.textContent).not.toContain('run run-42');
+        expect(row.textContent).not.toContain('spur workflow trace run-42');
         expect(row.textContent).toContain('success');
-        expect(row.textContent).toContain('spur workflow trace run-42');
+        expect(row.textContent).toContain('agent.run');
+        expect(row.textContent).not.toContain('Trace workflow run');
 
         fireEvent.click(row.querySelector('button[aria-expanded]') as HTMLButtonElement);
         const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.done"]');
         expect(detail?.textContent).toContain('project: spur-new');
         expect(detail?.textContent).toContain('producer: spur / test');
+        expect(detail?.textContent).toContain('run-42');
     });
 
     test('event name hover tooltip renders semantic context and remediation', async () => {
@@ -972,6 +988,8 @@ describe('observability components', () => {
                                 },
                                 summary: 'Queue maintenance completed',
                                 correlation: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737' },
+                                correlators: 'system-events-prune',
+                                actionLabel: 'Filter queue events',
                                 action: { label: 'Filter queue events', kind: 'filter', value: 'prefix=queue' },
                             }),
                         },
@@ -996,10 +1014,11 @@ describe('observability components', () => {
         const view = render(<SystemEventsTab />);
         await waitFor(() => expect(view.getByText('queue.job.completed')).toBeDefined());
         const row = view.getByText('queue.job.completed').closest('tr') as HTMLTableRowElement;
-        expect(row.textContent).toContain('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
+        expect(row.textContent).not.toContain('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
+        expect(row.textContent).toContain('system-events-prune');
         expect(row.textContent).toContain('Queue maintenance completed');
         expect(row.textContent).toContain('completed');
-        expect(row.textContent).toContain('prefix=queue');
+        expect(row.textContent).toContain('Filter queue events');
     });
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {
@@ -1808,6 +1827,8 @@ describe('system event tooltip title (R5, 0601)', () => {
         correlationFields,
         outcome: 'o',
         action: null,
+        actionLabel: 'unavailable',
+        agent: null,
     });
 
     test('correlator precedence: entity before run before execution before action before job', () => {

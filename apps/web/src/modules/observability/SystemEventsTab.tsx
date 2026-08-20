@@ -29,6 +29,8 @@ export interface SystemEventView {
     correlationFields: SystemEventDisplayField[];
     outcome: string;
     action: SystemEventDisplayAction | null;
+    actionLabel: string;
+    agent: string | null;
 }
 
 /** Wire shape of a single system event row from the history endpoint. */
@@ -432,6 +434,13 @@ export function parseSystemEventView(eventName: string, payload: Record<string, 
 
     const packageName = boundedDisplayText(producer.package, 128) ?? 'unavailable';
     const subsystem = boundedDisplayText(producer.subsystem, 128);
+    const action = parseDisplayAction(presentation.action);
+    // Table cells use server-projected keys only (ADR-073). Tooltip still gets
+    // correlationFields / presentation.action, which may include raw ids.
+    const actionLabel = boundedDisplayText(presentation.actionLabel, 128) ?? 'unavailable';
+    const agent = boundedDisplayText(presentation.agent, 128);
+    const correlators = boundedDisplayText(presentation.correlators, 512);
+
     return {
         severity,
         summary: boundedDisplayText(presentation.summary, 512) ?? 'unavailable',
@@ -440,11 +449,12 @@ export function parseSystemEventView(eventName: string, payload: Record<string, 
         projectName: boundedDisplayText(project.name, 128) ?? 'unavailable',
         projectRoot: boundedDisplayText(project.root, 256) ?? 'unavailable',
         producer: subsystem ? `${packageName} / ${subsystem}` : packageName,
-        correlation:
-            correlationFields.map(({ label, value }) => `${label.toLowerCase()} ${value}`).join(' · ') || 'unavailable',
+        correlation: correlators ?? 'unavailable',
         correlationFields,
         outcome: boundedDisplayText(presentation.outcome, 128) ?? 'unavailable',
-        action: parseDisplayAction(presentation.action),
+        action,
+        actionLabel,
+        agent,
     };
 }
 
@@ -462,6 +472,8 @@ function unavailableSystemEventView(eventName: string): SystemEventView {
         correlationFields: [],
         outcome: 'unavailable',
         action: null,
+        actionLabel: 'unavailable',
+        agent: null,
     };
 }
 
@@ -1145,13 +1157,15 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                 <colgroup>
                     <col className={isCompact ? 'w-24' : 'w-36'} />
                     {!isCompact && <col className="w-24" />}
-                    <col className="w-[17%]" />
-                    {!isCompact && <col className="w-[22%]" />}
-                    {!isCompact && <col className="w-[18%]" />}
+                    <col className="w-[15%]" />
                     {!isCompact && <col className="w-[20%]" />}
+                    {!isCompact && <col className="w-[16%]" />}
+                    {!isCompact && <col className="w-[16%]" />}
                     {!isCompact && <col className="w-28" />}
-                    {!isCompact && <col className="w-[18%]" />}
+                    {!isCompact && <col className="w-28" />}
+                    {!isCompact && <col className="w-[15%]" />}
                 </colgroup>
+                {/* R6 SystemEventsTab columns: Time Severity Event Summary Producer Correlation Agent Outcome Action */}
                 <thead className="sticky top-0 z-10 bg-base-200">
                     <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
                         <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
@@ -1178,6 +1192,11 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
                                 Correlation
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Agent
                             </th>
                         )}
                         {!isCompact && (
@@ -1571,9 +1590,14 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                 <span className="truncate" title={displayValue(view.correlation)}>
                                     {displayValue(view.correlation)}
                                 </span>
+                                {view.agent && (
+                                    <span className="truncate font-mono" title={view.agent}>
+                                        agent: {view.agent}
+                                    </span>
+                                )}
                                 <span className="truncate">outcome: {displayValue(view.outcome)}</span>
-                                <span className="truncate" title={displayValue(view.action?.value)}>
-                                    action: {displayValue(view.action?.value)}
+                                <span className="truncate" title={displayValue(view.actionLabel)}>
+                                    action: {displayValue(view.actionLabel)}
                                 </span>
                             </div>
                         )}
@@ -1606,6 +1630,14 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={view.agent ?? ''}
+                    >
+                        {view.agent ?? ''}
+                    </td>
+                )}
+                {!compact && (
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
                         title={displayValue(view.outcome)}
                     >
                         {displayValue(view.outcome)}
@@ -1614,15 +1646,15 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 {!compact && (
                     <td
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={displayValue(view.action?.value)}
+                        title={displayValue(view.actionLabel)}
                     >
-                        {displayValue(view.action?.value)}
+                        {displayValue(view.actionLabel)}
                     </td>
                 )}
             </tr>
             {expanded && (
                 <tr>
-                    <td colSpan={compact ? 2 : 8} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
+                    <td colSpan={compact ? 2 : 9} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
                         <section
                             id={`detail-${event.id}`}
                             aria-label={`Detail for ${event.eventName}`}
@@ -1646,6 +1678,9 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                 <span>
                                     <span className="text-spur-text-muted">correlation:</span>{' '}
                                     {displayValue(view.correlation)}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">agent:</span> {view.agent || '-'}
                                 </span>
                                 <span>
                                     <span className="text-spur-text-muted">actor:</span> {actorLabel}

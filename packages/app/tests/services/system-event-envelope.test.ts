@@ -256,4 +256,73 @@ describe('buildSystemEventEnvelope', () => {
             expect.objectContaining({ schemaVersion: 2, data: null }),
         );
     });
+
+    test('projectTablePresentation derives correlators, actionLabel, and agent without opaque IDs', async () => {
+        const { projectTablePresentation } = await import('../../src/services/system-event-envelope');
+        const entry = requireEntry('workflow.action.start');
+        const result = projectTablePresentation({
+            entry,
+            data: {
+                workflowName: 'task-pipeline',
+                nodeLabel: 'Implement Task',
+                kind: 'agent.run',
+                routing: { executor: 'sp:super-coder' },
+            },
+            correlation: {
+                runId: '123e4567-e89b-12d3-a456-426614174000',
+                entityKind: 'task',
+                entityId: '0605',
+                sequence: 3,
+            },
+            presentation: {
+                severity: 'info',
+                summary: '[workflow] task-pipeline · Implement Task',
+                description: 'test',
+                fields: [],
+            },
+            actor: 'system',
+        });
+
+        expect(result.correlators).toBe('task-pipeline · Implement Task · agent.run · task:0605 · #3');
+        expect(result.actionLabel).toBe('agent.run');
+        expect(result.agent).toBe('sp:super-coder');
+    });
+
+    test('projectTablePresentation omits Agent for pure engine rows even with actor present', async () => {
+        const { projectTablePresentation } = await import('../../src/services/system-event-envelope');
+        const entry = requireEntry('workflow.transition');
+        const result = projectTablePresentation({
+            entry,
+            data: {
+                workflowName: 'task-pipeline',
+                from: 'precheck',
+                to: 'implement',
+            },
+            correlation: { sequence: 1 },
+            presentation: {
+                severity: 'info',
+                summary: '[workflow] task-pipeline · precheck -> implement',
+                description: 'test',
+                fields: [],
+            },
+            actor: '@gobing-ai/ts-dual-workflow-engine',
+        });
+
+        expect(result.agent).toBeUndefined();
+    });
+
+    test('buildSystemEventEnvelope and projectStoredSystemEventEnvelope project agent from actor when appropriate', () => {
+        const entry = requireEntry('task.updated');
+        const envelope = buildSystemEventEnvelope(
+            entry,
+            { entity: { kind: 'task', id: '0605' } },
+            project,
+            [],
+            'sp:super-planner',
+        );
+        expect(envelope.presentation.agent).toBe('sp:super-planner');
+
+        const reprojected = projectStoredSystemEventEnvelope(entry, envelope, project, [], 'sp:super-planner');
+        expect(reprojected.presentation.agent).toBe('sp:super-planner');
+    });
 });
