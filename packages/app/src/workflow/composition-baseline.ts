@@ -313,7 +313,7 @@ export async function checkWorkflowComposition(options: {
                             actual: actAction.kind,
                         });
                     }
-                    if (expAction.invocation !== undefined && expAction.invocation !== actAction.invocation) {
+                    if (expAction.invocation !== actAction.invocation) {
                         errors.push(`Workflow "${name}" action "${actionKey}" invocation mismatch`);
                         diffs.push({
                             workflow: name,

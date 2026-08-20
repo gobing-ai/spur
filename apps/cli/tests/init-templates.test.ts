@@ -118,8 +118,7 @@ describe('spur init template copy', () => {
         expect(existsSync(join(wfDir, 'feature-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'task-pipeline.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'idea-pipeline.yaml'))).toBe(true);
-        // D5-K: planning is absorbed into the idea pipeline + /sp:dev-plan, so a fresh
-        // project must NOT receive planning-pipeline.yaml any more (ADR-072).
+        // ADR-072 accepted: planning is retired, so a fresh project has no planning graph.
         expect(existsSync(join(wfDir, 'planning-pipeline.yaml'))).toBe(false);
     });
 

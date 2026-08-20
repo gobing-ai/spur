@@ -47,8 +47,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'workflows/feature-dev.yaml', target: 'workflows/feature-dev.yaml' },
     { source: 'workflows/task-pipeline.yaml', target: 'workflows/task-pipeline.yaml' },
     // Planning is absorbed into the idea pipeline + /sp:dev-plan (D5-K, ADR-072).
-    // planning-pipeline.yaml is no longer seeded; the source file stays in this repo
-    // until ADR-072 is accepted, which is when it gets deleted outright.
+    // planning-pipeline.yaml was deleted on ADR-072 acceptance (task 0606 R6).
     // Idea + wrap-up pipelines (task 0167) — backing workflows for /sp:dev-idea, /sp:dev-wrap, /sp:dev-wrapall
     { source: 'workflows/idea-pipeline.yaml', target: 'workflows/idea-pipeline.yaml' },
     { source: 'workflows/wrapup-pipeline.yaml', target: 'workflows/wrapup-pipeline.yaml' },

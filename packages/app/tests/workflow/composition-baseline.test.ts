@@ -187,6 +187,47 @@ describe('Workflow Composition Baseline', () => {
         expect(result.diffs.some((d) => d.field.includes('invocation'))).toBe(true);
     });
 
+    test('checkWorkflowComposition fails when a live-present invocation is unrecorded in the baseline (R5 blind spot)', async () => {
+        const baselineContent = await Bun.file(
+            resolve(PROJECT_ROOT, 'config/workflow-composition-baseline.json'),
+        ).json();
+        const mutatedBaseline = JSON.parse(JSON.stringify(baselineContent)) as WorkflowCompositionBaseline;
+        const docsWf = mutatedBaseline.workflows['docs-pipeline'];
+        // draft:onEnter:1 is a shell action whose invocation IS recorded in the checked
+        // baseline; dropping the record simulates a baseline that never captured it —
+        // exactly the unrecorded-but-present invocation case R5 closes.
+        if (docsWf?.actions['draft:onEnter:1']) {
+            delete docsWf.actions['draft:onEnter:1'].invocation;
+        }
+
+        const result = await checkWorkflowComposition({
+            projectRoot: PROJECT_ROOT,
+            baseline: mutatedBaseline,
+        });
+        expect(result.pass).toBe(false);
+        expect(result.diffs.some((d) => d.field === 'actions.draft:onEnter:1.invocation')).toBe(true);
+    });
+
+    test('checkWorkflowComposition fails when an action shell body changes without a baseline update', async () => {
+        const baselineContent = await Bun.file(
+            resolve(PROJECT_ROOT, 'config/workflow-composition-baseline.json'),
+        ).json();
+        const mutatedBaseline = JSON.parse(JSON.stringify(baselineContent)) as WorkflowCompositionBaseline;
+        const docsWf = mutatedBaseline.workflows['docs-pipeline'];
+        // The baseline records the live invocation string; simulating a silent shell-body
+        // edit means the baseline invocation no longer matches the live definition.
+        if (docsWf?.actions['draft:onEnter:1']) {
+            docsWf.actions['draft:onEnter:1'].invocation = 'echo "rewritten shell body without baseline update"';
+        }
+
+        const result = await checkWorkflowComposition({
+            projectRoot: PROJECT_ROOT,
+            baseline: mutatedBaseline,
+        });
+        expect(result.pass).toBe(false);
+        expect(result.diffs.some((d) => d.field === 'actions.draft:onEnter:1.invocation')).toBe(true);
+    });
+
     test('checkWorkflowComposition fails when terminal states differ', async () => {
         const baselineContent = await Bun.file(
             resolve(PROJECT_ROOT, 'config/workflow-composition-baseline.json'),

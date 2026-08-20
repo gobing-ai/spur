@@ -215,6 +215,9 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 - **Decision:** Defer whether to retire or merge the planning pipeline; replace the wrap-up shell status ladder with idempotent `spur feature advance`, sharing transition logic with single-step update.
 - **Why:** The pipeline decision lacks evidence, while lifecycle walking is deterministic CLI behavior.
 - **Detail:** `04 §1`; `apps/cli/src/commands/feature.ts`.
+- **Amendment (2026-08-20, ADR-072 accepted):** the deferral is resolved — planning is retired.
+  `config/workflows/planning-pipeline.yaml` is deleted; planning routes through the canonical
+  idea/dev-plan path (idea-pipeline + `/sp:dev-plan`).
 
 ## ADR-030: Shared Full-Surface Mocks for Bun
 
@@ -879,7 +882,7 @@ quality, review, and observe-only verification evidence names one unchanged fina
 
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
-**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5 · **Would amend:** ADR-029
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5 · **Amends:** ADR-029
 
 **Decision.** Keep task execution, idea, docs, wrap-up, and integration-HEAD PR review as distinct
 lifecycle workflows; absorb planning into the canonical idea/dev-plan path, and merge only a
@@ -888,6 +891,12 @@ proof-preserving task-pipeline2 delta into task-pipeline before deleting the dup
 **Why.** A single graph per lifecycle boundary removes semantic drift while preserving genuinely independent gates.
 
 **Detail:** `03 §20.4`; `docs/design/workflow-composition-contract.md` §Target workflow inventory.
+
+**Acceptance (2026-08-20, task 0606 R6).** Every runtime planning caller was already migrated by
+task 0604 (waves D5-A…D5-P); nothing seeds or references `planning-pipeline.yaml`. On acceptance:
+`config/workflows/planning-pipeline.yaml` is deleted, ADR-029 is amended to record the retirement,
+and `RETIRED_PROJECT_SEEDS` in `packages/config/src/bundled-config.ts` (which excluded the retired
+graph from init seeding) is removed as now-dead, together with the two tests asserting the exclusion.
 
 ## ADR-073: System Event Table Cells Project Human Identity
 
@@ -908,3 +917,48 @@ proof-preserving task-pipeline2 delta into task-pipeline before deleting the dup
 **Why.** Producer names the emitting package; the diagnostic question is which coding agent executed the request, and that fact already exists on agent-bearing payloads.
 
 **Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
+
+## ADR-075: Wait and Message Stay Identity-Pinned — No Role Addressing
+
+**Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D6 · **Task:** 0609
+
+**Decision.** `spur agent wait` and `spur message send` keep identity-pinned addressing (spec id /
+`--to`), and role addressing is **not** added to either verb. A role names an *executor selection*
+for `agent.run`; it is not an addressee for wait or message. This closes the D5 R6 deferral, which
+was previously recorded only inside D5's acceptance criteria.
+
+**Why.** The concrete-caller survey (task 0609 R1) found no caller that needs to address a role
+rather than a spec id:
+
+- No shipped workflow in `config/workflows/*.yaml` invokes `agent wait` or `message send` at all
+  (`grep -rn "agent wait\|message send\|spur message"` → zero matches) — the pipeline surface has
+  no wait/message caller of any kind, let alone a role-addressed one.
+- The team/coordination surface (`spur team assign|status|up|down|start|stop`,
+  `apps/cli/src/commands/team.ts`) takes concrete `<task-id>`, `<agent-id>`, and `<team>` arguments
+  throughout — no verb accepts a role as an addressee.
+- No CLI command accepts `--role` (`rg '--role' apps/cli/src/commands/*.ts` → zero matches outside
+  `agent run`'s action option). The illustrative `--to reviewer` / `agent wait reviewer` examples in
+  `plugins/sp/skills/spur-cli/references/{message,agent}.md` are spec ids that happen to share role
+  names — the flag tables define them as "Recipient agent id" / "Agent spec id", and the
+  implementation (`apps/cli/src/commands/message.ts:29,50`, `agent.ts:96`) treats them as plain
+  recipient ids with no role resolution.
+- `--tags role:worker` (agent create, `agent.md:175`) is an identity *tag* on a spec — searchable
+  metadata, not a role-resolved addressee.
+
+Identity pinning stays authoritative because the occupant pin — `{ specId, runId, generation }`,
+snapshotted before wait or send (ADR-057 wave 2, task 0530) — is what actually binds a wait to a
+run. A role would need exact-one resolution to collapse to that same pin, and the survey shows no
+consumer that would benefit: the added surface would carry the ambiguity cost (zero/multi-occupant
+errors, re-resolution races) with no demonstrated caller. Under ADR-051's noun-first rule, adding
+`--role` to existing verbs without a concrete caller is surface without demand.
+
+**Evidence that would reopen this.** Any of: (1) a shipped pipeline or `spur team` workflow that
+genuinely needs to address "the reviewer"/"the planner" rather than a concrete spec; (2) a
+demonstrated multi-occupant team pattern where the operator needs one-role-one-recipient semantics
+and the concrete spec id is unknowable in advance; (3) an agent-to-agent protocol where messages
+must route by role for liveness (e.g. a dead occupant's role must be re-bound). If one appears,
+reopen with exact-one resolution: zero/multi-occupant are hard errors naming the role and count, the
+pin is written before proceed, and no fan-out is introduced (D6 R3/R4).
+
+**Detail:** `docs/design/spur-team-mode-design.md`; ADR-051 (public-surface consent),
+ADR-057 (identity-pinned control plane), ADR-061 (role→tier SSOT in `packages/config`).

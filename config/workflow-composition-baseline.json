@@ -49,6 +49,7 @@
                 },
                 "draft:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "$spurBin task update $wbs wip --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -59,11 +60,13 @@
                 },
                 "record:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "$spurBin task record $wbs --solution-from-diff --transition testing",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "done:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && printf '%s\\n' \"{\\\"wbs\\\":\\\"$wbs\\\",\\\"verdict\\\":\\\"PASS\\\",\\\"source\\\":\\\"docs-pipeline\\\",\\\"requirements\\\":[{\\\"id\\\":\\\"docs-deliverable\\\",\\\"status\\\":\\\"MET\\\",\\\"evidence\\\":\\\"docs-pipeline record step\\\"}],\\\"acceptanceCriteria\\\":[],\\\"checks\\\":[{\\\"name\\\":\\\"docs-only\\\",\\\"status\\\":\\\"pass\\\",\\\"evidence\\\":\\\"docs-pipeline\\\"}]}\" > \".spur/run/$wbs-verdict.json\"\n",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
@@ -74,6 +77,7 @@
                 },
                 "done:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "$spurBin task update $wbs done --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -108,11 +112,13 @@
                 },
                 "start:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && DOCTOR_FILE=\".spur/run/$__runId-idea-precheck-doctor.status\" && set +e && $spurBin agent doctor $agent; doctor_rc=$?; set -e && if [ \"$doctor_rc\" -eq 0 ] && test -n \"$idea\"; then\n  printf 'PASS\\n' > \"$DOCTOR_FILE\";\nelse\n  printf 'FAIL\\n' > \"$DOCTOR_FILE\";\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "discovery:onEnter:0": {
                     "kind": "agent.run",
+                    "invocation": "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty).",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
@@ -123,6 +129,7 @@
                 },
                 "feature-create:onEnter:0": {
                     "kind": "agent.run",
+                    "invocation": "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -133,26 +140,31 @@
                 },
                 "feature-create:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && test -s .spur/run/$__runId-idea-goal.md && $spurBin feature update \"$featureId\" --section Goal --from-file .spur/run/$__runId-idea-goal.md",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "feature-create:onEnter:3": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && test -s .spur/run/$__runId-idea-scope.md && $spurBin feature update \"$featureId\" --section Scope --from-file .spur/run/$__runId-idea-scope.md",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "ac-generate:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-ac-retry-count; rm -f .spur/run/$__runId-idea-ac-content.md .spur/run/$__runId-idea-ac-done.txt",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "ac-generate:onEnter:1": {
                     "kind": "agent.run",
+                    "invocation": "Generate acceptance criteria for feature ${vars.featureId}. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading.",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "ac-generate:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "if test -s .spur/run/$__runId-idea-ac-content.md; then\n  $spurBin feature update \"$featureId\" --section \"Acceptance Criteria\" --from-file .spur/run/$__runId-idea-ac-content.md && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-ac-done.txt;\nelse\n  exit 0;\nfi",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -163,21 +175,25 @@
                 },
                 "system-design:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && REVIEW=\".spur/run/$__runId-idea-design-review.md\" && test -f \"$REVIEW\" || printf '## Proposed design\\n\\n## Operator feedback\\n\\n## Reconciliation\\n' > \"$REVIEW\"",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "system-design:onEnter:1": {
                     "kind": "agent.run",
+                    "invocation": "Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update \"$featureId\" --section \"Acceptance Criteria\" --from-file <file>` — never edit feature corpus files directly.",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "system-design:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "REVIEW=\".spur/run/$__runId-idea-design-review.md\" && awk '/^## Proposed design/{f=1; next} /^## Operator feedback/{f=0} f' \"$REVIEW\" | grep -q '[^[:space:]]'",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
                 "design-approval:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-design-reject-count",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
@@ -188,16 +204,19 @@
                 },
                 "decompose:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "decompose:onEnter:1": {
                     "kind": "agent.run",
+                    "invocation": "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. SIZING FIRST, before any JSON: apply the skill's `Default to NOT decomposing` rubric to the whole unit of work — if it scores 0-2 the correct output is a ONE-entry batch, not many. Scenario count is not task count: merge scenarios that one task delivers (same file surface, same subsystem, or unreadable apart in review), and list every scenario a task covers in its background. Merging never costs AC coverage — one task may carry several scenarios. Do not emit one entry per scenario or per requirement by reflex. Then produce a task-batch JSON array at .spur/run/${vars.__runId}-idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting. Also emit the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json: a JSON array (one entry per batch item) of `{ name: <exact batch item name>, depends_on_names: [<batch item names>] }` declaring ordering/dependencies between the batch items; use `[]` when no ordering exists. Every `name` and every dependency must match exactly one batch item `name` — it is private workflow data, not part of task-batch.schema.json.",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "decompose:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "BATCH=\".spur/run/$__runId-idea-task-batch.json\" && ORDER=\".spur/run/$__runId-idea-task-order.json\" && jq -e --slurpfile b \"$BATCH\" '\n  (type == \"array\") and\n  (($b[0] | map(.name) | length) == ($b[0] | map(.name) | unique | length)) and\n  ((map(.name) | length) == (map(.name) | unique | length)) and\n  ((map(.name) - ($b[0] | map(.name))) | length == 0) and\n  ((($b[0] | map(.name)) - map(.name)) | length == 0) and\n  (((map(.depends_on_names // []) | flatten | unique) - ($b[0] | map(.name))) | length == 0)\n' \"$ORDER\" >/dev/null",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
@@ -208,11 +227,13 @@
                 },
                 "batch-create-run:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "if test -f .spur/run/$__runId-idea-batch-create.done; then exit 0; fi; rm -f .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-batch-create-result.json.tmp; if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json --json > .spur/run/$__runId-idea-batch-create-result.json.tmp && jq -e \".created == (.wbs | length)\" .spur/run/$__runId-idea-batch-create-result.json.tmp >/dev/null 2>&1; then\n  mv .spur/run/$__runId-idea-batch-create-result.json.tmp .spur/run/$__runId-idea-batch-create-result.json &&\n  date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.done;\nelse\n  rm -f .spur/run/$__runId-idea-batch-create-result.json.tmp;\n  date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.failed;\nfi",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "handoff-finalize:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "if [ -f packages/app/src/workflow/idea-handoff-cli.ts ]; then\n  bun packages/app/src/workflow/idea-handoff-cli.ts;\n  exit $?;\nfi; BATCH=\".spur/run/$__runId-idea-task-batch.json\" && RESULT=\".spur/run/$__runId-idea-batch-create-result.json\" && ORDER=\".spur/run/$__runId-idea-task-order.json\" && REPORT=\".spur/run/$__runId-idea-handoff.md\" && DEPMAP=\".spur/run/$__runId-idea-dep-map.tsv\" && CHECKS=\".spur/run/$__runId-idea-check-results.jsonl\" && rm -f \"$DEPMAP\" \"$CHECKS\" && jq -e --slurpfile b \"$BATCH\" '(.wbs | length) == ($b[0] | length) and (($b[0] | map(.name) | unique | length) == ($b[0] | length))' \"$RESULT\" >/dev/null && jq -r --slurpfile b \"$BATCH\" --slurpfile r \"$RESULT\" --slurpfile o \"$ORDER\" '\n  ($b[0] | map(.name)) as $names | ($r[0].wbs) as $wbs |\n  $o[0] | .[] |\n  (.name as $n | $names | index($n)) as $i |\n  (if $i == null or $wbs[$i] == null then \"MISSING\" else $wbs[$i] end) as $own |\n  ((.depends_on_names // []) | map(. as $dep | $names | index($dep) as $d | if $d == null then \"MISSING\" else $wbs[$d] end) | join(\" \")) as $deps |\n  [.name, $own, $deps] | @tsv\n' \"$ORDER\" > \"$DEPMAP\" && while IFS=\"$(printf '\\t')\" read -r name own deps; do\n  test \"$own\" != MISSING || exit 1;\n  if test -n \"$deps\"; then\n    for d in $deps; do test \"$d\" != MISSING || exit 1; done;\n    $spurBin task deps \"$own\" set $deps --json >/dev/null || exit 1;\n  fi;\ndone < \"$DEPMAP\" && $spurBin feature refresh --feature \"$featureId\" --json >/dev/null && WBS_LIST=$(jq -r '.wbs | join(\" \")' \"$RESULT\") && for wbs in $WBS_LIST; do\n  TMP=\".spur/run/$__runId-idea-check-$wbs.tmp\";\n  if $spurBin task check \"$wbs\" --json > \"$TMP\" 2>&1; then P=true; else P=false; fi;\n  jq -c --arg w \"$wbs\" --argjson p \"$P\" 'if (type == \"array\" and length > 0) then {wbs: $w, pass: $p, status: (.[0].status // \"unknown\")} else {wbs: $w, pass: $p, status: \"missing\"} end' \"$TMP\" >> \"$CHECKS\" || exit 1;\n  rm -f \"$TMP\";\ndone && CHECK_ROWS=$(wc -l < \"$CHECKS\" | tr -d ' ') && WBS_COUNT=$(printf '%s\\n' $WBS_LIST | wc -l | tr -d ' ') && test \"$CHECK_ROWS\" = \"$WBS_COUNT\" && NEXT=$(jq -r --arg feature \"$featureId\" --slurpfile c \"$CHECKS\" 'if ($c | any(.[]; .pass == false)) then \"/sp:dev-refineall --feature \\($feature) --auto --depth ready\" else \"/sp:dev-runall --feature \\($feature) --auto\" end' \"$RESULT\") && {\n  echo \"# Idea pipeline handoff report\";\n  echo;\n  echo \"Feature: $featureId\";\n  echo \"Run ID: $__runId\";\n  echo;\n  echo \"## Created tasks\";\n  printf '%s\\n' $WBS_LIST | sed 's/^/  - /';\n  echo;\n  echo \"## Per-task readiness (spur task check)\";\n  echo;\n  echo \"| WBS | Outcome |\";\n  echo \"|-----|---------|\";\n  while IFS= read -r line; do\n    w=$(printf '%s' \"$line\" | jq -r '.wbs');\n    o=$(printf '%s' \"$line\" | jq -r 'if .pass then \"PASS\" else \"FAIL\" end');\n    printf '| %s | %s |\\n' \"$w\" \"$o\";\n  done < \"$CHECKS\";\n  echo;\n  echo \"## Next command\";\n  echo;\n  echo \"$NEXT\";\n} > \"$REPORT\"",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -228,58 +249,7 @@
                 },
                 "handoff:onEnter:2": {
                     "kind": "shell",
-                    "stateEffect": "write",
-                    "evidenceEffect": "write"
-                }
-            }
-        },
-        "planning-pipeline": {
-            "definition": "config/workflows/planning-pipeline.yaml",
-            "boundary": "feature-planning",
-            "disposition": "absorb-then-delete",
-            "callers": ["sp:spur-dev", "sp:super-planner"],
-            "terminalStates": ["handoff", "cancelled", "failed"],
-            "artifacts": ["plan-feature-id", "plan-design-doc"],
-            "failurePolicy": "fail-closed",
-            "modelQueries": ["feature-id", "design-gen"],
-            "actions": {
-                "start:onEnter:0": {
-                    "kind": "shell",
-                    "stateEffect": "read",
-                    "evidenceEffect": "write"
-                },
-                "start:onEnter:1": {
-                    "kind": "note",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
-                },
-                "phasing:onEnter:0": {
-                    "kind": "hitl.confirm",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
-                },
-                "feature-id:onEnter:0": {
-                    "kind": "shell",
-                    "stateEffect": "read",
-                    "evidenceEffect": "write"
-                },
-                "feature-id:onEnter:1": {
-                    "kind": "agent.run",
-                    "stateEffect": "write",
-                    "evidenceEffect": "write"
-                },
-                "design-gen:onEnter:0": {
-                    "kind": "agent.run",
-                    "stateEffect": "write",
-                    "evidenceEffect": "write"
-                },
-                "design-approval:onEnter:0": {
-                    "kind": "hitl.confirm",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
-                },
-                "handoff:onEnter:0": {
-                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: idea-pipeline handoff feature=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/idea-checkpoint.md",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
@@ -297,11 +267,13 @@
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && DOCTOR_FILE=\".spur/run/$wbs-precheck-doctor.status\" && classifyDoctorProbe() {\n  PROBE_DETAIL=\"$1\";\n  PROBE_AGENT=\"$2\";\n  case \"$PROBE_AGENT\" in\n    omp|omp-*|pi|pi-*)\n      if printf '%s' \"$PROBE_DETAIL\" | grep -Eiq 'API key not found for provider|no probe registered'; then\n        printf 'env-miss\\n';\n        return;\n      fi;;\n  esac;\n  if printf '%s' \"$PROBE_DETAIL\" | grep -Eiq 'invalid (API )?key|unauthori[sz]ed|forbidden|authentication failed|credential(s)? rejected'; then\n    printf 'auth-fail\\n';\n  else\n    printf 'unknown\\n';\n  fi;\n} && STATUS=PASS; if [ -n \"$implementAgent\" ] && [ \"$implementAgent\" != \"$agent\" ]; then\n  echo \"precheck: agent=$agent implementAgent=$implementAgent (executors diverge)\";\n  EXECS=\"$agent $implementAgent\";\nelse\n  EXECS=\"$agent\";\nfi; for EXE in $EXECS; do\n  OUT=$($spurBin agent doctor \"$EXE\" --json 2>&1) || {\n    echo \"precheck: FAIL - doctor exited non-zero for $EXE\";\n    echo \"$OUT\";\n    STATUS=FAIL;\n    continue;\n  };\n  AUTH=$(printf '%s' \"$OUT\" | jq -r '.agents[0].authenticated // \"unknown\"' 2>/dev/null || echo unknown);\n  DETAIL=$(printf '%s' \"$OUT\" | jq -r '.agents[0].modelStatus.detail // \"\"' 2>/dev/null || echo \"\");\n  PROBE=$(classifyDoctorProbe \"$DETAIL\" \"$EXE\");\n  echo \"precheck: $EXE auth=$AUTH probe=$PROBE $DETAIL\";\n  if [ \"$AUTH\" = unauthenticated ]; then\n    case \"$EXE:$PROBE\" in\n      omp*:env-miss|pi*:env-miss|omp*:unknown|pi*:unknown)\n        echo \"precheck: SOFT - executor $EXE auth probe cannot see agent-owned credentials\";;\n      *)\n        echo \"precheck: FAIL - executor $EXE is unauthenticated; fix agent.default or pass --vars '{\\\"agent\\\":\\\"<authenticated-executor>\\\"}' ($spurBin agent doctor $EXE --json); $DETAIL\";\n        STATUS=FAIL;;\n    esac;\n  fi;\ndone; echo \"$STATUS\" > \"$DOCTOR_FILE\"; exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "precheck:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null); if [ -n \"$DIRTY\" ]; then\n  echo \"precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:\";\n  echo \"$DIRTY\";\nfi; CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null); if [ -n \"$CORPUS_DIRTY\" ]; then\n  echo \"precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:\";\n  echo \"$CORPUS_DIRTY\";\nfi; exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
@@ -312,11 +284,13 @@
                 },
                 "precheck:onEnter:3": {
                     "kind": "shell",
+                    "invocation": "if [ \"$profile\" = auto ]; then\n  FID=$($spurBin task show $wbs --json 2>/dev/null |\n  jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);\n  if [ -n \"$FID\" ]; then\n    $spurBin feature sync \"$FID\" --force --json 2>/dev/null ||\n    $spurBin feature update \"$FID\" active 2>/dev/null || true;\n  fi;\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "precheck:onEnter:4": {
                     "kind": "shell",
+                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then\n  bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\"\n  --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\"\n  --executor \"$implementAgent\";\nelse\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
@@ -328,21 +302,25 @@
                 },
                 "implement:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task update \"$wbs\" wip --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "implement:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "$formatCmd ; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "test:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && echo 0 > \"$ATTEMPT_FILE\" && : > \"$LOG_FILE\" && gate_attempt=1; while [ \"$gate_attempt\" -le 5 ]; do\n  ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n  sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n  gate_locked=0;\n  grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n  cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n  rm -f \"$ATTEMPT_LOG\";\n  if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n  printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n  sleep 10;\n  gate_attempt=$((gate_attempt + 1));\ndone && cat \"$LOG_FILE\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "test-fix:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && n=$(cat \"$ATTEMPT_FILE\" 2>/dev/null || echo 0) && printf '%s\\n' \"$((n + 1))\" > \"$ATTEMPT_FILE\"",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -359,6 +337,7 @@
                 },
                 "test-recheck:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && : > \"$LOG_FILE\" && probe_rc=0; if [ -n \"$gateProbeCmd\" ]; then\n  sh -c \"$gateProbeCmd\" > \"$LOG_FILE.probe\" 2>&1; probe_rc=$?;\n  cat \"$LOG_FILE.probe\" >> \"$LOG_FILE\";\n  rm -f \"$LOG_FILE.probe\";\nfi; if [ \"$probe_rc\" -ne 0 ]; then\n  gate_rc=$probe_rc;\nelse\n  gate_attempt=1;\n  while [ \"$gate_attempt\" -le 5 ]; do\n    ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n    sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n    gate_locked=0;\n    grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n    cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n    rm -f \"$ATTEMPT_LOG\";\n    if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n    printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n    sleep 10;\n    gate_attempt=$((gate_attempt + 1));\n  done;\nfi && cat \"$LOG_FILE\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -387,16 +366,19 @@
                 },
                 "record:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task record \"$wbs\" --solution-from-diff --transition testing",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "record:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r \".feature_id // .frontmatter.feature_id // empty\" 2>/dev/null); if [ -n \"$FID\" ]; then\n  if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then\n    bun plugins/sp/scripts/feature-sync-bounded.ts \"$FID\" --spur-bin \"$spurBin\" --json;\n  else\n    $spurBin feature sync \"$FID\" --json;\n  fi;\nelse\n  echo \"Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature.\" >> \".spur/run/$wbs-report.txt\";\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "done:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task update \"$wbs\" done --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -412,6 +394,7 @@
                 },
                 "done:onEnter:3": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/$wbs-checkpoint.md",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
@@ -429,11 +412,13 @@
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && DOCTOR_FILE=\".spur/run/$wbs-precheck-doctor.status\" && classifyDoctorProbe() {\n  PROBE_DETAIL=\"$1\";\n  PROBE_AGENT=\"$2\";\n  case \"$PROBE_AGENT\" in\n    omp|omp-*|pi|pi-*)\n      if printf '%s' \"$PROBE_DETAIL\" | grep -Eiq 'API key not found for provider|no probe registered'; then\n        printf 'env-miss\\n';\n        return;\n      fi;;\n  esac;\n  if printf '%s' \"$PROBE_DETAIL\" | grep -Eiq 'invalid (API )?key|unauthori[sz]ed|forbidden|authentication failed|credential(s)? rejected'; then\n    printf 'auth-fail\\n';\n  else\n    printf 'unknown\\n';\n  fi;\n} && STATUS=PASS; if [ -n \"$implementAgent\" ] && [ \"$implementAgent\" != \"$agent\" ]; then\n  echo \"precheck: agent=$agent implementAgent=$implementAgent (executors diverge)\";\n  EXECS=\"$agent $implementAgent\";\nelse\n  EXECS=\"$agent\";\nfi; for EXE in $EXECS; do\n  OUT=$($spurBin agent doctor \"$EXE\" --json 2>&1) || {\n    echo \"precheck: FAIL - doctor exited non-zero for $EXE\";\n    echo \"$OUT\";\n    STATUS=FAIL;\n    continue;\n  };\n  AUTH=$(printf '%s' \"$OUT\" | jq -r '.agents[0].authenticated // \"unknown\"' 2>/dev/null || echo unknown);\n  DETAIL=$(printf '%s' \"$OUT\" | jq -r '.agents[0].modelStatus.detail // \"\"' 2>/dev/null || echo \"\");\n  PROBE=$(classifyDoctorProbe \"$DETAIL\" \"$EXE\");\n  echo \"precheck: $EXE auth=$AUTH probe=$PROBE $DETAIL\";\n  if [ \"$AUTH\" = unauthenticated ]; then\n    case \"$EXE:$PROBE\" in\n      omp*:env-miss|pi*:env-miss|omp*:unknown|pi*:unknown)\n        echo \"precheck: SOFT - executor $EXE auth probe cannot see agent-owned credentials\";;\n      *)\n        echo \"precheck: FAIL - executor $EXE is unauthenticated; fix agent.default or pass --vars '{\\\"agent\\\":\\\"<authenticated-executor>\\\"}' ($spurBin agent doctor $EXE --json); $DETAIL\";\n        STATUS=FAIL;;\n    esac;\n  fi;\ndone; echo \"$STATUS\" > \"$DOCTOR_FILE\"; exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "precheck:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null); if [ -n \"$DIRTY\" ]; then\n  echo \"precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:\";\n  echo \"$DIRTY\";\nfi; CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null); if [ -n \"$CORPUS_DIRTY\" ]; then\n  echo \"precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:\";\n  echo \"$CORPUS_DIRTY\";\nfi; exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
@@ -444,11 +429,13 @@
                 },
                 "precheck:onEnter:3": {
                     "kind": "shell",
+                    "invocation": "if [ \"$profile\" = auto ]; then\n  FID=$($spurBin task show $wbs --json 2>/dev/null |\n  jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);\n  if [ -n \"$FID\" ]; then\n    $spurBin feature sync \"$FID\" --force --json 2>/dev/null ||\n    $spurBin feature update \"$FID\" active 2>/dev/null || true;\n  fi;\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "precheck:onEnter:4": {
                     "kind": "shell",
+                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\" --executor \"$implementAgent\" && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
@@ -460,21 +447,25 @@
                 },
                 "implement:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task update \"$wbs\" wip --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "implement:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "$formatCmd ; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "test:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && echo 0 > \"$ATTEMPT_FILE\" && : > \"$LOG_FILE\" && gate_attempt=1; while [ \"$gate_attempt\" -le 5 ]; do\n  ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n  sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n  gate_locked=0;\n  grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n  cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n  rm -f \"$ATTEMPT_LOG\";\n  if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n  printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n  sleep 10;\n  gate_attempt=$((gate_attempt + 1));\ndone && cat \"$LOG_FILE\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "test-fix:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && n=$(cat \"$ATTEMPT_FILE\" 2>/dev/null || echo 0) && printf '%s\\n' \"$((n + 1))\" > \"$ATTEMPT_FILE\"",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -491,6 +482,7 @@
                 },
                 "test-recheck:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && : > \"$LOG_FILE\" && probe_rc=0; if [ -n \"$gateProbeCmd\" ]; then\n  sh -c \"$gateProbeCmd\" > \"$LOG_FILE.probe\" 2>&1; probe_rc=$?;\n  cat \"$LOG_FILE.probe\" >> \"$LOG_FILE\";\n  rm -f \"$LOG_FILE.probe\";\nfi; if [ \"$probe_rc\" -ne 0 ]; then\n  gate_rc=$probe_rc;\nelse\n  gate_attempt=1;\n  while [ \"$gate_attempt\" -le 5 ]; do\n    ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n    sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n    gate_locked=0;\n    grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n    cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n    rm -f \"$ATTEMPT_LOG\";\n    if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n    printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n    sleep 10;\n    gate_attempt=$((gate_attempt + 1));\n  done;\nfi && cat \"$LOG_FILE\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -537,16 +529,19 @@
                 },
                 "record:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task record \"$wbs\" --solution-from-diff --transition testing",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "record:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r \".feature_id // .frontmatter.feature_id // empty\" 2>/dev/null); if [ -n \"$FID\" ]; then\n  if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then\n    bun plugins/sp/scripts/feature-sync-bounded.ts \"$FID\" --spur-bin \"$spurBin\" --json;\n  else\n    $spurBin feature sync \"$FID\" --json;\n  fi;\nelse\n  echo \"Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature.\" >> \".spur/run/$wbs-report.txt\";\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "done:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task update \"$wbs\" done --no-lifecycle",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -557,6 +552,7 @@
                 },
                 "done:onEnter:2": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/$wbs-checkpoint.md",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
@@ -584,26 +580,31 @@
                 },
                 "doc-sync:onEnter:0": {
                     "kind": "agent.run",
+                    "invocation": "Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus.",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
                 "learning-capture:onEnter:0": {
                     "kind": "agent.run",
+                    "invocation": "Extract working learnings from tasks ${vars.tasks}. Output raw markdown (no fences) grouped by date and task WBS: conventions, errors fixed, patterns, gotchas. Captured to .spur/run/wrapup-learnings.md.",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "learning-capture:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory && if test -s .spur/run/wrapup-learnings.md; then\n  cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md &&\n  printf '\\n' >> .spur/memory/learnings.md;\nelse\n  echo \"wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped\" >&2;\nfi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "metrics-record:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory && printf '%s' \"$tasks\" | jq -r '(if type == \"string\" then (try fromjson catch .) else . end) | if type == \"array\" then .[] else empty end' | while IFS= read -r wbs; do\n  if [ -n \"$wbs\" ]; then\n    task_json=$($spurBin task show \"$wbs\" --json 2>/dev/null || true);\n    if [ -n \"$task_json\" ]; then\n      feat=$(printf '%s' \"$task_json\" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);\n      stat=$(printf '%s' \"$task_json\" | jq -r '.frontmatter.status // .status // \"unknown\"' 2>/dev/null || true);\n      verdict=\"UNKNOWN\";\n      if [ -f \".spur/run/$wbs-verdict.json\" ]; then\n        v=$(jq -r '.verdict // \"UNKNOWN\"' \".spur/run/$wbs-verdict.json\" 2>/dev/null || true);\n        if [ -n \"$v\" ]; then verdict=\"$v\"; fi;\n      fi;\n      ts=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\");\n      printf '{\"wbs\":\"%s\",\"feature_id\":\"%s\",\"status\":\"%s\",\"verdict\":\"%s\",\"timestamp\":\"%s\"}\\n' \"$wbs\" \"$feat\" \"$stat\" \"$verdict\" \"$ts\" >> .spur/memory/wrapup-metrics.jsonl;\n    fi;\n  fi;\ndone && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "feature-transition:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "if [ -z \"$feature\" ]; then\n  echo \"feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)\" >&2;\n  exit 1;\nfi; if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then\n  bun plugins/sp/scripts/feature-sync-bounded.ts \"$feature\" --spur-bin \"$spurBin\" --json;\nelse\n  $spurBin feature sync \"$feature\" --json;\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none"
                 },
@@ -619,6 +620,7 @@
                 },
                 "done:onEnter:1": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: wrapup-pipeline done tasks=$tasks ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/wrapup-checkpoint.md",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
@@ -645,41 +647,49 @@
             "actions": {
                 "preflight:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-preflight.status\" && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" preflight --base \"$baseBranch\" --json > \".spur/run/$__runId-pr-context.json\"; rc=$?; set -e && if [ \"$rc\" -eq 0 ]; then printf 'PASS\\n' > \"$STATUS_FILE\"; else printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "hygiene:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-hygiene.status\" && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" hygiene --base \"$baseBranch\" --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-hygiene.json\"; rc=$?; set -e && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "precheck:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-precheck.status\" && if [ -z \"$preReviewCmd\" ]; then\n  printf 'SKIP\\n' > \"$STATUS_FILE\";\nelse\n  set +e; sh -c \"$preReviewCmd\"; rc=$?; set -e;\n  if [ \"$rc\" -eq 0 ]; then printf 'PASS\\n' > \"$STATUS_FILE\"; else printf 'FAIL\\n' > \"$STATUS_FILE\"; fi;\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "push:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-push.status\" && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" push --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-push.json\"; rc=$?; set -e && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "ensure-pr:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-ensure.status\" && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" ensure-pr --base \"$baseBranch\" --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr.json\"; rc=$?; set -e && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "request:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-request.status\" && FORCE_FLAG=\"\" && if [ \"$mode\" = \"rerun\" ]; then FORCE_FLAG=\"--force\"; fi && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" request --focus \"$focus\" $FORCE_FLAG --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-request.json\"; rc=$?; set -e && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
                 "wait:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-wait.status\" && set +e && SINCE=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).requestedAt;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && REQUEST_HEAD=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).head;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && bun \"$(superskill script path sp pr-reviewing.ts)\" wait --since \"$SINCE\" --head \"$REQUEST_HEAD\" --timeout \"$waitTimeoutSec\" --interval \"$waitIntervalSec\" --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-wait.json\"; rc=$?; set -e && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "collect:onEnter:0": {
                     "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-collect.status\" && set +e && SINCE=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).requestedAt;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && REQUEST_HEAD=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).head;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && bun \"$(superskill script path sp pr-reviewing.ts)\" collect --since \"$SINCE\" --head \"$REQUEST_HEAD\" --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-findings.json\"; collect_rc=$?; bun \"$(superskill script path sp pr-reviewing.ts)\" status --since \"$SINCE\" --head \"$REQUEST_HEAD\" --json > \".spur/run/$__runId-pr-status.json\"; status_rc=$?; set -e && if [ \"$collect_rc\" -ne 0 ] || [ \"$status_rc\" -ne 0 ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && { cat \".spur/run/$__runId-pr-findings.json\" 2>/dev/null || true; } && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 }

@@ -909,7 +909,7 @@ dangling executor reference fails loudly at drain, spawning nothing.
 Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
 `AgentRoleConfigSchema`); `config/config.example.yaml`; `plugins/sp/references/roles.md` (projection).
 
-## 20. Workflow Composition and Canonical Pipelines (proposed — ADR-069/071/072; taste gate pending)
+## 20. Workflow Composition and Canonical Pipelines (ADR-072 accepted; ADR-069/071 proposed — taste gate pending)
 
 D5 proposes an existing-seam, infrastructure-first migration. Workflow definitions remain the
 orchestration graph; they do not become a second application layer. Shared deterministic behavior
@@ -918,7 +918,7 @@ is deepened behind existing application and persistence interfaces before any li
 ### 20.1 Options and decision
 
 | Option | Coupling and blast radius | Reversibility and cost | Disposition |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Clean up commands independently inside each YAML/extension | couples policy to callers; drift remains across graphs | cheap initially, expensive to keep aligned | rejected |
 | Add a generalized workflow DSL, progress store, and event-driven controller | duplicates engine, persistence, and replay authority | largest one-way change and migration surface | rejected |
 | Extend existing app capabilities, engine action seam, persistence rows, and read projection | localizes changes behind proven owners | incremental, fixtureable, and reversible per pipeline | recommended |
@@ -930,7 +930,7 @@ no package, transport, data store, or public CLI surface.
 The rejected taste-gate details require three narrower decisions:
 
 | Seam | Candidates | Proposed choice | Strongest reason |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Proof establishment | trust a post-fix verdict; combine mutation and proof in one new capability; split remediation from observe-only proof | split remediation from the final `--fix none` verification | a PASS can name one state without trusting a capability that may edit it |
 | Gate execution | opaque shell string; structured executable/args; new gate DSL | literal executable/args invoking a named project script | it maps directly to `ProcessExecutor` and makes quoting and trust ownership explicit |
 | Definition binding | replace run metadata; add a digest table; merge at run creation | atomically merge into `runs.metadata_json` | it preserves one run authority and every pre-existing metadata key |
@@ -1017,8 +1017,8 @@ Enforceable invariants:
 
 The proposed target retains separate workflows where the lifecycle and rollback boundary is real:
 docs, wrap-up, idea/design review, task execution, and integration-HEAD PR review. Planning is a
-duplicate front half and would be absorbed into the canonical idea/dev-plan path, resolving
-ADR-029's deferral only after the taste gate accepts ADR-072.
+duplicate front half and was absorbed into the canonical idea/dev-plan path, resolving
+ADR-029's deferral (ADR-072 accepted 2026-08-20; `planning-pipeline.yaml` deleted).
 `task-pipeline2.yaml` remains a temporary candidate only; the live task pipeline stays authoritative
 until a redesigned delta passes promotion and receives explicit deletion approval.
 

@@ -113,8 +113,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ownSkills = new Set(skillDirs);
         const ownAgents = new Set(
             readdirSync(AGENTS_DIR)
-                .filter((f) => f.endsWith('.md'))
-                .map((f) => f.replace(/\.md$/, '')),
+                .filter((f: string) => f.endsWith('.md'))
+                .map((f: string) => f.replace(/\.md$/, '')),
         );
         const commandPrefixes = /^(dev|rule|workflow|brainstorm|prd|magent|agent|command|skill|hook)-/;
         const crossPluginOrCommand = (name: string) => commandPrefixes.test(name) || name === 'spur-init';
@@ -552,9 +552,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(offenders).toEqual([]);
     });
 
-    test('R37 — idea/planning pipelines route HITL answers and keep transition guards side-effect free', () => {
+    test('R37 — idea pipeline routes HITL answers and keeps transition guards side-effect free', () => {
         const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
-        const planning = readFileSync(join(WORKFLOWS_DIR, 'planning-pipeline.yaml'), 'utf8');
 
         expect(idea).toContain('kind: file.read.into-var');
         expect(idea).toContain('  - id: batch-create-run\n');
@@ -567,35 +566,38 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // Guards reference vars by name so the value reaches the shell as env rather than as
         // command text (task 0435). The routing invariants asserted below are unchanged.
+        // planning-pipeline.yaml is deleted (ADR-072 accepted, task 0606 R6) — the idea
+        // pipeline is the sole planning entry path and owns the HITL answer routing.
         const hitlAnswer = '$__hitlAnswer';
-        for (const text of [idea, planning]) {
-            expect(text).toContain(`test "${hitlAnswer}" = yes`);
-            expect(text).toContain(`test "${hitlAnswer}" = no`);
-            expect(text).toContain(`test "${hitlAnswer}" = cancel`);
-        }
+        expect(idea).toContain(`test "${hitlAnswer}" = yes`);
+        expect(idea).toContain(`test "${hitlAnswer}" = no`);
+        expect(idea).toContain(`test "${hitlAnswer}" = cancel`);
     });
 
-    test('R38 — planning-pipeline declares agent dispatch vars used by agent.run steps', () => {
-        const planning = readFileSync(join(WORKFLOWS_DIR, 'planning-pipeline.yaml'), 'utf8');
+    test('R38 — idea-pipeline declares agent dispatch vars used by agent.run steps', () => {
+        // planning-pipeline.yaml is deleted (ADR-072 accepted, task 0606 R6); the idea
+        // pipeline is the canonical planning entry path and must declare the same
+        // agent-dispatch var contract for its agent.run steps.
+        const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
         // stepTimeoutMs aligned with task-pipeline headroom (1800000), not the old 600s default.
         for (const line of ['  agent: "omp"', '  spurBin: "spur"', '  stepTimeoutMs: "1800000"']) {
-            expect(planning).toContain(line);
+            expect(idea).toContain(line);
         }
         const varsAgent = `$${'{vars.agent}'}`;
         const varsStepTimeout = `$${'{vars.stepTimeoutMs}'}`;
-        const varsSpurBin = `$${'{vars.spurBin}'}`;
-        expect(planning).toContain(`agent: ${varsAgent}`);
-        expect(planning).toContain(`timeoutMs: ${varsStepTimeout}`);
-        expect(planning).toContain(`${varsSpurBin} feature create`);
+        expect(idea).toContain(`agent: ${varsAgent}`);
+        expect(idea).toContain(`timeoutMs: ${varsStepTimeout}`);
+        // spurBin is consumed as a shell var ($spurBin) in action commands, and the
+        // feature-create agent input names the CLI verb directly (ADR-043 pure pointer).
+        expect(idea).toContain('$spurBin agent doctor $agent');
+        expect(idea).toContain('spur feature create \\"<name>\\" --json');
         // Soft precheck + expectFile reliability contract (fleet reliability pass).
         // 0425 R4: non-entity-scoped artifacts are ${vars.__runId}-prefixed.
-        expect(planning).toContain('plan-precheck.status');
-        const planFeatureExpect = ['expectFile: .spur/run/', '$', '{vars.__runId}', '-plan-feature-id.txt'].join('');
-        expect(planning).toContain(planFeatureExpect);
-        // Design artifact path uses engine template vars.slug — build without bare ${...}
-        // so biome noTemplateCurlyInString stays quiet on the test source.
-        const designExpect = ['expectFile: docs/design/', '$', '{vars.slug}', '.md'].join('');
-        expect(planning).toContain(designExpect);
+        expect(idea).toContain('idea-precheck-doctor.status');
+        const planFeatureExpect = ['expectFile: .spur/run/', '$', '{vars.__runId}', '-idea-feature-id.txt'].join('');
+        expect(idea).toContain(planFeatureExpect);
+        // Design satellites are written under docs/design/<slug>.md by sp:sys-architecture.
+        expect(idea).toContain('docs/design/<slug>.md');
     });
 
     test('R39 — idea-pipeline discovery delegates needs_design criteria to sp:brainstorm', () => {
@@ -697,8 +699,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const inputLine =
             implementBlock
                 .split('\n')
-                .map((l) => l.trim())
-                .find((l) => l.startsWith('input:')) ?? '';
+                .map((l: string) => l.trim())
+                .find((l: string) => l.startsWith('input:')) ?? '';
         expect(inputLine).toBe(pureImplementInput);
 
         const codeImplSkill = readFileSync(join(SKILLS_DIR, 'code-implementation', 'SKILL.md'), 'utf8');
@@ -823,8 +825,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
                 heading: '### Command index',
                 label: 'commands',
                 shipped: readdirSync(join(PLUGIN_ROOT, 'commands'))
-                    .filter((f) => f.endsWith('.md'))
-                    .map((f) => f.replace(/\.md$/, '')),
+                    .filter((f: string) => f.endsWith('.md'))
+                    .map((f: string) => f.replace(/\.md$/, '')),
                 hasTarget: (n) =>
                     statSync(join(PLUGIN_ROOT, 'commands', `${n}.md`), { throwIfNoEntry: false }) !== undefined,
             },
@@ -838,19 +840,20 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
                 heading: '#### 3. Agents',
                 label: 'agents',
                 shipped: readdirSync(AGENTS_DIR)
-                    .filter((f) => f.endsWith('.md'))
-                    .map((f) => f.replace(/\.md$/, '')),
+                    .filter((f: string) => f.endsWith('.md'))
+                    .map((f: string) => f.replace(/\.md$/, '')),
                 hasTarget: (n) => statSync(join(AGENTS_DIR, `${n}.md`), { throwIfNoEntry: false }) !== undefined,
             },
         ];
 
         for (const { heading, label, shipped, hasTarget } of sections) {
-            const startIdx = lines.findIndex((l) => l.trim().startsWith(heading));
+            const startIdx = lines.findIndex((l: string) => l.trim().startsWith(heading));
             expect(startIdx, `README must have a "${heading}" section`).toBeGreaterThanOrEqual(0);
             // Command section runs to the next top-level heading; skill/agent sections run to the
             // next `#### ` subsection (they sit inside "### Entity design").
             const endIdx = lines.findIndex(
-                (l, i) => i > startIdx && (heading.startsWith('### ') ? /^## /.test(l) : /^#### /.test(l)),
+                (l: string, i: number) =>
+                    i > startIdx && (heading.startsWith('### ') ? /^## /.test(l) : /^#### /.test(l)),
             );
             const sectionText = lines.slice(startIdx, endIdx === -1 ? undefined : endIdx).join('\n');
 
@@ -1009,11 +1012,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
                 continue;
             }
             // Data rows = pipe-rows minus the header row and the |---| separator row.
-            const pipeRows = cr.split('\n').filter((l) => l.trim().startsWith('|'));
-            const separators = pipeRows.filter((l) => /^\|[\s:|-]+\|?$/.test(l.trim())).length;
+            const pipeRows = cr.split('\n').filter((l: string) => l.trim().startsWith('|'));
+            const separators = pipeRows.filter((l: string) => /^\|[\s:|-]+\|?$/.test(l.trim())).length;
             const dataRows = pipeRows.length - separators - 1; // minus header row
             if (dataRows < 3) offenders.push(`${skill}: Common Rationalizations has ${dataRows} rows (need >= 3)`);
-            const flagItems = rf.split('\n').filter((l) => l.trim().startsWith('- ')).length;
+            const flagItems = rf.split('\n').filter((l: string) => l.trim().startsWith('- ')).length;
             if (flagItems < 3) offenders.push(`${skill}: Red Flags has ${flagItems} items (need >= 3)`);
         }
         expect(offenders).toEqual([]);
@@ -1028,7 +1031,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(cc).toContain('Red Flags — an unverified claim');
         // The section carries a Red-Flags table (a "| ... | ... |" row beyond the header).
         const vbc = cc.slice(cc.indexOf('## Verification Before Completion'));
-        const tableRows = vbc.split('\n').filter((l) => l.trim().startsWith('|'));
+        const tableRows = vbc.split('\n').filter((l: string) => l.trim().startsWith('|'));
         expect(tableRows.length).toBeGreaterThanOrEqual(5); // header + separator + >= 3 red-flag rows
 
         const anchor = 'cross-cutting.md#verification-before-completion';
@@ -1342,7 +1345,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // bare names (anti-hallucination, tasks) that R16b skips. This assertion parses the skills:
         // field directly and resolves each sp: entry to a directory under skills/.
         const offenders: string[] = [];
-        for (const file of readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.md'))) {
+        for (const file of readdirSync(AGENTS_DIR).filter((f: string) => f.endsWith('.md'))) {
             const text = readFileSync(join(AGENTS_DIR, file), 'utf8');
             const frontmatter = text.split('---')[1] ?? '';
             const skillsLine = frontmatter.match(/^skills:\s*\[(.*)\]/m)?.[1] ?? '';

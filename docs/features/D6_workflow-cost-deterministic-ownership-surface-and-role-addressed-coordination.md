@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D6"
 name: "Workflow cost, deterministic ownership surface, and role-addressed coordination"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-08-20T00:12:08.885Z"
+updated_at: "2026-08-20T02:09:16.114Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -87,3 +87,4 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 ## Notes
 
 ## History
+- 2026-08-20T02:09:16.114Z backlog → active (system)

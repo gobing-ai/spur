@@ -98,7 +98,6 @@ describe('workflow command (main)', () => {
     const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
     for (const wf of [
         'task-pipeline.yaml',
-        'planning-pipeline.yaml',
         'task-lifecycle.yaml',
         'feature-lifecycle.yaml',
         'feature-dev.yaml',

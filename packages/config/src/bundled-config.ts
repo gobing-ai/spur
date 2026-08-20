@@ -117,15 +117,6 @@ const PROJECT_SEED_FILTER = /\.(ya?ml|json|md|gitkeep)$/i;
 const BUNDLED_CONFIG_EXAMPLE = 'config.example.yaml';
 
 /**
- * Bundled assets kept in this repository but no longer seeded into projects.
- *
- * D5-K absorbed planning into the idea pipeline + `/sp:dev-plan` (ADR-072), so a fresh
- * project must not receive a second, competing planning graph. The source file stays
- * on disk until ADR-072 is accepted, which is when it is deleted outright.
- */
-const RETIRED_PROJECT_SEEDS: ReadonlySet<string> = new Set(['workflows/planning-pipeline.yaml']);
-
-/**
  * List every bundled asset that should land under a project's `.spur/` on init.
  *
  * Unlike {@link listBundledConfigFiles} (YAML/JSON only, for `~/.config/spur/`) this
@@ -137,7 +128,7 @@ export function listBundledProjectSeedFiles(): string[] {
     const root = bundledConfigRoot();
     if (root === null) return [];
     return walk(root, '', PROJECT_SEED_FILTER)
-        .filter((rel) => rel !== BUNDLED_CONFIG_EXAMPLE && !RETIRED_PROJECT_SEEDS.has(rel))
+        .filter((rel) => rel !== BUNDLED_CONFIG_EXAMPLE)
         .sort();
 }
 
