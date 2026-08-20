@@ -103,6 +103,36 @@ test('R1 — stale .mjs twin older than .ts source fails the gate', () => {
     }
 });
 
+test('R1 — fresh-checkout sub-second twin mtime delta does not fail stale_twin', () => {
+    // A `git worktree add` stamps every checked-out file within the same millisecond, and the
+    // lexicographic write order (`tool.mjs` < `tool.ts`) makes the twin spuriously "older" by a
+    // sub-millisecond delta. This regression test encodes that case: a real stale twin is
+    // seconds-to-minutes old, so sub-second deltas must never trip the gate (task 0606 R1
+    // eval-worktree blocker — without the tolerance, the eval fixture worktree could not pass
+    // qualityGateCmd and the promotion bar was unreachable).
+    const env = createTempEnv();
+    try {
+        const tsPath = join(env.scriptsDir, 'tool.ts');
+        const mjsPath = join(env.scriptsDir, 'tool.mjs');
+        writeFileSync(tsPath, 'console.log("new");\n');
+        writeFileSync(mjsPath, 'console.log("twin");\n');
+
+        // Twin written ~0.07ms before source — the exact fresh-worktree artifact delta.
+        const tsSeconds = (Date.now() - 0.07) / 1000;
+        utimesSync(tsPath, tsSeconds, tsSeconds);
+        const mjsSeconds = tsSeconds - 0.0001; // mjs marginally older by sub-millisecond
+        utimesSync(mjsPath, mjsSeconds, mjsSeconds);
+
+        const manifest: ScriptManifest = {
+            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
+        };
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        expect(violations.some((v) => v.kind === 'stale_twin')).toBe(false);
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('R2 — repo-only script with a .mjs twin fails unexpected_twin', () => {
     const env = createTempEnv();
     try {

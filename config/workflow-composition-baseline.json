@@ -290,7 +290,7 @@
                 },
                 "precheck:onEnter:4": {
                     "kind": "shell",
-                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then\n  bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\"\n  --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\"\n  --executor \"$implementAgent\";\nelse\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
+                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\" --executor \"$implementAgent\"; else\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },

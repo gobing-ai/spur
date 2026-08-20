@@ -195,7 +195,13 @@ export function validateContract(manifest: ScriptManifest, scriptsDir: string, p
         manifestMap.set(entry.rel, entry);
     }
 
-    // Rule 1: standard entries must have valid .mjs twins not older than the .ts source
+    // Rule 1: standard entries must have valid .mjs twins not older than the .ts source.
+    // mtime is only meaningful when a build genuinely ran: a `git worktree add` stamps
+    // every checked-out file within the same millisecond, and the lexicographic write
+    // order (`tool.mjs` < `tool.ts`) makes the twin spuriously "older" by <1ms. Tolerate
+    // sub-second deltas so a fresh checkout is never flagged; real build staleness is
+    // seconds-to-minutes, far beyond this window (task 0606 R1 eval-worktree blocker).
+    const STALE_TWIN_TOLERANCE_MS = 1000;
     for (const entry of manifest.entries) {
         if (entry.rel && entry.contract === 'standard') {
             const expectedTwinRel = entry.twin ?? entry.rel.replace(/\.ts$/, '.mjs');
@@ -211,7 +217,7 @@ export function validateContract(manifest: ScriptManifest, scriptsDir: string, p
             } else if (existsSync(tsPath)) {
                 const tsStat = statSync(tsPath);
                 const twinStat = statSync(twinPath);
-                if (twinStat.mtimeMs < tsStat.mtimeMs) {
+                if (twinStat.mtimeMs < tsStat.mtimeMs - STALE_TWIN_TOLERANCE_MS) {
                     violations.push({
                         kind: 'stale_twin',
                         target: entry.rel,

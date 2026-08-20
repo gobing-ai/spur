@@ -301,4 +301,25 @@ describe('Workflow Composition Baseline', () => {
         expect(facts.actions['s1:onExit:1']?.invocation).toBe('echo bye');
         expect(facts.modelQueries).toEqual(['s1']);
     });
+
+    // A YAML folded scalar (`>-`) only joins lines at the block's base indentation;
+    // a MORE-indented line keeps its newline. Indenting a command's flags to line them
+    // up under the command therefore splits one invocation into several, and the flag
+    // lines run as their own commands ("--executor: command not found"). This shipped
+    // undetected in task-pipeline's precheck-size action, where it silently dropped
+    // --spur-bin/--max-reqs/--max-plan-items/--executor and killed the 0487
+    // size-vs-capability gate. A continuation line starting with `-` is always this bug.
+    test('no live workflow shell command splits an argument list across lines', async () => {
+        const dir = resolve(PROJECT_ROOT, '.spur/workflows');
+        const offenders: string[] = [];
+        for (const file of Array.from(new Bun.Glob('*.yaml').scanSync(dir)).sort()) {
+            const def = await loadWorkflowDef(resolve(dir, file), { validateSchema: false });
+            for (const [key, action] of Object.entries(extractResolvedWorkflowFacts(def).actions)) {
+                for (const line of (action.invocation ?? '').split('\n').slice(1)) {
+                    if (/^\s*-/.test(line)) offenders.push(`${file} ${key}: ${line.trim()}`);
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
 });
