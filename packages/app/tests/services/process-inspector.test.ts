@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
     createPsProcessInspector,
+    defaultRunPs,
+    PS_LIST_ARGV,
     parseEtimeToSeconds,
     parsePsOutput,
     UnsupportedProcessPlatformError,
@@ -63,5 +65,39 @@ describe('createPsProcessInspector', () => {
         const rows = await inspector.listAll();
         expect(rows).toHaveLength(3);
         expect(rows[0]?.pid).toBe(100);
+    });
+});
+
+// `defaultRunPs` is the default value of an injectable seam, so every existing test supplies its own
+// `runPs` and this function — including its only error path — was never executed. That is a real
+// coverage gap, not a sandbox artifact: it stays uncovered on a host where `ps` is permitted.
+describe('defaultRunPs', () => {
+    const fakeExecutor = (result: { exitCode: number; stdout: string; stderr: string }) =>
+        ({ run: async () => result }) as unknown as Parameters<typeof defaultRunPs>[0];
+
+    test('returns stdout and invokes the shared ps argv on success', async () => {
+        let seen: { command: string; args: string[] } | undefined;
+        const executor = {
+            run: async (opts: { command: string; args: string[] }) => {
+                seen = opts;
+                return { exitCode: 0, stdout: 'row\n', stderr: '' };
+            },
+        } as unknown as Parameters<typeof defaultRunPs>[0];
+
+        expect(await defaultRunPs(executor)).toBe('row\n');
+        expect(seen?.command).toBe(PS_LIST_ARGV[0]);
+        expect(seen?.args).toEqual([...PS_LIST_ARGV.slice(1)]);
+    });
+
+    test('throws with the exit code and stderr on a non-zero exit', async () => {
+        await expect(defaultRunPs(fakeExecutor({ exitCode: 3, stdout: '', stderr: ' boom \n' }))).rejects.toThrow(
+            'ps failed (exit 3): boom',
+        );
+    });
+
+    test('reports "no stderr" rather than an empty reason when stderr is blank', async () => {
+        await expect(defaultRunPs(fakeExecutor({ exitCode: 1, stdout: '', stderr: '   ' }))).rejects.toThrow(
+            'ps failed (exit 1): no stderr',
+        );
     });
 });

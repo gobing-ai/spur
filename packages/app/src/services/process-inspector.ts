@@ -123,11 +123,20 @@ export function createPsProcessInspector(
     };
 }
 
-async function defaultRunPs(): Promise<string> {
+/**
+ * Run `ps` and return stdout, throwing on a non-zero exit.
+ *
+ * The executor is injectable so both branches are testable without spawning a real process — the
+ * default was previously unreachable from tests (every caller injects `runPs`), leaving the
+ * non-zero-exit error path with no coverage at all.
+ */
+export async function defaultRunPs(
+    executor: { run: NodeProcessExecutor['run'] } = new NodeProcessExecutor(),
+): Promise<string> {
     // ProcessExecutor seam — do not Bun.spawn here (no-direct-process-spawn +
     // concurrent-test isolation: execa uses Bun.spawn under the hood on Bun).
     const [command, ...args] = PS_LIST_ARGV;
-    const result = await new NodeProcessExecutor().run({
+    const result = await executor.run({
         command: command ?? 'ps',
         args,
         forceBuffered: true,
