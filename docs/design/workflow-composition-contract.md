@@ -26,7 +26,7 @@ workflow definitions remain regression fixtures or examples unless a later ADR c
 | D5-I | wrap-up metrics off the model hop | landed |
 | D5-J | docs precheck onto soft `command.gate` | landed |
 | D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` retained until ADR-072 is accepted |
-| D5-L | `task-pipeline.yaml` onto the shared primitives | partial — `run.artifact` owns the verdict; `qualityGateCmd` stays a documented per-project **shell** string, and the precheck doctor probe stays shell because both encode semantics `command.gate` cannot express without a new public CLI surface (ADR-051) |
+| D5-L | `task-pipeline.yaml` onto the shared primitives | partial — `run.artifact` owns the verdict; `qualityGateCmd` stays a documented per-project **shell** string. The precheck doctor probe **landed** on the `doctor.probe` built-in action kind (task 0608, feature D6 — the D6 ownership-surface decision); the D5-L wave itself shipped under the constraint that `command.gate` cannot express either program's semantics without a new public CLI surface (ADR-051) |
 | D5-M | pipeline2 residual made read-only | landed — the sweep is bracketed by a tree snapshot and any post-PASS mutation routes to `failed`, never `record` (ADR-071) |
 | D5-N | ~~eval-pipeline promotion bar~~ | **retired (ADR-076, 2026-08-20)** — the bar is no longer a gate; `task-pipeline2.yaml` was deleted rather than promoted. `eval-pipeline` remains a measurement tool only |
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + portable shell fallback |

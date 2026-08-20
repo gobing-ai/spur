@@ -10,6 +10,7 @@ import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner, type AgentRunAgentConfig } from './actions/agent-run';
 import { CommandGateActionRunner } from './actions/command-gate';
+import { DoctorProbeActionRunner } from './actions/doctor-probe';
 import { FileExistsActionRunner } from './actions/file-exists';
 import { FileReadActionRunner } from './actions/file-read';
 import { FileReadIntoVarActionRunner } from './actions/file-read-into-var';
@@ -78,6 +79,17 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     host.registerAction(new HitlInputActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(
         new CommandGateActionRunner(options.processExecutor ?? new NodeProcessExecutor(), fileSystem),
+        'builtin',
+    );
+    // Pre-launch executor doctor probe (task 0608 / D6 R4–R5). Replaces the task-pipeline
+    // precheck shell classifier: soft probe that writes PASS/FAIL to a status file under
+    // .spur/run/ and always succeeds so transition guards route on the token.
+    host.registerAction(
+        new DoctorProbeActionRunner(
+            options.processExecutor ?? new NodeProcessExecutor(),
+            fileSystem,
+            options.observabilityBus,
+        ),
         'builtin',
     );
     host.registerAction(new RunArtifactActionRunner(options.getDb, fileSystem, options.artifactDao), 'builtin');

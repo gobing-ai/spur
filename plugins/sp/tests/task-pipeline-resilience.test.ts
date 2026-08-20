@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
+import { DoctorProbeActionRunner } from '../../../packages/app/src/workflow/actions/doctor-probe';
 
 interface PipelineAction {
     kind: string;
@@ -32,6 +34,33 @@ function commandFor(stateId: string, shellIndex = 0): string {
     const command = commands[shellIndex];
     if (command === undefined) throw new Error(`missing shell command ${shellIndex} for ${stateId}`);
     return command;
+}
+
+interface DoctorProbeAction {
+    kind: string;
+    options?: { resultFile?: string; spurBin?: string; agent?: string; implementAgent?: string };
+}
+
+/** Resolve the `doctor.probe` action's options with `${vars.*}` templates filled from a map. */
+function doctorProbeOptions(
+    vars: Record<string, string>,
+): Required<Pick<DoctorProbeAction['options'], 'resultFile' | 'spurBin' | 'agent' | 'implementAgent'>> {
+    const action = PIPELINE.states
+        .find((state) => state.id === 'precheck')
+        ?.onEnter?.find((a) => a.kind === 'doctor.probe') as DoctorProbeAction | undefined;
+    if (action?.options?.resultFile === undefined) {
+        throw new Error('precheck does not declare a doctor.probe action');
+    }
+    const fill = (value: string | undefined, fallback: string): string => {
+        if (value === undefined) return fallback;
+        return value.replace(/\$\{vars\.(\w+)\}/g, (_m, name: string) => vars[name] ?? '');
+    };
+    return {
+        resultFile: fill(action.options.resultFile, '.spur/run/precheck-doctor.status'),
+        spurBin: fill(action.options.spurBin, 'spur'),
+        agent: fill(action.options.agent, ''),
+        implementAgent: fill(action.options.implementAgent, ''),
+    };
 }
 
 function executable(dir: string, name: string, body: string): string {
@@ -72,36 +101,43 @@ function runShell(command: string, cwd: string, env: Record<string, string>): { 
 }
 
 describe('0503 task-pipeline resilience', () => {
-    test('omp env-probe auth miss is soft while a non-omp unauthenticated executor fails with remediation', () => {
+    test('omp env-probe auth miss is soft while a non-omp unauthenticated executor fails with remediation', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0503-doctor-'));
         const doctor = executable(
             dir,
             'spur-doctor',
             `printf '%s\\n' '{"agents":[{"authenticated":"unauthenticated","modelStatus":{"detail":"API key not found for provider volc"}}]}'`,
         );
-        const command = commandFor('precheck');
+        // Behavior parity (task 0608 / D6 R5): the precheck doctor probe moved from the
+        // extracted shell program to the `doctor.probe` built-in action kind, so this
+        // test drives the real runner + NodeProcessExecutor against the same fake doctor
+        // binary the shell program used, asserting identical PASS/FAIL + output lines.
+        const runner = new DoctorProbeActionRunner(new NodeProcessExecutor(), createNodeFileSystem(dir));
 
-        const omp = runShell(command, dir, {
-            wbs: '0503',
-            agent: 'omp-dsv4-flash-volc',
-            implementAgent: 'omp-dsv4-flash-volc',
-            spurBin: doctor,
-        });
-        expect(omp.exitCode).toBe(0);
+        const omp = await runner.execute(
+            doctorProbeOptions({
+                wbs: '0503',
+                spurBin: doctor,
+                agent: 'omp-dsv4-flash-volc',
+                implementAgent: 'omp-dsv4-flash-volc',
+            }),
+            { runId: 'r1', stateOrNodeId: 'precheck', workdir: dir, vars: {}, env: {} },
+        );
+        expect(omp.ok).toBe(true);
+        expect((omp.data as { status: string }).status).toBe('PASS');
+        expect((omp.data as { output: string[] }).output.join('\n')).toContain('probe=env-miss');
+        expect((omp.data as { output: string[] }).output.join('\n')).toContain('precheck: SOFT');
         expect(readFileSync(join(dir, '.spur/run/0503-precheck-doctor.status'), 'utf8').trim()).toBe('PASS');
-        expect(omp.output).toContain('probe=env-miss');
-        expect(omp.output).toContain('precheck: SOFT');
 
-        const codex = runShell(command, dir, {
-            wbs: '0504',
-            agent: 'codex',
-            implementAgent: 'codex',
-            spurBin: doctor,
-        });
-        expect(codex.exitCode).toBe(0);
+        const codex = await runner.execute(
+            doctorProbeOptions({ wbs: '0504', spurBin: doctor, agent: 'codex', implementAgent: 'codex' }),
+            { runId: 'r2', stateOrNodeId: 'precheck', workdir: dir, vars: {}, env: {} },
+        );
+        expect(codex.ok).toBe(true);
+        expect((codex.data as { status: string }).status).toBe('FAIL');
+        expect((codex.data as { output: string[] }).output.join('\n')).toContain('fix agent.default or pass --vars');
+        expect((codex.data as { output: string[] }).output.join('\n')).toContain('agent doctor codex --json');
         expect(readFileSync(join(dir, '.spur/run/0504-precheck-doctor.status'), 'utf8').trim()).toBe('FAIL');
-        expect(codex.output).toContain('fix agent.default or pass --vars');
-        expect(codex.output).toContain('agent doctor codex --json');
     });
 
     test('a transient transition error retries once and preserves the broken path in output', () => {
@@ -202,7 +238,7 @@ describe('0503 task-pipeline resilience', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
         initGitRepo(dir);
         writeFileSync(join(dir, 'docs', 'tasks4', 'uncommitted.md'), 'corpus edit');
-        const command = commandFor('precheck', 1);
+        const command = commandFor('precheck', 0);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);
@@ -214,7 +250,7 @@ describe('0503 task-pipeline resilience', () => {
     test('precheck dirty-tree action stays quiet on a clean task corpus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-clean-'));
         initGitRepo(dir);
-        const command = commandFor('precheck', 1);
+        const command = commandFor('precheck', 0);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);

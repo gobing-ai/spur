@@ -133,72 +133,33 @@ states:
       `spur task check <wbs>`. Failures route to the `failed` terminal state
       (not a raw lifecycle abort mid-enter).
     onEnter:
-      # Soft doctor — write status and always exit 0 so transitions can branch to
-      # `failed` cleanly (same pattern as the quality-gate soft probe).
+      # Pre-launch executor doctor probe (task 0608 / D6 R4–R5). The auth classifier —
+      # per-agent-family classification (omp/pi env-key misses soft, explicit auth
+      # failures hard) plus the executor-divergence line — now lives in the
+      # `doctor.probe` built-in action kind (`packages/app/src/workflow/actions/doctor-probe.ts`)
+      # instead of this shell program; that is the ownership-surface landing for the
+      # task-pipeline precheck doctor probe (option c, least-privilege built-in).
       #
-      # R2 (0487): probe BOTH resolved executors ($agent and $implementAgent) and
-      # FAIL on `authenticated: unauthenticated`. Previously only $agent was probed
-      # and auth was informational, so a run whose implement executor had no
-      # provider key sailed through precheck into a guaranteed implement failure
-      # (runs e8cb00e7 / b16bfbf4: "auth: no … API key not found for provider
-      # 'volc'" → precheck ✓). `unknown` auth keeps the old soft behavior — some
-      # agents expose no auth-status verb. `spur agent doctor` CLI exit-code
-      # semantics are deliberately untouched; the gate lives here.
-      # R4 (0487): one divergence line when the two executors differ (legitimate
-      # when only implementAgent is pinned, but it must be visible in the log).
-      # R2 (0503): omp/pi env-key probe misses are soft because the CLI process
-      # cannot see relay-owned credentials; explicit non-omp auth failures remain hard.
-      - kind: shell
+      # Semantics preserved from the replaced shell (behavior parity is covered by
+      # `packages/app/tests/workflow/actions/doctor-probe.test.ts`):
+      #   R2 (0487): probe BOTH resolved executors ($agent and $implementAgent) and
+      #   FAIL on `authenticated: unauthenticated`. Previously only $agent was probed
+      #   and auth was informational, so a run whose implement executor had no
+      #   provider key sailed through precheck into a guaranteed implement failure
+      #   (runs e8cb00e7 / b16bfbf4). `unknown` auth keeps the old soft behavior —
+      #   some agents expose no auth-status verb. `spur agent doctor` CLI exit-code
+      #   semantics are deliberately untouched; the gate lives here.
+      #   R4 (0487): one divergence line when the two executors differ.
+      #   R2 (0503): omp/pi env-key probe misses are soft because the CLI process
+      #   cannot see relay-owned credentials; explicit non-omp auth failures remain hard.
+      # Soft probe: writes PASS/FAIL to the status file and always succeeds so the
+      # transition guards below route on the token (never a raw lifecycle abort).
+      - kind: doctor.probe
         options:
-          command: >-
-            mkdir -p .spur/run &&
-            DOCTOR_FILE=".spur/run/$wbs-precheck-doctor.status" &&
-            classifyDoctorProbe() {
-              PROBE_DETAIL="$1";
-              PROBE_AGENT="$2";
-              case "$PROBE_AGENT" in
-                omp|omp-*|pi|pi-*)
-                  if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'API key not found for provider|no probe registered'; then
-                    printf 'env-miss\n';
-                    return;
-                  fi;;
-              esac;
-              if printf '%s' "$PROBE_DETAIL" | grep -Eiq 'invalid (API )?key|unauthori[sz]ed|forbidden|authentication failed|credential(s)? rejected'; then
-                printf 'auth-fail\n';
-              else
-                printf 'unknown\n';
-              fi;
-            } &&
-            STATUS=PASS;
-            if [ -n "$implementAgent" ] && [ "$implementAgent" != "$agent" ]; then
-              echo "precheck: agent=$agent implementAgent=$implementAgent (executors diverge)";
-              EXECS="$agent $implementAgent";
-            else
-              EXECS="$agent";
-            fi;
-            for EXE in $EXECS; do
-              OUT=$($spurBin agent doctor "$EXE" --json 2>&1) || {
-                echo "precheck: FAIL - doctor exited non-zero for $EXE";
-                echo "$OUT";
-                STATUS=FAIL;
-                continue;
-              };
-              AUTH=$(printf '%s' "$OUT" | jq -r '.agents[0].authenticated // "unknown"' 2>/dev/null || echo unknown);
-              DETAIL=$(printf '%s' "$OUT" | jq -r '.agents[0].modelStatus.detail // ""' 2>/dev/null || echo "");
-              PROBE=$(classifyDoctorProbe "$DETAIL" "$EXE");
-              echo "precheck: $EXE auth=$AUTH probe=$PROBE $DETAIL";
-              if [ "$AUTH" = unauthenticated ]; then
-                case "$EXE:$PROBE" in
-                  omp*:env-miss|pi*:env-miss|omp*:unknown|pi*:unknown)
-                    echo "precheck: SOFT - executor $EXE auth probe cannot see agent-owned credentials";;
-                  *)
-                    echo "precheck: FAIL - executor $EXE is unauthenticated; fix agent.default or pass --vars '{\"agent\":\"<authenticated-executor>\"}' ($spurBin agent doctor $EXE --json); $DETAIL";
-                    STATUS=FAIL;;
-                esac;
-              fi;
-            done;
-            echo "$STATUS" > "$DOCTOR_FILE";
-            exit 0
+          resultFile: ".spur/run/${vars.wbs}-precheck-doctor.status"
+          spurBin: "${vars.spurBin}"
+          agent: "${vars.agent}"
+          implementAgent: "${vars.implementAgent}"
       # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
       # a tree already dirty with another task's implementation is how 0485's diff
       # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes

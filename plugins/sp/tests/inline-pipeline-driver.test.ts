@@ -166,6 +166,16 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
                 continue;
             }
             if (action.kind === 'hitl.confirm') throw new Error('auto profile must route around HITL');
+            if (action.kind === 'doctor.probe') {
+                // doctor.probe built-in (task 0608 / D6): the smoke harness simulates the
+                // probe outcome instead of importing the app runner — the fake spur's
+                // `agent doctor` returns auth=unknown, which the built-in classifies as
+                // PASS, so write PASS to the resolved resultFile.
+                const resultFile = expand(action.options?.resultFile ?? '', vars);
+                mkdirSync(dirname(join(cwd, resultFile)), { recursive: true });
+                writeFileSync(join(cwd, resultFile), 'PASS\n');
+                continue;
+            }
             if (action.kind === 'shell') {
                 let command = expand(action.options?.command ?? '', vars);
                 if (command.includes('task-size-precheck.ts')) {
