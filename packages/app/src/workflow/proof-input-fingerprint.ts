@@ -56,7 +56,19 @@ export interface ComputeProofInputOptions {
     fileSystem?: FileSystem;
 }
 
-const DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*', '.spur/run*', '.spur/memory*', '.spur/context*'];
+/**
+ * Corpus paths excluded from the git-tree half of the digest. Task/feature files are TRACKED, so
+ * they must be excluded here and folded in separately as normalized spec content — otherwise every
+ * pipeline section write would change the digest.
+ *
+ * `.spur/run*`, `.spur/memory*`, and `.spur/context*` were removed (task 0612): they live under
+ * `/.spur/…`, which `.gitignore` already excludes, so naming them added nothing — and it actively
+ * broke the tree hash. Naming an ignored path in a pathspec makes `git add` report
+ * "The following paths are ignored by one of your .gitignore files" and exit **1**, which
+ * `createGitAlternateTree` treated as fatal and answered with `''`. The git-tree component was
+ * therefore empty on every call since task 0603, leaving the digest sensitive only to spec content.
+ */
+const DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*'];
 
 /**
  * Computes an isolated git tree hash for the working tree excluding corpus/ephemeral directories.

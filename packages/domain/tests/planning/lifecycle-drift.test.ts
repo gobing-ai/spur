@@ -164,8 +164,14 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
     test('R2: record writes via `spur task record` + post-record feature sync (task 0328)', () => {
         const record = yaml.states.find((s) => s.id === 'record');
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
-        // The record state has record step + post-record feature sync step (task 0328 / ADR-0322)
-        expect(record?.onEnter ?? []).toHaveLength(2);
+        // Proof-state compare + record step + post-record feature sync (task 0328 / ADR-0322,
+        // task 0612 / ADR-071).
+        expect(record?.onEnter ?? []).toHaveLength(3);
+        // The proof compare must be FIRST: it asserts no proof input changed since the verdict was
+        // established, so it has to run before any record write. Ordering is the guarantee here —
+        // a compare placed after `spur task record` would validate a tree the step just mutated.
+        expect(record?.onEnter?.[0]?.kind).toBe('proof.fingerprint');
+        expect(String(record?.onEnter?.[0]?.options?.expect ?? '')).toContain('proofDigest');
         expect(
             cmds.some(
                 (c) =>

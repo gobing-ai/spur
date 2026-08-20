@@ -17,6 +17,7 @@ import { HitlConfirmActionRunner } from './actions/hitl-confirm';
 import { HitlInputActionRunner } from './actions/hitl-input';
 import { HitlSelectActionRunner } from './actions/hitl-select';
 import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from './actions/http-request';
+import { ProofFingerprintActionRunner } from './actions/proof-fingerprint';
 import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
 import { RunArtifactActionRunner } from './actions/run-artifact';
@@ -80,6 +81,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
         'builtin',
     );
     host.registerAction(new RunArtifactActionRunner(options.getDb, fileSystem, options.artifactDao), 'builtin');
+    host.registerAction(new ProofFingerprintActionRunner(fileSystem, options.processExecutor), 'builtin');
     if (options.httpRequester) {
         host.registerAction(
             new HttpRequestActionRunner(options.httpRequester, options.hostAllowlist ?? new Set()),

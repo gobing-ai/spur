@@ -364,13 +364,40 @@
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
+                "verify:onEnter:2": {
+                    "kind": "shell",
+                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // empty\" > \".spur/run/$wbs-taskpath.txt\" || true; exit 0",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "verify:onEnter:3": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:4": {
+                    "kind": "proof.fingerprint",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:5": {
+                    "kind": "shell",
+                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then jq --arg d \"$proofDigest\" \".checks += [{\\\"name\\\":\\\"proof-input-digest\\\",\\\"status\\\":\\\"pass\\\",\\\"evidence\\\":\\$d}]\" \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\"; fi; exit 0",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
                 "record:onEnter:0": {
+                    "kind": "proof.fingerprint",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "record:onEnter:1": {
                     "kind": "shell",
                     "invocation": "retry_transient() {\n  RETRY_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_OUTPUT\";\n  if [ \"$RETRY_RC\" -eq 0 ]; then return 0; fi;\n  if ! printf '%s' \"$RETRY_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return \"$RETRY_RC\"; fi;\n  sleep 2;\n  RETRY_SECOND_OUTPUT=$(\"$@\" 2>&1); RETRY_RC=$?;\n  printf '%s\\n' \"$RETRY_SECOND_OUTPUT\";\n  if [ \"$RETRY_RC\" -ne 0 ] && printf '%s\\n%s' \"$RETRY_OUTPUT\" \"$RETRY_SECOND_OUTPUT\" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then\n    echo \"node_modules link/dependency broken — run bun install and retry\";\n  fi;\n  return \"$RETRY_RC\";\n}; retry_transient $spurBin task record \"$wbs\" --solution-from-diff --transition testing",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
-                "record:onEnter:1": {
+                "record:onEnter:2": {
                     "kind": "shell",
                     "invocation": "FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r \".feature_id // .frontmatter.feature_id // empty\" 2>/dev/null); if [ -n \"$FID\" ]; then\n  if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then\n    bun plugins/sp/scripts/feature-sync-bounded.ts \"$FID\" --spur-bin \"$spurBin\" --json;\n  else\n    $spurBin feature sync \"$FID\" --json;\n  fi;\nelse\n  echo \"Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature.\" >> \".spur/run/$wbs-report.txt\";\nfi; exit 0",
                     "stateEffect": "write",

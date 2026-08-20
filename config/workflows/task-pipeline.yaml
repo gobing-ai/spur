@@ -78,6 +78,15 @@ vars:
   # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
   # Empty by default; only meaningful once the approve state has been entered.
   __hitlAnswer: ""
+  # Proof-state bracket (task 0612, ADR-071). `proofDigest` is captured at verify-exit, once the
+  # verdict artifact exists; `proofDigestNow` is the re-capture compared against it immediately
+  # before `record`. A mismatch means a proof input changed after the verdict was established, so
+  # the run routes to `failed` instead of crossing the completion boundary. `taskSpecPath` carries
+  # the task file path because `docs/tasks*` is excluded from the digest's git-tree half — spec
+  # content is folded in explicitly or a task-file edit would go undetected.
+  proofDigest: ""
+  proofDigestNow: ""
+  taskSpecPath: ""
   # Project quality gate for the `test` hop (probe + fixall + recheck). Override per project
   # with the same package-manager surface (this monorepo is Bun-only):
   # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
@@ -491,6 +500,27 @@ states:
       - kind: shell
         options:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
+      # Proof-state capture (task 0612, ADR-071). Placement is load-bearing: AFTER the verdict
+      # artifact exists, never before `verify`. `/sp:dev-verify --fix all` writes to the tree by
+      # design when it repairs a row, so an earlier capture would fire on verify's own legitimate
+      # repairs instead of on a violation.
+      - kind: shell
+        options:
+          command: '$spurBin task path $wbs --json 2>/dev/null | jq -r ".path // empty" > ".spur/run/$wbs-taskpath.txt" || true; exit 0'
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-taskpath.txt
+          var: taskSpecPath
+      - kind: proof.fingerprint
+        options:
+          var: proofDigest
+          taskFile: ${vars.taskSpecPath}
+      # R3: the evidence must NAME the digest, not just assert proof validity in prose. Stamp it
+      # into the verdict artifact's checks[] so the document that aggregates quality, review, and
+      # verification results carries the value `record`'s compare then proves unchanged.
+      - kind: shell
+        options:
+          command: 'V=".spur/run/$wbs-verdict.json"; if [ -f "$V" ] && [ -n "$proofDigest" ]; then jq --arg d "$proofDigest" ".checks += [{\"name\":\"proof-input-digest\",\"status\":\"pass\",\"evidence\":\$d}]" "$V" > "$V.tmp" && mv "$V.tmp" "$V"; fi; exit 0'
 
   - id: record
     description: >
@@ -501,6 +531,15 @@ states:
       retry-suppression) if `feature_id` is present, or appends an orphan link proposal
       to the run report if absent (task 0328 / ADR-0322).
     onEnter:
+      # Proof-state compare (task 0612, ADR-071) — FIRST action in the state, so it runs before any
+      # record write. Re-captures the digest and asserts it equals the value taken at verify-exit.
+      # A mismatch means a proof input changed after the verdict was established; the default `fail`
+      # policy halts the sequence and routes the run to `failed` rather than crossing into `record`.
+      - kind: proof.fingerprint
+        options:
+          var: proofDigestNow
+          taskFile: ${vars.taskSpecPath}
+          expect: ${vars.proofDigest}
       - kind: shell
         options:
           command: >-

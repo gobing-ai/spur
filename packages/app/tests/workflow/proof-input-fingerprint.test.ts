@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { rm } from 'node:fs/promises';
 import {
+    createGitAlternateTree,
     extractFeatureProofData,
     extractTaskProofData,
     ProofInputFingerprint,
@@ -171,5 +173,31 @@ Feature history.
         });
 
         expect(digest1).not.toBe(digest3);
+    });
+});
+
+// The git-tree half returned '' on EVERY call from task 0603 until task 0612: naming an already
+// gitignored path (`.spur/run*`) in the exclude pathspec made `git add` warn and exit 1, and the
+// function treated any non-zero exit as fatal. Nothing noticed, because an empty string is a valid
+// return and the digest still "worked" — it was just blind to the working tree. These two tests
+// make that silent failure loud.
+describe('git-tree component is live, not silently empty', () => {
+    test('returns a real tree hash rather than an empty string', async () => {
+        const tree = await createGitAlternateTree(process.cwd());
+        expect(tree).not.toBe('');
+        expect(tree).toMatch(/^[a-f0-9]{40}$/);
+    });
+
+    test('a working-tree change moves the digest, and reverting restores it', async () => {
+        const probe = 'docs/design/zz-proof-fingerprint-probe.md';
+        const before = await ProofInputFingerprint.compute();
+        try {
+            await Bun.write(probe, '# probe\n');
+            const during = await ProofInputFingerprint.compute();
+            expect(during).not.toBe(before);
+        } finally {
+            await rm(probe, { force: true });
+        }
+        expect(await ProofInputFingerprint.compute()).toBe(before);
     });
 });

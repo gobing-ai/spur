@@ -195,7 +195,7 @@ Use that helper at the producer fan-in points, not in presenters: `WorkflowServi
 - `packages/app/src/services/workflow-service.ts:1142-1151` — `ObservableWorkflowAdapter` receives the identity-decorated observability bus in `createEngineService`.
 - `packages/app/src/services/workflow-service.ts:601-606` — `run()` engine `events` bridge carries workflow identity.
 - `packages/app/src/services/workflow-service.ts:855-860` — `continuePaused()` resume `events` bridge carries workflow identity.
-- `apps/cli/src/commands/workflow.ts:444-461` — the steering callback decorates `workflow.steering` acks with identity from the parsed def.
+- `apps/cli/src/commands/workflow.ts:501-509` — the steering callback decorates `workflow.steering` acks with identity from the parsed def.
 - `packages/app/src/services/event-names.ts:1005-1470` — workflow presenters emit `[workflow]` prefix, prefer `workflowName` + `nodeLabel`/`kind` over UUIDs.
 
 - `package.json` — root workspace catalog + overrides pinned `@gobing-ai/ts-*` to `0.4.39` (0602's released version); `bun.lock` regenerated.
