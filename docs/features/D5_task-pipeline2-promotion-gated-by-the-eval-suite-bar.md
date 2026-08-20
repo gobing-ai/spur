@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D5"
 name: "Workflow pipeline contract, progress projection, and staged consolidation"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:31.735Z"
-updated_at: "2026-08-20T00:07:13.995Z"
+updated_at: "2026-08-20T21:53:34.988Z"
 ---
 
 # D5: Workflow pipeline contract, progress projection, and staged consolidation
@@ -186,3 +186,5 @@ Feature: Workflow pipeline contract, progress projection, and staged consolidati
 - 2026-08-19T21:21:03.135Z active → verifying (system)
 - 2026-08-19T21:21:13.190Z verifying → done (system)
 - 2026-08-20T00:07:13.995Z done → active (system)
+- 2026-08-20T21:53:34.608Z active → verifying (system)
+- 2026-08-20T21:53:34.988Z verifying → done (system)

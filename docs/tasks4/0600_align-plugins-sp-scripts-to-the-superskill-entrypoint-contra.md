@@ -4,7 +4,7 @@ name: "Align plugins/sp scripts to the superskill entrypoint contract and record
 status: done
 template: feature-impl
 created_at: 2026-08-19T00:06:00.238Z
-updated_at: "2026-08-19T06:37:24.113Z"
+updated_at: "2026-08-20T21:46:35.087Z"
 feature_id: I
 ac_numbering: task-local
 ac_altitude: task-local
@@ -284,7 +284,7 @@ the gate's rule-4 half are independent and may land first. Nothing here modifies
 4. **R5 (Build integration):**
    - Added `"build:scripts"` in `package.json` chaining `superskill script convert sp <rel>` for all 7 standard scripts, wired directly into `"build"`.
 5. **R6 (Workflow resilience guard):**
-   - Guarded `config/workflows/task-pipeline.yaml:257` with `[ -f plugins/sp/scripts/task-size-precheck.ts ]`, outputting a skip notice and setting status to `PASS` when absent in external seeded projects.
+   - Guarded `config/workflows/task-pipeline.yaml:218` with `[ -f plugins/sp/scripts/task-size-precheck.ts ]`, outputting a skip notice and setting status to `PASS` when absent in external seeded projects.
 6. **R7 (Two-sided contract gate):**
    - Created `config/plugin-scripts.json` registering 15 scripts (7 `standard` with `.mjs` twins, 8 `repo-only`).
    - Implemented `plugins/sp/scripts/script-contract-check.ts` and test suite `plugins/sp/tests/script-contract-check.test.ts`.
@@ -304,7 +304,7 @@ the gate's rule-4 half are independent and may land first. Nothing here modifies
 | R3 | MET | This run: `node plugins/sp/scripts/{batch-preflight,feature-sync-bounded,history-load,pr-reviewing,daily-summary/daily-summary,dogfood-testing/detect-pipeline-driving,dogfood-testing/validate-report}.mjs --help` — all 7 exit 0, print their usage, no `ReferenceError`. `bun run build:scripts` regenerated all 7 twins (convert + this re-run). |
 | R4 | MET | This run: `rg 'bun plugins/sp/scripts/' plugins/sp/{commands,skills,agents} plugins/sp/README.md` → 0 matches. Canonical form present at `plugins/sp/skills/pr-reviewing/SKILL.md:132`, `plugins/sp/skills/daily-summary/SKILL.md:55-61`, `plugins/sp/skills/dogfood-testing/SKILL.md:99`, `plugins/sp/skills/spur-dev/references/execution-batch.md:182`. README now uses `bun run validate-commands`. `--fix all` also rewrote `plugins/sp/scripts/pr-reviewing.ts:844` help to the `.mjs`/`node` form (was still documenting `bun` + `.ts`). |
 | R5 | MET | `package.json:60` `build:scripts` chains `superskill script convert` for all 7 standard scripts; `package.json:61` `build` runs `build:scripts` after `clean`. This run: `bun run build:scripts` regenerated all 7 twins (exit 0). |
-| R6 | MET | `config/workflows/task-pipeline.yaml:257-264` — `[ -f plugins/sp/scripts/task-size-precheck.ts ]` then bun, else skip notice + `echo PASS > $SIZE_FILE`. Sibling guard at `:533` unchanged. |
+| R6 | MET | `config/workflows/task-pipeline.yaml:218-225` — `[ -f plugins/sp/scripts/task-size-precheck.ts ]` then bun, else skip notice + `echo PASS > $SIZE_FILE`. Sibling guard at `:533` unchanged. |
 | R7 | MET | `config/plugin-scripts.json` (15 entries: 7 standard + 8 repo-only). `plugins/sp/scripts/script-contract-check.ts:117-122` scans shipped surfaces for `bun plugins/sp/scripts/`. This run: `bun run script-contract-check` → `15 script(s) … 0 violation(s) — PASS`. `bun test plugins/sp/tests/script-contract-check.test.ts` → 13/13 pass. Wired at `package.json:80` (`spur-check` third after transition-shim-check). |
 | R8 | MET | `docs/00_ADR.md:781-810` ADR-065 states the two-category contract, `node "$(superskill script path sp <rel>.mjs)"` form, forbidden repo-relative form, and the R7 gate; cites superskill ADR-015 and ADR-022. `--fix all` corrected two wrong `ADR-059` citations (that number is Run→Session Correlation) in `AGENTS.md` and `script-contract-check.ts`. |
 
@@ -315,7 +315,7 @@ the gate's rule-4 half are independent and may land first. Nothing here modifies
 | Scenario: R3 — every twin actually runs under bare node | MET | command | `node <twin> --help` this run on all 7 `.mjs` files, each exit 0 with usage text (no ReferenceError) |
 | Scenario: R4 — no shipped surface names a repo-relative script path | MET | command | `rg 'bun plugins/sp/scripts/' plugins/sp/{commands,skills,agents} README.md` this run → 0 matches; 16 former sites now `node "$(superskill script path sp …mjs)"` |
 | Scenario: R5 — a stale twin cannot ship | MET | command | `package.json:60-61`; `bun run build:scripts` this run regenerated all 7 twins; gate fails stale twins (`script-contract-check.test.ts` stale-twin case pass) |
-| Scenario: R6 — a seeded project degrades instead of failing | MET | command | Read `config/workflows/task-pipeline.yaml:257-264` this run: missing-script branch writes PASS and continues (`exit 0`) |
+| Scenario: R6 — a seeded project degrades instead of failing | MET | command | Read `config/workflows/task-pipeline.yaml:218-225` this run: missing-script branch writes PASS and continues (`exit 0`) |
 | Scenario: R7 — the contract is enforced mechanically | MET | test | `bun test plugins/sp/tests/script-contract-check.test.ts` 13/13 this run — missing twin, stale twin, unexpected twin, unregistered script, forbidden invocation all fail naming target |
 | Scenario: R8 — the contract is recorded as a decision | MET | command | `rg 'ADR-065\|ADR-015\|ADR-022' docs/00_ADR.md` this run hits ADR-065 body plus superskill ADR-015/022 authority lines `:809` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)

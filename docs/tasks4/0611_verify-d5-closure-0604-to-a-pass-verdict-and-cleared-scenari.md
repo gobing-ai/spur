@@ -4,7 +4,7 @@ name: "Verify D5 closure — 0604 to a PASS verdict and cleared scenarios"
 status: done
 template: feature-impl
 created_at: "2026-08-20T07:40:00.000Z"
-updated_at: "2026-08-20T17:14:05.979Z"
+updated_at: "2026-08-20T21:40:05.307Z"
 feature_id: D5
 dependencies: ["0606"]
 ---
@@ -149,12 +149,12 @@ touched.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Task 0604's verify verdict is **PASS**. `jq -r .verdict .spur/run/0604-verdict.json` → `PASS`, with 6/6 requirement rows MET and 12/12 acceptance-criteria rows MET. R3 — the sole non-MET row at entry — is now MET because task 0612 wired the `ProofInputFingerprint` digest into the canonical proof chain, satisfying its last open clause. The R7–R12 feature-scenario aliasing is preserved: the answer file was rebuilt programmatically **from the existing verdict artifact**, so all 12 row ids survive unchanged (6 task-local `Scenario: Rn` + 6 feature-alias `Rn — …`). `spur task check 0604` → pass, 0 findings. |
-| R2 | MET | D5's feature gate clears without suppression. `spur feature check D5 --json` → `pass=true`, **0 findings**, zero `L4.scenario-unverified` (6 at task entry). `bun run corpus-check` reports **no D5 row**. `git diff config/corpus-baseline.json` is **empty** — no entry was added for any of the six findings, so they disappeared because the condition was fixed rather than listed. The remaining sweep findings are explicitly out of scope per this task's non-goals: 5 × D6 `scenario-unverified` (tasks 0607/0608 unstarted) and 1 × pre-existing anchor finding on task 0601, in a web module this work never touched. |
+| R1 | MET | `.spur/run/0604-verdict.json` reads `"verdict": "PASS"` with **every** requirement row MET — checked programmatically this run, not by eye: `jq '{verdict, reqsAllMet: ([.requirements[].status]\|all(.=="MET")), acRows: (.acceptanceCriteria\|length)}'` → `{"verdict":"PASS","reqsAllMet":true,"acRows":6}`. All six scenario-titled AC rows are present and their ids reproduce 0604's scenario titles **verbatim** — verified by diffing the verdict's `acceptanceCriteria[].id` list against the task file's `Scenario:` lines (exact match, zero diff). That aliasing is what the feature traceability layer resolves on, and R1 explicitly requires preserving it. `spur task check 0604 --strict-core` → `pass: true`, 0 findings. |
+| R2 | MET | D5's gate clears without suppression. `spur feature check D5 --json` → `pass: true` with **zero** `scenario-unverified` findings this run. The corpus sweep no longer reports **any** D5 row: `bun run corpus-check` this run returns rows only for tasks **0511, 0595, 0600, 0601** — 0603 and 0604, the two D5 tasks that were reporting, are now clean. Critically, this was achieved by fixing the condition, never by listing it: `git diff config/corpus-baseline.json` is **empty**, so no entry was added for these findings, which is R2's binding constraint. The remaining rows are out of D5's scope — 0601 is the pre-existing error R2 already excludes (its cited file is unmodified in this tree), and 0511/0595/0600 are line-anchor drift caused by feature **D6** landing after this task was written (see the batch-level note). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R12 — Every migration is independently verified and shipped surfaces stay synchronized | MET | test | 0604 re-verified against its rewritten requirements reads `verdict=PASS` with every requirement row MET; the acceptance-criteria rows keyed to feature scenario titles R7–R12 are preserved (12/12 present and MET); `spur feature check D5` reports zero scenario-unverified findings; and no finding was added to the corpus baseline to achieve it (`git diff config/corpus-baseline.json` empty). Executable proof across the surfaces touched while closing the gap: full `bun run test` → exit 0, 5981 pass / 0 fail; `spur workflow validate` → 10/10; `bun test packages/app/tests/workflow/composition-baseline.test.ts` → 18 pass / 0 fail. |
+| Scenario: R12 — Every migration is independently verified and shipped surfaces stay synchronized | MET | command | Re-verified end to end this run: `jq` over `.spur/run/0604-verdict.json` → verdict PASS, all requirement rows MET, 6 AC rows; verdict AC ids diff clean against 0604's scenario titles (R7–R12 aliasing preserved); `spur feature check D5 --json` → pass, 0 `scenario-unverified`; `git diff config/corpus-baseline.json` → empty, so nothing was baselined to achieve it; `bun run corpus-check` reports no D5 row. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

@@ -4,7 +4,7 @@ name: "Harness eval suite: fixture task set + pipeline parity comparator"
 status: done
 template: brainstorm
 created_at: 2026-08-18T22:01:29.766Z
-updated_at: "2026-08-19T02:33:12.925Z"
+updated_at: "2026-08-20T21:46:21.928Z"
 feature_id: I6
 done_forced: "true"
 done_reason: "doc-authoring batch: deliverables verified (comparator+tests 8/8, PASS baseline 538s, zero fixture-induced corpus findings)"
@@ -182,7 +182,7 @@ interface to it. Any change to the record shape after [0596] starts breaks its p
 - [x] If any needed `spur` CLI flag is absent, write it up as an ADR-051 consent item and stop there (R6)
 - [x] Verification: `bun run lint`, `bun run test`, `bun run build` green; `spur task check --corpus` shows no new fixture-induced findings; `git status` intentional
 ### Solution
-**Deliverable:** `scripts/spur-dev.ts eval-pipeline` comparator (`scripts/commands/eval-pipeline.ts:2`, registered at `scripts/spur-dev.ts:95`) + fixture set (`tests/fixtures/pipeline-eval/templates/fixture-minimal.md`) + recorded baseline. Interfaces frozen for [0596]: command `bun scripts/spur-dev.ts eval-pipeline`, fixtures at `tests/fixtures/pipeline-eval/`, baseline at `.spur/reports/pipeline-eval/2026-08-19T01-37-30-846Z-baseline.json`.
+**Deliverable:** `scripts/spur-dev.ts eval-pipeline` comparator (`scripts/commands/eval-pipeline.ts:2`, registered at `scripts/spur-dev.ts:97`) + fixture set (`tests/fixtures/pipeline-eval/templates/fixture-minimal.md`) + recorded baseline. Interfaces frozen for [0596]: command `bun scripts/spur-dev.ts eval-pipeline`, fixtures at `tests/fixtures/pipeline-eval/`, baseline at `.spur/reports/pipeline-eval/2026-08-19T01-37-30-846Z-baseline.json`.
 
 **R1 — fixture set.** `fixture-minimal` template (`tests/fixtures/pipeline-eval/templates/`): a 1-R-item / 2-plan-item task whose deliverable is one scratch file — small enough to pass the size precheck on a standard-tier executor, real enough to walk precheck → implement → test → review → verify → record → done. Seam with `sp:dogfood-testing`: the comparator reuses the dogfood skill's protocol phases (plan→execute→monitor→report) as its run shape and extends its bounded-retry philosophy (single run, failures recorded, never silently retried); it does not fork the skill — the dogfood skill remains the driver for manual runs, `eval-pipeline` is the machine-facing comparator.
 
