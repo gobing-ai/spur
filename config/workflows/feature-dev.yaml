@@ -48,6 +48,11 @@ vars:
   profile: "standard"
   spurBin: "spur"
   stepTimeoutMs: "1800000"
+  # Integration review (D5-P, feature R11). Advisory by default: a pending, timed-out, or
+  # quota-unavailable review must never block a locally-verified feature. Set
+  # requireCleanReview=true to opt into a hard gate for a branch that must ship clean.
+  baseBranch: ""
+  requireCleanReview: "false"
   # Injected by WorkflowAppService.run(); scopes .spur/run artifacts per run (0425 R4).
   __runId: ""
 
@@ -136,6 +141,35 @@ states:
       AC, traceability, and that all linked tasks are done. A clean strict check is the only
       proof the feature is shippable.
 
+  - id: integration-review
+    description: >
+      Advisory integration review (D5-P, feature R11). Runs `config/workflows/pr-review.yaml`
+      ONCE for this feature/branch HEAD, after the local gates and before wrap merge/cleanup.
+      Current-HEAD dedup stays inside pr-review (`mode: full`), so a re-entry on the same HEAD
+      is a no-op there rather than a second quota spend here.
+
+      The gate is `softFail: true`, so `pending`, a wait timeout, a missing pr-review
+      definition, or an unavailable review quota records FAIL and still reaches `done`.
+      Only `requireCleanReview=true` turns that FAIL into a blocking edge. Findings are
+      collected by pr-review itself and re-enter the affected local gates on the next run.
+    onEnter:
+      - kind: command.gate
+        options:
+          id: feature-integration-review
+          executable: "${vars.spurBin}"
+          args:
+            - workflow
+            - run
+            - .spur/workflows/pr-review.yaml
+            - --vars
+            - '{"mode":"full","baseBranch":"${vars.baseBranch}"}'
+          resultFile: .spur/run/${vars.__runId}-integration-review.status
+          softFail: true
+          timeoutMs: 1800000
+      - kind: note
+        options:
+          message: "Integration review for feature ${vars.featureId} recorded at .spur/run/${vars.__runId}-integration-review.status (advisory unless requireCleanReview=true)."
+
   - id: done
     description: Terminal — feature planned, all tasks executed, and the feature verified.
     # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
@@ -195,12 +229,30 @@ transitions:
   # ── feature-verify gate: strict check certifies done, else fail ──
   # Declaration order: the pass guard is tried FIRST.
   - from: feature-verify
-    to: done
-    description: Strict feature check passed — the feature is complete.
+    to: integration-review
+    description: Strict feature check passed — spend one integration review on this stable HEAD.
     guard:
       kind: shell
       options:
         command: "$spurBin feature check $featureId --strict"
+
+  - from: integration-review
+    to: failed
+    description: >
+      Review came back FAIL and this branch opted into a hard gate
+      (requireCleanReview=true). Ordered before the advisory edge so the strict
+      policy wins when both would match.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$requireCleanReview" = true && test "$(cat .spur/run/$__runId-integration-review.status 2>/dev/null)" = FAIL'
+  - from: integration-review
+    to: done
+    description: >
+      Review clean, pending, unavailable, or advisory — the feature is complete. A
+      non-clean advisory review never blocks a locally-verified feature (feature R11).
+    guard:
+      kind: always
   - from: feature-verify
     to: failed
     description: Strict feature check failed — block before done; investigate incomplete tasks or AC.

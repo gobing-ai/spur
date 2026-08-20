@@ -512,9 +512,24 @@ states:
       is the only way to hold the fixed position (after PASS, before record/commit).
       It also makes the per-task sweep free in the `--feature` batch: the batch runs
       this pipeline once per task, so each task sweeps itself (Q&A: per task, never
-      once per feature). The agent.run prompt is the operator's verbatim fallback,
-      templated over `residualSweepTarget` (single-task vs feature wording).
+      once per feature).
+
+      D5-M (R3, ADR-071): the sweep is **read-only**. Editing the tree after a PASS
+      verdict silently invalidates the proof the verdict certifies, so the stage is
+      bracketed by a tree snapshot: any mutation between the pre and post snapshots
+      routes to `failed` instead of `record`. The finding is written under `.spur/run/`
+      as evidence; turning it into code is the next run's job, not this one's.
+      `stateEffect: read` — no `record` path exists for a mutated tree.
     onEnter:
+      # Pre-snapshot: the proof boundary. HEAD plus the full dirty-file set is the
+      # portable stand-in for the ProofInputFingerprint digest (which has no CLI
+      # surface — exposing one needs ADR-051 consent, deliberately not taken here).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            { git rev-parse HEAD 2>/dev/null || echo no-head; git status --porcelain 2>/dev/null; }
+            > ".spur/run/$wbs-residual-tree.pre"
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -522,8 +537,14 @@ states:
           # verdict structurally misses) — folds the `verify` stage, so it takes the
           # reviewer role (capable-1), matching the operator's strong-model usage.
           role: reviewer
-          input: "Anything remained in ${vars.residualSweepTarget}? if any, you should get all of them done before we commit all the changes in next step"
+          input: "Report—do not fix—anything left incomplete in ${vars.residualSweepTarget}. The tree is under a post-verification proof lock: making any edit invalidates the PASS verdict and fails this run. Write your findings to .spur/run/${vars.wbs}-residual.md as a markdown list (write 'CLEAR' if nothing remains), and change no other file."
           timeoutMs: ${vars.stepTimeoutMs}
+      # Post-snapshot: compared by the transition guards below.
+      - kind: shell
+        options:
+          command: >-
+            { git rev-parse HEAD 2>/dev/null || echo no-head; git status --porcelain 2>/dev/null; }
+            > ".spur/run/$wbs-residual-tree.post"
 
   - id: record
     description: >
@@ -752,9 +773,24 @@ transitions:
       kind: shell
       options:
         command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" != PASS'
+  # D5-M (R3, ADR-071): mutation after verification invalidates the proof. The
+  # invalidation edge is declared FIRST so a dirtied tree can never fall through to
+  # `record` — a fixture that edits after PASS reaches `failed`, by construction.
+  - from: residual-sweep
+    to: failed
+    description: >
+      The tree changed during the residual sweep — the PASS verdict no longer describes
+      the working tree, so recording it would certify unverified code. Re-run the pipeline
+      to re-earn quality, review, and verify on the new tree.
+    guard:
+      kind: shell
+      options:
+        command: '! cmp -s ".spur/run/$wbs-residual-tree.pre" ".spur/run/$wbs-residual-tree.post"'
   - from: residual-sweep
     to: record
-    description: Residual sweep done — record results and proceed to done.
+    description: >
+      Sweep was read-only — the verified tree is intact, so record results and proceed
+      to done. Residual findings (if any) are evidence at .spur/run/<wbs>-residual.md.
     guard:
       kind: always
   # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23) ──

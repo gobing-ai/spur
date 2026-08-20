@@ -36,23 +36,35 @@ vars:
 states:
   - id: precheck
     description: >
-      Soft precheck: task check + agent doctor. Status files always exit 0 so
-      failures route to `failed` via transitions (not a raw lifecycle abort).
+      Soft precheck: task check + agent doctor, each owned by a deterministic `command.gate`
+      (D5-J, ADR-069). Both gates run `softFail: true`, so a red probe records FAIL and lets
+      the transitions route to `failed` instead of aborting the run — the shipped action
+      schema exposes no `onError`, so soft mode is what preserves that routing.
+      The canonical `.spur/run/$wbs-docs-precheck.status` is the AND of the two gate files.
     onEnter:
+      - kind: command.gate
+        options:
+          id: docs-precheck-task
+          executable: "${vars.spurBin}"
+          args: ["task", "check", "${vars.wbs}"]
+          resultFile: .spur/run/${vars.wbs}-docs-precheck-task.status
+          softFail: true
+          timeoutMs: 120000
+      - kind: command.gate
+        options:
+          id: docs-precheck-agent
+          executable: "${vars.spurBin}"
+          args: ["agent", "doctor", "${vars.agent}"]
+          resultFile: .spur/run/${vars.wbs}-docs-precheck-agent.status
+          softFail: true
+          timeoutMs: 120000
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run &&
-            set +e &&
-            $spurBin task check $wbs; check_rc=$?;
-            $spurBin agent doctor $agent; doctor_rc=$?;
-            set -e &&
-            if [ "$check_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > ".spur/run/$wbs-docs-precheck.status";
-            else
-              printf 'FAIL\n' > ".spur/run/$wbs-docs-precheck.status";
-            fi &&
-            exit 0
+            if test "$(cat .spur/run/$wbs-docs-precheck-task.status 2>/dev/null)" = PASS &&
+               test "$(cat .spur/run/$wbs-docs-precheck-agent.status 2>/dev/null)" = PASS;
+            then printf 'PASS\n' > ".spur/run/$wbs-docs-precheck.status";
+            else printf 'FAIL\n' > ".spur/run/$wbs-docs-precheck.status"; fi
       - kind: note
         options:
           message: "Docs pipeline start for task ${vars.wbs}."

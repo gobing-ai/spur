@@ -19,6 +19,24 @@
 `feature-dev.yaml` remains a caller/orchestrator, not a second owner of any lifecycle above. Other
 workflow definitions remain regression fixtures or examples unless a later ADR changes their status.
 
+### Migration status (task 0604)
+
+| Wave | Scope | Status |
+|---|---|---|
+| D5-I | wrap-up metrics off the model hop | landed |
+| D5-J | docs precheck onto soft `command.gate` | landed |
+| D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` retained until ADR-072 is accepted |
+| D5-L | `task-pipeline.yaml` onto the shared primitives | partial — `run.artifact` owns the verdict; `qualityGateCmd` stays a documented per-project **shell** string, and the precheck doctor probe stays shell because both encode semantics `command.gate` cannot express without a new public CLI surface (ADR-051) |
+| D5-M | pipeline2 residual made read-only | landed — the sweep is bracketed by a tree snapshot and any post-PASS mutation routes to `failed`, never `record` (ADR-071) |
+| D5-N | eval-pipeline promotion + delete `task-pipeline2.yaml` | **not run** — spends model quota and needs explicit operator consent |
+| D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + portable shell fallback |
+| D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` |
+
+**Known baseline gap (not closed here).** `checkWorkflowComposition` compares an action's
+`invocation` only when the baseline records one, and ~50 pre-existing actions across all seven
+workflows record none — so their shell bodies can be rewritten undetected. Closing this means
+recording every shell program in the manifest; it is a follow-up, not part of this migration.
+
 ## Composition baseline
 
 The proposed checked manifest is `config/workflow-composition-baseline.json`. It records resolved
@@ -142,11 +160,26 @@ mutation, retry, and diagnostics.
 Contract:
 
 - `executable` and every `args` entry are literal, non-empty strings in the checked definition;
-  per-run vars cannot provide executable content.
+  per-run vars cannot provide executable *content*.
+- **Multi-token `executable` (amended, task 0604 / D5-J).** `executable` may resolve to a
+  whitespace-separated launch string and is split into `argv[0]` plus leading arguments. This
+  exists because `resolveSpurBin()` legitimately yields `"<bun> <mainModule>"` when the CLI runs
+  from source, so a single-token rule made every real gate in the shipped pipelines
+  inexpressible. Splitting is safe precisely because no shell is involved: each token becomes one
+  literal argv entry. An `executable` containing shell metacharacters
+  (`; & | < > $ ` ( ) { } [ ] ! * ? ~ # " '` or a newline) is rejected before execution — that is
+  the ban this action kind actually enforces.
 - The runner maps directly to `ProcessExecutor.run({ command: executable, args })`; it never calls
   `/bin/sh -c` and does not accept a `command` option.
 - Shell interpreters and `-c`-style execution are rejected. Compound behavior belongs in the named,
   version-controlled project script (`spur-check` above).
+- **`softFail` (added, task 0604 / D5-J).** Default `false` — a failed final attempt fails the
+  action. With `softFail: true` the gate still writes `FAIL` to `resultFile` but returns success,
+  so the transition guards decide the route. This is required, not a convenience: the shipped
+  action schema pins `additionalProperties: false` at the action level and exposes no `onError`,
+  so a hard-failing gate aborts the run before any guard can read the result file. Every soft
+  probe whose FAIL must reach a `failed` state through the graph — the docs precheck, the
+  advisory integration review — sets it. Hard gates leave it unset.
 - Formatting and auto-fix are separate `write` remediation actions. The named gate script is
   observe-only and cannot establish PASS if it changes the proof-input digest.
 - `retry.maxAttempts` is a positive bounded integer. Only declared failure classes retry; each

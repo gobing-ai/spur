@@ -379,9 +379,20 @@ states:
       # flipping the recommendation to runall — violating R3's any-fail=>refineall invariant.
       # Each `jq -c … >> "$CHECKS"` appends under `|| exit 1`, and a row-count assertion
       # (CHECKS lines == WBS count) gates the recommendation computation.
+      # D5-O (R4): the deterministic writer owns finalization wherever it exists.
+      # `idea-handoff-cli.ts` calls the tested `finalizeIdeaHandoff` capability and
+      # implements this exact contract (equal-length/unique-name zip, `spur task deps`,
+      # `spur feature refresh`, per-task check with a row-count assertion, and a single
+      # recommended next command). `spur init` never scaffolds `packages/`, so seeded
+      # projects fall through to the portable shell program below — the same
+      # monorepo-writer/shell-fallback split the wrap-up metrics hop uses (0604 Q&A).
       - kind: shell
         options:
           command: >-
+            if [ -f packages/app/src/workflow/idea-handoff-cli.ts ]; then
+              bun packages/app/src/workflow/idea-handoff-cli.ts;
+              exit $?;
+            fi;
             BATCH=".spur/run/$__runId-idea-task-batch.json" &&
             RESULT=".spur/run/$__runId-idea-batch-create-result.json" &&
             ORDER=".spur/run/$__runId-idea-task-order.json" &&

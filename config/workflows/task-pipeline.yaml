@@ -563,6 +563,13 @@ states:
               return "$RETRY_RC";
             };
             retry_transient $spurBin task update "$wbs" done --no-lifecycle
+      # D5-L: the verify verdict is this pipeline's proof of completion, so its ownership
+      # belongs to a deterministic primitive rather than an untracked file on disk.
+      # `run.artifact` records path + kind + runId only — never the body (ADR-069).
+      - kind: run.artifact
+        options:
+          path: .spur/run/${vars.wbs}-verdict.json
+          artifactKind: verify-verdict
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."

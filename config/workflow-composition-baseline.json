@@ -21,11 +21,22 @@
             "modelQueries": ["draft"],
             "actions": {
                 "precheck:onEnter:0": {
-                    "kind": "shell",
+                    "kind": "command.gate",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "precheck:onEnter:1": {
+                    "kind": "command.gate",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:2": {
+                    "kind": "shell",
+                    "invocation": "if test \"$(cat .spur/run/$wbs-docs-precheck-task.status 2>/dev/null)\" = PASS &&\n   test \"$(cat .spur/run/$wbs-docs-precheck-agent.status 2>/dev/null)\" = PASS;\nthen printf 'PASS\\n' > \".spur/run/$wbs-docs-precheck.status\"; else printf 'FAIL\\n' > \".spur/run/$wbs-docs-precheck.status\"; fi",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "precheck:onEnter:3": {
                     "kind": "note",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
@@ -390,11 +401,16 @@
                     "evidenceEffect": "none"
                 },
                 "done:onEnter:1": {
+                    "kind": "run.artifact",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "done:onEnter:2": {
                     "kind": "note",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
-                "done:onEnter:2": {
+                "done:onEnter:3": {
                     "kind": "shell",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
@@ -502,10 +518,22 @@
                     "evidenceEffect": "write"
                 },
                 "residual-sweep:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && { git rev-parse HEAD 2>/dev/null || echo no-head; git status --porcelain 2>/dev/null; } > \".spur/run/$wbs-residual-tree.pre\"",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "residual-sweep:onEnter:1": {
                     "kind": "agent.run",
-                    "invocation": "Anything remained in ${vars.residualSweepTarget}? if any, you should get all of them done before we commit all the changes in next step",
-                    "stateEffect": "may-write",
-                    "evidenceEffect": "none"
+                    "invocation": "Report—do not fix—anything left incomplete in ${vars.residualSweepTarget}. The tree is under a post-verification proof lock: making any edit invalidates the PASS verdict and fails this run. Write your findings to .spur/run/${vars.wbs}-residual.md as a markdown list (write 'CLEAR' if nothing remains), and change no other file.",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "residual-sweep:onEnter:2": {
+                    "kind": "shell",
+                    "invocation": "{ git rev-parse HEAD 2>/dev/null || echo no-head; git status --porcelain 2>/dev/null; } > \".spur/run/$wbs-residual-tree.post\"",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
                 },
                 "record:onEnter:0": {
                     "kind": "shell",
