@@ -35,6 +35,85 @@ describe('CommandGateActionRunner', () => {
         expect(res.error).toContain('must resolve beneath .spur/run/');
     });
 
+    test('softFail records FAIL without failing the action (soft probe)', async () => {
+        const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        const runner = new CommandGateActionRunner(undefined, fs);
+        const resultFile = '.spur/run/soft.status';
+        // A soft probe must keep the run alive so a transition guard can read the status
+        // file and route to `failed` itself — the schema exposes no `onError` to do this.
+        const res = await runner.execute(
+            { executable: 'false', resultFile, softFail: true },
+            { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+
+        expect(res.ok).toBe(true);
+        expect((res.data as { status: string }).status).toBe('FAIL');
+        expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('FAIL');
+    });
+
+    test('without softFail a failing command still fails the action', async () => {
+        const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        const runner = new CommandGateActionRunner(undefined, fs);
+        const resultFile = '.spur/run/hard.status';
+        const res = await runner.execute(
+            { executable: 'false', resultFile },
+            { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+
+        expect(res.ok).toBe(false);
+        expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('FAIL');
+    });
+
+    test('splits a multi-token executable into argv without a shell', async () => {
+        const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        const calls: Array<{ command: string; args?: string[] }> = [];
+        const executor = {
+            run: async (opts: { command: string; args?: string[] }) => {
+                calls.push({ command: opts.command, args: opts.args });
+                return { stdout: '', stderr: '', exitCode: 0 };
+            },
+            // biome-ignore lint/suspicious/noExplicitAny: minimal ProcessExecutor stub for argv assertion
+        } as any;
+
+        const runner = new CommandGateActionRunner(executor, fs);
+        // `resolveSpurBin()` returns "<bun> <mainModule>" when the CLI runs from source, so a
+        // single-token rule would make every real gate in the shipped pipelines inexpressible.
+        const res = await runner.execute(
+            {
+                executable: '/usr/bin/bun /repo/apps/cli/src/index.ts',
+                args: ['task', 'check', '0604'],
+                resultFile: '.spur/run/split.status',
+                softFail: true,
+            },
+            { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+
+        expect(res.ok).toBe(true);
+        expect(calls[0]?.command).toBe('/usr/bin/bun');
+        expect(calls[0]?.args).toEqual(['/repo/apps/cli/src/index.ts', 'task', 'check', '0604']);
+    });
+
+    test('rejects an executable carrying shell metacharacters', async () => {
+        const runner = new CommandGateActionRunner();
+        // Splitting on whitespace is only safe because no shell is involved; an executable
+        // that smuggles shell syntax is the exact abuse this action kind exists to block.
+        const res = await runner.execute(
+            { executable: 'sh -c "rm -rf /"; echo', resultFile: '.spur/run/evil.status' },
+            { runId: 'r1', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
+        );
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('shell metacharacters');
+    });
+
     test('executes successful command and writes PASS to resultFile', async () => {
         const workdir = join(tmpdir(), `test-gate-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);

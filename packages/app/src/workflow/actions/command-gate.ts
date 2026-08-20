@@ -37,6 +37,49 @@ export interface CommandGateOptions {
     retry?: CommandGateRetryOptions;
     /** Target status file path relative to repository root beneath `.spur/run/`. */
     resultFile: string;
+    /**
+     * Treat a non-zero exit as a recorded outcome rather than an action failure.
+     *
+     * The shipped action schema has no `onError`, so a hard-failing action aborts the run
+     * before any transition guard can read the result file. Soft probes — the precheck and
+     * quality-gate hops whose FAIL must route through the graph to a `failed` state rather
+     * than kill the run — set this to keep the engine going while still recording `FAIL`.
+     */
+    softFail?: boolean;
+}
+
+/**
+ * Shell metacharacters that must never appear in a resolved executable.
+ *
+ * The gate spawns argv directly and never goes through a shell, so these carry no meaning
+ * here — their presence signals that a caller is trying to smuggle a shell program into
+ * the executable slot, which is exactly what this action kind exists to prevent.
+ */
+const SHELL_METACHARACTERS = /[;&|<>$`(){}[\]!*?~#\n\r"']/;
+
+/**
+ * Split a resolved executable into its argv head and leading arguments.
+ *
+ * `spurBin` legitimately resolves to a multi-token launch string (`resolveSpurBin()` returns
+ * `"<bun> <mainModule>"` when the CLI runs from source), so a single-token-only rule would
+ * make every real gate in the shipped pipelines inexpressible. Splitting on whitespace is
+ * safe precisely because no shell is involved: each token becomes one literal argv entry.
+ */
+function splitExecutable(executable: string): { command: string; leadingArgs: string[] } | { error: string } {
+    if (SHELL_METACHARACTERS.test(executable)) {
+        return {
+            error: `command.gate "executable" must not contain shell metacharacters (got ${executable})`,
+        };
+    }
+    const tokens = executable
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t.length > 0);
+    const command = tokens[0];
+    if (command === undefined) {
+        return { error: 'Action option "executable" must be a non-empty string' };
+    }
+    return { command, leadingArgs: tokens.slice(1) };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -111,6 +154,12 @@ export class CommandGateActionRunner implements ActionRunner {
             };
         }
 
+        const split = splitExecutable(executable);
+        if ('error' in split) {
+            return { ok: false, error: split.error };
+        }
+
+        const softFail = options.softFail === true;
         const retry = (options.retry as CommandGateRetryOptions | undefined) ?? {};
         const maxAttempts = Math.max(1, typeof retry.maxAttempts === 'number' ? retry.maxAttempts : 1);
         const delayMs = Math.max(0, typeof retry.delayMs === 'number' ? retry.delayMs : 1000);
@@ -132,8 +181,8 @@ export class CommandGateActionRunner implements ActionRunner {
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             attemptsRun = attempt;
             const res = await this.processExecutor.run({
-                command: executable,
-                args,
+                command: split.command,
+                args: [...split.leadingArgs, ...args],
                 cwd: workdir,
                 env,
                 forceBuffered: true,
@@ -177,17 +226,23 @@ export class CommandGateActionRunner implements ActionRunner {
         }
 
         await this.fileSystem.writeFile(normalized, 'FAIL\n');
+        const failureData = {
+            status: 'FAIL',
+            exitCode: lastExitCode,
+            attempts: attemptsRun,
+            stdout: lastStdout,
+            stderr: lastStderr,
+            resultFile: normalized,
+        };
+        // Soft probes record FAIL and hand routing to the transition guards; the run only
+        // aborts here when the caller wants the gate to be fatal.
+        if (softFail) {
+            return { ok: true, data: failureData };
+        }
         return {
             ok: false,
             error: `command.gate failed (exit code ${lastExitCode}) after ${attemptsRun} attempt(s)`,
-            data: {
-                status: 'FAIL',
-                exitCode: lastExitCode,
-                attempts: attemptsRun,
-                stdout: lastStdout,
-                stderr: lastStderr,
-                resultFile: normalized,
-            },
+            data: failureData,
         };
     }
 }
