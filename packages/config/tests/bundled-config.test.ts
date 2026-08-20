@@ -25,7 +25,20 @@ describe('bundled-config', () => {
         // Workflow extracted in task 0024.
         expect(files).toContain('workflows/basic.yaml');
         expect(files).toContain('workflows/task-pipeline.yaml');
+        // planning-pipeline.yaml still exists on disk (deleted only once ADR-072 is
+        // accepted), so the raw bundle listing still sees it — but it is no longer
+        // seeded into projects; see the project-seed exclusion test below.
         expect(files).toContain('workflows/planning-pipeline.yaml');
+    });
+
+    test('listBundledProjectSeedFiles excludes retired planning-pipeline (D5-K)', () => {
+        const seeds = listBundledProjectSeedFiles();
+        // Absorbed into the idea pipeline + /sp:dev-plan (ADR-072): a fresh project must
+        // never receive a second planning graph, even while the source file still exists.
+        expect(seeds).not.toContain('workflows/planning-pipeline.yaml');
+        // Sibling pipelines are still seeded — the exclusion is targeted, not a blanket drop.
+        expect(seeds).toContain('workflows/idea-pipeline.yaml');
+        expect(seeds).toContain('workflows/task-pipeline.yaml');
     });
 
     test('listBundledConfigFiles excludes non-YAML/JSON entries', () => {

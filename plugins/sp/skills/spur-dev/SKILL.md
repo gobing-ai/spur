@@ -219,7 +219,8 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table (`scribe` / `coder` / `reviewer` /
   `planner`, one per tier); the role vocabulary this spine's operations route under.
 - `.spur/workflows/task-pipeline.yaml` — the execution pipeline definition.
-- `.spur/workflows/planning-pipeline.yaml` — the front-half state machine.
+- `.spur/workflows/idea-pipeline.yaml` — the front-half state machine (absorbed the retired
+  planning-pipeline in D5-K; `/sp:dev-plan` routes here, ADR-072).
 - `.spur/templates/bdd/gherkin.md` — the BDD scenario template.
 
 ## Platform Notes

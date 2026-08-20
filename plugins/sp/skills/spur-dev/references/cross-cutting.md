@@ -538,8 +538,7 @@ invariants that keep the pipeline set coherent as new ones are added.
 
 | Pipeline | Lifecycle phase | Entry point | Terminal states |
 | --- | --- | --- | --- |
-| `idea-pipeline.yaml` | Ideation (vague idea → feature + AC + task batch) | `/sp:dev-idea` | `handoff`, `cancelled` |
-| `planning-pipeline.yaml` | Design (known slug/task → design handoff) | `/sp:dev-plan` | `handoff`, `cancelled` |
+| `idea-pipeline.yaml` | Ideation + planning (vague idea or known slug → feature + AC + task batch) | `/sp:dev-idea`, `/sp:dev-plan` | `handoff`, `cancelled` |
 | `task-pipeline.yaml` | Execution (one task → done) | `/sp:dev-run` | `done`, `failed` |
 | `wrapup-pipeline.yaml` | Wrap-up (completed tasks → learning + metrics + doc-sync) | `/sp:dev-wrap`, `/sp:dev-wrapall` | `done`, `skipped` |
 | `feature-dev.yaml` | Umbrella (brainstorm → plan → execute → feature-verify) | `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | `done`, `failed` |
@@ -644,8 +643,8 @@ next_action: "run verification"
 **Write checkpoints after:**
 
 - Every HITL gate decision (approved/rejected/deferred).
-- Every phase transition in `planning-pipeline`, `task-pipeline`, `feature-dev`, `idea-pipeline`,
-  and `wrapup-pipeline`.
+- Every phase transition in `task-pipeline`, `feature-dev`, `idea-pipeline`, and
+  `wrapup-pipeline`.
 - Every terminal state (`done`, `failed`, `cancelled`, `skipped`).
 
 **Read checkpoints when:**

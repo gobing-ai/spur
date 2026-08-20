@@ -583,8 +583,8 @@ pipeline owns one lifecycle phase:
 | `basic.yaml`                | Generic implement/check/fix       | direct `spur workflow run`        |
 | `feature-lifecycle.yaml`    | Feature status FSM                | `spur feature update`             |
 | `task-lifecycle.yaml`       | Task status FSM                   | `spur task update`                |
-| `planning-pipeline.yaml`    | Planning/design from known slug   | `/sp:dev-plan`                    |
 | `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
+| `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `feature-dev.yaml`          | Feature umbrella execution        | `/sp:dev-runall --feature`        |
 | `idea-pipeline.yaml`        | Idea to feature + AC + task batch | `/sp:dev-idea`                    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |

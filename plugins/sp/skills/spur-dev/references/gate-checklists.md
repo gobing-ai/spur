@@ -36,8 +36,8 @@ SSOT: `.spur/workflows/task-lifecycle.yaml`.
 
 ## feature-check gate
 
-Entered before `spur feature check <id> --strict` (idea-pipeline `feature-check` state;
-planning-pipeline AC validation).
+Entered before `spur feature check <id> --strict` (idea-pipeline `feature-check` state — the
+AC-validation gate `/sp:dev-plan` also routes through since D5-K).
 
 - [ ] Feature file has a non-placeholder `## Goal` and `## Scope` section.
 - [ ] Acceptance criteria are R-numbered scenarios in Gherkin `Feature/Scenario` form (see `ac-style-guide.md`).
@@ -48,8 +48,8 @@ planning-pipeline AC validation).
 
 ## batch-create gate
 
-Entered before `spur task batch-create --file <json>` (idea-pipeline `batch-create` state;
-planning-pipeline decomposition gate).
+Entered before `spur task batch-create --file <json>` (idea-pipeline `batch-create` state — the
+decomposition gate `/sp:dev-plan` also routes through since D5-K).
 
 - [ ] The batch JSON is a bare array (not an object with a `tasks` key).
 - [ ] Each entry validates locally against `apps/cli/schemas/task-batch.schema.json` (`additionalProperties: false` — no unknown keys).

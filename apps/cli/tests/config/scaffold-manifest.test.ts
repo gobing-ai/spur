@@ -12,7 +12,6 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('workflows/task-lifecycle.yaml');
         expect(sources).toContain('workflows/feature-lifecycle.yaml');
         expect(sources).toContain('workflows/task-pipeline.yaml');
-        expect(sources).toContain('workflows/planning-pipeline.yaml');
         expect(sources).toContain('workflows/idea-pipeline.yaml');
         expect(sources).toContain('workflows/wrapup-pipeline.yaml');
         expect(sources).toContain('workflows/pr-review.yaml');
@@ -44,9 +43,10 @@ describe('scaffold-manifest', () => {
     });
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
-        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates
-        // + 1 brainstorm task template + 1 AGENTS.md (root) + 1 pr-review workflow = 36
-        expect(SCAFFOLD_MANIFEST.length).toBe(36);
+        // 16 original + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates
+        // + 1 brainstorm task template + 1 AGENTS.md (root) + 1 pr-review workflow = 35
+        // (planning-pipeline dropped in D5-K — planning routes through idea/dev-plan)
+        expect(SCAFFOLD_MANIFEST.length).toBe(35);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {
