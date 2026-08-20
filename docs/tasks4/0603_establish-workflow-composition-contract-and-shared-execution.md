@@ -4,7 +4,7 @@ name: "Establish workflow composition contract and shared execution infrastructu
 status: done
 template: feature-impl
 created_at: 2026-08-19T20:03:57.619Z
-updated_at: "2026-08-19T22:35:04.960Z"
+updated_at: "2026-08-19T23:43:25.379Z"
 feature_id: D5
 priority: P2
 tags: ["workflow", "infrastructure", "observability"]
@@ -166,7 +166,7 @@ Feature: Workflow contract and shared execution infrastructure
 
 **Done when** R1–R6 are observable in the files above and `spur task check 0603` stays clean. 0604 is not started inside this task.
 ### Solution
-- `packages/app/src/workflow/actions/command-gate.ts:59`: Implemented `CommandGateActionRunner` (`kind: 'command.gate'`) with literal executable and args, bounded retry policies, execution timeouts, and confinement of `resultFile` beneath `.spur/run/`.
+- `packages/app/src/workflow/actions/command-gate.ts:102`: Implemented `CommandGateActionRunner` (`kind: 'command.gate'`) with literal executable and args, bounded retry policies, execution timeouts, and confinement of `resultFile` beneath `.spur/run/`.
 - `packages/app/src/workflow/actions/run-artifact.ts:29`: Implemented `RunArtifactActionRunner` (`kind: 'run.artifact'`) recording referenced artifacts in `ArtifactDao` without loading bodies/stdout into memory.
 - `packages/app/src/workflow/builtins.ts:49`: Registered `command.gate` and `run.artifact` in `registerSpurBuiltins`.
 - `packages/domain/src/dao/run-dao.ts:100`: Added `mergeMetadata` method on `RunDao` with `json_set` semantics; updated dry-run stamp in `packages/app/src/services/workflow-service.ts:170`.
@@ -175,14 +175,29 @@ Feature: Workflow contract and shared execution infrastructure
 - `packages/app/src/workflow/progress-follow.ts:41`: Implemented `followWorkflowProgress` streaming progress projections using snapshot-then-follow on `system_events` with sequence cursors.
 - `packages/app/src/workflow/proof-input-fingerprint.ts:187`: Implemented `computeProofInputFingerprint` computing deterministic SHA-256 digests over isolated git alternate-trees and normalized task/feature specifications.
 - `packages/domain/src/dao/system-event-dao.ts:360`: Added `latestSequence` query method on `SystemEventDao` to isolate raw SQL inside domain DAOs.
-
 ### Testing
-- `bun test packages/app/tests/workflow`: 359 tests passing across all workflow action, baseline, progress, follower, and fingerprint suites.
-- `bun run spur-check`: Full quality gate green across all 7 steps (link-check, transition-shim-check, script-contract-check, lint, test-pre-check, full test suite [5932 tests across 314 files], test-post-check [coverage-gate + every-export-has-tsdoc]).
-- `bun run test-cf`: Cloudflare worker test passed.
-- `bun run build`: All apps and packages built cleanly.
-- `spur task check 0603 --json`: Pass with 0 findings.
+**Pipeline verify results**
 
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/00_ADR.md:844` ADR-069 Proposed (companions ADR-070/071/072 at :856/:868/:880); ADR-029 status line unchanged; mechanism `docs/03_ARCHITECTURE.md:912` §20 Workflow Composition and `docs/03_ARCHITECTURE.md:1039` §21 Workflow Progress Projection; commit 5801871d touched no `apps/cli` surface, so ADR-051 consent was not required |
+| R2 | MET | `packages/app/src/workflow/composition-baseline.ts:202` checkWorkflowComposition compares resolved graphs against `config/workflow-composition-baseline.json` (7 workflows); `packages/app/tests/workflow/composition-baseline.test.ts:43` asserts the live repository definitions pass, and `:74`/`:96` assert both drift directions fail |
+| R3 | MET | `packages/app/src/workflow/progress-projection.ts:169` projectWorkflowProgress builds the WorkflowProgressProjection DTO from the resolved definition plus run/phase/transition/action/artifact rows; no new table added; fixture matrix green in `packages/app/tests/workflow/progress-projection.test.ts` |
+| R4 | MET | `packages/app/src/workflow/progress-follow.ts:41` followWorkflowProgress snapshots the sequence then re-projects from persistence on every wakeup; cursor source `packages/domain/src/dao/system-event-dao.ts:360` latestSequence; reconnect/duplicate/missed/poll cases in `packages/app/tests/workflow/progress-follow.test.ts` |
+| R5 | MET | `packages/app/src/workflow/actions/command-gate.ts:102` CommandGateActionRunner (literal executable/args, `.spur/run/` confinement, classified retry) and `packages/app/src/workflow/actions/run-artifact.ts:29` RunArtifactActionRunner, both registered at `packages/app/src/workflow/builtins.ts:79` and `:82`; `packages/app/src/workflow/proof-input-fingerprint.ts:187` computeProofInputFingerprint; `packages/domain/src/dao/run-dao.ts:100` mergeMetadata merges rather than replaces and `packages/domain/src/dao/run-dao.ts:114` stampMetadata now delegates to it, leaving no replace caller; `packages/app/src/services/workflow-service.ts:170` stamps the definition digest through mergeMetadata |
+| R6 | MET | `packages/app/src/workflow/builtins.ts:52` AgentRunActionRunner registration is unchanged, so role-based executor selection on agent.run survives; commit 5801871d adds no raw role addressing to wait or message, and the exact-one role bind is explicitly deferred in the task Design |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Workflow composition rules are authoritative and enforceable | MET | static-ref | `docs/00_ADR.md:844` names YAML/deterministic ownership in one ADR; `docs/03_ARCHITECTURE.md:912` is the single matching architecture section; ADR-029 status untouched; no `apps/cli` diff in 5801871d |
+| Scenario: R2 — Every shipped pipeline has a reviewed disposition and frozen baseline | MET | test | bun test packages/app/tests/workflow/composition-baseline.test.ts — 15 pass / 0 fail, covering resolved-graph comparison, field-level diff, and both two-sided failure directions |
+| Scenario: R3 — Long runs expose one detailed persisted todo projection | MET | test | bun test packages/app/tests/workflow/ — 369 pass / 0 fail; projection fixtures cover pending/running/passed/failed/skipped/ambiguous plus attempts, diagnostics, and next eligible transitions |
+| Scenario: R4 — Event wakeups cannot become workflow mutation authority | MET | test | bun test packages/app/tests/workflow/progress-follow.test.ts green; `packages/app/src/workflow/progress-follow.ts:87` re-reads persisted rows on each wakeup instead of trusting the event payload |
+| Scenario: R5 — Deterministic workflow programs have explicit least-privilege owners | MET | test | bun test packages/app/tests/workflow/ — 369 pass, including command-gate, run-artifact, and proof-input-fingerprint failure-injection suites; `packages/domain/tests/dao/run-dao.test.ts:245` proves mergeMetadata keeps dryRun, definitionDigest, failureReason, and unknownKey together |
+| Scenario: R6 — Role-aware workflow coordination preserves occupant identity | MET | static-ref | `packages/app/src/workflow/builtins.ts:52` shows AgentRunActionRunner role routing intact; no wait/message identity change in 5801871d |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECUA + traceability review (2026-08-19). Verdict: PASS — ship.**
 

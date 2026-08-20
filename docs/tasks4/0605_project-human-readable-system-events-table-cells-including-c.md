@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Project human-readable System Events table cells including coding-agent identity"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-19T21:01:14.733Z
-updated_at: "2026-08-19T21:12:28.793Z"
+updated_at: "2026-08-19T23:18:32.740Z"
 feature_id: J91
 priority: P2
 tags: ["system-events", "observability", "presentation"]
@@ -30,14 +30,12 @@ Sizing: E3 D1 L2 C0 R1 = 7. Helpers, table projector, Agent retain, and producer
 
 Out of scope: reopening J9; a new envelope schema or transport; new CLI nouns; client-only UUID stripping; ledger rewrite or invented historical facts; unrelated Board tabs.
 ### Requirements
-- [ ] R1. Replace `workflowTitle` / `stepName` UUID and `kind` fallbacks with `humanWorkflowTitle`, `humanStepLabel`, and `looksLikeOpaqueId` so every cataloged `workflow.*` Summary follows `[workflow] {workflowName} · {human step} {result}` when those facts exist, omits a missing name or step (including the ` · ` separator), and never substitutes `runId`, `eventId`, `actionId`, a UUID-shaped `node`, or action `kind` as the step.
-- [ ] R2. After the event-name presenter, `projectTablePresentation` writes `presentation.correlators`, `presentation.actionLabel`, and `presentation.agent` from bounded `data` (plus optional persistence-row `actor`) with no opaque ids in those strings. Action is the action name (`kind`), entity, or a short human verb, never a remediation command that embeds a UUID. Tooltip `fields` and `presentation.action` remain the home for raw ids and those commands.
-- [ ] R3. Project Agent in order from `data.routing.executor`, then `data.agent`, then `data.metadata.agent`, then executor-shaped row `actor`; never `context.producer.package`. Omit the key (blank cell, not `-`) when the event has no executor, including pure engine rows such as `workflow.node.enter` and `workflow.transition`.
-- [ ] R4. Add optional `retain` on `SystemEventPresenterSpec` so catalog `metadataFields` = `fields` ∪ `retain`. Agent-executed workflow presenters retain `metadata.agent`, `metadata.role`, and `routing.executor`. Stamp identity at existing Spur fan-ins (`withWorkflowIdentity` on every engine-native and adapter emit that has a loaded `WorkflowDef`, `projectActionMetadata`, invoke routing). Keep `SystemEventEnvelopeV2.context` as `{project, producer, correlation}`. Upgrade a ts-libs producer contract only if that Spur path cannot emit any of the four Agent sources for an agent-executed event Spur already fans in.
-- [ ] R5. Use the same presenter and `projectTablePresentation` for fresh SSE/persistence and canonical v2 history reads: re-project `presentation` only, do not rewrite stored `data` / `context` or the ledger, and omit missing historical workflow name, step label, or agent identity rather than inventing them.
-- [ ] R6. Map server-projected Summary, `correlators`, `actionLabel`, and `agent` into Board columns `Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action` (compact ≤639px stacks Summary, Correlation, Action, and Agent under the event name) without recovering names or agent identity from raw payload keys and without client-only UUID stripping.
-
-Out of scope: new CLI nouns or flags; opening `context` with `human` / `executor`; rewriting `system_events` rows; inventing `workflowName` / `nodeLabel` / agent for rows that never stored them; using producer package as Agent; rendering `presentation.action.value` in the Action column.
+- [x] R1. Replace `workflowTitle` / `stepName` UUID and `kind` fallbacks with `humanWorkflowTitle`, `humanStepLabel`, and `looksLikeOpaqueId` so every cataloged `workflow.*` Summary follows `[workflow] {workflowName} · {human step} {result}` when those facts exist, omits a missing name or step (including the ` · ` separator), and never substitutes `runId`, `eventId`, `actionId`, a UUID-shaped `node`, or action `kind` as the step.
+- [x] R2. After the event-name presenter, `projectTablePresentation` writes `presentation.correlators`, `presentation.actionLabel`, and `presentation.agent` from bounded `data` (plus optional persistence-row `actor`) with no opaque ids in those strings. Action is the action name (`kind`), entity, or a short human verb, never a remediation command that embeds a UUID. Tooltip `fields` and `presentation.action` remain the home for raw ids and those commands.
+- [x] R3. Project Agent in order from `data.routing.executor`, then `data.agent`, then `data.metadata.agent`, then executor-shaped row `actor`; never `context.producer.package`. Omit the key (blank cell, not `-`) when the event has no executor, including pure engine rows such as `workflow.node.enter` and `workflow.transition`.
+- [x] R4. Add optional `retain` on `SystemEventPresenterSpec` so catalog `metadataFields` = `fields` ∪ `retain`. Agent-executed workflow presenters retain `metadata.agent`, `metadata.role`, and `routing.executor`. Stamp identity at existing Spur fan-ins (`withWorkflowIdentity` on every engine-native and adapter emit that has a loaded `WorkflowDef`, `projectActionMetadata`, invoke routing). Keep `SystemEventEnvelopeV2.context` as `{project, producer, correlation}`. Upgrade a ts-libs producer contract only if that Spur path cannot emit any of the four Agent sources for an agent-executed event Spur already fans in.
+- [x] R5. Use the same presenter and `projectTablePresentation` for fresh SSE/persistence and canonical v2 history reads: re-project `presentation` only, do not rewrite stored `data` / `context` or the ledger, and omit missing historical workflow name, step label, or agent identity rather than inventing them.
+- [x] R6. Map server-projected Summary, `correlators`, `actionLabel`, and `agent` into Board columns `Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action` (compact ≤639px stacks Summary, Correlation, Action, and Agent under the event name) without recovering names or agent identity from raw payload keys and without client-only UUID stripping.
 ### Acceptance Criteria
 ```gherkin
 Feature: System Events human-readable table: workflow identity, id-free columns, and coding-agent
@@ -177,24 +175,62 @@ Feature: System Events human-readable table: workflow identity, id-free columns,
 
 **ts-libs fallback (only if R4 audit fails).** If an agent-executed `workflow.action.*` or `agent.invoke.*` event that Spur already fans in still cannot emit `routing.executor` / `data.agent` / `metadata.agent` / executor-shaped `actor` after retain + wrap, add the missing scalar on the **domain payload** in the owning `@gobing-ai/ts-*` package and consume it in `data` — not a new envelope version. Record the package + field in Solution. If the Spur path works, write “no ts-libs upgrade” in Solution and stop.
 ### Plan
-- [ ] 1. R1 — Add `looksLikeOpaqueId`, `humanWorkflowTitle`, `humanStepLabel` in `event-names.ts`. Switch every `workflow.*` Summary off `workflowTitle` / `stepName`. Failing tests first: idea-pipeline `workflow.action.started` with long `nodeLabel` matches the grammar and contains neither run UUID nor event id; missing `workflowName` omits the name rather than substituting `runId`; `kind` is not the Summary step.
-- [ ] 2. R2 / R5 — Extend `SystemEventEnvelopeV2.presentation` + `PRESENTATION_KEYS` with optional `correlators`, `actionLabel`, `agent`. Add `projectTablePresentation` after the event-name presenter. Thread optional `actor` through `buildSystemEventEnvelope` / `projectStoredSystemEventEnvelope` / `buildPresentation` without putting it on `context`. Assert history v2 keeps stored `data`/`context` bytes and only replaces `presentation`. Empty correlators/actionLabel omit (Board `-`); opaque ids never appear in those strings; `presentation.action` still carries `spur workflow trace <runId>` for tooltip.
-- [ ] 3. R3 / R4 — Add `retain?` to `SystemEventPresenterSpec`; catalog `metadataFields` = `fields` ∪ `retain`. Retain `metadata.agent`, `metadata.role`, `routing.executor` on agent-executed `workflow.action.*` presenters. Project `presentation.agent` in the frozen order. Engine rows `workflow.node.enter` / `workflow.transition` omit Agent. Do not use `CORE_METADATA_PATHS`.
-- [ ] 4. R4 — Always wrap the adapter observability bus with `withWorkflowIdentity` when `createEngineService` has a loaded `WorkflowDef` (`workflow-service.ts:1148` ternary). Keep existing `run()` / `continuePaused()` engine-event wraps. Audit one agent-executed action payload: if none of the four Agent sources exist after wrap+retain, only then take the ts-libs fallback in Design; otherwise record “no ts-libs upgrade”.
-- [ ] 5. R6 / R7 / R8 — `parseSystemEventView` maps `correlators` / `actionLabel` / `agent`. Desktop adds Agent between Correlation and Outcome (9 columns; expanded `colSpan` 9). Action column uses `actionLabel`. Agent cell is blank when omitted. Compact stacks Summary, Correlation, Action, Agent. No client UUID stripper; no raw `data.*` recovery. Tooltip title/footer (J9) may still show run/action ids.
-- [ ] 6. Tests — targeted first: `event-names.test.ts` (Summary grammar + retain/catalog union), `system-event-envelope.test.ts` (projector, actor, history reprojection, `hasOnlyKeys`), workflow wrap (`observability.test.ts` / workflow-service tests), `components.test.tsx` (columns, Agent blank vs `-`, compact, Action not `spur workflow trace <uuid>`). Then one confirming `bun run lint` / targeted bun test; full `spur-check` is the pipeline gate, not this refine.
+- [x] 1. R1 — Add `looksLikeOpaqueId`, `humanWorkflowTitle`, `humanStepLabel` in `event-names.ts`. Switch every `workflow.*` Summary off `workflowTitle` / `stepName`. Failing tests first: idea-pipeline `workflow.action.started` with long `nodeLabel` matches the grammar and contains neither run UUID nor event id; missing `workflowName` omits the name rather than substituting `runId`; `kind` is not the Summary step.
+- [x] 2. R2 / R5 — Extend `SystemEventEnvelopeV2.presentation` + `PRESENTATION_KEYS` with optional `correlators`, `actionLabel`, `agent`. Add `projectTablePresentation` after the event-name presenter. Thread optional `actor` through `buildSystemEventEnvelope` / `projectStoredSystemEventEnvelope` / `buildPresentation` without putting it on `context`. Assert history v2 keeps stored `data`/`context` bytes and only replaces `presentation`. Empty correlators/actionLabel omit (Board `-`); opaque ids never appear in those strings; `presentation.action` still carries `spur workflow trace <runId>` for tooltip.
+- [x] 3. R3 / R4 — Add `retain?` to `SystemEventPresenterSpec`; catalog `metadataFields` = `fields` ∪ `retain`. Retain `metadata.agent`, `metadata.role`, `routing.executor` on agent-executed `workflow.action.*` presenters. Project `presentation.agent` in the frozen order. Engine rows `workflow.node.enter` / `workflow.transition` omit Agent. Do not use `CORE_METADATA_PATHS`.
+- [x] 4. R4 — Always wrap the adapter observability bus with `withWorkflowIdentity` when `createEngineService` has a loaded `WorkflowDef` (`workflow-service.ts:1148` ternary). Keep existing `run()` / `continuePaused()` engine-event wraps. Audit one agent-executed action payload: if none of the four Agent sources exist after wrap+retain, only then take the ts-libs fallback in Design; otherwise record “no ts-libs upgrade”.
+- [x] 5. R6 / R7 / R8 — `parseSystemEventView` maps `correlators` / `actionLabel` / `agent`. Desktop adds Agent between Correlation and Outcome (9 columns; expanded `colSpan` 9). Action column uses `actionLabel`. Agent cell is blank when omitted. Compact stacks Summary, Correlation, Action, Agent. No client UUID stripper; no raw `data.*` recovery. Tooltip title/footer (J9) may still show run/action ids.
+- [x] 6. Tests — targeted first: `event-names.test.ts` (Summary grammar + retain/catalog union), `system-event-envelope.test.ts` (projector, actor, history reprojection, `hasOnlyKeys`), workflow wrap (`observability.test.ts` / workflow-service tests), `components.test.tsx` (columns, Agent blank vs `-`, compact, Action not `spur workflow trace <uuid>`). Then one confirming `bun run lint` / targeted bun test; full `spur-check` is the pipeline gate, not this refine.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `packages/app/src/services/event-names.ts:164-190` — Added `looksLikeOpaqueId`, `humanWorkflowTitle`, `humanStepLabel`. Replaced `workflowTitle` and `stepName` across all `workflow.*` presenters so Summary follows `[workflow] {workflowName} · {humanStep} {result}` without opaque machine IDs.
+- `packages/app/src/services/event-names.ts:118` — Extended `SystemEventPresenterSpec` with optional `retain?: readonly SystemEventMetadataField[]`. Updated `resolveCatalogEntry` (line 1597) to set `metadataFields` to the union `presenter.fields ∪ presenter.retain`. Retained `metadata.agent`, `metadata.role`, `routing.executor` on agent-executed action presenters.
+- `packages/app/src/services/system-event-envelope.ts:72-85,129-139` — Added optional `correlators?: string`, `actionLabel?: string`, `agent?: string` to `SystemEventEnvelopeV2.presentation`, updated `PRESENTATION_KEYS`, and added validation in `isValidPresentation`.
+- `packages/app/src/services/system-event-envelope.ts:384-460` — Implemented `projectTablePresentation` projecting `correlators` from human facts in bounded data, `actionLabel` from action kind/verb (excluding remediation commands with UUIDs), and `agent` from `routing.executor` → `data.agent` → `data.metadata.agent` → actor (omitted on pure engine rows). Integrated into `buildPresentation`.
+- `packages/app/src/services/system-event-envelope.ts:198-252` — Threaded optional `actor?: string | null` through `buildSystemEventEnvelope` and `projectStoredSystemEventEnvelope` without opening `context`. Stored history v2 preserves `data` and `context` bytes byte-for-byte; only `presentation` is re-projected on read.
+- `apps/server/src/modules/events/index.ts:212-216,328-335` — Threaded actor into buildSystemEventEnvelope and projectStoredSystemEventEnvelope.
+- `packages/app/src/services/system-event-tap.ts:81-88` — Threaded actor into buildSystemEventEnvelope.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:20-33,434-460,1162-1207,1584-1650` — Updated `SystemEventView` and `parseSystemEventView` to map `correlation`, `actionLabel`, and `agent`. Updated table layout to 9 columns (`Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action`), rendered Agent cell blank when omitted (`view.agent ?? ''`), rendered Action cell with `actionLabel`, updated expanded detail `colSpan` to 9, and stacked `agent` when present in compact layout.
+- Producer audit: all Spur fan-in points (`withWorkflowIdentity` on engine/adapter buses, `projectActionMetadata`, `withInvokeRouting`) provide agent and workflow identity. No ts-libs contract upgrade required.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/event-names.ts:164-199` looksLikeOpaqueId humanWorkflowTitle humanStepLabel omit opaque runId kind UUID node |
+| R2 | MET | `packages/app/src/services/system-event-envelope.ts:380-503` projectTablePresentation correlators actionLabel agent without opaque ids |
+| R3 | MET | `packages/app/src/services/system-event-envelope.ts:392-433` Agent projection routing.executor data.agent metadata.agent actor omit pure engine rows |
+| R4 | MET | `packages/app/src/services/event-names.ts:114-121` SystemEventPresenterSpec retain metadata.agent metadata.role routing.executor |
+| R5 | MET | `packages/app/src/services/system-event-envelope.ts:227-252` projectStoredSystemEventEnvelope re-project presentation without rewriting stored data context ledger |
+| R6 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:1168-1211` R6 SystemEventsTab Time Severity Event Summary Producer Correlation Agent Outcome Action columns |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Workflow summaries name the definition and human step without opaque ids | MET | test | `packages/app/tests/services/event-names.test.ts:632-667` looksLikeOpaqueId humanWorkflowTitle humanStepLabel opaque ids |
+| R2 — Correlation and Action columns show human correlators, not opaque ids | MET | test | `packages/app/tests/services/system-event-envelope.test.ts:260-289` projectTablePresentation correlators actionLabel without opaque IDs |
+| R3 — Tooltip and expanded payload remain the home for raw ids | MET | test | `apps/web/tests/modules/observability/components.test.tsx:729-786` expanded detail keeps run-42 tooltip payload ids |
+| R4 — Agent column shows coding-agent identity from existing payload facts | MET | test | `packages/app/tests/services/system-event-envelope.test.ts:260-289` agent routing.executor |
+| R5 — Agent identity is stamped and retained on the Spur-only path | MET | test | `packages/app/tests/services/event-names.test.ts:618-630` retain catalog metadataFields |
+| R6 — Live and historical rows share the current human projection without a ledger rewrite | MET | test | `packages/app/tests/services/system-event-envelope.test.ts:140` re-projects only presentation on history row |
+| R7 — The Board renders server-projected cells and does not interpret raw payloads | MET | test | `apps/web/tests/modules/observability/system-events-tab.test.ts:87-110` parseSystemEventView maps correlators actionLabel agent |
+| R8 — Compact System Events layout stays human-readable | MET | test | `apps/web/tests/modules/observability/components.test.tsx:635` compact two columns human-readable stack |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability (R1-R6 / scenarios R1-R8):** all MET — server-owned table presentation projection implemented via `projectTablePresentation`, opaque ID filtering via `looksLikeOpaqueId`, clean workflow summary grammar without UUID fallbacks, 9-column desktop table layout with Agent column and human Action labels, compact layout stacking, and complete backward-compatible history reprojection without modifying stored bytes.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECUA review (P1-P4):**
 
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | Correctness | `packages/app/src/services/system-event-envelope.ts:384-460` | `projectTablePresentation` filters out opaque machine IDs and handles missing fields gracefully with undefined/empty fallbacks. |
+| P4 | Security | `packages/app/src/services/system-event-envelope.ts:198-252` | Bounded strings enforced on all table presentation properties (correlators <= 512, actionLabel <= 128, agent <= 128); secrets redacted before projection. |
+| P4 | Maintainability | `packages/app/src/services/event-names.ts:118` | `retain` mechanism allows preserving agent metadata paths without exceeding the 8-field tooltip cap. |
+| P4 | Architecture | `apps/web/src/modules/observability/SystemEventsTab.tsx` | Board acts as a pure presentation consumer without raw payload key scraping or client-side UUID regex munging. |
+
+**Architecture depth:** Adheres strictly to ADR-073 and ADR-074. Envelope `context` remains `{project, producer, correlation}`, stored v2 event data remains immutable, presentation is dynamically projected on read.
+
+**Disposition:** No P1-P2 findings. **Approved for verification.**
 ### References
 - Feature J91: `docs/features/J91_system-events-human-readable-table-workflow-identity-id-free-columns-and-coding-agent.md`
 - Satellite: `docs/design/system-events-human-table.md` (ADR-073/074)
@@ -204,3 +240,6 @@ Feature: System Events human-readable table: workflow identity, id-free columns,
 - Code SSOT: `packages/app/src/services/event-names.ts`, `packages/app/src/services/system-event-envelope.ts`, `packages/app/src/workflow/observability.ts`, `packages/app/src/services/event-bridge.ts`, `packages/app/src/services/workflow-service.ts`, `apps/web/src/modules/observability/SystemEventsTab.tsx`
 - UI tokens: repository-root `DESIGN.md` (no new Agent color token)
 ### History
+- 2026-08-19T22:44:31.446Z todo → wip (system)
+- 2026-08-19T22:54:12.470Z wip → testing (system)
+- 2026-08-19T22:54:14.961Z testing → done (system)

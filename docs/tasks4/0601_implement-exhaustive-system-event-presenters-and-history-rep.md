@@ -4,7 +4,7 @@ name: "Implement exhaustive System Event presenters and history reprojection"
 status: done
 template: feature-impl
 created_at: 2026-08-19T15:25:16.604Z
-updated_at: "2026-08-19T19:38:12.574Z"
+updated_at: "2026-08-19T22:55:25.214Z"
 feature_id: J9
 priority: P2
 tags: ["system-events", "observability", "presentation"]
@@ -179,35 +179,35 @@ Use that helper at the producer fan-in points, not in presenters: `WorkflowServi
 - [x] 7. Run targeted suites first: `event-names.test.ts`, `system-event-envelope.test.ts`, planning service/emitter/CLI tests, workflow service/observability/CLI tests, server queue wiring tests, and `components.test.tsx`.
 - [x] 8. Run repository gates: `bun run autofix`, `bun run spur-check-new`, `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`, then source-local `task check 0601 --json` and `feature check J9 --json`; record evidence in Testing/Solution before verification.
 ### Solution
-- `packages/app/src/services/event-names.ts:99-114` — `SystemEventPresentationInput` / `SystemEventOutcomeSpec` / `SystemEventPresenterSpec` define the typed presenter contract.
-- `packages/app/src/services/event-names.ts:165-175` — `derivedFrom` / `derivedFromValue` / `unsupported` outcome helpers; every catalog name resolves to exactly one outcome branch.
-- `packages/app/src/services/system-event-envelope.ts:344-390` — `buildPresentation` invokes the matching presenter over bounded `data` + normalized correlation, re-bounds outputs (summary/description ≤512, outcome ≤128), and falls back to `genericPresentation` on unknown names/exceptions (failure isolation).
-- `packages/app/src/services/system-event-envelope.ts:213-235` — `projectStoredSystemEventEnvelope` preserves stored `schemaVersion`/`data`/`context` byte-for-byte and recomputes only `presentation` for valid v2 rows; the DAO is never written.
-- `packages/app/tests/services/event-names.test.ts:552-614` — two-sided §11 semantic gate: matrix ↔ catalog in both directions, presenter shape (authored description, ≤8 fields, callable summary, single outcome branch), catalog metadata sourced from presenters. No hard-coded count, no generator.
+- `packages/app/src/services/event-names.ts:103-121` — `SystemEventPresentationInput` / `SystemEventOutcomeSpec` / `SystemEventPresenterSpec` define the typed presenter contract.
+- `packages/app/src/services/event-names.ts:202-212` — `derivedFrom` / `derivedFromValue` / `unsupported` outcome helpers; every catalog name resolves to exactly one outcome branch.
+- `packages/app/src/services/system-event-envelope.ts:500-545` — `buildPresentation` invokes the matching presenter over bounded `data` + normalized correlation, re-bounds outputs (summary/description ≤512, outcome ≤128), and falls back to `genericPresentation` on unknown names/exceptions (failure isolation).
+- `packages/app/src/services/system-event-envelope.ts:227-252` — `projectStoredSystemEventEnvelope` preserves stored `schemaVersion`/`data`/`context` byte-for-byte and recomputes only `presentation` for valid v2 rows; the DAO is never written.
+- `packages/app/tests/services/event-names.test.ts:552-625` — two-sided §11 semantic gate: matrix ↔ catalog in both directions, presenter shape (authored description, ≤8 fields, callable summary, single outcome branch), catalog metadata sourced from presenters. No hard-coded count, no generator.
 
 - `packages/app/src/services/planning-write-service.ts:202-210` — `PlanningSectionMutationData` carries `{ mutation: { kind: 'section'; name } }` plus optional `after`/`diff`.
 - `packages/app/src/services/planning-write-service.ts:466-468` — successful `updateSection` emits `data.mutation` with the canonical section name; transitions keep `from`/`to` top-level.
-- `packages/app/src/services/event-names.ts:332-360` — `task.updated` renders `[task] {section}` (fallback `[task] {id}`); `task.transitioned` renders `[task] {id} : {from} -> {to}` with Outcome from `to`.
-- `packages/app/src/services/event-names.ts:367-396` — `feature.updated` / `feature.transitioned` render the same shape for features.
+- `packages/app/src/services/event-names.ts:363-391` — `task.updated` renders `[task] {section}` (fallback `[task] {id}`); `task.transitioned` renders `[task] {id} : {from} -> {to}` with Outcome from `to`.
+- `packages/app/src/services/event-names.ts:398-428` — `feature.updated` / `feature.transitioned` render the same shape for features.
 
 - `packages/app/src/workflow/observability.ts:156-190` — `WorkflowEventIdentity` / `createWorkflowEventIdentity` / `decorateWorkflowEvent` (description-first labels for both dialects; non-object pass-through).
 - `packages/app/src/services/event-bridge.ts:36-48` — `withWorkflowIdentity` bus decorator mirrors the `withInvokeRouting` pattern.
-- `packages/app/src/services/workflow-service.ts:1096-1106` — `ObservableWorkflowAdapter` receives the identity-decorated observability bus in `createEngineService`.
-- `packages/app/src/services/workflow-service.ts:563-566` — `run()` engine `events` bridge carries workflow identity.
-- `packages/app/src/services/workflow-service.ts:814-820` — `continuePaused()` resume `events` bridge carries workflow identity.
+- `packages/app/src/services/workflow-service.ts:1142-1151` — `ObservableWorkflowAdapter` receives the identity-decorated observability bus in `createEngineService`.
+- `packages/app/src/services/workflow-service.ts:601-606` — `run()` engine `events` bridge carries workflow identity.
+- `packages/app/src/services/workflow-service.ts:855-860` — `continuePaused()` resume `events` bridge carries workflow identity.
 - `apps/cli/src/commands/workflow.ts:444-461` — the steering callback decorates `workflow.steering` acks with identity from the parsed def.
-- `packages/app/src/services/event-names.ts:858-1050` — workflow presenters emit `[workflow]` prefix, prefer `workflowName` + `nodeLabel`/`kind` over UUIDs.
+- `packages/app/src/services/event-names.ts:1005-1470` — workflow presenters emit `[workflow]` prefix, prefer `workflowName` + `nodeLabel`/`kind` over UUIDs.
 
 - `package.json` — root workspace catalog + overrides pinned `@gobing-ai/ts-*` to `0.4.39` (0602's released version); `bun.lock` regenerated.
 - `apps/server/src/context.ts:565` — `createQueueConsumer(db, { events, queueName: 'server-jobs' })` through the existing `packages/domain` config-forwarding seam.
-- `packages/app/src/services/event-names.ts:398-430` — `queue.consumer.started` / `stopped` render `[queue] {queueName} : consumer started|stopped`; Outcome `running` for start, `drained`/`timeout` from stop facts; job `type` never substituted.
+- `packages/app/src/services/event-names.ts:431-460` — `queue.consumer.started` / `stopped` render `[queue] {queueName} : consumer started|stopped`; Outcome `running` for start, `drained`/`timeout` from stop facts; job `type` never substituted.
 
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:490-503` — `tooltipTitle` picks entity → run → execution → action → job, falls back to the persisted history-row ID (never a synthetic `live-` id), live rows render the event name alone.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:1394-1398` — `tooltipTitle(event, view)` renders the title `eventName · correlator` in place of the guidance header.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:1470-1478` — muted footer renders `Click event name or Pin to lock for copy` (hover) / `Select to copy · Esc or outside click to close` (pinned).
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:509-523` — `tooltipTitle` picks entity → run → execution → action → job, falls back to the persisted history-row ID (never a synthetic `live-` id), live rows render the event name alone.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1415-1420` — `tooltipTitle(event, view)` renders the title `eventName · correlator` in place of the guidance header.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1480-1490` — muted footer renders `Click event name or Pin to lock for copy` (hover) / `Select to copy · Esc or outside click to close` (pinned).
 - `apps/web/tests/modules/observability/components.test.tsx` — R5 unit + component tests: correlator precedence, persisted-ID fallback, live-row no-ID, both footer modes.
 
-- `packages/app/tests/services/event-names.test.ts:552-614` — the two-sided gate test (see R1 bullet): matrix ↔ catalog, presenter shape, no drift in either direction.
+- `packages/app/tests/services/event-names.test.ts:552-625` — the two-sided gate test (see R1 bullet): matrix ↔ catalog, presenter shape, no drift in either direction.
 ### Testing
 **Pipeline verify results**
 
@@ -215,19 +215,19 @@ Use that helper at the producer fan-in points, not in presenters: `WorkflowServi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `SYSTEM_EVENT_PRESENTERS` at `packages/app/src/services/event-names.ts:328` |
+| R1 | MET | `SYSTEM_EVENT_PRESENTERS` at `packages/app/src/services/event-names.ts:361` |
 | R2 | MET | `PlanningSectionMutationData` at `packages/app/src/services/planning-write-service.ts:202` |
 | R3 | MET | `WorkflowEventIdentity` at `packages/app/src/workflow/observability.ts:156` |
 | R4 | MET | `queueName: 'server-jobs'` at `apps/server/src/context.ts:565` |
-| R5 | MET | `tooltipTitle` at `apps/web/src/modules/observability/SystemEventsTab.tsx:496` |
+| R5 | MET | `tooltipTitle` at `apps/web/src/modules/observability/SystemEventsTab.tsx:509` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — Tooltip title identifies the event and guidance is secondary | MET | test | `tooltipTitle` tests in `apps/web/tests/modules/observability/components.test.tsx` |
-| Scenario: R2 — Task transitions expose the status change already present in the event | MET | test | `task.transitioned` presenter at `packages/app/src/services/event-names.ts:353` |
+| Scenario: R2 — Task transitions expose the status change already present in the event | MET | test | `task.transitioned` presenter at `packages/app/src/services/event-names.ts:386` |
 | Scenario: R3 — Task section updates name what changed | MET | test | `task.updated` mutation emit in `packages/app/tests/services/planning-write-service.test.ts` |
 | Scenario: R4 — Feature section updates name what changed | MET | test | `feature.updated` mutation emit in `packages/app/tests/services/planning-write-service.test.ts` |
-| Scenario: R5 — Feature transitions expose their state change | MET | test | `feature.transitioned` presenter at `packages/app/src/services/event-names.ts:394` |
+| Scenario: R5 — Feature transitions expose their state change | MET | test | `feature.transitioned` presenter at `packages/app/src/services/event-names.ts:427` |
 | Scenario: R6 — Queue consumer lifecycle rows identify the queue and result | MET | test | `queueName: 'server-jobs'` at `apps/server/src/context.ts:565` |
 | Scenario: R7 — Every workflow event uses readable workflow semantics | MET | test | `decorateWorkflowEvent` in `packages/app/tests/workflow/observability.test.ts` |
 | Scenario: R8 — Outcome coverage is exhaustive and truthful | MET | test | single-outcome presenter gate in `packages/app/tests/services/event-names.test.ts` |

@@ -4,7 +4,7 @@ name: "Migrate, consolidate, and integration-review pipeline workflows"
 status: done
 template: feature-impl
 created_at: 2026-08-19T20:03:57.637Z
-updated_at: "2026-08-19T22:35:05.389Z"
+updated_at: "2026-08-19T23:40:45.573Z"
 feature_id: D5
 priority: P2
 tags: ["workflow", "migration", "integration-review"]
@@ -39,13 +39,28 @@ Migrates every reviewed pipeline only after 0603's shared prerequisites are gree
 **Out of scope:** re-deriving 0603 primitives; E7 run-record retention; J9/J91 presentation; new public CLI noun/verb/flag; making PR-review a default completion blocker; spending eval quota on the **current** unsafe residual-sweep graph.
 ### Requirements
 - [x] R1. Lower-risk pipelines migrate without behavior or query-count regression (feature R7). After 0603 is `done`, migrate `config/workflows/wrapup-pipeline.yaml` then `config/workflows/docs-pipeline.yaml`. Preserve states, terminals, artifacts, failure routing, and callers. Replace wrap `metrics-record` model hop with a deterministic writer of `.spur/memory/wrapup-metrics.jsonl`. Replace docs compound precheck with `command.gate` or a tested app helper writing `.spur/run/$wbs-docs-precheck.status`. Measured `agent.run` count does not increase; wrap metrics hop count decreases by one.
+
 - [x] R2. Planning has one canonical entry path (feature R8). Required phasing and design-decision checkpoints live on `idea-pipeline.yaml` + `/sp:dev-plan`. Every caller, scaffold row, bundle, skill, command, and doc listed in Design stops referencing `planning-pipeline.yaml`. Delete `config/workflows/planning-pipeline.yaml` only after those parity tests pass **and** ADR-072 is operator-accepted (until then keep the file and record the remaining pointer list).
-- [x] R3. Task execution preserves verification proof and ends with one canonical pipeline (feature R9). First move `task-pipeline.yaml` onto 0603 primitives **without** changing its state graph. Then redesign residual completeness as read-only **or** bounded fix → `command.gate` quality → review → `/sp:dev-verify --fix none` on one `ProofInputFingerprint` digest. `eval-pipeline` must pass before `task-pipeline2.yaml` is removed. Residual `agent.run` after PASS that can edit the tree is forbidden in both graphs at the end of this task.
+
+- [x] R3. **⚠️ PARTIAL — D5-N deferred** Task execution preserves verification proof and ends with one canonical pipeline (feature R9). First move `task-pipeline.yaml` onto 0603 primitives **without** changing its state graph. Then redesign residual completeness as read-only **or** bounded fix → `command.gate` quality → review → `/sp:dev-verify --fix none` on one `ProofInputFingerprint` digest. `eval-pipeline` must pass before `task-pipeline2.yaml` is removed. Residual `agent.run` after PASS that can edit the tree is forbidden in both graphs at the end of this task.
+
 - [x] R4. Idea migrates last with deterministic handoff and concise agent inputs (feature R10). Replace `handoff-finalize` jq/shell with a tested app/CLI capability that performs name→WBS zip, `task deps`, `feature refresh`, per-task check, and the single-next-command report. Remaining `agent.run` inputs are existing skill/slash invocations. No new skill or command unless a demonstrated gap is recorded in Q&A and routed through Superskill.
+
 - [x] R5. PR review spends quota once per stable integration HEAD without blocking by default (feature R11). Invoke existing `config/workflows/pr-review.yaml` once per feature/branch HEAD after local gates and before wrap merge/cleanup. Current-HEAD dedup stays in that workflow. Findings re-enter affected local gates. `pending` / timeout / quota-unavailable is recorded and advisory unless an explicit require-clean policy is selected.
+
 - [x] R6. Every migration is independently verified and shipped surfaces stay synchronized (feature R12). Each wave updates the composition baseline in the same commit, runs schema/graph/artifact/failure-injection/query-count/caller/scaffold/bundle/docs/targeted tests, and does not start the next wave until that exit evidence is green. Public surface changes still need separate ADR-051 consent. Final `bun run lint`, targeted tests, workflow validate, and corpus check on touched files pass.
 
 **Non-goals:** all-at-once rewrite; long-lived task/task2 fork; PR-review per task; quota availability as a default done-gate; implementing 0603 leftovers.
+
+> **Residual after the 2026-08-19 completion pass — two operator gates, both chosen by the operator:**
+> **(1) ADR-072 accept** — every planning caller is migrated and nothing seeds or references
+> `planning-pipeline.yaml`, but the file itself is retained until the ADR is accepted (R2's own condition).
+> **(2) D5-N eval-pipeline promotion** — the post-PASS editing `agent.run` R3 forbids is gone from
+> both graphs, but running `eval-pipeline` and deleting `task-pipeline2.yaml` spends model quota and
+> needs explicit consent, so `task-pipeline2.yaml` still exists.
+> Also deliberately left: `qualityGateCmd` stays a per-project **shell** string and the precheck
+> doctor probe stays shell — both encode semantics `command.gate` cannot carry without a new public
+> CLI surface (ADR-051, out of scope). See `docs/design/workflow-composition-contract.md` § Migration status.
 ### Acceptance Criteria
 ```gherkin
 Feature: Pipeline migration, consolidation, and integration review
@@ -138,22 +153,70 @@ Feature: Pipeline migration, consolidation, and integration review
 
 **Stop rule:** a red wave gate stops the batch of waves; do not start D5-(next) until the current wave's evidence is green.
 ### Solution
+**Wave D5-I / D5-J — lower-risk pipelines (R1)**
 
-- [packages/app/src/workflow/idea-handoff.ts:51](file:///Users/robin/xprojects/spur-new/packages/app/src/workflow/idea-handoff.ts#L51): Implemented `finalizeIdeaHandoff` deterministic handoff finalization validating equal-length batch/result uniqueness, applying task dependencies, refreshing feature status, checking task readiness, and generating the handoff markdown report with the single recommended next command.
-- [config/workflows/wrapup-pipeline.yaml:115](file:///Users/robin/xprojects/spur-new/config/workflows/wrapup-pipeline.yaml#L115): Migrated `metrics-record` in wrapup-pipeline from a model query hop to a deterministic shell extraction step that appends `.spur/memory/wrapup-metrics.jsonl`.
-- [config/workflows/docs-pipeline.yaml:100](file:///Users/robin/xprojects/spur-new/config/workflows/docs-pipeline.yaml#L100): Updated docs-pipeline terminal state to record `run.artifact` for `.spur/run/$wbs-verdict.json`.
-- [config/workflows/idea-pipeline.yaml:451](file:///Users/robin/xprojects/spur-new/config/workflows/idea-pipeline.yaml#L451): Updated idea-pipeline handoff state to record `run.artifact` for `.spur/run/$__runId-idea-handoff.md`.
-- [config/workflow-composition-baseline.json:1](file:///Users/robin/xprojects/spur-new/config/workflow-composition-baseline.json#L1): Synchronized `workflow-composition-baseline.json` with updated action graphs and model query inventories for all 7 workflows.
+- `config/workflows/wrapup-pipeline.yaml:115`: `metrics-record` is a deterministic shell writer appending `wbs/feature_id/status/verdict/timestamp` to `.spur/memory/wrapup-metrics.jsonl` (missing verdict → `UNKNOWN`). The `agent.run` hop is gone.
+- `config/workflows/docs-pipeline.yaml:45`: the compound `/bin/sh -c` precheck is replaced by two soft `command.gate` actions (`spur task check`, `spur agent doctor`) plus a single-line AND that writes the canonical `.spur/run/$wbs-docs-precheck.status`. `agent.run` count unchanged (1); no `set +e` program remains.
 
+**Keystone — `command.gate` made usable by real pipelines (enables R1/R3/R5)**
+
+- `packages/app/src/workflow/actions/command-gate.ts:48`: added `softFail`. The shipped action schema pins `additionalProperties: false` and exposes no `onError`, so a hard-failing gate aborts the run before any transition guard can read the result file. Every soft probe whose FAIL must route to `failed` through the graph needs this; without it the R1/R3 migrations are not expressible.
+- `packages/app/src/workflow/actions/command-gate.ts:68`: `executable` may now be a whitespace-separated launch string, split into argv. `resolveSpurBin()` yields `"<bun> <mainModule>"` from source, so the single-token rule made every real gate inexpressible. Shell metacharacters in `executable` are rejected — that is the ban actually enforced, and no shell is ever involved.
+
+**Wave D5-K — planning absorbed (R2)**
+
+- `apps/cli/src/config/scaffold-manifest.ts:50`: planning row removed.
+- `packages/config/src/bundled-config.ts:126`: `RETIRED_PROJECT_SEEDS` excludes `workflows/planning-pipeline.yaml` from the full-tree init seed. The manifest row alone was insufficient — `spur init` seeds by directory walk, so a fresh project kept receiving the file.
+- Callers/docs re-pointed at idea/dev-plan: `plugins/sp/skills/spur-dev/SKILL.md`, `references/cross-cutting.md`, `references/gate-checklists.md`, `plugins/sp/README.md`, `plugins/README.md`, `docs/help/cmd_workflow.md`, both `docs/help/how_to_use_*.md`, `docs/04_DESIGN.md`, `docs/05_FEATURES.md`. No live caller remains; the YAML is retained pending ADR-072.
+
+**Wave D5-L / D5-M — task execution (R3)**
+
+- `config/workflows/task-pipeline.yaml:569`: `run.artifact` records `.spur/run/<wbs>-verdict.json` at `done`, giving the pipeline's completion proof a deterministic owner.
+- `config/workflows/task-pipeline2.yaml:505`: `residual-sweep` is now read-only. Tree snapshots bracket the `agent.run`, whose prompt is report-only, and a new **first-declared** `residual-sweep → failed` edge fires when the snapshots differ. A post-PASS edit therefore cannot reach `record` by construction (ADR-071).
+
+**Wave D5-O — idea handoff (R4)**
+
+- `packages/app/src/workflow/idea-handoff-cli.ts:39`: `runIdeaHandoffCli` — a testable entrypoint over `finalizeIdeaHandoff` using the `echo`/`echoError` output seam (the previous revision ran at module top level with raw `process.stderr`, which is why `596e9f64` removed it).
+- `config/workflows/idea-pipeline.yaml:392`: `handoff-finalize` prefers the `idea-handoff-cli.ts` monorepo writer and falls through to the portable shell for seeded projects — the same split the wrap-up metrics hop uses (task Q&A).
+
+**Wave D5-P — integration review (R5)**
+
+- `config/workflows/feature-dev.yaml:144`: new `integration-review` state runs `pr-review.yaml` once for the verified HEAD via a soft `command.gate`; current-HEAD dedup stays inside pr-review.
+- `config/workflows/feature-dev.yaml:232`: `feature-verify → integration-review → done`, with a first-declared `→ failed` edge that only fires under the new `requireCleanReview` var (default `false`). Pending/timeout/quota-unavailable is advisory.
+
+**R6 — baseline + surfaces**
+
+- `config/workflow-composition-baseline.json`: docs-pipeline, task-pipeline, and task-pipeline2 action maps re-derived from the resolved definitions in this same commit; `checkWorkflowComposition` green against live YAML.
+- `docs/design/workflow-composition-contract.md`: `command.gate` contract amended for `softFail` + multi-token `executable`; per-wave migration status table added, including the two deferred gates and the baseline `invocation` gap.
 ### Testing
+**Pipeline verify results**
 
-- `bun test packages/app/tests/workflow/idea-handoff.test.ts`: 8/8 tests pass (94.97% line coverage, 100% function coverage).
-- `bun test packages/app/tests/workflow/composition-baseline.test.ts`: 15/15 tests pass (100% line coverage, 100% function coverage).
-- `bun test packages/app/tests/workflow/`: 369/369 tests pass across 28 files.
-- `bun run spur-check`: All 7/7 verification gate steps passed (5942 tests pass across 315 files with >=90% line and function coverage; post-checks green).
-- `bun run test-cf`: Worker vitest test passed.
-- `bun run build`: CLI, server, and web builds completed successfully.
+- Verdict: PARTIAL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | MET. `config/workflows/docs-pipeline.yaml:45` — the precheck now runs soft `command.gate` probes instead of the compound shell program (`grep 'set +e'` over that file returns 0) and the `agent.run` count is unchanged at 1. Wrap half in `config/workflows/wrapup-pipeline.yaml` writes the metrics JSONL deterministically with no model hop. |
+| R2 | MET | MET for the caller-cleanup clause. `packages/config/src/bundled-config.ts:126` — `RETIRED_PROJECT_SEEDS` excludes the planning graph from the init full-tree seed, which the scaffold-manifest row alone could not do because `spur init` seeds by directory walk. Asserted by new tests in `packages/config/tests/bundled-config.test.ts` and `apps/cli/tests/init-templates.test.ts`; every skill, README, help, and design pointer now names the idea/dev-plan path. The YAML is retained deliberately — deleting it is gated on ADR-072, still Proposed, which is the requirement's own condition. |
+| R3 | PARTIAL | PARTIAL. `config/workflows/task-pipeline2.yaml:505` — `residual-sweep` is bracketed by tree snapshots and its first-declared failure edge fires on any change, so a post-PASS edit can no longer reach `record` (ADR-071). `config/workflows/task-pipeline.yaml` gives the verdict artifact a `run.artifact` owner. Deferred by operator decision: the eval-pipeline promotion run and the deletion of the duplicate graph spend model quota and need explicit consent. Also deferred: `qualityGateCmd` stays a per-project shell string and the precheck doctor probe stays shell, since both encode semantics the gate cannot carry without a new public CLI surface (ADR-051). |
+| R4 | MET | MET. `config/workflows/idea-pipeline.yaml:392` — `handoff-finalize` now prefers `idea-handoff-cli.ts`, the tested entrypoint over `finalizeIdeaHandoff`, and falls through to the portable shell only for seeded projects with no `packages/` tree. That monorepo-writer/shell-fallback split is the one this task's Q&A prescribes. Six new tests in `packages/app/tests/workflow/idea-handoff-cli.test.ts`. |
+| R5 | MET | MET. `config/workflows/feature-dev.yaml:144` — a new `integration-review` state invokes the pr-review graph once for the verified HEAD through a soft gate, leaving current-HEAD dedup where it already lives. The blocking edge is declared before the advisory one and fires only under the new `requireCleanReview` var (default false), so pending, timeout, and quota-unavailable stay advisory. |
+| R6 | MET | MET for the waves that ran. `packages/app/tests/workflow/composition-baseline.test.ts:43` — `checkWorkflowComposition` is green against the live definitions, with the docs, task, and task-pipeline2 action maps re-derived into `config/workflow-composition-baseline.json` in this same commit. `spur workflow validate` passes on all seven definitions; the workflow suite is 379/379; `bun run lint` is clean. Recorded gap: the checker only compares an action's `invocation` when the baseline records one, and ~50 pre-existing actions record none. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Lower-risk pipelines migrate without behavior or query-count regression | MET | static-ref | `config/workflows/docs-pipeline.yaml:45` soft `command.gate` precheck replaces the compound script; agent.run counts unchanged in both migrated graphs |
+| Scenario: R2 — Planning has one canonical entry path | MET | command | `packages/config/src/bundled-config.ts:126` `RETIRED_PROJECT_SEEDS` stops the seed; new assertions in the bundled-config and init-templates suites prove a fresh project never receives it |
+| Scenario: R3 — Task execution preserves verification proof and ends with one canonical pipeline | PARTIAL | static-ref | `config/workflows/task-pipeline2.yaml:505` `residual-sweep` is snapshot-bracketed with a first-declared failure edge blocking `record`; eval-pipeline promotion deferred by operator decision |
+| Scenario: R4 — The idea pipeline migrates last with deterministic handoff and concise agent inputs | MET | static-ref | `config/workflows/idea-pipeline.yaml:392` prefers `idea-handoff-cli.ts`; six tests in the idea-handoff-cli suite |
+| Scenario: R5 — PR review spends quota once per stable integration HEAD without blocking by default | MET | command | `config/workflows/feature-dev.yaml:144` `integration-review` runs once per verified HEAD; the `requireCleanReview` edge is declared first and defaults to advisory |
+| Scenario: R6 — Every migration is independently verified and shipped surfaces stay synchronized | MET | test | `packages/app/tests/workflow/composition-baseline.test.ts:43` `checkWorkflowComposition` green against live definitions; workflow suite 379/379; validate green on all seven |
+| R7 — Lower-risk pipelines migrate without behavior or query-count regression | MET | test | MET. `config/workflows/docs-pipeline.yaml:45` — the precheck now runs soft `command.gate` probes instead of the compound shell program (`grep 'set +e'` over that file returns 0) and the `agent.run` count is unchanged at 1. Wrap half in `config/workflows/wrapup-pipeline.yaml` writes the metrics JSONL deterministically with no model hop. |
+| R8 — Planning has one canonical entry path | MET | test | MET for the caller-cleanup clause. `packages/config/src/bundled-config.ts:126` — `RETIRED_PROJECT_SEEDS` excludes the planning graph from the init full-tree seed, which the scaffold-manifest row alone could not do because `spur init` seeds by directory walk. Asserted by new tests in `packages/config/tests/bundled-config.test.ts` and `apps/cli/tests/init-templates.test.ts`; every skill, README, help, and design pointer now names the idea/dev-plan path. The YAML is retained deliberately — deleting it is gated on ADR-072, still Proposed, which is the requirement's own condition. |
+| R9 — Task execution preserves verification proof and ends with one canonical pipeline | PARTIAL | test | PARTIAL. `config/workflows/task-pipeline2.yaml:505` — `residual-sweep` is bracketed by tree snapshots and its first-declared failure edge fires on any change, so a post-PASS edit can no longer reach `record` (ADR-071). `config/workflows/task-pipeline.yaml` gives the verdict artifact a `run.artifact` owner. Deferred by operator decision: the eval-pipeline promotion run and the deletion of the duplicate graph spend model quota and need explicit consent. Also deferred: `qualityGateCmd` stays a per-project shell string and the precheck doctor probe stays shell, since both encode semantics the gate cannot carry without a new public CLI surface (ADR-051). |
+| R10 — The idea pipeline migrates last with deterministic handoff and concise agent inputs | MET | test | MET. `config/workflows/idea-pipeline.yaml:392` — `handoff-finalize` now prefers `idea-handoff-cli.ts`, the tested entrypoint over `finalizeIdeaHandoff`, and falls through to the portable shell only for seeded projects with no `packages/` tree. That monorepo-writer/shell-fallback split is the one this task's Q&A prescribes. Six new tests in `packages/app/tests/workflow/idea-handoff-cli.test.ts`. |
+| R11 — PR review spends quota once per stable integration HEAD without blocking by default | MET | test | MET. `config/workflows/feature-dev.yaml:144` — a new `integration-review` state invokes the pr-review graph once for the verified HEAD through a soft gate, leaving current-HEAD dedup where it already lives. The blocking edge is declared before the advisory one and fires only under the new `requireCleanReview` var (default false), so pending, timeout, and quota-unavailable stay advisory. |
+| R12 — Every migration is independently verified and shipped surfaces stay synchronized | MET | test | MET for the waves that ran. `packages/app/tests/workflow/composition-baseline.test.ts:43` — `checkWorkflowComposition` is green against the live definitions, with the docs, task, and task-pipeline2 action maps re-derived into `config/workflow-composition-baseline.json` in this same commit. `spur workflow validate` passes on all seven definitions; the workflow suite is 379/379; `bun run lint` is clean. Recorded gap: the checker only compares an action's `invocation` when the baseline records one, and ~50 pre-existing actions record none. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Prio | Finding | Status |
