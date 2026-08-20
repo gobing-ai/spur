@@ -45,6 +45,36 @@ function shQuote(value: string): string {
 }
 
 /**
+ * Nested-run refusal marker (task 0610 R4).
+ *
+ * `agent.run` spawns its agent as a child of the running workflow process, and that agent's shell
+ * inherits this process's environment — so a marker set here reaches any `spur workflow run` the
+ * agent tries to start, at any depth. Before this, the only protection was a prose NOTE in
+ * `task-pipeline.yaml` asking the model not to recurse; a recursing run forks a worktree and an
+ * agent per level with no bound.
+ *
+ * Set immediately before EXECUTION, never before the `--async` spawn: the detached worker is a
+ * legitimate top-level run, and marking the parent would make the worker refuse itself. Setting it
+ * late needs no exemption — and an exemption would be inherited by the worker's own agent children,
+ * re-opening the hole one level out.
+ */
+export const WORKFLOW_RUN_ACTIVE_ENV = 'SPUR_WORKFLOW_RUN_ACTIVE';
+
+function markWorkflowRunActive(): void {
+    process.env[WORKFLOW_RUN_ACTIVE_ENV] = '1';
+}
+
+/**
+ * Clear the marker once the run finishes. Children spawned DURING the run already inherited their
+ * own copy, so clearing does not weaken the guard — it keeps the marker scoped to the run rather
+ * than poisoning the process (which would refuse a legitimate second run in the same process, and
+ * leaks across in-process tests).
+ */
+function clearWorkflowRunActive(): void {
+    delete process.env[WORKFLOW_RUN_ACTIVE_ENV];
+}
+
+/**
  * Launch a long-lived async workflow worker via ProcessExecutor + nohup.
  * Avoids direct child_process.spawn (no-direct-process-spawn).
  */
@@ -263,6 +293,19 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     ? 'full'
                     : ((requestedDetail as WorkflowOutputDetail | undefined) ?? 'invocation');
 
+            // Nested-run refusal (task 0610 R4). Refuse BEFORE any side effect — no run record, no
+            // worktree, no agent spawn.
+            if (process.env[WORKFLOW_RUN_ACTIVE_ENV] === '1') {
+                context.output.error(
+                    `workflow run: refusing to start — already inside an active workflow run (${WORKFLOW_RUN_ACTIVE_ENV}=1).\n` +
+                        'A pipeline that starts another pipeline forks a worktree and an agent run per level, without bound.\n' +
+                        'If you are an agent running inside a pipeline step: do NOT start a pipeline here. Report what you\n' +
+                        'needed and let the operator run it from a clean shell.',
+                );
+                context.setExitCode(1);
+                return;
+            }
+
             // When --async, spawn a detached child process that runs the workflow
             // synchronously and exit immediately with the run ID. The child is its
             // own session/process-group LEADER (`detached: true` → setsid), so it
@@ -293,11 +336,17 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     await spawnAsyncWorkflowWorker(spurBin, cmd);
                 } catch {
                     // If spawn throws, fall through to the sync path so the workflow still runs.
-                    const result = await makeSvc(options.json).run(file, {
-                        runId,
-                        vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
-                        dryRun: options.dryRun || undefined,
-                    });
+                    markWorkflowRunActive();
+                    let result: Awaited<ReturnType<WorkflowAppService['run']>>;
+                    try {
+                        result = await makeSvc(options.json).run(file, {
+                            runId,
+                            vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
+                            dryRun: options.dryRun || undefined,
+                        });
+                    } finally {
+                        clearWorkflowRunActive();
+                    }
                     if (json) context.output.write(toJson(result));
                     else if (!silent) {
                         context.output.write(
@@ -483,6 +532,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
 
             let result: Awaited<ReturnType<WorkflowAppService['run']>>;
             try {
+                markWorkflowRunActive();
                 result = await makeSvc(json, bus).run(file, {
                     runId,
                     vars,
@@ -493,6 +543,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     ...(steeringController !== undefined ? { steeringController } : {}),
                 });
             } finally {
+                clearWorkflowRunActive();
                 for (const timer of heartbeats.values()) clearInterval(timer);
                 heartbeats.clear();
                 await traceWriter?.flush();

@@ -189,6 +189,31 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
+    // 0610 R4: an agent inside a pipeline step inherits the running workflow process's environment,
+    // so a pipeline that starts another pipeline recurses — forking a worktree and an agent run per
+    // level, unbounded. Before this the only protection was a prose NOTE in task-pipeline.yaml.
+    test('run refuses when already inside an active workflow run, before any side effect', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const prior = process.env.SPUR_WORKFLOW_RUN_ACTIVE;
+        process.env.SPUR_WORKFLOW_RUN_ACTIVE = '1';
+        try {
+            const exitCode = await main(['workflow', 'run', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
+
+            expect(exitCode).toBe(1);
+            expect(output.errors.join('\n')).toContain('refusing to start');
+            expect(output.errors.join('\n')).toContain('SPUR_WORKFLOW_RUN_ACTIVE=1');
+            // Refusal precedes execution: nothing was run, so no summary line was emitted.
+            expect(output.messages.join('\n')).not.toContain('workflow');
+        } finally {
+            if (prior === undefined) delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;
+            else process.env.SPUR_WORKFLOW_RUN_ACTIVE = prior;
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('validate of a valid workflow reports the workflow name', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
