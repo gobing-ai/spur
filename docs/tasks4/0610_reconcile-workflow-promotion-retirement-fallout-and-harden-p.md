@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Reconcile promotion-retirement fallout and harden pipeline execution safety"
-status: todo
+status: done
 template: feature-impl
 created_at: "2026-08-20T07:10:00.000Z"
-updated_at: "2026-08-20T07:10:00.000Z"
+updated_at: "2026-08-20T16:13:37.190Z"
 feature_id: D5
 dependencies: []
 ---
@@ -38,13 +38,13 @@ confirmed as the cause of any observed loop. R7 below is therefore hardening aga
 structural gap, **not** a confirmed incident — do not write it up as a fixed bug.
 
 ### Requirements
-- [ ] R1. Derived docs stop describing a promotion bar that no longer exists. Reconcile every remaining forward-looking `task-pipeline2` / D5-N promotion reference against ADR-076 in exactly these files: `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/features/I6_spur-harness-self-improvement-program-*.md`, `docs/features/INDEX.md`. **Historical records must not be rewritten** — `CHANGELOG.md`, and the `## Solution` / `## Testing` / `## Review` sections of tasks 0595, 0596, 0603, 0604, 0609, correctly describe what was true when written. Only statements that assert a *future* obligation change. Verify: `rg -n "task-pipeline2" docs/03_ARCHITECTURE.md docs/04_DESIGN.md docs/features/` returns only historical or ADR-referencing prose.
+- [x] R1. Derived docs stop describing a promotion bar that no longer exists. Reconcile every remaining forward-looking `task-pipeline2` / D5-N promotion reference against ADR-076 in exactly these files: `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/features/I6_spur-harness-self-improvement-program-*.md`, `docs/features/INDEX.md`. **Historical records must not be rewritten** — `CHANGELOG.md`, and the `## Solution` / `## Testing` / `## Review` sections of tasks 0595, 0596, 0603, 0604, 0609, correctly describe what was true when written. Only statements that assert a *future* obligation change. Verify: `rg -n "task-pipeline2" docs/03_ARCHITECTURE.md docs/04_DESIGN.md docs/features/` returns only historical or ADR-referencing prose.
 
-- [ ] R2. Feature D5's heading stops contradicting its own contract. Its `# D5:` heading still names the retired promotion bar while its frontmatter `name` reads "Workflow pipeline contract, progress projection, and staged consolidation". Align the heading to the frontmatter name. **Renaming the file itself is out of scope without explicit authorization** — ask first; if authorized, use a plain `mv` plus an inbound-reference sweep, never an automated rename. Verify: heading matches frontmatter `name`; `spur feature check D5` still passes.
+- [x] R2. Feature D5's heading stops contradicting its own contract. Its `# D5:` heading still names the retired promotion bar while its frontmatter `name` reads "Workflow pipeline contract, progress projection, and staged consolidation". Align the heading to the frontmatter name. **Renaming the file itself is out of scope without explicit authorization** — ask first; if authorized, use a plain `mv` plus an inbound-reference sweep, never an automated rename. Verify: heading matches frontmatter `name`; `spur feature check D5` still passes.
 
-- [ ] R3. `eval-pipeline` can complete a fixture run. `createEvalRun()` does `git worktree add --detach <dir> HEAD`, which brings no `node_modules`, so the fixture worktree cannot pass `qualityGateCmd`: measured at HEAD, `bun run format && bun run spur-check` exits **127** with `/bin/bash: tsc: command not found` across all 7 workspaces, producing `test-gate=FAIL` on every run. Make the worktree able to resolve the toolchain. Verify: a non-`--dry` fixture run reaches a verdict instead of `test-gate=FAIL`. **This unblocks task 0607**, which depends on it.
+- [x] R3. `eval-pipeline` can complete a fixture run. `createEvalRun()` does `git worktree add --detach <dir> HEAD`, which brings no `node_modules`, so the fixture worktree cannot pass `qualityGateCmd`: measured at HEAD, `bun run format && bun run spur-check` exits **127** with `/bin/bash: tsc: command not found` across all 7 workspaces, producing `test-gate=FAIL` on every run. Make the worktree able to resolve the toolchain. Verify: a non-`--dry` fixture run reaches a verdict instead of `test-gate=FAIL`. **This unblocks task 0607**, which depends on it.
 
-- [ ] R4. Nested pipeline execution is refused mechanically, not by prose. Today the only protection is a `NOTE` at `config/workflows/task-pipeline.yaml:268` asking the agent not to call `/sp:dev-run` in full mode, and `agent.run` exports no run identifier, so a spawned agent has no inherited signal that it is already inside a run. Export a run-depth signal from the `agent.run` action into the child environment, and make `spur workflow run` refuse to start a pipeline when that signal indicates an active run. Refusal is the default and needs no flag; **adding an opt-out flag would be a public-surface change and must route through task 0608 / ADR-051 consent.** Verify: a nested invocation exits non-zero, forks no worktree and no agent, and names the active run; a normal top-level invocation is unaffected.
+- [x] R4. Nested pipeline execution is refused mechanically, not by prose. Today the only protection is a `NOTE` at `config/workflows/task-pipeline.yaml:268` asking the agent not to call `/sp:dev-run` in full mode, and `agent.run` exports no run identifier, so a spawned agent has no inherited signal that it is already inside a run. Export a run-depth signal from the `agent.run` action into the child environment, and make `spur workflow run` refuse to start a pipeline when that signal indicates an active run. Refusal is the default and needs no flag; **adding an opt-out flag would be a public-surface change and must route through task 0608 / ADR-051 consent.** Verify: a nested invocation exits non-zero, forks no worktree and no agent, and names the active run; a normal top-level invocation is unaffected.
 
 **Non-goals:** rewriting historical task `Solution` / `Testing` / `Review` sections; reinstating the promotion bar as a gate (ADR-076); renaming the D5 feature file without explicit authorization; adding a public CLI noun, verb, or flag without ADR-051 consent (route to task 0608); measuring or reducing pipeline cost (task **0607** owns that, including cost-from-history and the real-run reading path); re-deriving ADR-076's rationale.
 
@@ -118,17 +118,89 @@ Precedent in-tree: `SPUR_EVAL_PIPELINE_ACTIVE` in `scripts/commands/eval-pipelin
 **Done when** no shipped surface presents the retired bar as a future obligation, a fixture run reaches a verdict, and a nested pipeline run is refused before it forks anything.
 
 ### Solution
+All four requirements landed. Two were documentation reconciliation; two were defects that made the
+harness unusable and left pipeline recursion unguarded.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### R1 — derived docs no longer describe a bar that does not exist
 
+- `docs/03_ARCHITECTURE.md` §20.3 — "statically disqualifies the current `task-pipeline2.yaml`" → past tense, noting the graph was deleted (ADR-076) and that the rule still governs any future candidate.
+- `docs/03_ARCHITECTURE.md` §20.4 (`:1022-1023`) — "remains a temporary candidate … until a redesigned delta passes promotion" → `task-pipeline.yaml` is the single canonical pipeline; the candidate was deleted rather than promoted, with the zero-callers and 5-vs-4 model-query reasons.
+- `docs/04_DESIGN.md` (`:1647`) — the "Rival pipeline" block rewritten as **retired**; (`:1656`) the D5 transition block now cites ADR-071/072/076 and states the invariant stands on its own.
+- `docs/features/I6_*.md` — four fixes: the decided-approach row marked **superseded**; the "Parallel YAML, never in-place" rule keeps the practice but records the lesson (pair a fork with a decision date); open question 1 struck through as **answered**; the "eval suite gates pipeline2" decision struck through as **reversed**. Plus the §Scope line that still read "a harness eval/parity suite that gates promotion of `task-pipeline2.yaml`".
+
+**History preserved, per R1's own rule.** `CHANGELOG.md` and the task-table rows for 0596 (`I6:41`, `I6:223`) are untouched — they correctly describe what was true when written.
+
+#### R2 — D5 heading aligned; file NOT renamed
+
+`# D5:` now reads "Workflow pipeline contract, progress projection, and staged consolidation",
+matching frontmatter `name`. **The file was deliberately not renamed** — R2 puts that behind explicit
+authorization. Consequence: the D5 entry in `docs/features/INDEX.md` still shows the old slug in its
+link, because the link text *is* the filename. That is the one remaining `task-pipeline2` reference outside history, and
+it clears only with the rename.
+
+#### R3 — the harness can finish a run (two independent causes)
+
+The reported symptom was `tsc: command not found`; fixing only that exposed a second cause.
+
+1. **No `node_modules`.** A fresh `git worktree add` carries none, so `bun run lint` → `typecheck` exited 127. Fixed by symlinking the repository's existing install. The root link alone was **not** enough — Bun workspaces keep a per-workspace `node_modules`, and without those `tsc` failed TS2307 across `apps/cli` (`@commander-js/extra-typings`, every `@gobing-ai/*`). `listWorkspaceModuleDirs()` discovers them rather than hard-coding, so a new workspace cannot silently break the harness.
+2. **Worktree location.** Even with the toolchain resolvable, `bun run format` exited 1 with `× No files were processed in the specified paths`. Cause: the worktree lived under `.spur/tmp/`, a **gitignored** path, and `biome.json` sets `vcs.useIgnoreFile: true` — so Biome ignored the entire tree. Fixed by creating the worktree in the system temp dir, outside the repository. A checkout there lints all 723 files.
+
+**Measured before/after** — `bun run format && bun run spur-check` in a fixture worktree: exit **127** → exit **0**.
+
+> **Correction to an earlier claim.** During diagnosis I called the Biome/gitlink theory "a red herring" after `bun run format` exited 0 in a probe worktree. That probe was resolving a *global* Biome 2.5.3, not the pinned 2.4.16. Once `node_modules` was linked, the pinned Biome ran and the ignore-file behavior reappeared. The theory was right; the probe was wrong.
+
+`tests/fixtures/pipeline-eval/README.md` and `docs/design/run-record-contract.md:101` updated for the new location and shifted line numbers (`:370`/`:401`, re-read this run).
+
+#### R4 — nested pipeline runs refused mechanically
+
+`spur workflow run` now refuses when `SPUR_WORKFLOW_RUN_ACTIVE=1`, exiting non-zero **before** any run
+record, worktree, or agent spawn. The marker is set on the workflow process itself, so it inherits
+transitively (`agent.run` → agent → its shell → any `spur` it invokes) — one check covers every depth
+without threading env through `AgentService`/`AiRunner`.
+
+**Deviation from the frozen Design, recorded:** Design said "export a run-depth signal from the
+`agent.run` action". The marker is set by `workflow run` instead. Same inheritance, same coverage,
+and it needs no change to `packages/app` or the ts-libs runner. The Design's intent (a signal the
+child cannot miss) is preserved.
+
+Two placement subtleties, both load-bearing:
+
+- **Set before execution, never before the `--async` spawn.** The detached worker is a legitimate top-level run; marking the parent would make the worker refuse itself. Setting it late needs no exemption — and an exemption would be inherited by the worker's own agent children, re-opening the hole one level out.
+- **Cleared in `finally`.** Children spawned during the run already hold their own copy, so clearing does not weaken the guard; leaving it set would poison the process and refuse a legitimate second run (it broke six in-process CLI tests before this was added).
+
+No new public noun, verb, or flag — refusal is unconditional. An opt-out would be a public-surface
+change and belongs to task 0608's ADR-051 consent path.
+
+#### Change map
+
+- `scripts/commands/eval-pipeline.ts` — worktree moved to `tmpdir()`; root + per-workspace `node_modules` symlinks; `listWorkspaceModuleDirs()` helper.
+- `scripts/commands/eval-pipeline.test.ts` — "fixture worktree can run the quality gate" (outside repo + toolchain resolvable).
+- `apps/cli/src/commands/workflow.ts` — `WORKFLOW_RUN_ACTIVE_ENV`, `markWorkflowRunActive()` / `clearWorkflowRunActive()`, refusal guard, marker at both execution sites.
+- `apps/cli/tests/commands/workflow.test.ts` — refusal test asserting exit 1, the message, and that nothing executed.
+- `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/features/I6_*.md`, `docs/features/D5_*.md`, `docs/design/run-record-contract.md`, `tests/fixtures/pipeline-eval/README.md`.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Forward-looking promotion-bar references reconciled in all four named files. `docs/03_ARCHITECTURE.md:1001` now reads "statically disqualified the former `task-pipeline2.yaml`" and `:1023` reads "`task-pipeline.yaml` is the single canonical task pipeline"; `docs/04_DESIGN.md:1647` opens "**Rival pipeline — retired.**"; `docs/features/I6_*.md` carries four struck-through/superseded entries plus a corrected §Scope line. History preserved as required: `CHANGELOG.md` and the 0596 task-table rows (`I6:41`, `I6:223`) untouched. Residual sweep `rg task-pipeline2` over the four files returns only past-tense prose and the `docs/features/INDEX.md:18` filename link, which is R2-blocked. |
+| R2 | MET | `# D5:` heading now reads "Workflow pipeline contract, progress projection, and staged consolidation", matching frontmatter `name`. `spur feature check D5` passes. The file was deliberately **not** renamed — R2 puts that behind explicit authorization, and the request was not made; the consequence (INDEX link still shows the old slug) is recorded in `## Solution` rather than silently absorbed. |
+| R3 | MET | Fixture worktree now passes the project quality gate — measured `bun run format && bun run spur-check` in a worktree from `createEvalRun()`: **exit 127 → exit 0**. Two causes fixed in `scripts/commands/eval-pipeline.ts`: worktree created via `mkdtemp(join(tmpdir(), 'spur-eval-pipeline-'))` (outside the repo — under `.spur/tmp/` it sat beneath a gitignored path and Biome's `vcs.useIgnoreFile` skipped all 723 files), and root plus per-workspace `node_modules` symlinked (`listWorkspaceModuleDirs()`; the root link alone left TS2307 across `apps/cli`). Regression test `scripts/commands/eval-pipeline.test.ts` — "is created outside the repository and resolves the toolchain" — 14 pass / 0 fail. This unblocks task 0607. |
+| R4 | MET | `spur workflow run` refuses a nested run before any side effect. `apps/cli/src/commands/workflow.ts` adds `WORKFLOW_RUN_ACTIVE_ENV`, a guard placed after flag validation and before the `--async` branch, and `markWorkflowRunActive()` at both execution sites with `clearWorkflowRunActive()` in the existing `finally`. Verified live: with the marker set the CLI printed "refusing to start — already inside an active workflow run" and forked nothing; with a clean env the same command executed normally. Regression test in `apps/cli/tests/commands/workflow.test.ts` asserts exit 1, the message, and that no run executed — 107 pass / 0 fail. **End-to-end proof (measured, not inferred):** a probe workflow whose `shell` action printed the variable recorded `CHILD_SEES=[1]` — a child process spawned by a live run does inherit the marker — while the invoking shell read `unset` after the run, confirming the `finally` clear. A second probe whose `shell` action invoked `spur workflow run` on another definition recorded `workflow run: refusing to start — already inside an active workflow run` with `NESTED_EXIT=1`, so the real recursion path (live run -> shell action -> nested pipeline) is refused, not merely the synthetic env-var case. No new public noun, verb, or flag. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R12 — Every migration is independently verified and shipped surfaces stay synchronized | MET | test | No shipped surface still presents the promotion bar as a future obligation (R1/R2 sweep above); historical records are unrewritten; the measurement harness completes a run (quality gate exit 127 → 0 in a fixture worktree); and a nested pipeline run is refused mechanically rather than by prose. Executable proof across the affected suites: `bun test scripts/commands/eval-pipeline.test.ts` → 14 pass / 0 fail; `bun test apps/cli/tests/commands/workflow.test.ts` → 107 pass / 0 fail; full `bun run test` → **5970 pass / 0 fail, exit 0** (re-measured at re-verify; it read 5967 and exit **1** when this task was first verified — the non-zero exit was a pre-existing coverage shortfall on `packages/app/src/services/process-inspector.ts`, unrelated to this task and since fixed to 100%); `spur workflow validate` 10/10; `bun run lint` clean. Both behavioural claims re-measured this run, not carried forward: the fixture-worktree quality gate exits **0** and the worktree is created outside the repository; and the end-to-end nested probe again recorded `workflow run: refusing to start — already inside an active workflow run` with `NESTED_EXIT=1`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Decision: `docs/00_ADR.md` — **ADR-076** (retire the promotion bar, delete task-pipeline2), ADR-071 (proof-state invariant), ADR-072 (one canonical pipeline), ADR-051 (public-surface consent)
 - Feature: `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md` (scenario R12)
@@ -139,3 +211,6 @@ Precedent in-tree: `SPUR_EVAL_PIPELINE_ACTIVE` in `scripts/commands/eval-pipelin
 
 ### History
 - 2026-08-20T07:10:00.000Z created as todo (umbrella for ADR-076 deferred work)
+- 2026-08-20T14:54:30.750Z todo → wip (system)
+- 2026-08-20T15:22:49.751Z wip → testing (system)
+- 2026-08-20T15:22:50.264Z testing → done (system)

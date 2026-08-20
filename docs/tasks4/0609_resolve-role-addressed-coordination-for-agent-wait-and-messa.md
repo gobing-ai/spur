@@ -4,7 +4,7 @@ name: "Resolve role-addressed coordination for agent wait and message"
 status: done
 template: feature-impl
 created_at: 2026-08-20T00:09:15.116Z
-updated_at: "2026-08-20T02:17:25.157Z"
+updated_at: "2026-08-20T16:11:12.557Z"
 feature_id: D6
 ---
 
@@ -175,15 +175,15 @@ design (feature D6 R6 allows "a dated decision record closing the question" as t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Caller survey of team/coordination surface + `agent wait` / `message send`: `apps/cli/src/commands/team.ts:41-94` — all six verbs (`assign`/`status`/`up`/`down`/`start`/`stop`) take concrete agent/team/task ids, no role addressee; `apps/cli/src/commands/agent.ts:96` — positional `<specId>` with no `--role`; `apps/cli/src/commands/message.ts:29` `--to <id>` recipient flows into `getOccupant({ specId: options.to })` at :124 and `sendMessage(from, options.to, …)` at :131. `--to reviewer` examples in the CLI references are spec-ids literally named "reviewer", not role resolution. No caller needs to address a role rather than a spec id — demonstrated, not assumed. |
-| R2 | MET | Decision reached and recorded: `docs/00_ADR.md:921` — ADR-075 (Accepted, dated 2026-08-20, D6/0609) closes the question: wait/message stay identity-pinned, role addressing NOT added; states why identity pinning stays authoritative and lists the evidence that would reopen it. `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md:86-90` RESOLVED comment points the old deferral at ADR-075. |
-| R3 | MET | Exact-one resolution not applicable — nothing ships (no surface change). ADR-075 records that any future role binding must resolve exactly-one with a persisted occupant pin before proceeding. |
-| R4 | MET | No broadcast/fan-out introduced — `spur message` keeps one recipient per send under both outcomes (ADR-075). |
-| R5 | MET | Role vocabulary untouched — `DEFAULT_AGENT_ROLES` in `packages/config` remains the sole role SSOT; `plugins/sp/references/roles.md` stays a parity-checked projection; no second role list invented. |
+| R1 | MET | Concrete-caller survey re-confirmed this run, every anchor re-read. `apps/cli/src/commands/agent.ts:96` is `.argument('<specId>', 'Agent spec id whose occupant to wait on')` — positional spec id, no `--role`. `apps/cli/src/commands/message.ts:29` is `.requiredOption('--to <id>', 'Recipient agent id')`; `:121` captures the `{ specId, runId, generation }` pin before send. `apps/cli/src/commands/team.ts:41` (`assign`) through `:94` (`stop`) — 6 verbs, each taking a concrete `<task-id>` / `<agent-id>` / `<team>` argument, none accepting a role as addressee. Re-measured greps: workflows invoking `agent wait` / `message send` = **0**; CLI commands accepting `--role` = **0**. "No caller exists" remains demonstrated, not assumed. |
+| R2 | MET | Decision recorded and still standing: `docs/00_ADR.md:921` is `## ADR-075: Wait and Message Stay Identity-Pinned — No Role Addressing`, running through `:964`. The D5 deferral pointer is intact at `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md:86-90` (RESOLVED comment naming ADR-075). Both anchors re-read this run and confirmed unshifted despite this session's edits to `docs/00_ADR.md` (ADR-076 appended at `:966`, after ADR-075) and to that D5 file (heading, Scope, and the R9 scenario — all in-place, line-count neutral). |
+| R3 | MET | Exact-one resolution remains N/A by non-shipment — no role resolution path exists to enforce. The rule is preserved in ADR-075 as the precondition any future proposal must meet. |
+| R4 | MET | No broadcast or fan-out. `apps/cli/src/commands/message.ts` still has exactly one `sendMessage(from, options.to, …)` call site — one recipient per send. No addressing surface was added. |
+| R5 | MET | Role vocabulary still closed and singly-owned: exactly **one** `export const DEFAULT_AGENT_ROLES` definition in `packages/`, at `packages/config/src/index.ts:173`. `packages/app/src/workflow/actions/agent-run.ts:144` still reads the role as an `agent.run` executor-selection option only, with the schema gate at `:204`. No second role list. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — Role-addressed wait and message are resolved, not left open [docs-only] | MET | static-ref | `docs/00_ADR.md:921-964` — dated ADR-075 entry closes the question (outcome b: identity pinning stays authoritative, reopening evidence listed). The one unacceptable outcome (leaving the question open) is avoided. `[docs-only]` — no runtime path; decision-record task. |
+| R6 — Role-addressed wait and message are resolved, not left open [docs-only] | MET | static-ref | Outcome (b) of the scenario's two permitted outcomes: a dated decision record closes the question. `docs/00_ADR.md:921-964` — ADR-075, Accepted 2026-08-20, stating why identity pinning stays authoritative and listing the evidence that would reopen it. The one unacceptable outcome (leaving the question open) is avoided, and the deferral is no longer recorded only inside D5's acceptance criteria. No broadcast or fan-out addressing introduced under either outcome (R4 above). `[docs-only]` — decision-record task; no runtime code path added. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict: PASS (no P1–P3 findings).** Decision-record task (ADR-075) — no product/CLI/workflow code changed, so SECUA and architecture dimensions are clean by construction.

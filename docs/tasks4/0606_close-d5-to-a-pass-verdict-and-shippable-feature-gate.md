@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close D5 to a PASS verdict and shippable feature gate"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-20T00:05:44.231Z
-updated_at: "2026-08-20T06:45:39.119Z"
+updated_at: "2026-08-20T16:15:34.583Z"
 feature_id: D5
 ---
 
@@ -227,11 +227,30 @@ cap that the 0487 size-vs-capability gate enforces on `standard`-tier executors.
 `bun run corpus-check` back to its exact pre-existing finding set — this work added none.
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Duplicate graph deleted and the question closed. `config/workflows/task-pipeline2.yaml` no longer exists; `config/workflow-composition-baseline.json` holds five workflows (docs-pipeline, idea-pipeline, pr-review, task-pipeline, wrapup-pipeline) after its 158-line entry was removed in the same commit (T10); `rg task-pipeline2 config/ plugins/ apps/ packages/` returns **no** caller. Decision recorded at `docs/00_ADR.md:966` (ADR-076) with `docs/00_ADR.md:968` reading `**Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D5`. All 10 remaining definitions pass `spur workflow validate`. |
+| R2 | MET | `eval-pipeline` is a measurement tool, not a gate. `scripts/commands/eval-pipeline.ts` `PROMOTION_BAR_PROPOSAL` now opens `'RETIRED (ADR-076, 2026-08-20): the D5-N promotion bar is no longer a gate...'`; the frozen `EvalReport` field name is retained per task 0596's contract. No workflow, slash command, or skill references the command — `rg -l eval-pipeline config/workflows/ plugins/sp/commands/ plugins/sp/skills/` returns nothing, so nothing can gate on it. |
+| R5 | MET | Composition-baseline invocation blind spot closed. `packages/app/src/workflow/composition-baseline.ts:316` reads `if (expAction.invocation !== actAction.invocation) {` — the `!== undefined &&` short-circuit is gone, so a live-present but baseline-absent invocation is itself a mismatch. Baseline records 56 invocations across 79 actions (was 77/104 before the pipeline2 entry was removed — arithmetic consistent: 104-25 actions, 77-21 invocations). 18 tests in `packages/app/tests/workflow/composition-baseline.test.ts`, all passing. Proven in service: it caught this session's `task-pipeline.yaml` precheck-size edit as `invocation mismatch`. |
+| R6 | MET | ADR statuses reflect reality. `docs/00_ADR.md:883` is ADR-072 and `docs/00_ADR.md:885` reads `**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5 · **Amends:** ADR-029`. `config/workflows/planning-pipeline.yaml` no longer exists, and `RETIRED_PROJECT_SEEDS` has 0 occurrences in `packages/config/src/bundled-config.ts` (removed as dead code). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R9 — Task execution preserves verification proof and ends with one canonical pipeline | MET | test | Exactly one canonical task pipeline remains: `config/workflows/task-pipeline.yaml`, with `task-pipeline2.yaml` deleted rather than promoted and no caller referencing it. The promotion question is closed by a dated decision record (`docs/00_ADR.md:966`, ADR-076 Accepted 2026-08-20) instead of an unrun bar. Proof preservation is unchanged — ADR-071's read-only snapshot-bracketed residual behavior was not modified by this task. **Executable proof:** `bun test packages/app/tests/workflow/composition-baseline.test.ts` → 18 pass / 0 fail; `packages/app/tests/workflow/composition-baseline.test.ts:136` ("fails when definition file is missing") makes a baselined workflow whose YAML is absent a hard failure, and `:43` ("passes on live repository definitions against checked baseline") makes a live YAML absent from the baseline a hard failure. The suite passing is therefore executable proof that the baselined set and the on-disk set are exactly equal — i.e. that task-pipeline2 is gone from both sides, not merely from one. |
+| R2 — Every shipped pipeline has a reviewed disposition and frozen baseline | MET | test | `packages/app/src/workflow/composition-baseline.ts:316` compares invocation unconditionally; the baseline was reconciled to five workflows / 79 actions / 56 invocations in the same commit as the deletion (T10). `bun test packages/app/tests/workflow/composition-baseline.test.ts` → 18 pass / 0 fail, including the two-sided cases proving an unrecorded-but-present invocation and a silent shell-body edit both fail the checker. |
+| R1 — Workflow composition rules are authoritative and enforceable | MET | test | ADR-072 Accepted at `docs/00_ADR.md:885` with `Amends: ADR-029`; `config/workflows/planning-pipeline.yaml` deleted; `RETIRED_PROJECT_SEEDS` removed from `packages/config/src/bundled-config.ts` (0 occurrences). ADR-076 adds the task-pipeline2 disposition. No ADR status was flipped to clear a gate — the promotion bar was retired by reasoned decision with its evidence recorded, and the deletion it authorized is a no-op removal of an uncalled file. **Executable proof:** `bun test packages/config/tests/bundled-config.test.ts apps/cli/tests/init-templates.test.ts` → 33 pass / 0 fail, with `apps/cli/tests/init-templates.test.ts:122` asserting `existsSync(join(wfDir, 'planning-pipeline.yaml'))` is `false` — a freshly seeded project receives no planning graph. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Feature: `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md` (scenarios R1, R2, R9 — this task's AC titles)
 - Upstream (both `done`): task `0603` (contract + shared primitives), task `0604` (migration waves; its PARTIAL R3 is what this task closes)
@@ -247,3 +266,6 @@ cap that the 0487 size-vs-capability gate enforces on `standard`-tier executors.
 - 2026-08-20T01:23:08.151Z todo → wip (system)
 - 2026-08-20T05:31:22.761Z wip → blocked (system)
 - 2026-08-20T05:31:22.984Z blocked → todo (system)
+- 2026-08-20T14:51:09.146Z todo → wip (system)
+- 2026-08-20T14:54:15.633Z wip → testing (system)
+- 2026-08-20T14:54:20.355Z testing → done (system)
