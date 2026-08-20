@@ -22,7 +22,7 @@ Establish a deterministic-first workflow composition contract and shared progres
   - Review all six shipped pipeline workflows, freeze their graph/artifact/failure/model-query baselines, map prerequisites, and migrate them in a deliberate order with per-pipeline tests.
   - Add one persisted workflow progress projection, with read-side event wakeups and polling fallback, for detailed inline and trace todo/progress views.
   - Place reusable deterministic behavior in existing CLI/application services, least-privilege built-ins, or external extensions according to ownership; refine existing skills and slash commands only for demonstrated gaps.
-  - Retire the duplicate planning path, merge a proof-preserving `task-pipeline2.yaml` delta into the canonical task pipeline after its promotion bar passes, and integrate advisory per-HEAD PR review at the feature/branch boundary.
+  - Retire the duplicate planning path, end with exactly one canonical task pipeline by deleting the unreferenced `task-pipeline2.yaml` and closing the promotion question with a dated decision record, and integrate advisory per-HEAD PR review at the feature/branch boundary.
 - Out of scope:
   - EventBus or `system_events` as a workflow mutation/control authority, and generic event-driven waits without a concrete external dependency.
   - Raw role addressing or broadcast for `spur agent wait` or `spur message`; identity-pinned occupant semantics remain authoritative.
@@ -106,12 +106,12 @@ Feature: Workflow pipeline contract, progress projection, and staged consolidati
 
   @core
   Scenario: R9 — Task execution preserves verification proof and ends with one canonical pipeline
-    Given `task-pipeline2.yaml` currently permits agent mutation after a PASS verdict
+    Given `task-pipeline2.yaml` was a parallel graph that once permitted agent mutation after a PASS verdict
     When the canonical task pipeline and residual-completeness behavior are redesigned
     Then residual checking is read-only or mutation re-enters bounded remediation, quality, review, and `--fix none` verification
     And the final quality, review, and verification evidence names one unchanged proof-input digest before record or done
-    And pipeline2 is evaluated only after the canonical pipeline uses the shared prerequisites
-    And a passing promotion bar merges the safe delta into `task-pipeline.yaml` and removes pipeline2
+    And exactly one canonical task pipeline remains, the duplicate graph having been deleted rather than promoted
+    And the promotion question is closed by a dated decision record instead of being left open behind an unrun bar
 
   @core
   Scenario: R10 — The idea pipeline migrates last with deterministic handoff and concise agent inputs

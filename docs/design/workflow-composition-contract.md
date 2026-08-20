@@ -9,7 +9,7 @@
 | Workflow | Lifecycle boundary | Proposed disposition |
 |---|---|---|
 | `task-pipeline.yaml` | one task from precheck through recorded completion | canonical; absorb only a proof-preserving pipeline2 delta |
-| `task-pipeline2.yaml` | experimental task execution | temporary candidate; freeze current promotion, redesign, merge after parity, then delete |
+| ~~`task-pipeline2.yaml`~~ | *(deleted 2026-08-20)* | **removed under ADR-076** — unreferenced duplicate declaring a 5th model query against the canonical pipeline's 4; deleted rather than promoted |
 | `planning-pipeline.yaml` | feature planning front half | absorb into the canonical idea/dev-plan path, then delete after caller parity |
 | `idea-pipeline.yaml` | idea discovery, design review, and decomposition | keep separate; migrate last |
 | `docs-pipeline.yaml` | numbered-document evolution | keep separate |
@@ -28,7 +28,7 @@ workflow definitions remain regression fixtures or examples unless a later ADR c
 | D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` retained until ADR-072 is accepted |
 | D5-L | `task-pipeline.yaml` onto the shared primitives | partial — `run.artifact` owns the verdict; `qualityGateCmd` stays a documented per-project **shell** string, and the precheck doctor probe stays shell because both encode semantics `command.gate` cannot express without a new public CLI surface (ADR-051) |
 | D5-M | pipeline2 residual made read-only | landed — the sweep is bracketed by a tree snapshot and any post-PASS mutation routes to `failed`, never `record` (ADR-071) |
-| D5-N | eval-pipeline promotion + delete `task-pipeline2.yaml` | **not run** — spends model quota and needs explicit operator consent |
+| D5-N | ~~eval-pipeline promotion bar~~ | **retired (ADR-076, 2026-08-20)** — the bar is no longer a gate; `task-pipeline2.yaml` was deleted rather than promoted. `eval-pipeline` remains a measurement tool only |
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + portable shell fallback |
 | D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` |
 

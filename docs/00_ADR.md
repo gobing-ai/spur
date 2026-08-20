@@ -962,3 +962,51 @@ pin is written before proceed, and no fan-out is introduced (D6 R3/R4).
 
 **Detail:** `docs/design/spur-team-mode-design.md`; ADR-051 (public-surface consent),
 ADR-057 (identity-pinned control plane), ADR-061 (role→tier SSOT in `packages/config`).
+
+## ADR-076: Retire the D5-N Promotion Bar — Delete task-pipeline2 Rather Than Promote It
+
+**Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D5 · **Task:** 0606 · **Amends:** ADR-072
+
+**Decision.** The D5-N promotion bar is **retired as a gate**, and `config/workflows/task-pipeline2.yaml`
+is **deleted rather than promoted**. `task-pipeline.yaml` remains the single canonical task pipeline.
+`scripts/spur-dev.ts eval-pipeline` survives as a *measurement* tool, invoked deliberately; it is no
+longer a precondition for any transition, deletion, or feature closure.
+
+**Why.**
+
+- **The bar guarded a promotion nobody wants.** A static comparison of the two graphs
+  (`extractResolvedWorkflowFacts`, 2026-08-20) shows pipeline2 declares **5** model queries to
+  pipeline1's **4** — it *adds* a `residual-sweep` model hop. The stated goal of the work was to make
+  the pipeline faster. Promoting a graph with an extra LLM stage does not serve that goal.
+- **The thing it blocked was a no-op deletion.** `task-pipeline2.yaml` has **zero live callers** —
+  nothing in `config/`, `plugins/`, `apps/`, `packages/`, or `scripts/` invokes it. The only
+  non-documentation references were its own `name:` field, its composition-baseline entry, and a
+  prose proposal string. Deleting unreferenced code needs no performance evidence; the constitution's
+  "delete, don't layer" rule already covers it.
+- **The gate did not protect what it appeared to protect.** Changes to the *canonical*
+  `task-pipeline.yaml` never went through the bar — the 2026-08-20 precheck-size fix landed without it.
+  It gated a parallel file, not the pipeline that runs real work.
+- **The instrument could not measure its own criterion.** `eval-pipeline` derives `tokenCost` from
+  `action_runs.result_json`, where 44 of 1971 rows carry any token field — so every run reported
+  `tokenCost: null`. The bar's "model-query count / cost" condition was unmeasurable in practice.
+- **The wall-clock baseline was unrepresentative.** The 538 s I6 PASS baseline is the outlier: the only
+  other full-depth run on record is 2053 s, and the 2026-08-20 runs measured 2023 s / 1985 s — all
+  within 4 % of each other. A ±10 % band around 538 s was not a reachable target.
+- **Cost of keeping it.** Four attempts over two days, each ~35 min × 2 pipelines of live model quota,
+  never reaching a verdict. It blocked 0606 R1 → R3 → R4 → D5 closure → tasks 0607/0608 → feature D6.
+
+**The safety rationale was already discharged.** ADR-071 made `residual-sweep` read-only and
+snapshot-bracketed, so a post-PASS mutation cannot reach `record`. What the bar still guarded was
+cost and parity, not a safety hole.
+
+**How performance is measured instead.** From real execution, not a synthetic fixture. Every task run
+through the pipeline already produces wall-clock, and `history_message` carries per-message
+`input_tokens` / `output_tokens` / `cost_usd` for pi, claude, omp, and codex. Real runs are a larger
+and more representative dataset than a one-R-item fixture, and they cost nothing extra.
+
+**Evidence that would reopen this.** A concrete need to promote a parallel task-pipeline graph that
+measurably *reduces* model-query count or wall-clock against real-run history data. If that appears,
+gate it on measured real-run data, not on a fixture bar.
+
+**Detail:** ADR-071 (proof-state invariant), ADR-072 (one canonical pipeline per lifecycle boundary),
+`docs/design/workflow-composition-contract.md`.

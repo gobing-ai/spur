@@ -392,16 +392,51 @@ export function diffRecords(a: EvalRecord[], b: EvalRecord[]): string[] {
     return out;
 }
 
+// The `promotionBarProposal` field name is frozen by task 0596's EvalRecord/EvalReport contract, so
+// it stays; its meaning does not. ADR-076 (Accepted 2026-08-20) retired the D5-N promotion bar as a
+// gate and deleted task-pipeline2.yaml rather than promoting it. This command is a MEASUREMENT tool
+// now: run it deliberately when you want numbers. Nothing may gate on it.
 const PROMOTION_BAR_PROPOSAL =
-    'PROPOSAL (map open question 1 — operator ratifies): promote task-pipeline2.yaml when, ' +
-    'over >= 3 consecutive eval-pipeline runs on the fixture set: (1) verdict parity — every ' +
-    'fixture verdict is PASS in pipeline2 at least as often as baseline (no regression); ' +
-    '(2) cost band — mean wallClockMs within +10% of the baseline mean, with the measured ' +
-    'variance reported alongside; (3) gate integrity — zero fixture runs ending in `failed` ' +
-    'attributable to pipeline defects; (4) no new CLI surface required beyond recorded ' +
-    'ADR-051 consent items.';
+    'RETIRED (ADR-076, 2026-08-20): the D5-N promotion bar is no longer a gate, and ' +
+    'task-pipeline2.yaml was deleted rather than promoted. eval-pipeline remains a measurement ' +
+    'tool only — no transition, deletion, feature closure, or verdict may depend on it. Note its ' +
+    'tokenCost is derived from action_runs, where almost no row carries token usage, so it reports ' +
+    'null; for real cost use per-message input_tokens/output_tokens/cost_usd in history_message. ' +
+    'Reopening a promotion bar requires measured real-run evidence, not a fixture run.';
+
+/**
+ * Nesting guard (task 0596 P3 — "instruct the sweep agent not to spawn nested pipeline/eval runs").
+ *
+ * `evalPipeline` spawns a full `spur workflow run <pipeline>`, whose `implement` hop runs an agent
+ * that reads the task's own `## Plan` — and several D5/D6 tasks (0604, 0606, 0607) instruct that
+ * agent to run `eval-pipeline`. Implementing one of those tasks *through the pipeline* therefore
+ * recurses: every level forks another detached worktree and another multi-minute agent run, with no
+ * bound. 0596 recorded this happening for real; only the fixture-folder half of its mitigation
+ * (per-run worktrees) ever landed.
+ *
+ * The flag is set on THIS process, so it inherits through `Bun.spawnSync` -> `spur workflow run` ->
+ * `agent.run` -> the agent's own shell. A nested invocation anywhere down that chain refuses here
+ * instead of forking. Run the bar from a clean host shell, never from inside a pipeline run.
+ */
+const NESTING_ENV = 'SPUR_EVAL_PIPELINE_ACTIVE';
 
 export async function evalPipeline(argv: string[]): Promise<number> {
+    if (process.env[NESTING_ENV] === '1') {
+        console.error(
+            [
+                `eval-pipeline: REFUSING to run — already inside an eval-pipeline run (${NESTING_ENV}=1).`,
+                '',
+                'eval-pipeline spawns a full task-pipeline run, so a nested invocation forks another',
+                'worktree and another agent run, without bound (task 0596 P3).',
+                '',
+                'If you are an agent implementing a task whose Plan says to run the promotion bar:',
+                'do NOT run it here. Record that the bar must be run from a clean host shell,',
+                'outside any pipeline run, and continue with the rest of the task.',
+            ].join('\n'),
+        );
+        return 1;
+    }
+    process.env[NESTING_ENV] = '1';
     const args = parseArgs(argv);
     const label = args.label ?? 'run';
     const records: EvalRecord[] = [];

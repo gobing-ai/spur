@@ -4,7 +4,7 @@ name: "Decide and land the ownership surface for compound pipeline shell"
 status: todo
 template: feature-impl
 created_at: 2026-08-20T00:09:14.886Z
-updated_at: "2026-08-20T00:13:38.344Z"
+updated_at: "2026-08-20T07:54:16.720Z"
 feature_id: D6
 dependencies: ["0606"]
 ---
@@ -36,6 +36,11 @@ Implements feature D6 scenarios R4–R5.
 
 - [ ] R5. The seeded-project portability rule is stated and honored. `spur init` never scaffolds `packages/` or `plugins/sp/`, so any capability a shipped workflow invokes must resolve in a seeded project or degrade deliberately. Record the rule, and either retire the dual-implementation split introduced for the idea handoff in task 0604 (`packages/app/src/workflow/idea-handoff-cli.ts` plus its shell fallback) or record why the split is the correct steady state.
 
+> **Cross-reference (2026-08-20):** task **0610 R4** adds a nested-pipeline-run refusal that touches
+> `agent.run` and `spur workflow run`. It deliberately ships **no** new public noun, verb, or flag —
+> refusal is the unconditional default. If a real caller ever needs an opt-out, that flag is a public
+> surface change and belongs to this task's R2 consent path, not to 0610.
+
 **Non-goals:** adding a public verb without consent; re-running D5's migrations; duplicating `packages/app` logic into a standalone plugin script to dodge the surface question; changing the proof-state invariant; the query-cost work (task 0607) or D5's closure (task 0606).
 ### Acceptance Criteria
 ```gherkin
@@ -62,12 +67,103 @@ Feature: Ownership surface for compound pipeline shell
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**WHAT.** Decide, under ADR-051, who owns each compound shell program in the shipped pipelines — a
+public `spur` verb, an application service, a built-in action kind, a workflow-relative external
+extension, or a recorded shell exception — and land the decision for at least the two cases D5-L
+could not migrate.
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+**WHY.** D5 shipped the built-in half (`command.gate`, `run.artifact`, task 0603) but ruled a new
+public CLI surface out of scope, and never exercised the external-extension path. That is what stopped
+task 0604's D5-L wave and forced the idea-handoff dual implementation. The decision, not the code, is
+the deliverable.
 
+#### WHERE — frozen inventory scope (measured on this tree, 2026-08-20)
+
+`grep -c 'kind: shell'` reports **148**, which is misleading: it counts transition guards too.
+Measured precisely by parsing the definitions:
+
+| Class | Count | Disposition |
+| --- | --- | --- |
+| **Compound state actions** (`onEnter` / `onExit`, multi-statement or control-flow) | **49** | **The inventory R1 owns.** |
+| Simple state actions (one `$spurBin …` call) | 7 | Stated bulk exception — trivial glue, no reusable semantics. |
+| Transition guards (`guard: kind: shell`) | 92 | Stated bulk exception — single boolean predicates (`test … && $spurBin …`). |
+| **Total shell programs** | **148** | |
+
+Compound state actions by workflow: `idea-pipeline` 13, `task-pipeline` 13, `pr-review` 8,
+`wayfinder-resolution` 4, `wrapup-pipeline` 4, `basic` 3, `docs-pipeline` 2, `feature-dev` 2.
+
+**Classify the 49 individually; record the 7 and the 92 as two reasoned bulk exceptions.** R1 says a
+case left in shell must record *why* — a bulk exception with a stated rule satisfies that and keeps
+the task finishable. Classifying 148 programs one by one is not a better decision, it is a worse one
+made 148 times.
+
+> **ponytail: known ceiling.** The bulk exception is a judgment that guards and one-liners carry no
+> reusable product semantics. If a specific guard later proves to hold real policy, promote that one
+> case out of the exception — do not re-open all 92.
+
+#### The two mandatory cases (R3)
+
+1. **`qualityGateCmd`** — defaults to `"bun run format && bun run spur-check"`, documented as a
+   per-project override, executed via `sh -c`. `command.gate` bans shell strings by design, so it
+   cannot host this without either breaking the override surface or defeating the primitive. This is
+   **project-only policy**, not product semantics — the strongest candidate for option (d), a
+   workflow-relative external extension, or for a recorded permanent shell exception.
+2. **`task-pipeline.yaml` precheck doctor probe** — a ~40-line classifier (per-agent-family auth
+   classification, executor-divergence line) accumulated across tasks 0487 and 0503. `command.gate`
+   records exit codes only, so migrating as-is would delete the classification. This is **reusable
+   product semantics** — the strongest candidate for option (b), an application service, with the
+   pipeline invoking it.
+
+**Precision note:** `docs-pipeline`'s precheck migrated *partially* — 2 of its 4 precheck actions are
+`command.gate`; a third is still a `shell` PASS/FAIL combiner. Cite it as a partial precedent, not a
+clean one.
+
+#### Frozen decision options (ADR-051)
+
+(a) public `spur` verb — **needs explicit operator consent with design context before it lands**, and
+the first CLI layer is **nouns only**, so a new noun is justified only when no existing noun can host
+the action; (b) application service, monorepo-only; (c) least-privilege built-in action kind;
+(d) workflow-relative external extension; (e) deliberately-stays-shell **with a recorded reason**.
+
+**No public surface lands in this task without recorded consent.** That is R2, and it is the failure
+mode this task exists to prevent.
+
+#### Seeded-project portability rule (R5)
+
+`spur init` scaffolds neither `packages/` nor `plugins/sp/`, so any capability a shipped workflow
+invokes must resolve in a seeded project or degrade deliberately. `plugins/sp/scripts/` is the existing
+portable mechanism (`pr-review.yaml` calls `bun "$(superskill script path sp pr-reviewing.ts)"` in 8
+places), but those scripts are standalone — `node:*` imports only — so hosting `packages/app` logic
+there means duplicating it, which is the outcome D5 exists to prevent. Task 0604 resolved this once by
+shipping both (`packages/app/src/workflow/idea-handoff-cli.ts` **plus** a shell fallback). R5 requires
+either retiring that split or recording why it is the correct steady state.
+
+#### Anti-patterns (do not implement)
+
+- Copying `packages/app` logic into a standalone `plugins/sp/scripts/` twin to dodge the surface
+  question. That is the duplication D5 exists to prevent, and R5 names it.
+- Adding a public noun, verb, or flag without recorded consent, or adding a **noun** where an existing
+  noun could host a verb (ADR-051 noun-first).
+- Migrating the doctor probe to `command.gate` as-is — it records exit codes only, so the
+  classification would be silently deleted.
+- Forcing `qualityGateCmd` into `command.gate` by pre-splitting the shell string; that breaks the
+  documented per-project override.
+- Leaving a replaced shell beside its new owner (R4 requires deletion).
+- Classifying all 148 programs individually.
+
+#### Cross-task contract
+
+- **Depends on 0606** for D5 closure ordering only; no code overlap.
+- **Owns the consent path for 0610 R4.** 0610 adds a nested-run refusal touching `agent.run` and
+  `spur workflow run` with **no** new public flag (refusal is unconditional). If a real caller ever
+  needs an opt-out, that flag is a public surface change and belongs to R2 here.
+- **Does not own cost/query work** — task **0607**. If a measurement needs a new surface, 0607 routes
+  it here.
+- **Leaves for dependents:** the recorded classification becomes the precedent any future shell
+  program is judged against.
 ### Plan
-1. **Inventory (R1).** Enumerate every `shell` action across `config/workflows/*.yaml` with its state, purpose, and whether it encodes reusable product semantics, project-only policy, or trivial glue. Verify: the inventory covers every `shell` action the composition baseline lists — no action unclassified.
-2. **Classify (R1).** Assign each case one of: public `spur` verb, application service, built-in action kind, workflow-relative external extension, deliberately-stays-shell. Record the reason per case. Verify: `qualityGateCmd` and the precheck doctor probe each have an explicit disposition.
+1. **Inventory (R1) — scope frozen in Design.** Classify the **49 compound state actions** individually (state, purpose, and whether the behavior is reusable product semantics, project-only policy, or trivial glue). Record the **7 simple state actions** and the **92 transition guards** as two reasoned *bulk* exceptions, not 99 individual verdicts. Verify: all 49 compound cases carry a disposition and a reason; both bulk exceptions state their rule; the counts in the write-up match a re-run of the measurement (49 / 7 / 92, total 148).
+2. **Classify (R1, R3).** Assign each of the 49 one of: public `spur` verb, application service, built-in action kind, workflow-relative external extension, deliberately-stays-shell. Record the reason per case. Verify: `qualityGateCmd` and the `task-pipeline` precheck doctor probe each have an explicit disposition — these two are mandatory under R3 and a run that leaves both untouched with no reason recorded does not satisfy this task.
 3. **Consent round (R2).** Present the surface-affecting subset to the operator with design context and alternatives, honoring ADR-051's noun-first rule. Verify: a recorded consent decision exists before any public-surface code lands.
 4. **Prototype the external-extension path (R1).** It is the least-explored option and the most likely home for project-only policy like `qualityGateCmd`. Verify: a workflow-relative extension loads and runs from a seeded-project layout, not just the monorepo.
 5. **Land the decided owners (R3, R4).** Ship each capability with unit and failure-path tests, point the pipeline at it, delete the replaced shell, and update `config/workflow-composition-baseline.json` in the same commit. Verify: affected pipeline tests green; `spur workflow validate` green; the removed shell is absent from the diff's "after" side.

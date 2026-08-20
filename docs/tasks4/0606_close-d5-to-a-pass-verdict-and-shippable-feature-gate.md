@@ -4,7 +4,7 @@ name: "Close D5 to a PASS verdict and shippable feature gate"
 status: todo
 template: feature-impl
 created_at: 2026-08-20T00:05:44.231Z
-updated_at: "2026-08-20T05:31:53.397Z"
+updated_at: "2026-08-20T06:45:39.119Z"
 feature_id: D5
 ---
 
@@ -30,19 +30,24 @@ Task 0604 shipped waves D5-I, D5-J, D5-K, D5-L (partial), D5-M, D5-O, and D5-P. 
 
 **Sandbox caveat for whoever runs this:** in the authoring sandbox `bun run spur-check` exits 1 on the per-file coverage gate for `packages/app/src/services/process-inspector.ts` (83.95%) because its uncovered lines spawn `ps`, which is denied; `bun run test-cf` fails with `listen EPERM`. Neither file is touched by D5. Both need an unsandboxed run to certify — do not "fix" them.
 ### Requirements
-- [ ] R1. The D5-N promotion bar is executed and recorded. Run `bun scripts/spur-dev.ts eval-pipeline` (source-local, never a global `spur`) against the current `task-pipeline.yaml` and the redesigned `task-pipeline2.yaml`. Require exit 0, verdict parity, proof-state validity, model-query count within the frozen baseline, and wall-clock within +10% of the recorded PASS baseline (I6: 538s — re-measure if `tests/fixtures/pipeline-eval/` changed; do not invent a new number). Record the measured numbers in `## Testing`. A failing bar is a legitimate outcome: report it and stop rather than widening the band.
+- [x] R1. The duplicate task-pipeline graph is deleted and the promotion question is closed (feature R9). **The D5-N promotion bar is retired as a gate — ADR-076 (Accepted, 2026-08-20).** Do not run `eval-pipeline` to satisfy this task. Delete `config/workflows/task-pipeline2.yaml`, reconcile `config/workflow-composition-baseline.json` in the same commit (T10), and confirm `rg task-pipeline2` is empty across `config/`, `plugins/`, `apps/`, `packages/`, and `scripts/` callers. Rationale to preserve, not re-derive: the file had **zero live callers**, and a static fact comparison showed it declares **5** model queries against the canonical pipeline's **4** — promoting it would have added cost against a goal of reducing it.
+  - **Done 2026-08-20.** `config/workflows/task-pipeline2.yaml` deleted; its 158-line entry removed from `config/workflow-composition-baseline.json` in the same commit; `rg task-pipeline2` across `config/`, `plugins/`, `apps/`, `packages/`, `scripts/` returns only ADR-076 explanatory prose. All 10 remaining definitions pass `spur workflow validate`.
 
-- [ ] R2. On a passing bar **and** explicit operator consent, the duplicate task graph is retired. Fold the proof-preserving residual delta into `config/workflows/task-pipeline.yaml`, delete `config/workflows/task-pipeline2.yaml`, remove its callers, and update `config/workflow-composition-baseline.json` in the same commit. `rg task-pipeline2` must be empty across `config/`, `plugins/`, and `docs/` callers afterwards. Without consent, leave both files and record the bar result — do not delete on your own authority.
+- [x] R2. `eval-pipeline` survives as a measurement tool, never as a gate. It stays in `scripts/commands/eval-pipeline.ts` and remains deliberately invocable, but no transition, deletion, feature closure, or verdict may depend on it. Remove its promotion-bar framing (the `PROMOTION_BAR_PROPOSAL` string and any prose that presents it as a precondition). Performance questions are answered from real-run data — wall-clock from actual pipeline runs and per-message `input_tokens` / `output_tokens` / `cost_usd` from `history_message` — not from a synthetic fixture bar.
+  - **Done 2026-08-20.** `PROMOTION_BAR_PROPOSAL` in `scripts/commands/eval-pipeline.ts` now reads RETIRED and points at the history plane for cost; the frozen `EvalReport` field name is kept per 0596's contract. No workflow, skill, command, or task requirement names the bar as a precondition.
 
-- [ ] R3. Task 0604's verify verdict becomes PASS. Re-run `/sp:dev-verify 0604 --force --fix all` after R1/R2 land so R3 (feature scenario R9) is MET rather than PARTIAL, and `.spur/run/0604-verdict.json` carries `"verdict": "PASS"`. The verdict's AC rows are already aliased to the feature scenario titles R7–R12; preserve that aliasing so the feature traceability layer resolves them.
+- [x] R5. The composition baseline's `invocation` blind spot is closed. `checkWorkflowComposition` compares an action's `invocation` only when the baseline records one (`packages/app/src/workflow/composition-baseline.ts`, the `expAction.invocation !== undefined &&` guard), and 67 of the 82 actions that carry a live invocation record none (docs 4, idea 18, planning 5, task 13, task-pipeline2 13, wrapup 6, pr-review 8 — measured 2026-08-19; the planning and pipeline2 rows disappear if R2/R6 delete those files, so run this after them) — so their shell bodies can be rewritten undetected, which defeats feature scenario R2's "a field-level diff fails the checker". Record an `invocation` for every action that has one, make an unrecorded-but-present invocation an error, and reconcile the resulting fallout in the same commit (constitution T10).
+  - **Done** (commit `40cd5c5b`). Short-circuit removed at `packages/app/src/workflow/composition-baseline.ts:316`; baseline regenerated; two regression cases added.
 
-- [ ] R4. `spur feature check D5` reports zero `L4.scenario-unverified` findings and the feature is shippable. All six scenarios R7–R12 resolve to a covering task with a PASS verdict and a MET requirement. `bun run corpus-check` is green with **no new entry added to `config/corpus-baseline.json` for these six findings** — they must disappear because the condition is fixed, never because it was suppressed.
+- [x] R6. ADR statuses reflect reality. If the operator accepts ADR-072, flip it Proposed → Accepted, amend ADR-029 to record the planning retirement, and delete `config/workflows/planning-pipeline.yaml` in that same commit (all callers are already migrated). If the operator does not accept, leave every ADR status untouched and record the decision — never flip an ADR status to make a gate go green.
+  - **Done** (commit `2dc86579`). ADR-072 Accepted, ADR-029 amended, `config/workflows/planning-pipeline.yaml` deleted, `RETIRED_PROJECT_SEEDS` removed.
 
-- [ ] R5. The composition baseline's `invocation` blind spot is closed. `checkWorkflowComposition` compares an action's `invocation` only when the baseline records one (`packages/app/src/workflow/composition-baseline.ts`, the `expAction.invocation !== undefined &&` guard), and 67 of the 82 actions that carry a live invocation record none (docs 4, idea 18, planning 5, task 13, task-pipeline2 13, wrapup 6, pr-review 8 — measured 2026-08-19; the planning and pipeline2 rows disappear if R2/R6 delete those files, so run this after them) — so their shell bodies can be rewritten undetected, which defeats feature scenario R2's "a field-level diff fails the checker". Record an `invocation` for every action that has one, make an unrecorded-but-present invocation an error, and reconcile the resulting fallout in the same commit (constitution T10).
+**Moved out on 2026-08-20 (decomposition):** former R3 (0604 → PASS verdict) and R4 (D5 feature gate
+clear) now belong to task **0611**. They are verification of already-landed work, not implementation,
+and carrying them here kept this task above the 5-R-item size cap. Requirement numbering keeps its
+original gaps so existing verdict and evidence references stay resolvable.
 
-- [ ] R6. ADR statuses reflect reality. If the operator accepts ADR-072, flip it Proposed → Accepted, amend ADR-029 to record the planning retirement, and delete `config/workflows/planning-pipeline.yaml` in that same commit (all callers are already migrated). If the operator does not accept, leave every ADR status untouched and record the decision — never flip an ADR status to make a gate go green.
-
-**Non-goals:** widening the eval-pipeline promotion band to force a pass; baselining the six D5 findings; deleting `task-pipeline2.yaml` or `planning-pipeline.yaml` without the corresponding consent; introducing a new public CLI noun/verb/flag (that is the sibling CLI-surface task); re-doing waves D5-I/J/K/L/M/O/P, which are already landed and verified.
+**Non-goals:** re-running the retired eval-pipeline bar to satisfy any requirement here (ADR-076); baselining the six D5 findings; deleting `planning-pipeline.yaml` without the corresponding consent; introducing a new public CLI noun/verb/flag (that is the sibling CLI-surface task); re-doing waves D5-I/J/K/L/M/O/P, which are already landed and verified.
 ### Acceptance Criteria
 The product behavior this task completes is already specified by feature D5's own scenarios, so the
 AC reuses those titles rather than inventing parallel ones. Process-level closing conditions (verdict
@@ -52,11 +57,11 @@ PASS, feature gate green, corpus-check green without suppression) are tracked in
 Feature: D5 closure to a PASS verdict and a shippable feature gate
 
   Scenario: R9 — Task execution preserves verification proof and ends with one canonical pipeline
-    Given the canonical task pipeline and the residual-safe pipeline2 both on the shared prerequisites
-    When `bun scripts/spur-dev.ts eval-pipeline` runs source-local and the operator consents to promotion
-    Then the bar exits 0 with verdict parity, valid proof state, model-query count within baseline, and wall-clock within +10% of the recorded PASS baseline
-    And the proof-preserving delta is folded into task-pipeline.yaml and task-pipeline2.yaml is removed with its callers
-    And without a passing bar or without consent both graphs remain and only the measured result is recorded
+    Given task-pipeline2.yaml is an unreferenced duplicate graph declaring a 5th model query the canonical pipeline does not have
+    When the promotion question is decided rather than measured
+    Then a dated decision record closes it and task-pipeline2.yaml is deleted rather than promoted
+    And the composition baseline is reconciled in the same commit and no caller references the deleted graph
+    And no transition, deletion, or feature closure depends on the eval-pipeline bar thereafter
 
   Scenario: R2 — Every shipped pipeline has a reviewed disposition and frozen baseline
     Given roughly fifty baseline actions that record no invocation, so their shell bodies drift undetected
@@ -73,9 +78,9 @@ Feature: D5 closure to a PASS verdict and a shippable feature gate
     And no ADR status is flipped merely to turn a gate green
 ```
 ### Q&A
-- **The two operator gates are decisions, not blockers to route around.** ADR-072 accept and D5-N promotion consent are both explicitly reserved to the operator (recorded in task 0604's Q&A and re-confirmed 2026-08-19). A hold on either is a legitimate outcome; this task records it and reports which D5 scenarios remain unverified as a result. It does **not** proceed on assumed consent.
-- **A failing promotion bar does not block this task's other requirements.** R5 (checker), R6 (ADR decision), and the parts of R3/R4 that do not depend on the delta still land. Only the pipeline2 deletion and R9's full satisfaction wait on a passing bar.
-- **If the bar fails, D5 cannot reach PASS in this task.** That is the honest outcome: report the measured numbers, leave R9 PARTIAL, and let the operator decide whether to redesign the delta (new task) or accept the canonical pipeline as final and amend D5's AC. Do not force a PASS.
+- **Both operator gates are now decided.** ADR-072 accepted 2026-08-20; the D5-N promotion question closed by ADR-076 (bar retired, graph deleted). Historically both were reserved to the operator (recorded in task 0604's Q&A and re-confirmed 2026-08-19). A hold on either is a legitimate outcome; this task records it and reports which D5 scenarios remain unverified as a result. It does **not** proceed on assumed consent.
+- **Superseded by ADR-076 (kept as history).** A failing promotion bar does not block this task's other requirements. R5 (checker), R6 (ADR decision), and the parts of R3/R4 that do not depend on the delta still land. Only the pipeline2 deletion and R9's full satisfaction wait on a passing bar.
+- **Superseded by ADR-076 (kept as history).** If the bar fails, D5 cannot reach PASS in this task. That is the honest outcome: report the measured numbers, leave R9 PARTIAL, and let the operator decide whether to redesign the delta (new task) or accept the canonical pipeline as final and amend D5's AC. Do not force a PASS.
 - **R5 is scoped after the deletions, deliberately.** 67 unrecorded invocations today; 18 of them belong to files that may not exist by the time R5 runs. Ordering is frozen in Design.
 - **The `--fix all` re-verify of 0604 must preserve the R7–R12 AC aliases.** Task 0604's verdict artifact carries acceptance-criteria rows keyed to the *feature* scenario titles as well as the task's local R-numbers; the feature traceability layer resolves on the former. A re-verify that drops them re-opens the six findings for a different reason.
 - **Corpus-check will still be red after this task if D6 is unstarted.** `bun run corpus-check` currently reports 6 D5 findings, 6 D6 findings, 2 `prerequisite-not-done` on 0607/0608, and 1 pre-existing finding on task 0601. R4 owns only the six D5 rows; the D6 rows and the prerequisite rows are expected in-flight state for unstarted follow-up work and must not be baselined either.
@@ -83,12 +88,12 @@ Feature: D5 closure to a PASS verdict and a shippable feature gate
 
 **── Prior-run state (2026-08-20 session) — DO NOT RE-DERIVE ──**
 
-- **R2, R5, R6 are landed and verified MET.** They are committed work, not claims: ADR-072 Accepted + `planning-pipeline.yaml` deleted + `RETIRED_PROJECT_SEEDS` removed (R6); composition-baseline `invocation` short-circuit removed, 104 actions / 77 invocations recorded, two regression cases added (R5); the non-passing bar's else-branch correctly taken, both graphs left in place (R2). A re-implement must **not** redo these — re-verify them cheaply and move on.
-- **R1/R3/R4 are the only open work.** R3 and R4 are pure consequences of R1: 0604 cannot reach PASS, and D5's six `L4.scenario-unverified` rows cannot clear, until the D5-N bar passes.
+- **R1, R2, R5, R6 are landed; R3/R4 are delegated to task 0611.** They are committed work, not claims: ADR-072 Accepted + `planning-pipeline.yaml` deleted + `RETIRED_PROJECT_SEEDS` removed (R6); composition-baseline `invocation` short-circuit removed, 104 actions / 77 invocations recorded, two regression cases added (R5); the non-passing bar's else-branch correctly taken, both graphs left in place (R2). A re-implement must **not** redo these — re-verify them cheaply and move on.
+- **Superseded 2026-08-20 (kept as history).** R1/R3/R4 are the only open work. R3 and R4 are pure consequences of R1: 0604 cannot reach PASS, and D5's six `L4.scenario-unverified` rows cannot clear, until the D5-N bar passes.
 - **Three blockers were found on the bar; two are cleared.**
   1. **FIXED —** `task-pipeline.yaml`'s precheck-size action split its flag list across YAML folded-scalar lines, so `--spur-bin`/`--max-reqs`/`--max-plan-items`/`--executor` ran as separate commands (`sh: --spur-bin: command not found`, exit 127). The 0487 size-vs-capability gate was dead code as a result. Fixed by de-indenting to the folded block's base indentation (line-count neutral, so no evidence anchors moved); guard added at `packages/app/tests/workflow/composition-baseline.test.ts`; baseline reconciled.
-  2. **CLEARED —** the omp HTTP 429 weekly quota, by switching executor to `omp-dsv4-flash-volc`. Note `omp-zai-volc` is **not usable on this box** (live probe: `Model "volc/glm-5.2" not found`). Do not trust `spur agent doctor`'s `authenticated` field — it is a known-bad signal; probe with `spur agent run`.
-  3. **OPEN —** the eval fixture worktree cannot pass `qualityGateCmd`, so `test-gate=FAIL` on **both** pipelines identically. Two independent worktree artifacts: `bun run format` exits 1 because `biome.json` sets `vcs.useIgnoreFile: true` and a `git worktree`'s `.git` is a gitlink **file**, not a directory (biome processes 0 files); and `script-contract-check` reports 7 false `stale_twin` violations because it compares `.mjs`/`.ts` **mtimes** and `git worktree add` stamps everything at checkout time (main repo: `0 violation(s) — PASS`). Neither is a pipeline defect; both make a PASS verdict unreachable in the harness regardless of executor. **Fix this before re-running the bar** or R1 cannot pass.
+  2. **CLEARED —** the omp HTTP 429 weekly quota, by switching executor to `omp-dsv4-flash-volc`. Note `omp-zai-volc` is **not usable on this box** (live probe: `Model "volc/glm-5.2" not found`). The 429 provider logs lived inside disposable eval worktrees under `.spur/tmp/` and were removed with them — that evidence is gone, so re-probe rather than citing it. Do not trust `spur agent doctor`'s `authenticated` field — it is a known-bad signal; probe with `spur agent run`.
+  3. **ROOT CAUSE FOUND —** the eval fixture worktree could not pass `qualityGateCmd`, so `test-gate=FAIL` on **both** pipelines identically. Two causes, and the second is the real one. (a) **FIXED in commit `40cd5c5b`:** `script-contract-check` reported 7 false `stale_twin` violations because it compared `.mjs`/`.ts` mtimes and `git worktree add` stamps every file within the same millisecond; a 1s tolerance now separates that from real build staleness. (b) **OPEN, one-line fix available:** `createEvalRun()` does `git worktree add --detach <dir> HEAD`, which does **not** bring `node_modules`. The project quality gate needs it — measured in a fresh worktree at HEAD: `bun run format && bun run spur-check` → **exit 127**, `bun run lint` → `typecheck` → `/bin/bash: tsc: command not found` across all 7 workspaces. Fix: symlink (or `bun install` into) `node_modules` in `createEvalRun()` — the root symlink is enough, since it carries `.bin/tsc` and `.bin/biome`. Until then the bar cannot reach a verdict regardless of executor. **Earlier note about `biome` / `vcs.useIgnoreFile` / gitlink was a red herring** — `bun run format` exits 0 in a fresh worktree at HEAD; the old failure was a stale worktree resolving a different biome build.
 - **The 538s wall-clock baseline looks unrepresentative.** The only other full-depth run on record is 2053s (`pipeline2-parity`, 2026-08-19), and the two 2026-08-20 runs were 2023s / 1985s — all within 4% of each other. 538s is the outlier. R1's `+10%` band may be unachievable by construction. R1 forbids inventing a new number and the fixtures have not changed, so **re-baselining is an operator decision** — surface it, do not take it.
 - **Pipeline paths must be absolute when running the bar.** `createEvalRun()` does `git worktree add --detach <dir> HEAD`, so a *relative* `--pipeline` silently tests **HEAD**, not the working tree. A fix that is uncommitted will appear not to work.
 - **Executor pinning for the bar:** `--vars '{"agent":"omp-dsv4-flash-volc","implementAgent":"omp-dsv4-flash-volc"}'`.
@@ -99,8 +104,8 @@ Feature: D5 closure to a PASS verdict and a shippable feature gate
 
 **WHERE (frozen file targets):**
 
-- `scripts/commands/eval-pipeline.ts` + `tests/fixtures/pipeline-eval/` — the promotion bar. Reuse; do not fork a second harness.
-- `config/workflows/task-pipeline.yaml`, `config/workflows/task-pipeline2.yaml` — the promotion delta and the deletion.
+- `scripts/commands/eval-pipeline.ts` + `tests/fixtures/pipeline-eval/` — a measurement tool, no longer a gate (ADR-076). Do not fork a second harness.
+- `config/workflows/task-pipeline.yaml` (canonical, stays), `config/workflows/task-pipeline2.yaml` (deleted under ADR-076).
 - `config/workflows/planning-pipeline.yaml` — deleted only on ADR-072 accept.
 - `packages/app/src/workflow/composition-baseline.ts:316` — the `expAction.invocation !== undefined &&` short-circuit to remove.
 - `config/workflow-composition-baseline.json` — the 67 `invocation` records to add.
@@ -122,10 +127,10 @@ R5 must run **after** R2 and R6 because deleting `planning-pipeline.yaml` remove
 
 **Anti-patterns (do not implement):**
 
-- Widening the eval-pipeline promotion band, changing the fixture set, or re-running until a pass appears. A failing bar is a reportable result.
+- Running the retired eval-pipeline bar to satisfy any requirement here, or reinstating it as a gate (ADR-076).
 - Adding the six D5 findings (or the six D6 findings) to `config/corpus-baseline.json`. They must vanish because the condition is fixed.
 - Flipping ADR-072 or ADR-029 status to make a gate green. Status changes follow an operator decision, never a red check.
-- Deleting `task-pipeline2.yaml` or `planning-pipeline.yaml` without the corresponding consent.
+- Deleting `planning-pipeline.yaml` without the corresponding consent. (`task-pipeline2.yaml` deletion IS consented — ADR-076.)
 - Re-implementing verdict derivation — `eval-pipeline` already reads `spur task verdict --json`.
 - Editing `.spur/run/0604-verdict.json` by hand to say PASS. The verdict follows re-verification; hand-editing it is the exact dishonesty D5's gate exists to catch.
 - "Fixing" `process-inspector.ts` coverage or `test-cf`. Both fail only under a sandbox that denies `ps` spawn and `listen`; neither is touched by D5.
@@ -137,11 +142,11 @@ R5 must run **after** R2 and R6 because deleting `planning-pipeline.yaml` remove
 Ordered to match the Design's frozen precedence — **R1 → R6 → R2 → R5 → R3 → R4**. R5 runs after
 the two deletions because 18 of its 67 records belong to files that may no longer exist.
 
-1. **Measure the bar (R1).** Run `bun scripts/spur-dev.ts eval-pipeline` source-local — never a global `spur`, which silently wins on PATH and runs stale code (AGENTS.md, task 0504 R4). Re-measure the PASS baseline first if `tests/fixtures/pipeline-eval/` changed since I6's 538s. Consume the frozen `EvalRecord` / `EvalReport` shapes; do not fork a harness. **Verify:** exit code, verdict parity, proof-state validity, `tokenCost`, and `wallClockMs` vs the ±10% band, all pasted into `## Testing`. A failing bar is recorded and reported, never re-run until green.
+1. **Delete the duplicate graph and close the question (R1).** Do **not** run `eval-pipeline` — the bar is retired (ADR-076). Delete `config/workflows/task-pipeline2.yaml`, remove its `workflows["task-pipeline2"]` entry from `config/workflow-composition-baseline.json` in the same commit (T10), and strip promotion-bar framing from `scripts/commands/eval-pipeline.ts`. **Verify:** `rg task-pipeline2` empty across `config/`, `plugins/`, `apps/`, `packages/`, `scripts/`; `spur workflow validate` green on all remaining definitions; `bun test packages/app/tests/workflow/composition-baseline.test.ts` green.
 
 2. **ADR-072 decision (R6).** Present the migrated-caller evidence and ask the operator to accept or hold. **On accept:** flip ADR-072 Proposed → Accepted, amend ADR-029 to record the retirement, delete `config/workflows/planning-pipeline.yaml`, and remove the now-dead `RETIRED_PROJECT_SEEDS` entry in `packages/config/src/bundled-config.ts` plus the two tests that assert the exclusion. **On hold:** change nothing, record the decision. **Verify:** `bun test packages/config apps/cli/tests`; `spur workflow validate` on the remaining definitions.
 
-3. **Promotion decision and deletion (R2).** Present the step-1 numbers. **On a passing bar plus consent:** fold the proof-preserving residual delta into `config/workflows/task-pipeline.yaml`, delete `config/workflows/task-pipeline2.yaml` and its callers, and update `config/workflow-composition-baseline.json` in the same commit. **Otherwise:** leave both graphs and record the result. **Verify:** `rg task-pipeline2` empty across `config/`, `plugins/`, `docs/`; `spur workflow validate` green on every remaining definition.
+3. **Keep eval-pipeline as a measurement tool (R2).** Leave the command in place and deliberately invocable, but ensure nothing gates on it. Performance questions are answered from real-run data instead: wall-clock from actual pipeline runs, and per-message `input_tokens` / `output_tokens` / `cost_usd` from `history_message` (pi, claude, omp, codex all carry them). **Verify:** no workflow, skill, command, or task requirement names the bar as a precondition.
 
 4. **Close the checker blind spot (R5).** Now that the surviving workflow set is final, regenerate each baseline `actions` map from `extractResolvedWorkflowFacts`, carrying forward curated `stateEffect` / `evidenceEffect` where `kind` is unchanged and failing loudly on any unclassified action. Record the full invocation string (not a digest — see Design). Then delete the `expAction.invocation === undefined` short-circuit at `packages/app/src/workflow/composition-baseline.ts:316` so a live-present, baseline-absent invocation is its own error. Reconcile all fallout in the same commit (constitution T10). **Verify:** `bun test packages/app/tests/workflow/composition-baseline.test.ts`, plus a new case proving a silent shell-body edit now fails the checker.
 
@@ -157,19 +162,70 @@ the two deletions because 18 of its 67 records belong to files that may no longe
 
 **Done when** the eval bar is measured and recorded, both operator decisions are executed or recorded as holds, the checker rejects unrecorded invocations, 0604 verifies PASS, `spur feature check D5` reports zero unverified scenarios, and no D5 finding was baselined to get there.
 ### Solution
+**⚠️ PARTIAL — R3/R4 delegated to task 0611.** This task delivered D5's substantive pipeline work
+(R1, R2, R5, R6). The remaining two requirements are verification bookkeeping over already-landed
+work and were split out on 2026-08-20; see task **0611**.
 
-_Reset for re-implementation 2026-08-20 (executor `omp-dsv4-flash-volc`)._ The prior run's full
-findings are preserved in `### Q&A` → **Prior-run state — DO NOT RE-DERIVE**.
+## R1 — the duplicate graph is deleted, the question is closed
 
-**Landed and verified in the prior run — do not redo:**
+**ADR-076 (Accepted, 2026-08-20): Retire the D5-N Promotion Bar — Delete task-pipeline2 Rather Than
+Promote It** (`docs/00_ADR.md:966`). The bar was retired as a gate rather than run, on four grounds
+recorded there: `task-pipeline2.yaml` had **zero live callers**; a static fact comparison showed it
+declares **5** model queries against the canonical pipeline's **4**, so promoting it would have added
+cost against a goal of reducing it; the bar's own cost criterion was unmeasurable (`tokenCost` derives
+from `action_runs.result_json`, which carries usage on 44 of 1971 rows); and its 538s wall-clock
+baseline was the outlier against the only other full-depth run at 2053s.
 
-- R6 — ADR-072 flipped Proposed → Accepted at `docs/00_ADR.md:883`; ADR-029 amended; `config/workflows/planning-pipeline.yaml` deleted.
-- R5 — invocation blind spot closed at `packages/app/src/workflow/composition-baseline.ts:316` (bare inequality, no short-circuit); baseline regenerated to 104 actions / 77 invocations.
-- R1 blocker 1 — precheck-size folded-scalar defect fixed at `config/workflows/task-pipeline.yaml:249`; flags now fold into one command instead of running as separate ones.
-- R2 — non-passing bar's else-branch correctly taken; both pipeline graphs left in place.
+- `config/workflows/task-pipeline2.yaml` — **deleted**.
+- `config/workflow-composition-baseline.json` — its 158-line entry removed in the same commit (T10);
+  five workflows remain (`docs-pipeline`, `idea-pipeline`, `pr-review`, `task-pipeline`,
+  `wrapup-pipeline`); JSON valid, no reformatting.
+- `docs/features/D5_*.md` — R9 scenario and Scope rewritten from "a passing bar merges the delta" to
+  deletion plus a dated decision record.
+- `docs/tasks4/0604_*.md` — R3 rewritten to drop the bar precondition and its `⚠️ PARTIAL` marker.
+- `docs/design/workflow-composition-contract.md` — both D5-N rows struck through with the ADR reference.
+- Six `path:line` anchors in tasks 0596/0604 that cited the deleted file were converted to the
+  non-anchor historical form (line number outside the backticks, `(file deleted 2026-08-20, ADR-076)`).
+  The historical claims are unchanged; only the citation form is, because a line anchor into a deleted
+  file cannot be re-read.
 
-**Open scope for this re-implementation:** R1 (run the D5-N bar to a pass), R3 (0604 → PASS), R4
-(D5 feature gate clear). R3 and R4 are pure consequences of R1.
+## R2 — eval-pipeline is a measurement tool, not a gate
+
+`scripts/commands/eval-pipeline.ts` — `PROMOTION_BAR_PROPOSAL` now reads **RETIRED (ADR-076)** and
+points at `history_message` for real cost. The field *name* is kept because task 0596 froze the
+`EvalRecord` / `EvalReport` shape. Nothing gates on the command: no workflow, skill, slash command, or
+task requirement names it as a precondition.
+
+Also added while the recursion hypothesis was open: a nesting guard
+(`SPUR_EVAL_PIPELINE_ACTIVE`) that refuses a nested `eval-pipeline` invocation before it forks a
+worktree or an agent. **Note honestly:** a pi history sweep (1625 files / 13584 messages; 231,903 pi
+rows) found *no* infinite loop — longest consecutive-identical streak since 2026-08-18 was 4, and it
+was the spur ASCII banner. The guard is hardening against a real structural gap, **not** a fix for a
+confirmed incident. Generalizing it to the engine is task 0610 R4.
+
+## R5 — composition-baseline invocation blind spot
+
+Delivered in commit `40cd5c5b`: the `expAction.invocation !== undefined &&` short-circuit removed at
+`packages/app/src/workflow/composition-baseline.ts:316`; baseline regenerated; two regression cases
+added. It proved itself immediately — it caught the `task-pipeline.yaml` precheck-size edit in this
+same session as an `invocation mismatch`.
+
+## R6 — ADR statuses reflect reality
+
+Delivered in commit `2dc86579`: ADR-072 flipped Proposed → Accepted, ADR-029 amended,
+`config/workflows/planning-pipeline.yaml` deleted, `RETIRED_PROJECT_SEEDS` removed as dead.
+
+## R3 / R4 — delegated
+
+Split to task **0611** ("Verify D5 closure — 0604 to a PASS verdict and cleared scenarios"). Both are
+verification of work already in the tree, and keeping them here held this task above the 5-R-item size
+cap that the 0487 size-vs-capability gate enforces on `standard`-tier executors.
+
+## Verification at hand-off
+
+`bun run lint` clean; `bun run test` **5965 pass / 0 fail**; `spur workflow validate` 10/10;
+`bun run corpus-check` back to its exact pre-existing finding set — this work added none.
+
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->

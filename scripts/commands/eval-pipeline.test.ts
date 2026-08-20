@@ -7,6 +7,7 @@ import {
     diffSnapshot,
     type EvalRecord,
     type EvalRun,
+    evalPipeline,
     extractTokenCost,
     parseVerdict,
     readGateOutcomes,
@@ -143,5 +144,34 @@ describe('record shape + diffRecords', () => {
     test('diff flags gate outcome drift', () => {
         const changed: EvalRecord = { ...base, gateOutcomes: ['precheck-size=FAIL'] };
         expect(diffRecords([base], [changed])[0]).toContain('gateOutcomes');
+    });
+});
+
+// 0596 P3: eval-pipeline spawns a task-pipeline run whose implement agent may itself be told (by a
+// task Plan) to run eval-pipeline. Unguarded that recurses without bound, forking a worktree and an
+// agent run per level. The flag inherits into every child process, so the nested call refuses here.
+describe('nesting guard', () => {
+    test('refuses to run when already inside an eval-pipeline run, without forking anything', async () => {
+        const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+        process.env.SPUR_EVAL_PIPELINE_ACTIVE = '1';
+        try {
+            // --dry would still create a worktree if the guard did not fire first.
+            expect(await evalPipeline(['--dry', '--label', 'nesting-guard-test'])).toBe(1);
+        } finally {
+            if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+            else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
+        }
+    });
+
+    test('a first-level run sets the flag so children inherit it', async () => {
+        const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+        delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+        try {
+            await evalPipeline(['--dry', '--label', 'nesting-guard-sets-flag']);
+            expect(process.env.SPUR_EVAL_PIPELINE_ACTIVE).toBe('1');
+        } finally {
+            if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+            else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
+        }
     });
 });
