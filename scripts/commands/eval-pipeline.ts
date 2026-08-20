@@ -67,6 +67,81 @@ export interface EvalReport {
     records: EvalRecord[];
     variance: { wallClockMs: Record<string, number> } | null;
     promotionBarProposal: string;
+    /**
+     * Additive (0607 R1): per pipeline path → model-query count from the frozen
+     * `modelQueries` list in `config/workflow-composition-baseline.json` (the SSOT,
+     * itself two-sided checked). Absent for consumers that never knew it.
+     */
+    modelQueries?: Record<string, number>;
+    /**
+     * Additive (0607 R4): per pipeline path → structural breakdown of where
+     * wall-clock can go — model hops vs deterministic actions vs gate/recheck
+     * states. A reporting aid for the measured breakdown, not a timing rig.
+     */
+    breakdown?: Record<string, { modelHops: number; deterministicActions: number; gateStates: number }>;
+}
+
+/** Per-workflow model-query + action facts read from the composition baseline. */
+interface BaselineWorkflowFacts {
+    modelQueries: string[];
+    actions: string[];
+}
+
+/**
+ * Load the frozen model-query SSOT from `config/workflow-composition-baseline.json`
+ * (task 0607 R1: "reuse the modelQueries list already frozen per workflow … as the
+ * query-count source of truth"). A pipeline is matched by its definition path's
+ * basename minus the `.yaml` suffix, exactly how the baseline's `definition` field
+ * is keyed. Missing baseline / unknown pipeline → empty facts (measurement still
+ * proceeds; the count is reported as 0 for the un-baselined case, never guessed).
+ */
+export async function loadBaselineFacts(baselinePath: string): Promise<Record<string, BaselineWorkflowFacts>> {
+    try {
+        const content = await readFile(baselinePath, 'utf-8');
+        const parsed = JSON.parse(content) as {
+            workflows?: Record<string, { modelQueries?: string[]; actions?: Record<string, unknown> }>;
+        };
+        const out: Record<string, BaselineWorkflowFacts> = {};
+        for (const [name, entry] of Object.entries(parsed.workflows ?? {})) {
+            out[name] = {
+                modelQueries: entry.modelQueries ?? [],
+                actions: Object.keys(entry.actions ?? {}),
+            };
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/** Map a pipeline definition path to its baseline key (basename minus `.yaml`). */
+export function baselineKeyForPipeline(pipelinePath: string): string {
+    return (
+        pipelinePath
+            .split('/')
+            .pop()
+            ?.replace(/\.yaml$/, '') ?? pipelinePath
+    );
+}
+
+/**
+ * Per-pipeline structural breakdown (0607 R4): model hops = the baseline `modelQueries`
+ * list length; deterministic actions = every other recorded action; gate/recheck states
+ * = actions whose key names a gate/recheck/approve/test state. Reported as a guide for
+ * the measured breakdown, never as a timing claim.
+ */
+export function describeBreakdown(
+    facts: Record<string, BaselineWorkflowFacts>,
+    pipelinePath: string,
+): { modelHops: number; deterministicActions: number; gateStates: number } {
+    const entry = facts[baselineKeyForPipeline(pipelinePath)];
+    if (!entry) return { modelHops: 0, deterministicActions: 0, gateStates: 0 };
+    const gateStates = entry.actions.filter((key) => /(^|:)(test|recheck|approve|gate)/i.test(key)).length;
+    return {
+        modelHops: entry.modelQueries.length,
+        deterministicActions: entry.actions.length - entry.modelQueries.length,
+        gateStates,
+    };
 }
 
 /**
@@ -239,29 +314,30 @@ export function diffSnapshot(before: Record<string, number>, after: Record<strin
 }
 
 /**
- * Token cost from agent.run actions in the run window. Scans action_runs
- * result_json for token/usage fields; returns null when none recorded —
- * never zero (unmeasured ≠ free).
+ * Cost from the history plane in the run window (task 0607 R1). Reads
+ * `history_message` typed `cost_usd` per message — NEVER `action_runs.result_json`,
+ * which carries usage on ~44 of 1971 rows and is why the old action_runs derivation
+ * reported `null` every run. Returns the summed USD cost; `null` when no message in
+ * the window carries `cost_usd` — never zero (unmeasured ≠ free; a source like
+ * grok/agy legitimately has no cost rows, so `null` is the honest answer).
+ *
+ * The frozen `EvalRecord.tokenCost` field name is kept (task 0596 contract); its
+ * meaning is the history-plane USD cost. `ts` is ISO-8601 text, so the lexicographic
+ * window compare matches `fromIso`/`toIso`. The run window is the correlation anchor
+ * ("run window plus session id" per 0607 Design); a deliberate measurement run has
+ * no concurrent activity, so the window is honest.
  */
-export function extractTokenCost(dbPath: string, fromIso: string, toIso: string): number | null {
+export function extractHistoryCost(dbPath: string, fromIso: string, toIso: string): number | null {
     const db = new Database(dbPath, { readonly: true });
     try {
-        const rows = db
+        const row = db
             .query(
-                `SELECT result_json FROM action_runs
-                 WHERE kind = 'agent.run' AND created_at >= ? AND created_at <= ?`,
+                `SELECT SUM(cost_usd) AS total, COUNT(*) AS n
+                 FROM history_message
+                 WHERE ts >= ? AND ts <= ? AND cost_usd IS NOT NULL`,
             )
-            .all(fromIso, toIso) as Array<{ result_json: string | null }>;
-        let total: number | null = null;
-        for (const row of rows) {
-            if (!row.result_json) continue;
-            const found = JSON.stringify(row.result_json).match(/"(?:input|output|total)?[Tt]okens?"\s*:\s*(\d+)/g);
-            for (const m of found ?? []) {
-                const n = Number.parseInt(m.replace(/\D+/g, ''), 10);
-                total = (total ?? 0) + n;
-            }
-        }
-        return total;
+            .get(fromIso, toIso) as { total: number | null; n: number } | undefined;
+        return row && row.n > 0 ? Math.round((row.total ?? 0) * 10000) / 10000 : null;
     } finally {
         db.close();
     }
@@ -408,7 +484,14 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                 verdict: parseVerdict(verdictJson.stdout),
                 gateOutcomes: await readGateOutcomes(wbs, run.runDir),
                 artifactsWritten: diffSnapshot(before, after),
-                tokenCost: args.dry ? null : extractTokenCost(run.dbPath, fromIso, new Date(t1).toISOString()),
+                // 0607 R1: cost comes from the history plane (`history_message` cost_usd)
+                // correlated on the run window. The eval worktree's own DB is fresh and holds
+                // only action_runs; the real per-message cost rows live in the MAIN tree's
+                // `.spur/spur.db`. A deliberate measurement run has no concurrent activity,
+                // so the window correlation is the honest anchor.
+                tokenCost: args.dry
+                    ? null
+                    : extractHistoryCost(join(REPO_ROOT, '.spur/spur.db'), fromIso, new Date(t1).toISOString()),
                 wallClockMs: t1 - t0,
                 exitCode,
             });
@@ -445,10 +528,10 @@ export function diffRecords(a: EvalRecord[], b: EvalRecord[]): string[] {
 const PROMOTION_BAR_PROPOSAL =
     'RETIRED (ADR-076, 2026-08-20): the D5-N promotion bar is no longer a gate, and ' +
     'task-pipeline2.yaml was deleted rather than promoted. eval-pipeline remains a measurement ' +
-    'tool only — no transition, deletion, feature closure, or verdict may depend on it. Note its ' +
-    'tokenCost is derived from action_runs, where almost no row carries token usage, so it reports ' +
-    'null; for real cost use per-message input_tokens/output_tokens/cost_usd in history_message. ' +
-    'Reopening a promotion bar requires measured real-run evidence, not a fixture run.';
+    'tool only — no transition, deletion, feature closure, or verdict may depend on it. ' +
+    'tokenCost is now the summed history_message.cost_usd across the run window (task 0607 R1), ' +
+    'null on a source with no cost rows. Reopening a promotion bar requires measured real-run ' +
+    'evidence, not a fixture run.';
 
 /**
  * Nesting guard (task 0596 P3 — "instruct the sweep agent not to spawn nested pipeline/eval runs").
@@ -485,6 +568,7 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     process.env[NESTING_ENV] = '1';
     const args = parseArgs(argv);
     const label = args.label ?? 'run';
+    const baselineFacts = await loadBaselineFacts(join(REPO_ROOT, 'config/workflow-composition-baseline.json'));
     const records: EvalRecord[] = [];
     for (let r = 0; r < args.runs; r++) {
         for (const pipeline of args.pipelines) {
@@ -492,6 +576,11 @@ export async function evalPipeline(argv: string[]): Promise<number> {
         }
     }
     const byPipeline: EvalRecord[][] = args.pipelines.map((p) => records.filter((r) => r.pipeline === p));
+    // 0607 R1/R4: per-pipeline model-query count (baseline SSOT) and structural breakdown.
+    const modelQueries = Object.fromEntries(
+        args.pipelines.map((p) => [p, baselineFacts[baselineKeyForPipeline(p)]?.modelQueries.length ?? 0]),
+    );
+    const breakdown = Object.fromEntries(args.pipelines.map((p) => [p, describeBreakdown(baselineFacts, p)]));
     const first = byPipeline[0] ?? [];
     const variance: { wallClockMs: Record<string, number> } | null =
         args.runs > 1 && first.length > 0
@@ -517,6 +606,8 @@ export async function evalPipeline(argv: string[]): Promise<number> {
         records,
         variance,
         promotionBarProposal: PROMOTION_BAR_PROPOSAL,
+        modelQueries,
+        breakdown,
     };
     await Bun.write(
         join(REPORT_DIR, `${report.generatedAt.replace(/[:.]/g, '-')}-${label}.json`),
@@ -525,8 +616,15 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     for (const rec of records) {
         console.log(
             `${rec.wbs} [${rec.pipeline.split('/').pop()}] verdict=${rec.verdict ?? 'UNKNOWN'} exit=${rec.exitCode} ` +
-                `wall=${(rec.wallClockMs / 1000).toFixed(1)}s tokens=${rec.tokenCost ?? 'null'} ` +
+                `wall=${(rec.wallClockMs / 1000).toFixed(1)}s queries=${modelQueries[rec.pipeline] ?? 0} ` +
+                `cost=$ ${rec.tokenCost ?? 'null'} ` +
                 `artifacts=${rec.artifactsWritten.length} gates=[${rec.gateOutcomes.join(', ')}]`,
+        );
+    }
+    for (const p of args.pipelines) {
+        const b = breakdown[p];
+        console.log(
+            `breakdown ${p.split('/').pop()}: modelHops=${b.modelHops} deterministicActions=${b.deterministicActions} gateStates=${b.gateStates}`,
         );
     }
     if (byPipeline.length === 2) {

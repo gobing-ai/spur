@@ -1,14 +1,19 @@
+import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    baselineKeyForPipeline,
     createEvalRun,
+    describeBreakdown,
     diffRecords,
     diffSnapshot,
     type EvalRecord,
     type EvalRun,
     evalPipeline,
-    extractTokenCost,
+    extractHistoryCost,
+    loadBaselineFacts,
     parseVerdict,
     readGateOutcomes,
     removeEvalRun,
@@ -68,10 +73,114 @@ describe('parseVerdict', () => {
     });
 });
 
-describe('extractTokenCost', () => {
-    test('returns null when no agent.run rows carry token data (never zero)', () => {
-        // No agent.run rows exist at unix epoch — guaranteed empty window.
-        expect(extractTokenCost('.spur/spur.db', '1970-01-01T00:00:00Z', '1970-01-01T00:00:01Z')).toBeNull();
+describe('extractHistoryCost', () => {
+    test('sums cost_usd from history_message in the window; null when none recorded (never zero)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'eval-histcost-'));
+        const dbPath = join(dir, 'test.db');
+        const db = new Database(dbPath);
+        try {
+            db.run(
+                'CREATE TABLE history_message (ts TEXT, cost_usd REAL, input_tokens INTEGER, output_tokens INTEGER)',
+            );
+            db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:01Z', 0.0123, 1000, 200)");
+            db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:02Z', 0.004, 500, 50)");
+            // Outside the window — excluded.
+            db.run("INSERT INTO history_message VALUES ('2026-08-20T01:00:00Z', 9.99, 9000, 900)");
+            // No cost row — never summed as zero.
+            db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:03Z', NULL, 7, 7)");
+
+            expect(extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:59Z')).toBeCloseTo(0.0163, 4);
+        } finally {
+            db.close();
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('returns null when no rows carry cost in the window (unmeasured ≠ free)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'eval-histcost-'));
+        const dbPath = join(dir, 'test.db');
+        const db = new Database(dbPath);
+        try {
+            db.run('CREATE TABLE history_message (ts TEXT, cost_usd REAL)');
+            db.run("INSERT INTO history_message VALUES ('2026-08-20T00:00:01Z', NULL)");
+            expect(extractHistoryCost(dbPath, '2026-08-20T00:00:00Z', '2026-08-20T00:00:02Z')).toBeNull();
+        } finally {
+            db.close();
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('baseline facts (0607 R1/R4)', () => {
+    test('loadBaselineFacts reads modelQueries + action keys from the frozen baseline', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'eval-baseline-'));
+        const p = join(dir, 'baseline.json');
+        await writeFile(
+            p,
+            JSON.stringify({
+                workflows: {
+                    'task-pipeline': {
+                        definition: 'config/workflows/task-pipeline.yaml',
+                        modelQueries: ['implement', 'test-fix', 'review', 'verify'],
+                        actions: {
+                            'test:onEnter:0': {},
+                            'test-recheck:onEnter:0': {},
+                            'review:onEnter:0': {},
+                            'done:onEnter:0': {},
+                        },
+                    },
+                },
+            }),
+        );
+        const facts = await loadBaselineFacts(p);
+        expect(facts['task-pipeline'].modelQueries).toEqual(['implement', 'test-fix', 'review', 'verify']);
+        expect(facts['task-pipeline'].actions).toHaveLength(4);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('baselineKeyForPipeline maps a definition path to its workflow name', () => {
+        expect(baselineKeyForPipeline('config/workflows/task-pipeline.yaml')).toBe('task-pipeline');
+        expect(baselineKeyForPipeline('config/workflows/pr-review.yaml')).toBe('pr-review');
+    });
+
+    test('describeBreakdown counts model hops, deterministic actions, and gate states', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'eval-baseline-'));
+        const p = join(dir, 'baseline.json');
+        await writeFile(
+            p,
+            JSON.stringify({
+                workflows: {
+                    'task-pipeline': {
+                        modelQueries: ['implement', 'test-fix', 'review', 'verify'],
+                        actions: {
+                            'precheck:onEnter:0': {},
+                            'test:onEnter:0': {},
+                            'test-recheck:onEnter:0': {},
+                            'review:onEnter:0': {},
+                            'approve:onEnter:0': {},
+                            'done:onEnter:0': {},
+                        },
+                    },
+                },
+            }),
+        );
+        const facts = await loadBaselineFacts(p);
+        const b = describeBreakdown(facts, 'config/workflows/task-pipeline.yaml');
+        expect(b.modelHops).toBe(4);
+        // 6 total actions − 4 model states = 2 deterministic.
+        expect(b.deterministicActions).toBe(2);
+        // test, test-recheck, approve match the gate regex.
+        expect(b.gateStates).toBe(3);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('unknown pipeline reports zeros, never a guess', async () => {
+        const facts = await loadBaselineFacts('/nonexistent/baseline.json');
+        expect(describeBreakdown(facts, 'config/workflows/unknown.yaml')).toEqual({
+            modelHops: 0,
+            deterministicActions: 0,
+            gateStates: 0,
+        });
     });
 });
 

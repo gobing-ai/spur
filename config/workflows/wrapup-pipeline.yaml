@@ -7,7 +7,7 @@
 # apply identically. Branch cleanup is an irreversible HITL gate — it always pauses,
 # even under --auto (Iron Law #6: irreversible action -> surface to human).
 #
-# Shape: start -> task-resolve -> doc-sync -> learning-capture -> metrics-record
+# Shape: start -> task-resolve -> doc-sync -> metrics-record
 #          -> feature-transition (conditional: if vars.feature set)
 #          -> branch-cleanup (conditional: if vars.merge=true)
 #          -> done
@@ -25,8 +25,10 @@
 # Reliability (aligned with task-pipeline / ADR-043):
 #   - Prefer pure slash commands when a command exists; free-form inputs remain only
 #     where capture artifacts (answerFile) have no dedicated slash surface yet.
-#   - learning-capture / metrics-record use expectFile + soft append (empty capture
-#     does not abort wrap-up after prior steps already landed).
+#   - doc-sync / metrics-record use expectFile + soft append (empty capture
+#     does not abort wrap-up after prior steps already landed). The doc-sync hop is a
+#     single model query that both repairs doc drift (sp:doc-evolve) and captures
+#     working learnings (task 0607 R2 — one query answers both; count 2 -> 1).
 #   - feature-transition is a soft shell (always exit 0) so a blocked feature sync
 #     does not abort wrap-up after learnings/metrics already landed.
 #   - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer defense).
@@ -35,7 +37,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-description: "Post-execution wrap-up: doc-sync, learning-capture, metrics, feature-transition, branch-cleanup"
+description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
 terminalStates:
@@ -73,28 +75,24 @@ states:
 
   - id: doc-sync
     description: >
-      Project-level doc drift repair for the batch (04_DESIGN, 03_ARCHITECTURE,
-      00_ADR, docs/design/*). No dedicated slash command yet — free-form skill
-      pointer until a /sp:doc-evolve command exists (ADR-043 residual).
+      ONE model query that both repairs project-level doc drift for the batch
+      (04_DESIGN, 03_ARCHITECTURE, 00_ADR, docs/design/*) and captures working
+      learnings (task 0607 R2: two adjacent agent.run hops merged, count 2 -> 1;
+      no operator-decision pause or verdict boundary sits between them). No dedicated
+      slash command yet — free-form skill pointer until a /sp:doc-evolve command
+      exists (ADR-043 residual). Capture+shell decoupling preserved: expectFile gates
+      a non-empty capture before the append; append is best-effort soft (empty capture
+      skips without aborting wrap-up).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: 'Skill(skill="sp:doc-evolve", args="wrapup tasks=${vars.tasks}"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus.'
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
-          role: coder
-          timeoutMs: ${vars.stepTimeoutMs}
-
-  - id: learning-capture
-    description: >
-      Append working learnings to .spur/memory/learnings.md. Capture+shell decoupling:
-      expectFile gates non-empty capture before append; append is best-effort soft
-      (empty capture skips without aborting wrap-up).
-    onEnter:
-      - kind: agent.run
-        options:
-          agent: ${vars.agent}
-          input: "Extract working learnings from tasks ${vars.tasks}. Output raw markdown (no fences) grouped by date and task WBS: conventions, errors fixed, patterns, gotchas. Captured to .spur/run/wrapup-learnings.md."
+          input: >-
+            First run Skill(skill="sp:doc-evolve", args="wrapup tasks=${vars.tasks}") to repair drift in
+            docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit
+            rules; do not write task/feature corpus. THEN extract working learnings from tasks ${vars.tasks} —
+            conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown
+            (no fences) and END your final message with that markdown (it is captured to .spur/run/wrapup-learnings.md).
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: coder
           answerFile: .spur/run/wrapup-learnings.md
@@ -228,15 +226,10 @@ transitions:
     guard:
       kind: always
 
-  # ── linear body: doc-sync -> learning-capture -> metrics-record ──
+  # ── linear body: doc-sync -> metrics-record ──
   - from: doc-sync
-    to: learning-capture
-    description: Doc sync complete — capture learnings.
-    guard:
-      kind: always
-  - from: learning-capture
     to: metrics-record
-    description: Learnings captured — record metrics.
+    description: Doc drift repair + learning capture complete — record metrics.
     guard:
       kind: always
 

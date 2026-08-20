@@ -29,13 +29,15 @@ import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { devAll } from './commands/dev-all';
 import { evalPipeline } from './commands/eval-pipeline';
 import { linkCheck } from './commands/link-check';
+import { checkPipelineBudgets } from './commands/pipeline-budgets';
 import { publish } from './commands/publish';
+import { realRunCost } from './commands/real-run-cost';
 import { bumpVer, dropTags } from './commands/release';
 import { verifyPack } from './commands/verify-pack';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets',
     );
     process.exit(message ? 1 : 0);
 }
@@ -97,6 +99,12 @@ try {
             break;
         case 'link-check':
             process.exit(await linkCheck());
+            break;
+        case 'real-run-cost':
+            process.exit(await realRunCost(args));
+            break;
+        case 'check-pipeline-budgets':
+            process.exit(await checkPipelineBudgets(args));
             break;
         default:
             usage(command ? `unknown command "${command}"` : undefined);

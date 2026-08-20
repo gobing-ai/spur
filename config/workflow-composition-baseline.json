@@ -434,7 +434,7 @@
             "terminalStates": ["done", "skipped"],
             "artifacts": ["wrapup-learnings", "wrapup-metrics"],
             "failurePolicy": "fail-closed",
-            "modelQueries": ["doc-sync", "learning-capture"],
+            "modelQueries": ["doc-sync"],
             "actions": {
                 "start:onEnter:0": {
                     "kind": "note",
@@ -448,17 +448,11 @@
                 },
                 "doc-sync:onEnter:0": {
                     "kind": "agent.run",
-                    "invocation": "Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\"). Repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules. Do not write task/feature corpus.",
+                    "invocation": "First run Skill(skill=\"sp:doc-evolve\", args=\"wrapup tasks=${vars.tasks}\") to repair drift in docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit rules; do not write task/feature corpus. THEN extract working learnings from tasks ${vars.tasks} — conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown (no fences) and END your final message with that markdown (it is captured to .spur/run/wrapup-learnings.md).",
                     "stateEffect": "write",
-                    "evidenceEffect": "none"
-                },
-                "learning-capture:onEnter:0": {
-                    "kind": "agent.run",
-                    "invocation": "Extract working learnings from tasks ${vars.tasks}. Output raw markdown (no fences) grouped by date and task WBS: conventions, errors fixed, patterns, gotchas. Captured to .spur/run/wrapup-learnings.md.",
-                    "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
-                "learning-capture:onEnter:1": {
+                "doc-sync:onEnter:1": {
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/memory && if test -s .spur/run/wrapup-learnings.md; then\n  cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md &&\n  printf '\\n' >> .spur/memory/learnings.md;\nelse\n  echo \"wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped\" >&2;\nfi && exit 0",
                     "stateEffect": "write",

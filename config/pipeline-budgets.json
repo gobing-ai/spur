@@ -1,0 +1,42 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-08-20T00:00:00.000Z",
+    "note": "Per-pipeline model-query + wall-clock cost budgets (task 0607 R3). modelQueries anchors the frozen config/workflow-composition-baseline.json list (the SSOT, two-sided checked). wallClockMs is a gross-regression ceiling anchored to measured real-run data (R5): the gate compares the median-of-sane terminal-run wall-clock against it. A null budget is unenforced until measured — never treated as 0. Raising a numeric budget requires a fresh recorded decision in the same commit (config/pipeline-budgets.json vs git HEAD); the check-pipeline-budgets gate fails a silent raise by name.",
+    "budgets": {
+        "task-pipeline": {
+            "modelQueries": 4,
+            "wallClockMs": 2300000,
+            "tokenCostUsd": null,
+            "source": "Full-depth runs 2026-08-08..20: 1459s-2719s; authoritative 2053s/2023s/1985s (n=3, 2026-08-19/20, per ADR-076 retirement — 538s unusable). Budget = 2300s ≈ max+~12% headroom. Gate measures median-of-sane terminal runs; short precheck-failure/dry runs pull the median down, so this is a gross-regression ceiling. Live fixture re-measurement: bun scripts/spur-dev.ts eval-pipeline --runs 3 (operator command in 0607 Solution).",
+            "decision": null
+        },
+        "idea-pipeline": {
+            "modelQueries": 5,
+            "wallClockMs": 7200000,
+            "tokenCostUsd": null,
+            "source": "No fixture (0607 option a). Real-run reading (R5): median ~435s, max-sane 8.8h (n=37). Budget = 2h gross-regression ceiling; authoritative fixture measurement pending (operator command in 0607 Solution).",
+            "decision": null
+        },
+        "wrapup-pipeline": {
+            "modelQueries": 1,
+            "wallClockMs": 3600000,
+            "tokenCostUsd": null,
+            "source": "Post-merge count (0607 R2: doc-sync + learning-capture consolidated, 2 -> 1). Real-run reading (R5): median 253s, max-sane 2319s (n=44). Budget = 60 min ceiling.",
+            "decision": null
+        },
+        "docs-pipeline": {
+            "modelQueries": 1,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 1 is enforced.",
+            "decision": null
+        },
+        "pr-review": {
+            "modelQueries": 0,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "Zero-query pipeline (baseline modelQueries []); query budget trivially 0 — the gate handles an empty list (0607 R3). No real full run recorded; wall-clock unenforced.",
+            "decision": null
+        }
+    }
+}
