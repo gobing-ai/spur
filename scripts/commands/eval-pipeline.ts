@@ -18,6 +18,7 @@
  * tests/fixtures/pipeline-eval/README.md for the documented lifecycle.
  */
 import { Database } from 'bun:sqlite';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,7 +27,25 @@ const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');
 const REPORT_DIR = join(REPO_ROOT, '.spur/reports/pipeline-eval');
 const DEFAULT_PIPELINE = join(REPO_ROOT, 'config/workflows/task-pipeline.yaml');
-const SPUR_BIN = join(REPO_ROOT, '.spur/run/spur-bin.sh');
+
+/**
+ * The spur CLI invocation the eval harness drives, as an argv prefix.
+ *
+ * Prefer a locally-provisioned `.spur/run/spur-bin.sh` override (the dev setup's gitignored
+ * launcher, e.g. a `bun link`ed or built CLI); on CI / fresh checkouts that file does not
+ * exist, so fall back to the monorepo dev CLI `<bun> apps/cli/src/index.ts`, which is always
+ * in-tree. Without the fallback, `bun run test` on a fresh checkout cannot spawn the CLI and
+ * every fixture-create call (the nesting-guard tests) dies with ENOENT. The two-token form
+ * is what `doctor.probe`'s `spurBin` option already documents as splittable into argv.
+ */
+const SPUR_ARGV = resolveSpurArgv();
+
+function resolveSpurArgv(): string[] {
+    const override = join(REPO_ROOT, '.spur/run/spur-bin.sh');
+    if (existsSync(override)) return [override];
+    return [process.execPath, join(REPO_ROOT, 'apps/cli/src/index.ts')];
+}
+
 const FIXTURE_BASE_COUNTER = 9499;
 
 function git(args: string[], cwd = REPO_ROOT): { exitCode: number; stdout: string; stderr: string } {
@@ -392,7 +411,7 @@ function jsonGateVerdict(content: string): string {
 }
 
 function spur(args: string[], opts: { cwd?: string; timeoutMs?: number } = {}) {
-    const proc = Bun.spawnSync([SPUR_BIN, ...args], {
+    const proc = Bun.spawnSync([...SPUR_ARGV, ...args], {
         cwd: opts.cwd ?? REPO_ROOT,
         timeout: opts.timeoutMs ?? 60_000,
         stdout: 'pipe',
@@ -452,7 +471,7 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
             if (!args.dry) {
                 const proc = Bun.spawnSync(
                     [
-                        SPUR_BIN,
+                        ...SPUR_ARGV,
                         'workflow',
                         'run',
                         pipeline,
@@ -460,7 +479,7 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                         JSON.stringify({
                             wbs,
                             profile: 'auto',
-                            spurBin: SPUR_BIN,
+                            spurBin: SPUR_ARGV.join(' '),
                             ...args.vars,
                         }),
                     ],
