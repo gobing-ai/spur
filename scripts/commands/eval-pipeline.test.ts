@@ -1,5 +1,5 @@
-import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
     createEvalRun,
@@ -147,16 +147,65 @@ describe('record shape + diffRecords', () => {
     });
 });
 
+// 0610 R3: the fixture worktree must be able to run the project quality gate, or every fixture run
+// ends `test-gate=FAIL` and the harness can never reach a verdict. Two independent causes were fixed:
+// the worktree lives OUTSIDE the repo (inside `.spur/tmp/` it sat under a gitignored path, so Biome
+// ignored the whole tree), and both root and per-workspace `node_modules` are linked (without them
+// `tsc` is missing and typecheck fails TS2307 across apps/cli).
+describe('fixture worktree can run the quality gate', () => {
+    const repoRoot = new URL('../../', import.meta.url).pathname;
+    const created: EvalRun[] = [];
+
+    afterAll(async () => {
+        for (const run of created) await removeEvalRun(run);
+    });
+
+    test('is created outside the repository and resolves the toolchain', async () => {
+        const run = await createEvalRun();
+        created.push(run);
+        expect(run.projectDir.startsWith(repoRoot)).toBeFalse();
+        // Bun.file().exists() is false for directories — stat the linked trees instead.
+        expect(await Bun.file(join(run.projectDir, 'node_modules/.bin/tsc')).exists()).toBeTrue();
+        expect((await stat(join(run.projectDir, 'apps/cli/node_modules'))).isDirectory()).toBeTrue();
+    });
+});
+
 // 0596 P3: eval-pipeline spawns a task-pipeline run whose implement agent may itself be told (by a
 // task Plan) to run eval-pipeline. Unguarded that recurses without bound, forking a worktree and an
 // agent run per level. The flag inherits into every child process, so the nested call refuses here.
 describe('nesting guard', () => {
+    // These two tests drive the real `evalPipeline`, which writes to stdout/stderr. Under the dots
+    // reporter an unsilenced multi-line "REFUSING to run" block is indistinguishable from a crash —
+    // it was read as a test failure in review. Capture both streams: the assertions are on behavior
+    // and on the captured text, so nothing is lost by not printing it.
+    let logSpy: ReturnType<typeof spyOn>;
+    let errSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+        logSpy = spyOn(console, 'log').mockImplementation(() => {});
+        errSpy = spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(async () => {
+        logSpy.mockRestore();
+        errSpy.mockRestore();
+        // `--dry` still writes a report; do not leave test artifacts in the project's report dir.
+        const reportDir = join(new URL('../../', import.meta.url).pathname, '.spur/reports/pipeline-eval');
+        for (const f of await readdir(reportDir).catch(() => [] as string[])) {
+            if (f.includes('nesting-guard')) await rm(join(reportDir, f), { force: true });
+        }
+    });
+
     test('refuses to run when already inside an eval-pipeline run, without forking anything', async () => {
         const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
         process.env.SPUR_EVAL_PIPELINE_ACTIVE = '1';
         try {
             // --dry would still create a worktree if the guard did not fire first.
             expect(await evalPipeline(['--dry', '--label', 'nesting-guard-test'])).toBe(1);
+            // Assert on the captured refusal rather than letting it print.
+            const refusal = errSpy.mock.calls.flat().join('\n');
+            expect(refusal).toContain('REFUSING to run');
+            expect(refusal).toContain('SPUR_EVAL_PIPELINE_ACTIVE=1');
         } finally {
             if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
             else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;

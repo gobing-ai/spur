@@ -18,7 +18,8 @@
  * tests/fixtures/pipeline-eval/README.md for the documented lifecycle.
  */
 import { Database } from 'bun:sqlite';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
@@ -69,6 +70,25 @@ export interface EvalReport {
 }
 
 /**
+ * Repo-relative paths of every per-workspace `node_modules` that exists in the main tree
+ * (e.g. `apps/cli/node_modules`). Discovered rather than hard-coded so adding a workspace does not
+ * silently break the eval harness's typecheck.
+ */
+async function listWorkspaceModuleDirs(): Promise<string[]> {
+    const out: string[] = [];
+    for (const group of ['apps', 'packages']) {
+        const entries = await readdir(join(REPO_ROOT, group), { withFileTypes: true }).catch(() => []);
+        for (const e of entries) {
+            if (!e.isDirectory()) continue;
+            const rel = join(group, e.name, 'node_modules');
+            const st = await stat(join(REPO_ROOT, rel)).catch(() => null);
+            if (st?.isDirectory()) out.push(rel);
+        }
+    }
+    return out;
+}
+
+/**
  * Create a disposable detached worktree for one pipeline run.
  *
  * The worktree starts at HEAD, giving workflow actions real Git context. Its
@@ -76,8 +96,12 @@ export interface EvalReport {
  * and adds only the fixture folder/floor; the production config is untouched.
  */
 export async function createEvalRun(): Promise<EvalRun> {
-    await mkdir(join(REPO_ROOT, '.spur/tmp'), { recursive: true });
-    const tempParent = await mkdtemp(join(REPO_ROOT, '.spur/tmp/eval-pipeline-'));
+    // OUTSIDE the repository, deliberately. A worktree under `.spur/tmp/` sits beneath a gitignored
+    // path, so Biome's `vcs.useIgnoreFile` integration ignores the entire tree ("No files were
+    // processed in the specified paths") and `bun run format` / `bun run lint` exit 1 — the project
+    // quality gate could never pass and every fixture run ended `test-gate=FAIL`. From the system
+    // temp dir the same checkout lints all 723 files. (task 0610 R3)
+    const tempParent = await mkdtemp(join(tmpdir(), 'spur-eval-pipeline-'));
     const projectDir = join(tempParent, 'worktree');
     let worktreeAdded = false;
     try {
@@ -86,6 +110,28 @@ export async function createEvalRun(): Promise<EvalRun> {
             throw new Error(`eval-pipeline: worktree create failed: ${created.stderr || created.stdout}`);
         }
         worktreeAdded = true;
+
+        // A fresh `git worktree add` carries no `node_modules`, so the project quality gate the
+        // `test` stage runs (`qualityGateCmd` -> `bun run lint` -> `tsc`) exits 127 with
+        // "tsc: command not found" and EVERY fixture run ends `test-gate=FAIL` — the harness could
+        // never reach a verdict. Link the repository's existing install instead of reinstalling:
+        // `node_modules` is gitignored so it does not dirty the worktree, and
+        // `git worktree remove --force` still cleans up. (task 0610 R3)
+        //
+        // Bun workspaces keep a per-workspace `node_modules` as well as the root one, and `tsc`
+        // resolves `@commander-js/extra-typings` and the `@gobing-ai/*` workspace packages through
+        // them — the root link alone leaves typecheck failing with TS2307 across `apps/cli`.
+        //
+        // ponytail: symlink the existing installs rather than running `bun install` per run (tens of
+        // seconds, needs network). The links resolve to the MAIN tree, so the gate typechecks
+        // main-tree sources rather than the worktree copy — consistent with `$spurBin`, which also
+        // resolves to the main tree, and fine for a gate probe. Upgrade to `bun install` here if a
+        // worktree-local source change ever needs to be checked by the quality probe.
+        await symlink(join(REPO_ROOT, 'node_modules'), join(projectDir, 'node_modules'), 'dir');
+        for (const ws of await listWorkspaceModuleDirs()) {
+            await mkdir(join(projectDir, ws, '..'), { recursive: true }).catch(() => {});
+            await symlink(join(REPO_ROOT, ws), join(projectDir, ws), 'dir').catch(() => {});
+        }
 
         const fixtureDir = join(projectDir, 'tests/fixtures/pipeline-eval');
         const tasksDir = join(fixtureDir, 'tasks');

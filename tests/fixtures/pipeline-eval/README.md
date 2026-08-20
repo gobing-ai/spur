@@ -8,7 +8,7 @@ comparator that measures a task pipeline (R1–R7 of task 0595).
 | Path | Role |
 | --- | --- |
 | `templates/` | Fixture task bodies (checked in). `fixture-minimal.md` is the single-task set. |
-| `.spur/tmp/eval-pipeline-*/worktree` | One disposable detached Git worktree per pipeline invocation. It contains the run-local config, task folder, database/run artifacts, and scratch tree. |
+| `$TMPDIR/spur-eval-pipeline-*/worktree` | One disposable detached Git worktree per pipeline invocation, created in the **system temp dir**, outside the repository. It contains the run-local config, task folder, database/run artifacts, and scratch tree. Placing it under `.spur/tmp/` put it beneath a gitignored path, which made Biome's `vcs.useIgnoreFile` integration skip the entire tree, so the project quality gate could never pass (task 0610 R3). |
 
 ## Lifecycle (R4 — no corpus pollution)
 

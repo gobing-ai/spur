@@ -98,7 +98,7 @@ Every current reader of a `.spur/run/*` artifact, with `path:line`:
 | `verifyall` | `apps/cli/src/commands/task.ts:966` | `.spur/run/verifyall-batch-input.json` | yes | yes → cache key |
 | workflow shell guards | `apps/cli/tests/commands/workflow.test.ts:632` (canonical `test "$(cat …-gate.status …)" = PASS`) | `.spur/run/<RUNID>-gate.status` | yes (between steps) | yes → cache `state.gates` |
 | feature-sync verdict mtime vector | `plugins/sp/scripts/feature-sync-bounded.ts:320` (`readVerdictMtimeVector`, called `:393`) | `-verdict.json` mtimes | yes (bounded loop) | yes → cache `state.verdict.updatedAt` |
-| eval-pipeline snapshot | `scripts/commands/eval-pipeline.ts:231`/`:252` (`snapshotDir(.spur/run)`) | whole dir | yes | yes — snapshots the two files instead of N |
+| eval-pipeline snapshot | `scripts/commands/eval-pipeline.ts:370`/`:401` (`snapshotDir(run.runDir)`) | whole dir | yes | yes — snapshots the two files instead of N |
 | `WorkflowRunLogSink` | `apps/cli/src/commands/workflow.ts:374` | (writes) `.spur/run/<RUNID>.log` | writer | n/a — becomes the markdown writer |
 
 **Conclusion:** every mid-run reader needs *state*, not *sequence*. All of them move to the read/write JSON cache. The append-only markdown has exactly **one** mid-run consumer — the human `--follow` tail, which is read-only and offset-based, therefore append-safe. **The strict append-only rule is feasible**; no relaxation required.
