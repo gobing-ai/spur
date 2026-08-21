@@ -35,6 +35,16 @@
 - style(dogfood): normalize markdown table formatting (c35834f5)
 - test(cli): assert self noun alias parity for init/migrate/serve/status (0eac580e)
 
+## [0.3.55] — 2026-08-20
+
+### Fixed
+
+- fix(workflow): accept a Layer-1 role in agent.default (6e696e16)
+
+### Changed
+
+- docs(tasks): add feature A3 and tasks 0613-0622 (5ee6699f)
+
 ## [0.3.54] — 2026-08-20
 
 ### Added
