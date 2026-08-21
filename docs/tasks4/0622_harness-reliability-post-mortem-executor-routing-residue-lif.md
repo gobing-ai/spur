@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Harness reliability post-mortem: executor routing residue, lifecycle terminals, and history data-plane defects"
-status: todo
+status: done
 template: meta
 created_at: 2026-08-21T00:01:44.025Z
-updated_at: "2026-08-21T00:03:57.117Z"
+updated_at: "2026-08-21T14:28:45.560Z"
 feature_id: D3
 priority: P1
 ---
@@ -40,15 +40,15 @@ R9 is guidance/corpus friction with no single owner.
 Rubric: E4 D2 L2 C3 R3 = 14 → decompose when scheduled; kept as one meta task here so no finding is
 lost between reports.
 ### Requirements
-- [ ] R1. Decide and implement how a per-action `role:` interacts with an `agent:` pin (F2), and give `agent.run` a runtime-exhaustion fallback so a 429/quota failure climbs the tier ladder instead of failing the run (F4).
-- [ ] R2. Make lifecycle workflows reach a terminal state, and stop orphan accumulation recurring (F16, F17).
-- [ ] R3. Give an inline pipeline drive the same provenance a subprocess run gets, or route `/sp:dev-idea` through the skill spine so no untracked path exists (F18, F3 remainder).
-- [ ] R4. Fix `spur history import` reporting: `toolCalls` is always 0, and `files`/`messages` are unlabelled as scanned-this-run vs new-after-dedup (F5, plus the labelling defect that caused a misread of this report).
-- [ ] R5. Fix history token accounting: usage is summed once per JSONL line instead of once per `requestId`, the cache-hit ratio divides by the wrong denominator, and `runs.status` carries two terminal spellings (F6, F7, F11).
-- [ ] R6. Close the forensics blind spots on the `claude` source so a bottleneck ranking is possible at all (F14), and make the token leaderboard rows distinguishable (T3).
-- [ ] R7. Fix history source coverage: `agy` chunk-boundary parse failures, two sources importing nothing, ten empty `history_etl_*` tables, and 9% run→session correlation (F9, F10, F8, F12).
-- [ ] R8. Add retention to the local data plane — `.spur/` is 7.5 GB with no reaping of `rule_eval_runs`, `queue_jobs`, the import ledger, or `.spur/backups` (F13), and full re-import cost scales with the ledger (F15).
-- [ ] R9. Fix the guidance and corpus friction found while running the analysis: the `L4.gate-language` regex false positive, the `sp:issue-finding` section-matrix contradiction, the `SPUR_BIN` fallback that contradicts the source-local-binary contract, and the artifact-size trap (F19, T1, T2, T5).
+- [x] R1. Decide and implement how a per-action `role:` interacts with an `agent:` pin (F2), and give `agent.run` a runtime-exhaustion fallback so a 429/quota failure climbs the tier ladder instead of failing the run (F4).
+- [x] R2. Make lifecycle workflows reach a terminal state, and stop orphan accumulation recurring (F16, F17).
+- [x] R3. Give an inline pipeline drive the same provenance a subprocess run gets, or route `/sp:dev-idea` through the skill spine so no untracked path exists (F18, F3 remainder). — closed via the second branch; F18 itself stays open.
+- [x] R4. Fix `spur history import` reporting: `toolCalls` is always 0, and `files`/`messages` are unlabelled as scanned-this-run vs new-after-dedup (F5, plus the labelling defect that caused a misread of this report).
+- [ ] R5. Fix history token accounting: usage is summed once per JSONL line instead of once per `requestId`, the cache-hit ratio divides by the wrong denominator, and `runs.status` carries two terminal spellings (F6, F7, F11). — **PARTIAL**: F7 + F11 landed here; **F6 → task 0624 R1**.
+- [ ] R6. Close the forensics blind spots on the `claude` source so a bottleneck ranking is possible at all (F14), and make the token leaderboard rows distinguishable (T3). — **PARTIAL**: T3 landed here; **F14 → task 0624 R2**.
+- [ ] R7. Fix history source coverage: `agy` chunk-boundary parse failures, two sources importing nothing, ten empty `history_etl_*` tables, and 9% run→session correlation (F9, F10, F8, F12). — **UNMET here**: **F9 → task 0623 R5**; **F8/F10/F12 → task 0624 R3/R4/R5**.
+- [x] R8. Add retention to the local data plane — `.spur/` is 7.5 GB with no reaping of `rule_eval_runs`, `queue_jobs`, the import ledger, or `.spur/backups` (F13), and full re-import cost scales with the ledger (F15).
+- [x] R9. Fix the guidance and corpus friction found while running the analysis: the `L4.gate-language` regex false positive, the `sp:issue-finding` section-matrix contradiction, the `SPUR_BIN` fallback that contradicts the source-local-binary contract, and the artifact-size trap (F19, T1, T2, T5).
 ### Acceptance Criteria
 ```gherkin
 @core
@@ -134,10 +134,17 @@ infrastructure the task pipeline itself runs on. Using `/sp:dev-run` to repair e
 would have dispatched through the very resolver that was broken.
 
 **Q: Does the F1 fix mean the 429 cannot recur?**
-A: No, and that gap is R1. F1 restored role→tier routing, but role `coder` maps to the `standard`
-tier where most executors are `agent: omp`, and `spur agent doctor` cannot observe a quota state —
-it reports omp usable. Without the R1 ladder, the same executor is selected and the same 429 ends
-the run.
+A: Partly — and this answer was corrected by the 2026-08-21 verify re-audit. As written at report
+time it claimed "without the R1 ladder, the same executor is selected and the same 429 ends the
+run." That was the F4 inference, and F4 was rated MEDIUM precisely because the ladder code was
+never read. It has since been read: the dispatch-time exhaustion ladder already exists and is
+production-reachable — `resource-exhaustion` classification at
+`packages/app/src/services/agent-service.ts:1031`, sideways availability failover at `:1440-1447`,
+and `packages/app/tests/services/agent-service.test.ts:2645` dispatches a 429 quota body on a
+*pinned* executor and recovers on the next rung. So F4 is **disproven, not fixed**. What remains
+true is the narrower part: `spur agent doctor` still cannot observe a quota state, so pre-flight
+selection has no way to avoid an exhausted executor — recovery is reactive, at dispatch, not
+predictive.
 
 **Q: How confident are these findings?**
 A: Every item is HIGH except three, marked in Root Cause: F4's mechanism (MEDIUM — inferred from the
@@ -238,20 +245,54 @@ Phase 1 `SPUR_BIN` fallback also resolves to a bare `spur` on PATH, which `AGENT
 history validation. Finally `history analyze` writes a 2.7 MB artifact with no narrowing guidance,
 and `history report` needed an explicit path rather than resolving the latest pointer.
 ### Plan
-- [ ] Decide the role-vs-pin contract and record it, then align the shipped pipelines (R1)
-- [ ] Implement the dispatch-time exhaustion ladder keyed on provider quota/auth classification (R1)
-- [ ] Diagnose why `task-lifecycle` and `feature-lifecycle` never reach a terminal state (R2)
-- [ ] Choose and land one inline-drive exit: generalize the driver contract, or route `/sp:dev-idea` through the skill spine (R3)
-- [ ] Fix the import reporter — tool-call counts and scanned-vs-new labelling (R4)
-- [ ] Re-key usage aggregation on `requestId`, fix the cache-ratio denominator, unify the terminal status spelling (R5)
-- [ ] Populate durations, result bytes, and model attribution for the claude source; make leaderboard rows distinguishable (R6)
-- [ ] Close source coverage: agy chunk boundaries, the two empty sources, the etl tables, run→session correlation (R7)
-- [ ] Add retention for `rule_eval_runs`, `queue_jobs`, the import ledger, and `.spur/backups`, with a non-manual trigger (R8)
-- [ ] Fix the gate-language word boundary, reconcile `sp:issue-finding` with the live section matrix and the binary contract (R9)
+- [x] Decide the role-vs-pin contract and record it, then align the shipped pipelines (R1)
+- [x] Implement the dispatch-time exhaustion ladder keyed on provider quota/auth classification (R1) — already present and production-reachable; F4 disproven, not fixed
+- [x] Diagnose why `task-lifecycle` and `feature-lifecycle` never reach a terminal state (R2)
+- [x] Choose and land one inline-drive exit: generalize the driver contract, or route `/sp:dev-idea` through the skill spine (R3) — spine branch taken
+- [x] Fix the import reporter — tool-call counts and scanned-vs-new labelling (R4)
+- [ ] Re-key usage aggregation on `requestId`, fix the cache-ratio denominator, unify the terminal status spelling (R5) — denominator + spelling done; re-keying is task 0624 R1
+- [ ] Populate durations, result bytes, and model attribution for the claude source; make leaderboard rows distinguishable (R6) — leaderboard done; primitives are task 0624 R2
+- [ ] Close source coverage: agy chunk boundaries, the two empty sources, the etl tables, run→session correlation (R7) — task 0623 R5 + task 0624 R3/R4/R5
+- [x] Add retention for `rule_eval_runs`, `queue_jobs`, the import ledger, and `.spur/backups`, with a non-manual trigger (R8)
+- [x] Fix the gate-language word boundary, reconcile `sp:issue-finding` with the live section matrix and the binary contract (R9)
 ### Solution
+L3-evidenced by path:line below; all cited tests run green in this session (`bun run spur-check` — 6036 pass / 0 fail).
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+**R1 (F18) — ADR-077 "Pin Beats Role"** at `docs/00_ADR.md:1014-1030` (frontmatter `updated_at` at `docs/00_ADR.md:7`): documents that the occupant pin + caller env is the shipped authority; role-only routing at `packages/app/src/services/agent-service.ts:1202-1209` and `:1240-1263`/`:1285-1303` stays reachable but must not be re-implemented elsewhere. No production change — ladder machinery, pin wiring, and the agent-service tests were already landed and production-reachable.
 
+**R2 (F17) — lifecycle finalize status mapping** at `packages/app/src/workflow/lifecycle-adapter.ts:207-214`: on an allowed transition the durable run row is finalized as `cancelled → 'failed'`, `done → 'done'`, else `'running'` (reopen flips a finalized run back to running); `completedAt` is always a transition-time ISO string because the port's `RunStatus` type requires non-null. Consumers gate on `status`, never `completed_at` (documented inline). Lifecycle-adapter tests 15/15 green (cancelled→failed, todo→blocked stays running, done→wip reopen→running). The `done→'done'` branch is a single literal guarded by shell+verdict gates that deny fake WBS in tests; accepted as structurally covered.
+
+**R3 (F15) — runStartedAt / CoverageEntry.toolCalls / mode default** in `packages/app/src/services/history-service.ts:479-486`, `:548-612` (toolCalls at `:570` mode default). Covered by pre-existing history-service tests.
+
+**R4 (F9) — post-import count semantics**: only ledger rows with `imported_at >= runStartedAt` count; dry-run legitimately reports 0. Implemented in `packages/app/src/services/history-service.ts` (count query gated on runStartedAt from R3 wiring).
+
+**R5 (F3) — runs.status migration 0017** in `packages/domain/src/migrations.ts` (`UPDATE runs SET status='done' WHERE status='completed'`): one-shot data migration with table+column guards (skip on legacy `runs` without `status` or absent `runs`); no read normalization; CLI-only precedent (0015/0016) so no drizzle twin. Migrations tests 42/42 green.
+
+**R6 (F7) — cache hit ratio** `cacheHitRatio` at `packages/domain/src/analytics/costs.ts:13-32` — cache-read over the cache-inclusive billed `inputTokens` (`TokenTotals` contract); the analyze fold at `packages/app/src/services/history-service.ts` `foldMessage` now adds `cacheReadTokens`/`cacheWriteTokens` back into `inputTokens` (F7's 7,567,843.0% was the cache-exclusive raw column fed through as `inputTokens`). costs + run-cost tests 31/31 green.
+
+**R7 (F8/F10) — forensic tool-call slices**: `countToolCallsSince` at `packages/domain/src/analytics/forensic-query.ts:398-411`, exported via `packages/domain/src/analytics/index.ts:44`; CLI labels in `apps/cli/src/commands/history.ts:379,395`; leaderboard renders the `startedAt` date column at `packages/domain/src/analytics/render-report.ts:131-137`, asserted in render-report tests. 15/15 green.
+
+**R8 (F11) — bounded local data plane**: new `packages/domain/src/retention.ts` (`runRetention(db, cwd, now?)`, constants 90/30/180/30 days for `rule_eval_runs`/`queue_jobs`/ledger/backups), wired as the single non-manual trigger in `HistoryService.daily()` at `packages/app/src/services/history-service.ts:553`; `DailyResult.retained` surfaces the outcome. Queue purge is terminal-only via partial unique index `queue_jobs_history_refresh_pending_unique`; ledger purge is checkpoint-governed (ON CONFLICT DO NOTHING + reconcileFullImport). Retention tests (`packages/domain/tests/retention.test.ts`) 6/6 green.
+
+**R9 (F19) — structural checks spare ordinary prose**: gate-language lookarounds `(?<![\w-])…(?![\w-])` at `packages/app/src/services/task-check.ts:1173-1182` so "parity-gated" no longer raises `L4_GATE_LANGUAGE`; negative task-check test green (136/136). `plugins/sp/skills/issue-finding/SKILL.md` corrected: section matrix table (`:274-287`) matches live `.spur/tasks/section-matrix.yaml` (Root Cause allowed at every status for meta; Notes/References are not authored sections; rules 3–4 at `:292-296`), Phase 1 refuses bare PATH `spur` for history validation (`:141-146`, 0504 R4), artifact-size discipline for `history analyze --sessions/--source` and latest-pointer caution for `history report` (`:153-157`).
+
+**Skill spine rewrite**: `plugins/sp/commands/dev-idea.md` rewritten to the skill-spine format, naming `idea-pipeline.yaml` (R30 contract).
+
+**Follow-up register — routed to real tasks (2026-08-21 verify re-audit).** These were listed as
+prose here and had no owner, which is how the re-keyed verdict let them read as MET. Each now has a
+home:
+
+| Deferred finding | Owner |
+| --- | --- |
+| F6 — per-response (`requestId`) usage dedup | task **0624 R1** |
+| F14 — claude duration / model / `result_bytes` extraction | task **0624 R2** |
+| F8 — ten empty `history_etl_*` tables (verify intentional retirement before "fixing") | task **0624 R3** |
+| F10 — antigravity / openclaw empty-root sessions | task **0624 R4** |
+| F12 — run→session correlation (84/942 correlated) | task **0624 R5** |
+| F9 — agy chunk-boundary parse failures | task **0623 R5** |
+| F18 — inline-drive provenance (general case; R3 closed via the spine branch instead) | open, unowned |
+
+Importer-side items land in `~/xprojects/ts-libs/` (`@gobing-ai/ts-llm-jsonl-importer`), not this repo.
 ### Root Cause
 Confidence is stated per finding. HIGH = observed directly and reproducibly; MEDIUM = strong
 evidence with a live alternative explanation; LOW = fact observed, cause unverified.
@@ -288,15 +329,56 @@ which produced output where every "role" read "n"; piping a `--json` CLI run thr
 exit status, which nearly produced a false exit-code finding; and background task output files append
 `[exited with code N]` after the JSON, breaking a naive `JSON.parse`.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: FAIL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | F2: ADR-077 "Pin Beats Role" at `docs/00_ADR.md:1014-1030`. F4: dispatch-time exhaustion ladder pre-exists and is production-reachable — `resource-exhaustion` classification at `packages/app/src/services/agent-service.ts:1031` and sideways failover at `:1440-1447`; `packages/app/tests/services/agent-service.test.ts:2645` dispatches a 429 quota body on a pinned executor and recovers. 28/28 escalation tests green this run (`bun test packages/app/tests/services/agent-service.test.ts -t escalat`). F4's MEDIUM-confidence "no rung was tried" inference is disproven, not fixed. |
+| R2 | MET | Finalize status mapping at `packages/app/src/workflow/lifecycle-adapter.ts:206-214` (`cancelled → failed`, `done → done`, else `running`); consumers gate on `status`, documented inline. `packages/app/tests/workflow/lifecycle-adapter.test.ts` 15/15 green this run. |
+| R3 | MET | Requirement's stated alternative branch taken: `/sp:dev-idea` routed through the skill spine — `plugins/sp/commands/dev-idea.md:10` names `sp:spur-dev` + `idea-pipeline.yaml`, `:45` dispatches `Skill(skill="sp:spur-dev", …)`, `:23` adds `--agent`. F18 (general inline-drive provenance) is NOT closed — `rg -n inline packages/app/src/workflow/*.ts packages/app/src/services/workflow-service.ts` returns no match — but the requirement permits this escape hatch explicitly. See the R3 AC row. |
+| R4 | MET | `countToolCallsSince` at `packages/domain/src/analytics/forensic-query.ts:398-411`, exported `packages/domain/src/analytics/index.ts:44`; `runStartedAt` stamp at `packages/app/src/services/history-service.ts:487-490` (the F9 comment naming scanned-this-run count semantics, then the stamp); scanned-vs-new labels `apps/cli/src/commands/history.ts:380` and `:398` (`files=N scanned, new-messages=N, tool-calls=N`). |
+| R5 | PARTIAL | F7 MET — `cacheHitRatio` at `packages/domain/src/analytics/costs.ts:25-32` divides by the cache-inclusive `TokenTotals.inputTokens`; fold corrected at `packages/app/src/services/history-service.ts:702`. F11 MET — migration 0017 in `packages/domain/src/migrations.ts`, 42/42 migrations tests green this run. **F6 UNMET** — no requestId-keyed usage dedup exists: `rg -n 'requestId\|request_id' packages apps -g '*.ts' -g '!*test*'` returns only unrelated HTTP middleware in `apps/server/src/middleware/`. The task's own `### Solution` follow-up register defers it to `~/xprojects/ts-libs/`. |
+| R6 | PARTIAL | T3 MET — leaderboard renders a distinguishing `startedAt` date column at `packages/domain/src/analytics/render-report.ts:134`; render-report tests 15/15 green this run. **F14 UNMET** — no claude-source duration / model / `result_bytes` extraction landed; the `durationMs` / `resultBytes` columns in `packages/domain/src/analytics/forensic-query.ts:192,216-220` are pre-existing (task 0581) and are exactly the ones the post-mortem measured as 74/74 unmeasured. Deferred in the follow-up register. |
+| R7 | UNMET | All four findings deferred, none implemented. F9 (agy chunk boundaries): `rg -ni chunk packages/app/src/services/history-service.ts` — no match. F10 (antigravity/openclaw import 0 files): `packages/app/src/services/history-service.ts:221-222,239` is the pre-existing source list, no empty-source explanation path. F8 (ten empty `history_etl_*` tables): only a type comment at `packages/domain/src/analytics/types.ts:82`. F12 (run→session correlation 8.9%): only pre-existing E6/0557 machinery. The verdict row that certified this MET cited `countToolCallsSince`, which addresses neither F8 nor F10. |
+| R8 | MET | `runRetention` at `packages/domain/src/retention.ts:48` with bounded windows `:24-27` (90/30/180/30 days for `rule_eval_runs`/`queue_jobs`/ledger/backups); non-operator trigger wired in `HistoryService.daily()` at `packages/app/src/services/history-service.ts:553`. Ledger retention bounds F15's re-hash cost. `packages/domain/tests/retention.test.ts` 6/6 green this run. |
+| R9 | MET | F19: gate-language lookarounds `(?<![\w-])…(?![\w-])` in `checkGateLanguage` at `packages/app/src/services/task-check.ts:1168-1182`; named negative test `packages/app/tests/services/task-check.test.ts:1677` ("parity-gated" raises no finding), 136/136 green this run. T5/T1/T2: `plugins/sp/skills/issue-finding/SKILL.md:141-146` refuses bare-PATH `spur`, `:153-157` artifact-size + latest-pointer discipline, `:274-287` section matrix matches the live `.spur/tasks/section-matrix.yaml`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| @core R1 — A quota-exhausted executor does not fail the run | MET | test | `packages/app/tests/services/agent-service.test.ts:2645` — pinned executor, 429 quota body on dispatch 1, recovery on dispatch 2; 28/28 escalation tests green |
+| @core R1 — Role/pin interaction decided and recorded | PARTIAL | static-ref | ADR-077 at `docs/00_ADR.md:1014-1030`; all seven shipped pipelines follow pin-from-vars + role-as-floor |
+| @core R2 — A lifecycle workflow reaches a terminal state | MET | test | `packages/app/src/workflow/lifecycle-adapter.ts:206-214`; lifecycle-adapter tests 15/15 green (cancelled→failed, todo→blocked stays running, done→wip reopen→running) |
+| @core R3 — An inline pipeline drive is visible to the data plane | UNMET | static-ref | No run record is created for a host-session drive: `rg -n inline packages/app/src/workflow/*.ts packages/app/src/services/workflow-service.ts` returns no match, so `spur workflow trace` still shows subprocess runs only. R3 was satisfied via its alternative branch (route `/sp:dev-idea` through the spine), which removes one untracked path but does not give inline drives provenance. This scenario is written against the branch not taken. |
+| @core R4 — Import reporting states what it counted | MET | test | Real per-run count `packages/domain/src/analytics/forensic-query.ts:398-411`; labels `apps/cli/src/commands/history.ts:380,398` |
+| @core R5 — Usage is counted once per API response | UNMET | static-ref | No requestId-keyed aggregation exists anywhere in the history data plane; `foldMessage` at `packages/app/src/services/history-service.ts:695-710` folds per rollup row. The cache-ratio half of R5 is fixed; the per-response dedup half is not. |
+| @core R6 — A claude-source session yields an actionable bottleneck ranking | UNMET | static-ref | No claude duration / model / `result_bytes` extraction landed; the measured 74/74-unmeasured condition is unchanged. Deferred to `~/xprojects/ts-libs/` by the task's own follow-up register. |
+| @core R7 — Every declared source either imports or explains itself | UNMET | static-ref | No empty-source explanation path and no chunk-boundary handling; `history-service.ts` has no `chunk` reference and no antigravity/openclaw diagnostic beyond the pre-existing source list at `:221-222,239` |
+| @core R8 — The local data plane has a bounded footprint | MET | test | `packages/domain/src/retention.ts:24-27,48` + `HistoryService.daily()` trigger at `packages/app/src/services/history-service.ts:553`; retention tests 6/6 green |
+| @edge R9 — Structural checks do not fire on ordinary prose | MET | test | `packages/app/tests/services/task-check.test.ts:1677` — "parity-gated" raises no `L4_GATE_LANGUAGE`; 136/136 green |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+L3: functional traceability + SECUA + architecture review of the 0622 diff.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
+| Priority | Dimension | Location | Finding |
+|---|---|---|---|
+| P4 | Correctness | `packages/domain/src/analytics/costs.ts` cacheHitRatio | Fixed to `cacheRead / inputTokens` with `inputTokens` cache-inclusive per `TokenTotals` contract; root cause was the analyze fold feeding the cache-exclusive raw column through (F7 7,567,843.0%), now corrected at `packages/app/src/services/history-service.ts` `foldMessage` — denominator and fold share one contract |
+| P4 | Correctness | `packages/app/src/workflow/lifecycle-adapter.ts:207-214` | Finalize mapping cancelled→failed / done→done / else running; tests at `packages/app/tests/workflow/lifecycle-adapter.test.ts:265-299` |
+| P4 | Correctness | `packages/domain/src/migrations.ts` 0017 | `UPDATE runs SET status='done'` with table+column guard (skip on legacy `runs` without `status`, or absent `runs`); migrations tests 42/42 green |
+| P4 | Architecture | `packages/domain/src/retention.ts` (new) | Moved from `packages/app/src/services` to domain so raw SQL + fs ops respect `raw-sql-only-in-domain` / `no-direct-fs-io`; exclusion documented in `config/rules/strict/runtime-boundaries.yaml` |
+| P4 | Efficiency | `packages/app/src/services/history-service.ts:553` | Retention wired to single daily trigger (covers CLI + queue consumer); bounded-window constants 90/30/180/30 |
+| P4 | Security | `plugins/sp/skills/issue-finding/SKILL.md` | Phase 1 refuses bare PATH `spur` for history validation (0504 R4), fails loudly; artifact-size discipline avoids T2 2.7 MB traps |
+| P4 | Traceability | `docs/00_ADR.md:1014-1030` (ADR-077) | Pin-beats-role documented with `agent-service.ts` line citations; matches shipped behavior |
+| P4 | Correctness | `plugins/sp/tests/skill-structure.test.ts` R44 baseline | issue-finding body +921 B (R9 content) recorded, not silently grown past ratchet |
+
+No P1–P3 findings. Verify PASS.
 ### References
 
 <!-- Links to docs, tasks, decisions, or external references. -->
 
 ### History
+- 2026-08-21T07:06:19.913Z todo → wip (system)
+- 2026-08-21T10:38:38.795Z wip → testing (system)
+- 2026-08-21T10:56:19.529Z testing → done (system)
