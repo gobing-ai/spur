@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.42.0
+version: 1.43.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-21
@@ -37,6 +37,7 @@ When collaborating with the design team:
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md)                                           | Team mode — agent specs, inbox, `TeamService`                                                                                                                                                         | design                          |
 | [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability plus D5's proposed persisted progress projection shape                                                                                                                     | foundation built; D5 proposed   |
 | [`workflow-composition-contract.md`](design/workflow-composition-contract.md)                           | D5 workflow composition baseline, split state/evidence effects, structured gate execution, digest-bound proof, and consolidation contract                                                             | proposed; taste gate pending    |
+| [`workflow-shell-ownership.md`](design/workflow-shell-ownership.md)                                     | Shipped workflow shell-program ownership, including the wrap-up feature-sync extension plus trusted corpus-gate command (task 0625)                                                                    | accepted; current through 0625  |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                      | implemented                     |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\|auto\|name>` selector, interactive task-pipeline host driver (0503), named escalation triggers, and `sp:dogfood-testing` extraction                | implemented                     |
 | [`agent-inline-host-session.md`](design/agent-inline-host-session.md)                                   | `--agent inline` host-session-only guarantee — headless surfaces reject explicit `inline` with a frozen greppable message; no `agent.default` fallback; 0508 eligibility is omit-only (ADR-047 amendment, feature G5 / task 0565) | implemented (0565)             |
@@ -46,6 +47,7 @@ When collaborating with the design team:
 | [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md)                         | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2)                                               | implemented                     |
 | [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md)             | Features detail action progress — F83 job-queue runner, queue.job.\* SSE correlation, floating progress layer (implements F81/0352–0354)                                                              | design                          |
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md)             | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410)                                                                                         | implemented                     |
+| [`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md)                         | Feature sync/roster convergence, explicit refresh breadth, wrap-up corpus observation, and task/feature projection-content findings (0625)                                                            | implemented (0625)              |
 | [`project-switcher.md`](design/project-switcher.md)                                                     | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1)                                                                                                                       | design                          |
 | [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — shipped unified timeline (M4/0422); accepted message-only boundary under G3 (ADR-052)                                                                                           | transition design               |
 | [`workflow-run-log.md`](design/workflow-run-log.md)                                                     | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045)                       | built                           |
@@ -60,7 +62,7 @@ When collaborating with the design team:
 | [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602); J91 built (0605) |
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
-| [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures (shell line-count, agent.run non-slash trigger, advisory posture) and four-surface script placement table + feature A3 consent record (ADR-069 amendment, ADR-051 amendment, task 0613) | authority landed; advisory tooling 0614/0615                                                                                                                    |
+| [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures, four-surface script placement, and dated ADR-051 consent applications (feature A3/0613; explicit feature-refresh breadth/0625)                                                 | authority landed; current through 0625                                                                                                                         |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -950,8 +952,22 @@ Sync feature status with linked task states via conservative forward-only deriva
 - `--all` — evaluate and sync all features with linked tasks.
 - `--dry-run` — report proposed status sync transitions without applying writes.
 - `--force` — force applying reopen proposals (`done/cancelled -> active` when non-terminal tasks are linked) without confirmation.
+- Applied-hop projection (task 0625): after one or more lifecycle hops, `syncFeature` calls
+  `refresh({ featureId: id })` before returning, so the touched feature's `## Tasks` marker region
+  reflects the task edges used to derive status. Dry-run, confirmation-refused, and no-op results do
+  not refresh.
 - `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns HTTP 501 structured error (not supported; use pull or CLI `spur feature sync`).
-- Pipeline integration (task 0328; bounded by 0411): `task-pipeline.yaml`'s post-record step syncs the feature when the task carries a `feature_id`, or appends an orphan proposal to the run report if unlinked; `wrapup-pipeline.yaml`'s feature-transition step syncs `${vars.feature}`. Both prefer the retry-suppressing wrapper `bun plugins/sp/scripts/feature-sync-bounded.ts <id> --spur-bin <bin> --json` and fall back to the plain `spur feature sync <id> --json` verb when that script is absent — `spur init` seeds `.spur/workflows/` but never `plugins/sp/`, so a scaffolded project must not depend on the monorepo-relative path. Both steps are **advisory** (`; exit 0`): feature-status sync is a follow-up, never a completion gate, and must not abort a run that already produced a PASS verdict — the one exception is an empty feature id in the wrapup feature-transition step, which fails loud (`exit 1`) because it is a mis-invocation, not a blocked sync (dogfood 2026-08-15, I3). Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
+- Pipeline integration (task 0328; bounded by 0411, amended by 0625): `task-pipeline.yaml`'s
+  post-record step syncs the linked feature or records an orphan proposal. `wrapup-pipeline.yaml`'s
+  `feature-transition` step syncs `${vars.feature}`, captures the JSON result, and when `applied` is
+  true runs trusted workflow var `featureGateCmd` (default `bun run spur-check-new`) before
+  returning. Both prefer `feature-sync-bounded.ts` and fall back to plain `spur feature sync` in a
+  seeded project. The shells remain advisory (`exit 0`); the wrap-up gate emits explicit PASS/FAIL
+  while leaving recovery to the operator. An empty wrap-up feature id fails loud with exit 1.
+
+Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
+
+Detailed shapes: [`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md).
 
 #### `spur task scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]`
 
@@ -1196,7 +1212,7 @@ config/
     pr-review.yaml                  # GitHub Codex PR-review spine (/sp:dev-pr-review; skill sp:pr-reviewing)
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
-  corpus-baseline.json              # accepted errors for `spur task check --corpus` / `bun run corpus-check` (ADR-050)
+  corpus-baseline.json              # accepted findings by severity for `spur task check --corpus` / `bun run corpus-check` (ADR-050/062)
   transition-shims.json            # transition-shim manifest — removal worklist for the agent-role transition (task 0541, §2.5)
   templates/                        # task/feature/bdd/docs body templates (§8); CLI never hardcodes body content (DD-11)
     task/{standard,feature-impl,issue,review,brainstorm,meta}.md   # one per TASK_VARIANTS entry (§7.3.1); SSOT alignment invariant enforced by init.test.ts
@@ -1472,6 +1488,12 @@ Source: delivery §1.1, design §10.
 | `spur task verifyall-aggregate`        | `--from-file <path>` `--json`                                                                                                             | 0/1     | Read a JSON array of `{wbs, outcome[, reason]}` and emit the deterministic batch verdict; NOT-STARTED excluded from the rollup. Default input `.spur/run/verifyall-batch-input.json`. Replaces agent-discretion rollup prose (task 0341). |
 | `spur task run-link <wbs>`             | `--source <src>` `--run-id <id>` `--json`                                                                                                | 0/1     | Record a pipeline provenance run-link for a task (used by `--next` auto chains to satisfy the testing→done guard). Idempotent: re-run prints already-exists and skips. `--source` default `chain`; `--run-id` auto-generated when omitted. Shared ensure helper with `task record` (task 0436). |
 
+**Projection-content additions (task 0625).** `spur task check` emits warning
+`L4.testing-verdict-stub` for the record-generated hollow Testing row. For a prose-free Solution
+change-map row, the existing `L4.anchor-subject-mismatch` check derives subject tokens from the
+cited path basename before evaluating the line. Exact triggers and tokenization:
+[`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md) §2.
+
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
 
@@ -1491,13 +1513,18 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature advance <id>`            | `--to <status>` `--folder <path>` `--json`                                                   | 0/1   | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `spur feature list`                    | `--status <s>` `--priority <p>` `--folder <path>` `--json`                                   | 0/1   | Lists features sorted by ID; optional status/priority filters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `spur feature check [<id>]`            | `--strict` `--as <status>` `--fix` `--folder <path>` `--json`                                        | 0/1   | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over `active` (0418: `verifying` is terminal-bound and no longer counts as a goal; `--as <status>` evaluates the rule against the post-transition status so lifecycle guards never deny the exit they relieve) + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09) + verdict-backed AC satisfaction from canonical `id` rows or the `scenario` compatibility alias + bounded malformed-artifact diagnostics + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. Details: [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md). |
-| `spur feature refresh`                 | `--folder <path>` `--json`                                                                   | 0/1   | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `spur feature refresh`                 | `--feature <id>` `--all` `--folder <path>` `--json`                                          | 0/1/2 | Regenerate the deterministic global `INDEX.md`; `--feature <id>` rewrites only that feature's `## Tasks` marker region, while `--all` opts into every feature. A bare invocation refuses with exit 2. Feature lifecycle status, non-marker feature content, and all task files are preserved (task 0625; ADR-051 consent).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `spur feature move <id> --parent <id>` | `--parent <id>` `--dry-run` `--folder <path>` `--json`                                       | 0/1   | Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames their files, rewrites each `id` frontmatter + appends a move History line, and updates every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 / not-into-own-subtree); applies atomically with best-effort rollback. `--dry-run` returns the old→new map + affected tasks with zero writes. Omit `--parent` to move to a top-level group.                                                                                                                                                                                                                                                                                                                                                                           |
+
+**Dogfood identity (task 0625).** For self-referential workflow work, `feature check` accepts a
+report only when the feature ID appears as a non-alphanumeric-delimited filename segment; an
+incidental substring does not satisfy `L4.dogfood-missing`. Exact shape:
+[`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md) §3.
 
 ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. The `## Tasks` auto-gen markers are
 `<!-- AUTO-GENERATED by spur feature refresh -->` … `<!-- END AUTO-GENERATED -->` (recognized by
 `MarkdownDocument.replaceMarkerRegion`). The full `spur feature` surface
-(create/show/update/advance/list/check/refresh/move) is now live.
+(create/show/update/advance/list/check/refresh/move/sync) is now live.
 
 **Root-node discipline (ADR-063).** Because the ID encodes position, the single-letter root set is
 the product's coarsest map and a new letter is effectively permanent. File new work under the

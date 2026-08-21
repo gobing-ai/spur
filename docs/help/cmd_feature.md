@@ -15,7 +15,7 @@
 | `advance <id>` | Walk a feature through the legal forward lifecycle path to a target status |
 | `list` | List features sorted by ID, with status/priority filters |
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
-| `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change) |
+| `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change); scope explicit via `--feature <id>` or `--all` |
 | `check [id]` | Validate feature file(s) through the four-layer check |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) |
 
@@ -213,6 +213,7 @@ spur feature refresh [options]
 | Flag | Description |
 |---|---|
 | `--feature <id>` | Restrict the `## Tasks` rewrite to one feature (INDEX.md still regenerated) |
+| `--all` | Rewrite every feature `## Tasks` region (explicit broad sweep) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
@@ -222,8 +223,12 @@ link) and repopulate each feature's `## Tasks` auto-gen marker region from task
 all task files are byte-preserved. **Does not change feature lifecycle status** (that is
 `sync`).
 
-> Run `spur feature refresh` when closing a task to keep feature `## Tasks` blocks tracking
-> real task status.
+Scope is explicit: pass `--feature <id>` to rewrite one feature, or `--all` to sweep every
+feature. A bare invocation refuses to sweep — the all-features rewrite silently touched
+unrelated features during the A3 run (task 0625 R5a, ADR-051 consent).
+
+> Run `spur feature refresh --feature <id>` when closing a task to keep feature `## Tasks`
+> blocks tracking real task status (use `--all` only when every roster is stale).
 
 ## spur feature sync
 

@@ -1,9 +1,9 @@
-# Harness surface governance (feature A3, task 0613)
+# Harness surface governance
 
 **Area:** the two detectable composition measures (shell / agent.run), the advisory-only posture, and
-the four-surface script placement table with the feature's operator consent record.
+the four-surface script placement table with dated operator-consent applications.
 **Status:** authority landed (ADR-069 amendment + promotion, ADR-051 amendment); advisory tooling is
-sibling tasks 0614/0615.
+sibling tasks 0614/0615; consent record updated by task 0625 on 2026-08-21.
 **Authority:** derived; ADR-069 (composition measures, advisory posture), ADR-051 (surface boundary,
 consent gate), ADR-065 (plugin-script entrypoint contract, cross-referenced), ADR-043 (slash-command
 preference). On conflict, `00_ADR.md` wins (lower number wins on content, constitution §4.1).
@@ -92,7 +92,17 @@ spur-dev → public-noun promotion of any kind may ride this record. Every futur
 its **own** consent-gate entry (audience + surface + justification) exactly like the rows above;
 without one, the command stays internal under `scripts/commands/`.
 
-## 4. Known follow-ups (none open)
+## 4. Subsequent consent applications
+
+| Date | Task | Public change | Granted scope and reason |
+| --- | --- | --- | --- |
+| 2026-08-21 | 0625 | `spur feature refresh` adds `--all`; a bare invocation now exits 2 unless `--feature <id>` is supplied | Require an explicit one-feature or all-feature breadth token. The A3 wrap-up's bare refresh rewrote unrelated D3/D5/D6/E5 rosters, so implicit global mutation is no longer an acceptable default. |
+
+The grant changes only refresh breadth selection. It does not change the `## Tasks` marker format,
+the deterministic global `INDEX.md` regeneration, or lifecycle status; those shapes are in
+`lifecycle-projection-integrity.md`.
+
+## 5. Known follow-ups (none open)
 
 Both 0613 follow-ups closed by task 0614 (2026-08-21): the shell-ownership doc's
 `learning-capture:onEnter:1` key is re-keyed to `doc-sync:onEnter:1` with the frozen-rule measure

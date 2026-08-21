@@ -8,7 +8,7 @@ import {
     resolveConfiguredTaskDirs,
     resolveRepoRoot,
 } from '../../src/services/anchor-qualifier';
-import { citedLinesNameSubject, extractSubjectTokens } from '../../src/services/task-check';
+import { citedLinesNameSubject, extractPathSubjectTokens, extractSubjectTokens } from '../../src/services/task-check';
 
 describe('qualifySectionBody', () => {
     const index = new Map<string, string[]>([
@@ -237,5 +237,30 @@ describe('anchor-subject-mismatch (R4/R5)', () => {
 
     test('empty subject token set never reports mismatch', () => {
         expect(citedLinesNameSubject([], 'anything at all')).toBe(true);
+    });
+});
+
+describe('extractPathSubjectTokens (R4, 0625) — Solution change-map subject derivation', () => {
+    test('derives identifier tokens from a kebab-case basename', () => {
+        expect(extractPathSubjectTokens('apps/cli/src/workflow/mermaid-render.ts')).toEqual(
+            expect.arrayContaining(['mermaid', 'render']),
+        );
+    });
+
+    test('derives a plain basename symbol', () => {
+        expect(extractPathSubjectTokens('apps/cli/src/commands/workflow.ts')).toEqual(
+            expect.arrayContaining(['workflow']),
+        );
+    });
+
+    test('drops the extension and short fragments', () => {
+        // `ts` is the extension — stripped before tokenization; no 2-char token.
+        expect(extractPathSubjectTokens('apps/cli/src/commands/workflow.ts')).not.toContain('ts');
+        expect(extractPathSubjectTokens('x/y/a.ts')).toEqual([]);
+    });
+
+    test('camelCase basename stays one identifier token (no case splitting)', () => {
+        const tokens = extractPathSubjectTokens('packages/app/src/services/taskService.ts');
+        expect(tokens).toContain('taskservice');
     });
 });

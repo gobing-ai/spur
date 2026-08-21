@@ -227,7 +227,7 @@ transition a pipeline invokes, but their states are not pipeline steps themselve
 | 25 | `doc-sync`                   | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run sp:doc-evolve` (drift repair in 04/03/00, `docs/design/*`) | —  |
 | 26 | `learning-capture`           | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-learnings.md` + `shell` append to `.spur/memory/learnings.md` | — |
 | 27 | `metrics-record`             | `wrapup-pipeline.yaml`                              | Wrap-up                     | `/sp:dev-wrap` or `/sp:dev-wrapall`                                      | `agent.run` → `.spur/run/wrapup-metrics.jsonl` + `shell` append to `.spur/memory/wrapup-metrics.jsonl` | — |
-| —  | `feature-transition`         | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrapall --feature <id>`                                         | `shell` — `backlog→active→verifying→done` via `spur feature update` (lifecycle FSM guards) | obj |
+| —  | `feature-transition`         | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrapall --feature <id>`                                         | `shell` — bounded `feature sync`; after an applied transition, run `featureGateCmd` (default `bun run spur-check-new`) and report PASS/FAIL softly | obj |
 | —  | `branch-cleanup`             | `wrapup-pipeline.yaml`                              | Wrap-up (conditional)       | `/sp:dev-wrap --merge` / `/sp:dev-wrapall --merge`                        | `hitl.confirm` — irreversible (always pauses, even under `--auto`) | irrev |
 
 **Reading the table.** Steps 1–15 cover the planning half (intake → ideation → design →
@@ -511,7 +511,7 @@ Required actions:
 | `doc-sync` | Dispatch `sp:doc-evolve` once for the batch. |
 | `learning-capture` | Append working learnings to `.spur/memory/learnings.md`. |
 | `metrics-record` | Append one JSONL row per task to `.spur/memory/wrapup-metrics.jsonl`. |
-| `feature-transition` | If `feature` is set, advance through legal feature lifecycle edges only. |
+| `feature-transition` | If `feature` is set, run bounded feature sync; after an applied transition, run the corpus-aware `featureGateCmd` before returning. |
 | `branch-cleanup` | If `merge=true`, dispatch `sp:branch-workflow` behind an irreversible HITL gate. |
 | `done` | Output wrap-up summary and next action. |
 
@@ -520,6 +520,8 @@ Rules:
 - Project-level doc-sync runs once per batch.
 - Learning capture aggregates the batch, then writes task-specific entries.
 - Metrics are append-only and machine-readable.
+- `featureGateCmd` is trusted project configuration executed through `sh -c`; its failure is
+  reported but does not hard-fail the wrap-up shell.
 - Branch cleanup always pauses unless the operator explicitly confirms the irreversible action.
 - Task statuses are not mutated.
 

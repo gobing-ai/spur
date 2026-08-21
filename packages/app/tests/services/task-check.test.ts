@@ -3267,3 +3267,147 @@ describe('F92 R2 — target-status (asStatus) validation projection', () => {
         expect(result.pass).toBe(false);
     });
 });
+
+describe('0625 R3 — hollow-Testing stub detection', () => {
+    const stubTask = (testingBody: string): string =>
+        [
+            '---',
+            'schema_version: 1',
+            'name: "Stub testing task"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Stub testing task',
+            '',
+            '### Background',
+            'text',
+            '',
+            '### Solution',
+            '`packages/app/src/services/task-check.ts:10-20` implements the check.',
+            '',
+            '### Testing',
+            testingBody,
+            '',
+            '### Review',
+            '| P1 | path | finding | fix |',
+            '| P2 | foo.ts | issue | done |',
+        ].join('\n');
+
+    test('reports L4.testing-verdict-stub when Testing carries the record UNKNOWN stub row', async () => {
+        const body = [
+            '**Pipeline verify results**',
+            '',
+            '- Verdict: UNKNOWN (from verdict artifact)',
+            '',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| — | — | No requirements recorded; verify verdict UNKNOWN |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(stubTask(body));
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
+        expect(stub).toHaveLength(1);
+        expect(stub[0]?.severity).toBe('warning');
+        expect(stub[0]?.section).toBe('Testing');
+    });
+
+    test('no stub finding when Testing carries a populated requirement table', async () => {
+        const body = [
+            '**Pipeline verify results**',
+            '',
+            '- Verdict: PASS (from verdict artifact)',
+            '',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET | `packages/app/src/services/task-check.ts:10-20` |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(stubTask(body));
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
+        expect(stub).toHaveLength(0);
+    });
+
+    test('prose "no requirements recorded" in a sentence does not trip the row-shape match', async () => {
+        const body = [
+            '**Pipeline verify results**',
+            '',
+            '- Verdict: PASS (from verdict artifact)',
+            '',
+            'No requirements recorded — verified manually by re-running the pipeline.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(stubTask(body));
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
+        expect(stub).toHaveLength(0);
+    });
+});
+
+describe('0625 R4 — Solution change-map anchor drift detection', () => {
+    function seedChangeMap(row: string, fileContent: string) {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Change-map task"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Change-map task',
+            '',
+            '### Background',
+            'text',
+            '',
+            '### Solution',
+            '| Change |',
+            '|--------|',
+            `| ${row} |`,
+            '',
+            '### Testing',
+            'Tested.',
+            '',
+            '### Review',
+            '| P1 | path | finding | fix |',
+            '| P2 | foo.ts | issue | done |',
+        ].join('\n');
+        const env = seedEnv({ taskContent: content });
+        const root = join(env.path, '..', '..');
+        writeFileSync(join(root, 'workflow.ts'), fileContent);
+        return env;
+    }
+
+    test('a bare change-map row citing a drifted line reports L4.anchor-subject-mismatch', async () => {
+        // Symbol `registerCancel` is at line 1; the row cites line 3 where nothing
+        // of the sort lives. Path-derived subject (`workflow`) must not match.
+        const { fs, path, cleanup } = seedChangeMap(
+            '`workflow.ts:3`',
+            'export function registerCancel() {}\nexport function other() {}\nconst unused = 1;\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+        expect(mismatch).toHaveLength(1);
+        expect(mismatch[0]?.message).toContain('workflow.ts:3');
+    });
+
+    test('a bare change-map row whose cited line names the path-derived symbol reports no mismatch', async () => {
+        const { fs, path, cleanup } = seedChangeMap(
+            '`workflow.ts:1`',
+            'export function registerWorkflow() {}\nexport function other() {}\nconst unused = 1;\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+        expect(mismatch).toHaveLength(0);
+    });
+});

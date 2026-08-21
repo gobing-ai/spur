@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.25.0
+version: 1.26.0
 owner: Robin Min
 updated_at: 2026-08-21
 read_before: any structural change; before diverging from a decision
@@ -436,6 +436,15 @@ is already crowded.
 - **Why:** Combined flags bypassed all guards, while one-time transition checks missed later rule drift; a stale-aware corpus sweep closes both gaps.
 - **Detail:** task CLI backstop; corpus-check script; baseline; `99 §5 T10`.
 
+  **Amendment (2026-08-21, task 0625):** The repository quality gate is deliberately split:
+  `spur-check` is the fast per-task chain and excludes the corpus sweep; `spur-check-new` adds
+  `spur task check --corpus`. Per-task lifecycle edges keep their structural guards, while an
+  applied wrap-up feature transition runs `spur-check-new` once and reports its result before the
+  transition action returns. This supersedes the phrase "on `spur-check`" above. The split keeps
+  the measured corpus-sweep cost out of every task loop without leaving feature-level findings
+  unobserved. **Detail:** `03 §12.5` and
+  `docs/design/lifecycle-projection-integrity.md`.
+
 ## ADR-051: Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate
 
 - **Status:** Accepted · **Date:** 2026-08-10
@@ -501,6 +510,13 @@ is already crowded.
     intent (surface governance) and the A3 batch review of 2026-08-20; each landing task cites this
     record instead of re-litigating the gate. **Operational view:**
     `docs/design/harness-surface-governance.md`.
+
+  **Amendment (2026-08-21, task 0625):** Consent granted to make `spur feature refresh` scope
+  explicit: `--feature <id>` rewrites one feature, the new `--all` flag opts into the full sweep,
+  and a bare invocation refuses with exit 2. The explicit broad-write token prevents a scoped
+  lifecycle run from silently rewriting unrelated feature rosters. **Detail:**
+  `docs/design/harness-surface-governance.md` §4 and
+  `docs/design/lifecycle-projection-integrity.md`.
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 

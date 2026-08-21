@@ -563,7 +563,15 @@ export class FeatureCheckService extends PlanningCheckService {
                 let hasDogfood = false;
                 try {
                     const entries = await this.fs.readDir(dogfoodDir);
-                    hasDogfood = entries.some((f) => f.includes(featureId));
+                    // R5b (0625): anchor the match to a filename segment, not a raw
+                    // substring. `f.includes('A3')` matched any filename merely
+                    // CONTAINING `A3` — an unrelated report (or a report for another
+                    // feature with A3 as an incidental substring) cleared this gate.
+                    // The id must be delimited by `-`/`.`/`_`/boundary, so a filename
+                    // segment must equal the feature id (feature ids are `[A-Z][0-9]*`,
+                    // so the delimiters cannot be alphanumeric).
+                    const segmentRe = new RegExp(`(^|[^A-Za-z0-9])${featureId}([^A-Za-z0-9]|$)`);
+                    hasDogfood = entries.some((f) => segmentRe.test(f));
                 } catch {
                     // Directory doesn't exist — no dogfood artifact.
                 }

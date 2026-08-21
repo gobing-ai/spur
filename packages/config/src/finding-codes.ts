@@ -63,6 +63,7 @@ export const ALL_FINDING_CODES = [
     'L4.anchor-subject-mismatch',
     'L4.malformed-verdict-artifact',
     'L4.scenario-unverified',
+    'L4.testing-verdict-stub',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -131,4 +132,5 @@ export const FINDING_CODES = {
     L4_ANCHOR_SUBJECT_MISMATCH: 'L4.anchor-subject-mismatch',
     L4_MALFORMED_VERDICT_ARTIFACT: 'L4.malformed-verdict-artifact',
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
+    L4_TESTING_VERDICT_STUB: 'L4.testing-verdict-stub',
 } as const satisfies Record<string, FindingCode>;

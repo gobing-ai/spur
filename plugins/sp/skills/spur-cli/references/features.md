@@ -27,7 +27,7 @@ what* or *how to write a scenario*, this skill.
 | `advance <id>` | Walk forward along the legal lifecycle path to a target status | `--to <status>` (default `done`) `--folder` `--json` |
 | `list` | List features, filtered | `--status <s>` `--priority <p>` `--folder` `--json` |
 | `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
-| `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--folder` `--json` |
+| `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--all` `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate; `--fix` repairs structural findings in place | `--strict` `--fix` `--folder` `--json` |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) | `--all` `--dry-run` `--force` `--folder` `--json` |
 
@@ -157,6 +157,9 @@ the AC coverage map. Habits that keep it green:
   the files (files win). This is **not** `sync` — it does not change feature status.
 - **Scope `refresh` to one feature** with `--feature <id>` when only one feature's task links changed
   (INDEX.md is still regenerated for the whole tree): `spur feature refresh --feature H2`.
+- **The broad sweep is explicit** (task 0625 R5a): bare `spur feature refresh` refuses to sweep; pass
+  `--all` to rewrite every feature's `## Tasks` region. A bare sweep silently touched unrelated
+  features during the A3 run.
 
 ## Roadmap and priority habits
 

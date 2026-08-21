@@ -376,7 +376,7 @@ describe('spur feature CLI', () => {
     test('refresh regenerates INDEX.md and reports tasksUpdated (--json)', async () => {
         await main(['feature', 'create', 'Refreshable Group'], { cwd, output: createCapturedOutput() });
         const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'refresh', '--json'], { cwd, output });
+        const exitCode = await main(['feature', 'refresh', '--all', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(lastMessage(output));
         expect(parsed.index_path).toMatch(/INDEX\.md$/);
@@ -452,9 +452,16 @@ describe('spur feature CLI', () => {
 
     test('refresh prints a human summary (non-JSON)', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'refresh'], { cwd, output });
+        const exitCode = await main(['feature', 'refresh', '--all'], { cwd, output });
         expect(exitCode).toBe(0);
         expect(lastMessage(output)).toContain('INDEX.md regenerated');
+    });
+
+    test('bare refresh refuses to sweep without --feature/--all (R5a, 0625)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'refresh'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('')).toContain('--feature <id> or --all is required');
     });
 
     test('check with no id validates all features in the folder (--json)', async () => {

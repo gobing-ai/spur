@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close the 2026-08-21 dogfood residue: lifecycle projections and gates that report a state the tree contradicts"
-status: backlog
+status: done
 template: meta
 created_at: 2026-08-21T21:34:00.042Z
-updated_at: "2026-08-21T21:38:26.933Z"
+updated_at: "2026-08-21T23:23:05.853Z"
 feature_id: F91
 ac_altitude: task-local
 ---
@@ -61,15 +61,15 @@ surface reports a lifecycle state that the tree contradicts, and no gate is posi
 → **0624**. Neither overlaps: 0623 is CLI-surface parity SSOT plus the agy mapper, 0624 is the
 history schema and importers. This task touches neither.
 ### Requirements
-- [ ] R1. Make a lifecycle transition that changes feature state run the corpus-aware gate. The pipeline quality gate defaults to `bun run autofix && bun run spur-check` (`plugins/sp/skills/spur-dev/references/execution-workflow.md:49`), which omits `corpus-check` — the only sweep that observes feature-level findings. A commit that advances a feature must not be able to leave `bun run spur-check-new` red. Out of scope: making `corpus-check` part of the per-task fast gate — the ~41 s cost is why the split exists (commit `4b929877`), and per-task transitions do not arm feature-level findings.
+- [x] R1. Make a lifecycle transition that changes feature state run the corpus-aware gate. The pipeline quality gate defaults to `bun run autofix && bun run spur-check` (`plugins/sp/skills/spur-dev/references/execution-workflow.md:49`), which omits `corpus-check` — the only sweep that observes feature-level findings. A commit that advances a feature must not be able to leave `bun run spur-check-new` red. Out of scope: making `corpus-check` part of the per-task fast gate — the ~41 s cost is why the split exists (commit `4b929877`), and per-task transitions do not arm feature-level findings.
 
-- [ ] R2. Converge the feature status/docs projection so `spur feature sync` cannot leave a `## Tasks` table contradicting the task edges it just read. Either `sync` refreshes the features it touched, or the wrap path calls both verbs — decide which in `### Q&A` before writing code. Out of scope: changing the `## Tasks` table format or the `AUTO-GENERATED` marker contract.
+- [x] R2. Converge the feature status/docs projection so `spur feature sync` cannot leave a `## Tasks` table contradicting the task edges it just read. Either `sync` refreshes the features it touched, or the wrap path calls both verbs — decide which in `### Q&A` before writing code. Out of scope: changing the `## Tasks` table format or the `AUTO-GENERATED` marker contract.
 
-- [ ] R3. Give `spur task check` a finding for a `## Testing` section whose body is the `record` UNKNOWN stub (`| — | — | No requirements recorded; verify verdict … |`, emitted at `packages/app/src/services/task-record.ts:191`), so the stub cannot sit in a `done` task unobserved. Severity must be chosen against the two-sided ratchet: the corpus holds tasks in this shape today, so a new **error** obliges same-commit baseline reconciliation (constitution T10). Out of scope: re-authoring the historical tasks the sweep surfaces — record them in the warning baseline.
+- [x] R3. Give `spur task check` a finding for a `## Testing` section whose body is the `record` UNKNOWN stub (`| — | — | No requirements recorded; verify verdict … |`, emitted at `packages/app/src/services/task-record.ts:191`), so the stub cannot sit in a `done` task unobserved. Severity must be chosen against the two-sided ratchet: the corpus holds tasks in this shape today, so a new **error** obliges same-commit baseline reconciliation (constitution T10). Out of scope: re-authoring the historical tasks the sweep surfaces — record them in the warning baseline.
 
-- [ ] R4. Make `### Solution` change-map anchor drift detectable. `checkLineAnchors` already covers `Solution` (`packages/app/src/services/task-check.ts:1237`) but only for existence and line bounds; subject-matching cannot fire on a change-map row that carries no prose (0620 cited `workflow.ts:744`, symbol at `:759`, gate silent — while 0591's prose-bearing row with identical drift reported). Out of scope: the `cmd_*.md` underscore false-positive, which has a landed authoring mitigation and needs its own measurement.
+- [x] R4. Make `### Solution` change-map anchor drift detectable. `checkLineAnchors` already covers `Solution` (`packages/app/src/services/task-check.ts:1237`) but only for existence and line bounds; subject-matching cannot fire on a change-map row that carries no prose (0620 cited `workflow.ts:744`, symbol at `:759`, gate silent — while 0591's prose-bearing row with identical drift reported). Out of scope: the `cmd_*.md` underscore false-positive, which has a landed authoring mitigation and needs its own measurement.
 
-- [ ] R5. Tighten two feature-surface imprecisions that let a broad action look narrow and a loose match look like proof: `spur feature refresh` with no `--feature` rewrites every feature's `## Tasks` table (it rewrote D3/D5/D6/E5 alongside A3 during the A3 verify run), and `L4.dogfood-missing` clears on any `docs/dogfood/` filename *containing* the feature id (`packages/app/src/services/feature-check.ts:566`), which a two-character id like `A3` matches by accident. Out of scope: changing the dogfood requirement itself or which features arm it.
+- [x] R5. Tighten two feature-surface imprecisions that let a broad action look narrow and a loose match look like proof: `spur feature refresh` with no `--feature` rewrites every feature's `## Tasks` table (it rewrote D3/D5/D6/E5 alongside A3 during the A3 verify run), and `L4.dogfood-missing` clears on any `docs/dogfood/` filename *containing* the feature id (`packages/app/src/services/feature-check.ts:566`), which a two-character id like `A3` matches by accident. Out of scope: changing the dogfood requirement itself or which features arm it.
 ### Acceptance Criteria
 ```gherkin
 @core
@@ -184,6 +184,9 @@ observable behavior change to a public verb, which ADR-051's amended consent gat
 ("the consent gate covers observable output changes of existing verbs, not just noun/verb
 additions"). Present the options with design context and get consent before landing. R5(b) is
 internal matching logic and needs no consent.
+
+**Q: When can `L4.testing-verdict-stub` be promoted from warning to error?**
+A: Only after the corpus is migrated — the three baselined occurrences are tasks 0164/0165/0394 whose Testing sections still carry the record UNKNOWN stub row. Promotion requires re-authoring those Testing sections (re-running the verify/record hop against their verdict artifacts), then removing the three baseline entries and flipping the severity in `task-check.ts:899`. Until then the two-sided ratchet holds them visible at warning.
 ### Design
 Five findings, one root: **a Spur surface reports a lifecycle state the tree contradicts, and no
 gate is positioned to notice.** Sequenced **R1 → R2 → R3 → R4 → R5** because R1 is the gate that
@@ -317,14 +320,14 @@ Depends on nothing. Does not touch **0623** (CLI-surface parity SSOT + agy mappe
 subject-matching both change corpus-sweep output, so land them **before** any batch that would
 otherwise absorb their fallout into an unrelated baseline reconciliation.
 ### Plan
-- [ ] Add a `featureGateCmd` var (default `bun run spur-check-new`) to `config/workflows/wrapup-pipeline.yaml` and run it in the `feature-transition` step after an applied sync, reporting the result without hard-failing the soft shell (R1)
-- [ ] Have `syncFeature` call `refresh({ featureId })` for the feature it touched, so status and the `## Tasks` projection cannot disagree; assert convergence for a bare `spur feature sync` as well as the pipeline callers (R2)
-- [ ] Register `L4.testing-verdict-stub` in `finding-codes.ts` and match the `record` stub row shape (not prose) in the `## Testing` body from `task-check.ts`; land at warning severity (R3)
-- [ ] Reconcile the warning baseline for every pre-existing occurrence in the same commit and record in `### Q&A` what promoting to error would require (R3)
-- [ ] In `checkLineAnchors`, derive subject tokens from the row's own path basename when a `Solution` change-map row yields none, reusing the existing token pipeline (R4)
-- [ ] Make the bare `spur feature refresh` sweep explicit (`--all`, or require one of `--feature`/`--all`) — present the surface options and obtain ADR-051 operator consent before landing (R5)
-- [ ] Anchor the `L4.dogfood-missing` filename match to a delimited id segment instead of a raw substring (R5)
-- [ ] Verification: per-requirement tests; re-run `bun run spur-check-new` and record the corpus sweep's new/stale counts before and after in `### Testing` — the bar is measured deltas plus a green two-sided ratchet, not green tests alone
+- [x] Add a `featureGateCmd` var (default `bun run spur-check-new`) to `config/workflows/wrapup-pipeline.yaml` and run it in the `feature-transition` step after an applied sync, reporting the result without hard-failing the soft shell (R1)
+- [x] Have `syncFeature` call `refresh({ featureId })` for the feature it touched, so status and the `## Tasks` projection cannot disagree; assert convergence for a bare `spur feature sync` as well as the pipeline callers (R2)
+- [x] Register `L4.testing-verdict-stub` in `finding-codes.ts` and match the `record` stub row shape (not prose) in the `## Testing` body from `task-check.ts`; land at warning severity (R3)
+- [x] Reconcile the warning baseline for every pre-existing occurrence in the same commit and record in `### Q&A` what promoting to error would require (R3)
+- [x] In `checkLineAnchors`, derive subject tokens from the row's own path basename when a `Solution` change-map row yields none, reusing the existing token pipeline (R4)
+- [x] Make the bare `spur feature refresh` sweep explicit (`--all`, or require one of `--feature`/`--all`) — present the surface options and obtain ADR-051 operator consent before landing (R5)
+- [x] Anchor the `L4.dogfood-missing` filename match to a delimited id segment instead of a raw substring (R5)
+- [x] Verification: per-requirement tests; re-run `bun run spur-check-new` and record the corpus sweep's new/stale counts before and after in `### Testing` — the bar is measured deltas plus a green two-sided ratchet, not green tests alone
 ### Root Cause
 **One root, five surfaces.** Each finding is a place where a Spur surface reports a lifecycle state
 that the tree contradicts, and no gate is positioned to observe the contradiction:
@@ -351,17 +354,105 @@ read as a model regression — was live throughout. Recorded because it is evide
 mechanical guard rather than prose; no mechanism is proposed here, and inventing one without
 measuring the frequency would be speculative.
 ### Solution
+Five requirements, five code seams, one baseline reconciliation. All anchors live-verified at authoring time and re-verified against this task's own R4 gate.
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+#### Change map
 
+| Change | Anchor |
+|---|---|
+| R1 — wrapup `feature-transition` runs `featureGateCmd` (corpus-aware gate) only after an applied sync | `config/workflows/wrapup-pipeline.yaml:187` |
+| R2 — `syncFeature` refreshes the roster when `appliedHops.length > 0`, closing the invariant at the service seam | `packages/app/src/services/feature-service.ts:560` |
+| R3 — `TESTING_VERDICT_STUB_RE` matches the record-UNKNOWN stub row in `### Testing` | `packages/app/src/services/task-check.ts:83` |
+| R3 — finding code `L4.testing-verdict-stub` registered | `packages/config/src/finding-codes.ts:135` |
+| R3 — `runL4` fires the stub finding on a Testing body matching the stub | `packages/app/src/services/task-check.ts:876` |
+| R4 — `extractPathSubjectTokens` derives identifier tokens from a change-map row's own path | `packages/app/src/services/task-check.ts:414` |
+| R4 — `checkLineAnchors` substitutes `effectiveTokens` when a Solution row yields no prose tokens | `packages/app/src/services/task-check.ts:1384` |
+| R5a — bare `feature refresh` refuses (exit 2) unless `--feature` or `--all` | `apps/cli/src/commands/feature.ts:314` |
+| R5b — dogfood check matches `featureId` as a delimited segment, not a substring | `packages/app/src/services/feature-check.ts:573` |
+
+Prose-only anchors (underscore-bearing filenames can never match cited-line content — L4 subject rule; kept out of the table): `docs/help/cmd_feature.md`, `docs/help/how_to_use_spur_for_daily_software_development.md`, `plugins/sp/skills/spur-cli/references/features.md`, `plugins/sp/skills/spur-cli/references/features/verbs.md` — flag tables and bare-form call sites updated to the `[--feature <id> | --all]` signature.
+
+#### Notes per requirement
+
+- **R1** — the gate is soft by design: it captures the sync JSON output, extracts `.applied`, and only then runs `sh -c "$featureGateCmd"`; failures report but never fail the wrapup hop. `#` comments stay at YAML level, never inside the `>-` folded shell string (they fold onto the next statement and comment it out).
+- **R2** — the refresh is scoped to the `featureId` under sync, not the global sweep; it runs only when `appliedHops.length > 0`.
+- **R3** — warning-first, matching the RC-1/F91 landed pattern. The corpus holds three stub occurrences (0164, 0165, 0394), baselined same-commit. Promoting to error requires a corpus migration that re-authors those Testing sections — recorded in Q&A below.
+- **R4** — the widened matching surfaced 82 pre-existing drift findings across 26 tasks, all baselined same-commit (not re-authored; historical tasks keep their citations). Seven baseline entries went stale and were removed. `effectiveTokens` message fix included: the finding message now names the actual path-derived tokens.
+- **R5a** — operator consent recorded 2026-08-21 (ADR-051): "Require `--feature` or `--all`; add `--all`". Bare refresh errors with exit 2 and a refusal message. All repo callers already passed `--feature` or were updated.
+- **R5b** — the segment regex `(^|[^A-Za-z0-9])ID([^A-Za-z0-9]|$)` stops single-letter feature ids (D, H, E) matching incidental substrings inside longer filenames. The three newly-exposed dogfood gaps are baselined same-commit as pre-existing, not backfilled.
+
+#### Baseline reconciliation (T10)
+
+`config/workflow-composition-baseline.json` (R1, T10): `feature-transition:onEnter:0` invocation updated in the same commit via 1-line targeted splice (0612 precedent — no full-JSON rewrite); `checkWorkflowComposition` two-sided checker green (`bun test packages/app/tests/workflow/composition-baseline.test.ts` → 18 pass).
+
+`config/corpus-baseline.json`: +32 entries (82 new findings across 26 tasks for R4 widening; 3 stub warnings for R3; 3 dogfood warnings for R5b), −7 stale (drift repaired by earlier qualification work). Re-run green: `corpus-check OK — errors 2264 observed, 764 baselined, 0 new, 0 stale; warnings 2413 observed, 1142 baselined, 0 new, 0 stale.`
+
+#### Tests
+
+| Test | Anchor |
+|---|---|
+| `extractPathSubjectTokens` tokenization unit tests | `packages/app/tests/services/anchor-qualifier.test.ts:243` |
+| Hollow-Testing stub detection (fires / populated doesn't / prose doesn't) | `packages/app/tests/services/task-check.test.ts:1` |
+| Solution change-map anchor-drift e2e (drifted fires / correct passes) | `packages/app/tests/services/task-check.test.ts:1` |
+| R5b delimited-segment match (`M3` vs `M3A` filename) | `packages/app/tests/services/feature-check.test.ts:1845` |
+| R2 `syncFeature` convergence (roster refreshes after applied hops) | `packages/app/tests/services/feature-service.test.ts:763` |
+| CLI bare-refresh refusal + `--all` acceptance | `apps/cli/tests/commands/feature.test.ts:460` |
+
+All suites green at authoring time: task-check + anchor-qualifier + feature-check (261 pass), feature-service (48 pass), apps/cli feature tests (45 pass), plugin parity suite (112 pass).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — A feature transition cannot leave the corpus gate red | MET | config/workflows/wrapup-pipeline.yaml:161 — corpus-aware gate runs after an applied sync (APPLIED=$(... \| jq -r '.applied // false')), reporting PASS/FAIL; soft-by-design matches blocked-sync precedent |
+| R2 — Feature status and the task roster agree after a sync | MET | packages/app/src/services/feature-service.ts:560-566 — refresh({featureId}) runs after appliedHops.length > 0, rewriting the feature's ## Tasks marker region from the same task edges the status derived from |
+| R3 — A hollow Testing section is reported | MET | packages/app/src/services/task-check.ts:83 (TESTING_VERDICT_STUB_RE), fired at :887-906; code L4_TESTING_VERDICT_STUB at packages/config/src/finding-codes.ts:135; tested in packages/app/tests/services/task-check.test.ts (stub row trips, populated table does not) |
+| R3 — The new finding is reconciled two-sided in the same commit | MET | config/corpus-baseline.json — 1881→1906 entries (−7 stale, +32 new); sweep after: 2264 errors observed / 764 baselined / 0 new / 0 stale; 2413 warnings observed / 1142 baselined / 0 new / 0 stale |
+| R4 — Change-map anchor drift is caught | MET | packages/app/src/services/task-check.ts:414 (extractPathSubjectTokens), substitution at :1384-1390 — bare Solution rows derive subject tokens from the path basename; drifted anchor now reports L4.anchor-subject-mismatch |
+| R5 — A refresh touches only what it was asked to touch | MET | apps/cli/src/commands/feature.ts:314 — bare refresh refuses with exit 2 + scope guidance; --all opts into the broad sweep; --feature <id> rewrites exactly that feature |
+| R5 — The dogfood gate matches the feature it is named for | MET | packages/app/src/services/feature-check.ts:573 — segment regex (^\|[^A-Za-z0-9])ID([^A-Za-z0-9]\|$) anchors the id to a filename segment; incidental substring no longer clears the gate |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Reviewer:** inline pipeline review (session host-session-6F2763B0-B936-49AB-8D2A-6F77363D110E), 2026-08-21.
+**Scope:** working-tree diff, 19 modified files (+768/−78) — all five code seams, both baselines, regenerated docs, tests.
+**Method:** full-diff read of every seam; contract verification against live source (`refresh` marker-region semantics, `featureId` charset, regex anchors); gate evidence from the test hop.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+## Findings
 
+|Priority|Finding|Evidence|
+|---|---|---|
+|P4|No findings — all five seams verified, all gates green (informational row for table-shape compliance)|`packages/app/src/services/feature-service.ts:560`, `packages/app/src/services/task-check.ts:414`|
+
+## SECUA dimensions
+
+|Dimension|Verdict|Evidence|
+|---|---|---|
+|Security|PASS|No new inputs cross a trust boundary. `featureId` interpolated into `RegExp` (`packages/app/src/services/feature-check.ts:573`) is `[A-Z][0-9]*`-shaped from the feature registry — no metacharacters reachable. Shell changes (`config/workflows/wrapup-pipeline.yaml`) read-only probes + `jq` over local script output; no eval of external content.|
+|Efficiency|PASS|R1 corpus sweep runs once per feature transition (comment names the cost: ~41 s paid once). R2 `refresh({featureId})` is marker-region-scoped, write-on-diff. R3/R4 are regex passes over existing section bodies — no new I/O.|
+|Correctness|PASS|`TESTING_VERDICT_STUB_RE` anchored to ROW SHAPE (`^\|\s*—…\|\s*No requirements recorded; verify verdict\s+\S+\s*\|`) — prose mention can't trip it. R4 `extractPathSubjectTokens` falls back only when a row yields zero prose tokens (Solution rows only), whole-basename deliberately excluded as weak subject. R5b segment regex delimits the id both sides; delimiters can't be alphanumeric given the id charset. R2 fires only after `appliedHops.length > 0` — no no-op refresh.|
+|Usability|PASS|R5a refusal prints scope guidance + `--all` escape hatch before exit 2 (`apps/cli/src/commands/feature.ts:314`). R3/R4 messages name the fix, not just the finding. Help docs + `cmd_feature.md` updated same-commit.|
+|Architecture|PASS|All seams extend existing services; no new module. R1 lives in the wrapup shell where the transition already runs (no third surface); soft-by-design matches the blocked-sync precedent. Gates + codes follow the two-sided-ratchet pattern with T10 reconciliation done in-commit.|
+
+## Requirement traceability
+
+|Req|Verdict|Anchor (Solution change-map)|
+|---|---|---|
+|R1 — corpus-aware gate after applied sync in wrapup|MET|`config/workflows/wrapup-pipeline.yaml:161` (gate block, `APPLIED` via `jq .applied`), baseline spliced `config/workflow-composition-baseline.json:1`|
+|R2 — `refresh({featureId})` after applied hops|MET|`packages/app/src/services/feature-service.ts:560`|
+|R3 — L4 stub-row detection, warning severity|MET|`packages/app/src/services/task-check.ts:83` (`TESTING_VERDICT_STUB_RE`), fired at `:887`; code `L4_TESTING_VERDICT_STUB` `packages/config/src/finding-codes.ts:135`|
+|R4 — path-derived subject tokens for bare Solution rows|MET|`packages/app/src/services/task-check.ts:414` (`extractPathSubjectTokens`), substitution `:1384`|
+|R5a — bare `feature refresh` refuses, `--all` opts in|MET|`apps/cli/src/commands/feature.ts:314` (exit 2)|
+|R5b — dogfood match anchored to filename segment|MET|`packages/app/src/services/feature-check.ts:573`|
+|T10 — same-commit baseline reconciliation|MET|`config/corpus-baseline.json` 1881→1906 (−7 stale, +32 new: 0 new / 0 stale after); composition baseline 1-line splice, checker 18 pass|
+
+## Residuals (noted, no change required)
+
+- 3 pre-existing dogfood D/H/E warnings + 3 stub warnings are baselined, not re-authored — deliberate (historical tasks keep citations; two-sided ratchet holds at 0/0).
+- R3 promotion warning→error requires corpus migration (re-authoring Testing of 0164/0165/0394) — recorded in Q&A as follow-up, out of scope here.
+
+**Verdict: PASS** — no findings requiring changes.
 ### References
 - Source dogfood reports (gitignored, local-only — `.gitignore:177`): `docs/dogfood/2026-08-21-sp-dev-run-0622-auto-next-dogfood.md` · `docs/dogfood/2026-08-21-sp-dev-run-0622-auto-next-agent-inline-dogfood.md` · `docs/dogfood/2026-08-21-A3-harness-surface-governance-batch-dogfood.md` · `docs/dogfood/2026-08-21-A3-sp-dev-verify-feature-A3-auto-next-force-focus-all-fix-all-dogfood.md`
 - Recurrence precedent (R2): `docs/dogfood/2026-07-27-sp-dev-verifyall-feature-F81-auto-next-force-focus-all-fix-all-dogfood.md` § Findings P4 — the identical stale-Tasks-table finding, 2026-07-27, not acted on.
@@ -373,3 +464,6 @@ measuring the frequency would be speculative.
 - Corpus ratchet obligation (R3): `docs/99_PROJECT_CONSTITUTION.md` **T10** — adding or tightening a finding code obliges reconciling the fallout in the same commit.
 - Anchors verified 2026-08-21: `plugins/sp/skills/spur-dev/references/execution-workflow.md:49` · `config/workflows/wrapup-pipeline.yaml:140-163` · `packages/app/src/services/feature-service.ts:331` / `:514` · `packages/app/src/services/task-record.ts:191` · `packages/app/src/services/task-check.ts:1235` / `:1237` / `:1319` · `packages/app/src/services/feature-check.ts:552` / `:566`.
 ### History
+- 2026-08-21T23:12:18.671Z backlog → wip (system)
+- 2026-08-21T23:21:57.944Z wip → testing (system)
+- 2026-08-21T23:23:05.853Z testing → done (system)

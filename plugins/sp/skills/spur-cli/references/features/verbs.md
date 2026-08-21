@@ -116,7 +116,7 @@ spur feature update  <id> [status] [--field <k> --value <v>] [--section <n> --fr
 spur feature advance <id> [--to <status>] [--folder] [--json]
 spur feature list    [--status <s>] [--priority <p>] [--folder] [--json]
 spur feature move    <id> [--parent <id>] [--dry-run] [--folder] [--json]
-spur feature refresh [--feature <id>] [--folder] [--json]
+spur feature refresh [--feature <id> | --all] [--folder] [--json]
 spur feature sync    [id] | --all [--dry-run] [--force] [--folder] [--json]
 spur feature check   [id] [--strict] [--folder] [--json]
 ```

@@ -35,7 +35,23 @@
         },
         {
             "kind": "feature",
+            "id": "D",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "feature touches workflow infra but predates the dogfood artifact requirement; artifact not backfilled",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "feature",
             "id": "D3",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "feature touches workflow infra but predates the dogfood artifact requirement; artifact not backfilled",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "feature",
+            "id": "E",
             "code": "L4.dogfood-missing",
             "severity": "warning",
             "reason": "feature touches workflow infra but predates the dogfood artifact requirement; artifact not backfilled",
@@ -230,6 +246,14 @@
             "severity": "warning",
             "reason": "Linked task lacks a PASS verdict with MET requirement — verification pending, see note § L4.scenario-unverified.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "feature",
+            "id": "H",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "feature touches workflow infra but predates the dogfood artifact requirement; artifact not backfilled",
+            "since": "2026-08-21"
         },
         {
             "kind": "feature",
@@ -3425,6 +3449,14 @@
         },
         {
             "kind": "task",
+            "id": "0067",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0068",
             "code": "L1.schema-validation",
             "reason": "Legacy corpus predates DD-03 `schema_version: 1` — see note § L1.schema-validation.",
@@ -5018,6 +5050,14 @@
         },
         {
             "kind": "task",
+            "id": "0107",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0108",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks — see note § L3.ac-empty.",
@@ -5038,6 +5078,14 @@
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history — remediation is separate work, see note § L3.unchecked-checklist.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0108",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -5671,14 +5719,6 @@
         },
         {
             "kind": "task",
-            "id": "0132",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0133",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
@@ -6130,6 +6170,14 @@
         {
             "kind": "task",
             "id": "0148",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0148",
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked — see note § L4.missing-feature-id.",
@@ -6361,6 +6409,14 @@
         {
             "kind": "task",
             "id": "0157",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0157",
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked — see note § L4.missing-feature-id.",
@@ -6437,6 +6493,14 @@
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history — remediation is separate work, see note § L3.unchecked-checklist.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0160",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -6544,6 +6608,14 @@
         },
         {
             "kind": "task",
+            "id": "0164",
+            "code": "L4.testing-verdict-stub",
+            "severity": "warning",
+            "reason": "record UNKNOWN stub in Testing — pre-existing (0625 R3); promotion to error requires corpus migration",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0165",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
@@ -6573,6 +6645,14 @@
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked — see note § L4.missing-feature-id.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0165",
+            "code": "L4.testing-verdict-stub",
+            "severity": "warning",
+            "reason": "record UNKNOWN stub in Testing — pre-existing (0625 R3); promotion to error requires corpus migration",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -7102,14 +7182,6 @@
         {
             "kind": "task",
             "id": "0185",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "error",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject — a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
-            "id": "0185",
             "code": "L4.missing-feature-id",
             "severity": "warning",
             "reason": "Task predates DD-07 feature_id requirement or was authored unlinked — see note § L4.missing-feature-id.",
@@ -7208,14 +7280,6 @@
             "severity": "error",
             "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject — a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
             "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
-            "id": "0189",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
         },
         {
             "kind": "task",
@@ -8068,14 +8132,6 @@
         },
         {
             "kind": "task",
-            "id": "0231",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0232",
             "code": "L3.ac-empty",
             "reason": "Gate postdates the task: AC was not required at close, and several are spike/meta/brainstorm tasks — see note § L3.ac-empty.",
@@ -8730,6 +8786,14 @@
         },
         {
             "kind": "task",
+            "id": "0254",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0255",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
@@ -8762,6 +8826,14 @@
         },
         {
             "kind": "task",
+            "id": "0256",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0257",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
@@ -8791,6 +8863,14 @@
             "severity": "warning",
             "reason": "Closed before the numeric coverage-claim requirement existed — see note § L3.testing-coverage.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0258",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -9055,6 +9135,14 @@
             "severity": "error",
             "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject — a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0270",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -10004,14 +10092,6 @@
         },
         {
             "kind": "task",
-            "id": "0313",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0314",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
@@ -10243,14 +10323,6 @@
             "code": "L3.requirements-empty",
             "reason": "Accepted: spike/meta/brainstorm tasks whose contract was a question, not a behavior — see note § L3.requirements-empty.",
             "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0323",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "error",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject — a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
         },
         {
             "kind": "task",
@@ -11564,6 +11636,14 @@
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history — remediation is separate work, see note § L3.unchecked-checklist.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0394",
+            "code": "L4.testing-verdict-stub",
+            "severity": "warning",
+            "reason": "record UNKNOWN stub in Testing — pre-existing (0625 R3); promotion to error requires corpus migration",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -13207,14 +13287,6 @@
         {
             "kind": "task",
             "id": "0476",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "error",
-            "reason": "Accumulated anchor drift, surfaced by promotion of anchor-subject matching rule following later file edits.",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
-            "id": "0476",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these — see note § L4.uncovered-task-scenario.",
@@ -13886,6 +13958,14 @@
         },
         {
             "kind": "task",
+            "id": "0523",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0524",
             "code": "L4.anchor-subject-mismatch",
             "severity": "error",
@@ -14075,6 +14155,14 @@
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history — remediation is separate work, see note § L3.unchecked-checklist.",
             "since": "2026-08-17"
+        },
+        {
+            "kind": "task",
+            "id": "0547",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -14438,6 +14526,38 @@
         },
         {
             "kind": "task",
+            "id": "0578",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0579",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0580",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0581",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0582",
             "code": "L4.anchor-subject-mismatch",
             "severity": "error",
@@ -14475,6 +14595,14 @@
             "severity": "warning",
             "reason": "One box stays unchecked on purpose: AC4 (live preflight repro on the base branch) is PARTIAL, not MET — `gh auth status` fails against the keyring in the sandbox and the tree is dirty, so both earlier preflight guards fire before the base-branch check is reached. The behaviour is proven by the in-process tests under AC1. Remove this entry once AC4 is run on a clean tree with working `gh` auth.",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0587",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
         },
         {
             "kind": "task",
@@ -14526,10 +14654,26 @@
         },
         {
             "kind": "task",
+            "id": "0592",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0593",
             "code": "L3.requirements-checkbox",
             "severity": "warning",
             "reason": "R-item(s) written without the [ ] checkbox marker — pre-existing structural debt; repair with `spur task check --fix` (task 0619).",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0593",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
             "since": "2026-08-21"
         },
         {
@@ -14646,6 +14790,54 @@
         },
         {
             "kind": "task",
+            "id": "0612",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0614",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0616",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0617",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0619",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0620",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
             "id": "0622",
             "code": "L2.section-order",
             "severity": "warning",
@@ -14658,6 +14850,14 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "done task retains 6 unchecked boxes; historical ship state, not re-openable in this batch",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0622",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "bare Solution change-map row cites a line that does not name its path-derived subject — 0625 R4 widening; pre-existing citation, baselined not re-authored",
             "since": "2026-08-21"
         },
         {

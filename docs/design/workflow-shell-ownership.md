@@ -1,8 +1,9 @@
-# Workflow shell ownership surface (feature D6, task 0608)
+# Workflow shell ownership surface (feature D6, task 0608; amended by 0625)
 
 **Area:** who owns each compound shell program in the shipped pipelines, decided under ADR-051.
-**Status:** accepted — decision record plus one landed owner (the `doctor.probe` built-in).
-**Authority:** derived; ADR-051 (public-surface consent gate), ADR-076 (pipeline2 retirement),
+**Status:** accepted — decision record plus one landed owner (the `doctor.probe` built-in); current
+through the task-0625 wrap-up gate addition.
+**Authority:** derived; ADR-050 (corpus gate), ADR-051 (public-surface consent gate), ADR-076 (pipeline2 retirement),
 `workflow-composition-contract.md` (deterministic action ownership).
 
 ## The decision
@@ -36,6 +37,10 @@ Measurement method: parse each `config/workflows/*.yaml` state-machine definitio
 `kind: shell` action in `onEnter` / `onExit` plus every transition `guard.kind === 'shell'`.
 Reproducible via any YAML parser over the same files.
 
+**2026-08-21 delta (task 0625):** the shell-program count is unchanged; wrap-up
+`feature-transition:onEnter:0` now sequences its existing feature-sync extension with the trusted
+project command `featureGateCmd`. Its row below is reclassified `EXT + POLICY`.
+
 ## Bulk exceptions
 
 1. **92 transition guards** — single boolean predicates (`test … && $spurBin …`) that decide graph
@@ -48,10 +53,12 @@ Reproducible via any YAML parser over the same files.
 
 ## The two mandatory D5-L cases (feature R5, task 0608 R3)
 
-1. **`qualityGateCmd` — option (e), deliberate shell exception.** The `test` / `test-recheck`
+1. **`qualityGateCmd` / `featureGateCmd` — option (e), deliberate shell exceptions.** The `test` / `test-recheck`
    quality-gate programs (`task-pipeline test:onEnter:0`, `test-recheck:onEnter:0`; the same
    pattern in `basic check:onEnter:0`, `pr-review precheck:onEnter:0` for `preReviewCmd`, and
    `implement:onEnter:2` for `formatCmd`) execute a **per-project command string** via `sh -c`.
+   Task 0625 adds the same ownership shape to wrap-up `feature-transition:onEnter:0` for
+   `featureGateCmd` after an applied feature sync.
    That override surface **is** the semantic: `command.gate` bans shell strings by design, so
    forcing it into a gate either breaks the documented per-project override or defeats the
    primitive's purpose. It is project-only policy, not reusable product semantics. The
@@ -86,7 +93,8 @@ Dispositions: **BUILTIN** = landed built-in this task; **EXT** = already a porta
 extension under `plugins/sp/scripts/` (shell is wrapper glue); **POLICY** = deliberate shell
 exception for a per-project command string; **GLUE** = stays shell as trivial / workflow-local
 glue around an existing capability; **DUAL** = app-service + portable shell fallback (R5 steady
-state); **SIMPLE** = single `$spurBin` call, bulk exception.
+state); **SIMPLE** = single `$spurBin` call, bulk exception. A combined label means one shell
+program deliberately sequences two independently-owned capabilities.
 
 ### pr-review.yaml (8 compound)
 
@@ -176,7 +184,7 @@ state); **SIMPLE** = single `$spurBin` call, bulk exception.
 | --- | --- | --- |
 | `doc-sync:onEnter:1` | GLUE | append learnings if present (7 lines; re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
 | `metrics-record:onEnter:0` | GLUE | per-task metrics loop (jq + `task show` + verdict) → wrapup-metrics.jsonl |
-| `feature-transition:onEnter:0` | EXT | feature sync via `feature-sync-bounded.ts` (option d) + `feature sync` fallback |
+| `feature-transition:onEnter:0` | EXT + POLICY | feature sync via `feature-sync-bounded.ts` (option d) + `feature sync` fallback; after an applied sync, trusted `featureGateCmd` runs through `sh -c` (option e) and reports PASS/FAIL softly |
 | `done:onEnter:1` | GLUE | checkpoint write |
 
 ### feature-dev.yaml (2 compound)

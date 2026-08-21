@@ -557,6 +557,15 @@ export class FeatureService {
             appliedHops.push(hop);
         }
 
+        // R2 (0625): converge status and its ## Tasks projection. `deriveFeatureStatus`
+        // read the linked task edges to derive the status we just applied; refresh the
+        // touched feature's Tasks table from those same edges so a bare `spur feature
+        // sync` cannot leave the roster contradicting the status it derived (the
+        // A3/F81 recurrence). Scoped to this featureId — never the global sweep (R5).
+        if (appliedHops.length > 0) {
+            await this.refresh({ featureId });
+        }
+
         return { proposal, applied: true, appliedHops };
     }
 

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.28.0
+version: 1.29.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-19
+updated_at: 2026-08-21
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -528,6 +528,49 @@ task ## Acceptance Criteria (subset coverage)
 - Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
   FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
 
+### 12.5 Lifecycle projection and corpus-gate convergence (task 0625)
+
+Lifecycle state and its generated markdown projection converge at the application-service seam that
+applies the transition. A successful `FeatureService.syncFeature` refreshes only the touched
+feature's `## Tasks` marker region after at least one lifecycle hop; dry runs, refused confirmations,
+and no-op proposals perform no refresh. The global `INDEX.md` remains a deterministic derived view.
+
+```text
+linked task edges
+  -> derive feature status
+  -> apply lifecycle hop(s)
+  -> refresh({ featureId })
+  -> return applied sync result
+  -> wrap-up feature-transition runs the corpus-aware gate
+```
+
+The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
+`feature-transition` action reads the sync JSON result and, only when `applied` is true, runs the
+trusted project command `featureGateCmd` (default `bun run spur-check-new`) before the action
+returns. The shell remains advisory: it emits an explicit corpus-gate PASS or FAIL and exits 0 so
+the operator owns the recovery decision; an applied feature transition can no longer leave the
+corpus gate unobserved.
+
+Content checks close the remaining projection gaps at read time. `TaskCheckService` flags the
+record-generated hollow Testing row and derives subject tokens from a bare Solution change-map
+path before checking its cited line. `FeatureCheckService` treats a dogfood artifact as proof only
+when the feature ID is a delimited filename segment. Every new warning remains subject to the
+per-severity two-sided corpus baseline.
+
+Enforceable invariants:
+
+1. An applied feature sync returns only after a scoped roster refresh; it never triggers the
+   all-feature sweep.
+2. Broad refresh is opt-in at the CLI boundary; a bare `spur feature refresh` cannot mutate feature
+   projections.
+3. An applied wrap-up feature transition executes and reports the corpus-aware gate before the
+   transition action returns.
+4. A lifecycle projection is not accepted as proof merely because it exists; the check layer
+   validates its content or identity.
+
+Concrete command, finding, and workflow-var shapes:
+`docs/design/lifecycle-projection-integrity.md`.
+
 ## 13. Dev-Command Argument Contract (built — ADR-032 amendment)
 
 The agent-facing input contract stays inside each hand-authored command file and is projected to
@@ -847,9 +890,9 @@ marker no longer appears fails as a **stale entry**; an incomplete entry fails n
 field. It scans the source roots `apps, packages, plugins, config, scripts, tooling`, skipping
 build output, `vendors`, and `tests`/`test` directories (a fixture mentioning a marker id is test
 data, not a shim) and `docs/` (prose examples do not trip the gate). Node-builtin only so it ships
-to arbitrary projects; `--manifest` / `--roots` overridable. Wired into the `spur-check` chain in
-root `package.json` alongside `corpus-check` (R3) — no opt-in step. Exit 0 when every entry is
-present and every marker registered; 1 on any violation.
+to arbitrary projects; `--manifest` / `--roots` overridable. Wired into the fast `spur-check`
+chain; `spur-check-new` composes that chain and then adds `corpus-check` (§12.5). Exit 0 when every
+entry is present and every marker registered; 1 on any violation.
 
 **Invariants (enforceable)**
 

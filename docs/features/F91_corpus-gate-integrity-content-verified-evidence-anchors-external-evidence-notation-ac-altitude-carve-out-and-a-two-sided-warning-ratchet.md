@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-18T06:24:28.631Z"
+updated_at: "2026-08-21T23:26:42.870Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -92,6 +92,7 @@ Feature: Corpus gate integrity
 | 0582 | Corpus ratchet: sweep every configured task folder and ratchet warning severity | done |
 | 0583 | Anchor integrity: qualification migration, then subject matching | done |
 | 0584 | Task authoring contract: external-evidence citation form and AC-altitude declaration | done |
+| 0625 | Close the 2026-08-21 dogfood residue: lifecycle projections and gates that report a state the tree contradicts | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -102,3 +103,5 @@ Feature: Corpus gate integrity
 - 2026-08-18T00:10:12.783Z backlog → active (system)
 - 2026-08-18T06:21:22.420Z active → verifying (system)
 - 2026-08-18T06:24:28.631Z verifying → active (system)
+- 2026-08-21T23:23:08.778Z active → verifying (system)
+- 2026-08-21T23:26:42.870Z verifying → done (system)

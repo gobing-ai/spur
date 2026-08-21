@@ -51,6 +51,15 @@ vars:
   spurBin: "spur"
   agent: "omp"
   stepTimeoutMs: "1800000"
+  # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
+  # The per-task gate (`spur-check`) deliberately excludes corpus-check — the only
+  # sweep that observes feature-level findings — so a transition that arms one
+  # would go green. A feature transition happens once per feature, so the ~41 s
+  # corpus sweep is paid once here. Soft by design: the gate reports PASS/FAIL
+  # and lets the operator decide; it never hard-fails the wrap-up shell.
+  # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
+  # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
+  featureGateCmd: "bun run spur-check-new"
   __hitlAnswer: ""
 
 states:
@@ -152,6 +161,13 @@ states:
       # description promises against). `feature-sync-bounded.ts` is a Spur-monorepo
       # path (`spur init` does not scaffold `plugins/sp/`), so seeded projects fall
       # back to the plain `spur feature sync` verb.
+      # R1 (0625): a feature transition that changed state may have armed a
+      # feature-level finding the per-task fast gate (spur-check) never sees.
+      # Run the corpus-aware gate AFTER an applied sync and report PASS/FAIL —
+      # soft by design (like the blocked-sync path): the operator decides, and
+      # wrap-up never hard-fails on a red corpus gate here. NOTE: do not add
+      # `#` comments INSIDE the folded shell string — YAML `>-` folds them onto
+      # the following statement line and comments it out.
       - kind: shell
         options:
           command: >-
@@ -159,10 +175,23 @@ states:
               echo "feature-transition: vars.feature is empty — refusing no-op feature sync (mis-invocation, not a blocked sync)" >&2;
               exit 1;
             fi;
-            if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
+            SYNC_OUTPUT=$(if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
               bun plugins/sp/scripts/feature-sync-bounded.ts "$feature" --spur-bin "$spurBin" --json;
             else
               $spurBin feature sync "$feature" --json;
+            fi);
+            SYNC_RC=$?;
+            printf '%s\n' "$SYNC_OUTPUT";
+            APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
+            if [ "$APPLIED" = "true" ]; then
+              echo "feature-transition: sync applied for $feature — running corpus-aware gate: $featureGateCmd";
+              if sh -c "$featureGateCmd"; then
+                echo "feature-transition: corpus-aware gate PASS for feature $feature";
+              else
+                echo "feature-transition: corpus-aware gate FAIL for feature $feature — inspect findings before reporting the transition complete" >&2;
+              fi;
+            else
+              echo "feature-transition: sync did not apply a transition (rc=$SYNC_RC, applied=$APPLIED) — corpus-aware gate skipped";
             fi;
             exit 0
 

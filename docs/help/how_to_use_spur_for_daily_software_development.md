@@ -251,8 +251,8 @@ spur feature check          # validate all features (4-layer check)
 spur feature check F7       # validate one feature
 spur feature check --strict # warnings become failures
 
-# Regenerate INDEX.md and ## Tasks blocks
-spur feature refresh
+# Regenerate INDEX.md and ## Tasks blocks (--all = explicit broad sweep; --feature <id> scopes)
+spur feature refresh --all
 
 # Move a feature (cascade-renames the subtree)
 spur feature move F71 --parent B   # → B + next digit
@@ -625,7 +625,7 @@ spur workflow run .spur/workflows/wrapup-pipeline.yaml \
   --vars '{"tasks":"[\"0089\"]","profile":"auto"}'
 
 # 7. Refresh the board
-spur feature refresh
+spur feature refresh --all
 spur task refresh
 ```
 
@@ -764,7 +764,7 @@ Every command supports `--json`. Representative envelope shapes (verified):
 spur task list --json        # → array of task objects [{wbs, name, status, filePath, frontmatter}, ...]
 spur task show 0089 --json   # → single task object {wbs, name, status, ..., frontmatter}
 spur task refresh --json     # → { folders, tasks }   # corpus re-scan (kanban.md retired — A17)
-spur feature refresh --json  # → { index_path, tasksUpdated }
+spur feature refresh --all --json  # → { index_path, tasksUpdated }
 spur feature list --json     # → array of feature objects [{id, status, priority, name}, ...]
 spur rule run --json         # → { preset, ruleCount, findings[], fixes[] }
 spur rule list --json        # → { totalFiles, ...sources }

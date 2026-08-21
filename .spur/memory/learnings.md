@@ -805,3 +805,44 @@ Extracted working learnings from task **0587** grouped by date/WBS:
 - **`--fix`-style structural repair engines** are best implemented as pure string transforms (frontmatter split + code-fence-aware heading scan) so the byte-identical no-op property is free.
 - **`spur workflow show`** renders the *resolved* definition, not the YAML text; both engine kinds (state-machine + transition-flow) discriminated on `kind`; mermaid ids need escaping; empty edge labels should be omitted (`A --> B`).
 
+Doc drift repaired in constitutional order: append-only ADR-050/051 amendments, architecture sync, detail-first satellite updates, then the `04` index/surface projection.
+
+Files: [00_ADR.md](/Users/robin/xprojects/spur-new/docs/00_ADR.md:439), [03_ARCHITECTURE.md](/Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md:531), [04_DESIGN.md](/Users/robin/xprojects/spur-new/docs/04_DESIGN.md:40), [lifecycle-projection-integrity.md](/Users/robin/xprojects/spur-new/docs/design/lifecycle-projection-integrity.md:1).
+
+Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/index checks passed; live CLI help matches. Full lint is blocked by 148 unrelated errors in the concurrent 0626–0629 prototype files. No task/feature corpus writes or git-index operations were performed.
+
+## 2026-08-21
+
+### Task 0625
+
+#### Conventions
+
+- Converge authoritative lifecycle state and derived projections at the application-service seam: an applied `syncFeature` hop refreshes the same feature’s `## Tasks` region.
+- Require explicit write breadth for public commands: `spur feature refresh --feature <id>` is scoped, `--all` opts into the broad sweep, and the bare form exits 2.
+- Keep the per-task gate fast. Run the corpus-aware `spur-check-new` once after an applied feature transition instead of adding the corpus sweep to every task loop.
+- Reconcile every new or widened finding against `config/corpus-baseline.json` by key and severity in the implementing change; warning-first is appropriate when historical migration is intentionally deferred.
+
+#### Errors fixed
+
+- Feature transitions could arm feature-level findings while running only the corpus-blind fast gate; wrap-up now observes the corpus-aware gate after an applied sync.
+- Feature status and its generated task roster were maintained by separate verbs; applied sync now refreshes the touched roster automatically.
+- A record-generated hollow Testing table could survive in a done task; `L4.testing-verdict-stub` now reports it.
+- Prose-free Solution change-map rows produced no subject tokens, allowing drifted anchors to pass; subject tokens now fall back to the cited path basename.
+- Dogfood evidence used raw substring matching, allowing incidental feature-ID matches; filenames now require a delimited ID segment.
+- Bare `feature refresh` silently rewrote unrelated feature rosters; broad mutation now requires `--all`.
+
+#### Patterns
+
+- Presence is not proof. Validate projected content and identity, not merely that a section, anchor, or filename exists.
+- Fix recurring caller drift by deepening the owning service invariant, not by teaching every pipeline caller to invoke a second repair verb.
+- A broad default that mutates many corpus files should carry an explicit breadth token.
+- Documentation must be transcribed from live code and tests. Task prose is evidence, not authority, when it contradicts implementation.
+
+#### Gotchas
+
+- The wrap-up corpus gate is observational, not enforcing: it prints PASS/FAIL but exits 0. It prevents silent red state; it does not block completion automatically.
+- Post-sync roster convergence occurs only when `appliedHops.length > 0`. A no-op sync does not repair an independently stale roster; use scoped `feature refresh`.
+- Passing both `--feature` and `--all` is not rejected by the current CLI; `--feature` determines service scope. Do not document mutual exclusivity until it is enforced.
+- Path fallback includes a plain basename token: `workflow.ts` becomes `workflow`. The task’s Solution prose claiming whole basenames are excluded is stale.
+- Keep YAML comments outside folded `>-` shell strings; folding can place `#` on the same logical line as the next statement and comment it out.
+- `featureGateCmd` executes through `sh -c`; treat it as trusted operator/project configuration and never interpolate untrusted input.

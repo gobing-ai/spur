@@ -296,16 +296,26 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 '  • docs/features/INDEX.md (ID-encoded tree)',
                 '  • each feature ## Tasks auto-gen region (WBS / title / status from feature_id edges)',
                 '',
+                'Scope is explicit (task 0625 R5a, ADR-051 consent): pass --feature <id> to rewrite',
+                'one feature, or --all to sweep every feature. A bare invocation refuses to sweep',
+                '— the all-features rewrite silently touched unrelated features during the A3 run.',
+                '',
                 'Does NOT change feature frontmatter status. For lifecycle alignment use `spur feature sync`.',
                 'Use after task create/link/done when the ## Tasks table is stale.',
             ].join('\n'),
         )
         .option(...SHARED_OPTIONS.featureTasksRewrite)
+        .option('--all', 'Rewrite every feature ## Tasks region (explicit broad sweep)')
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
+                if (!options.all && !options.feature) {
+                    context.output.error('--feature <id> or --all is required (refusing silent all-features sweep)');
+                    context.setExitCode(2);
+                    return;
+                }
                 const result = await svc.refresh({ featureId: options.feature });
                 if (options.json) {
                     const featuresDir = options.folder ?? (await resolvePlanningFolders(context.fs)).featuresDir;

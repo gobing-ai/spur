@@ -8,6 +8,7 @@ import {
     FeatureCheckService,
     verdictRowsMatchScenarios,
 } from '../../src/services/feature-check';
+import { FINDING_CODES } from '../../src/services/finding-codes';
 
 function seedFile(content: string): { fs: ReturnType<typeof createNodeFileSystem>; path: string; cleanup(): void } {
     const dir = mkdtempSync(join(tmpdir(), 'spur-feature-check-'));
@@ -1775,6 +1776,86 @@ describe('FeatureCheckService', () => {
 
         const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
         expect(dogfoodFindings).toHaveLength(0);
+    });
+
+    test('P3 (0625 R5b): an incidental substring of the feature id does not clear the dogfood gate', async () => {
+        // Feature `M3`. A report for feature `M3A` contains `M3` as a substring but
+        // not as a delimited segment — the raw `f.includes(featureId)` match would
+        // clear this feature's gate. The segment-anchored match must NOT.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-seg-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const dogfoodDir = join(dir, 'dogfood');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(dogfoodDir, { recursive: true });
+
+        writeFileSync(
+            join(featuresDir, 'M3_gate.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "M3"',
+                'name: "Dogfood segment gate"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# M3: Dogfood segment gate',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: M3',
+                '',
+                '  Scenario: dogfood',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        writeFileSync(
+            join(tasksDir, '0001_gate.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "self-ref task"',
+                'status: done',
+                'feature_id: M3',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. self-ref task',
+                '',
+                '### Solution',
+                '',
+                'Touched .spur/workflows/task-pipeline.yaml.',
+            ].join('\n'),
+        );
+
+        // Filename carries M3 only as a substring of M3A — not a delimited segment.
+        writeFileSync(join(dogfoodDir, '2026-07-10-M3A-dogfood.md'), '# Dogfood for M3A');
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'M3_gate.md'), 'M3', {
+            featuresDir,
+            tasksDir,
+            dogfoodDir,
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(1);
+        expect(dogfoodFindings[0]?.code).toBe(FINDING_CODES.L4_DOGFOOD_MISSING);
     });
 
     test('P3: no finding when tasks do not touch self-referential paths', async () => {

@@ -71,6 +71,19 @@ function isPlaceholderBody(body: string): boolean {
 }
 
 /**
+ * The `record` UNKNOWN stub row in a `## Testing` section (task 0625 R3).
+ *
+ * `spur task record` emits this exact table row when a verdict artifact carries
+ * no requirement rows (`packages/app/src/services/task-record.ts:191`). The
+ * clobber that produced it is fixed, but a stub already sitting in a `done` task
+ * went undetected (0619/0620). Match the ROW SHAPE, not the prose: an author who
+ * writes "no requirements recorded" in a sentence must not trip this. The verdict
+ * token is a single word (PASS/PARTIAL/FAIL/UNKNOWN) after `verify verdict`.
+ */
+const TESTING_VERDICT_STUB_RE =
+    /^\|\s*[—–-]+\s*\|\s*[—–-]+\s*\|\s*No requirements recorded; verify verdict\s+\S+\s*\|/m;
+
+/**
  * A table cell that carries no real content: empty, a dash/em-dash placeholder run
  * (`—`, `–`, `-`, `---`), or a bare `n/a`/`N/A`. Dash-filled cells defeat a bare
  * non-empty check — a `| P1 | — | — | — |` placeholder row is still a placeholder
@@ -313,6 +326,7 @@ export function classifyExternalEvidence(
  */
 export function extractSubjectTokens(row: string, excludeCitation?: string): string[] {
     const tokens = new Set<string>();
+
     // Tokens that can never appear in cited SOURCE lines, so keeping them only
     // guarantees a mismatch on well-formed rows:
     //   - the citation itself — code never contains its own `path:line`;
@@ -382,6 +396,35 @@ export function citedLinesNameSubject(subjectTokens: string[], cited: string): b
     // correctly-cited minimal row. Absence of a real identifier ⇒ nothing to assert.
     const isRowId = (t: string) => /^(r|ac)-?\d+$/.test(t);
     return subjectTokens.every(isRowId);
+}
+
+/**
+ * Identifier tokens from a `## Solution` change-map row's own path (task 0625 R4).
+ *
+ * A bare change-map row (`| \`apps/cli/src/commands/workflow.ts:744\` |`) carries
+ * no prose, so `extractSubjectTokens` yields nothing and subject-matching cannot
+ * fire — 0620 cited `workflow.ts:744` while the symbol sat at `:759` and the gate
+ * was silent. When a Solution row yields no tokens, derive the subject from the
+ * path itself: split the basename on `-`/`_`/`.` boundaries and take the
+ * identifier-like pieces (`mermaid-render` → `mermaid`, `render`), then reuse the
+ * existing `citedLinesNameSubject` matcher. The whole-path basename (`workflow.ts`)
+ * is a weak subject — it names the file, not the symbol — so it is deliberately
+ * NOT a token; only the delimited identifier pieces are.
+ */
+export function extractPathSubjectTokens(path: string): string[] {
+    const basename = path.split('/').pop() ?? '';
+    const stem = basename.replace(/\.[^.]+$/, ''); // drop the extension
+    const tokens = new Set<string>();
+    for (const part of stem.split(/[-_.]+/)) {
+        if (!/^[A-Za-z][A-Za-z0-9]*$/.test(part)) continue;
+        const lower = part.toLowerCase();
+        // A two-character stem (`ts` in `workflow.ts` is dropped by extension
+        // strip, but `cmd` from `cmd_workflow` is a real token) — keep ≥ 3 chars
+        // and reject pure extension-like short identifiers.
+        if (lower.length < 3) continue;
+        tokens.add(lower);
+    }
+    return [...tokens];
 }
 
 function hasAdjacentFileLineColumns(body: string): boolean {
@@ -842,6 +885,26 @@ export class TaskCheckService extends PlanningCheckService {
         // ── R1: Done-gate verdict artifact check (testing/done status) ──
         if (status === 'testing' || status === 'done') {
             await this.checkVerdictArtifact(wbs, tasksDir, findings);
+        }
+
+        // ── R3 (0625): hollow-Testing stub detection. A `## Testing` section
+        // carrying the `record` UNKNOWN stub row (`| — | — | No requirements
+        // recorded; verify verdict <V> |`) reports a state the verdict artifact
+        // contradicts. The clobber that produced the stub is fixed; nothing detects
+        // one already sitting in a done task. Warning severity (two-sided-ratchet:
+        // the corpus holds tasks in this shape today — reconciling the baseline is
+        // this task's same-commit obligation, T10). Warning-first, promote to error
+        // only after the corpus is migrated.
+        const testingBody = doc.getSection('Testing');
+        if (testingBody !== null && TESTING_VERDICT_STUB_RE.test(testingBody)) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_TESTING_VERDICT_STUB,
+                severity: 'warning',
+                section: 'Testing',
+                message:
+                    'Testing section carries the record UNKNOWN stub row ("No requirements recorded; verify verdict …") — the verdict artifact contradicts this; re-run the verify/record hop so Testing reflects a real verdict',
+            });
         }
 
         // ── R4 (task 0294): Design placeholder warning ──
@@ -1313,13 +1376,22 @@ export class TaskCheckService extends PlanningCheckService {
                             body.split('\n').find((l) => l.includes(cite.raw)) ??
                             '';
                         const tokens = extractSubjectTokens(citingRow, cite.raw);
-                        if (!citedLinesNameSubject(tokens, citedWindow)) {
+                        // R4 (0625): a bare Solution change-map row carries no
+                        // subject tokens, so subject-matching had nothing to match
+                        // and a drifted anchor passed (0620: `workflow.ts:744` vs
+                        // symbol at `:759`). Derive the subject from the row's own
+                        // path basename and reuse the same matcher.
+                        const effectiveTokens =
+                            tokens.length === 0 && section === 'Solution'
+                                ? extractPathSubjectTokens(cite.path)
+                                : tokens;
+                        if (!citedLinesNameSubject(effectiveTokens, citedWindow)) {
                             findings.push({
                                 layer: 'L4',
                                 code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
                                 severity: 'warning',
                                 section,
-                                message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${tokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
+                                message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${effectiveTokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
                             });
                             reported++;
                         }
