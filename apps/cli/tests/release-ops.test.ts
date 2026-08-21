@@ -101,6 +101,43 @@ describe('builder bump-ver', () => {
         expect(tags).toContain('@demo/root-v0.3.0');
     });
 
+    test('--all includes the root-named CLI package so the aggregate tag stays consistent', async () => {
+        // Mirror the monorepo: a workspace package shares the root manifest name (the CLI
+        // release target, @gobing-ai/spur). The aggregate tag names it, so --all must bump it.
+        const root = join(tmpdir(), `spur-builder-cliroot-${crypto.randomUUID()}`);
+        repos.push(root);
+        const repo = join(root, 'repo');
+        mkdirSync(join(repo, 'pkgs', 'cli'), { recursive: true });
+        mkdirSync(join(repo, 'pkgs', 'lib'), { recursive: true });
+        writeFileSync(
+            join(repo, 'package.json'),
+            `${JSON.stringify({ name: '@demo/root', version: '0.1.0', workspaces: ['pkgs/*'] }, null, 4)}\n`,
+        );
+        writeFileSync(
+            join(repo, 'pkgs', 'cli', 'package.json'),
+            `${JSON.stringify({ name: '@demo/root', version: '0.1.0', dependencies: { '@demo/lib': 'workspace:0.1.0' } }, null, 4)}\n`,
+        );
+        writeFileSync(
+            join(repo, 'pkgs', 'lib', 'package.json'),
+            `${JSON.stringify({ name: '@demo/lib', version: '0.1.0' }, null, 4)}\n`,
+        );
+        sh(root, ['git', 'init', '--bare', join(root, 'origin.git')]);
+        sh(repo, ['git', 'init']);
+        sh(repo, ['git', 'config', 'user.email', 'test@example.com']);
+        sh(repo, ['git', 'config', 'user.name', 'Test']);
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'init']);
+        sh(repo, ['git', 'remote', 'add', 'origin', join(root, 'origin.git')]);
+
+        await bumpVer(['--all', '0.3.0'], repo);
+        const cli = await Bun.file(join(repo, 'pkgs', 'cli', 'package.json')).json();
+        expect(cli.version).toBe('0.3.0');
+        const tags = localTags(repo);
+        // The CLI's own tag equals the aggregate tag, so only the aggregate is created.
+        expect(tags).toContain('@demo/root-v0.3.0');
+        expect(tags).toContain('@demo/lib-v0.3.0');
+    });
+
     test('rejects invalid semver', async () => {
         const { repo } = mkRepo();
         await expect(bumpVer(['lib', 'not-semver'], repo)).rejects.toThrow('not a valid semver');

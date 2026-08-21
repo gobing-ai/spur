@@ -171,7 +171,13 @@ async function releaseContext(repoRoot: string): Promise<ReleaseContext> {
         });
     }
 
-    // The `--all` set: workspace packages pinned as `workspace:` deps by any other workspace package.
+    // The `--all` set: workspace packages pinned as `workspace:` deps by any other workspace package,
+    // PLUS the package whose name equals the workspace root name (the CLI release target, e.g.
+    // `@gobing-ai/spur`). The aggregate tag is `<rootName>-v<version>` and that tag is what triggers
+    // the publish workflow, so the package it names MUST be bumped by `--all` — otherwise a bare
+    // `bump-ver <version> --push` pushes an aggregate tag whose version the CLI does not carry, and
+    // the publish gate (tag version == package.json version) fails or the run never ships (dogfood
+    // 2026-08-21: 0.3.57 was never published because the CLI stayed at 0.3.55).
     const pinnedNames = new Set<string>();
     for (const ws of workspaces) {
         for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
@@ -184,6 +190,7 @@ async function releaseContext(repoRoot: string): Promise<ReleaseContext> {
             }
         }
     }
+    pinnedNames.add(rootName);
     const allPackages = [...packages.values()].filter((c) => pinnedNames.has(c.packageName));
 
     return { repoRoot, rootName, packages, allPackages };
