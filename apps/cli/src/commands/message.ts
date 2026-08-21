@@ -12,6 +12,7 @@ import {
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Default sender used for operator-originated messages. */
 const DEFAULT_FROM = 'operator';
@@ -29,9 +30,9 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .requiredOption('--to <id>', 'Recipient agent id')
         .option('--from <id>', 'Sender id', DEFAULT_FROM)
         .option('--wait', 'Block until the recipient occupant reaches --until (default: invoke-exit)')
-        .option('--until <state>', 'Wait target for --wait: injected|invoke-exit', collectSendUntil, [])
-        .option('--timeout <ms>', 'Caller deadline in milliseconds', parseTimeout)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.untilMessage, collectSendUntil, [])
+        .option(...SHARED_OPTIONS.timeout, parseTimeout)
+        .option(...SHARED_OPTIONS.json)
         .action(async (body, options) => {
             const svc = new TeamService(context);
             const code = await runMessageSend(svc, context, body, options);
@@ -40,8 +41,8 @@ export function registerMessageCommand(program: Command, context: CliContext): v
 
     noun.command('inbox')
         .description('List messages addressed to an agent.')
-        .requiredOption('--agent <id>', 'Agent id')
-        .option('--json', 'Output machine-readable JSON')
+        .requiredOption(...SHARED_OPTIONS.agentIdMessage)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = new TeamService(context);
             const code = await runMessageInbox(svc, context, options);
@@ -52,7 +53,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .description('Thread a reply to a message.')
         .argument('<msg-id>', 'Message id to reply to')
         .argument('<body>', 'Reply body')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (msgId, body, options) => {
             const svc = new TeamService(context);
             const code = await runMessageReply(svc, context, msgId, body, options);
@@ -61,9 +62,9 @@ export function registerMessageCommand(program: Command, context: CliContext): v
 
     noun.command('watch')
         .description('Follow an agent inbox — surface new messages as they arrive (Ctrl-C to exit).')
-        .requiredOption('--agent <id>', 'Agent id to watch')
+        .requiredOption(...SHARED_OPTIONS.agentIdWatch)
         .option('--interval <ms>', 'Poll interval in milliseconds', String(DEFAULT_WATCH_INTERVAL_MS))
-        .option('--json', 'Output one JSON object per new message (machine-consumable)')
+        .option(...SHARED_OPTIONS.jsonMessageStream)
         .action(async (options) => {
             const svc = new TeamService(context);
             const intervalMs = parseInterval(options.interval);

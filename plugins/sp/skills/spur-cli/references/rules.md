@@ -207,3 +207,8 @@ directly on the command line.
 
 **Template type**: technique
 **Purpose**: Operate `spur rule` across its full lifecycle as the deterministic constraint gate in LLM code delivery
+
+> **Shared option declarations (0618):** options shared across command modules resolve from
+> `apps/cli/src/commands/shared-options.ts` (`SHARED_OPTIONS`). Never re-declare a shared flag
+> inline in a command module — see SKILL.md "Shared option registry" and
+> `docs/04_DESIGN.md` §1.0.1.

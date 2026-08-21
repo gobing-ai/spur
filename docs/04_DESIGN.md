@@ -105,6 +105,26 @@ noun requires writing its registration function and importing it in `apps/cli/sr
 Commander handles option parsing, `--help` rendering, and subcommand dispatch — no custom
 help rendering overrides remain.
 
+### 1.0.1 Shared option registry (0618)
+
+Every option shared by two or more command modules is declared **once**, in
+`apps/cli/src/commands/shared-options.ts`. The registry exports:
+
+- `SHARED_OPTIONS` — `Record<string, readonly [flags, description]>` (`as const` tuples). One entry
+  per **(flag, description) pair**, not per flag string: semantic homonyms (`--json` machine-output
+  vs `--json` serve's `{port,url,pid}`; `--cwd` serve vs agent) and per-module one-off descriptions of
+  a shared flag each get their own key. Spreading a tuple into `.option(...SHARED_OPTIONS.<key>)`
+  preserves `@commander-js/extra-typings` inference; parser/default/collector args are appended after
+  the spread at the call site.
+- `SHARED_OPTION_FLAGS` — the derived membership set (28 flag strings). A flag string qualifies for
+  the registry the moment it is declared in ≥2 command modules; **all** of its (flag, desc)
+  declarations get entries so the parity test is total.
+
+Enforcement: `apps/cli/tests/shared-option-parity.test.ts` fails on (a) any literal
+`.option/.requiredOption` declaration of a flag string in `SHARED_OPTION_FLAGS`, (b) a registry entry
+spread by zero command modules, or (c) a shared flag string consumed by fewer than two modules.
+Adding a shared option: add the entry, spread it at every site — never re-declare inline.
+
 ### 1.1 Committed product commands
 
 #### `spur init [--name <name>] [--force] [--minimal] [--json]`

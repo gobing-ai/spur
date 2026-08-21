@@ -108,7 +108,7 @@ documented compatibility alias — `apps/cli/src/commands/task.ts:1044-1057`.
 **R3 — missing target-required sections deny the transition, byte-identical.**
 The lifecycle guards invoke `task check --as testing` / `--as done` —
 `config/workflows/task-lifecycle.yaml:73,78`. The inline no-lifecycle backstop
-`runDoneGateCheck` passes the transition target as `asStatus` — `apps/cli/src/commands/task.ts:1464-1480`.
+`runDoneGateCheck` passes the transition target as `asStatus` — `apps/cli/src/commands/task.ts:1462-1481`.
 Matrix loading fails loudly with the attempted paths when neither a project-local nor a
 bundled canonical asset is reachable — `apps/cli/src/commands/task.ts:1511-1530`. The server
 provides a bundled canonical matrix so server task creation keeps the same authority —
@@ -126,7 +126,7 @@ provides a bundled canonical matrix so server task creation keeps the same autho
 |-------------|--------|----------|
 | R1 — Matrix alone determines created sections | MET | `packages/app/src/services/task-service.ts:565` (`create` → `buildTaskSkeleton`) and `packages/app/src/services/task-service.ts:1421` (`batchCreate` → `buildTaskSkeleton`); section set resolved by `sectionsForStatus` (`packages/app/src/services/task-service.ts:415`) which fails loudly on missing matrix/entry; `DEFAULT_CREATION_SECTIONS` and CLI `FALLBACK_MATRIX` deleted; tests `packages/app/tests/services/task-service.test.ts` (F92 R1 create layout, fail-loud, batchCreate matrix) |
 | R2 — Transition gates evaluate target status via `--as` | MET | `packages/app/src/services/task-check.ts:493-510` `effectiveStatus = asStatus ?? frontmatter.status` drives L2/L3/L4 policy while L1 reads the real doc (omitted `--as` behavior-compatible); `apps/cli/src/commands/task.ts:1044-1057` adds canonical-status-validated `--as`, rejects `--corpus`, keeps `--strict-core` as documented alias; tests `packages/app/tests/services/task-check.test.ts` (F92 R2) + `apps/cli/tests/commands/task.test.ts` (--as projection/invalid/conflict) |
-| R3 — Missing target-required sections deny transition, byte-identical | MET | lifecycle guards invoke check as the target: `config/workflows/task-lifecycle.yaml:73,78` (`--as testing`/`--as done`); inline no-lifecycle backstop `runDoneGateCheck` passes the transition target as `asStatus` (`apps/cli/src/commands/task.ts:1464-1480`); R3 test proves testing→done denies missing Review and leaves the file byte-identical (matrix loader fails loudly with attempted paths when no canonical asset is reachable — see Solution) |
+| R3 — Missing target-required sections deny transition, byte-identical | MET | lifecycle guards invoke check as the target: `config/workflows/task-lifecycle.yaml:73,78` (`--as testing`/`--as done`); inline no-lifecycle backstop `runDoneGateCheck` passes the transition target as `asStatus` (`apps/cli/src/commands/task.ts:1462-1481`); R3 test proves testing→done denies missing Review and leaves the file byte-identical (matrix loader fails loudly with attempted paths when no canonical asset is reachable — see Solution) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

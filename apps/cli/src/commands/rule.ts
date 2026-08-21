@@ -12,6 +12,7 @@ import {
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Register the `spur rule` command and its subcommands on the CLI program. */
 export function registerRuleCommand(program: Command, context: CliContext): void {
@@ -20,14 +21,14 @@ export function registerRuleCommand(program: Command, context: CliContext): void
     rule.command('run')
         .summary('Evaluate constraint rules over the working tree.')
         .option('--preset <name>', 'Preset to load (default: recommended-pre-check)', 'recommended-pre-check')
-        .option('--file <path>', 'Ad-hoc rule file')
+        .option(...SHARED_OPTIONS.fileRuleAdhoc)
         .option('--rule <id>', 'Filter run to one rule ID')
         .option('--fail-on <severity>', 'Exit 1 threshold: error|warning|info (default: error)', 'error')
         .option('--stop-on-first [severity]', 'Stop evaluation after first rule with findings at/above severity')
         .option('--fix-mode <mode>', 'Fix collection/apply mode: none|suggest|auto (default: none)', 'none')
-        .option('--dry-run', 'Preview fixes without writing (use with --fix-mode auto)')
-        .option('--verbose', 'Stream per-rule progress to stderr')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.dryRunRuleFix)
+        .option(...SHARED_OPTIONS.verboseRule)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const service = new RuleService(context);
             const preset = options.preset ?? 'recommended-pre-check';
@@ -64,11 +65,11 @@ export function registerRuleCommand(program: Command, context: CliContext): void
     rule.command('validate')
         .summary('Validate a rule file or preset without evaluating it.')
         .argument('[file-or-preset]', 'File path or preset name to validate')
-        .option('--file <path>', 'Ad-hoc rule file path')
+        .option(...SHARED_OPTIONS.fileRuleAdhocPath)
         .option('--preset <name>', 'Preset name')
         .option('--kind <type>', 'Source kind: file or preset')
-        .option('--no-schema', 'Skip schema validation')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.noSchema)
+        .option(...SHARED_OPTIONS.json)
         .action(async (fileOrPreset, options) => {
             const service = new RuleService(context);
             const source = resolveSource(
@@ -87,7 +88,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
     rule.command('list')
         .summary('List discovered rule files, or list resolved rules for a preset.')
         .option('--preset <name>', 'Preset to list rules for')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const service = new RuleService(context);
             const preset = options.preset;
@@ -105,10 +106,10 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .summary('Show persisted rule run history.')
         .argument('[run-id]', 'Run ID for per-run detail')
         .option('--preset <name>', 'Filter by preset name')
-        .option('--status <status>', 'Filter by status: done, failed')
-        .option('--since <iso-date>', 'Filter runs started on or after this date')
-        .option('--last <n>', 'Limit results (default 20)', '20')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.statusDoneFailed)
+        .option(...SHARED_OPTIONS.since)
+        .option(...SHARED_OPTIONS.last, '20')
+        .option(...SHARED_OPTIONS.json)
         .action(async (runId, options) => {
             const last = parseInt(options.last, 10);
             if (!Number.isInteger(last) || last < 1) {

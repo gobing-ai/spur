@@ -38,6 +38,7 @@ import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** POSIX single-quote for `sh -c` argv embedding. */
 function shQuote(value: string): string {
@@ -225,8 +226,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('validate')
         .description('Validate a workflow definition.')
         .argument('<file>', 'Workflow YAML file')
-        .option('--no-schema', 'Skip schema validation')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.noSchema)
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (file, options) => {
             const result = await makeSvc().validate(file, { validateSchema: options.schema });
             if (options.json) {
@@ -260,9 +261,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('run')
         .description('Execute a workflow definition.')
         .argument('<file>', 'Workflow YAML file')
-        .option('--run-id <id>', 'Persisted run id for workflow run')
+        .option(...SHARED_OPTIONS.runIdWorkflow)
         .option('--vars <json>', 'Per-run variable overrides as a JSON object, e.g. \'{"taskId":"0042"}\'')
-        .option('--dry-run', 'Validate and walk transitions without executing actions')
+        .option(...SHARED_OPTIONS.dryRunWorkflowValidate)
         .option(
             '--async',
             'Start the workflow in the background and exit immediately — monitor with `spur workflow trace <run-id>`',
@@ -270,12 +271,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--no-plan', 'Suppress the run-start plan preview (synchronous runs only)')
         .option('--quiet', 'Suppress plan and per-step progress; keep the final summary')
         .option('--silent', 'Suppress all routine output; errors still set a non-zero exit status')
-        .option('--verbose', 'Include transitions and correlation diagnostics in human progress')
+        .option(...SHARED_OPTIONS.verboseWorkflow)
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
         .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/runs/workflow/')
         .option('--no-log', 'Opt out of writing the consolidated .spur/run/<RUNID>.log')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (file, options) => {
             const json = options.json === true;
             const silent = !json && options.silent === true;
@@ -590,7 +591,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             '--answer <yes|no|cancel>',
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
         )
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (runId, options) => {
             const json = options.json === true;
             // Validate --answer enum (R1): commander does not natively enforce choices.
@@ -664,10 +665,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 '`spur workflow cancel <run-id>` instead.',
         )
         .option('--older-than <minutes>', 'Staleness threshold in minutes (stale-run scope only)', '30')
-        .option('--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)')
+        .option(...SHARED_OPTIONS.forceWorkflowClean)
         .option('--logs', 'Scope to retained run-log reclamation only (skip stale-run finalization)')
-        .option('--dry-run', 'List what would be cleaned without writing (applies to both scopes)')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.dryRunWorkflowClean)
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (options) => {
             const dryRun = options.dryRun === true;
             const logsOnly = options.logs === true;
@@ -719,7 +720,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             'Cancel a single non-terminal run by id (mark as failed). The bulk/stale variant is `spur workflow clean`.',
         )
         .argument('<run-id>', 'Run id to cancel')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (runId, options) => {
             const result = await makeSvc(options.json).cancel(runId);
             if (options.json) {
@@ -742,7 +743,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     workflow
         .command('list')
         .description('List available workflow YAML files.')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (options) => {
             const paths = await resolveWorkflowPaths(context.cwd);
             const result = await makeSvc().list(paths);
@@ -758,13 +759,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('Show persisted workflow run history.')
         .argument('[run-id]', 'Run ID for per-run timeline detail')
         .option('--workflow <name>', 'Filter by workflow name')
-        .option('--status <status>', 'Filter by status: done, failed, running')
-        .option('--since <iso-date>', 'Filter runs started on or after this date')
-        .option('--last <n>', 'Limit results (default 20)', '20')
+        .option(...SHARED_OPTIONS.statusDoneFailedRunning)
+        .option(...SHARED_OPTIONS.since)
+        .option(...SHARED_OPTIONS.last, '20')
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
-        .option('--poll <ms>', 'Follow polling interval in milliseconds', '1000')
+        .option(...SHARED_OPTIONS.pollWorkflow, '1000')
         .option('--output', 'With --follow: stream .spur/run/<RUNID>.log instead of the DB timeline')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (runId, options) => {
             const svc = makeSvc();
             const last = parseInt(options.last, 10);

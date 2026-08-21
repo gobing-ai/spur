@@ -12022,14 +12022,6 @@
         },
         {
             "kind": "task",
-            "id": "0570",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "error",
-            "reason": "Accumulated anchor drift, surfaced for the first time by task 0583's content-matching rule. The cited lines resolve and are in bounds, but no longer name the requirement row's subject — a later task edited the file and pushed the anchor onto unrelated code. Spot-verified true positives (an import block cited for a component's hooks; a severity-parsing block cited for `runL4Rollup`). Repairing 1,300+ historical citations is its own campaign; the rule ships at warning severity until then (0583 R6).",
-            "since": "2026-08-18"
-        },
-        {
-            "kind": "task",
             "id": "0571",
             "code": "L3.plan-format",
             "severity": "warning",
@@ -12282,38 +12274,6 @@
             "code": "L4.anchor-subject-mismatch",
             "severity": "error",
             "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); composition-baseline.ts:202 and workflow-service.ts:170 windows shifted",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0616",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0617",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0619",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0620",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
             "since": "2026-08-21"
         },
         {

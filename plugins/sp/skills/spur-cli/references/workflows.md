@@ -359,3 +359,8 @@ directly on the command line.
 
 **Template type**: technique
 **Purpose**: Operate `spur workflow` across its full lifecycle — choose the execution mode, author, validate, run, and refine dual-mode workflows
+
+> **Shared option declarations (0618):** options shared across command modules resolve from
+> `apps/cli/src/commands/shared-options.ts` (`SHARED_OPTIONS`). Never re-declare a shared flag
+> inline in a command module — see SKILL.md "Shared option registry" and
+> `docs/04_DESIGN.md` §1.0.1.

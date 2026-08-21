@@ -310,3 +310,8 @@ spur task path 0040 --json
   execution loop. Use it to *drive* work; use this skill to *look up a verb*.
 - **`spur feature` (see [features.md](features.md))** — the companion for `spur feature` (hierarchical IDs, AC conventions,
   traceability).
+
+> **Shared option declarations (0618):** options shared across command modules resolve from
+> `apps/cli/src/commands/shared-options.ts` (`SHARED_OPTIONS`). Never re-declare a shared flag
+> inline in a command module — see SKILL.md "Shared option registry" and
+> `docs/04_DESIGN.md` §1.0.1.

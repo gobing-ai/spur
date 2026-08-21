@@ -11,6 +11,7 @@ import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Register the `spur feature` command and its subcommands on the CLI program. */
 export function registerFeatureCommand(program: Command, context: CliContext): void {
@@ -22,8 +23,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .summary('Create a feature; allocates a hierarchical ID (DD-14) under the create-lock.')
         .argument('<name>', 'Feature name')
         .option('--parent <id>', 'Parent feature ID (child gets the next free digit 1-9)')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (name, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -47,8 +48,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .alias('get')
         .summary('Show a feature by ID.')
         .argument('<id>', 'Feature ID')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -86,10 +87,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         )
         .option('--field <key>', 'Frontmatter field to set (e.g. priority)')
         .option('--value <value>', 'New value for --field')
-        .option('--section <name>', 'Section name to replace')
-        .option('--from-file <path>', 'File to read section body from (requires --section)')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.section)
+        .option(...SHARED_OPTIONS.fromFile)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, status, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -153,8 +154,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .summary('Walk a feature through the legal forward lifecycle path.')
         .argument('<id>', 'Feature ID to advance')
         .option('--to <status>', "Target status (default: 'done')")
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             const target = options.to ?? 'done';
@@ -221,10 +222,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
     feature
         .command('list')
         .summary('List features with optional status/priority filters.')
-        .option('--status <s>', 'Filter by status')
-        .option('--priority <p>', 'Filter by priority')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.statusFilter)
+        .option(...SHARED_OPTIONS.priorityFilter)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -257,9 +258,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .summary('Move a feature to a new parent — cascade rename of the subtree (DD-14).')
         .argument('<id>', 'Feature ID to move')
         .option('--parent <id>', 'New parent feature ID (omit to move to a top-level group)')
-        .option('--dry-run', 'Show the old→new ID map + affected tasks without writing')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.dryRunFeatureMap)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -299,9 +300,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 'Use after task create/link/done when the ## Tasks table is stale.',
             ].join('\n'),
         )
-        .option('--feature <id>', 'Restrict the ## Tasks rewrite to one feature (INDEX.md still regenerated)')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.featureTasksRewrite)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -327,13 +328,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .command('check')
         .summary('Validate feature file(s) through the four-layer check (design §3).')
         .argument('[id]', 'Feature ID (validates all features in the folder when omitted)')
-        .option('--strict', 'Elevate warnings to failures')
-        .option(
-            '--as <status>',
-            'Evaluate the one-active-goal rule as if the feature were in <status> (0418: lifecycle FSM guards pass the transition target)',
-        )
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.strictFeature)
+        .option(...SHARED_OPTIONS.asFeature0418)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const resolved = await resolvePlanningFolders(context.fs);
             const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
@@ -408,10 +406,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         )
         .argument('[id]', 'Feature ID to sync (optional if --all is passed)')
         .option('--all', 'Sync all features with linked tasks')
-        .option('--dry-run', 'Report proposed status sync transitions without applying')
-        .option('--force', 'Force applying reopen proposals without confirmation')
-        .option('--folder <path>', 'Custom features folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.dryRunFeatureSync)
+        .option(...SHARED_OPTIONS.forceFeatureReopen)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {

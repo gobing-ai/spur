@@ -19,6 +19,7 @@ import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
+import { SHARED_OPTIONS } from './shared-options';
 
 export type { AgentRunDeps };
 
@@ -29,7 +30,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('list')
         .description('List detected coding agents, or team agent specs with --specs.')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .option('--specs', 'List team specs instead of detected agents')
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
@@ -40,7 +41,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('doctor')
         .description('Check agent readiness.')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .argument('[agent]', 'Agent to check')
         .action(async (agentName, options) => {
             const svc = context.agentService();
@@ -58,9 +59,9 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option('--spec <id>', 'Team agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')
         .option('--model <name>', 'Agent model argument')
-        .option('--mode <mode>', 'Agent output mode: text|json')
-        .option('--cwd <path>', 'Working directory for agent execution')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.modeAgent)
+        .option(...SHARED_OPTIONS.cwdAgent)
+        .option(...SHARED_OPTIONS.jsonSupported)
         .option('--drain', 'Prepend pending inbox messages for --spec <id>')
         .argument('<prompt>', 'The prompt or slash command to execute')
         .action(async (prompt, options) => {
@@ -73,8 +74,8 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('loop')
         .description('Run the persistent self-draining loop for a team member (used by the supervisor).')
         .option('--spec <id>', 'Agent spec id / message recipient')
-        .option('--agent <id>', 'Agent spec id / message recipient (legacy — prefer --spec)')
-        .option('--poll <ms>', 'Idle poll interval in milliseconds', String(DEFAULT_LOOP_POLL_MS))
+        .option(...SHARED_OPTIONS.agentIdLegacyRecipient)
+        .option(...SHARED_OPTIONS.pollAgent, String(DEFAULT_LOOP_POLL_MS))
         .action(async (options) => {
             const controller = new AbortController();
             const onSignal = () => controller.abort();
@@ -94,10 +95,10 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('wait')
         .description('Wait for a pinned occupant run to reach a lifecycle state (G4 wave 2).')
         .argument('<specId>', 'Agent spec id whose occupant to wait on')
-        .option('--run <runId>', 'Pin a specific run id (default: spec latest run)')
-        .option('--until <state>', 'Lifecycle state to wait for (repeatable OR)', collectUntil, [])
-        .option('--timeout <ms>', 'Caller deadline in milliseconds', parseTimeout)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.runAgentPin)
+        .option(...SHARED_OPTIONS.untilAgent, collectUntil, [])
+        .option(...SHARED_OPTIONS.timeout, parseTimeout)
+        .option(...SHARED_OPTIONS.json)
         .action(async (specId, options) => {
             const code = await runAgentWait(context, specId, options);
             context.setExitCode(code);
@@ -109,14 +110,14 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option('--type <agent-type>', 'Agent spec type for create')
         .option('--tags <a,b>', 'Team identity tags')
         .option('--system-prompt <text>', 'Team identity system prompt')
-        .option('--name <name>', 'Agent name')
+        .option(...SHARED_OPTIONS.nameAgent)
         .option('--workspace <path>', 'Workspace path')
         .option('--purpose <text>', 'Team identity purpose')
         .option('--auto-start', 'Auto-start flag')
         .option('--model <name>', 'Agent model argument')
         .option('--autonomy <level>', 'Autonomy level')
         .option('--no-identity-preamble', 'Disable identity preamble')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .argument('<id>', 'Agent spec id')
         .action(async (id, options) => {
             const flags = commanderOptionsToFlags(options);
@@ -136,7 +137,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('delete')
         .description('Remove an agent spec.')
-        .option('--force', 'Required for delete')
+        .option(...SHARED_OPTIONS.forceAgentDelete)
         .argument('<id>', 'Agent spec id')
         .action(async (id, options) => {
             const flags = commanderOptionsToFlags(options);

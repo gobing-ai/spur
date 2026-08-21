@@ -143,7 +143,9 @@ function parseVerbsFromHeading(section: string, noun: string): VerbSurface[] {
 // ── Parse code surface ────────────────────────────────────────────────────
 
 async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
-    const entries = (await readdir(cmdsDir)).filter((f) => f.endsWith('.ts') && f !== 'stubs.ts');
+    const entries = (await readdir(cmdsDir)).filter(
+        (f) => f.endsWith('.ts') && f !== 'stubs.ts' && f !== 'shared-options.ts',
+    );
     const nouns: NounSurface[] = [];
 
     for (const file of entries) {
@@ -176,12 +178,14 @@ async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
                 }
                 const blockStart = block.end;
                 const blockEnd = i + 1 < blocks.length ? (blocks[i + 1]?.end ?? text.length) : text.length;
-                const hasJson = /\.option\s*\(\s*['"]--json['"]/.test(text.slice(blockStart, blockEnd));
+                const hasJson = /\.option\s*\(\s*(?:\.\.\.SHARED_OPTIONS\.json\w*|['"]--json['"])/.test(
+                    text.slice(blockStart, blockEnd),
+                );
                 verbs.set(name, { name, hasJson });
             }
         } else {
             // Verbless: .command('noun').summary(…)… on program directly.
-            const hasJson = /\.option\s*\(\s*['"]--json['"]/.test(text);
+            const hasJson = /\.option\s*\(\s*(?:\.\.\.SHARED_OPTIONS\.json\w*|['"]--json['"])/.test(text);
             verbs.set('(verbless)', { name: '(verbless)', hasJson });
         }
 

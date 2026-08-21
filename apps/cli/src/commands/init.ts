@@ -8,6 +8,7 @@ import { CLI_CONFIG } from '../config';
 import { SCAFFOLD_MANIFEST } from '../config/scaffold-manifest';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Global user config root, relative to the home directory. */
 const GLOBAL_CONFIG_DIR = join('.config', 'spur');
@@ -164,10 +165,10 @@ export function registerInitCommand(program: Command, context: CliContext, optio
     program
         .command('init', { hidden: options.hidden === true })
         .summary('scaffold a local Spur project')
-        .option('--name <name>', 'Project name (default: current directory name)')
-        .option('--force', 'Recreate files that already exist')
+        .option(...SHARED_OPTIONS.nameProjectInit)
+        .option(...SHARED_OPTIONS.forceInitRecreate)
         .option('--minimal', 'Only write the minimal .spur scaffold')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const json = options.json === true;
             const force = options.force === true;

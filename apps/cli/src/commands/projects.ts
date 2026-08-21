@@ -4,6 +4,7 @@ import { isPortLive, ProjectRegistry, startRegisteredProject } from '@gobing-ai/
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /**
  * Registers the `spur projects` CLI command group (add, remove, list, start, stop).
@@ -14,8 +15,8 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('add')
         .argument('<path>', 'Project root directory path')
-        .option('--name <name>', 'Display name for the project')
-        .option('--json', 'Output JSON response')
+        .option(...SHARED_OPTIONS.nameProjectDisplay)
+        .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .action(async (pathArg, options) => {
             try {
                 const absolutePath = resolve(context.cwd, pathArg);
@@ -46,7 +47,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('remove')
         .argument('<target>', 'Project display name or directory path')
-        .option('--json', 'Output JSON response')
+        .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -73,7 +74,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
 
     projectsCmd
         .command('list')
-        .option('--json', 'Output JSON array of projects')
+        .option(...SHARED_OPTIONS.jsonProjectsArray)
         .action(async (options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -113,8 +114,8 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('start')
         .argument('<target>', 'Project display name or path')
-        .option('--port <n>', 'Explicit port to bind', parseInt)
-        .option('--json', 'Output JSON response')
+        .option(...SHARED_OPTIONS.portProjects, parseInt)
+        .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -155,7 +156,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('stop')
         .argument('<target>', 'Project display name or path')
-        .option('--json', 'Output JSON response')
+        .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();

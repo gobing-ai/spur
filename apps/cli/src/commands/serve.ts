@@ -4,6 +4,7 @@ import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
 export function resolveServeDbUrl(cwd: string, env: Record<string, string | undefined>, configuredUrl: string): string {
@@ -15,11 +16,11 @@ export function registerServeCommand(program: Command, context: CliContext, opti
     program
         .command('serve', { hidden: options.hidden === true })
         .summary('start the Spur web server (local fallback)')
-        .option('--port <n>', 'Server port (env: PORT, default: 3000)', parseInt)
+        .option(...SHARED_OPTIONS.portServe, parseInt)
         .option('--host <addr>', 'Bind address (env: HOST, default: localhost)')
         .option('--no-open', 'Skip opening the browser')
-        .option('--cwd <path>', 'Working directory', context.cwd)
-        .option('--json', 'Output { port, url, pid } and exit')
+        .option(...SHARED_OPTIONS.cwdServe, context.cwd)
+        .option(...SHARED_OPTIONS.jsonServePortUrl)
         .action(async (options) => {
             try {
                 const env = process.env as Record<string, string | undefined>;

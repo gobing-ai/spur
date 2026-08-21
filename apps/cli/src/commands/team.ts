@@ -12,6 +12,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger, type CliSystemEventLedger } from '../system-event-ledger';
+import { SHARED_OPTIONS } from './shared-options';
 
 // ── Injectable fetch seam for tests ───────────────────────────────────
 let _testFetch: typeof fetch | undefined;
@@ -49,7 +50,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
 
     noun.command('status')
         .description('List agent specs and their run status; --by-team groups by team (0258 R4).')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .option('--by-team', 'Group specs by their agent.team.<id> membership')
         .option('--server <url>', 'Server API URL for live run status', DEFAULT_SERVER)
         .action(async (options) => {
@@ -64,7 +65,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .argument('<team>', 'Team id (agent.team.<team>)')
         .option('--check', 'Dry-run: show the add/prune diff without writing')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (team, options) => {
             const code = await runTeamUp(team, options, context);
             context.setExitCode(code);
@@ -75,7 +76,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .argument('<team>', 'Team id')
         .option('--purge', 'Also delete spur:generated specs (never manual / ref:)')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (team, options) => {
             const code = await runTeamDown(team, options, context);
             context.setExitCode(code);
@@ -85,7 +86,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .description('Start a supervised agent process (requires spur serve).')
         .argument('<agent-id>', 'Agent spec id')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (agentId, options) => {
             const code = await runTeamStart(agentId, options, context);
             context.setExitCode(code);
@@ -95,7 +96,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .description('Stop a supervised agent process (requires spur serve).')
         .argument('<agent-id>', 'Agent spec id')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (agentId, options) => {
             const code = await runTeamStop(agentId, options, context);
             context.setExitCode(code);

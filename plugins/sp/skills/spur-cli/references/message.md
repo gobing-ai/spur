@@ -107,3 +107,8 @@ lines.
 - **`spur agent` (see [agent.md](agent.md))** - `run --drain` and `loop` consume the inbox.
 - **`spur team` (see [team.md](team.md))** - team lifecycle that assigns agents to tasks.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.
+
+> **Shared option declarations (0618):** options shared across command modules resolve from
+> `apps/cli/src/commands/shared-options.ts` (`SHARED_OPTIONS`). Never re-declare a shared flag
+> inline in a command module — see SKILL.md "Shared option registry" and
+> `docs/04_DESIGN.md` §1.0.1.

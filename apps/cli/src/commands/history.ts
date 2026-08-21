@@ -15,6 +15,7 @@ import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
+import { SHARED_OPTIONS } from './shared-options';
 
 /**
  * Resolve the running CLI's own invocation path and the resolved importer package version
@@ -54,13 +55,13 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 'per-source failure isolation (task 0470). A single source is the n=1 case of ' +
                 'the same contract — never two import paths.',
         )
-        .option('--source <source>', 'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all', 'all')
-        .option('--file <path>', 'Import one JSONL file (single-source only)')
+        .option(...SHARED_OPTIONS.sourceHistory, 'all')
+        .option(...SHARED_OPTIONS.fileHistoryJsonl)
         .option('--root <path>', 'Scan a history root')
-        .option('--mode <mode>', 'full|incremental|force-file')
-        .option('--dry-run', 'Scan without persisting imported records')
+        .option(...SHARED_OPTIONS.modeHistory)
+        .option(...SHARED_OPTIONS.dryRunHistoryScan)
         .option('--source-timeout <ms>', 'Per-source timeout in milliseconds (default 600000 = 10 min)', '600000')
-        .option('--json', 'Output machine-readable JSON where supported')
+        .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (options) => {
             const source = options.source ?? 'all';
 
@@ -132,13 +133,13 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .option('--since <iso>', 'Inclusive lower bound on message timestamp')
         .option('--until <iso>', 'Inclusive upper bound on message timestamp')
-        .option('--source <source>', 'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all', 'all')
+        .option(...SHARED_OPTIONS.sourceHistory, 'all')
         .option('--session <id>', 'Narrow to a single session id')
-        .option('--run <runId>', 'Narrow to a single workflow run id')
+        .option(...SHARED_OPTIONS.runHistory)
         .option('--task <wbs>', 'Narrow to a single task WBS')
         .option('--top <n>', 'Leaderboard depth for byTool/bySession', '20')
         .option('--out <path>', 'Write the artifact to this path instead of the dated reports dir')
-        .option('--json', 'Emit the artifact as JSON instead of the human summary')
+        .option(...SHARED_OPTIONS.jsonArtifact)
         .action(async (options) => {
             const svc = makeService();
             const source = options.source ?? 'all';
@@ -174,7 +175,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 '--task / --top narrow the already-loaded artifact client-side (0564 R3).',
         )
         .argument('[path]', 'Artifact JSON path (defaults to the latest.json pointer)')
-        .option('--json', 'Emit the parsed artifact as JSON instead of the human report')
+        .option(...SHARED_OPTIONS.jsonParsedArtifact)
         .option('--mode <name>', 'Report mode: default | forensics (registry-resolved; unknown names fail)')
         .option('--task <wbs>', 'Narrow to a single task WBS the artifact was analyzed with')
         .option('--top <n>', 'Leaderboard depth for byTool/bySession (re-slices the artifact)')
@@ -231,7 +232,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             '600000',
         )
         .option('--root <path>', 'History root override (default: per-source platform dir)')
-        .option('--json', 'Emit the daily result as JSON')
+        .option(...SHARED_OPTIONS.jsonDaily)
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
             const svc = makeService();

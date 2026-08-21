@@ -101,6 +101,17 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
   semantics — including task and feature status-transition verbs — while multi-step lifecycle
   orchestration belongs to `sp:spur-dev`.
 
+## Shared option registry (0618)
+
+Options shared by two or more command modules are declared once in
+`apps/cli/src/commands/shared-options.ts` and spread at every call site
+(`.option(...SHARED_OPTIONS.<key>)` — parser/default/collector args append after the spread). One
+registry entry per **(flag, description) pair**: semantic homonyms (`--json`,
+`--cwd`) keep separate keys with their distinct texts. When editing a command module, never
+re-declare a shared flag inline — `apps/cli/tests/shared-option-parity.test.ts` fails on any literal
+declaration of a flag string in `SHARED_OPTION_FLAGS`. Add a new shared option by adding the entry
+and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
+
 ## See also
 
 - **[references/agent.md](references/agent.md)** - coding-agent execution surface (`run`, `loop`,

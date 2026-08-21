@@ -45,6 +45,7 @@ import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toJson } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Per-status column title for the human-readable board. */
 const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
@@ -142,17 +143,17 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('create')
         .summary('Create a new task with race-safe WBS allocation.')
         .argument('<title>', 'Task title')
-        .option('--feature <id>', 'Feature ID for traceability and Goal→Background derivation')
+        .option(...SHARED_OPTIONS.featureTrace)
         .option('--parent <wbs>', 'Parent WBS for sub-task grouping')
         .option('--template <variant>', `Template variant (${TASK_VARIANTS.join('|')})`)
-        .option('--folder <path>', 'Custom tasks folder')
+        .option(...SHARED_OPTIONS.folderTasks)
         .option(
             '--dedupe-within <seconds>',
             'Override the default dedup window (seconds). Guard is on (300s) by default when --feature is set.',
             Number,
         )
         .option('--allow-duplicate-name', 'Disable the dedup guard entirely (creates anyway)')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
                 context.output.error(
@@ -243,8 +244,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .alias('get')
         .summary('Show a task by WBS.')
         .argument('<wbs>', 'Task WBS number')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -282,10 +283,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 'Valid section names (no failed write): `spur task sections <wbs> list`.',
             ].join('\n'),
         )
-        .option('--section <name>', 'Section name to replace')
-        .option('--from-file <path>', 'File to read section body from (requires --section)')
-        .option('--feature <id>', 'Set the feature_id frontmatter field (traceability edge)')
-        .option('--priority <p>', 'Set the priority frontmatter field (P0–P3)')
+        .option(...SHARED_OPTIONS.section)
+        .option(...SHARED_OPTIONS.fromFile)
+        .option(...SHARED_OPTIONS.featureFrontmatter)
+        .option(...SHARED_OPTIONS.prioritySet)
         .option(
             '--ac-numbering <mode>',
             'Set the ac_numbering frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check',
@@ -307,8 +308,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Rationale for a forced-done override (paired with --force-done; persisted as done_reason)',
         )
         .option('--verdict-dir <path>', 'Directory holding <wbs>-verdict.json artifacts (default: .spur/run)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, status, options) => {
             const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
@@ -528,8 +529,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<wbs>', 'Task WBS number to mutate')
         .argument('<op>', 'Operation: set | add | remove | clear')
         .argument('[values...]', 'WBS values (required for set/add/remove; forbidden for clear)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, op, values, options) => {
             const allowedOps = ['set', 'add', 'remove', 'clear'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
@@ -582,8 +583,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<wbs>', 'Task WBS number to mutate')
         .argument('<op>', 'Operation: init | add | list')
         .argument('[name]', 'Canonical section name (required for add; forbidden for init/list)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, op, name, options) => {
             const allowedOps = ['init', 'add', 'list'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
@@ -637,12 +638,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     // ── list ──
     task.command('list')
         .summary('List tasks with optional filtering.')
-        .option('--status <s>', 'Filter by status')
+        .option(...SHARED_OPTIONS.statusFilter)
         .option('--phase <p>', 'Filter by phase (legacy alias for --status)')
         .option('--parent <wbs>', 'Filter by parent WBS')
-        .option('--feature <id>', 'Filter by linked feature ID (feature_id edge)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.featureFilterEdge)
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -679,8 +680,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     // ── refresh ──
     task.command('refresh')
         .summary('Re-scan the task corpus and report counts (kanban.md retired — A17 cutover).')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -699,9 +700,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     // ── migrate ──
     task.command('migrate')
         .summary('Run the one-time A17 task corpus normalization pass.')
-        .option('--dry-run', 'Produce the full report without writing files')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.dryRunTaskReport)
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             try {
                 const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
@@ -724,8 +725,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     // ── migrate-anchors ──
     task.command('migrate-anchors')
         .summary('Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3).')
-        .option('--dry-run', 'Produce the full report without writing files')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.dryRunTaskReport)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             try {
                 const dryRun = options.dryRun === true;
@@ -786,8 +787,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('refresh-roster')
         .summary("Regenerate a parent task's sub-task roster block in its ## Plan (0121 roll-up gate's generator).")
         .argument('<wbs>', 'Parent task WBS number')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -808,9 +809,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     // ── batch-create ──
     task.command('batch-create')
         .summary('Create many tasks from a validated JSON file — all-or-nothing (LLM→CLI gate).')
-        .requiredOption('--file <path>', 'Path to the batch JSON file validated against task-batch.schema.json')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .requiredOption(...SHARED_OPTIONS.fileTaskBatch)
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -865,8 +866,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--verdict-file <path>', 'Path to verdict JSON (default: .spur/run/<wbs>-verdict.json)')
         .option('--solution-from-diff', 'Backfill Solution from git diff when bare')
         .option('--transition <status>', 'Optional lifecycle transition (e.g. testing)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -896,8 +897,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Derive PASS/PARTIAL/FAIL/UNKNOWN verdict from verify answer text (replaces pipeline grep/shell).')
         .argument('<wbs>', 'Task WBS number')
         .option('--from-answer <path>', 'Path to verify answer text file')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
             const { deriveVerdict, verdictRowsMatchScenarios } = await import('@gobing-ai/spur-app');
@@ -968,8 +969,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 'verdict with NOT-STARTED tasks excluded from the rollup. Replaces agent-discretion ' +
                 'rollup prose (dev-operations.md §3a) with deterministic code (task 0341).',
         )
-        .option('--from-file <path>', 'Path to JSON array of {wbs,outcome[,reason]} rows')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.fromFileOutcomeRows)
+        .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const inputPath = options.fromFile ?? '.spur/run/verifyall-batch-input.json';
             let raw: string;
@@ -1029,19 +1030,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('check')
         .summary('Validate a task file through the four-layer check (design §3).')
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
-        .option('--strict', 'Elevate ALL warnings to failures')
+        .option(...SHARED_OPTIONS.strictTaskAll)
         .option(
             '--strict-core',
             'Compatibility alias (F92 R2): historically the done-gate label; kept so installed plugins/workflows that call it keep working. No longer meaningful on its own — target-state selection (`--as`) supplies the real done semantics.',
         )
-        .option(
-            '--as <status>',
-            'Evaluate the task AS if it were in <status> (F92 R2): the lifecycle guards pass the transition target so testing→done checks the done row. Validate against canonical task statuses. Omitted → current-status diagnostics.',
-        )
+        .option(...SHARED_OPTIONS.asTaskF92)
         .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
         .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const json = options.json === true;
             // `--strict` elevates every advisory; `--strict-core` is the done-gate
@@ -1246,9 +1244,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('resolve')
         .summary('Resolve a file path to its owning task WBS.')
         .argument('<file-path>', 'File path to resolve')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--strict', 'Match only the exact corpus path (no basename-WBS fallback)')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.strictTaskPath)
+        .option(...SHARED_OPTIONS.json)
         .action(async (filePath, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -1273,8 +1271,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('path')
         .summary('Resolve a WBS to its absolute task file path.')
         .argument('<wbs>', 'Task WBS number')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -1301,9 +1299,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Record a pipeline provenance link for a task (used by --next auto chains to satisfy testing→done guard).',
         )
         .argument('<wbs>', 'Task WBS number')
-        .option('--source <source>', 'Link source identifier (e.g. next-auto)', 'chain')
-        .option('--run-id <id>', 'Explicit run_id (auto-generated when omitted)')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.sourceLink, 'chain')
+        .option(...SHARED_OPTIONS.runIdTask)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             try {
                 const db = await context.getDb();
@@ -1337,9 +1335,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('scaffold-tests')
         .summary('Generate BDD test stubs from task Acceptance Criteria.')
         .argument('<wbs>', 'Task WBS number')
-        .option('--file <path>', 'Custom target test file path')
-        .option('--folder <path>', 'Custom tasks folder')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.fileTaskTest)
+        .option(...SHARED_OPTIONS.folderTasks)
+        .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
             const { TaskScaffoldService, resolvePlanningFolders } = await import('@gobing-ai/spur-app');
             const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;

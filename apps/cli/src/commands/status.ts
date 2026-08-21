@@ -4,13 +4,14 @@ import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toJson } from '../output';
+import { SHARED_OPTIONS } from './shared-options';
 
 /** Register `spur status` command (optionally hidden from the top-level help listing). */
 export function registerStatusCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
         .command('status', { hidden: options.hidden === true })
         .summary('show project, Git, and optional path status')
-        .option('--json', 'Output machine-readable JSON')
+        .option(...SHARED_OPTIONS.json)
         .argument('[path]', 'Optional file/dir path to check')
         .action(async (path, options) => {
             try {
