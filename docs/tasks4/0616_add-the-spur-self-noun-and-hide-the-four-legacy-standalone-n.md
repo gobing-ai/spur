@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Add the spur self noun and hide the four legacy standalone nouns behind it"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.541Z
-updated_at: "2026-08-20T23:19:40.743Z"
+updated_at: "2026-08-21T18:03:05.680Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613", "0618"]
@@ -27,11 +27,11 @@ Rubric: E2 D1 L1 C2 R2 = 8 → decompose.
 
 ### Requirements
 
-- [ ] R1. Add a `self` noun mounting the four existing command builders so `spur self init|migrate|serve|status` behave identically to the legacy nouns, including flags, output, and exit codes.
-- [ ] R2. Keep each legacy top-level noun registered and working unchanged, as a hidden alias rather than a re-implementation.
-- [ ] R3. Hide the four legacy nouns from the top-level help listing while `self` is listed.
-- [ ] R4. Update `docs/help/spur-cli-matrix.md`, the affected `docs/help/cmd_*.md` pages, and `docs/04_DESIGN.md` in the same commit.
-- [ ] R5. Cover the alias equivalence and the help-listing visibility with tests.
+- [x] R1. Add a `self` noun mounting the four existing command builders so `spur self init|migrate|serve|status` behave identically to the legacy nouns, including flags, output, and exit codes.
+- [x] R2. Keep each legacy top-level noun registered and working unchanged, as a hidden alias rather than a re-implementation.
+- [x] R3. Hide the four legacy nouns from the top-level help listing while `self` is listed.
+- [x] R4. Update `docs/help/spur-cli-matrix.md`, the affected `docs/help/cmd_*.md` pages, and `docs/04_DESIGN.md` in the same commit.
+- [x] R5. Cover the alias equivalence and the help-listing visibility with tests.
 
 ### Acceptance Criteria
 
@@ -70,28 +70,54 @@ change that lands without its doc updates fails the parity gate, correctly.
 
 ### Plan
 
-- [ ] Read `apps/cli/src/index.ts` and the four command modules to find the registration seam
-- [ ] Add the `self` noun mounting the four existing builders (R1)
-- [ ] Re-register the legacy nouns as hidden aliases over the same implementations (R2, R3)
-- [ ] Verify flags, output, and exit codes are identical on both paths (R1)
-- [ ] Update the CLI matrix, the affected `cmd_*.md` pages, and `docs/04_DESIGN.md` (R4)
-- [ ] Add tests for alias equivalence and for help-listing visibility (R5)
-- [ ] Run `bun run lint`, `bun run test`, and the `sp:spur-cli` parity gate
+- [x] Read `apps/cli/src/index.ts` and the four command modules to find the registration seam
+- [x] Add the `self` noun mounting the four existing builders (R1)
+- [x] Re-register the legacy nouns as hidden aliases over the same implementations (R2, R3)
+- [x] Verify flags, output, and exit codes are identical on both paths (R1)
+- [x] Update the CLI matrix, the affected `cmd_*.md` pages, and `docs/04_DESIGN.md` (R4)
+- [x] Add tests for alias equivalence and for help-listing visibility (R5)
+- [x] Run `bun run lint`, `bun run test`, and the `sp:spur-cli` parity gate
 
 ### Solution
+Implemented in commit `9baf106b` (this session verified and closed the corpus bookkeeping). The
+`self` noun mounts the four existing command builders; legacy nouns stay registered over the same
+builders as hidden aliases.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `self` sub-command created and `registerInitCommand`/`registerMigrateCommand`/
+  `registerServeCommand`/`registerStatusCommand` mounted under it — one implementation registered
+  twice, so flags, output, and exit codes are identical by construction
+  (`apps/cli/src/index.ts:135-147`).
+- The four legacy top-level registrations re-registered with `{ hidden: true }` over the same
+  builders — hidden alias, not a re-implementation (`apps/cli/src/index.ts:144-147`).
+- Help: `self` listed with its summary; `init`/`migrate`/`serve`/`status` absent from the top-level
+  listing (verified live via `spur --help`).
+- Docs updated in the same commit: `docs/help/spur-cli-matrix.md`, `cmd_init.md` / `cmd_migrate.md`
+  / `cmd_serve.md` / `cmd_status.md`, `docs/help/index.md`, `docs/04_DESIGN.md`, and the
+  `sp:spur-cli` routing.
+- Tests: alias equivalence and help-visibility assertions in
+  `apps/cli/tests/commands/dispatch-inspect.test.ts` and `apps/cli/tests/spur-cli-parity.test.ts`.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| Scenario: R7 — spur self hosts the self-management verbs with the legacy nouns preserved | MET | R1: `self` mounts the four existing builders (`apps/cli/src/index.ts:135-147`). R2: legacy nouns re-registered `{ hidden: true }` over the same builders (`apps/cli/src/index.ts:144-147`). R3: help lists `self`, hides the four (live smoke). R4: matrix + `cmd_init.md`/`cmd_migrate.md`/`cmd_serve.md`/`cmd_status.md` + `docs/04_DESIGN.md` same commit `9baf106b`. R5: alias equivalence + visibility tests green — `apps/cli/tests/commands/dispatch-inspect.test.ts` and `apps/cli/tests/spur-cli-parity.test.ts` (24 pass / 0 fail) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Kind | Finding | Ref |
+|---|---|---|---|
+| P4 | Verify | No P1–P3 findings. One implementation registered twice — no fork, no drift surface | R1/R2 MET |
+| P4 | Verify | Hidden-alias choice matches the design note: published `spur status` contract in shipped workflow YAML keeps working while help lists only `self` | R3 MET |
+| P4 | Verify | Docs (matrix, cmd_* pages, 04_DESIGN, spur-cli routing) landed in the same commit `9baf106b` | R4 MET |
+| P4 | Verify | Equivalence + visibility covered by dispatch-inspect and parity tests | R5 MET |
+| P4 | Note | Task file status was left `todo` when the code landed; this change closes the corpus bookkeeping only — no code delta in this commit | — |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-21T18:02:54.834Z todo → wip (system)
+- 2026-08-21T18:02:55.394Z wip → testing (system)
+- 2026-08-21T18:03:05.680Z testing → done (system)
