@@ -72,4 +72,12 @@ Validated, 3 rows in `.spur/run/wrapup-metrics.jsonl`:
 {"wbs":"0587","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-18T16:49:45.000Z"}
 ```
 
-Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing → Pipeline verify results`); `status: done`, `feature_id: H1`. Appended to the existing 2-row file.
+Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing → Pipeline verify results`); `status: done`, `feature_id: H1`. Appended to the existing 2-row file.{"wbs":"0613","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
+{"wbs":"0614","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
+{"wbs":"0615","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
+{"wbs":"0616","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:51Z"}
+{"wbs":"0617","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:51Z"}
+{"wbs":"0618","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:51Z"}
+{"wbs":"0619","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:51Z"}
+{"wbs":"0620","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:52Z"}
+{"wbs":"0621","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:52Z"}

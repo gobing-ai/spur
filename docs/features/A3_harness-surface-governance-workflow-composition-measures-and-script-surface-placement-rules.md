@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A3"
 name: "Harness surface governance: workflow composition measures and script-surface placement rules"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-20T23:10:47.090Z"
-updated_at: "2026-08-21T15:16:15.310Z"
+updated_at: "2026-08-21T20:40:31.266Z"
 ---
 
 # A3: Harness surface governance: workflow composition measures and script-surface placement rules
@@ -210,3 +210,4 @@ Feature: Harness surface governance: workflow composition measures and script-su
 
 ## History
 - 2026-08-21T15:16:15.310Z backlog → active (system)
+- 2026-08-21T20:40:31.266Z active → verifying (system)
