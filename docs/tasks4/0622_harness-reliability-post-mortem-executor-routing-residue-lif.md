@@ -140,7 +140,7 @@ run." That was the F4 inference, and F4 was rated MEDIUM precisely because the l
 never read. It has since been read: the dispatch-time exhaustion ladder already exists and is
 production-reachable — `resource-exhaustion` classification at
 `packages/app/src/services/agent-service.ts:1031`, sideways availability failover at `:1440-1447`,
-and `packages/app/tests/services/agent-service.test.ts:2645` dispatches a 429 quota body on a
+and `packages/app/tests/services/agent-service.test.ts:2666-2680` dispatches a 429 quota body on a
 *pinned* executor and recovers on the next rung. So F4 is **disproven, not fixed**. What remains
 true is the narrower part: `spur agent doctor` still cannot observe a quota state, so pre-flight
 selection has no way to avoid an exhausted executor — recovery is reactive, at dispatch, not
@@ -335,7 +335,7 @@ exit status, which nearly produced a false exit-code finding; and background tas
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | F2: ADR-077 "Pin Beats Role" at `docs/00_ADR.md:1014-1030`. F4: dispatch-time exhaustion ladder pre-exists and is production-reachable — `resource-exhaustion` classification at `packages/app/src/services/agent-service.ts:1031` and sideways failover at `:1440-1447`; `packages/app/tests/services/agent-service.test.ts:2645` dispatches a 429 quota body on a pinned executor and recovers. 28/28 escalation tests green this run (`bun test packages/app/tests/services/agent-service.test.ts -t escalat`). F4's MEDIUM-confidence "no rung was tried" inference is disproven, not fixed. |
+| R1 | MET | F2: ADR-077 "Pin Beats Role" at `docs/00_ADR.md:1014-1030`. F4: dispatch-time exhaustion ladder pre-exists and is production-reachable — `resource-exhaustion` classification at `packages/app/src/services/agent-service.ts:1031` and sideways failover at `:1440-1447`; `packages/app/tests/services/agent-service.test.ts:2666-2680` dispatches a 429 quota body on a pinned executor and recovers. 28/28 escalation tests green this run (`bun test packages/app/tests/services/agent-service.test.ts -t escalat`). F4's MEDIUM-confidence "no rung was tried" inference is disproven, not fixed. |
 | R2 | MET | Finalize status mapping at `packages/app/src/workflow/lifecycle-adapter.ts:206-214` (`cancelled → failed`, `done → done`, else `running`); consumers gate on `status`, documented inline. `packages/app/tests/workflow/lifecycle-adapter.test.ts` 15/15 green this run. |
 | R3 | MET | Requirement's stated alternative branch taken: `/sp:dev-idea` routed through the skill spine — `plugins/sp/commands/dev-idea.md:10` names `sp:spur-dev` + `idea-pipeline.yaml`, `:45` dispatches `Skill(skill="sp:spur-dev", …)`, `:23` adds `--agent`. F18 (general inline-drive provenance) is NOT closed — `rg -n inline packages/app/src/workflow/*.ts packages/app/src/services/workflow-service.ts` returns no match — but the requirement permits this escape hatch explicitly. See the R3 AC row. |
 | R4 | MET | `countToolCallsSince` at `packages/domain/src/analytics/forensic-query.ts:398-411`, exported `packages/domain/src/analytics/index.ts:44`; `runStartedAt` stamp at `packages/app/src/services/history-service.ts:487-490` (the F9 comment naming scanned-this-run count semantics, then the stamp); scanned-vs-new labels `apps/cli/src/commands/history.ts:381` and `:398` (`files=N scanned, new-messages=N, tool-calls=N`). |
@@ -347,7 +347,7 @@ exit status, which nearly produced a false exit-code finding; and background tas
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| @core R1 — A quota-exhausted executor does not fail the run | MET | test | `packages/app/tests/services/agent-service.test.ts:2645` — pinned executor, 429 quota body on dispatch 1, recovery on dispatch 2; 28/28 escalation tests green |
+| @core R1 — A quota-exhausted executor does not fail the run | MET | test | `packages/app/tests/services/agent-service.test.ts:2666-2680` — pinned executor, 429 quota body on dispatch 1, recovery on dispatch 2; 28/28 escalation tests green |
 | @core R1 — Role/pin interaction decided and recorded | PARTIAL | static-ref | ADR-077 at `docs/00_ADR.md:1014-1030`; all seven shipped pipelines follow pin-from-vars + role-as-floor |
 | @core R2 — A lifecycle workflow reaches a terminal state | MET | test | `packages/app/src/workflow/lifecycle-adapter.ts:206-214`; lifecycle-adapter tests 15/15 green (cancelled→failed, todo→blocked stays running, done→wip reopen→running) |
 | @core R3 — An inline pipeline drive is visible to the data plane | UNMET | static-ref | No run record is created for a host-session drive: `rg -n inline packages/app/src/workflow/*.ts packages/app/src/services/workflow-service.ts` returns no match, so `spur workflow trace` still shows subprocess runs only. R3 was satisfied via its alternative branch (route `/sp:dev-idea` through the spine), which removes one untracked path but does not give inline drives provenance. This scenario is written against the branch not taken. |

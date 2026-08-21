@@ -2128,9 +2128,11 @@ function renderModelStatus(status: ModelHealthResult | null | undefined): string
 
 /**
  * Render the `spur agent doctor` text output as an aligned table with a header,
- * a ✓/✗ state glyph, and a tier-1 summary footer. `--json` output is unaffected.
- * A missing agent (no version) renders `—` for both auth and version.
- * The MODEL column shows compact model health when a probe was run.
+ * a ✓/✗ state glyph, and a tier-1 summary footer. `--json` output is unaffected
+ * and keeps `authenticated` for every agent (0621: the AUTH column was removed —
+ * the signal cannot distinguish "not authenticated" from "no probe for provider").
+ * A missing agent (no version) renders `—` for version. The MODEL column shows
+ * compact model health when a probe was run.
  */
 function renderDoctorTable(results: DoctorRow[]): string {
     const dash = '—';
@@ -2141,8 +2143,6 @@ function renderDoctorTable(results: DoctorRow[]): string {
             state: usable ? 'usable' : 'missing',
             agent: result.agent,
             tier: String(result.tier),
-            // A missing agent has nothing meaningful to report for auth/version.
-            auth: usable ? renderAuth(result.authenticated) : dash,
             version: result.version ?? dash,
             model: renderModelStatus(result.modelStatus),
         };
@@ -2153,7 +2153,6 @@ function renderDoctorTable(results: DoctorRow[]): string {
         state: 'STATUS',
         agent: 'AGENT',
         tier: 'TIER',
-        auth: 'AUTH',
         version: 'VERSION',
         model: 'MODEL',
     };
@@ -2162,11 +2161,10 @@ function renderDoctorTable(results: DoctorRow[]): string {
     const wState = width('state');
     const wAgent = width('agent');
     const wTier = width('tier');
-    const wAuth = width('auth');
     const wVersion = width('version');
 
     const line = (row: (typeof all)[number]) =>
-        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.auth.padEnd(wAuth)}  ${row.version.padEnd(wVersion)}  ${row.model}`.trimEnd();
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.model}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
     const missingTier1 = results.filter((result) => !result.usable && result.tier === 1).length;

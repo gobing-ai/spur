@@ -140,9 +140,11 @@ spur agent doctor [options] [agent]
 | `--json` | Output machine-readable JSON |
 
 Readiness check per agent. Text mode prints an aligned table
-(`<✓|✗> <usable|missing> <agent> <tier> <auth:yes|no|?> <version>`) with a
-`STATUS AGENT TIER AUTH VERSION` header and an `N usable, M missing (tier-1)` footer.
-Auth is informational (its own column, not a state label — liveness-only gate, ADR-0127).
+(`<✓|✗> <usable|missing> <agent> <tier> <version>`) with a
+`STATUS AGENT TIER VERSION` header and an `N usable, M missing (tier-1)` footer.
+No AUTH column — the auth signal cannot distinguish "not authenticated" from
+"no probe registered for the provider", so it misreported usable agents (0621).
+`--json` still emits `authenticated` per agent (used by the `doctor.probe` built-in).
 **Exit 1 if any tier-1 agent is not usable.** Backed by `ts-ai-runner` `DoctorRunner`.
 
 ### JSON shape

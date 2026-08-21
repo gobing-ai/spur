@@ -298,9 +298,10 @@ describe('AgentService.doctor', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('text render surfaces authenticated as a yes/no/? column', async () => {
-        // Auth is informational now — all three states must render regardless of
-        // usable (a logged-out agent is usable but shows auth=no).
+    test('R1/R12 (0621): text table omits the AUTH column; --json keeps authenticated', async () => {
+        // The auth signal cannot distinguish "not authenticated" from "no probe
+        // registered" — the column misreported usable agents and is gone. The
+        // `authenticated` field stays in --json for the doctor.probe classifier.
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -308,7 +309,6 @@ describe('AgentService.doctor', () => {
                 Promise.resolve([
                     mockDoctorResult({ agent: 'claude', authenticated: 'authenticated' }),
                     mockDoctorResult({ agent: 'omp', authenticated: 'unauthenticated' }),
-                    mockDoctorResult({ agent: 'opencode', authenticated: 'unknown' }),
                 ]),
             ),
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
@@ -316,10 +316,31 @@ describe('AgentService.doctor', () => {
 
         const exitCode = await svc.doctor({ json: false }, { doctorRunner });
         expect(exitCode).toBe(0);
-        // Aligned table: auth renders as a yes/no/? column (no `auth=` prefix).
-        expect(lines.some((l) => /\bclaude\b/.test(l) && /\byes\b/.test(l))).toBe(true);
-        expect(lines.some((l) => /\bomp\b/.test(l) && /\bno\b/.test(l))).toBe(true);
-        expect(lines.some((l) => /\bopencode\b/.test(l) && /\?/.test(l))).toBe(true);
+        // No AUTH header and no yes/no/? auth cell on any agent row.
+        expect(lines.some((l) => l.includes('AUTH'))).toBe(false);
+        expect(lines.some((l) => /\bclaude\b/.test(l) && /\byes\b/.test(l))).toBe(false);
+        expect(lines.some((l) => /\bomp\b/.test(l) && /\bno\b/.test(l))).toBe(false);
+        // Remaining columns stay aligned: every row shares the header's column count.
+        const tableLines = lines.join('').split('\n');
+        const header = tableLines.find((l) => l.includes('STATUS'));
+        expect(header).toBeDefined();
+        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(5); // STATUS|AGENT|TIER|VERSION|MODEL
+        const row = tableLines.find((l) => l.includes('claude'));
+        expect(row).toBeDefined();
+        // glyph+state share the first cell, so the row has the same 5 cells as the header
+        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(5);
+        // Tier-1 summary footer unchanged (R3).
+        expect(tableLines.some((l) => /^\d+ usable, \d+ missing/.test(l))).toBe(true);
+
+        // R16: --json still emits authenticated for every agent.
+        const jsonLines: string[] = [];
+        const jsonOutput = {
+            write: (s: string) => jsonLines.push(s),
+        } as unknown as typeof output;
+        const svc2 = makeService({}, jsonOutput);
+        await svc2.doctor({ json: true }, { doctorRunner });
+        const parsed = JSON.parse(jsonLines.join(''));
+        expect(parsed.agents.every((a: { authenticated: string }) => typeof a.authenticated === 'string')).toBe(true);
     });
 
     // --- Task 0239: model health probe integration (cases 11–16) ---
