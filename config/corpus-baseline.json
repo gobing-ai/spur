@@ -12203,6 +12203,166 @@
             "severity": "warning",
             "reason": "DD-09 subset rule: 0590's AC are parser-behaviour checks for a verdict-tooling defect, an altitude below feature H1's shipping scenarios — see note § L4.uncovered-task-scenario and the ADR-062 AC-altitude carve-out.",
             "since": "2026-08-18"
+        },
+        {
+            "kind": "task",
+            "id": "0513",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done drift; SKILL.md:64 anchor cited for both plugins/sp test rows, subject tokens not in window",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0610",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done drift; eval-pipeline.ts:205 lines (node_modules symlink) do not name row subject",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0606",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); eval-pipeline.ts:528 / composition-baseline.ts:316 / 00_ADR.md:930 rows",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0607",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); eval-pipeline.ts:98/:133/:330 and workflow-composition-baseline.json:437 renumbered",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0601",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done drift; SystemEventsTab.tsx:509 and workflow-service.ts:855/:1142 windows shifted",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0604",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); 00_ADR.md:930/:1013 workflow-list lines moved by ADR-069 amendment",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0555",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done drift; history-service.ts:500/:1021 windows shifted by later edits",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0586",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done drift; .spur/config.yaml:211-212 and 04_DESIGN.md:1374 anchors predate config growth",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0608",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); workflow-composition-baseline.json:268-272 canonical rewrite changed the cited window",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0603",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "post-done evidence drift; anchors predate 0614 doc/code shifts (ADR renumbering, composition-baseline edits); composition-baseline.ts:202 and workflow-service.ts:170 windows shifted",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0616",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0617",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0619",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0620",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "prereq sequence in batch A3 run; clears when 0618 reaches done — prune then",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0622",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "done task retains 6 unchecked boxes; historical ship state, not re-openable in this batch",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0622",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "task scenarios sit at finer altitude than feature D3 AC; DD-09 subset rule fires — pre-existing, feature AC not extended",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0623",
+            "code": "L4.missing-feature-id",
+            "severity": "warning",
+            "reason": "pre-existing task without feature link; backfill tracked outside batch A3",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0624",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "task scenarios sit at finer altitude than feature E5 AC; DD-09 subset rule fires — pre-existing, feature AC not extended",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "feature",
+            "id": "D3",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "feature touches workflow infra but predates the dogfood artifact requirement; artifact not backfilled",
+            "since": "2026-08-21"
+        },
+        {
+            "kind": "feature",
+            "id": "A3",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "remaining scenarios (R5, R7-R17) verify as batch A3 tasks 0615-0621 reach done; prune at 0620",
+            "since": "2026-08-21"
         }
     ]
 }

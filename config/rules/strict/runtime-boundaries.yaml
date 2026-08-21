@@ -73,3 +73,4 @@ rules:
             # Synchronous template & workflow resolvers:
             - "apps/cli/src/commands/task.ts" # sync loadTemplateContent/Bodies callbacks
             - "apps/cli/src/workflow/make-lifecycle-adapter.ts" # sync resolveWorkflowPath lookup
+            - "packages/app/src/services/workflow-service.ts" # sync workflow-composition-baseline.json lookup (walk-up) for the validate composition advisory (task 0614); sync read inside the synchronous validate path

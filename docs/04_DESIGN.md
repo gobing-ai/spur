@@ -482,6 +482,18 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   gate; a missing module, a module without the declared capability, an absolute path, or `..`
   traversal fails the command before any workflow step. Schema: both workflow JSON schemas carry
   `extensions` (0431 parity).
+- **Composition advisory (0614/ADR-069):** on the valid path `validate` also emits a warn-only
+  composition advisory: `--json` adds `composition: {findings[], suppressed}` where each finding is
+  `{workflow, state, actionKey, measure: {kind: 'shell-lines'|'agent-run-chars', measured,
+  threshold?, severity?}, recommendation}`; human mode prints the advisory to stderr and stays
+  exit 0. Rules (frozen): a `shell` action flags when its command has **≥6** non-comment units
+  (split on newline and `;`, blank/`#` units skipped); an `agent.run` action flags when its
+  `input` is a **non-slash** prompt, severity by raw length (<200 low / ≤1000 medium / >1000
+  high); guards are exempt (actions only). Actions with a recorded `disposition` in
+  `config/workflow-composition-baseline.json` (resolved by walking up from the workflow file,
+  ≤10 dirs) are counted in `suppressed` instead of `findings`; workflows absent from the baseline
+  report all findings unsuppressed. The advisory never changes exit status and is not part of
+  `spur-check` / `spur-check-new`.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.

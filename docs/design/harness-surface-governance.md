@@ -85,9 +85,10 @@ Operator consent granted 2026-08-20 for the feature's six public-surface changes
 Each landing task cites this record; none re-litigates the gate. The 2026-08-16 amendment precedent
 (consent gate covers observable output changes of existing verbs) applies to rows 5–6.
 
-## 4. Known follow-ups (not this task)
+## 4. Known follow-ups (none open)
 
-- `docs/design/workflow-shell-ownership.md` key `learning-capture:onEnter:1` is stale — the state
-  was renamed `doc-sync` by task 0607; the program is now `doc-sync:onEnter:1` (4 lines, GLUE).
-  Re-keying and re-measuring belongs to the calibration task (0614).
-- Threshold freeze + ADR update with the chosen number: 0614 deliverable.
+Both 0613 follow-ups closed by task 0614 (2026-08-21): the shell-ownership doc's
+`learning-capture:onEnter:1` key is re-keyed to `doc-sync:onEnter:1` with the frozen-rule measure
+(7 lines, GLUE), and the threshold is frozen at `>5` in the ADR-069 amendment with the
+steady-state record (0 shell findings, 25 suppressed, 8 agent.run findings across all 10
+`config/workflows/*.yaml`).

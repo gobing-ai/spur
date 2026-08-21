@@ -1,5 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -43,7 +44,7 @@ import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
-import { computeDefinitionDigest } from '../workflow/composition-baseline';
+import { computeDefinitionDigest, type WorkflowCompositionBaseline } from '../workflow/composition-baseline';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import type { AgentService } from './agent-service';
@@ -199,8 +200,23 @@ function withDefinitionDigestRecording(
 
 /** Result of a workflow validate operation. */
 export type WorkflowValidateResult =
-    | { ok: true; valid: true; workflow: WorkflowDef }
+    | { ok: true; valid: true; workflow: WorkflowDef; composition?: CompositionAdvisory }
     | { ok: false; valid: false; file: string; errors: string[] };
+
+/** Warn-only composition advisory for a validated workflow (0614). */
+export interface CompositionAdvisory {
+    findings: CompositionFinding[];
+    suppressed: number;
+}
+
+/** One advisory finding under the frozen composition measures. */
+export interface CompositionFinding {
+    workflow: string;
+    state: string;
+    actionKey: string;
+    measure: { kind: 'shell-lines' | 'agent-run-chars'; measured: number; threshold?: number; severity?: string };
+    recommendation: string;
+}
 
 /**
  * Result of a workflow run operation: the engine's run result, widened with an
@@ -519,13 +535,17 @@ export class WorkflowAppService {
                 return { ok: false, valid: false, file, errors: roleErrors };
             }
 
+            // 0614: warn-only composition advisory (shell measure + agent.run
+            // prompt size + disposition suppression). Never affects validity.
+            const composition = collectCompositionAdvisory(workflow, absolute);
+
             // 0533 R3: validate fails closed on a bad extension — a missing module,
             // an absolute/`..` path, or a mis-shaped export surfaces as a validation
             // error before any step. Same load path as run/continue (R2); a bare
             // default host is enough for the import + shape check (no builtins/DB).
             await this.loadWorkflowExtensions(createDefaultWorkflowEngineHost(), workflow, absolute);
 
-            return { ok: true, valid: true, workflow };
+            return { ok: true, valid: true, workflow, composition };
         } catch (error) {
             return {
                 ok: false,
@@ -1285,6 +1305,116 @@ function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
         }
     }
     return violations;
+}
+
+/**
+ * Warn-only composition advisory walk (0614). Measures shell actions and
+ * non-slash agent.run prompts against the frozen ADR-069 thresholds and
+ * suppresses adjudicated findings via action-level `disposition` entries in
+ * `config/workflow-composition-baseline.json`. Guards are excluded wholesale
+ * (bulk exception, `docs/design/workflow-shell-ownership.md`). Never affects
+ * the validate exit status.
+ */
+function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): CompositionAdvisory {
+    const findings: CompositionFinding[] = [];
+    let suppressed = 0;
+
+    /** Frozen measure (ADR-069 amendment): shell lines = non-blank, non-comment
+     *  units after splitting `options.command` on `\n` and `;`. */
+    const shellLines = (command: string): number =>
+        command
+            .split(/\n|;/)
+            .map((u) => u.trim())
+            .filter((u) => u.length > 0 && !u.startsWith('#')).length;
+
+    const agentRunSeverity = (prompt: string): 'low' | 'medium' | 'high' => {
+        if (prompt.length < 200) return 'low';
+        if (prompt.length <= 1000) return 'medium';
+        return 'high';
+    };
+
+    const baseline = loadCompositionBaselineFor(workflowFile);
+    const workflowName = basename(workflowFile, '.yaml');
+
+    const adjudicated = (actionKey: string): boolean => {
+        if (!baseline) return false;
+        const entry = baseline.workflows[workflowName];
+        if (!entry) return false;
+        const action = entry.actions[actionKey];
+        return action?.disposition !== undefined;
+    };
+    const visitAction = (stateId: string, action: ActionDef, idx: number, phase: 'onEnter' | 'onExit'): void => {
+        const actionKey = `${stateId}:${phase}:${idx}`;
+        if (action.kind === 'shell') {
+            const cmd = action.options?.command;
+            if (typeof cmd !== 'string' || cmd.length === 0) return;
+            const measured = shellLines(cmd);
+            if (measured < 6) return;
+            if (adjudicated(actionKey)) {
+                suppressed += 1;
+                return;
+            }
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                measure: { kind: 'shell-lines', measured, threshold: 6 },
+                recommendation: `shell action at ${actionKey} measures ${measured} lines (>5 frozen threshold, ADR-069) — extract to a script or record a disposition in config/workflow-composition-baseline.json`,
+            });
+        } else if (action.kind === 'agent.run') {
+            const input = action.options?.input;
+            if (typeof input !== 'string' || input.length === 0) return;
+            if (input.trimStart().startsWith('/')) return; // slash-pinned steps are fine
+            if (adjudicated(actionKey)) {
+                suppressed += 1;
+            } else {
+                const severity = agentRunSeverity(input);
+                findings.push({
+                    workflow: workflowName,
+                    state: stateId,
+                    actionKey,
+                    measure: { kind: 'agent-run-chars', measured: input.length, severity },
+                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
+                });
+            }
+        }
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            if (node.action) visitAction(node.id, node.action, 0, 'onEnter');
+        }
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        for (const state of smDef.states ?? []) {
+            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i, 'onEnter');
+            for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i, 'onExit');
+        }
+    }
+
+    return { findings, suppressed };
+}
+
+/**
+ * Resolve `config/workflow-composition-baseline.json` for a workflow file by
+ * walking up from the file's directory to the repo root; absent baseline
+ * reports all findings with zero suppressed.
+ */
+function loadCompositionBaselineFor(workflowFile: string): WorkflowCompositionBaseline | undefined {
+    let dir = dirname(resolve(workflowFile));
+    for (let i = 0; i < 10; i++) {
+        const candidate = join(dir, 'config/workflow-composition-baseline.json');
+        if (existsSync(candidate)) {
+            try {
+                return JSON.parse(readFileSync(candidate, 'utf8')) as WorkflowCompositionBaseline;
+            } catch {
+                return undefined;
+            }
+        }
+        dir = dirname(dir);
+    }
+    return undefined;
 }
 
 async function fileExists(path: string): Promise<boolean> {

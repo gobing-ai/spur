@@ -20,6 +20,14 @@ export interface WorkflowActionBaseline {
     stateEffect: 'read' | 'write' | 'may-write';
     /** Classification of evidence creation effect. */
     evidenceEffect: 'none' | 'write';
+    /**
+     * Advisory-only ownership disposition for shell actions (0614): why this
+     * multi-line shell program is the right owner for the step. Consumed by
+     * the warn-only composition advisory on `spur workflow validate` to
+     * suppress already-adjudicated findings; never compared by
+     * {@link checkWorkflowComposition}.
+     */
+    disposition?: string;
 }
 
 /**

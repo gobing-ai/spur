@@ -174,7 +174,7 @@ state); **SIMPLE** = single `$spurBin` call, bulk exception.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `learning-capture:onEnter:1` | GLUE | append learnings if present |
+| `doc-sync:onEnter:1` | GLUE | append learnings if present (7 lines; re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
 | `metrics-record:onEnter:0` | GLUE | per-task metrics loop (jq + `task show` + verdict) → wrapup-metrics.jsonl |
 | `feature-transition:onEnter:0` | EXT | feature sync via `feature-sync-bounded.ts` (option d) + `feature sync` fallback |
 | `done:onEnter:1` | GLUE | checkpoint write |

@@ -4,7 +4,7 @@
  * Usage: bun scripts/spur-dev.ts real-run-cost [--workflow <name>]... [--json]
  *
  * Reads the main history plane (`.spur/spur.db`) and aggregates, per in-scope workflow
- * (the five in `config/workflow-composition-baseline.json`):
+ * (the eight in `config/workflow-composition-baseline.json`):
  *   - wall-clock from the `runs` table (`completed_at - started_at`) over terminal runs;
  *   - cost from `history_run_session` → `history_message` (summed `cost_usd`, exact
  *     observed mappings only), the same history-plane fold `attributeActionCost` uses.
@@ -15,7 +15,7 @@
  * a repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051; surface
  * questions route to task 0608).
  *
- * The `--workflow` filter defaults to the five in-scope pipelines; `--json` emits a
+ * The `--workflow` filter defaults to the in-scope pipelines from the baseline; `--json` emits an
  * machine-readable object. `n/a`, never `0`, for an unmeasured duration/cost (0284
  * invariant).
  */
@@ -134,7 +134,7 @@ export function readWorkflowMetrics(dbPath: string, workflows: string[]): Workfl
     });
 }
 
-/** The five in-scope pipelines from the composition baseline (their baseline keys). */
+/** The in-scope pipelines from the composition baseline (their baseline keys). */
 export async function inScopeWorkflows(baselinePath: string = BASELINE_PATH): Promise<string[]> {
     try {
         const parsed = JSON.parse(await readFile(baselinePath, 'utf-8')) as {

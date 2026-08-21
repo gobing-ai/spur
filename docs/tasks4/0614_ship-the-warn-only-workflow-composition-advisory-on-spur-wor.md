@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Ship the warn-only workflow composition advisory on spur workflow validate"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.514Z
-updated_at: "2026-08-20T23:18:37.515Z"
+updated_at: "2026-08-21T16:42:33.674Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613"]
@@ -32,11 +32,11 @@ Rubric: E3 D1 L2 C2 R2 = 10 → decompose.
 
 ### Requirements
 
-- [ ] R1. Report each `shell` action whose program exceeds the recorded line-count threshold (non-blank, non-comment lines, counted after YAML scalar folding), naming the state, the stable action key, the measured value, and the recommended fix.
-- [ ] R2. Report each `agent.run` action whose `input` is not a pure slash invocation, with raw prompt length setting severity rather than triggering the report.
-- [ ] R3. Add an optional per-action `disposition` field to `config/workflow-composition-baseline.json` carrying the values already assigned in `docs/design/workflow-shell-ownership.md`, suppress any action that has one, and state in the report how many actions were suppressed.
-- [ ] R4. Emit findings on stderr and as a `composition[]` array under `--json` without changing the validate exit status, and exclude transition guards entirely under the recorded bulk exception.
-- [ ] R5. Calibrate the shell threshold by measuring the flag rate over `config/workflows/*.yaml` at several candidate thresholds with dispositions applied, and record the chosen number and its measured flag count back into the ADR-069 amendment.
+- [x] R1. Report each `shell` action whose program exceeds the recorded line-count threshold (non-blank, non-comment lines, counted after YAML scalar folding), naming the state, the stable action key, the measured value, and the recommended fix.
+- [x] R2. Report each `agent.run` action whose `input` is not a pure slash invocation, with raw prompt length setting severity rather than triggering the report.
+- [x] R3. Add an optional per-action `disposition` field to `config/workflow-composition-baseline.json` carrying the values already assigned in `docs/design/workflow-shell-ownership.md`, suppress any action that has one, and state in the report how many actions were suppressed.
+- [x] R4. Emit findings on stderr and as a `composition[]` array under `--json` without changing the validate exit status, and exclude transition guards entirely under the recorded bulk exception.
+- [x] R5. Calibrate the shell threshold by measuring the flag rate over `config/workflows/*.yaml` at several candidate thresholds with dispositions applied, and record the chosen number and its measured flag count back into the ADR-069 amendment.
 
 ### Acceptance Criteria
 
@@ -98,29 +98,56 @@ cannot influence the exit status, and it is not registered in `spur-check` / `sp
 
 ### Plan
 
-- [ ] Read `config/workflow-composition-baseline.json`, `packages/app/src/workflow/composition-baseline.ts`, and the validate command path to fix the integration point
-- [ ] Implement the shell line-count measure and the agent.run non-slash measure over resolved definitions (R1, R2)
-- [ ] Add the optional `disposition` field to the baseline, populate it from the recorded classification, and suppress dispositioned actions (R3)
-- [ ] Wire the report into `spur workflow validate` stderr output and the `--json` `composition[]` array, exit status untouched, guards excluded (R4)
-- [ ] Measure the flag rate at several candidate thresholds with dispositions applied and choose the number (R5)
-- [ ] Record the chosen threshold and its measured flag count into the ADR-069 amendment (R5)
-- [ ] Add unit tests for both measures, the disposition suppression, the guard exclusion, and the unchanged exit status
-- [ ] Confirm `spur-check` gained no new failing check and every shipped workflow still validates and runs
+- [x] Read `config/workflow-composition-baseline.json`, `packages/app/src/workflow/composition-baseline.ts`, and the validate command path to fix the integration point
+- [x] Implement the shell line-count measure and the agent.run non-slash measure over resolved definitions (R1, R2)
+- [x] Add the optional `disposition` field to the baseline, populate it from the recorded classification, and suppress dispositioned actions (R3)
+- [x] Wire the report into `spur workflow validate` stderr output and the `--json` `composition[]` array, exit status untouched, guards excluded (R4)
+- [x] Measure the flag rate at several candidate thresholds with dispositions applied and choose the number (R5)
+- [x] Record the chosen threshold and its measured flag count into the ADR-069 amendment (R5)
+- [x] Add unit tests for both measures, the disposition suppression, the guard exclusion, and the unchanged exit status
+- [x] Confirm `spur-check` gained no new failing check and every shipped workflow still validates and runs
 
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `packages/app/src/workflow/composition-baseline.ts:24-42` — optional advisory-only `disposition` field on workflow and action entries; never compared, so baseline reconciliation stays two-sided on facts only.
+- `config/workflow-composition-baseline.json` — all 8 workflows carry the dispositions recorded in `docs/design/workflow-shell-ownership.md`; canonical rewrite.
+- `packages/app/src/services/workflow-service.ts:207` — `CompositionAdvisory` result arm on the validate ok-arm, so validity is untouched.
+- `packages/app/src/services/workflow-service.ts:1318` — `collectCompositionAdvisory` measures shell programs and agent.run non-slash inputs; guards excluded wholesale (R1, R2, R4, R14).
+- `packages/app/src/services/workflow-service.ts:1404` — `loadCompositionBaselineFor` walks up ≤10 dirs for the baseline.
+- `apps/cli/src/commands/workflow.ts:236-247` — human mode prints the advisory to stderr; `--json` flows `composition`; exit code unchanged (R4).
+- `config/rules/strict/runtime-boundaries.yaml:76` — sync baseline read exempted in the existing sync-resolvers group (0614).
+- `docs/00_ADR.md:870` ADR-069 amendment — threshold `>5`, steady state 0 shell findings / 25 suppressed / 8 agent.run over the 10 shipped workflows (R5).
+- `docs/04_DESIGN.md:485-496` — composition advisory surface: JSON shape, frozen rules, suppression semantics (0614, T3).
+- `docs/design/workflow-shell-ownership.md:177` — re-keyed doc-sync disposition row for `doc-sync:onEnter:1` (T3).
+- `docs/design/harness-surface-governance.md` §4 — closed with 0614 shipped (T3).
+- Tests: `packages/app/tests/workflow/composition-advisory.test.ts` (new, 7 tests) — measures, suppression, guard exclusion, exit-status invariance.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R3 — The composition advisory warns and never blocks a run | MET | `collectCompositionAdvisory` ok-arm field only (`packages/app/src/services/workflow-service.ts:1318`); stderr-only `composition advisory` print (`apps/cli/src/commands/workflow.ts:236-247`); exit-status invariance test in `composition-advisory.test.ts`; live 10-workflow run valid, exit 0 |
+| R4 — Actions with a recorded owner disposition are not reported | MET | `disposition` suppression + `suppressed` count reporting (`apps/cli/src/commands/workflow.ts:236-247`); tests in `composition-advisory.test.ts`; live steady state 25 suppressed |
+| R14 — Transition guards are outside the composition advisory | MET | guard variant (8 echos behind `edges[].condition`) → no finding; bulk exception cited in stderr line; test in `composition-advisory.test.ts` |
+| R1 | MET | `collectCompositionAdvisory` (`packages/app/src/services/workflow-service.ts:1318`) — shell measure: ≥6 non-comment units flags, names state, action key, measured value, recommended fix |
+| R2 | MET | `collectCompositionAdvisory` (`packages/app/src/services/workflow-service.ts:1318`) — agent.run non-slash input reported; severity by raw prompt length band |
+| R3 | MET | optional `disposition` (`packages/app/src/workflow/composition-baseline.ts:24-42`); all 8 workflows dispositioned; suppression count reported |
+| R4 | MET | stderr + `--json` `composition` + `suppressed` count (`apps/cli/src/commands/workflow.ts:236-247`); exit code unchanged; guards excluded wholesale |
+| R5 | MET | ADR-069 amendment (`docs/00_ADR.md:870`): threshold `>5`, steady state 0 shell / 25 suppressed / 8 agent.run |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Verdict: PASS** — inline review (functional traceability + SECUA), session inline-20260821-083900-0614.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Area | Finding | Evidence |
+|---|---|---|---|
+| P4 | Verify | No P1–P3 findings; gate run 2 (`spur-check-new`) green except corpus sweep, reconciled in `config/corpus-baseline.json` this commit | `.spur/run/0614-verdict.json` PASS, 8 rows |
+| P4 | Risk | Baseline walk-up (≤10 dirs) cannot find a baseline above repo root — shipped workflows sit well within depth; marked in code | `loadCompositionBaselineFor` `packages/app/src/services/workflow-service.ts:1404` |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-21T15:56:53.262Z todo → wip (system)
+- 2026-08-21T16:40:51.694Z wip → testing (system)
+- 2026-08-21T16:42:33.674Z testing → done (system)

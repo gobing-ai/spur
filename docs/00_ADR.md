@@ -903,6 +903,16 @@ the advisory-only posture the principle previously lacked.
 Accepted — the decision now carries detectable measures and a fix vocabulary, which is the
 acceptance case the Proposed status waited on.
 
+**Amendment (2026-08-21, feature A3 / task 0614):** Threshold frozen at **`>5`** (a program with
+≥6 non-comment shell units is flagged). The 2026-08-20 flag-rate table was measured over the 58
+pre-migration classified programs; on the live 57 shell actions the raw `>5` flag rate is 25.
+Steady state recorded 2026-08-21 across all 10 `config/workflows/*.yaml`: **0 shell findings,
+25 suppressed, 8 agent.run findings** — every shell action measuring ≥6 lines carries a recorded
+disposition in `config/workflow-composition-baseline.json` (8 workflow entries); the 33
+sub-threshold classified programs need no entry. agent.run severity bands are frozen at
+<200 low / ≤1000 medium / >1000 chars. The advisory appears in `workflow validate --json` as
+`composition {findings[], suppressed}` and on stderr in human mode; it never changes exit status.
+
 ## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
 
 **Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
