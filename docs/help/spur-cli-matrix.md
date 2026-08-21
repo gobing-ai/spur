@@ -15,13 +15,14 @@
 
 ## Compound Noun × Verb Matrix
 
-| Verb \ Noun | agent | feature | history | message | projects | rule | self | task | team | workflow |
+| Verb \ Noun | agent | builder | feature | history | message | projects | rule | self | task | team | workflow |
 |---|---|---|---|---|---|---|---|---|---|---|
 | **add** | | | | | ✅ | | | | | |
 | **advance** | | ✅ | | | | | | | | |
 | **analyze** | | | ✅ | | | | | | | |
 | **assign** | | | | | | | | | ✅ | |
 | **batch-create** | | | | | | | | ✅ | | |
+| **bump-ver** | | ✅ | | | | | | | | |
 | **cancel** | | | | | | | | | | ✅ |
 | **check** | | ✅ | | | | | | ✅ | | |
 | **clean** | | | | | | | | | | ✅ |
@@ -29,6 +30,7 @@
 | **create** | ✅ | ✅ | | | | | | ✅ | | |
 | **daily** | | | ✅ | | | | | | | |
 | **delete** | ✅ | | | | | | | | | |
+| **drop-tags** | | ✅ | | | | | | | | |
 | **deps** | | | | | | | | ✅ | | |
 | **doctor** | ✅ | | | | | | | | | |
 | **down** | | | | | | | | | ✅ | |
@@ -68,7 +70,7 @@
 | **verifyall-aggregate** | | | | | | | | ✅ | | |
 | **wait** | ✅ | | | | | | | | | |
 | **watch** | | | | ✅ | | | | | | |
-| **Verb count** | **8** | **9** | **4** | **4** | **5** | **4** | **4** | **18** | **6** | **7** |
+| **Verb count** | **8** | **2** | **9** | **4** | **4** | **5** | **4** | **4** | **18** | **6** | **7** |
 
 ## Hidden Legacy Aliases
 
@@ -86,11 +88,11 @@ from the top-level help listing, still fully functional for scripts and workflow
 
 | Metric | Count |
 |---|---|
-| Total nouns | **14** |
-| Compound nouns (with verbs) | **10** |
+| Total nouns | **15** |
+| Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **4** |
-| Unique verbs | **45** |
-| Total noun×verb cells | **69** |
+| Unique verbs | **47** |
+| Total noun×verb cells | **71** |
 
 > [!NOTE]
-> `task` has the richest surface at 18 verbs, followed by `feature` (9) and `agent` (8). Several verbs are shared across nouns — e.g., `list` (6 nouns), `create`/`run` (3 nouns each), `check`/`show`/`update`/`start`/`stop`/`trace`/`validate`/`refresh` (2 nouns each). `self` (4 verbs) hosts every self-management operation.
+> `task` has the richest surface at 18 verbs, followed by `feature` (9) and `agent` (8). `builder` (2 verbs: `bump-ver`, `drop-tags`) hosts the release plumbing promoted from `spur-dev`. Several verbs are shared across nouns — e.g., `list` (6 nouns), `create`/`run` (3 nouns each), `check`/`show`/`update`/`start`/`stop`/`trace`/`validate`/`refresh` (2 nouns each). `self` (4 verbs) hosts every self-management operation.

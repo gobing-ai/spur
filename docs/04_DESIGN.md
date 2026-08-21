@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.41.0
+version: 1.42.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-21
@@ -82,6 +82,9 @@ spur <noun> [<verb>] [positionals] [--flags]
 **Noun-verb contract:**
 
 - Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
+- **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
+  (task 0617, ADR-051). Promoted verbatim from the internal `spur-dev release` script; frozen at
+  these two verbs (see `docs/design/harness-surface-governance.md` §3).
 - **`self`** is the noun hosting the self-management verbs — `spur self init|migrate|serve|status`.
   Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
   output, and exit codes are identical on both paths.
@@ -182,6 +185,31 @@ clobbering a configured project. `--json` emits
 `templates/task/<variant>.md` entry per `TASK_VARIANTS`
 (`standard·feature-impl·issue·review·brainstorm·meta`); enforced by
 `apps/cli/tests/commands/init.test.ts` to prevent template/manifest drift.
+
+#### `spur builder bump-ver <package-id|--all> <version> [--push]` · `spur builder drop-tags <package-id|--all> <version> [--remote]`
+
+**Release plumbing, promoted from `spur-dev` (ADR-051, task 0617).** `builder` hosts the two
+release verbs formerly hidden behind the internal `bun run scripts/spur-dev.ts release` command;
+`scripts/commands/release.ts` is now a thin forwarder to the same implementation. The noun is
+**frozen at exactly these two verbs** — no further spur-dev verb may be promoted onto it, and any
+future spur-dev → public-noun promotion needs its own consent-gate entry
+(`docs/design/harness-surface-governance.md` §3).
+
+- `bump-ver <package-id> <version> [--push]` — bump one workspace package: rewrite its
+  `package.json` version (plus the in-source `binaryVersion` literal in `src/config.ts` when
+  present and any `workspace:` pins of consumers), commit
+  `chore(release): bump <pkg> to <version>`, create the annotated tag `<pkg>-v<version>`, and
+  optionally `--push` the branch + tag.
+- `bump-ver --all <version> [--push]` (or a bare `bump-ver <version>`) — bump every package pinned
+  via `workspace:` by another workspace package, then add per-package trace tags plus the aggregate
+  `@<scope>/<root>-v<version>` publish tag.
+- `drop-tags <package-id> <version> [--remote]` — delete the local tag; `--remote` also deletes it
+  on origin.
+- `drop-tags --all <version> [--remote]` — drop the per-package + aggregate tags.
+
+Package ids are unscoped short names (`@gobing-ai/spur` → `spur`). Unknown ids, invalid semver, a
+dirty tree, a detached HEAD, or an existing local/origin tag abort with exit 1 and usage text
+(`releaseUsage`). Output and exit behavior are identical to the legacy `spur-dev release` path.
 
 #### `spur agent run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 

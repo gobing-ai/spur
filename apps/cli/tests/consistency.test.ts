@@ -161,7 +161,7 @@ async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
 
         if (multiVerbMatch) {
             const varName = multiVerbMatch[1] ?? '';
-            const subRe = new RegExp(String.raw`(?:${varName})\s*\.\s*command\s*\(\s*['"](\w+)['"]\s*\)`, 'g');
+            const subRe = new RegExp(String.raw`(?:${varName})\s*\.\s*command\s*\(\s*['"]([\w-]+)['"]\s*\)`, 'g');
             const blocks = matchAll(subRe, text).map((m) => ({
                 name: cap(m),
                 end: m.index + m[0].length,

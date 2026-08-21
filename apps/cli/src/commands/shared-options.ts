@@ -24,6 +24,7 @@
 /** One shared option declaration: the literal `[flags, description]` pair. */
 export type SharedOption = readonly [flags: string, description: string];
 
+/** Registry of every option shared by two or more command modules, keyed by semantic use. */
 export const SHARED_OPTIONS = {
     // ── cross-command exact pairs (identical text in every declaring module) ──
     json: ['--json', 'Output machine-readable JSON'] as const,
@@ -119,6 +120,7 @@ export const SHARED_OPTIONS = {
     strictTaskPath: ['--strict', 'Match only the exact corpus path (no basename-WBS fallback)'] as const,
 } as const satisfies Record<string, SharedOption>;
 
+/** Key of a shared option registry entry (semantic name, not the flag string). */
 export type SharedOptionKey = keyof typeof SHARED_OPTIONS;
 
 /** Flag strings owned by the registry (any entry). */

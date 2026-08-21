@@ -12,7 +12,7 @@ priority: P2
 tags: ["project-switcher", "web", "ui"]
 dependencies: ["0383"]
 created_at: "2026-07-29T23:06:42.178Z"
-updated_at: "2026-08-19T05:43:50.815Z"
+updated_at: "2026-08-21T19:21:32.109Z"
 done_forced: "true"
 done_reason: Verified with 7 web tests and 434 total passing monorepo tests
 ---
@@ -67,7 +67,7 @@ Refs: docs/design/project-switcher.md §8; AC R1, R2, R12; LeftSidebar.tsx.
 - `apps/web/src/components/ProjectSwitcher.tsx:1-120`: Created `ProjectSwitcher` component with popup menu, running/stopped indicators, current project badge, and auto-start on stopped selection.
 - `apps/web/src/components/LeftSidebar.tsx:98`: Integrated `ProjectSwitcher` into LeftSidebar header.
 - `apps/web/tests/components/ProjectSwitcher.test.tsx:1-75`: Added component unit tests for project switching and auto-starting stopped projects.
-- `docs/04_DESIGN.md:938`: Updated CLI surface documentation for `spur projects`.
+- `docs/04_DESIGN.md:966`: Updated CLI surface documentation for `spur projects`.
 ### Testing
 **Mode:** verifyall re-audit `--force --fix all` — 2026-07-29
 

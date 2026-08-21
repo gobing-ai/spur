@@ -169,6 +169,7 @@ const REFERENCE_LAYOUT: Record<string, { file: string; heading: string; format: 
     feature: { file: 'features.md', heading: '## Verb map', format: 'table' },
     rule: { file: 'rules.md', heading: '## Command surface', format: 'fence' },
     workflow: { file: 'workflows.md', heading: '## Command surface', format: 'fence' },
+    builder: { file: 'builder.md', heading: '## Verb map', format: 'table' },
     agent: { file: 'agent.md', heading: '## Verb map', format: 'table' },
     message: { file: 'message.md', heading: '## Verb map', format: 'table' },
     team: { file: 'team.md', heading: '## Verb map', format: 'table' },

@@ -4,7 +4,7 @@ name: "Consolidate shared spur CLI option declarations behind one definition sit
 status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.568Z
-updated_at: "2026-08-21T17:47:45.277Z"
+updated_at: "2026-08-21T19:21:33.585Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613"]
@@ -88,7 +88,7 @@ the two `--fix` flags are authored against the registry from the start.
 - [x] Run `bun run lint`, `bun run test`, and the `sp:spur-cli` parity gate
 
 ### Solution
-Single definition site: `apps/cli/src/commands/shared-options.ts` exports `SHARED_OPTIONS` (72 `readonly [flags, description] as const` tuples), `SharedOptionKey` (`apps/cli/src/commands/shared-options.ts:27`), and the derived membership set `SHARED_OPTION_FLAGS` (28 flag strings, `apps/cli/src/commands/shared-options.ts:125`). Membership rule: a flag string declared in ≥2 command modules qualifies; **every** (flag, desc) pair of that flag string gets an entry, so single-module texts of a shared flag are also registry-owned — this makes the parity check total.
+Single definition site: `apps/cli/src/commands/shared-options.ts` exports `SHARED_OPTIONS` (72 `readonly [flags, description] as const` tuples), `SharedOptionKey` (`apps/cli/src/commands/shared-options.ts:124`), and the derived membership set `SHARED_OPTION_FLAGS` (28 flag strings, `apps/cli/src/commands/shared-options.ts:127`). Membership rule: a flag string declared in ≥2 command modules qualifies; **every** (flag, desc) pair of that flag string gets an entry, so single-module texts of a shared flag are also registry-owned — this makes the parity check total.
 
 **Design decision — split, no `--json` unification.** The prior session leaned toward unifying `--json`'s descriptions behind one canonical text. Overturned: the 9 `--json` description variants are not divergent wording for one concept but semantically distinct texts (e.g. serve's `Output { port, url, pid } and exit`). R4's byte-identical clause and scenario R9's "help output is unchanged" would both be violated by rewriting 9 published help pages — exactly the wording change riding along with a refactor that the Design section forbids. R4's "choose one canonical text" clause is per-divergence discretion; the chosen resolution is the registry split (one entry per pair), recorded here. Registry completeness was re-derived from source: the prior 39/64-entry plans missed 8 declarations (`--json` has 9 distinct descs, `--from-file` has 3); the final registry holds all 72 (flag,desc) pairs, script-validated `missing: set(), extra: set()`.
 
@@ -107,14 +107,14 @@ Single definition site: `apps/cli/src/commands/shared-options.ts` exports `SHARE
 | R2. Convert the command modules to consume the registry for every option shared by two or more commands, leaving single-command options declared locally. | MET | 161 call sites converted across 13 modules (task 52, feature 28, workflow 17, agent 14, rule 12, history 10, message 8, projects 7, team 5, init 3, serve 3, migrate 1, status 1); parsers/defaults/collectors preserved after the spread (e.g. `apps/cli/src/commands/task.ts:150-153` keeps `Number`); single-command options untouched. |
 | R3. Add a parity check that fails when a command re-declares a shared option with divergent wording. | MET | `apps/cli/tests/shared-option-parity.test.ts:34-45` fails on any literal declaration of a `SHARED_OPTION_FLAGS` member (stricter than divergent wording); mutation check: injected `--json` literal made it fail, removal restored green; reverse checks pin spread≥1 module and flags≥2 modules. |
 | R4. Keep every command's resolved `--help` output byte-identical before and after the consolidation, resolving any pre-existing wording divergence by choosing one canonical text and recording the change. | MET | 87 help pages dumped before/after; `diff -r` empty. No rewrite needed: one registry entry per (flag,desc) pair preserves every published description verbatim; the prior session's `--json` unification lean was overturned and recorded in Solution. |
-| R5. Document the registry as the place new shared options are added, in `docs/04_DESIGN.md` and the `sp:spur-cli` reference. | MET | `SHARED_OPTIONS` documented: `docs/04_DESIGN.md` §1.0.1 "Shared option registry" (`docs/04_DESIGN.md:108-113`) + `plugins/sp/skills/spur-cli/SKILL.md:104-108` + note appended to all 8 noun reference files. |
+| R5. Document the registry as the place new shared options are added, in `docs/04_DESIGN.md` and the `sp:spur-cli` reference. | MET | `SHARED_OPTIONS` documented: `docs/04_DESIGN.md` §1.0.1 "Shared option registry" (`docs/04_DESIGN.md:111-117`) + `plugins/sp/skills/spur-cli/SKILL.md:106-112` + note appended to all 8 noun reference files. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict: PASS** — inline review (functional traceability + SECUA), session inline-20260821-094623-0618.
 
 | Priority | Area | Finding | Evidence |
 |---|---|---|---|
-| P4 | Verify | No P1–P3 findings. Registry documented in `docs/04_DESIGN.md` §1.0.1 (`docs/04_DESIGN.md:108`) and `sp:spur-cli` SKILL.md "Shared option registry" (`plugins/sp/skills/spur-cli/SKILL.md:104`) + a note appended to all 8 noun references | R5 MET |
+| P4 | Verify | No P1–P3 findings. Registry documented in `docs/04_DESIGN.md` §1.0.1 (`docs/04_DESIGN.md:111`) and `sp:spur-cli` SKILL.md "Shared option registry" (`plugins/sp/skills/spur-cli/SKILL.md:106`) + a note appended to all 8 noun references | R5 MET |
 | P4 | Risk | Registry is source-of-truth for 28 flag strings; drift now structurally impossible (parity test fails on any literal of a shared flag) | `apps/cli/tests/shared-option-parity.test.ts:34-45` |
 | P4 | Risk | Anchor citations in 5 older task files (0384, 0591, 0609, 0622) repointed after line renumbering; task 0570 baseline entry went STALE (anchor now matches) — pruned this commit | `config/corpus-baseline.json` |
 | P4 | Verify | Help output unchanged across the entire CLI surface: 87/87 pages byte-identical | R4 MET |

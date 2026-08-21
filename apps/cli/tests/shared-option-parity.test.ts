@@ -35,7 +35,7 @@ describe('shared option registry parity', () => {
         const offenders: string[] = [];
         for (const { name, src } of modules) {
             for (const m of src.matchAll(LITERAL_HEAD)) {
-                const head = flagKey(m[2]);
+                const head = flagKey(m[2] ?? '');
                 if (SHARED_OPTION_FLAGS.has(head)) {
                     offenders.push(`${name}: ${m[2]}`);
                 }
@@ -48,7 +48,7 @@ describe('shared option registry parity', () => {
         const keys = Object.keys(SHARED_OPTIONS);
         const spread = new Set<string>();
         for (const { src } of modules) {
-            for (const m of src.matchAll(/SHARED_OPTIONS\.(\w+)/g)) spread.add(m[1]);
+            for (const m of src.matchAll(/SHARED_OPTIONS\.(\w+)/g)) spread.add(m[1] ?? '');
         }
         const unused = keys.filter((k) => !spread.has(k));
         expect(unused).toEqual([]);

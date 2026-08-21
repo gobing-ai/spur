@@ -247,6 +247,7 @@ spur <noun> --help
 | Noun       | Purpose                                          |
 | ---------- | ------------------------------------------------ |
 | `agent`    | Run / list / doctor / agent specs                |
+| `builder`  | Release plumbing: `bump-ver` / `drop-tags` (promoted from spur-dev, ADR-051) |
 | `feature`  | Feature tree + AC gates → **`sp:spur-cli`**      |
 | `history`  | Import / analyze agent history                   |
 | `message`  | Inter-agent messages                             |

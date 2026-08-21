@@ -85,6 +85,13 @@ Operator consent granted 2026-08-20 for the feature's six public-surface changes
 Each landing task cites this record; none re-litigates the gate. The 2026-08-16 amendment precedent
 (consent gate covers observable output changes of existing verbs) applies to rows 5–6.
 
+**No-further-promotion rule (0617).** The `spur builder` noun is **frozen at exactly the two
+promoted verbs** (`bump-ver`, `drop-tags`) — this consent record is scoped to that pair and to
+nothing else. No additional `spur-dev` verb may be promoted onto `builder`, and no further
+spur-dev → public-noun promotion of any kind may ride this record. Every future promotion needs
+its **own** consent-gate entry (audience + surface + justification) exactly like the rows above;
+without one, the command stays internal under `scripts/commands/`.
+
 ## 4. Known follow-ups (none open)
 
 Both 0613 follow-ups closed by task 0614 (2026-08-21): the shell-ownership doc's

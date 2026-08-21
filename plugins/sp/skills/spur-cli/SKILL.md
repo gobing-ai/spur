@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: "The CLI facade for the `spur` command surface - one reference per noun (task/feature/rule/workflow/agent/message/team/self): verbs, flags, `--json` shapes, exit codes, the CLI-gated write contract. NOT for driving the lifecycle (that is the spine, sp:spur-dev). Triggers: \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"spur agent\", \"spur message\", \"spur team\", \"spur self\", \"spur self init\", \"spur self status\", \"create a task\", \"task check\", \"batch-create\", or looking up any spur CLI verb or convention."
+description: "The CLI facade for the `spur` command surface - one reference per noun (task/feature/rule/workflow/builder/agent/message/team/self): verbs, flags, `--json` shapes, exit codes, the CLI-gated write contract. NOT for driving the lifecycle (that is the spine, sp:spur-dev). Triggers: \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"spur agent\", \"spur message\", \"spur team\", \"spur self\", \"spur self init\", \"spur self status\", \"create a task\", \"task check\", \"batch-create\", or looking up any spur CLI verb or convention."
 license: Apache-2.0
 metadata:
   author: spur
@@ -14,6 +14,7 @@ metadata:
     - feature
     - rule
     - workflow
+    - builder
     - agent
     - message
     - team
@@ -25,7 +26,7 @@ metadata:
 # spur-cli — the CLI facade for the Spur command surface
 
 `spur-cli` is the single reference for operating the **`spur` command-line surface**. Each `spur`
-noun (`task`, `feature`, `rule`, `workflow`, `agent`, `message`, `team`, `self`) has one reference file that documents *what each verb
+noun (`task`, `feature`, `rule`, `workflow`, `builder`, `agent`, `message`, `team`, `self`) has one reference file that documents *what each verb
 is, how to use it well, its flags, `--json` shapes, and exit codes*. This skill is a **facade /
 dispatch reference** — it tells you which verb does what and routes you to the noun's detail. It is
 **not** an orchestrator and contains **no competency logic**: the skill knows *how to invoke*; the
@@ -41,6 +42,7 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **feature** | Feature tree: author with hierarchical IDs (DD-14), acceptance criteria (Gherkin), status lifecycle, move subtrees, `check --json` | [references/features.md](references/features.md) |
 | **Tier A** | **rule** | Constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend engine | [references/rules.md](references/rules.md) |
 | **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
+| **Tier A** | **builder** | Release plumbing: bump a package (or the `workspace:`-pinned set) with `bump-ver`, delete release tags with `drop-tags`, commit + tag + optional push | [references/builder.md](references/builder.md) |
 | **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, manage team agent specs, persistent self-draining loop, readiness check | [references/agent.md](references/agent.md) |
 | **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
 | **Tier B** | **team** | Team coordination and supervision: assign, status, up/down rosters, start/stop supervised processes | [references/team.md](references/team.md) |

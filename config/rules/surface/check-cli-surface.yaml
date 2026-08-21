@@ -10,6 +10,7 @@ include:
 
 exclude:
   - "apps/cli/src/commands/stubs.ts"
+  - "apps/cli/src/commands/shared-options.ts" # option registry, not a command module (consistency.test.ts excludes it too)
 
 rules:
   - id: cli-register-pattern
