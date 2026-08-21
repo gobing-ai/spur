@@ -10,10 +10,10 @@ export function resolveServeDbUrl(cwd: string, env: Record<string, string | unde
     return env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : configuredUrl;
 }
 
-/** Register `spur serve` command. */
-export function registerServeCommand(program: Command, context: CliContext): void {
+/** Register `spur serve` command (optionally hidden from the top-level help listing). */
+export function registerServeCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
-        .command('serve')
+        .command('serve', { hidden: options.hidden === true })
         .summary('start the Spur web server (local fallback)')
         .option('--port <n>', 'Server port (env: PORT, default: 3000)', parseInt)
         .option('--host <addr>', 'Bind address (env: HOST, default: localhost)')

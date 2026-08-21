@@ -5,10 +5,10 @@ import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toJson } from '../output';
 
-/** Register `spur status` command. */
-export function registerStatusCommand(program: Command, context: CliContext): void {
+/** Register `spur status` command (optionally hidden from the top-level help listing). */
+export function registerStatusCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
-        .command('status')
+        .command('status', { hidden: options.hidden === true })
         .summary('show project, Git, and optional path status')
         .option('--json', 'Output machine-readable JSON')
         .argument('[path]', 'Optional file/dir path to check')

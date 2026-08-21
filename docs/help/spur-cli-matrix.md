@@ -4,84 +4,93 @@
 
 ## Legend
 
-- **Standalone nouns** (`init`, `migrate`, `serve`, `status`): no sub-verbs — the noun itself is the command.
-- **Compound nouns** (all others): `spur <noun> <verb>`.
+- **Compound nouns**: `spur <noun> <verb>`.
+- **`self`** — the noun hosting the self-management verbs (`init`, `migrate`, `serve`, `status`). Its
+  verbs mount the same command builders as the legacy standalone nouns.
+- **Hidden legacy aliases** — the four former standalone nouns (`init`, `migrate`, `serve`, `status`)
+  remain registered at the top level as hidden aliases over `spur self <verb>`. They keep working
+  unchanged for existing scripts and workflow YAML, but are absent from `spur --help`.
 
 ---
 
 ## Compound Noun × Verb Matrix
 
-| Verb \ Noun | agent | feature | history | message | projects | rule | task | team | workflow |
-|---|---|---|---|---|---|---|---|---|---|
-| **add** | | | | | ✅ | | | | |
-| **advance** | | ✅ | | | | | | | |
-| **analyze** | | | ✅ | | | | | | |
-| **assign** | | | | | | | | ✅ | |
-| **batch-create** | | | | | | | ✅ | | |
-| **cancel** | | | | | | | | | ✅ |
-| **check** | | ✅ | | | | | ✅ | | |
-| **clean** | | | | | | | | | ✅ |
-| **continue** | | | | | | | | | ✅ |
-| **create** | ✅ | ✅ | | | | | ✅ | | |
-| **daily** | | | ✅ | | | | | | |
-| **delete** | ✅ | | | | | | | | |
-| **deps** | | | | | | | ✅ | | |
-| **doctor** | ✅ | | | | | | | | |
-| **down** | | | | | | | | ✅ | |
-| **edit** | ✅ | | | | | | | | |
-| **import** | | | ✅ | | | | | | |
-| **inbox** | | | | ✅ | | | | | |
-| **list** | ✅ | ✅ | | | ✅ | ✅ | ✅ | | ✅ |
-| **loop** | ✅ | | | | | | | | |
-| **migrate** | | | | | | | ✅ | | |
-| **migrate-anchors** | | | | | | | ✅ | | |
-| **move** | | ✅ | | | | | | | |
-| **path** | | | | | | | ✅ | | |
-| **record** | | | | | | | ✅ | | |
-| **refresh** | | ✅ | | | | | ✅ | | |
-| **refresh-roster** | | | | | | | ✅ | | |
-| **remove** | | | | | ✅ | | | | |
-| **reply** | | | | ✅ | | | | | |
-| **report** | | | ✅ | | | | | | |
-| **resolve** | | | | | | | ✅ | | |
-| **run** | ✅ | | | | | ✅ | | | ✅ |
-| **run-link** | | | | | | | ✅ | | |
-| **scaffold-tests** | | | | | | | ✅ | | |
-| **sections** | | | | | | | ✅ | | |
-| **send** | | | | ✅ | | | | | |
-| **show** | | ✅ | | | | | ✅ | | |
-| **start** | | | | | ✅ | | | ✅ | |
-| **status** | | | | | | | | ✅ | |
-| **stop** | | | | | ✅ | | | ✅ | |
-| **sync** | | ✅ | | | | | | | |
-| **trace** | | | | | | ✅ | | | ✅ |
-| **up** | | | | | | | | ✅ | |
-| **update** | | ✅ | | | | | ✅ | | |
-| **validate** | | | | | | ✅ | | | ✅ |
-| **verdict** | | | | | | | ✅ | | |
-| **verifyall-aggregate** | | | | | | | ✅ | | |
-| **wait** | ✅ | | | | | | | | |
-| **watch** | | | | ✅ | | | | | |
-| **Verb count** | **8** | **9** | **4** | **4** | **5** | **4** | **18** | **6** | **7** |
+| Verb \ Noun | agent | feature | history | message | projects | rule | self | task | team | workflow |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **add** | | | | | ✅ | | | | | |
+| **advance** | | ✅ | | | | | | | | |
+| **analyze** | | | ✅ | | | | | | | |
+| **assign** | | | | | | | | | ✅ | |
+| **batch-create** | | | | | | | | ✅ | | |
+| **cancel** | | | | | | | | | | ✅ |
+| **check** | | ✅ | | | | | | ✅ | | |
+| **clean** | | | | | | | | | | ✅ |
+| **continue** | | | | | | | | | | ✅ |
+| **create** | ✅ | ✅ | | | | | | ✅ | | |
+| **daily** | | | ✅ | | | | | | | |
+| **delete** | ✅ | | | | | | | | | |
+| **deps** | | | | | | | | ✅ | | |
+| **doctor** | ✅ | | | | | | | | | |
+| **down** | | | | | | | | | ✅ | |
+| **edit** | ✅ | | | | | | | | | |
+| **import** | | | ✅ | | | | | | | |
+| **inbox** | | | | ✅ | | | | | | |
+| **init** | | | | | | | ✅ | | | |
+| **list** | ✅ | ✅ | | | ✅ | ✅ | | ✅ | | ✅ |
+| **loop** | ✅ | | | | | | | | | |
+| **migrate** | | | | | | | ✅ | ✅ | | |
+| **migrate-anchors** | | | | | | | | ✅ | | |
+| **move** | | ✅ | | | | | | | | |
+| **path** | | | | | | | | ✅ | | |
+| **record** | | | | | | | | ✅ | | |
+| **refresh** | | ✅ | | | | | | ✅ | | |
+| **refresh-roster** | | | | | | | | ✅ | | |
+| **remove** | | | | | ✅ | | | | | |
+| **reply** | | | | ✅ | | | | | | |
+| **report** | | | ✅ | | | | | | | |
+| **resolve** | | | | | | | | ✅ | | |
+| **run** | ✅ | | | | | ✅ | | | | ✅ |
+| **run-link** | | | | | | | | ✅ | | |
+| **scaffold-tests** | | | | | | | | ✅ | | |
+| **sections** | | | | | | | | ✅ | | |
+| **send** | | | | ✅ | | | | | | |
+| **serve** | | | | | | | ✅ | | | |
+| **show** | | ✅ | | | | | | ✅ | | |
+| **start** | | | | | ✅ | | | | ✅ | |
+| **status** | | | | | | | ✅ | | ✅ | |
+| **stop** | | | | | ✅ | | | | ✅ | |
+| **sync** | | ✅ | | | | | | | | |
+| **trace** | | | | | | ✅ | | | | ✅ |
+| **up** | | | | | | | | | ✅ | |
+| **update** | | ✅ | | | | | | ✅ | | |
+| **validate** | | | | | | ✅ | | | | ✅ |
+| **verdict** | | | | | | | | ✅ | | |
+| **verifyall-aggregate** | | | | | | | | ✅ | | |
+| **wait** | ✅ | | | | | | | | | |
+| **watch** | | | | ✅ | | | | | | |
+| **Verb count** | **8** | **9** | **4** | **4** | **5** | **4** | **4** | **18** | **6** | **7** |
 
-## Standalone Nouns (no sub-verbs)
+## Hidden Legacy Aliases
 
-| Noun | Description |
-|---|---|
-| `init` | Scaffold a Spur project |
-| `migrate` | Run CLI schema migrations |
-| `serve` | Start local web server |
-| `status` | Show project / Git status |
+The four former standalone nouns stay registered over the same builders as `spur self <verb>` — hidden
+from the top-level help listing, still fully functional for scripts and workflow YAML.
+
+| Legacy noun | Canonical | Description |
+|---|---|---|
+| `spur init` | `spur self init` | Scaffold a Spur project |
+| `spur migrate` | `spur self migrate` | Run CLI schema migrations |
+| `spur serve` | `spur self serve` | Start local web server |
+| `spur status` | `spur self status` | Show project / Git status |
 
 ## Summary
 
 | Metric | Count |
 |---|---|
-| Total nouns | **13** |
-| Compound nouns (with verbs) | **9** |
-| Standalone nouns | **4** |
-| Unique verbs | **43** |
-| Total noun×verb cells | **65** |
+| Total nouns | **14** |
+| Compound nouns (with verbs) | **10** |
+| Hidden legacy aliases | **4** |
+| Unique verbs | **45** |
+| Total noun×verb cells | **69** |
 
 > [!NOTE]
-> `task` has the richest surface at 18 verbs, followed by `feature` (9) and `agent` (8). Several verbs are shared across nouns — e.g., `list` (6 nouns), `create`/`run` (3 nouns each), `check`/`show`/`update`/`start`/`stop`/`trace`/`validate`/`refresh` (2 nouns each).
+> `task` has the richest surface at 18 verbs, followed by `feature` (9) and `agent` (8). Several verbs are shared across nouns — e.g., `list` (6 nouns), `create`/`run` (3 nouns each), `check`/`show`/`update`/`start`/`stop`/`trace`/`validate`/`refresh` (2 nouns each). `self` (4 verbs) hosts every self-management operation.

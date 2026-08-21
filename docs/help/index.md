@@ -36,12 +36,11 @@ Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected 
 
 ### CLI Surface
 
-12 command groups, every command supports `--json`:
+10 noun groups, every command supports `--json`:
 
 | Command         | Purpose                                                           |
 | --------------- | ----------------------------------------------------------------- |
-| `spur init`     | Scaffold a local Spur project (`.spur/`)                          |
-| `spur status`   | Show project, Git, and optional path status                       |
+| `spur self`     | Self-management verbs: `init` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
 | `spur agent`    | Run and inspect supported coding agents + team agent specs        |
 | `spur rule`     | Manage constraint rules and presets                               |
 | `spur workflow` | Validate, run, continue (`--answer`), trace, cancel, clean workflow YAML |
@@ -50,8 +49,7 @@ Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected 
 | `spur history`  | Import and analyze coding-agent history                           |
 | `spur message`  | Send and inspect durable inter-agent messages                     |
 | `spur team`     | Team assign / status / up / down / start / stop (needs serve)     |
-| `spur serve`    | Start the Spur web server (local fallback)                        |
-| `spur migrate`  | Apply CLI-owned schema migrations                                 |
+| `spur projects` | Manage the multi-project registry                                 |
 
 ### Architecture Diagram
 

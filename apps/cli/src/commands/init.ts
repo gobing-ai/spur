@@ -159,10 +159,10 @@ async function seedGlobalConfig(context: CliContext): Promise<number> {
     }
     return written;
 }
-/** Register `spur init` command. */
-export function registerInitCommand(program: Command, context: CliContext): void {
+/** Register `spur init` command (optionally hidden from the top-level help listing). */
+export function registerInitCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
-        .command('init')
+        .command('init', { hidden: options.hidden === true })
         .summary('scaffold a local Spur project')
         .option('--name <name>', 'Project name (default: current directory name)')
         .option('--force', 'Recreate files that already exist')

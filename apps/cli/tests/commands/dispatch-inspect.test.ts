@@ -14,7 +14,8 @@ describe('CLI dispatch and status', () => {
 
         expect(await main(['help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         // Top-level help is rendered by commander's standard flat command list.
-        // All 10 nouns appear alphabetically under "Commands:".
+        // The visible noun groups appear under "Commands:"; the legacy standalone nouns
+        // (init/migrate/serve/status) are hidden aliases over `spur self <verb>`.
         const helpOutput = output.messages.join('\n');
         expect(output.messages.some((m) => m.includes('agent'))).toBe(true);
         expect(helpOutput).toContain('Options:');
@@ -22,9 +23,14 @@ describe('CLI dispatch and status', () => {
         expect(helpOutput).toContain('agent');
         expect(helpOutput).toContain('rule');
         expect(helpOutput).toContain('history');
-        expect(helpOutput).toContain('init');
+        expect(helpOutput).toContain('self');
         expect(helpOutput).toContain('--version');
         expect(helpOutput).not.toContain('workspace');
+        // The four legacy standalone nouns are hidden from the top-level listing.
+        expect(helpOutput).not.toContain('spur init');
+        expect(helpOutput).not.toContain('spur migrate');
+        expect(helpOutput).not.toContain('spur serve');
+        expect(helpOutput).not.toContain('spur status');
         expect(bannerText()).toContain('___');
 
         expect(await main(['version'], { cwd, output, dbUrl: ':memory:' })).toBe(1);

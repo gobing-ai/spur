@@ -4,10 +4,14 @@ import { applyCliMigrations, loadSqlMigrations } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
-/** Register `spur migrate` command. */
-export function registerMigrateCommand(program: Command, context: CliContext): void {
+/** Register `spur migrate` command (optionally hidden from the top-level help listing). */
+export function registerMigrateCommand(
+    program: Command,
+    context: CliContext,
+    options: { hidden?: boolean } = {},
+): void {
     program
-        .command('migrate')
+        .command('migrate', { hidden: options.hidden === true })
         .summary('apply CLI-owned schema migrations')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {

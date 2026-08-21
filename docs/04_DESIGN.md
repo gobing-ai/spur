@@ -81,8 +81,13 @@ spur <noun> [<verb>] [positionals] [--flags]
 **Noun-verb contract:**
 
 - Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
-- `init`, `status`, and `migrate` are the only sanctioned **verb-less** commands. They accept
-  flags and optional positionals directly.
+- **`self`** is the noun hosting the self-management verbs — `spur self init|migrate|serve|status`.
+  Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
+  output, and exit codes are identical on both paths.
+- The four legacy **hidden aliases** (`spur init`, `spur migrate`, `spur serve`, `spur status`) stay
+  registered at the top level for back-compat with existing scripts and workflow YAML. They are
+  verb-less commands that accept flags and optional positionals directly, but they are omitted from
+  the `spur --help` listing (commander's `hidden` option), leaving `self` as the visible surface.
 - All other nouns require a verb. Commander enforces this: calling `spur workflow` without a verb
   prints commander's help and exits 1.
 
@@ -102,6 +107,9 @@ help rendering overrides remain.
 ### 1.1 Committed product commands
 
 #### `spur init [--name <name>] [--force] [--minimal] [--json]`
+
+> **Canonical path:** `spur self init`. The legacy `spur init` top-level form remains a hidden alias
+> over the same command — identical flags, output, and exit codes; absent from `spur --help`.
 
 Scaffold a local Spur project. Writes `.spur/config.yaml` (§2.1) and records the config artifact. Unless
 `--minimal`, scaffolds `.spur/` from the default config assets (§2.3): `.spur/rules/` (with the
@@ -892,10 +900,10 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 
 | Command                                                                       | Behavior                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spur status [path] [--json]`                                                 | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory).                                                                                                                                                              |
-| `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. |
+| `spur status [path] [--json]`                                                 | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory). Hidden alias — canonical: `spur self status`. |
+| `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. Hidden alias — canonical: `spur self serve`. |
 | `spur projects [add                                                           | remove                                                                                                                                                                                                                                                                                                                                                                                                     | list | start | stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
-| `spur migrate [--json]`                                                       | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`.                                                                                                                                                                                                                                                                                                                            |
+| `spur migrate [--json]`                                                       | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. Hidden alias — canonical: `spur self migrate`. |
 
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 

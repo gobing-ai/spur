@@ -172,10 +172,8 @@ const REFERENCE_LAYOUT: Record<string, { file: string; heading: string; format: 
     agent: { file: 'agent.md', heading: '## Verb map', format: 'table' },
     message: { file: 'message.md', heading: '## Verb map', format: 'table' },
     team: { file: 'team.md', heading: '## Verb map', format: 'table' },
-    // The combined init/status reference documents both noun commands in one table.
-    init: { file: 'init.md', heading: '## CLI verbs', format: 'table' },
-    status: { file: 'init.md', heading: '## CLI verbs', format: 'table' },
-    serve: { file: 'serve.md', heading: '## Verb map', format: 'table' },
+    // `self` is the consolidated home for the four self-management verbs (init/migrate/serve/status).
+    self: { file: 'self.md', heading: '## Verb map', format: 'table' },
 };
 
 /** Extract `--flag` tokens (same shape the 0512 Commander adapter parses). */

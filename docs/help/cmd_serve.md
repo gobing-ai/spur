@@ -4,6 +4,10 @@
 > The server is **Hono on Bun.serve** locally (or the Cloudflare Worker for production);
 > static assets are served via Hono `serveStatic` (local) or the Cloudflare assets binding
 > (production) with SPA fallback.
+>
+> **Canonical path:** `spur self serve`. The legacy `spur serve` top-level form remains a hidden
+> alias over the same command — it keeps working unchanged for existing scripts and workflow YAML but
+> is absent from `spur --help`.
 
 ## Usage
 

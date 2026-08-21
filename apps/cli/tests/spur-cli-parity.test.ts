@@ -6,6 +6,7 @@ import { registerAgentCommand } from '../src/commands/agent';
 import { registerFeatureCommand } from '../src/commands/feature';
 import { registerInitCommand } from '../src/commands/init';
 import { registerMessageCommand } from '../src/commands/message';
+import { registerMigrateCommand } from '../src/commands/migrate';
 import { registerRuleCommand } from '../src/commands/rule';
 import { registerServeCommand } from '../src/commands/serve';
 import { registerStatusCommand } from '../src/commands/status';
@@ -58,22 +59,18 @@ const EXPECTED_TIER_B_VERBS = {
     agent: ['run', 'loop', 'wait', 'list', 'doctor', 'create', 'edit', 'delete'],
     message: ['send', 'inbox', 'reply', 'watch'],
     team: ['assign', 'status', 'up', 'down', 'start', 'stop'],
-    init: ['init'],
-    status: ['status'],
-    serve: ['serve'],
+    self: ['init', 'migrate', 'serve', 'status'],
 } satisfies Record<string, string[]>;
 
 // Tier C nouns explicitly excluded from documentation with stated reasons (task 0395 R5)
-const EXCLUDED_TIER_C_NOUNS = ['history', 'migrate', 'projects', 'help'];
+const EXCLUDED_TIER_C_NOUNS = ['history', 'projects', 'help'];
 
-// Tier B noun -> reference file mapping (init and status share init.md)
+// Tier B noun -> reference file mapping (`self` consolidates init/migrate/serve/status)
 const TIER_B_REF_FILES = {
     agent: 'agent.md',
     message: 'message.md',
     team: 'team.md',
-    init: 'init.md',
-    status: 'init.md',
-    serve: 'serve.md',
+    self: 'self.md',
 } satisfies Record<string, string>;
 
 /**
@@ -116,9 +113,13 @@ const cliProgram: Command = (() => {
     registerAgentCommand(program, stubContext);
     registerMessageCommand(program, stubContext);
     registerTeamCommand(program, stubContext);
-    registerInitCommand(program, stubContext);
-    registerStatusCommand(program, stubContext);
-    registerServeCommand(program, stubContext);
+    // `self` hosts the four self-management verbs (mirrors apps/cli/src/index.ts); the legacy
+    // top-level nouns remain hidden aliases and are not part of the in-process tree here.
+    const selfCommand = program.command('self');
+    registerInitCommand(selfCommand, stubContext);
+    registerMigrateCommand(selfCommand, stubContext);
+    registerServeCommand(selfCommand, stubContext);
+    registerStatusCommand(selfCommand, stubContext);
     return program;
 })();
 
@@ -244,9 +245,9 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
             const helpText = nounCommand(noun).helpInformation();
 
             for (const verb of verbs) {
-                // Single-verb nouns (init/status/serve) name themselves rather than listing a
-                // subcommand, so the noun's own name is what proves the verb exists.
-                expect(noun === verb ? noun : helpText).toContain(verb);
+                // `self` lists its verbs as subcommands; other Tier B nouns are leaf or
+                // self-named (agent/message/team), so the noun's own help proves the verb exists.
+                expect(helpText).toContain(verb);
             }
         }
     });

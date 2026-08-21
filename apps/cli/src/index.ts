@@ -128,14 +128,24 @@ async function runCommandDispatch(
     registerAgentCommand(program, context);
     registerFeatureCommand(program, context);
     registerHistoryCommand(program, context);
-    registerInitCommand(program, context);
     registerMessageCommand(program, context);
-    registerMigrateCommand(program, context);
     registerProjectsCommand(program, context);
     registerRuleCommand(program, context);
 
-    registerStatusCommand(program, context);
-    registerServeCommand(program, context);
+    // `self` is the visible home for the self-management verbs; the four legacy
+    // top-level nouns stay registered over the same builders as hidden aliases
+    // so existing scripts, workflow YAML, and habits keep working unchanged.
+    const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
+    registerInitCommand(selfCommand, context);
+    registerMigrateCommand(selfCommand, context);
+    registerServeCommand(selfCommand, context);
+    registerStatusCommand(selfCommand, context);
+
+    registerInitCommand(program, context, { hidden: true });
+    registerMigrateCommand(program, context, { hidden: true });
+    registerServeCommand(program, context, { hidden: true });
+    registerStatusCommand(program, context, { hidden: true });
+
     registerTeamCommand(program, context);
     registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);

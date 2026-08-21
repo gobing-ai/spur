@@ -246,19 +246,16 @@ spur <noun> --help
 
 | Noun       | Purpose                                          |
 | ---------- | ------------------------------------------------ |
-| `init`     | Scaffold a Spur project                          |
 | `agent`    | Run / list / doctor / agent specs                |
+| `feature`  | Feature tree + AC gates → **`sp:spur-cli`**      |
 | `history`  | Import / analyze agent history                   |
-| `rule`     | Constraints → **`sp:spur-cli`**                  |
-| `workflow` | Engine + run progress/follow → **`sp:spur-cli`** |
 | `message`  | Inter-agent messages                             |
+| `projects` | Multi-project registry                           |
+| `rule`     | Constraints → **`sp:spur-cli`**                  |
+| `self`     | Self-management verbs: `init` / `migrate` / `serve` / `status` (legacy top-level forms remain hidden aliases) |
 | `team`     | Assign / start / stop / status                   |
 | `task`     | Task corpus → **`sp:spur-cli`**                  |
-| `feature`  | Feature tree + AC gates → **`sp:spur-cli`**      |
-| `status`   | Project / Git status                             |
-| `projects` | Multi-project registry                           |
-| `migrate`  | CLI schema migrations                            |
-| `serve`    | Local web server                                 |
+| `workflow` | Engine + run progress/follow → **`sp:spur-cli`** |
 
 **Adding a command? Two surfaces, one rule (ADR-051):**
 
@@ -268,7 +265,7 @@ spur <noun> --help
 | `scripts/spur-dev.ts` | **Internal** — Spur self-dev only: packaging/release (`publish`, `bundle-*`, `verify-pack`, `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), monorepo gates (`link-check`). | No consent gate; one module per command under `scripts/commands/` + test sibling + `bundle-*`-style verb naming. |
 
 Promoted in task 0502 per ADR-051 noun discipline: corpus validation is `spur task check --corpus`
-(NOT a new `corpus` noun); the misplaced spur-dev command is removed. All thirteen CLI nouns are
+(NOT a new `corpus` noun); the misplaced spur-dev command is removed. All ten CLI nouns are
 legitimately public; all other spur-dev commands are correctly internal.
 
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
