@@ -773,7 +773,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'dogfood-testing': 37_452,
             'code-verification': 30_488,
             wayfinder: 26_264,
-            'issue-finding': 26_139,
+            // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
+            // refusal, artifact-size discipline). Not permanent — split into references.
+            'issue-finding': 27_060,
         };
 
         const overBudget: string[] = [];

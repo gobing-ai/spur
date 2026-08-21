@@ -1170,7 +1170,7 @@ export class TaskCheckService extends PlanningCheckService {
             const body = doc.getSection(section);
             if (body === null) continue;
             if (
-                /\b(HITL|human[- ]in[- ]the[- ]loop|approval|approved|merge event|merged|content-gate|GATED|capstone)\b/i.test(
+                /(?<![\w-])(HITL|human[- ]in[- ]the-loop|approval|approved|merge event|merged|content-gate|GATED|capstone)(?![\w-])/i.test(
                     body,
                 )
             ) {

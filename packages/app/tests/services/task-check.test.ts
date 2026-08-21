@@ -1674,6 +1674,24 @@ describe('TaskCheckService', () => {
         expect(gate).toHaveLength(1);
         expect(gate[0]?.section).toBe('Design');
     });
+    test('readiness: hyphenated tokens like "parity-gated" do NOT raise gate language (0622 R9)', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            'The parity-gated references stay authoritative; see the spine for details.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const gate = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('gate language'));
+        expect(gate).toHaveLength(0);
+    });
 
     test('readiness: blocked status reports not-ready state', async () => {
         const content = taskFm({ feature_id: 'F1', status: 'blocked' });

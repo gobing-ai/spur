@@ -139,13 +139,22 @@ sessions (typed ETL via `spur history` — or raw JSONL under the three fallback
 **Primary path (typed sources):** `spur history report --mode forensics` (task 0555).
 
 ```bash
-# 0568 R4: SPUR_BIN env > local CLI > PATH — stale PATH spur fails history import.
-SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo spur)}"
+# 0568 R4 / 0504 R4: SPUR_BIN env > local CLI. NEVER a bare PATH `spur` for history validation —
+# a stale global binary silently runs old code. If SPUR_BIN is unset and apps/cli/src/index.ts
+# is absent, FAIL LOUDLY instead of falling back to PATH.
+SPUR_BIN="${SPUR_BIN:-$([ -f apps/cli/src/index.ts ] && echo 'bun apps/cli/src/index.ts' || echo '')}"
+[ -n "$SPUR_BIN" ] || { echo 'REFUSING: no source-local spur and SPUR_BIN unset (0504 R4)'; exit 1; }
 
-$SPUR_BIN history import --source <source> --json   # checkpoint resume
-$SPUR_BIN history analyze --json                    # writes versioned artifact (0554)
-$SPUR_BIN history report --mode forensics           # pure renderer; latest artifact pointer
+$SPUR_BIN history import --source <source> --json   # checkpoint resume; record provenance header
+$SPUR_BIN history analyze --sessions <ids> --source <src> --json   # narrow the artifact (T2: full run → 2.7 MB trap)
+$SPUR_BIN history report --mode forensics           # pure renderer; reads the LATEST artifact — verify it is the one you just wrote
 ```
+
+**Artifact-size discipline:** `history analyze` without narrowing writes an artifact covering every
+session in the DB — multi-MB blobs that drown the context. Narrow with `--sessions` / `--source` to
+the corpus this investigation actually needs. `history report` renders whatever artifact the latest
+pointer references; if you ran analyze for another purpose in between, re-run analyze (narrowed)
+before reporting.
 
 The forensics renderer emits **8 CLI-derivable sections**: Session Data Summary, Tool Breakdown,
 Token Profile (tokens + cache-hit ratio — never prices), Time Decomposition, Per-Phase, Per-Tool
@@ -271,7 +280,9 @@ EOF
 spur task update <wbs> --section Background --from-file /tmp/issue-bg.md --json
 ```
 
-**Required sections for a meta issue-finding task:**
+**Recommended sections for a meta issue-finding task** (live matrix `.spur/tasks/section-matrix.yaml`
+meta variant — `Root Cause` is allowed at every status; `Notes` and `References` are **not** defined
+sections and must not be authored):
 
 | Section             | Content                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -281,17 +292,18 @@ spur task update <wbs> --section Background --from-file /tmp/issue-bg.md --json
 | Q&A                 | 4–6 Q&A pairs: rationale, approach, hook vs guidance, savings, decomposition                         |
 | Design              | Per-fix evidence (counts, timestamps), fix content, target location                                  |
 | Plan                | Ordered checkboxes referencing requirements                                                          |
-| Notes               | Root-cause analyses (RC1–RC*n*) with forensic evidence (meta template: **not** a Root Cause section) |
-| References          | Session JSONL paths, source/agent, guard `file:line`, pipeline YAML, commits                         |
+| Root Cause          | RC1–RC*n* analyses with forensic evidence — allowed at every status for meta tasks                   |
+
 
 **Section format rules** (from task 0379):
 
 1. **Solution `file:line` citations**: repo-relative `file:line` (e.g. `apps/web/src/components/SupervisorTab.tsx:17-20`), never bare `:line` or bare filename without path.
 2. **Review P1–P4 table**: if a Review section exists, include a table with a cell matching
    `/^\s*P[1-4]\s*$/` and a non-placeholder content cell.
-3. **Meta template**: no `Root Cause` section — put analyses in `Notes`.
+3. **Meta template**: `Root Cause` is allowed at every status for meta tasks (live matrix) —
+   put RC analyses there, never in `Notes` or `References` (undefined sections).
 4. **Canonical sections only**: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`,
-   `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes`.
+   `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `History`.
 5. **Section body**: body-only for `--section` (no duplicate heading).
 6. **Batch writes**: write all section temps → apply all `spur task update --section` calls →
    **one** `spur task check`. Never write-check-rewrite-check per section.
