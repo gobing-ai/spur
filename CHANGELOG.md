@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.3.56] — 2026-08-21
+
+### Added
+
+- feat: add the spur builder noun with bump-ver and drop-tags promoted from spur-dev (80d9b413)
+- feat: add spur workflow show to render a workflow FSM as a mermaid diagram (0620) (824f6d14)
+- feat: add --fix to spur task check and spur feature check for structural repairs (0619) (77702bb2)
+- feat: remove the unreliable AUTH column from spur agent doctor table output (0621) (ff86da5f)
+- feat: consolidate shared CLI option declarations behind one registry (0618) (599aeb0f)
+- feat: ship warn-only workflow composition advisory on workflow validate (0614) (12008b24)
+- feat(cli): consolidate self-management verbs under spur self (9baf106b)
+- feat(domain): add local data-plane retention (0622 R8) (e2c63916)
+
+### Fixed
+
+- fix: preserve authored Testing on task record when verdict is UNKNOWN; codify batch gate-preflight and record sequencing lessons (A3 post-mortem) (79593c0a)
+- fix(core): 0622 structural checks and guidance reconciliation (358c8b38)
+- fix(history): 0622 data-plane reporting, cache ratio, retention wiring (d36b64e0)
+- fix(app): 0622 executor routing, lifecycle terminals, inline provenance (649bbaf7)
+
+### Changed
+
+- docs: record composition measures and four-surface placement rule as authority (0613) (05689262)
+- docs: teach expert-spur and the spur-cli workflow reference the composition advisory (0615) (6e883ae3)
+- docs: close 0616 corpus bookkeeping for the landed self noun (0616) (78448cb2)
+- chore: wrap up feature A3 batch — learnings, metrics, feature to verifying (0613-0621) (247b51f8)
+- docs: dogfood report for feature A3 batch; repoint shifted task-service anchors; feature A3 to done (4c3bf737)
+- docs: record feature A3 task roster as done (feature sync wrap output) (0e247f03)
+- docs(task): add new task file (d413273f)
+- docs(0622): record post-mortem verify results (9c8a9191)
+- chore(tasks): add 0623 CLI-surface parity SSOT + agy import, 0624 history data-plane residue (7a8b029b)
+- chore(config): reorder executors and set editor output style (fe742821)
+- style(dogfood): normalize markdown table formatting (c35834f5)
+- test(cli): assert self noun alias parity for init/migrate/serve/status (0eac580e)
+
 ## [0.3.54] — 2026-08-20
 
 ### Added
