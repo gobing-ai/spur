@@ -27,6 +27,7 @@ import {
     type SectionMatrix,
     type Severity,
 } from './planning-check-base';
+import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { TaskLocator } from './task-locator';
 import { readVerifyVerdict } from './verify-verdict';
 
@@ -45,6 +46,8 @@ export interface CheckResult {
     missingSections: string[];
     /** Whether the check passed (no hard errors). */
     pass: boolean;
+    /** Structural repairs applied by `--fix` (empty when `--fix` was not given or nothing was repairable). */
+    repairs?: StructuralRepair[];
 }
 
 interface TaskSnapshot {
@@ -473,10 +476,28 @@ export class TaskCheckService extends PlanningCheckService {
             asStatus?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
             accepted?: ReadonlyMap<string, CorpusSeverity>;
+            /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
+            fix?: boolean;
         },
     ): Promise<CheckResult> {
         const strict = options?.strict === true;
-        const raw = await this.fs.readFile(filePath);
+        const rawSource = await this.fs.readFile(filePath);
+        let raw = rawSource;
+        let repairs: StructuralRepair[] = [];
+        if (options?.fix === true) {
+            const probe = MarkdownDocument.parse(rawSource, 'task');
+            const probeFm = probe.frontmatterData ?? {};
+            const probeStatus = (probeFm.status as string) ?? 'backlog';
+            const probeEffective = options?.asStatus ?? probeStatus;
+            const probeVariant = (probeFm.template as string) ?? DEFAULT_TASK_VARIANT;
+            const fixEntry = this.resolveMatrixEntry(probeVariant, probeEffective);
+            const fixed = applyStructuralRepairs(rawSource, 'task', fixEntry);
+            if (fixed.changed) {
+                await this.fs.writeFile(filePath, fixed.content);
+                repairs = fixed.repairs;
+                raw = fixed.content;
+            }
+        }
         const findings: CheckFindings[] = [];
 
         // ── L1: Schema validation (hard) — always reads the REAL frontmatter ──
@@ -501,7 +522,7 @@ export class TaskCheckService extends PlanningCheckService {
         const entry = this.resolveMatrixEntry(variant, effectiveStatus);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
-        this.runL2(doc, entry, findings);
+        this.runL2(doc, entry, findings, raw);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
         this.runL3(doc, entry, effectiveStatus, findings);
@@ -530,6 +551,7 @@ export class TaskCheckService extends PlanningCheckService {
                 options?.accepted,
                 wbs,
             ),
+            repairs,
         };
     }
 

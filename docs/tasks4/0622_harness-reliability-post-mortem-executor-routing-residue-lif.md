@@ -4,7 +4,7 @@ name: "Harness reliability post-mortem: executor routing residue, lifecycle term
 status: done
 template: meta
 created_at: 2026-08-21T00:01:44.025Z
-updated_at: "2026-08-21T14:28:45.560Z"
+updated_at: "2026-08-21T20:09:06.160Z"
 feature_id: D3
 priority: P1
 ---
@@ -256,6 +256,7 @@ and `history report` needed an explicit path rather than resolving the latest po
 - [x] Add retention for `rule_eval_runs`, `queue_jobs`, the import ledger, and `.spur/backups`, with a non-manual trigger (R8)
 - [x] Fix the gate-language word boundary, reconcile `sp:issue-finding` with the live section matrix and the binary contract (R9)
 ### Solution
+
 L3-evidenced by path:line below; all cited tests run green in this session (`bun run spur-check` — 6036 pass / 0 fail).
 
 **R1 (F18) — ADR-077 "Pin Beats Role"** at `docs/00_ADR.md:1014-1030` (frontmatter `updated_at` at `docs/00_ADR.md:7`): documents that the occupant pin + caller env is the shipped authority; role-only routing at `packages/app/src/services/agent-service.ts:1202-1209` and `:1240-1263`/`:1285-1303` stays reachable but must not be re-implemented elsewhere. No production change — ladder machinery, pin wiring, and the agent-service tests were already landed and production-reachable.
@@ -274,7 +275,7 @@ L3-evidenced by path:line below; all cited tests run green in this session (`bun
 
 **R8 (F11) — bounded local data plane**: new `packages/domain/src/retention.ts` (`runRetention(db, cwd, now?)`, constants 90/30/180/30 days for `rule_eval_runs`/`queue_jobs`/ledger/backups), wired as the single non-manual trigger in `HistoryService.daily()` at `packages/app/src/services/history-service.ts:553`; `DailyResult.retained` surfaces the outcome. Queue purge is terminal-only via partial unique index `queue_jobs_history_refresh_pending_unique`; ledger purge is checkpoint-governed (ON CONFLICT DO NOTHING + reconcileFullImport). Retention tests (`packages/domain/tests/retention.test.ts`) 6/6 green.
 
-**R9 (F19) — structural checks spare ordinary prose**: gate-language lookarounds `(?<![\w-])…(?![\w-])` at `packages/app/src/services/task-check.ts:1173-1182` so "parity-gated" no longer raises `L4_GATE_LANGUAGE`; negative task-check test green (136/136). `plugins/sp/skills/issue-finding/SKILL.md` corrected: section matrix table (`:274-287`) matches live `.spur/tasks/section-matrix.yaml` (Root Cause allowed at every status for meta; Notes/References are not authored sections; rules 3–4 at `:292-296`), Phase 1 refuses bare PATH `spur` for history validation (`:141-146`, 0504 R4), artifact-size discipline for `history analyze --sessions/--source` and latest-pointer caution for `history report` (`:153-157`).
+**R9 (F19) — structural checks spare ordinary prose**: gate-language lookarounds `(?<![\w-])…(?![\w-])` at `packages/app/src/services/task-check.ts:1190-1206` so "parity-gated" no longer raises `L4_GATE_LANGUAGE`; negative task-check test green (136/136). `plugins/sp/skills/issue-finding/SKILL.md` corrected: section matrix table (`:274-287`) matches live `.spur/tasks/section-matrix.yaml` (Root Cause allowed at every status for meta; Notes/References are not authored sections; rules 3–4 at `:292-296`), Phase 1 refuses bare PATH `spur` for history validation (`:141-146`, 0504 R4), artifact-size discipline for `history analyze --sessions/--source` and latest-pointer caution for `history report` (`:153-157`).
 
 **Skill spine rewrite**: `plugins/sp/commands/dev-idea.md` rewritten to the skill-spine format, naming `idea-pipeline.yaml` (R30 contract).
 
@@ -329,6 +330,8 @@ which produced output where every "role" read "n"; piping a `--json` CLI run thr
 exit status, which nearly produced a false exit-code finding; and background task output files append
 `[exited with code N]` after the JSON, breaking a naive `JSON.parse`.
 ### Testing
+
+
 **Pipeline verify results**
 
 - Verdict: FAIL (from verdict artifact)
@@ -343,7 +346,7 @@ exit status, which nearly produced a false exit-code finding; and background tas
 | R6 | PARTIAL | T3 MET — leaderboard renders a distinguishing `startedAt` date column at `packages/domain/src/analytics/render-report.ts:134`; render-report tests 15/15 green this run. **F14 UNMET** — no claude-source duration / model / `result_bytes` extraction landed; the `durationMs` / `resultBytes` columns in `packages/domain/src/analytics/forensic-query.ts:192,216-220` are pre-existing (task 0581) and are exactly the ones the post-mortem measured as 74/74 unmeasured. Deferred in the follow-up register. |
 | R7 | UNMET | All four findings deferred, none implemented. F9 (agy chunk boundaries): `rg -ni chunk packages/app/src/services/history-service.ts` — no match. F10 (antigravity/openclaw import 0 files): `packages/app/src/services/history-service.ts:221-222,239` is the pre-existing source list, no empty-source explanation path. F8 (ten empty `history_etl_*` tables): only a type comment at `packages/domain/src/analytics/types.ts:82`. F12 (run→session correlation 8.9%): only pre-existing E6/0557 machinery. The verdict row that certified this MET cited `countToolCallsSince`, which addresses neither F8 nor F10. |
 | R8 | MET | `runRetention` at `packages/domain/src/retention.ts:48` with bounded windows `:24-27` (90/30/180/30 days for `rule_eval_runs`/`queue_jobs`/ledger/backups); non-operator trigger wired in `HistoryService.daily()` at `packages/app/src/services/history-service.ts:553`. Ledger retention bounds F15's re-hash cost. `packages/domain/tests/retention.test.ts` 6/6 green this run. |
-| R9 | MET | F19: gate-language lookarounds `(?<![\w-])…(?![\w-])` in `checkGateLanguage` at `packages/app/src/services/task-check.ts:1168-1182`; named negative test `packages/app/tests/services/task-check.test.ts:1677` ("parity-gated" raises no finding), 136/136 green this run. T5/T1/T2: `plugins/sp/skills/issue-finding/SKILL.md:141-146` refuses bare-PATH `spur`, `:153-157` artifact-size + latest-pointer discipline, `:274-287` section matrix matches the live `.spur/tasks/section-matrix.yaml`. |
+| R9 | MET | F19: gate-language lookarounds `(?<![\w-])…(?![\w-])` in `checkGateLanguage` at `packages/app/src/services/task-check.ts:1190-1206`; named negative test `packages/app/tests/services/task-check.test.ts:1687` ("parity-gated" raises no finding), 136/136 green this run. T5/T1/T2: `plugins/sp/skills/issue-finding/SKILL.md:141-146` refuses bare-PATH `spur`, `:153-157` artifact-size + latest-pointer discipline, `:274-287` section matrix matches the live `.spur/tasks/section-matrix.yaml`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -356,7 +359,7 @@ exit status, which nearly produced a false exit-code finding; and background tas
 | @core R6 — A claude-source session yields an actionable bottleneck ranking | UNMET | static-ref | No claude duration / model / `result_bytes` extraction landed; the measured 74/74-unmeasured condition is unchanged. Deferred to `~/xprojects/ts-libs/` by the task's own follow-up register. |
 | @core R7 — Every declared source either imports or explains itself | UNMET | static-ref | No empty-source explanation path and no chunk-boundary handling; `history-service.ts` has no `chunk` reference and no antigravity/openclaw diagnostic beyond the pre-existing source list at `:221-222,239` |
 | @core R8 — The local data plane has a bounded footprint | MET | test | `packages/domain/src/retention.ts:24-27,48` + `HistoryService.daily()` trigger at `packages/app/src/services/history-service.ts:553`; retention tests 6/6 green |
-| @edge R9 — Structural checks do not fire on ordinary prose | MET | test | `packages/app/tests/services/task-check.test.ts:1677` — "parity-gated" raises no `L4_GATE_LANGUAGE`; 136/136 green |
+| @edge R9 — Structural checks do not fire on ordinary prose | MET | test | `packages/app/tests/services/task-check.test.ts:1687` — "parity-gated" raises no `L4_GATE_LANGUAGE`; 136/136 green |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 L3: functional traceability + SECUA + architecture review of the 0622 diff.

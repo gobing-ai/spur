@@ -267,6 +267,7 @@ spur feature check [options] [id]
 |---|---|
 | `--strict` | Elevate warnings to failures |
 | `--as <status>` | Evaluate the one-active-goal rule as if the feature were in `<status>` (0418: lifecycle FSM guards pass the transition target) |
+| `--fix` | Repair structural findings in place (heading presence/level, section order, R-item checkboxes) — never authors content, never removes off-variant sections (task 0619) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 

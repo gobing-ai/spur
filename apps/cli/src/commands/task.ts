@@ -1038,6 +1038,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.asTaskF92)
         .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
         .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
+        .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
@@ -1060,6 +1061,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.output.error(
                     '--as <status> is a single-task target projection and cannot be combined with --corpus',
                 );
+                context.setExitCode(2);
+                return;
+            }
+            if (options.fix === true && options.corpus === true) {
+                context.output.error('--fix repairs files in place and cannot be combined with --corpus');
                 context.setExitCode(2);
                 return;
             }
@@ -1151,6 +1157,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 const tasksDir = context.fs.resolve(options.folder ?? activeFolder);
                 const printResult = (result: Awaited<ReturnType<typeof svc.check>>) => {
                     if (json) return;
+                    if (result.repairs !== undefined && result.repairs.length > 0) {
+                        for (const r of result.repairs) {
+                            context.output.write(`  [FIX] ${r.kind} ${r.section}: ${r.detail}`);
+                        }
+                    }
                     context.output.write(`\n${result.wbs} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
                     for (const f of result.findings) {
                         const tag = f.severity === 'error' ? 'ERR' : 'WARN';
@@ -1180,6 +1191,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             asStatus,
                             severityOverrides: planningFolders.severityOverrides,
                             accepted,
+                            fix: options.fix === true,
                         });
                         results.push(result);
                         printResult(result);
@@ -1203,6 +1215,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             asStatus,
                             severityOverrides: planningFolders.severityOverrides,
                             accepted,
+                            fix: options.fix === true,
                         });
                         results.push(result);
                         printResult(result);

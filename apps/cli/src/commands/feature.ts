@@ -331,6 +331,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.strictFeature)
         .option(...SHARED_OPTIONS.asFeature0418)
         .option(...SHARED_OPTIONS.folderFeatures)
+        .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
         .option(...SHARED_OPTIONS.json)
         .action(async (id, options) => {
             const resolved = await resolvePlanningFolders(context.fs);
@@ -367,9 +368,15 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         runDir: context.fs.resolve('.spur/run'),
                         severityOverrides: resolved.severityOverrides,
                         asStatus: options.as,
+                        fix: options.fix === true,
                     });
                     results.push(result);
                     if (!json) {
+                        if (result.repairs !== undefined && result.repairs.length > 0) {
+                            for (const r of result.repairs) {
+                                context.output.write(`  [FIX] ${r.kind} ${r.section}: ${r.detail}`);
+                            }
+                        }
                         context.output.write(`\n${result.id} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
                         for (const f of result.findings) {
                             const tag = f.severity === 'error' ? 'ERR' : 'WARN';

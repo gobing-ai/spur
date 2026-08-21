@@ -696,7 +696,9 @@ describe('TaskCheckService', () => {
         const result = await svc.check(path, '0001');
         cleanup();
 
-        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.code !== 'L3.requirements-checkbox',
+        );
         expect(reqWarnings).toHaveLength(0);
     });
 
@@ -727,7 +729,9 @@ describe('TaskCheckService', () => {
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001');
         cleanup();
-        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.code !== 'L3.requirements-checkbox',
+        );
         expect(reqWarnings).toHaveLength(0);
     });
 
@@ -759,7 +763,9 @@ describe('TaskCheckService', () => {
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001');
         cleanup();
-        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.code !== 'L3.requirements-checkbox',
+        );
         expect(reqWarnings).toHaveLength(0);
     });
 
@@ -790,7 +796,9 @@ describe('TaskCheckService', () => {
         const { fs, path, cleanup } = seedFile(content);
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
-        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.code !== 'L3.requirements-checkbox',
+        );
         expect(reqWarnings).toHaveLength(0);
     });
 
@@ -839,7 +847,9 @@ describe('TaskCheckService', () => {
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001');
         cleanup();
-        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.code !== 'L3.requirements-checkbox',
+        );
         expect(reqWarnings).toHaveLength(0);
     });
 

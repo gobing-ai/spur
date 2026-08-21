@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-13T05:25:12.480Z"
-updated_at: "2026-08-13T20:18:19.931Z"
+updated_at: "2026-08-21T19:52:42.832Z"
 ---
 
 ## 0532. Record G2 supervision AC verdicts so verifying can go done
@@ -86,9 +86,10 @@ Premise check (2026-08-12): those test files exist and contain the named suites.
 4. [x] R1 — `spur feature sync G2 --json` → `done`.
 5. [x] Record 0532 Testing/Review via `spur task verdict` / `record`.
 ### Solution
+
 Verdict artifacts only — no product code. Change map:
 
-- **`.spur/run/0195-verdict.json`**, **`.spur/run/0207-verdict.json`**, **`.spur/run/0208-verdict.json`**, **`.spur/run/0209-verdict.json`**, **`.spur/run/0210-verdict.json`** (new, gitignored `.spur/run/`) — `verdict: PASS` with `acceptanceCriteria[]` rows whose `id` matches each G2 scenario title (R-prefix stripped, per `rowMatchesScenario` at `packages/app/src/services/feature-check.ts:923-934`). Each row cites the targeted `bun test` command re-run on the 2026-08-13 verify pass:
+- **`.spur/run/0195-verdict.json`**, **`.spur/run/0207-verdict.json`**, **`.spur/run/0208-verdict.json`**, **`.spur/run/0209-verdict.json`**, **`.spur/run/0210-verdict.json`** (new, gitignored `.spur/run/`) — `verdict: PASS` with `acceptanceCriteria[]` rows whose `id` matches each G2 scenario title (R-prefix stripped, per `rowMatchesScenario` at `packages/app/src/services/feature-check.ts:947-965`). Each row cites the targeted `bun test` command re-run on the 2026-08-13 verify pass:
   - Autostart → 0207/0195: `supervisor-service.test.ts --test-name-pattern "startAutostart"` (2 pass / 0 fail)
   - Listable over API → 0208/0195: `apps/server/tests/modules/team/index.test.ts --test-name-pattern "GET /api/team/processes"` (11 pass / 0 fail)
   - Attach replay+tail → 0208/0195: `--test-name-pattern "stream"` (12 pass / 0 fail)
@@ -101,6 +102,7 @@ Verdict artifacts only — no product code. Change map:
 
 Anti-patterns respected: no fabricated PASS (every row maps to a green test run); no `spur team attach` CLI; no `--force` done on G2; no edits to `docs/tasks2/` bodies.
 ### Testing
+
 **Re-verify 2026-08-13 (`/sp-dev-verify 0532 --auto --next --force --focus all --fix all`).** `--force` re-audit of an already-`done` task. All Design-table tests re-ran this session (0 fail). Fix pass: flipped R1 checklist `[ ]` → `[x]`; refreshed `.spur/run/{0195,0207,0208,0209,0210}-verdict.json` evidence to this-run counts.
 
 **Verdict: PASS**
@@ -109,7 +111,7 @@ Anti-patterns respected: no fabricated PASS (every row maps to a green test run)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Five PASS artifacts rewritten this run: `.spur/run/0195-verdict.json` (7 AC), `.spur/run/0207-verdict.json` (1), `.spur/run/0208-verdict.json` (4), `.spur/run/0209-verdict.json` (1), `.spur/run/0210-verdict.json` (1). AC `id`s match G2 titles (R-prefix stripped; matcher `packages/app/src/services/feature-check.ts:923-934`). This-run tests (0 fail): `startAutostart` 2, `GET /api/team/processes` 11, `stream` 12, `stdin` 4, CLI `start/stop` 12, supervisor `stop` 6, supervisor `list` 2. `spur feature check G2 --strict --as done --json` exit 0, findings []. `spur feature sync G2 --dry-run` → already `done`. No `team attach` (`spur team --help` has start/stop only). |
+| R1 | MET | Five PASS artifacts rewritten this run: `.spur/run/0195-verdict.json` (7 AC), `.spur/run/0207-verdict.json` (1), `.spur/run/0208-verdict.json` (4), `.spur/run/0209-verdict.json` (1), `.spur/run/0210-verdict.json` (1). AC `id`s match G2 titles (R-prefix stripped; matcher `packages/app/src/services/feature-check.ts:947-965`). This-run tests (0 fail): `startAutostart` 2, `GET /api/team/processes` 11, `stream` 12, `stdin` 4, CLI `start/stop` 12, supervisor `stop` 6, supervisor `list` 2. `spur feature check G2 --strict --as done --json` exit 0, findings []. `spur feature sync G2 --dry-run` → already `done`. No `team attach` (`spur team --help` has start/stop only). |
 
 **Acceptance Criteria Verification**
 

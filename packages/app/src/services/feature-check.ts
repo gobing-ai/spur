@@ -29,6 +29,7 @@ import {
     type SectionMatrix,
     type Severity,
 } from './planning-check-base';
+import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -54,6 +55,8 @@ export interface CheckFeatureResult {
     missingSections: string[];
     /** Whether the check passed (no hard errors). */
     pass: boolean;
+    /** Structural repairs applied by `--fix` (empty when `--fix` was not given or nothing was repairable). */
+    repairs?: StructuralRepair[];
 }
 
 /** Default feature section matrix — matches the canonical section vocabulary. */
@@ -177,10 +180,27 @@ export class FeatureCheckService extends PlanningCheckService {
              * layer keeps evaluating the current frontmatter.
              */
             asStatus?: string;
+            /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
+            fix?: boolean;
         },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
-        const raw = await this.fs.readFile(filePath);
+        const rawSource = await this.fs.readFile(filePath);
+        let raw = rawSource;
+        let repairs: StructuralRepair[] = [];
+        if (options?.fix === true) {
+            const probe = MarkdownDocument.parse(rawSource, 'feature');
+            const probeFm = probe.frontmatterData ?? {};
+            const probeStatus = (probeFm.status as string) ?? 'backlog';
+            const probeEffective = options?.asStatus ?? probeStatus;
+            const fixEntry = this.resolveMatrixEntry(isGroupFeature(probeFm), probeEffective);
+            const fixed = applyStructuralRepairs(rawSource, 'feature', fixEntry);
+            if (fixed.changed) {
+                await this.fs.writeFile(filePath, fixed.content);
+                repairs = fixed.repairs;
+                raw = fixed.content;
+            }
+        }
         const findings: CheckFeatureFindings[] = [];
 
         // ── L1: Schema validation (hard) ──
@@ -197,7 +217,7 @@ export class FeatureCheckService extends PlanningCheckService {
         const entry = this.resolveMatrixEntry(isGroupFeature(fm), status);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
-        this.runL2(doc, entry, findings);
+        this.runL2(doc, entry, findings, raw);
 
         // ── L3: Format rules — BDD AC validation + structural rules ──
         this.runL3(doc, findings, fm);
@@ -225,7 +245,11 @@ export class FeatureCheckService extends PlanningCheckService {
                   : [];
         await this.runL4(doc, featureId, status, taskScanDirs, dogfoodDir, runDir, findings);
 
-        return { id: featureId, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
+        return {
+            id: featureId,
+            ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides),
+            repairs,
+        };
     }
 
     // ── L3: Format rules ──

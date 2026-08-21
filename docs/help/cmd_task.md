@@ -279,6 +279,7 @@ spur task check [options] [wbs]
 | `--strict-core` | Gate variant: fail only on hard-core errors (the `testing → done` guard) |
 | `--corpus` | Sweep every task and feature against `config/corpus-baseline.json` |
 | `--since <ref>` | Scope the corpus fog check to changes since a git ref |
+| `--fix` | Repair structural findings in place (heading presence/level, section order, R-item checkboxes) — never authors content, never removes off-variant sections (task 0619) |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
 

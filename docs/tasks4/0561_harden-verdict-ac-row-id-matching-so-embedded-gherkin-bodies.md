@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-14T18:15:14.986Z"
-updated_at: "2026-08-18T22:39:11.303Z"
+updated_at: "2026-08-21T19:52:44.484Z"
 ---
 
 ## 0561. Harden verdict AC-row id matching so embedded Gherkin bodies cannot fail the scenario gate
@@ -21,7 +21,8 @@ updated_at: "2026-08-18T22:39:11.303Z"
 ### Background
 During the E6 batch (2026-08-14), task 0558's verify answer embedded the full Gherkin body in the AC row id — `Scenario: R4 — ... (Given ... / When ... / Then ... / And ...)` — and `spur task verdict --from-answer` preserved that id verbatim in the verdict artifact. The feature scenario gate matches AC rows by exact normalized scenario title (feature-check.ts `isScenarioVerified`), so R4 was flagged `L4.scenario-unverified` despite a PASS verdict with a MET row. This required post-hoc surgery: hand-editing the answer file and re-deriving the verdict before the E6 feature could transition to done. Evidence: `.spur/run/0558-verify-answer.txt` (row 15), `.spur/run/0558-verdict.json` (AC id), feature-check finding at 17:23.
 ### Requirements
-- [x] R1. An AC row id carrying a trailing Gherkin body still matches its feature scenario — `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) accepts the id with a trailing parenthetical group removed as an additional candidate form, so a PASS verdict with a MET row can never be reported `L4.scenario-unverified` for that reason alone. Existing verdict artifacts on disk are repaired by the same change (no re-derivation required).
+
+- [x] R1. An AC row id carrying a trailing Gherkin body still matches its feature scenario — `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:947-965`) accepts the id with a trailing parenthetical group removed as an additional candidate form, so a PASS verdict with a MET row can never be reported `L4.scenario-unverified` for that reason alone. Existing verdict artifacts on disk are repaired by the same change (no re-derivation required).
 - [x] R2. Additive matching does not regress a legitimately parenthesized title — a feature scenario whose own title ends in `(...)` still matches its unmodified AC row id, because the raw and prefix-stripped forms are still compared.
 - [x] R3. The answer-file contract states the rule — `plugins/sp/skills/spur-dev/references/ac-style-guide.md` says an AC row id is exactly the scenario title with no Gherkin body appended.
 ### Acceptance Criteria
@@ -65,7 +66,8 @@ linking a backlog task under it would leave a done feature holding unfinished wo
 the operator** — link to a remediation feature if one is opened, otherwise leave unset (the L4
 advisory is expected and non-blocking).
 ### Design
-**Fix target: `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923-935`) — the single matcher every caller routes through. No new API, no new exported symbol, no new file.**
+
+**Fix target: `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:947-965`) — the single matcher every caller routes through. No new API, no new exported symbol, no new file.**
 
 #### Why the matcher and not the parser
 
@@ -76,7 +78,7 @@ row text at parse time would make the artifact disagree with the answer file it 
 The mismatch happens one layer later:
 
 ```ts
-// feature-check.ts:923-935 — strips a leading [tag] and a leading `Scenario: ` prefix only
+// feature-check.ts:947-965 — strips a leading [tag] and a leading `Scenario: ` prefix only
 const stripped = id.replace(/^\[[^\]]*\]\s*/, '').replace(/^Scenario:\s*/i, '')...
 return normalizeTitle(id) === sc.normalized || normalizeTitle(stripped) === sc.normalized
     || id === sc.alias || stripped === sc.alias;
@@ -127,7 +129,8 @@ and still produced the bad row — so it is the prevention half and the matcher 
 `.spur/run/0558-verdict.json` `acceptanceCriteria[].id` preserving the parenthetical; feature-check
 finding at 17:23.
 ### Plan
-- [x] 1. Add the trailing-parenthetical candidate form to `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:923`) alongside the existing raw/stripped/alias comparisons (R1, R2)
+
+- [x] 1. Add the trailing-parenthetical candidate form to `rowMatchesScenario` (`packages/app/src/services/feature-check.ts:947-965`) alongside the existing raw/stripped/alias comparisons (R1, R2)
 - [x] 2. Unit test in the feature-check suite: MET row id with a trailing Gherkin body verifies; parenthesized-title row still matches; unrelated title still fails (R1, R2)
 - [x] 3. Regression check against the real artifact — restore the pre-surgery `.spur/run/0558-verdict.json` into a fixture and assert the E6 scenario verifies (R1)
 - [x] 4. Add the row-id rule to `plugins/sp/skills/spur-dev/references/ac-style-guide.md` (R3)
@@ -136,9 +139,10 @@ finding at 17:23.
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+
 Change map (0561):
 
-- `packages/app/src/services/feature-check.ts:923` (`rowMatchesScenario`) — added a third derived id form `bodyStripped` next to `id`/`stripped`:
+- `packages/app/src/services/feature-check.ts:947-965` (`rowMatchesScenario`) — added a third derived id form `bodyStripped` next to `id`/`stripped`:
   `const bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim();`
   and two new comparisons `normalizeTitle(bodyStripped) === sc.normalized || bodyStripped === sc.alias`.
   - Applied to `stripped` only — prefix stripping (`[tag]`, `Scenario:`) runs first, exactly as before.
@@ -158,13 +162,14 @@ Change map (0561):
 
 Rationale: the mismatch lived in the matcher, not the parser — verdict artifacts are evidence and must not be rewritten at parse time. Fixing `rowMatchesScenario` (the single matcher every caller routes through: `isScenarioVerified`, `verdictRowsMatchScenarios`) repairs existing artifacts for free. No new API, no exported symbol, no new file, no shared normalization helper (one call site).
 ### Testing
+
 **Re-verify (--force, focus all) 2026-08-15 — Verdict: PASS**
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:923` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons, additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:196-203` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 9 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression and the alias-path pin added this run). |
+| R1 | MET | `rowMatchesScenario` re-read at `packages/app/src/services/feature-check.ts:947-965` — third derived form `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` with two added comparisons, additive beside the existing four; greedy strip handles nested pairs + line breaks. Parser untouched: `packages/app/src/services/task-verdict.ts:196-203` re-read — `cells[0]` still taken verbatim (matcher-side fix, so on-disk artifacts repair without re-derivation). Tests this run: `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0561"` → 9 pass / 0 fail (incl. the E6/0558 reconstructed-fixture regression and the alias-path pin added this run). |
 | R2 | MET | Additive-only design confirmed by re-read: the four pre-existing comparisons are intact and evaluated; legitimately parenthesized titles match on the raw form — asserted by the 0561 R2 tests in both the e2e and direct-matcher blocks (pass this run). |
 | R3 | MET | `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116` — subsection "The id is exactly the scenario title — no Gherkin body appended" present (re-read this run): id = scenario title exactly, body never appended, verifier-verbatim + gate-backstop rationale. |
 
@@ -185,7 +190,7 @@ Rationale: the mismatch lived in the matcher, not the parser — verdict artifac
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | efficiency | `packages/app/src/services/feature-check.ts:935` | Greedy `[\s\S]*` is O(n²)-worst-case on adversarial ids without a trailing `)`; row ids are short sentences — negligible, as the original review noted. No blocker/major/minor findings. |
+| P4 | efficiency | `packages/app/src/services/feature-check.ts:947-965` | Greedy `[\s\S]*` is O(n²)-worst-case on adversarial ids without a trailing `)`; row ids are short sentences — negligible, as the original review noted. No blocker/major/minor findings. |
 
 Coverage: N/A (verdict-based; targeted 9/9 + suite 97/97 re-run this turn).
 Fix-pass writes: `.spur/run/0561-verdict.json` (regenerated this run); `packages/app/tests/services/feature-check.test.ts` (alias-path test added).
@@ -214,7 +219,8 @@ Fix-pass writes: `.spur/run/0561-verdict.json` (regenerated this run); `packages
 
 **PASS** — approve. All three requirements (R1, R2, R3) are implemented, tested (8 new tests, all green), and consistent with the task's frozen design and anti-pattern constraints. Remaining items are P4 documentation/test-polish notes only.
 ### References
-- Code (fix target): `packages/app/src/services/feature-check.ts:923-935` (`rowMatchesScenario`) · `:681-696` (`isScenarioVerified`)
+
+- Code (fix target): `packages/app/src/services/feature-check.ts:947-965` (`rowMatchesScenario`) · `:681-696` (`isScenarioVerified`)
 - Code (parser, intentionally unchanged): `packages/app/src/services/task-verdict.ts:200-207` (`extractAcceptanceCriteria` — row id taken verbatim from `cells[0]`)
 - Guidance: `plugins/sp/skills/spur-dev/references/ac-style-guide.md`
 - Evidence: `.spur/run/0558-verify-answer.txt` (row 15) · `.spur/run/0558-verdict.json` · feature-check finding at 17:23

@@ -31,8 +31,13 @@ class TestCheckService extends PlanningCheckService {
         return super.runL1(raw, ref, findings);
     }
 
-    override runL2(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
-        super.runL2(doc, entry, findings);
+    override runL2(
+        doc: MarkdownDocument,
+        entry: MatrixEntry | undefined,
+        findings: CheckFindings[],
+        raw: string,
+    ): void {
+        super.runL2(doc, entry, findings, raw);
     }
 
     override summarizeWithStatus(status: string, findings: CheckFindings[], strict?: boolean): CheckResultBase {
@@ -224,7 +229,7 @@ describe('PlanningCheckService.runL2', () => {
         const svc = new TestCheckService(simpleMatrix);
         const doc = MarkdownDocument.parse(taskDoc(['Background']), 'task');
         const findings: CheckFindings[] = [];
-        svc.runL2(doc, undefined, findings);
+        svc.runL2(doc, undefined, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toEqual([]);
     });
 
@@ -233,7 +238,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(taskDoc([]), 'task'); // no sections
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Background', 'Notes'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(2);
         expect(findings.every((f) => f.layer === 'L2' && f.severity === 'warning')).toBe(true);
         expect(findings.every((f) => f.message.includes('Missing required section'))).toBe(true);
@@ -247,7 +252,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(taskDoc([]), 'task');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Solution'], gate: true };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(1);
         expect(findings[0]?.severity).toBe('error');
         expect(findings[0]?.message ?? '').toContain('gate: true');
@@ -255,11 +260,11 @@ describe('PlanningCheckService.runL2', () => {
 
     test('pushes a warning for each forbidden section that is present', () => {
         const svc = new TestCheckService(simpleMatrix);
-        const doc = MarkdownDocument.parse(taskDoc(['Solution', 'Background']), 'task');
+        const doc = MarkdownDocument.parse(taskDoc(['Background', 'Solution']), 'task');
         const findings: CheckFindings[] = [];
         // Declare Background as optional so only the forbidden finding appears.
         const entry: MatrixEntry = { optional: ['Background'], forbidden: ['Solution'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(1);
         expect(findings[0]).toMatchObject({
             layer: 'L2',
@@ -275,7 +280,7 @@ describe('PlanningCheckService.runL2', () => {
         const findings: CheckFindings[] = [];
         // Background is required, Design is not declared at all
         const entry: MatrixEntry = { required: ['Background'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         // Background is present → no finding; Design is undeclared → warning
         expect(findings).toHaveLength(1);
         expect(findings[0]).toMatchObject({
@@ -291,7 +296,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(taskDoc(['Background', 'Notes']), 'task');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Background'], optional: ['Notes'], forbidden: ['Solution'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toEqual([]);
     });
 
@@ -300,7 +305,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(taskDoc([]), 'task');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: [], optional: [], forbidden: [] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toEqual([]);
     });
 
@@ -309,7 +314,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(featureDoc(['Goal', 'Scope']), 'feature');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Goal'], optional: ['Scope'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toEqual([]);
     });
 
@@ -318,7 +323,7 @@ describe('PlanningCheckService.runL2', () => {
         const doc = MarkdownDocument.parse(taskDoc(['Solution']), 'task');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Background'], forbidden: ['Solution'] };
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(2);
         const missing = findings.find((f) => f.message.includes('Missing required'));
         const forbidden = findings.find((f) => f.message.includes('forbidden'));
@@ -328,13 +333,13 @@ describe('PlanningCheckService.runL2', () => {
 
     test('undeclared section plus forbidden section plus missing required all reported', () => {
         const svc = new TestCheckService(simpleMatrix);
-        const doc = MarkdownDocument.parse(taskDoc(['Solution', 'Design']), 'task');
+        const doc = MarkdownDocument.parse(taskDoc(['Design', 'Solution']), 'task');
         const findings: CheckFindings[] = [];
         const entry: MatrixEntry = { required: ['Background'], forbidden: ['Solution'] };
         // Background missing → warning
         // Solution forbidden + present → warning
         // Design undeclared → warning
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(3);
     });
 });
@@ -573,7 +578,7 @@ describe('PlanningCheckService end-to-end pipeline', () => {
         if (!doc) return;
 
         const entry = svc.resolveMatrixEntry('standard', 'backlog');
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         const result = svc.summarizeWithStatus('backlog', findings);
 
         expect(result.pass).toBe(true);
@@ -589,7 +594,7 @@ describe('PlanningCheckService end-to-end pipeline', () => {
         if (!doc) return;
 
         const entry = svc.resolveMatrixEntry('standard', 'backlog');
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         const result = svc.summarizeWithStatus('backlog', findings);
 
         expect(result.pass).toBe(true);
@@ -606,7 +611,7 @@ describe('PlanningCheckService end-to-end pipeline', () => {
         if (!doc) return;
 
         const entry = svc.resolveMatrixEntry('standard', 'backlog');
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         const result = svc.summarizeWithStatus('backlog', findings, true);
 
         expect(result.pass).toBe(false);
@@ -622,7 +627,7 @@ describe('PlanningCheckService end-to-end pipeline', () => {
         if (!doc) return;
 
         const entry = svc.resolveMatrixEntry('standard', 'done');
-        svc.runL2(doc, entry, findings);
+        svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         const result = svc.summarizeWithStatus('done', findings);
 
         expect(result.pass).toBe(false);

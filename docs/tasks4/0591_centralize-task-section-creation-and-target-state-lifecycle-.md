@@ -13,7 +13,7 @@ tags: ["task-contract", "section-matrix", "lifecycle"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T20:06:22.451Z"
-updated_at: "2026-08-19T04:16:41.134Z"
+updated_at: "2026-08-21T19:52:45.175Z"
 ---
 
 ## 0591. Centralize task section creation and target-state lifecycle validation
@@ -83,6 +83,7 @@ Feature: Task section and target-state validation
 - [x] Update docs/04_DESIGN.md and spur-cli task references, retaining --strict-core only as a documented compatibility alias.
 - [x] Run narrow task-service/task-check/lifecycle/CLI tests first, then bun run autofix, bun run spur-check, bun run lint, bun run test, bun run test-cf, and bun run build.
 ### Solution
+
 Created one section authority + target-aware lifecycle validation (F92).
 
 **R1 — matrix alone determines created sections.** Both `create` and `batchCreate` build
@@ -100,7 +101,7 @@ fallback). The template-as-skeleton producers (`renderCreatedTaskContent`) and
 
 **R2 — transition gates evaluate the target status via `--as`.** `TaskCheckService.check`
 projects `effectiveStatus = asStatus ?? frontmatter.status` for the matrix entry and the
-L2/L3/L4 policy while L1 still reads the real document — `packages/app/src/services/task-check.ts:493-510`.
+L2/L3/L4 policy while L1 still reads the real document — `packages/app/src/services/task-check.ts:517-522`.
 Omitted `--as` stays behavior-compatible. The CLI adds the canonical-status-validated
 `--as <status>` option, rejects the `--corpus` combination, and keeps `--strict-core` as a
 documented compatibility alias — `apps/cli/src/commands/task.ts:1044-1057`.
@@ -118,6 +119,7 @@ provides a bundled canonical matrix so server task creation keeps the same autho
 `checkVerdictArtifact` done-gate continues to consume 0590's normalized answer output via
 `.spur/run/<wbs>-verdict.json` — unchanged.
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -125,7 +127,7 @@ provides a bundled canonical matrix so server task creation keeps the same autho
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — Matrix alone determines created sections | MET | `packages/app/src/services/task-service.ts:565` (`create` → `buildTaskSkeleton`) and `packages/app/src/services/task-service.ts:1421` (`batchCreate` → `buildTaskSkeleton`); section set resolved by `sectionsForStatus` (`packages/app/src/services/task-service.ts:415`) which fails loudly on missing matrix/entry; `DEFAULT_CREATION_SECTIONS` and CLI `FALLBACK_MATRIX` deleted; tests `packages/app/tests/services/task-service.test.ts` (F92 R1 create layout, fail-loud, batchCreate matrix) |
-| R2 — Transition gates evaluate target status via `--as` | MET | `packages/app/src/services/task-check.ts:493-510` `effectiveStatus = asStatus ?? frontmatter.status` drives L2/L3/L4 policy while L1 reads the real doc (omitted `--as` behavior-compatible); `apps/cli/src/commands/task.ts:1044-1057` adds canonical-status-validated `--as`, rejects `--corpus`, keeps `--strict-core` as documented alias; tests `packages/app/tests/services/task-check.test.ts` (F92 R2) + `apps/cli/tests/commands/task.test.ts` (--as projection/invalid/conflict) |
+| R2 — Transition gates evaluate target status via `--as` | MET | `packages/app/src/services/task-check.ts:517-522` `effectiveStatus = asStatus ?? frontmatter.status` drives L2/L3/L4 policy while L1 reads the real doc (omitted `--as` behavior-compatible); `apps/cli/src/commands/task.ts:1044-1057` adds canonical-status-validated `--as`, rejects `--corpus`, keeps `--strict-core` as documented alias; tests `packages/app/tests/services/task-check.test.ts` (F92 R2) + `apps/cli/tests/commands/task.test.ts` (--as projection/invalid/conflict) |
 | R3 — Missing target-required sections deny transition, byte-identical | MET | lifecycle guards invoke check as the target: `config/workflows/task-lifecycle.yaml:73,78` (`--as testing`/`--as done`); inline no-lifecycle backstop `runDoneGateCheck` passes the transition target as `asStatus` (`apps/cli/src/commands/task.ts:1462-1481`); R3 test proves testing→done denies missing Review and leaves the file byte-identical (matrix loader fails loudly with attempted paths when no canonical asset is reachable — see Solution) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

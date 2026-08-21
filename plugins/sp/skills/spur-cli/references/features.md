@@ -28,7 +28,7 @@ what* or *how to write a scenario*, this skill.
 | `list` | List features, filtered | `--status <s>` `--priority <p>` `--folder` `--json` |
 | `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
 | `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--folder` `--json` |
-| `check [id]` | Validate one feature / the tree; the 4-layer gate | `--strict` `--folder` `--json` |
+| `check [id]` | Validate one feature / the tree; the 4-layer gate; `--fix` repairs structural findings in place | `--strict` `--fix` `--folder` `--json` |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) | `--all` `--dry-run` `--force` `--folder` `--json` |
 
 **`refresh` vs `sync` (do not conflate):**

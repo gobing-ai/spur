@@ -3175,3 +3175,66 @@ updated_at: "2026-08-10T00:00:00.000Z"
         });
     });
 });
+
+describe('spur task check --fix', () => {
+    test('repairs structural findings in place and leaves content findings reported', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-fix-${Date.now()}`);
+        try {
+            const tasksDir = join(isoCwd, 'docs', 'tasks');
+            await mkdir(tasksDir, { recursive: true });
+            const taskPath = join(tasksDir, '9999_fix-probe.md');
+            await writeFile(
+                taskPath,
+                `---
+name: "Fix probe"
+status: wip
+template: feature-impl
+created_at: 2026-08-21T00:00:00.000Z
+updated_at: 2026-08-21T00:00:00.000Z
+---
+
+## 9999. Fix probe
+
+### Background
+
+Probe for the repair engine.
+
+## Requirements
+
+- R1. First requirement
+- [ ] R2. Already checkboxed
+
+### Plan
+
+- [ ] step one
+`,
+            );
+
+            const output = createCapturedOutput();
+            // The fixture is content-incomplete (missing feature_id, empty AC, no
+            // created/updated provenance), so the check still FAILs — that is correct:
+            // --fix repairs structural shapes only and exit 1 carries the remaining
+            // content findings. The file write is the observable contract.
+            await main(['task', 'check', '9999', '--fix', '--folder', tasksDir], {
+                cwd: isoCwd,
+                output,
+            });
+
+            const fixed = await readFile(taskPath, 'utf8');
+            // Heading level repaired.
+            expect(fixed).toContain('### Requirements');
+            expect(fixed).not.toContain('\n## Requirements\n');
+            // R-item checkbox form repaired.
+            expect(fixed).toContain('- [ ] R1. First requirement');
+            // Missing required section inserted as a bare heading (never content).
+            expect(fixed).toContain('### Acceptance Criteria');
+            expect(fixed).not.toContain('Scenario');
+
+            const combined = output.messages.join('\n');
+            expect(combined).toContain('[FIX] heading-level');
+            expect(combined).toContain('[FIX] requirement-checkbox');
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+});

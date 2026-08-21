@@ -18,6 +18,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { z } from 'zod';
 
 import { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode } from './finding-codes';
+import { structuralFindings } from './structural-repair';
 
 export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
 
@@ -88,7 +89,7 @@ export type DocKind = 'task' | 'feature';
 export abstract class PlanningCheckService {
     protected readonly fs: FileSystem;
     protected readonly matrix: SectionMatrix;
-    private readonly docKind: DocKind;
+    protected readonly docKind: DocKind;
     private readonly frontmatterSchema: z.ZodTypeAny;
     private readonly parse: (raw: string, kind: DocKind) => MarkdownDocument;
 
@@ -145,7 +146,12 @@ export abstract class PlanningCheckService {
     }
 
     /** L2: Section-Status-Matrix presence — required / forbidden / closed-world vocabulary. */
-    protected runL2(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
+    protected runL2(
+        doc: MarkdownDocument,
+        entry: MatrixEntry | undefined,
+        findings: CheckFindings[],
+        raw: string,
+    ): void {
         if (!entry) return;
 
         const sectionNames: string[] = doc.sectionNames;
@@ -197,6 +203,11 @@ export abstract class PlanningCheckService {
                 });
             }
         }
+
+        // Structural repairs the `--fix` verb can apply (task 0619): heading level,
+        // section order, and R-item checkbox form are detected on the raw body
+        // because a mis-levelled heading is not parsed into `doc.sectionNames`.
+        findings.push(...structuralFindings(raw, this.docKind));
     }
 
     /**

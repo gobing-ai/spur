@@ -15,9 +15,12 @@ export const ALL_FINDING_CODES = [
     'L2.missing-required-section',
     'L2.forbidden-section',
     'L2.disallowed-section',
+    'L2.heading-level',
+    'L2.section-order',
 
     // L3: Format rules
     'L3.requirements-format',
+    'L3.requirements-checkbox',
     'L3.requirements-empty',
     'L3.ac-empty',
     'L3.ac-requirement-coverage',
@@ -80,9 +83,12 @@ export const FINDING_CODES = {
     L2_MISSING_REQUIRED_SECTION: 'L2.missing-required-section',
     L2_FORBIDDEN_SECTION: 'L2.forbidden-section',
     L2_DISALLOWED_SECTION: 'L2.disallowed-section',
+    L2_HEADING_LEVEL: 'L2.heading-level',
+    L2_SECTION_ORDER: 'L2.section-order',
 
     // L3
     L3_REQUIREMENTS_FORMAT: 'L3.requirements-format',
+    L3_REQUIREMENTS_CHECKBOX: 'L3.requirements-checkbox',
     L3_REQUIREMENTS_EMPTY: 'L3.requirements-empty',
     L3_AC_EMPTY: 'L3.ac-empty',
     L3_AC_REQUIREMENT_COVERAGE: 'L3.ac-requirement-coverage',
