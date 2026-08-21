@@ -5,7 +5,7 @@ authority: derived
 version: 1.41.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-19
+updated_at: 2026-08-21
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -60,6 +60,7 @@ When collaborating with the design team:
 | [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602); J91 built (0605) |
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
+| [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures (shell line-count, agent.run non-slash trigger, advisory posture) and four-surface script placement table + feature A3 consent record (ADR-069 amendment, ADR-051 amendment, task 0613) | authority landed; advisory tooling 0614/0615                                                                                                                    |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

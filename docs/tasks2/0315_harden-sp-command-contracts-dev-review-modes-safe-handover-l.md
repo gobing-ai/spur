@@ -108,7 +108,7 @@ The simplification target is **contract ambiguity, not command count**. Any surf
 2. `plugins/sp/skills/spur-dev/references/dev-operations.md:85-95` — Updated section 2 (`review` operation) to document WBS mode vs Path mode and deprecation of `--fix` and `--next`.
 3. `plugins/sp/skills/spur-dev/references/dev-operations.md:393-400` — Updated section 11 (`handover` operation) step 4 to specify standalone handover document `docs/handover/<YYYY-MM-DD>-<slug>.md` as SSOT and append-only link pointer into task `References` / `Notes` without clobbering existing content.
 4. `plugins/sp/README.md:105` — Corrected `dev-review` description drift to match multi-dimensional review contract.
-5. `docs/04_DESIGN.md:895-897` — Updated section 7.8 to document deterministic WBS/Path modes and handover SSOT behavior.
+5. `docs/04_DESIGN.md:1872-1874` — Updated section 7.8 to document deterministic WBS/Path modes and handover SSOT behavior.
 6. `CHANGELOG.md:12` — Added task 0315 changelog entry under release `[0.3.21]`.
 7. `plugins/sp/tests/command-contract.test.ts:686-745` — Added unit tests verifying `dev-review` least-privilege tools, mode definitions, deprecations, and `dev-handover` pre-existing content preservation.
 

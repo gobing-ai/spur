@@ -4,7 +4,7 @@ owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
 version: 1.25.0
 owner: Robin Min
-updated_at: 2026-08-20
+updated_at: 2026-08-21
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -479,6 +479,29 @@ is already crowded.
   consent gate covers observable output changes of existing verbs, not just noun/verb additions; the
   granted application supersedes the earlier 2026-08-16 parked status. **Detail:** `04 §7.1`.
 
+  **Amendment (2026-08-20, feature A3 / task 0613):** Extends the two-surface rule to the complete
+  four-surface script placement table and records this feature's operator consent in one place.
+
+  - **R4 — four-surface placement table.** A new script lands on exactly one of four surfaces,
+    selected by a single condition:
+
+    | Surface | Hosts | Selection condition |
+    | --- | --- | --- |
+    | `apps/cli/src/commands` | public `spur` verbs | a Spur **end user** runs it on any Spur-managed project — and each addition needs the consent gate below |
+    | `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates (one module per command, `bundle-*`-style naming, test sibling) |
+    | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
+    | `plugins/sp/scripts` | plugin-shipped scripts | the action must run on **agent machines that only have the plugin**, not the monorepo — entrypoint contract owned by **ADR-065** (`.mjs` twins, declaration, no repo-relative paths), cross-referenced, not restated |
+
+  - **R5 — consent record (feature A3).** Operator consent is granted for the feature's six
+    public-surface changes: the `spur self` noun (aggregating legacy standalone verbs, 0616), the
+    `spur builder` noun (spur-dev `bump-ver` / `drop-tags` promotion, 0617), `--fix` on
+    `spur task check` and `spur feature check` (0619), `spur workflow show` (mermaid FSM render,
+    0620), the `spur agent doctor` AUTH-column removal (0621), and the `workflow validate`
+    composition advisory output (0614, advisory-only per ADR-069 R3). Design context: the feature
+    intent (surface governance) and the A3 batch review of 2026-08-20; each landing task cites this
+    record instead of re-litigating the gate. **Operational view:**
+    `docs/design/harness-surface-governance.md`.
+
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 
 - **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
@@ -846,7 +869,7 @@ define the upstream standard contract.
 
 ## ADR-069: Workflow YAML Orchestrates Owned Capabilities
 
-**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5
 
 **Decision.** Workflow YAML selects and orders capabilities; reusable deterministic behavior lives
 in its owning application/CLI module or a capability-specific built-in, workflow extensions own
@@ -855,6 +878,30 @@ only local policy, and `agent.run` remains the judgment boundary.
 **Why.** Extending proven seams keeps one behavior owner without inventing a generalized workflow DSL.
 
 **Detail:** `03 §20`; `docs/design/workflow-composition-contract.md`.
+
+**Amendment (2026-08-20, feature A3 / task 0613):** Adds the detectable composition measures and
+the advisory-only posture the principle previously lacked.
+
+- **R1 — shell composition measure.** The unit is the non-comment shell line (split on newline and
+  `;`) of a `shell` action's `command`. A program reported above the threshold is
+  to-be-enhanced, and the recommended fixes are drawn **only** from the five owner options already
+  recorded in `docs/design/workflow-shell-ownership.md` (public verb / application service /
+  least-privilege built-in / external extension / stays-shell exception) — no new vocabulary. The
+  threshold number is deliberately **not frozen here**: measured on this tree, all 58 classified
+  shell programs join a recorded disposition, and flag rates run >3→30, >4→25, >5→21, >6→18,
+  >8→14 of the 58 — `>5` cleanly separates trivial glue (SIMPLE ≤ 2, GLUE
+  median 2, never flagged at ≥3) from owned-capability candidates (POLICY 22–32, DUAL 43), and is
+  the candidate this tree's evidence supports; the sibling advisory task (0614) freezes the number
+  and this ADR records it once it survives contact.
+- **R2 — agent.run composition measure.** A **non-slash `input`** is the reporting trigger (per
+  ADR-043); raw prompt length sets **severity only**, never triggers a report; the recommended fix
+  is to move the operation behind a centralized agent skill or slash command.
+- **R3 — advisory posture.** Composition findings never change a `workflow validate` exit status,
+  never block a run, and are not added to `spur-check` / `spur-check-new`.
+
+**Operational view:** `docs/design/harness-surface-governance.md`. **Promotion:** Proposed →
+Accepted — the decision now carries detectable measures and a fix vocabulary, which is the
+acceptance case the Proposed status waited on.
 
 ## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
 

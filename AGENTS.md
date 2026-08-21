@@ -257,15 +257,22 @@ spur <noun> --help
 | `task`     | Task corpus → **`sp:spur-cli`**                  |
 | `workflow` | Engine + run progress/follow → **`sp:spur-cli`** |
 
-**Adding a command? Two surfaces, one rule (ADR-051):**
+**Adding a script/command? Four surfaces, one rule (ADR-051, amended 2026-08-20 — feature A3/0613):**
 
 | Surface | Audience | Gate |
 | --- | --- | --- |
-| `spur` CLI (`apps/cli/`) | **Public** — end-user harness; stays simple and easy to use. Default home for anything a Spur end user would run. **First layer = nouns only** (`task check`, `rule run`) so similar actions group; verbs/flags are the expansion mechanism — a new noun is justified only when no existing noun can host the action. | Adding/changing/removing any noun or verb requires **explicit operator consent** with design context. Present the surface choice + options first; never land a CLI surface change unilaterally. |
-| `scripts/spur-dev.ts` | **Internal** — Spur self-dev only: packaging/release (`publish`, `bundle-*`, `verify-pack`, `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), monorepo gates (`link-check`). | No consent gate; one module per command under `scripts/commands/` + test sibling + `bundle-*`-style verb naming. |
+| `spur` CLI (`apps/cli/src/commands`) | **Public** — end-user harness; stays simple and easy to use. Default home for anything a Spur end user would run. **First layer = nouns only** (`task check`, `rule run`) so similar actions group; verbs/flags are the expansion mechanism — a new noun is justified only when no existing noun can host the action. | Adding/changing/removing any noun or verb requires **explicit operator consent** with design context. Present the surface choice + options first; never land a CLI surface change unilaterally. |
+| `scripts/commands` (via `scripts/spur-dev.ts`) | **Internal** — Spur self-dev only: packaging/release (`publish`, `bundle-*`, `verify-pack`, `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), monorepo gates (`link-check`). | No consent gate; one module per command + test sibling + `bundle-*`-style verb naming. |
+| `package.json` scripts | **Repo developers** — entrypoints invoked by name (`bun run …`); compose existing binaries, add no logic; the script name is the contract. | No consent gate; keep entries composable and logic-free. |
+| `plugins/sp/scripts` | **Plugin-shipped** — actions that must run on agent machines that only have the plugin, not the monorepo. | Entrypoint contract owned by **ADR-065** (`.mjs` twins, `config/plugin-scripts.json` declaration, no repo-relative paths); cross-referenced, not restated here. |
+
+Selection condition: identify the **audience** (end user / self-dev / repo developer / plugin-only
+agent machine); the audience selects the surface; only the first surface crosses the consent gate.
+Operational view: `docs/design/harness-surface-governance.md`. Feature A3 consent record (six
+public-surface changes): ADR-051 amendment 2026-08-20.
 
 Promoted in task 0502 per ADR-051 noun discipline: corpus validation is `spur task check --corpus`
-(NOT a new `corpus` noun); the misplaced spur-dev command is removed. All ten CLI nouns are
+(NOT a new `corpus` noun); the misplaced spur-dev command is removed. All public CLI nouns are
 legitimately public; all other spur-dev commands are correctly internal.
 
 **Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,

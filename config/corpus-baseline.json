@@ -10160,14 +10160,6 @@
         {
             "kind": "task",
             "id": "0413",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0413",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "DD-09 subset rule postdates AC authorship; the AC-altitude carve-out (ADR-062 / task 0584) dissolves most of these — see note § L4.uncovered-task-scenario.",
