@@ -4,7 +4,7 @@ name: "Add --fix to spur task check and spur feature check for structural repair
 status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.582Z
-updated_at: "2026-08-21T20:14:18.716Z"
+updated_at: "2026-08-21T21:02:23.787Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613", "0618"]
@@ -135,11 +135,13 @@ One structural repair engine, two call sites (task 0619, ADR-051 consent row 3):
 ### Testing
 **Pipeline verify results**
 
-- Verdict: UNKNOWN (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| — | — | No requirements recorded; verify verdict UNKNOWN |
+| Scenario: R10 — spur task check --fix repairs structural task defects only | MET | `apps/cli/src/commands/task.ts:1041` declares `--fix`; repairs applied by `packages/app/src/services/structural-repair.ts:179` (`applyStructuralRepairs` — heading presence/level/order, R-item checkboxes) with content findings still reported; CLI coverage `apps/cli/tests/commands/task.test.ts:3179` (`describe('spur task check --fix')`) asserts exit 1 still carries the remaining content findings. |
+| Scenario: R11 — spur feature check --fix repairs structural feature defects only | MET | `apps/cli/src/commands/feature.ts:334` declares `--fix`; `FeatureCheckService.check({ fix })` at `packages/app/src/services/feature-check.ts:184` routes to the same repair pass; engine coverage `packages/app/tests/services/structural-repair.test.ts` (reorder Goal/Scope, insert History). |
+| Scenario: R15 — --fix is a no-op on a corpus file with nothing structural to repair | MET | `applyStructuralRepairs` (`packages/app/src/services/structural-repair.ts:179`) returns `changed:false` and `structuralFindings` (`packages/app/src/services/structural-repair.ts:117`) returns `[]` on a well-formed file. Live re-verify 2026-08-21: `spur task check 0620 --fix` → `{pass:true, repairs:[]}`, file md5 byte-identical before/after. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict: PASS** — inline review (functional traceability + SECUA), session inline-20260821-123204-0619.

@@ -106,6 +106,7 @@ Feature: Workflow run reliability defects
 | 0433 | Headless HITL taste gates cannot be approved after the fact | done |
 | 0435 | Shell guard commands still interpolate vars into shell - same injection class as 0432 | done |
 | 0571 | workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates | done |
+| 0622 | Harness reliability post-mortem: executor routing residue, lifecycle terminals, and history data-plane defects | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -124,6 +124,7 @@ Feature: Session forensics implementation
 | 0579 | Sanitize sentinel timestamps out of the time-decomposition span math | done |
 | 0580 | Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel | done |
 | 0581 | Per-step token/time and cache-efficiency sections in the analyze artifact | done |
+| 0624 | Close the 0622 history data-plane residue: per-response usage dedup, claude forensic blind spots, empty sources and ETL tables | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

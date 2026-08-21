@@ -4,7 +4,7 @@ name: "Add spur workflow show to render a workflow FSM as a mermaid diagram"
 status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.595Z
-updated_at: "2026-08-21T20:35:33.548Z"
+updated_at: "2026-08-21T21:02:24.034Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613", "0618"]
@@ -115,11 +115,12 @@ Read-only `show` verb on the `workflow` noun (task 0620, ADR-051 consent row 4 �
 ### Testing
 **Pipeline verify results**
 
-- Verdict: UNKNOWN (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| — | — | No requirements recorded; verify verdict UNKNOWN |
+| Scenario: R13 — spur workflow show renders the FSM as a mermaid diagram | MET | `apps/cli/src/workflow/mermaid-render.ts:26` (`renderWorkflowMermaid`) emits a fenced `mermaid` `flowchart LR` over the resolved definition, both engine kinds discriminated on `def.kind`; wired at `apps/cli/src/commands/workflow.ts:759` (`.command('show')`). Live re-verify 2026-08-21: `spur workflow show .spur/workflows/task-pipeline.yaml` → fenced mermaid block with `classDef terminal/failure/initial/gate`, exit 0. Tests `apps/cli/tests/workflow/mermaid-render.test.ts` (both kinds, terminal/failure, escaping). |
+| Scenario: R17 — spur workflow show fails cleanly on an unusable definition | MET | `apps/cli/src/commands/workflow.ts:769` emits `workflow show: cannot read or parse <file> — <err>` and exits non-zero; renderer runs only after a successful load, so no partial diagram is possible. Live re-verify 2026-08-21: `spur workflow show /nope/missing.yaml` → that message naming the file, exit 1, no diagram. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict: PASS** — inline review (functional traceability + SECUA), session inline-20260821-131601-0620.
@@ -131,7 +132,7 @@ Read-only `show` verb on the `workflow` noun (task 0620, ADR-051 consent row 4 �
 | P4 | Verify | Failure path exits 1, names the file, and emits no partial diagram (renderer invoked only after a successful load). | CLI test + smoke |
 | P4 | Risk | Mermaid node ids/labels escaped (`"` → `&quot;`, `[`/`]` → `&#91;`/`&#93;`) — a workflow id with quotes/brackets can't corrupt the diagram. | `mermaid-render.ts` `esc()` + escaping test |
 | P4 | Risk | Edge labels join trigger/guard/description with ` · `; empty labels are omitted (`A --> B`), so a plain transition renders cleanly. | renderer tests |
-| P4 | Docs | Fixed a pre-existing misalignment in `spur-cli-matrix.md`'s `show` row (was under builder/self; now under task + workflow). | `spur-cli-matrix.md:60` |
+| P4 | Docs | Fixed a pre-existing misalignment in `spur-cli-matrix.md`'s `show` row (was under builder/self; now under task + workflow). | `docs/help/spur-cli-matrix.md:60` |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
