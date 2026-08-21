@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
@@ -1847,6 +1848,52 @@ terminalStates:
             expect(Array.isArray(warnings)).toBe(true);
             expect(warnings?.filter((w) => w.includes('commented-out-exec'))).toHaveLength(1);
             expect(emitted.filter((w) => w.includes('commented-out-exec'))).toHaveLength(1);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('a Layer-1 role in agent.default is injected, not rejected as a stale executor', async () => {
+            // Regression: `agent.default` moved to the role domain in 0542 (config.example.yaml
+            // ships `coder`), but this resolver still validated executor names only — so the
+            // recommended value was dropped and every agent.run silently fell back to the
+            // pipeline's `omp` literal, defeating the role -> tier -> executor ladder.
+            const dir = await seedBoth('spur-wf-role-default-', 'agent:\n  default: coder\n');
+            const emitted: string[] = [];
+            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'role-default-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            // The role reaches both vars; `spur agent run --agent coder` resolves it downstream.
+            expect(await capturedAgents(dir)).toBe('coder coder');
+            expect(emitted.filter((w) => w.includes('agent.default'))).toHaveLength(0);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('every Layer-1 role id is accepted in agent.default', async () => {
+            for (const role of AGENT_ROLE_NAMES) {
+                const dir = await seedBoth(`spur-wf-role-${role}-`, `agent:\n  default: ${role}\n`);
+                const svc = new WorkflowAppService(makeCtx(dir));
+
+                const result = await svc.run(join(dir, 'test.yaml'), { runId: `role-${role}-1` });
+
+                expect(result.status, `run failed for ${role}: ${String(result.reason ?? '')}`).toBe('done');
+                expect(await capturedAgents(dir)).toBe(`${role} ${role}`);
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('a value that is neither role, executor, nor binary still warns and keeps the literal', async () => {
+            const dir = await seedBoth('spur-wf-role-bogus-', 'agent:\n  default: not-a-role\n');
+            const emitted: string[] = [];
+            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
+
+            const result = await svc.run(join(dir, 'test.yaml'), { runId: 'role-bogus-1' });
+
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
+            expect(await capturedAgents(dir)).toBe('omp');
+            expect(emitted.filter((w) => w.includes('not-a-role'))).toHaveLength(1);
+            // The warning names all three accepted domains so the operator can fix the value.
+            expect(emitted.find((w) => w.includes('not-a-role'))).toContain('Layer-1 role');
             await rm(dir, { recursive: true, force: true });
         });
 

@@ -1301,8 +1301,8 @@ async function fileExists(path: string): Promise<boolean> {
  * Returns an empty object — leaving the YAML default in force — when the caller
  * already chose both agents, when no `agent.default` is configured, or when config
  * cannot be read. Each key is injected independently: a caller-set `agent` does not
- * suppress `implementAgent`. When the configured default names neither a configured
- * executor nor a canonical agent binary, one warning is emitted and nothing is
+ * suppress `implementAgent`. When the configured default names none of a Layer-1 role,
+ * a configured executor, or a canonical agent binary, one warning is emitted and nothing is
  * injected, so a stale `agent.default` (e.g. a commented-out executor) never fails
  * dispatch (AC3) — the pipeline YAML literal governs instead.
  *
@@ -1334,16 +1334,23 @@ async function resolveDefaultAgentVar(
     if (typeof configured !== 'string' || configured.length === 0) {
         return result;
     }
-    // Validate before injecting (AC3): accept iff the default names a configured
-    // executor or a canonical agent binary. On mismatch, warn once and inject
-    // nothing so the pipeline YAML literal governs instead of a dispatch-time
+    // Validate before injecting (AC3): accept iff the default names a Layer-1 role,
+    // a configured executor, or a canonical agent binary. On mismatch, warn once and
+    // inject nothing so the pipeline YAML literal governs instead of a dispatch-time
     // "Unknown agent" failure.
+    //
+    // The role branch is what task 0542 moved the value domain to: `config.example.yaml`
+    // ships `agent.default: coder`, and `spur agent run --agent <role>` resolves
+    // role -> tier -> cheapest usable executor. Without it, the recommended config value
+    // was rejected here and every engine-driven `agent.run` silently fell back to the
+    // pipeline YAML literal, defeating the whole role ladder.
     const valid =
+        (AGENT_ROLE_NAMES as readonly string[]).includes(configured) ||
         config.agent?.executors?.some((e) => e.name === configured) === true ||
         resolveAgentName(configured) !== undefined;
     if (!valid) {
         warn(
-            `agent.default "${configured}" does not name a configured executor or agent binary; leaving the pipeline's literal agent in force`,
+            `agent.default "${configured}" does not name a Layer-1 role, a configured executor, or an agent binary; leaving the pipeline's literal agent in force`,
         );
         return result;
     }

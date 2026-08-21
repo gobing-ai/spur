@@ -8,7 +8,8 @@
  *     The old R2/R3 per-flag inline deep-link is dropped — gate (e) in validate-commands.ts
  *     now enforces a single footer glossary reference per command.
  * R4 (task 0413, H82): --inline/--subprocess absent from every hint (collapsed to --agent).
- * R5 (task 0413, H82): --agent declared by exactly 19 mode-aware commands.
+ * R5 (task 0413, H82): --agent declared by exactly 25 mode-aware commands.
+ *     dev-idea joined the set once its pipeline gained an operator-steerable executor.
  * R6 (task 0412, H81): compatibility aliases documented in body, absent from canonical hint.
  *
  * Body text (removal notices, disambiguation prose) is deliberately excluded from flag
@@ -192,7 +193,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         const agentCommands = [...allDevHints.keys()].filter((n) =>
             extractFlags(allDevHints.get(n) ?? '').has('--agent'),
         );
-        expect(agentCommands.length).toBe(24);
+        expect(agentCommands.length).toBe(25);
     });
 
     // ---------- compatibility alias owning-contract assertions ----------
