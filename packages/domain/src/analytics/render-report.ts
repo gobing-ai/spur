@@ -131,6 +131,7 @@ function renderBySession(artifact: HistoryArtifact): string[] {
         lines.push(
             `  ${s.sessionId.slice(0, 18).padEnd(18)} ` +
                 `${s.source.slice(0, 8).padEnd(8)} ` +
+                `${(s.startedAt ?? '…').slice(0, 10).padStart(10)} ` +
                 `${String(s.messages).padStart(5)} msg  ${String(s.toolCalls).padStart(5)} calls  ` +
                 `${tokens.padStart(6)}M tok  $${s.costUsd.toFixed(2).padStart(7)}` +
                 (s.topTool ? `  top: ${s.topTool}` : ''),

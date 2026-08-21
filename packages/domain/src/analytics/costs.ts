@@ -11,8 +11,12 @@ export function computeRecordCost(record: CostRecord): CostRecord {
 }
 
 /**
- * Prompt-cache hit ratio for a totals bucket: cache-read input tokens over total billed
- * input tokens, in `[0, 1]`.
+ * Prompt-cache hit ratio for a totals bucket: cache-read input tokens over total
+ * input tokens, in `[0, 1]`. The denominator is {@link TokenTotals.inputTokens}
+ * — the billed total, cache reads and writes already included (that contract is
+ * what makes the ratio ≤ 1; F7's 7,567,843.0% happened when the analyze fold fed
+ * the cache-*exclusive* raw column through as `inputTokens`, so a cache-read
+ * dwarfing fresh input produced an unbounded quotient).
  *
  * Returns `null` — never 0 — when the ratio is not knowable: no records carried provider
  * usage, or there were no input tokens to divide by. A `null` here is the "unavailable"

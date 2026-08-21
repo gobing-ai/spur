@@ -56,6 +56,7 @@ rules:
 
             # Low-level system primitives (O_EXCL locks, FD byte-tailing, FS watcher, atomic registry, Vite glob fallback):
             - "packages/domain/src/planning/locks.ts" # POSIX atomic O_EXCL file locks
+            - "packages/domain/src/retention.ts" # recursive backup-dir reclamation + mtime stat (task 0622 R8); ts-runtime FileSystem seam has no recursive dir remove
             - "packages/app/src/services/token-ledger-service.ts" # FD byte-window log tailing
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher
             - "packages/app/src/services/project-registry.ts" # atomic projects.json persistence

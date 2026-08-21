@@ -395,6 +395,21 @@ export async function countCheckpointsBySource(db: DbAdapter, source: string): P
     return row?.cnt ?? 0;
 }
 
+/**
+ * Count `history_tool_call` rows a source import wrote in this run (`imported_at >= runStartedAt`,
+ * task 0622 F9). Standalone `history import` coverage previously hardcoded `toolCalls: 0`; the
+ * count is real only when rows landed, so dry-run legitimately reports 0. Owned here so raw SQL
+ * stays in the domain layer (ADR-011).
+ */
+export async function countToolCallsSince(db: DbAdapter, source: string, runStartedAt: string): Promise<number> {
+    const row = await db.queryFirst<{ cnt: number }>(
+        'SELECT COUNT(*) AS cnt FROM history_tool_call WHERE source = ? AND imported_at >= ?',
+        source,
+        runStartedAt,
+    );
+    return row?.cnt ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Per-step rankings (task 0581)
 // ---------------------------------------------------------------------------

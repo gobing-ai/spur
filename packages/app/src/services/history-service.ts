@@ -23,6 +23,7 @@ import {
     cacheWasteAggregate,
     computeDerived,
     countCheckpointsBySource,
+    countToolCallsSince,
     type DriftRow,
     dataWindow,
     derivedWarnings,
@@ -37,9 +38,11 @@ import {
     messageRollup,
     narrowArtifact,
     pairingSummary,
+    type RetentionResult,
     RunSessionDao,
     renderMarkdown,
     resolveReportMode,
+    runRetention,
     type SessionState,
     type SourceSummaryRow,
     selectorDigest,
@@ -177,6 +180,12 @@ export interface DailyResult {
     artifact: HistoryArtifact;
     /** Pruned report directory names (`YYYY-MM-DD`), oldest first. */
     pruned: string[];
+    /**
+     * Data-plane retention outcome (task 0622 R8): rows and backup files reclaimed by
+     * the pass that ran beside the report prune. Always present — zero counts mean
+     * nothing was past its window (or the store was unavailable, best-effort).
+     */
+    retained: RetentionResult;
     /**
      * Honest coverage report (task 0550, R3/R4): refreshed + skipped sources and the
      * covered window. Always present — a refresh reports its coverage, never bare success.
@@ -475,10 +484,19 @@ export class HistoryService {
 
         const entries: CoverageEntry[] = [];
         const warnings: ArtifactWarning[] = [];
+        // F9: stamp the run start so per-source tool-call counts reflect only rows this
+        // run imported (existing rows from prior runs never inflate the count). Dry-run
+        // writes nothing, so its counts stay legitimately 0.
+        const runStartedAt = new Date().toISOString();
 
         for (const source of sources) {
             // eslint-disable-next-line no-await-in-loop -- fan-out is deliberately sequential (R7, task 0470 Design)
-            const { coverageEntry, sourceWarnings } = await this.importOneIsolated(source, opts, timeoutMs);
+            const { coverageEntry, sourceWarnings } = await this.importOneIsolated(
+                source,
+                opts,
+                timeoutMs,
+                runStartedAt,
+            );
             entries.push(coverageEntry);
             warnings.push(...sourceWarnings);
         }
@@ -488,11 +506,13 @@ export class HistoryService {
 
     /**
      * Run-once daily pipeline (task 0470 R6): import-all → analyze → write artifact → prune old
-     * reports beyond {@link REPORT_RETENTION_DAYS}. Exits when done; never stays resident. The
-     * import step takes no date window — it relies on checkpoint resume (R7), so a missed night
-     * self-heals on the next run with no gap and no double-count. Only the analyze step scopes
-     * the report via `since`/`until`. `opts.mode` (0555 R4) is a pure pass-through: it only
-     * adds a `.md` sidecar next to the artifact and never alters this pipeline's steps.
+     * reports beyond {@link REPORT_RETENTION_DAYS} → data-plane retention (0622 R8: reclaim
+     * stale `rule_eval_runs` / `queue_jobs` / import-ledger rows and `.spur/backups` files).
+     * Exits when done; never stays resident. The import step takes no date window — it relies
+     * on checkpoint resume (R7), so a missed night self-heals on the next run with no gap and
+     * no double-count. Only the analyze step scopes the report via `since`/`until`. `opts.mode`
+     * (0555 R4) is a pure pass-through: it only adds a `.md` sidecar next to the artifact and
+     * never alters this pipeline's steps.
      */
     async daily(opts: DailyOptions = {}): Promise<DailyResult> {
         const cwd = opts.cwd ?? process.cwd();
@@ -528,10 +548,13 @@ export class HistoryService {
         }
 
         const pruned = pruneReports(cwd, REPORT_RETENTION_DAYS);
+        // R8: data-plane retention beside the report prune — same choke point the
+        // queue-consumer refresh job flows through, so reclamation needs no operator.
+        const retained = await runRetention(db, cwd);
 
         const coverage = await buildRefreshCoverage(db, selector, fanOut);
 
-        return { fanOut, artifact, pruned, coverage, ...(reportPath !== undefined ? { reportPath } : {}) };
+        return { fanOut, artifact, pruned, retained, coverage, ...(reportPath !== undefined ? { reportPath } : {}) };
     }
 
     /**
@@ -544,6 +567,7 @@ export class HistoryService {
         source: LlmJsonlSource,
         opts: ImportAllOptions,
         timeoutMs: number,
+        runStartedAt: string,
     ): Promise<{ coverageEntry: CoverageEntry; sourceWarnings: ArtifactWarning[] }> {
         const db = await this.ctx.getDb();
         const sourceWarnings: ArtifactWarning[] = [];
@@ -598,12 +622,17 @@ export class HistoryService {
                 });
             }
 
+            // F9: real count of tool calls this run imported for this source — rows with
+            // imported_at >= run start. Replaces the hardcoded 0 that made standalone
+            // `history import` look tool-less. Dry-run writes nothing, so it stays 0.
+            const toolCalls = opts.dryRun ? 0 : await countToolCallsSince(db, source, runStartedAt);
+
             const coverageEntry: CoverageEntry = {
                 source,
                 status,
                 files: result.scannedFiles,
                 messages: result.importedRecords,
-                toolCalls: 0, // enriched by SQL in daily→analyze merge; standalone importAll has no tool data
+                toolCalls,
                 unknownRecords: result.unknownRecords,
                 lastImportedAt: null,
                 parseErrors: result.parseErrors.length,
@@ -666,7 +695,11 @@ function emptyTotals(): ForensicTotals {
 function foldMessage(bucket: ForensicTotals, row: MessageRollupRow): void {
     bucket.messages += row.messages;
     bucket.records += row.messages;
-    bucket.inputTokens += row.inputTokens ?? 0;
+    // The typed `input_tokens` column is cache-exclusive (fresh only); the
+    // TokenTotals.inputTokens contract is the billed total — cache reads and
+    // writes included — so add them back here. F7's 7,567,843.0% cache-hit
+    // rendered because this fold fed the cache-excl column straight through.
+    bucket.inputTokens += (row.inputTokens ?? 0) + (row.cacheReadTokens ?? 0) + (row.cacheWriteTokens ?? 0);
     bucket.outputTokens += row.outputTokens ?? 0;
     bucket.cacheReadTokens += row.cacheReadTokens ?? 0;
     bucket.cacheWriteTokens += row.cacheWriteTokens ?? 0;

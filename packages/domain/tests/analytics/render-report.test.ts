@@ -140,7 +140,7 @@ describe('renderReport forensic sections (R3)', () => {
         const report = renderReport(a);
         expect(report).toContain('Session leaderboard (1):');
         expect(report).toContain('sess-leader');
-        expect(report).toContain('2.5M tok');
+        expect(report).toContain('2026-08-07');
         expect(report).toContain('$');
     });
 });

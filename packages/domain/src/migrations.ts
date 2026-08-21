@@ -421,6 +421,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0016_spur_cli_history_message_ts_nullable',
         sql: HISTORY_MESSAGE_TS_NULLABLE_SCHEMA_SQL,
     },
+    {
+        id: '0017_spur_cli_runs_status_completed_to_done',
+        sql: "UPDATE runs SET status = 'done' WHERE status = 'completed'",
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -495,10 +499,21 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const nameOccurredIndexSkip =
             migration.id === '0014_spur_cli_system_events_name_occurred_idx' &&
             !(await tableExists(adapter, 'system_events'));
+
+        // Migration 0017 retires the legacy `completed` runs status — a DML
+        // against a table foreign/legacy journals may not have (the 0009
+        // simulation shape: journaled foundation, no engine tables) or whose
+        // `runs` predates the `status` column (the 0000/0001 stub shape). Journal
+        // without executing when `runs` is absent or lacks `status`; real DBs
+        // always have the column.
+        const runsStatusDoneSkip =
+            migration.id === '0017_spur_cli_runs_status_completed_to_done' &&
+            (!(await tableExists(adapter, 'runs')) || !(await columnExists(adapter, 'runs', 'status')));
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
             !argsRawSkip &&
+            !runsStatusDoneSkip &&
             !nameOccurredIndexSkip &&
             !callIdSkip &&
             !tsNullableSkip

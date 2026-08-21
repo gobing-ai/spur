@@ -148,15 +148,16 @@ describe('analytics costs', () => {
         });
 
         test('renders the cache-hit percentage when usage is present', () => {
-            const summary = makeSummary(totals({ inputTokens: 1000, cacheReadTokens: 250, recordsWithUsage: 1 }));
-            expect(formatSummary(summary)).toContain('Cache hit: 25.0%');
+            // inputTokens is the billed total, cache reads included (TokenTotals contract).
+            const summary = makeSummary(totals({ inputTokens: 1250, cacheReadTokens: 250, recordsWithUsage: 1 }));
+            expect(formatSummary(summary)).toContain('Cache hit: 20.0%');
         });
     });
 
     describe('cacheHitRatio', () => {
-        test('is cache-read over total input when usage is present', () => {
-            expect(cacheHitRatio({ inputTokens: 1000, cacheReadTokens: 300, recordsWithUsage: 1 })).toBeCloseTo(
-                0.3,
+        test('is cache-read over billed total input (cache reads already included) when usage is present', () => {
+            expect(cacheHitRatio({ inputTokens: 1300, cacheReadTokens: 300, recordsWithUsage: 1 })).toBeCloseTo(
+                300 / 1300,
                 10,
             );
         });

@@ -41,6 +41,7 @@ export {
     type CacheWasteAggregateRow,
     cacheWasteAggregate,
     countCheckpointsBySource,
+    countToolCallsSince,
     type DriftRow,
     drift,
     type LoopRow,

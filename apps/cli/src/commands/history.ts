@@ -376,7 +376,9 @@ export function parseTopOrThrow(raw: string | undefined): number | undefined {
 function formatFanOutResult(r: FanOutResult): string {
     const lines: string[] = ['history import (fan-out)', 'sources:'];
     for (const e of r.entries) {
-        lines.push(`  ${e.source}: ${e.status} (files=${e.files} messages=${e.messages})`);
+        lines.push(
+            `  ${e.source}: ${e.status} (files=${e.files} scanned, new-messages=${e.messages}, tool-calls=${e.toolCalls})`,
+        );
     }
     if (r.warnings.length > 0) {
         lines.push('warnings:');
@@ -392,7 +394,9 @@ function formatDailyResult(r: DailyResult): string {
     const lines: string[] = ['history daily'];
     lines.push('import:');
     for (const e of r.fanOut.entries) {
-        lines.push(`  ${e.source}: ${e.status} (files=${e.files} messages=${e.messages})`);
+        lines.push(
+            `  ${e.source}: ${e.status} (files=${e.files} scanned, new-messages=${e.messages}, tool-calls=${e.toolCalls})`,
+        );
     }
     if (r.fanOut.warnings.length > 0) {
         lines.push('warnings:');
