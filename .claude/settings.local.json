@@ -75,5 +75,6 @@
     "turnstile-spin": "off",
     "web-perf": "off",
     "workers-best-practices": "off"
-  }
+  },
+  "outputStyle": "Concise"
 }

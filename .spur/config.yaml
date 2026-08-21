@@ -76,7 +76,13 @@ agent:
       model: minimax/MiniMax-M3
       tier: cheap
 
-    # standard — implementation, tests, wrap-up (omp first: the working default)
+    # standard — implementation, tests, wrap-up
+    # omp-dsv4-flash-volc first: the available implementation executor (omp opencode
+    # is quota-exhausted as of 2026-08-21; role-coder cheapest-eligible picks this).
+    - name: omp-dsv4-flash-volc
+      agent: omp
+      model: volc/deepseek-v4-flash-ga-260731
+      tier: standard
     - name: omp
       agent: omp
       model: opencode/deepseek-v4-flash
@@ -104,10 +110,6 @@ agent:
     - name: omp-zai-volc
       agent: omp
       model: volc/glm-5.2
-      tier: standard
-    - name: omp-dsv4-flash-volc
-      agent: omp
-      model: volc/deepseek-v4-flash-ga-260731
       tier: standard
     # - name: omp-zai-ollama
     #   agent: omp
