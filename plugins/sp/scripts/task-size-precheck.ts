@@ -141,13 +141,18 @@ function runSpur(spurBin: string, args: string[]): string {
  * tier all read as `standard` — conservative: a false block is one flag away,
  * a false pass costs a 30-minute timed-out implement.
  */
-function resolveCapabilityTier(spurBin: string, executor: string): string {
+function resolveCapabilityTier(spurBin: string, executor: string): { tier: string; resolvedName: string } {
     try {
         const out = runSpur(spurBin, ['agent', 'doctor', executor, '--json']);
-        const tier = JSON.parse(out)?.agents?.[0]?.capabilityTier;
-        return typeof tier === 'string' && tier ? tier : 'standard';
+        const row = JSON.parse(out)?.agents?.[0];
+        const tier = row?.capabilityTier;
+        // R1 (0622 F2/F4 residue): `doctor <role>` resolves the role to its cheapest
+        // eligible executor (`coder` → `omp`); surface the resolved executor name in
+        // the block message, not the role the caller passed in.
+        const resolvedName = typeof row?.agent === 'string' && row.agent.length > 0 ? row.agent : executor;
+        return { tier: typeof tier === 'string' && tier ? tier : 'standard', resolvedName };
     } catch {
-        return 'standard';
+        return { tier: 'standard', resolvedName: executor };
     }
 }
 
@@ -185,11 +190,11 @@ function main(): void {
     // R3 (0487): a large task on a sub-capable executor blocks even when the caller
     // raised the caps — the caps are an acceptance of size, not a capability grant.
     if (executor && (reqCount > LARGE_TASK_REQS || planItemCount > LARGE_TASK_PLAN_ITEMS)) {
-        const tier = resolveCapabilityTier(spurBin, executor);
+        const { tier, resolvedName } = resolveCapabilityTier(spurBin, executor);
         if (!CAPABLE_TIERS.has(tier)) {
             reasons.push(
                 `Task size (${reqCount} R-items / ${planItemCount} Plan items) requires a capable executor, ` +
-                    `but ${executor} is tier ${tier}. ` +
+                    `but ${resolvedName} is tier ${tier}. ` +
                     `Pass \`--agent <capable>\` or \`--vars '{"implementAgent":"<capable>"}'\`, or split the task.`,
             );
         }

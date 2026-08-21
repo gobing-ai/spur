@@ -58,7 +58,9 @@ describe('ensurePipelineRunLink', () => {
         await applyCliMigrations(db);
 
         const first = await ensurePipelineRunLink(db, '9998', { runId: 'test:first' });
-        const second = await ensurePipelineRunLink(db, '9998', { runId: 'test:second' });
+        // No explicit runId on the second call: returns the existing link untouched
+        // (pure idempotency — the record path that has no provenance of its own).
+        const second = await ensurePipelineRunLink(db, '9998');
         expect(first.created).toBe(true);
         expect(second.created).toBe(false);
         expect(second.id).toBe(first.id);
@@ -66,5 +68,24 @@ describe('ensurePipelineRunLink', () => {
 
         const links = await new TaskRunLinkDao(db).listByWbs('9998', 20);
         expect(links.filter((l) => l.kind === 'pipeline')).toHaveLength(1);
+    });
+
+    test('explicit differing runId re-links the existing pipeline link (R3 inline provenance)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        adapters.push(db);
+        await applyCliMigrations(db);
+
+        const first = await ensurePipelineRunLink(db, '9997', { runId: 'test:first' });
+        const second = await ensurePipelineRunLink(db, '9997', { runId: 'test:second' });
+        expect(first.created).toBe(true);
+        expect(second.created).toBe(false);
+        expect(second.id).toBe(first.id);
+        // An explicit `--run-id` from the inline driver must record the inline run,
+        // not silently bind to the first pipeline run's provenance (task 0622 R3).
+        expect(second.runId).toBe('test:second');
+
+        const links = await new TaskRunLinkDao(db).listByWbs('9997', 20);
+        expect(links.filter((l) => l.kind === 'pipeline')).toHaveLength(1);
+        expect(links[0]?.run_id).toBe('test:second');
     });
 });

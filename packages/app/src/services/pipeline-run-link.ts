@@ -52,6 +52,19 @@ export async function ensurePipelineRunLink(
     const links = await dao.listByWbs(wbs, 20);
     const existing = links.find((l) => l.kind === 'pipeline');
     if (existing) {
+        // R3 (0622): an explicit `--run-id` from the inline driver must record the
+        // inline run, not silently bind to the FIRST pipeline run's provenance.
+        // Re-point the existing link when the caller named a different run.
+        if (options.runId !== undefined && options.runId !== existing.run_id) {
+            await dao.updateRunId(existing.id, options.runId);
+            return {
+                created: false,
+                id: existing.id,
+                wbs: existing.wbs,
+                runId: options.runId,
+                kind: 'pipeline',
+            };
+        }
         return {
             created: false,
             id: existing.id,

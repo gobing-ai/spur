@@ -2,12 +2,13 @@
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
 role: planner
 argument-hint: "\"<idea>\" [--auto] [--skip-design] [--approve-taste] [--agent <inline|auto|name>]"
-allowed-tools: ["Bash", "Read", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Idea
 
-Wraps the **idea-pipeline.yaml** workflow.
+Wraps the **sp:spur-dev** skill; the machine is **idea-pipeline.yaml** — the stage
+contract below maps to that workflow's transitions.
 
 ## Argument Flags
 
@@ -40,20 +41,7 @@ vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Pref
 
 ## Implementation
 
-Map flags → workflow vars, then:
-
-```bash
-spur workflow run .spur/workflows/idea-pipeline.yaml --vars '{
-  "idea":"<text>",
-  "profile":"interactive|auto",
-  "design":"auto|skip",
-  "design_approved":"false|true",
-  "idea_approved":"false|true",
-  "agent":"<executor-or-role>"
-}'
-```
-
-Omit `agent` from `--vars` unless the operator passed `--agent`: an absent var lets `agent.default`
-(a Layer-1 role, resolved to its tier's cheapest usable executor) govern, which is the intended
-routing. Passing `--agent <name>` pins that executor for every `agent.run` stage — the escape hatch
-when the resolved executor is unusable (quota exhaustion, auth failure).
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `Skill(skill="sp:spur-dev", args="idea $ARGUMENTS")`
+- Stage contract (discovery → idea-eval → feature-create → AC → feature-check → system-design →
+  decompose → batch-create → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.

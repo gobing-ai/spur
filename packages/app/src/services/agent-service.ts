@@ -438,8 +438,37 @@ export class AgentService {
     async doctor(args: { json: boolean; agent?: string }, deps?: AgentRunDeps): Promise<number> {
         const executors = this.ctx.agentConfig?.executors;
         const doctorRunner = deps?.doctorRunner ?? new DoctorRunner({ env: this.ctx.env, executors });
-        const results =
-            args.agent === undefined ? await doctorRunner.runAll() : [await doctorRunner.runOne(args.agent)];
+        // R1 (0622 F2/F4 residue): a Layer-1 role (`coder`, `planner`, …) is not an
+        // executor. Resolve it through the SAME ranked doctor-walk dispatch uses
+        // (`resolveRole`): cheapest eligible → most expensive, checking each until
+        // one is usable. Never probe the literal role name (that fabricates
+        // `{usable:false}`) and never stop at the first eligible without a
+        // usability check (a quota-exhausted or missing executor must fall through
+        // to the next rung, exactly as dispatch would).
+        if (args.agent === undefined) {
+            const results = await doctorRunner.runAll();
+            return this.renderDoctor(results, executors, args.json, args.agent);
+        }
+        const roleDef = this.ctx.roles?.get(args.agent);
+        if (roleDef !== undefined) {
+            const resolved = await this.resolveRole(args.agent, roleDef.tier, doctorRunner);
+            if (!resolved.ok) {
+                this.ctx.output.error(resolved.message);
+                return resolved.exitCode;
+            }
+            const results = [await doctorRunner.runOne(resolved.executor ?? resolved.agent)];
+            return this.renderDoctor(results, executors, args.json, resolved.executor ?? resolved.agent);
+        }
+        const results = [await doctorRunner.runOne(args.agent)];
+        return this.renderDoctor(results, executors, args.json, args.agent);
+    }
+
+    private renderDoctor(
+        results: Awaited<ReturnType<DoctorRunner['runAll']>>,
+        executors: readonly AgentExecutorConfig[] | undefined,
+        json: boolean,
+        agent?: string,
+    ): number {
         // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
         const modelByExecutor = new Map(
             (executors ?? []).filter((e) => e.model !== undefined).map((e) => [e.name, e.model as string]),
@@ -455,7 +484,7 @@ export class AgentService {
                 );
             }
         }
-        if (args.json) {
+        if (json) {
             // R3 (task 0487): expose the executor's *capability* tier so out-of-process
             // callers (the pipeline size precheck) can gate a large task on executor
             // strength without re-implementing the inference regex. Distinct from the
@@ -470,7 +499,7 @@ export class AgentService {
                 return { ...result, capabilityTier: getExecutorTier(executor) };
             });
             this.ctx.output.write(toJson({ agents: rows }));
-        } else if (args.agent !== undefined) {
+        } else if (agent !== undefined) {
             // Single-executor mode: show full model detail when available.
             this.ctx.output.write(renderDoctorDetail(results[0] ?? null));
         } else {

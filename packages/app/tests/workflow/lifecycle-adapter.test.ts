@@ -261,3 +261,39 @@ describe('LifecycleAdapter (engine integration)', () => {
         db.close();
     });
 });
+
+// ── F16/F17 (0622 R2): finalizeRun maps entity status → durable run status ──
+
+async function runStatus(db: DbAdapter): Promise<string> {
+    const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs');
+    if (!row) throw new Error('no runs row');
+    return row.status;
+}
+
+test('F16/F17: cancelled transition finalizes the run as failed', async () => {
+    const { adapter, db } = await makeAdapter();
+    const result = await adapter.requestTransition(makeRef('f161'), 'backlog', 'cancelled');
+    expect(result.allowed).toBe(true);
+    expect(await runStatus(db)).toBe('failed');
+    db.close();
+});
+
+test('F16/F17: non-terminal allowed transition leaves the run running', async () => {
+    const { adapter, db } = await makeAdapter();
+    const result = await adapter.requestTransition(makeRef('f162'), 'todo', 'blocked');
+    expect(result.allowed).toBe(true);
+    expect(await runStatus(db)).toBe('running');
+    db.close();
+});
+
+test('F16/F17: done→wip reopen flips a finalized run back to running', async () => {
+    const { adapter, db } = await makeAdapter();
+    const first = await adapter.requestTransition(makeRef('f163'), 'todo', 'wip');
+    expect(first.allowed).toBe(true);
+    // Simulate the run having been finalized done earlier in its life.
+    await db.run("UPDATE runs SET status = 'done'");
+    const reopen = await adapter.requestTransition(makeRef('f163'), 'done', 'wip');
+    expect(reopen.allowed).toBe(true);
+    expect(await runStatus(db)).toBe('running');
+    db.close();
+});

@@ -114,7 +114,8 @@ export class LifecycleAdapter implements LifecyclePort {
         // with no `env`, which would expand every `$NAME` to empty and deny every transition.
         const host = createDefaultWorkflowEngineHost();
         host.registerGuard(new EnvShellGuardRunner(new NodeProcessExecutor()), 'builtin');
-        const svc = new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(db));
+        const persistence = new DbWorkflowPersistenceAdapter(db);
+        const svc = new EngineWorkflowService(host, persistence);
         const workflow = this.bindGuardVar(await this.loadWorkflow(), ref.id);
         const externalKey = `${profile.entityPrefix}:${ref.id}`;
         const now = new Date().toISOString();
@@ -196,6 +197,21 @@ export class LifecycleAdapter implements LifecyclePort {
         // ── R2: request the transition; map the engine result to the port ──
         const result = await svc.requestTransition(workflow, runId, to, { workdir: this.opts.cwd });
         if (result.allowed) {
+            // F16/F17: finalize the durable run when the entity lands in a terminal-ish
+            // resting state so it never reads `running` forever. `done` is deliberately
+            // re-enterable in the workflow defs, but a parked entity has no in-flight work; a
+            // later reopen (done→wip) flips the run back to `running` below. Engine
+            // `WorkflowStatus` has no 'cancelled', so cancelled maps to 'failed' — the
+            // run did not conclude normally.
+            const terminalStatus = to === 'cancelled' ? 'failed' : to === 'done' ? 'done' : null;
+            await persistence.finalizeRun(
+                runId,
+                terminalStatus ?? 'running',
+                // Port takes non-null `completedAt`. On reopen (→ running) the timestamp is
+                // the transition time; harmless — consumers gate on `status`, never on
+                // `completed_at` (F16/F17 was a status bug, not a timestamp bug).
+                new Date().toISOString(),
+            );
             return { allowed: true, from: result.fromState, to: result.toState };
         }
         return {

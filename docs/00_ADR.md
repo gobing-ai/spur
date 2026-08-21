@@ -4,7 +4,7 @@ owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
 version: 1.25.0
 owner: Robin Min
-updated_at: 2026-08-19
+updated_at: 2026-08-20
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1010,3 +1010,21 @@ gate it on measured real-run data, not on a fixture bar.
 
 **Detail:** ADR-071 (proof-state invariant), ADR-072 (one canonical pipeline per lifecycle boundary),
 `docs/design/workflow-composition-contract.md`.
+
+## ADR-077: Pin Beats Role — Explicit Executor Pins Win Routing; Roles Set the Tier Floor
+
+- **Status:** Accepted · **Date:** 2026-08-20
+- **Decision:** When an `agent.run` step (or CLI invocation) carries both an explicit executor pin
+  and a declared role, the pin wins routing outright and the role sets only the capability floor the
+  escalation ladder climbs from. A pinned executor is operator steering — an intentional override —
+  while a role is a starting-tier default. Resolution never silently substitutes away from a pin.
+- **Why:** Post-mortem (task 0622) surfaced doubt about which signal wins when pipelines declare
+  `agent: ${vars.agent}` alongside `role:`. Both shipped behaviors are intentional and
+  production-reachable; the precedence was implicit in code but nowhere written. All seven shipped
+  pipelines follow this pattern (pin from vars, role as floor), so codifying it removes ambiguity
+  without changing behavior.
+- **Detail:** `packages/app/src/services/agent-service.ts` — pin handling and the comment that a pin
+  bypasses role resolution (~:1202-1209), role attribution recorded under a pin (~:1240-1263), and
+  role→starting-tier rationale (~:1285-1303). Tests:
+  `packages/app/tests/services/agent-service.test.ts:2574` (declared-role escalation climbs the
+  ladder) and `:2645` (pinned executor bypasses role routing).

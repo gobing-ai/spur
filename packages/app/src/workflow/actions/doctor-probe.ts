@@ -63,17 +63,23 @@ function classifyDoctorProbe(detail: string, agent: string): ProbeClass {
 }
 
 /** Parse `.agents[0]` from `spur agent doctor <exe> --json`; anything unexpected stays unknown. */
-function parseDoctorJson(stdout: string): { auth: string; detail: string } {
+function parseDoctorJson(stdout: string): { auth: string; detail: string; resolvedAgent: string } {
     try {
         const parsed = JSON.parse(stdout) as {
-            agents?: Array<{ authenticated?: unknown; modelStatus?: { detail?: unknown } }>;
+            agents?: Array<{ authenticated?: unknown; modelStatus?: { detail?: unknown }; agent?: unknown }>;
         };
         const first = parsed.agents?.[0];
         const auth = typeof first?.authenticated === 'string' ? first.authenticated : 'unknown';
         const detail = typeof first?.modelStatus?.detail === 'string' ? first.modelStatus.detail : '';
-        return { auth, detail };
+        // R1 (0622): `doctor <role>` resolves the role to its cheapest eligible executor and
+        // the JSON row names that executor (`agent: omp`). The auth classification must use
+        // THIS resolved name, not the selector the caller probed with — a role literal like
+        // `coder` is not omp/pi-family, so testing the selector would turn a relay-owned
+        // env-miss into a hard FAIL (fabricated "executor coder is unauthenticated").
+        const resolvedAgent = typeof first?.agent === 'string' && first.agent.length > 0 ? first.agent : '';
+        return { auth, detail, resolvedAgent };
     } catch {
-        return { auth: 'unknown', detail: '' };
+        return { auth: 'unknown', detail: '', resolvedAgent: '' };
     }
 }
 
@@ -179,19 +185,25 @@ export class DoctorProbeActionRunner implements ActionRunner {
                 continue;
             }
 
-            const { auth, detail } = parseDoctorJson(res.stdout);
-            const probe = classifyDoctorProbe(detail, exe);
-            const line = `precheck: ${exe} auth=${auth} probe=${probe} ${detail}`.replace(/\s+$/, '');
+            const { auth, detail, resolvedAgent } = parseDoctorJson(res.stdout);
+            // Classify against the executor the doctor row actually reports (resolved
+            // from a role), falling back to the selector when the row names none.
+            const classifyAgainst = resolvedAgent !== '' ? resolvedAgent : exe;
+            const probe = classifyDoctorProbe(detail, classifyAgainst);
+            // Show the resolved executor only when it differs from the selector (a
+            // role was resolved); direct executors keep the terse original line.
+            const resolvedSuffix = resolvedAgent !== '' && resolvedAgent !== exe ? ` (resolved ${resolvedAgent})` : '';
+            const line = `precheck: ${exe}${resolvedSuffix} auth=${auth} probe=${probe} ${detail}`.replace(/\s+$/, '');
             lines.push(line);
             emit(line);
 
             if (auth === 'unauthenticated') {
-                if (RELAY_FAMILY.test(exe) && (probe === 'env-miss' || probe === 'unknown')) {
-                    const soft = `precheck: SOFT - executor ${exe} auth probe cannot see agent-owned credentials`;
+                if (RELAY_FAMILY.test(classifyAgainst) && (probe === 'env-miss' || probe === 'unknown')) {
+                    const soft = `precheck: SOFT - executor ${classifyAgainst} auth probe cannot see agent-owned credentials`;
                     lines.push(soft);
                     emit(soft);
                 } else {
-                    const hard = `precheck: FAIL - executor ${exe} is unauthenticated; fix agent.default or pass --vars '{"agent":"<authenticated-executor>"}' (${spurBin} agent doctor ${exe} --json); ${detail}`;
+                    const hard = `precheck: FAIL - executor ${classifyAgainst} is unauthenticated; fix agent.default or pass --vars '{"agent":"<authenticated-executor>"}' (${spurBin} agent doctor ${classifyAgainst} --json); ${detail}`;
                     lines.push(hard);
                     emit(hard);
                     status = 'FAIL';
