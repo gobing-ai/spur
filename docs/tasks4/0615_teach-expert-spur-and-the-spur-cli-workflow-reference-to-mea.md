@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Teach expert-spur and the spur-cli workflow reference to measure and fix composition defects"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.528Z
-updated_at: "2026-08-20T23:18:37.732Z"
+updated_at: "2026-08-21T18:01:09.988Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613", "0614"]
@@ -29,11 +29,11 @@ advisory existing).
 
 ### Requirements
 
-- [ ] R1. Add a Composition measures section to `plugins/sp/skills/spur-cli/references/workflows.md` stating both triggers, how to run the advisory, and how to read its report.
-- [ ] R2. Map each defect class to its recommended fix path in that section — shell to the five recorded owner options, `agent.run` to a centralized skill or slash command.
-- [ ] R3. State in the same section that findings are advisory: they never justify blocking a run, failing a gate, or editing a pipeline that is currently executing.
-- [ ] R4. Add the routing line to `plugins/sp/agents/expert-spur.md` pointing at the new section, without duplicating its content into the agent file.
-- [ ] R5. Keep the plugin surface parity and command-validation gates green.
+- [x] R1. Add a Composition measures section to `plugins/sp/skills/spur-cli/references/workflows.md` stating both triggers, how to run the advisory, and how to read its report.
+- [x] R2. Map each defect class to its recommended fix path in that section — shell to the five recorded owner options, `agent.run` to a centralized skill or slash command.
+- [x] R3. State in the same section that findings are advisory: they never justify blocking a run, failing a gate, or editing a pipeline that is currently executing.
+- [x] R4. Add the routing line to `plugins/sp/agents/expert-spur.md` pointing at the new section, without duplicating its content into the agent file.
+- [x] R5. Keep the plugin surface parity and command-validation gates green.
 
 ### Acceptance Criteria
 
@@ -74,27 +74,51 @@ would violate the same reuse-first discipline this feature is written to enforce
 
 ### Plan
 
-- [ ] Read `plugins/sp/skills/spur-cli/references/workflows.md` and `plugins/sp/agents/expert-spur.md` to place the section inside the existing harness loop
-- [ ] Write the Composition measures section: both triggers, how to run the advisory, how to read the report (R1)
-- [ ] Add the defect-class to fix-path map, citing the five recorded owner options (R2)
-- [ ] State the advisory-only rule explicitly (R3)
-- [ ] Add the routing line to `expert-spur.md` with no content duplication (R4)
-- [ ] Run the plugin parity and command-validation gates plus `bun run test` for `plugins/sp` (R5)
+- [x] Read `plugins/sp/skills/spur-cli/references/workflows.md` and `plugins/sp/agents/expert-spur.md` to place the section inside the existing harness loop
+- [x] Write the Composition measures section: both triggers, how to run the advisory, how to read the report (R1)
+- [x] Add the defect-class to fix-path map, citing the five recorded owner options (R2)
+- [x] State the advisory-only rule explicitly (R3)
+- [x] Add the routing line to `expert-spur.md` with no content duplication (R4)
+- [x] Run the plugin parity and command-validation gates plus `bun run test` for `plugins/sp` (R5)
 
 ### Solution
+Taught the corpus steward and its per-noun reference the composition measures. The reference is the
+SSOT; the agent file only routes to it (no content duplication).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- Added a `Composition measures and the advisory` section to the `workflow` noun reference: states
+  both triggers (shell ≥6 non-comment units; `agent.run` non-slash `input`), how to run the advisory
+  (`workflow validate --json` → `composition: {findings[], suppressed}`, human mode stderr, exit 0),
+  and how to read the report including baseline `suppressed`
+  (`plugins/sp/skills/spur-cli/references/workflows.md:202-235`).
+- The same section maps each defect class to its fix path: shell findings to the five recorded owner
+  options (public verb / application service / built-in action kind / external extension /
+  deliberately-stays-shell), `agent.run` findings to a centralized skill or slash command
+  (`plugins/sp/skills/spur-cli/references/workflows.md:219-227`).
+- The advisory-only rule is stated explicitly — never block a run, fail a gate, or edit a pipeline
+  that is currently executing (`plugins/sp/skills/spur-cli/references/workflows.md:229-234`).
+- `expert-spur.md` gained a routing line under Workflow work pointing at the new section without
+  duplicating its content (`plugins/sp/agents/expert-spur.md:48-51`).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| Scenario: R5 — expert-spur and its backing reference teach measuring and fixing composition defects | MET | R1: composition-measures section states both triggers and how to run/read the advisory (`plugins/sp/skills/spur-cli/references/workflows.md:202-235`). R2: defect-class fix-path map — shell to the five recorded owner options, `agent.run` to a centralized skill or slash command (`plugins/sp/skills/spur-cli/references/workflows.md:219-227`). R3: advisory-only rule stated verbatim (`plugins/sp/skills/spur-cli/references/workflows.md:229-235`). R4: routing line in the agent file, no content duplication (`plugins/sp/agents/expert-spur.md:48-51`). R5: plugin parity + command-validation gates green via full `bun run test` (6047 pass / 0 fail) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Kind | Finding | Ref |
+|---|---|---|---|
+| P4 | Verify | No P1–P3 findings. Content matches the frozen rules in `docs/04_DESIGN.md` §composition advisory (≥6 shell units, non-slash input, severity bands, baseline suppression) | R1/R2 MET |
+| P4 | Verify | Advisory-only posture stated verbatim (never block / never fail a gate / never edit an executing pipeline), matching ADR-069 §1.3 | R3 MET |
+| P4 | Verify | Agent file carries a routing line only — no duplicated measures content, preserving the reference-as-SSOT design | R4 MET |
+| P4 | Verify | Plugin parity + command-validation gates green via full `bun run test` | R5 MET |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-21T18:01:03.451Z todo → wip (system)
+- 2026-08-21T18:01:04.021Z wip → testing (system)
+- 2026-08-21T18:01:09.988Z testing → done (system)

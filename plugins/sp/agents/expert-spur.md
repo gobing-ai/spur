@@ -46,6 +46,9 @@ guide and conventions before acting.
 - **Section-editing campaigns** — update the same section across multiple tasks.
 - **Rule-catalog work** — author, fine-tune, validate, or harden constraint rules across the catalog.
 - **Workflow work** — author, validate, dry-run, or refactor one or more workflows.
+  When authoring or refactoring, read the composition-measures section in
+  `sp:spur-cli` `references/workflows.md` and apply the advisory's fix-path map — findings are
+  advisory only; never block a run or edit an executing pipeline over them.
 - **Corpus health checks** — run `check`/`validate` across a batch and report findings.
 
 For a single operation, use the `spur` CLI directly. For the planning/execution lifecycle, use

@@ -199,6 +199,40 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
 - **`--steer`** is synchronous and in-process: it cannot combine with `--json` or `--async` (exit `2`).
   It accepts steering commands on stdin at declared action boundaries for interactive control.
 
+## Composition measures and the advisory (0615)
+
+`workflow validate` (valid path only) also reports a **warn-only composition advisory** covering the
+two detectable measures from ADR-069. It answers "does this workflow lean on ad-hoc shell or raw
+agent prompts where a first-class surface would own it better?" — nothing more.
+
+**The two triggers:**
+
+- **Shell measure** — a `shell` action (state hooks `onEnter`/`onExit`; guards are exempt) flags when
+  its `command` has **≥6** non-comment units (split on newline and `;`, blank/`#` units skipped).
+- **agent.run measure** — an `agent.run` action flags when its `input` is a **non-slash** prompt;
+  raw prompt length only sets the reported severity (<200 low / ≤1000 medium / >1000 high).
+
+**How to run it:** it is not a separate command — `spur workflow validate <file> --json` returns
+`composition: {findings[], suppressed}` on the valid path; human mode prints the advisory to stderr
+with exit 0. Actions with a recorded disposition in
+`config/workflow-composition-baseline.json` (resolved by walking up from the workflow file) are
+counted in `suppressed`, not `findings`.
+
+**How to read it, and the fix path per defect class:**
+
+- **Shell finding** → pick one of the five recorded owner options from
+  `docs/design/workflow-shell-ownership.md`: (a) public `spur` verb (consent-gated),
+  (b) application service, (c) least-privilege built-in action kind, (d) workflow-relative external
+  extension, (e) deliberately-stays-shell exception (record the reason in the baseline).
+- **agent.run finding** → move the operation behind a centralized agent skill or slash command and
+  make the action's `input` reference it (ADR-043 preference).
+
+**Advisory-only posture (binding):** findings never justify blocking a run, failing a gate, or
+editing a pipeline that is currently executing. The advisory never changes `validate`'s exit status,
+never blocks `workflow run`, and is not part of `spur-check` / `spur-check-new`. Treat a finding as
+a to-be-enhanced note for the workflow's owner — surface it in your report, apply the fix only when
+the operator accepts it, and never hot-edit a running workflow's shell in place.
+
 ## Command surface
 
 ```
