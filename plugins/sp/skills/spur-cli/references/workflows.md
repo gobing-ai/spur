@@ -237,6 +237,7 @@ the operator accepts it, and never hot-edit a running workflow's shell in place.
 
 ```
 spur workflow validate <file> [--no-schema] [--json]
+spur workflow show      <file>
 spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer] [--json]
 spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--json]
 spur workflow cancel   <run-id> [--json]

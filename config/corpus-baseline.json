@@ -35,14 +35,6 @@
         },
         {
             "kind": "feature",
-            "id": "A3",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "remaining scenarios (R5, R7-R17) verify as batch A3 tasks 0615-0621 reach done; prune at 0620",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "feature",
             "id": "D3",
             "code": "L4.dogfood-missing",
             "severity": "warning",

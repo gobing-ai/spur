@@ -57,7 +57,7 @@
 | **sections** | | | | | | | | ✅ | | |
 | **send** | | | | ✅ | | | | | | |
 | **serve** | | | | | | | ✅ | | | |
-| **show** | | ✅ | | | | | | ✅ | | |
+| **show** | | | | | | | | | ✅ | | ✅ |
 | **start** | | | | | ✅ | | | | ✅ | |
 | **status** | | | | | | | ✅ | | ✅ | |
 | **stop** | | | | | ✅ | | | | ✅ | |
@@ -70,7 +70,7 @@
 | **verifyall-aggregate** | | | | | | | | ✅ | | |
 | **wait** | ✅ | | | | | | | | | |
 | **watch** | | | | ✅ | | | | | | |
-| **Verb count** | **8** | **2** | **9** | **4** | **4** | **5** | **4** | **4** | **18** | **6** | **7** |
+| **Verb count** | **8** | **2** | **9** | **4** | **4** | **5** | **4** | **4** | **18** | **6** | **8** |
 
 ## Hidden Legacy Aliases
 
@@ -91,8 +91,8 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total nouns | **15** |
 | Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **4** |
-| Unique verbs | **47** |
-| Total noun×verb cells | **71** |
+| Unique verbs | **48** |
+| Total noun×verb cells | **72** |
 
 > [!NOTE]
 > `task` has the richest surface at 18 verbs, followed by `feature` (9) and `agent` (8). `builder` (2 verbs: `bump-ver`, `drop-tags`) hosts the release plumbing promoted from `spur-dev`. Several verbs are shared across nouns — e.g., `list` (6 nouns), `create`/`run` (3 nouns each), `check`/`show`/`update`/`start`/`stop`/`trace`/`validate`/`refresh` (2 nouns each). `self` (4 verbs) hosts every self-management operation.

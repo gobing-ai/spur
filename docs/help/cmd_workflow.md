@@ -11,6 +11,7 @@
 | Subcommand | Description |
 |---|---|
 | `validate <file>` | Validate a workflow definition (schema + semantic) |
+| `show <file>` | Render a workflow definition as a fenced mermaid FSM diagram (read-only) |
 | `run <file>` | Execute a workflow definition |
 | `continue [run-id]` | Resume a paused (HITL) workflow run |
 | `list` | List available workflow YAML files across project + global layers |

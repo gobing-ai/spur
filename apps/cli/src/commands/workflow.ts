@@ -29,7 +29,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
-import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
@@ -37,6 +37,7 @@ import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
+import { renderWorkflowMermaid } from '../workflow/mermaid-render';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -752,6 +753,25 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             } else {
                 context.output.write(formatListHuman(result));
             }
+        });
+
+    workflow
+        .command('show')
+        .description('Render a workflow definition as a mermaid FSM diagram.')
+        .argument('<file>', 'Workflow YAML file')
+        .action(async (file) => {
+            const filePath = resolve(context.cwd, file);
+            let def: WorkflowDef;
+            try {
+                def = await loadWorkflowDef(filePath, { validateSchema: true });
+            } catch (err) {
+                context.output.error(
+                    `workflow show: cannot read or parse ${file} — ${err instanceof Error ? err.message : String(err)}`,
+                );
+                context.setExitCode(1);
+                return;
+            }
+            context.output.write(renderWorkflowMermaid(def));
         });
 
     workflow

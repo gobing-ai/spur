@@ -2181,3 +2181,29 @@ describe('followRunLog', () => {
         await rm(dir, { recursive: true, force: true });
     });
 });
+
+describe('spur workflow show', () => {
+    test('renders a fenced mermaid diagram for a valid definition', async () => {
+        const dir = await createTempProject();
+        const wf = join(dir, 'wf.yaml');
+        await writeFile(wf, MINIMAL_WORKFLOW_YAML);
+        const res = await runCli(['workflow', 'show', wf], dir);
+        expect(res.code).toBe(0);
+        expect(res.stdout).toContain('```mermaid');
+        expect(res.stdout).toContain('flowchart LR');
+        expect(res.stdout).toContain('start["start"]');
+        expect(res.stdout).toContain('done(["done"])');
+        expect(res.stdout).toContain('class done terminal;');
+        expect(res.stdout).toContain('start --> done');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('exits non-zero naming the file on a missing definition with no partial diagram', async () => {
+        const dir = await createTempProject();
+        const res = await runCli(['workflow', 'show', join(dir, 'missing.yaml')], dir);
+        expect(res.code).not.toBe(0);
+        expect(res.stderr + res.stdout).toContain('missing.yaml');
+        expect(res.stdout).not.toContain('```mermaid');
+        await rm(dir, { recursive: true, force: true });
+    });
+});
