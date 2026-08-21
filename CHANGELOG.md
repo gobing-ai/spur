@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.57] — 2026-08-21
+
+### Fixed
+
+- fix(release): include the root-named CLI package in the --all bump set so the aggregate publish tag stays consistent (b81184cb)
+
 ## [0.3.56] — 2026-08-21
 
 ### Added
