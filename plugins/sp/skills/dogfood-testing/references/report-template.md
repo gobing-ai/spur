@@ -25,7 +25,7 @@ colon form — the dash form `sp-dogfood-testing@…` is rejected in new runs.
 Every dogfood run **always** writes **two** files — with or without `--save`:
 
 | Artifact | Path | Role |
-|----------|------|------|
+| ---------- | ------ | ------ |
 | **Live** | `.spur/run/dogfood/<run_id>.md` | Mid-run SSOT; opened in Phase 1; ledger rows appended on every step resolve |
 | **Report** | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` | Operator artifact; same content promoted on open + every step + finalize |
 
@@ -59,7 +59,7 @@ workspace_fingerprint:    ← optional — recorded in Phase 1 for fix-mode and 
 ### Status model (partial-OK)
 
 | `status` | When |
-|----------|------|
+| ---------- | ------ |
 | `running` | Phase 1 opened; steps still in progress |
 | `aborted` | Finalize-or-abort after mid-run stop / incomplete narrative |
 | `complete` | Phase 4 finished a normal end-of-run report |
@@ -238,6 +238,7 @@ downstream task creation does not inherit an unactionable acceptance criterion:
 The tag is a prompt to whoever turns findings into tasks: `[stale]` → drop, `[unverifiable]` →
 reframe or defer, `[feasible]` → proceed. A finding without a tag is treated as `[feasible]`.
 Severity scale:
+
 - **P1** — blocks correct use or causes drift/wrong output; fix before shipping the testee.
 - **P2** — real friction or a latent correctness gap; fix soon. **Includes mandatory workspace-drift
   finding:** when a drift row (`drift:external`) is present in the ledger, a P2 finding naming the
@@ -310,6 +311,7 @@ Findings (P1+P2):
 ```
 
 Rules:
+
 - **Result** and **Tokens** lines are mandatory; always tag token numbers `[~estimate]`.
 - List Fixed / Unresolved / Findings; print `(none)` when empty — never omit a sub-list.
 - With `--full`, Findings include P3+P4.

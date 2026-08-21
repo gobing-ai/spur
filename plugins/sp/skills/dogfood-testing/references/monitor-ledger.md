@@ -19,7 +19,7 @@ lives in the dual artifacts (see [report-template.md](report-template.md) → Al
 artifacts):
 
 | File | Path |
-|------|------|
+| ------ | ------ |
 | Live | `.spur/run/dogfood/<run_id>.md` |
 | Report | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` |
 
@@ -73,7 +73,7 @@ in the report's §6 Findings (no exemption applies).
 ```
 
 | Column | Meaning |
-|--------|---------|
+| -------- | --------- |
 | `Step` | The derived step label (Phase 1) or `N` for a single-step testee. |
 | `Attempts` | How many times the step was run (1 = first-try; >1 = retried under the fix budget). |
 | `Outcome` | `PASS` / `FIXED` / `UNRESOLVED` / `N/A`. (`FIXED` = failed then passed within budget.) |
@@ -114,7 +114,7 @@ Ledger estimates alone are **confidence: LOW**. When assembling the report Cost 
 ([report-template.md](report-template.md) §2):
 
 | Source | When to use | Confidence | Scope label |
-|--------|-------------|------------|-------------|
+| -------- | ------------- | ------------ | ------------- |
 | Ledger `chars/4` heuristic | Always | LOW | per-step trend |
 | `ccusage` daily/session | If CLI available and returns data | MEDIUM | day or session — **not** per-step |
 | Agent usage fields in tool results | If present (never invent) | MEDIUM | as reported by the tool |
@@ -168,7 +168,7 @@ the driver re-fetching data it already holds. Apply these while monitoring each 
 When aggregate cache% risks falling under 50%, apply this checklist **before** re-reading:
 
 | # | Action | Why |
-|---|--------|-----|
+| --- | -------- | ----- |
 | 1 | Reuse the Step-1 `spur task show --json` capture for the rest of the run | Avoids re-tokenizing the full task body |
 | 2 | Do not re-Read SKILL.md / report-template after Phase 1 loaded them | Skill body is large; keep one copy in context |
 | 3 | Prefer `--json` CLI over re-parsing freeform prose | Smaller, stable payloads |
