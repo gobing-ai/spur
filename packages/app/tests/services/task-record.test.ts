@@ -545,6 +545,36 @@ describe('TaskService.record', () => {
         expect(raw).not.toContain('pipeline verify step');
     });
 
+    test('preserves authored Testing when the verdict is UNKNOWN (no artifact)', async () => {
+        const wbs = await createTask(svc);
+
+        // Pre-populate Testing as the pipeline's verify step would have (hand-authored).
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const filePath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const ref = { kind: 'task' as const, id: wbs, filePath, folder: tasksDir };
+        const testingBody = [
+            '**Pipeline verify results**',
+            '',
+            '- Verdict: PASS (from verdict artifact)',
+            '',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| Scenario: R1 — … | MET | hand-authored evidence |',
+            '',
+        ].join('\n');
+        const writeService = new PlanningWriteService({ fs });
+        await writeService.updateSection(ref, 'Testing', testingBody);
+
+        // NO verdict artifact — record must not clobber the authored Testing.
+        const result = await svc.record(wbs);
+
+        expect(result.testingWritten).toBe(false);
+        const raw = await fs.readFile(filePath);
+        expect(raw).toContain('hand-authored evidence');
+        expect(raw).not.toContain('No requirements recorded');
+    });
+
     test('R4: auto-walks wip→testing→done and creates a pipeline run-link on PASS to done', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-record-r4-'));
         const dir = join(root, 'tasks');

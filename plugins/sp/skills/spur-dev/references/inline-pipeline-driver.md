@@ -124,12 +124,34 @@ Transition guards are not advisory. Execute the declared guard exactly, in order
 resolved variables and artifacts. `--no-lifecycle` remains bookkeeping only; the YAML's task checks,
 verdict gate, record step, and done guard all remain authoritative.
 
-## Batch use
+## Record & done sequencing (dogfood 2026-08-21, feature A3)
 
-Sequential `/sp:dev-runall` with omit/`inline` runs this driver once per ready WBS, with a fresh run
-id and the same frozen/topologically ordered batch plan. Batch inspection, halt/keep-going policy,
-and reporting remain in `execution-batch.md`. Parallel mode cannot share one host session safely and
-therefore keeps the existing isolated subprocess/worktree path (trigger 4).
+Order matters for the `testing → done` hop. The A3 batch hit the same clobbering spiral on two
+tasks (0617, 0619) because the sections were hand-written **before** the verdict artifact existed:
+
+1. **Write the verdict artifact first.** `spur task record --solution-from-diff --transition testing`
+   reads `.spur/run/<wbs>-verdict.json` (default). With no artifact it emits a **UNKNOWN** verdict and
+   **overwrites** a hand-authored `## Testing` with an auto-generated "No requirements recorded" table,
+   plus replaces `## Solution` with a bare auto change-map. Creating the artifact first (PASS, with
+   requirement rows keyed by scenario title) makes `task record` the compliant path.
+   ```bash
+   # verdict artifact first (shape: {wbs, verdict, requirements:[{id,status,evidence}], checks:[], source})
+   # then the record hop; then re-write Testing/Solution if record's backfill is thinner than intended.
+   spur task update <wbs> wip --no-lifecycle
+   spur task record <wbs> --solution-from-diff --transition testing
+   ```
+   The engine now preserves an already-authored Testing when the verdict is UNKNOWN (task-service
+   `record` fallback-only, mirroring the Review 0593 precedent) — but the order above is still the
+   contract for the standard pipeline.
+2. **Done-probe before done.** Run the check projected to `done` (`spur task check <wbs> --as done`
+   via the `TaskCheckService` probe pattern) — it surfaces `L3.unchecked-checklist` (flip `- [ ]` → `- [x]`)
+   and `L3.required-section-placeholder` before the transition, not after.
+3. **Solution change-map anchor rule (L4.anchor-subject-mismatch).** A Solution change-map table must
+   list **one `file:line` per row**. A ·-joined paragraph makes every anchor's "subject" the other
+   anchors and trips the L4 subject check. Paths containing `_` (e.g. `docs/help/cmd_*.md`,
+   `spur-cli-matrix.md`) can **never** match their cited line — the snake_case filename token is
+   extracted as the subject and cannot appear in the line content — so drop those rows from the table
+   (prose still covers them).
 
 ## Failure contract
 

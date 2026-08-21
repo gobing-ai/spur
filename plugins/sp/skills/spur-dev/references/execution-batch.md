@@ -734,6 +734,25 @@ command doc so it does not read as a bug.
   `sp:super-planner` surfaces blockers/HITL only at the **batch boundary** (between task runs), not
   from inside a pipeline step.
 
+## Gate preflight (dogfood 2026-08-21, feature A3)
+
+The A3 batch burned multiple full `spur-check-new` runs (~2 min each) that failed only at the tail
+gates. The cheap rule gates fail fast when run first — the full-gate run is dominated by the ~65 s
+test suite, so a gate run that dies at `test-post-check` or `corpus-check` wasted most of its wall
+time. Before launching a full `spur-check-new`:
+
+1. **Run the two rule gates first** — `bun run test-pre-check` (43 rules: `no-console-output`,
+   `no-direct-process-spawn`, `cli-*`, `require-corresponding-test`) and `bun run test-post-check`
+   (`every-export-has-tsdoc`, `coverage-gate`). They catch boundary/TSDoc violations in seconds.
+2. **Promoted code must satisfy the boundary rules `scripts/` never enforced.** A command module
+   moving from `scripts/` into `apps/cli/src` must route output through the `CommandOutput` seam (no
+   `console.*`), spawn processes via `NodeProcessExecutor` (no `Bun.spawnSync`), get a
+   `runtime-boundaries` fs-io exemption for sync reads (mirrors `task.ts`), and a non-command helper
+   must not live in `apps/cli/src/commands/` (the noun scan treats every file there as a noun).
+3. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — `corpus-check` surfaces them
+   as `L4.anchor-subject-mismatch`. Repoint the shifted citations (via `spur task update --section`)
+   in the same commit, and reconcile new/stale baseline entries before the gate run.
+
 ## AC traceability
 
 | AC | Where satisfied |

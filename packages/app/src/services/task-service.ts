@@ -1125,10 +1125,18 @@ export class TaskService {
             solutionBackfilled: false,
         };
 
-        // ── Testing section (R2) ──
-        const testingBody = renderTesting(verdict);
-        await this.writeService.updateSection(ref, 'Testing', testingBody);
-        result.testingWritten = true;
+        // ── Testing section (R2) — authored-first (0619 F/U) ──
+        // When the verify verdict is UNKNOWN (no artifact / verify step skipped),
+        // an already-authored `## Testing` is preserved instead of being clobbered
+        // by the "no requirements recorded" stub — the A3 batch hit this twice
+        // (hand-written Testing overwritten before the verdict artifact existed).
+        // Mirrors the Review fallback-only precedent (0593 R1): with a real verdict
+        // (PASS/PARTIAL/FAIL) record still owns Testing.
+        if (!(verdict.verdict === 'UNKNOWN' && !sectionIsBare(doc, 'Testing'))) {
+            const testingBody = renderTesting(verdict);
+            await this.writeService.updateSection(ref, 'Testing', testingBody);
+            result.testingWritten = true;
+        }
 
         // ── Review section (R2) — fallback-only (F92 0593 R1) ──
         // The review coordinator (super-reviewer /dev-review) writes the authored
