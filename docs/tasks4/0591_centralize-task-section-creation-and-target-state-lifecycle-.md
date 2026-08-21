@@ -13,7 +13,7 @@ tags: ["task-contract", "section-matrix", "lifecycle"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T20:06:22.451Z"
-updated_at: "2026-08-21T19:52:45.175Z"
+updated_at: "2026-08-21T21:07:04.009Z"
 ---
 
 ## 0591. Centralize task section creation and target-state lifecycle validation
@@ -91,7 +91,7 @@ through `buildTaskSkeleton` (the single layout producer) with the section set re
 the canonical section matrix + universal `References`/`History`:
 
 - `buildTaskSkeleton` in `create` — `packages/app/src/services/task-service.ts:565`
-- `buildTaskSkeleton` in `batchCreate` — `packages/app/src/services/task-service.ts:1421`
+- `buildTaskSkeleton` in `batchCreate` — `packages/app/src/services/task-service.ts:1429`
 - section set resolved by `sectionsForStatus` — `packages/app/src/services/task-service.ts:415`
 
 `sectionsForStatus` fails loudly on a missing matrix or entry (no hand-maintained creation
@@ -126,7 +126,7 @@ provides a bundled canonical matrix so server task creation keeps the same autho
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — Matrix alone determines created sections | MET | `packages/app/src/services/task-service.ts:565` (`create` → `buildTaskSkeleton`) and `packages/app/src/services/task-service.ts:1421` (`batchCreate` → `buildTaskSkeleton`); section set resolved by `sectionsForStatus` (`packages/app/src/services/task-service.ts:415`) which fails loudly on missing matrix/entry; `DEFAULT_CREATION_SECTIONS` and CLI `FALLBACK_MATRIX` deleted; tests `packages/app/tests/services/task-service.test.ts` (F92 R1 create layout, fail-loud, batchCreate matrix) |
+| R1 — Matrix alone determines created sections | MET | `packages/app/src/services/task-service.ts:565` (`create` → `buildTaskSkeleton`) and `packages/app/src/services/task-service.ts:1429` (`batchCreate` → `buildTaskSkeleton`); section set resolved by `sectionsForStatus` (`packages/app/src/services/task-service.ts:415`) which fails loudly on missing matrix/entry; `DEFAULT_CREATION_SECTIONS` and CLI `FALLBACK_MATRIX` deleted; tests `packages/app/tests/services/task-service.test.ts` (F92 R1 create layout, fail-loud, batchCreate matrix) |
 | R2 — Transition gates evaluate target status via `--as` | MET | `packages/app/src/services/task-check.ts:517-522` `effectiveStatus = asStatus ?? frontmatter.status` drives L2/L3/L4 policy while L1 reads the real doc (omitted `--as` behavior-compatible); `apps/cli/src/commands/task.ts:1044-1057` adds canonical-status-validated `--as`, rejects `--corpus`, keeps `--strict-core` as documented alias; tests `packages/app/tests/services/task-check.test.ts` (F92 R2) + `apps/cli/tests/commands/task.test.ts` (--as projection/invalid/conflict) |
 | R3 — Missing target-required sections deny transition, byte-identical | MET | lifecycle guards invoke check as the target: `config/workflows/task-lifecycle.yaml:73,78` (`--as testing`/`--as done`); inline no-lifecycle backstop `runDoneGateCheck` passes the transition target as `asStatus` (`apps/cli/src/commands/task.ts:1462-1481`); R3 test proves testing→done denies missing Review and leaves the file byte-identical (matrix loader fails loudly with attempted paths when no canonical asset is reachable — see Solution) |
 
