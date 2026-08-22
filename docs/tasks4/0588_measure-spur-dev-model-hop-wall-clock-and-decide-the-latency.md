@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T15:49:26.547Z"
-updated_at: "2026-08-18T18:47:14.901Z"
+updated_at: "2026-08-22T00:15:15.518Z"
 ---
 
 ## 0588. Measure spur-dev model-hop wall-clock and decide the latency lever
@@ -148,7 +148,7 @@ oversized task to a flash model.
 |-------------|--------|----------|
 | R1 | MET | n=3 runs, all 12 hop durations re-derived this run with `rg -o "✓ [a-z-]+/agent\.run \([0-9hms ]+\)" .spur/run/<id>.log` on run ids 08d76749-8c30-4582-b42c-b37a53038059, 7831bfc8-ffc4-47a5-93e6-347bcb44f551, 97e7a2a6-811c-4a0b-b8ae-fb9bbff44a9d — every value matches the `### Design` table exactly. Budget ratios and pipeline wall-clocks recomputed from log timestamps and match (0482 43m59s vs 44.0m, 0535 24m18s vs 24.3m, 0536 45m19s vs 45.3m). Executor and model read from the logs themselves (`volc/deepseek-v4-flash-ga-260731`, `deepseek/deepseek-v4-flash`); current default `zai/glm-5.2` at `.spur/agents/demo-omp-zai.yaml:10` |
 | R2 | MET | `### Design` "Cost attribution (R2 — measured, n=2 runs)" splits (a)/(b)/(c) for 2 implement hops and 2 review hops. Re-derived this run: `jq -s 'reduce .[] as $r (0; . + ($r.message.duration // 0))'` on run 7831bfc8 session JSONL gives 692681ms generation for the 11m59s implement hop and 115336ms for the 2m12s review hop; `jq -s 'max_by(.message.contextSnapshot.nonMessageTokens // 0).message.contextSnapshot.nonMessageTokens'` gives 68097 fixed-context tokens. Method and HIGH confidence stated in-section. Repaired this run — prior text estimated (a) at 30–40k tok via chars/4 and declared (b)/(c) unmeterable |
-| R3 | MET | `### Design` option matrix at `docs/tasks4/0588_measure-spur-dev-model-hop-wall-clock-and-decide-the-latency.md:118-123` — 3 option rows, each carrying cost, risk and confirming measurement; exactly one recommendation at `:125`. Mechanism change routed to ADR-064, `docs/00_ADR.md:777`, re-read this run |
+| R3 | MET | `### Design` option matrix at `docs/tasks4/0588_measure-spur-dev-model-hop-wall-clock-and-decide-the-latency.md:118-123` — 3 option rows, each carrying cost, risk and confirming measurement; exactly one recommendation at `:125`. Mechanism change routed to ADR-064, `docs/00_ADR.md:804-814`, re-read this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

@@ -4,7 +4,7 @@ name: "Record the composition measures and the four-surface script placement rul
 status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.495Z
-updated_at: "2026-08-21T15:31:43.420Z"
+updated_at: "2026-08-22T00:15:16.492Z"
 feature_id: A3
 priority: P1
 ---
@@ -115,7 +115,7 @@ Authority-only change (no code, no tooling) implementing R1–R5:
 - `docs/00_ADR.md:882-904` — ADR-069 amendment: R1 shell measure (unit = non-comment shell line split on newline/`;`; fixes closed to the five owner options in `docs/design/workflow-shell-ownership.md`; threshold deliberately unfrozen — measured flag rates >3→30, >4→25, >5→21, >6→18, >8→14 of 58; `>5` recorded as the candidate separator), R2 agent.run measure (non-slash `input` triggers per ADR-043; raw prompt length = severity only; fix = centralized skill/slash command), R3 advisory posture (never changes validate exit, never blocks, not in spur-check/spur-check-new); status Proposed → Accepted with rationale.
 - `docs/00_ADR.md:482-503` — ADR-051 amendment: R4 four-surface placement table (`apps/cli/src/commands` / `scripts/commands` / `package.json` scripts / `plugins/sp/scripts`) with audience-selected condition per surface, ADR-065 cross-referenced for the plugin entrypoint contract (not restated); R5 consent record for the six feature-A3 public-surface changes (spur self 0616, spur builder 0617, --fix 0619, workflow show 0620, doctor AUTH-column removal 0621, workflow validate advisory output 0614).
 - `docs/design/harness-surface-governance.md:1-94` — new derived satellite: operational view of both amendments (§1 measures + measured distribution table, §2 placement table + decision procedure, §3 consent table, §4 follow-ups).
-- `docs/04_DESIGN.md:63` — `harness-surface-governance.md` single §0 index row; frontmatter `updated_at` → 2026-08-21.
+- `docs/04_DESIGN.md:65` — `harness-surface-governance.md` single §0 index row; frontmatter `updated_at` → 2026-08-21.
 - `AGENTS.md:260-276` — § Spur CLI surface "two surfaces" table → four-surface table with selection condition + consent-gate scope; ADR-051 amendment xref.
 - Measurement evidence: `/tmp/measure-shell.mjs` parses `config/workflows/*.yaml` (57 state-hook shell actions joined programmatically + `doc-sync:onEnter:1` joined manually against the doc's stale key `learning-capture:onEnter:1` — 58/58 total).
 

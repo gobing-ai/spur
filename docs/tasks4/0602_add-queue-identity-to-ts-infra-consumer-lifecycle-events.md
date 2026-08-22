@@ -4,7 +4,7 @@ name: "Add queue identity to ts-infra consumer lifecycle events"
 status: done
 template: feature-impl
 created_at: 2026-08-19T15:25:16.660Z
-updated_at: "2026-08-19T19:45:02.981Z"
+updated_at: "2026-08-22T00:15:15.874Z"
 feature_id: J9
 priority: P2
 tags: ["system-events", "queue", "ts-infra", "cross-repo"]
@@ -107,7 +107,7 @@ Store the bus only together with its validated name (an internal object/tuple is
 - [x] 8. R5 — Confirm the aggregate Publish run and npm version, then use Spur's CLI-owned section-update path to record the ts-libs implementation/release commits, tag/version, workflow evidence, and checks. Mark 0602 done only after publication; 0601 then consumes the recorded version.
 ### Solution
 Implemented in `/Users/robin/xprojects/ts-libs` on branch `feat/0602-queue-identity`, commit `75f943d`.
-Spur-side assignment of this fact to the upstream producer is `docs/00_ADR.md:834-838` (ADR-068).
+Spur-side assignment of this fact to the upstream producer is `docs/00_ADR.md:884-892` (ADR-068).
 
 **Change map (external ts-libs evidence — ADR-062 form):**
 - @gobing-ai/ts-infra `src/job-queue/types.ts` line 69 — `queueName?: string` on `QueueConsumerConfig`; JSDoc states runtime-required whenever `events` is configured; validated, never normalized.
