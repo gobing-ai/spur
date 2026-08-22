@@ -384,7 +384,9 @@ async function computeSummaryExtras(
         (async () => {
             if (previousSel === null) return null;
             if (exact) return await previousExactKpis(db, previousSel);
-            return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, bucket, dimension));
+            // Bounded previous-window KPIs: fixed daily bucket + model projection keeps the
+            // read on history_daily_stats regardless of the active (possibly sub-day) bucket.
+            return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, '1d', 'model'));
         })(),
         (async () => {
             if (dimension === 'skill') return activeBuckets ?? [];

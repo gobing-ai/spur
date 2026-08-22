@@ -10,7 +10,6 @@ import type {
     StepRow,
     ToolRollupRow,
 } from './forensic-query';
-import { bucketedTokenSeries } from './forensic-query';
 
 const MESSAGE_DEDUP = `(m.rowid IN (
     SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
@@ -476,7 +475,7 @@ interface WhereSpec {
 function buildRollupWhere(
     sel: ArtifactSelector,
     alias: string,
-    options: { timestamp: string; dateOnly?: boolean; toolFields?: boolean },
+    options: { timestamp: string; dateOnly?: boolean; toolFields?: boolean; skillOnly?: boolean },
 ): WhereSpec {
     const clauses: string[] = [];
     const params: unknown[] = [];
@@ -507,6 +506,9 @@ function buildRollupWhere(
     if (options.toolFields && sel.skills !== null && sel.skills !== undefined && sel.skills.length > 0) {
         clauses.push(`${alias}.skill_name IN (${sel.skills.map(() => '?').join(', ')})`);
         params.push(...sel.skills);
+    }
+    if (options.skillOnly) {
+        clauses.push(`${alias}.skill_name <> ''`);
     }
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
@@ -539,7 +541,7 @@ export async function historyBoardSummaryFromRollup(
     const useDaily = bucket === '1d' && (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
     const aggregateTable = useDaily ? 'history_daily_stats' : filteredTokenTable(sel);
     const aggregateIsTool = aggregateTable === 'history_board_tool_5m';
-    const seriesTable = dimension === 'tool' ? 'history_board_tool_5m' : aggregateTable;
+    const seriesTable = dimension === 'tool' || dimension === 'skill' ? 'history_board_tool_5m' : aggregateTable;
     const seriesIsTool = seriesTable === 'history_board_tool_5m';
     const aggregateWhere = buildRollupWhere(sel, 'r', {
         timestamp: useDaily ? 'day' : 'bucket_start',
@@ -551,8 +553,16 @@ export async function historyBoardSummaryFromRollup(
         timestamp: seriesUsesDaily ? 'day' : 'bucket_start',
         dateOnly: seriesUsesDaily,
         toolFields: seriesIsTool,
+        skillOnly: dimension === 'skill',
     });
-    const seriesKey = dimension === 'model' ? 'r.model' : dimension === 'source' ? 'r.source' : 'r.tool_name';
+    const seriesKey =
+        dimension === 'model'
+            ? 'r.model'
+            : dimension === 'source'
+              ? 'r.source'
+              : dimension === 'skill'
+                ? 'r.skill_name'
+                : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
     const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
                          SUM(r.cache_read_tokens) AS cacheReadTokens,
@@ -570,18 +580,13 @@ export async function historyBoardSummaryFromRollup(
     const toolTable = allTimeTools ? 'history_board_tool_stats' : 'history_board_tool_5m';
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
     const [buckets, models, sources, tools, skills, sessionCount] = await Promise.all([
-        // Skill attribution is live-only: the 5m tool split (tokens / tools_in_message) cannot
-        // reproduce the live skill view (tokens / skill links), so the skill series reads the
-        // same live attribution query as the un-refreshed path — equality by construction.
-        dimension === 'skill'
-            ? bucketedTokenSeries(db, sel, bucket, 'skill')
-            : db.queryAll<BucketedTokenRow>(
-                  `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${tokenSelect}
-                   FROM ${seriesTable} r
-                   ${seriesWhere.where}
-                   GROUP BY bucketStart, key ORDER BY bucketStart ASC`,
-                  ...seriesWhere.params,
-              ),
+        db.queryAll<BucketedTokenRow>(
+            `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${tokenSelect}
+             FROM ${seriesTable} r
+             ${seriesWhere.where}
+             GROUP BY bucketStart, key ORDER BY bucketStart ASC`,
+            ...seriesWhere.params,
+        ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.model AS key, ${tokenSelect} FROM ${aggregateTable} r
              ${aggregateWhere.where} GROUP BY r.model ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,

@@ -874,8 +874,11 @@ export async function bucketedTokenSeries(
     const folded = withMessageDedup(wm.where);
 
     if (dim === 'tool' || dim === 'skill') {
-        const skillPredicate = dim === 'skill' ? `AND ${HISTORY_SKILL_NAME_SQL} <> ''` : '';
+        // Allocation is canonical: a message's tokens divide across ALL linked tool calls,
+        // and skill rows are selected only after that division — matching how
+        // history_board_tool_5m was materialized so fresh and stale results stay equal.
         const keyExpr = dim === 'tool' ? 'tc.tool_name' : HISTORY_SKILL_NAME_SQL;
+        const outerSkillFilter = dim === 'skill' ? "WHERE key <> ''" : '';
         return db.queryAll<BucketedTokenRow>(
             `WITH linked AS (
                  SELECT ${bucketExpr} AS bucketStart, ${keyExpr} AS key,
@@ -885,13 +888,14 @@ export async function bucketedTokenSeries(
                         COUNT(*) OVER (PARTITION BY m.record_hash) AS links
                  FROM history_message m
                  JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                 ${folded} ${skillPredicate}
+                 ${folded}
              )
              SELECT bucketStart, key,
                     SUM(CAST(freshInputTokens AS REAL) / links) AS freshInputTokens,
                     SUM(CAST(cacheReadTokens AS REAL) / links) AS cacheReadTokens,
                     SUM(CAST(outputTokens AS REAL) / links) AS outputTokens
              FROM linked
+             ${outerSkillFilter}
              GROUP BY bucketStart, key
              ORDER BY bucketStart ASC`,
             ...params,

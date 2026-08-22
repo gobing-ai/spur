@@ -77,7 +77,7 @@ interface ToolCall {
     args_digest?: string | null;
     args_raw?: string | null;
     status: string;
-    duration_ms: number | null;
+    duration_ms?: number | null;
 }
 
 async function insertToolCall(db: DbAdapter, t: ToolCall): Promise<void> {
@@ -317,6 +317,75 @@ describe('forensic-query history live extensions (task 0628)', () => {
         const skillRows = await bucketedTokenSeries(db, skillSel, '1d', 'model');
         expect(skillRows.length).toBe(1);
         expect(skillRows[0]?.key).toBe('gpt-5.6-sol');
+    });
+
+    test('skill series divides tokens across ALL linked tool calls before selecting skill rows (canonical allocation)', async () => {
+        const db = await setup();
+        // One message with a non-skill and a skill tool call: tokens split 50/50.
+        await insertMessage(db, {
+            record_hash: 'mx-1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T12:00:00Z',
+            model: 'gpt-5',
+            input: 100,
+            cache_read: 40,
+            output: 60,
+            source: 'claude',
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc-mx-1',
+            message_hash: 'mx-1',
+            session_id: 's1',
+            seq: 1,
+            tool_name: 'Read',
+            args_raw: '{"file": "a.ts"}',
+            status: 'success',
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc-mx-2',
+            message_hash: 'mx-1',
+            session_id: 's1',
+            seq: 2,
+            tool_name: 'skill',
+            args_raw: '{"skill": "sp-code-testing"}',
+            status: 'success',
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc-mx-3',
+            message_hash: 'mx-1',
+            session_id: 's1',
+            seq: 3,
+            tool_name: 'skill',
+            args_raw: null, // blank skill name must stay excluded
+            status: 'success',
+        });
+
+        const sel: ArtifactSelector = {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        };
+        const rows = await bucketedTokenSeries(db, sel, '1d', 'skill');
+        // 3 linked calls -> the skill row carries one third of the message tokens.
+        expect(rows).toEqual([
+            {
+                bucketStart: '2026-06-01',
+                key: 'sp-code-testing',
+                freshInputTokens: 100 / 3,
+                cacheReadTokens: 40 / 3,
+                outputTokens: 60 / 3,
+            },
+        ]);
+        // Blank-skill and non-skill rows are excluded; tool dimension still sees all 3 tools.
+        const toolRows = await bucketedTokenSeries(db, sel, '1d', 'tool');
+        expect(toolRows.map((r) => r.key).sort()).toEqual(['Read', 'skill']);
     });
 
     test('sessionTimeline returns chronological event stream', async () => {

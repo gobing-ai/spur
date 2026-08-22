@@ -1,10 +1,10 @@
 # History Data Processing Architecture — Ingestion, Materialization, and Query Plane
 
 **Document Version:** 1.0.0  
-**Status:** Approved / Authoritative Design  
+**Status:** Design (current-tree corrected; task 0632 R4)  
 **Date:** 2026-08-22  
-**Owner:** Spur Architecture (Feature E9 / ADR-014, ADR-021)  
-**Corpus Scale:** 1.72M+ messages, 440K+ tool calls, 2.1M+ ledger rows, ~3.8GB SQLite store.
+**Owner:** Spur Architecture (Feature E9)  
+**Corpus Scale (measured 2026-08-22 on `.spur/spur.db`, task 0632 evidence):** 1,724,061 messages; 441,117 tool calls; 60,218 `history_board_tool_5m` rows.
 
 ---
 
@@ -35,36 +35,43 @@ graph TD
 
     subgraph Serving Plane ["3. Serving Plane (LiveHistoryBoardService)"]
         R_META --> GATE{Freshness Gate}
-        GATE -- Fresh --> FAST[Precalculated Rollup Queries <50ms]
-        GATE -- Stale/Custom --> RAW[Raw SQL Fallback with Index Scans]
+        GATE -- Fresh & unfiltered --> FAST[Precalculated Rollup Queries]
+        GATE -- Stale or tool/skill-filtered --> RAW[Raw Forensic Fallback, same canonical allocation]
         FAST & RAW --> ORPC[oRPC History API Router]
         ORPC --> WEB[Spur Board 5-Tab UI]
     end
 ```
 
 ### Core Invariants
-1. **Dual-Tier Storage Architecture:** Raw forensic logs (`history_message`, `history_tool_call`) are immutable and append-only. Materialized read models (`history_board_*`) are derived projections regenerated during `spur history analyze`.
+1. **Dual-Tier Storage Architecture:** Raw forensic logs (`history_message`, `history_tool_call`) are append-only during incremental imports, but a full-mode import runs reconciliation that **deletes stale rows** no longer present in the source files — raw history is curated, not immutable. Materialized read models (`history_board_*`) are derived projections fully deleted and regenerated during `spur history analyze`.
 2. **Sub-50ms Serving SLA:** Web UI endpoints (`getSummary`, `getInsights`, `getSessions`, `getSources`, `getTimeline`) must execute in under 50ms against multi-gigabyte databases by querying materialized tables.
-3. **Pure-Token Accounting Contract:** All storage, DTOs, analytics functions, and UI components record and display pure token counts (`freshInputTokens`, `cacheReadTokens`, `outputTokens`, `billedTokens`). Zero currency, pricing, or dollar conversions exist in the codebase.
+3. **Accounting Boundary:** Forensic storage and analyze artifacts retain currency (`history_message.cost_usd`, `costUsd` in analyzer rows). The **History Board transport DTOs** are pure-token (`freshInputTokens`, `cacheReadTokens`, `outputTokens`, `billedTokens`) and carry no currency, pricing, or dollar conversion. "Pure token" applies to the Board surface only.
 4. **Idempotent Ingestion & Versioned Rollups:** Checkpoint-based resumption ensures re-running imports or analyses produces identical, deterministic state without duplicate counts.
 
 ---
 
 ## 2. Ingestion Plane (`spur history import`)
 
-### 2.1 Supported Coding Agent Roots & Match Patterns
+### 2.1 Source Catalogs: Importer vs Board
 
-| Agent ID | Name | Default Discovery Path | File Match Pattern | Streaming Mode |
-| :--- | :--- | :--- | :--- | :--- |
-| `claude` | Claude Code | `~/.claude/projects/` | `**/*.jsonl` | Line checkpoint |
-| `codex` | OpenAI Codex | `~/.codex/sessions/` | `**/*.jsonl` | Line checkpoint |
-| `antigravity` | Antigravity CLI | `~/.gemini/antigravity-cli/brain/` | `**/transcript.jsonl` | Step / line checkpoint |
-| `omp` | OMP | `~/.omp/logs/` | `**/*.jsonl` | Line checkpoint |
-| `openclaw` | OpenClaw | `~/.openclaw/history/` | `**/*.jsonl` | Line checkpoint |
-| `hermes` | Hermes | `~/.hermes/sessions/` | `**/*.jsonl` | Line checkpoint |
-| `grok` | Grok Build | `~/.grok/logs/` | `**/*.jsonl` | Line checkpoint |
-| `opencode` | OpenCode | `~/.local/share/opencode/` | `opencode.db` / `*.jsonl` | SQLite / JSONL mapper |
-| `pi` | Pi | `~/.pi/transcripts/` | `**/*.jsonl` | Line checkpoint |
+Two distinct catalogs exist and must not be conflated:
+
+**Importer source ids (10)** — `SOURCE_DEFINITIONS` in `@gobing-ai/ts-llm-jsonl-importer@0.4.41` (`src/sources.ts`):
+
+| Source ID | Name | Discovery Roots (relative to home) | Match Pattern |
+| :--- | :--- | :--- | :--- |
+| `pi` | Pi | `.pi/agent/sessions` | `*.jsonl` |
+| `claude` | Claude Code | `.claude/projects` | `*.jsonl` |
+| `codex` | Codex | `.codex/sessions` | `*.jsonl` |
+| `omp` | OMP | `.omp/agent/sessions` | `*.jsonl` |
+| `grok` | Grok Build | `.grok/sessions` | `*.jsonl` |
+| `agy` | Antigravity CLI | `.gemini/antigravity-cli/brain` | `*.jsonl` (corrupt lines skipped) |
+| `gemini` | Gemini CLI | `.gemini/tmp`, `.config/gemini` | `*.jsonl` |
+| `opencode` | OpenCode | `.opencode`, `.local/share/opencode` | `*.jsonl` |
+| `antigravity` | Antigravity | `.antigravity` | `*.jsonl` |
+| `openclaw` | OpenClaw | `.openclaw` | `*.jsonl` |
+
+**Board card catalog (9)** — `AGENT_CATALOG` in `packages/app/src/services/history-board-service.ts`: `claude`, `codex`, `agy`, `omp`, `openclaw`, `hermes`, `grok`, `opencode`, `pi`. The Board renders nine agent cards; the importer ingests ten source ids. The sets differ (importer has `gemini`/`antigravity`, Board has `hermes`), so neither count substitutes for the other.
 
 ### 2.2 Deduplication and Checkpoint Architecture
 
@@ -88,12 +95,12 @@ sequenceDiagram
     end
 ```
 
-1. **`history_import_checkpoint` Table:**
-   - Tracks `(source, file_path)` with `file_hash`, `last_imported_line`, `last_imported_byte`, and `updated_at`.
-   - Enables fast resumption: files with unmodified `(mtime, size)` are skipped instantly.
-2. **`history_import_ledger` Table:**
-   - Primary key: `record_hash` (SHA-256 of canonical message contents).
-   - Prevents duplicate message ingestion even across renamed files or re-imported directories.
+1. **`history_import_checkpoint` Table (actual DDL, importer `src/schema-sql.ts`):**
+   - Columns: `source`, `source_file`, `last_imported_line`, `updated_at`; primary key `(source, source_file)`.
+   - There is **no** `file_hash` or `last_imported_byte` column. Resumption is by imported line count.
+2. **`history_import_ledger` Table (actual DDL):**
+   - Columns: `record_hash` (primary key), `source`, `source_file`, `source_line`, `split_index`, `target_table`, `imported_at`.
+   - Prevents duplicate ingestion even across renamed files or re-imported directories.
 3. **`request_id` Deduplication:**
    - Streaming LLM APIs emit multiple lines sharing one `request_id`.
    - The query plane applies `(m.rowid IN (SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id) OR m.request_id IS NULL)` to fold streaming duplicates into a single billable event.
@@ -102,7 +109,7 @@ sequenceDiagram
 
 ## 3. Materialization Plane (`spur history analyze`)
 
-The materialization plane runs at the conclusion of `spur history analyze` or `spur history daily`. It transforms 1.7M+ raw rows into compact, indexed rollup tables.
+The single refresh choke point is `refreshHistoryRollups(db)` (`packages/app/src/services/history-analysis-service.ts`), invoked at the end of `HistoryService.analyze()` — which `spur history analyze` and the `spur history daily` pipeline both route through. It is a no-op when `historyBoardRollupsFresh(db)` reports the stored version current; otherwise it fully deletes and rebuilds every `history_board_*` / `history_daily_stats` table via `replaceHistoryBoardRollups`.
 
 ```mermaid
 graph LR
@@ -133,16 +140,16 @@ graph LR
 | Table Name | Row Count (1.7M Corpus) | Key Granularity | Purpose & Query Consumer |
 | :--- | :---: | :--- | :--- |
 | `history_board_rollup_meta` | 1 | `id = 1` | Stores `history_version` hash and `refreshed_at` timestamp for instant freshness check. |
-| `history_daily_stats` | ~1,300 | `(source, model, day)` | Daily token breakdown for Summary Tab and period delta comparisons. |
-| `history_board_message_5m` | ~48,000 | `(bucket_start, session_id, source, model)` | High-resolution sub-day time series for dynamic bucket aggregation (5m, 10m, 30m, 1h, 4h, 1d). |
-| `history_board_tool_5m` | ~60,000 | `(bucket_start, session_id, source, model, tool, skill)` | Precalculated tool and skill temporal token attribution. |
-| `history_board_session_stats` | ~4,000 | `(source, session_id)` | Pre-aggregated session records (started, duration, tokens, messages, top tool, state) for Sessions Tab & Timeline roster. |
-| `history_board_model_stats` | ~80 | `(model)` | All-time model comparison metrics (speed, cache hit %, error rate, output ratio). |
-| `history_board_tool_stats` | ~250 | `(tool_name, skill_name)` | All-time tool and skill call counts and error aggregates for Summary Tab. |
-| `history_board_loop_findings` | ~6,500 | `(source, session_id, tool, args_digest)` | Pre-computed tool execution loop findings (repeats ≥ 3) for Insights Tab. |
-| `history_board_ranked_steps` | ~3,000 | `(kind, rank)` | Top 1,000 ranked steps by `tokens`, `duration`, and `cache-waste` for Insights Tab. |
-| `history_board_source_stats` | 9 | `(source)` | All-time file count, session count, token totals, and date spans per agent for Sources Tab. |
-| `history_board_source_daily` | ~520 | `(source, day)` | 90-day daily token activity matrix powering GitHub-style calendar heatmaps. |
+| `history_daily_stats` | (per source/model/day; no recorded count) | `(source, model, day)` | Daily token breakdown for Summary Tab and period delta comparisons. |
+| `history_board_message_5m` | (no recorded count) | `(bucket_start, session_id, source, model)` | High-resolution sub-day time series for dynamic bucket aggregation (5m, 10m, 30m, 1h, 4h, 1d). |
+| `history_board_tool_5m` | 60,218 (measured, task 0632) | `(bucket_start, session_id, source, model, tool, skill)` | Precalculated tool and skill temporal token attribution. |
+| `history_board_session_stats` | (no recorded count) | `(source, session_id)` | Pre-aggregated session records (started, duration, tokens, messages, top tool, state) for Sessions Tab & Timeline roster. |
+| `history_board_model_stats` | (no recorded count) | `(model)` | All-time model comparison metrics (speed, cache hit %, error rate, output ratio). |
+| `history_board_tool_stats` | (no recorded count) | `(tool_name, skill_name)` | All-time tool and skill call counts and error aggregates for Summary Tab. |
+| `history_board_loop_findings` | (no recorded count) | `(source, session_id, tool, args_digest)` | Pre-computed tool execution loop findings (repeats ≥ 3) for Insights Tab. |
+| `history_board_ranked_steps` | (no recorded count) | `(kind, rank)` | Top 1,000 ranked steps by `tokens`, `duration`, and `cache-waste` for Insights Tab. |
+| `history_board_source_stats` | one per imported source (no recorded count) | `(source)` | All-time file count, session count, token totals, and date spans per agent for Sources Tab. |
+| `history_board_source_daily` | (no recorded count) | `(source, day)` | 90-day daily token activity matrix powering GitHub-style calendar heatmaps. |
 
 ### 3.2 Freshness Detection Protocol
 
@@ -182,53 +189,58 @@ graph TD
     end
 ```
 
-### 4.2 Latency Benchmark Matrix (1.72M Messages Corpus)
+### 4.1.1 Summary Skill Series and Previous Window (task 0632)
 
-| Endpoint / Operation | Un-Optimized Raw Scan | Optimized Rollup Query | Speedup Factor |
-| :--- | :---: | :---: | :---: |
-| **`getSummary` (Model Dimension)** | 1,475.2 ms | **12.4 ms** | **119x** |
-| **`getSummary` (Skill Dimension / Extras)** | 18,795.8 ms | **23.3 ms** | **806x** |
-| **`getInsights` (Loops, Waste, Radar)** | 25,400.0 ms | **84.1 ms** | **302x** |
-| **`getSessions` (Page 1, 20 Rows)** | 4,490.0 ms | **1.5 ms** | **2,993x** |
-| **`getSessions` (100-Row Timeline Roster)** | 5,120.0 ms | **1.2 ms** | **4,266x** |
-| **`getSources` (9-Agent Heatmaps & Stats)** | 12,300.0 ms | **3.0 ms** | **4,100x** |
-| **`getTimeline` (Single Session Traces)** | 61.4 ms | **7.3 ms** | **8.4x** |
+- Both `tool` and `skill` Summary series read `history_board_tool_5m` (`r.tool_name` / `r.skill_name`; the skill branch excludes `skill_name = ''`). A fresh, unfiltered Summary never touches the raw tables for any dimension.
+- **Canonical allocation:** a message's tokens divide across **all** linked tool calls, and skill rows are selected only after that division. The stale/missing-rollup fallback (`bucketedTokenSeries(..., 'skill')` in `forensic-query.ts`) applies the same order of operations, so fresh and stale results stay numerically equal.
+- **Previous-window KPIs** always call `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')`, so they read the bounded `history_daily_stats` projection regardless of the active bucket (24h/7d requests no longer re-aggregate 5-minute rows).
+- The freshness gate itself (`historyBoardHistoryVersion`) may read a single `history_message` row (`ORDER BY rowid DESC LIMIT 1`) only when no import checkpoint exists; it is a one-row probe, never a scan.
+
+### 4.2 Measured Latency Evidence
+
+Only numbers tied to recorded evidence are stated. Measured 2026-08-22 on the `.spur/spur.db` corpus above (task 0632 background):
+
+| Operation | Latency | Evidence |
+| :--- | :---: | :--- |
+| Fresh 30-day model Summary, skill extras on the **live skill scan** (pre-0632) | 26,217 ms | task 0632 background measurement |
+| Equivalent `history_board_tool_5m` skill aggregation | 19.7 ms | task 0632 background measurement |
+
+Task 0633 owns end-to-end refresh and per-endpoint latency regression evidence; numbers without a recorded command/corpus/date must not be added here.
 
 ---
 
 ## 5. Database Indexing & Maintenance Strategy
 
-### 5.1 Complete Index Catalog
+### 5.1 Index Catalog (mirrors `packages/domain/src/migrations.ts`)
 
 ```sql
--- 1. Raw Message and Tool Call Indexes
+-- Raw-plane indexes
 CREATE INDEX IF NOT EXISTS idx_history_message_session_id_seq ON history_message (session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_history_message_source_ts ON history_message (source, ts);
 CREATE INDEX IF NOT EXISTS idx_history_message_model_ts ON history_message (model, ts);
 CREATE INDEX IF NOT EXISTS idx_history_message_duration_rank ON history_message (duration_ms DESC) WHERE role = 'assistant' AND duration_ms IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_history_message_token_rank ON history_message ((COALESCE(input_tokens, 0) + COALESCE(cache_read_tokens, 0)) DESC) WHERE role = 'assistant';
 CREATE INDEX IF NOT EXISTS idx_history_message_input_rank ON history_message (input_tokens DESC) WHERE role = 'assistant';
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_session_id_seq ON history_tool_call (session_id, seq);
 
-CREATE INDEX IF NOT EXISTS idx_history_tool_call_session_seq ON history_tool_call (session_id, seq);
-CREATE INDEX IF NOT EXISTS idx_history_tool_call_message_hash ON history_tool_call (message_hash);
-CREATE INDEX IF NOT EXISTS idx_history_tool_call_tool_name ON history_tool_call (tool_name);
-
--- 2. Materialized Rollup Indexes
+-- Rollup-plane indexes
 CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_source ON history_board_message_5m (source, bucket_start);
 CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_model ON history_board_message_5m (model, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_session ON history_board_message_5m (session_id, source);
 CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_bucket_model ON history_board_message_5m (bucket_start, model);
-
 CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_source ON history_board_tool_5m (source, bucket_start);
 CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_model ON history_board_tool_5m (model, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_tool ON history_board_tool_5m (tool_name, bucket_start);
 CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_skill ON history_board_tool_5m (skill_name, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_session ON history_board_tool_5m (session_id, source);
 CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_bucket_skill ON history_board_tool_5m (bucket_start, skill_name);
-
 CREATE INDEX IF NOT EXISTS idx_history_board_session_started ON history_board_session_stats (started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_history_board_session_started_source ON history_board_session_stats (started_at DESC, source);
 CREATE INDEX IF NOT EXISTS idx_history_board_session_model ON history_board_session_stats (model, started_at DESC);
-
+CREATE INDEX IF NOT EXISTS idx_history_board_session_source_started ON history_board_session_stats (source, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_history_board_ranked_steps_filter ON history_board_ranked_steps (kind, source, model, ts);
 ```
+
+There is no `history_tool_call (message_hash)` or `(tool_name)` index in the current tree; tool-call joins ride the primary-key/rowid paths plus the session-leading index above.
 
 ### 5.2 Storage Maintenance & Retention
 - **Retention Job (`runRetention`):** Automatically cleans up stale evaluation logs and import ledger checkpoints older than 90 days during `spur history daily`.
@@ -240,7 +252,7 @@ CREATE INDEX IF NOT EXISTS idx_history_board_ranked_steps_filter ON history_boar
 ## 6. Architectural Evolution & Verification
 
 - **Task Traceability:** Feature E9 establishes and enforces the performance boundaries documented here.
-- **Verification Gates:** Continuous integration runs automated latency assertions ensuring all History Board oRPC procedures complete within their <50ms SLA targets.
+- **Verification Gates:** `packages/app/tests/services/history-board-service.test.ts` asserts all six endpoints respond in <50 ms on a seeded corpus; production-scale latency evidence is owned by task 0633.
 - **Reference Code Locations:**
   - Ingestion Engine: `packages/app/src/services/history-service.ts` & `@gobing-ai/ts-llm-jsonl-importer`
   - Forensic Query & Materialization: `packages/domain/src/analytics/history-board-rollup.ts` & `forensic-query.ts`

@@ -3,6 +3,7 @@ import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { ArtifactSelector } from '../../src/analytics/artifact';
 import type { MessageRollupRow, StepRow, ToolRollupRow } from '../../src/analytics/forensic-query';
+import { bucketedTokenSeries } from '../../src/analytics/forensic-query';
 import {
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
@@ -543,18 +544,29 @@ describe('historyBoardSummaryFromRollup', () => {
         const db = await setup();
         await seedCorpusAndRefresh(db);
         const summary = await historyBoardSummaryFromRollup(db, ALL, '5m', 'skill');
-        // Skill series reads the live attribution query: each skill row carries the full
-        // message tokens (links are counted after the skill predicate), matching the
-        // un-refreshed path exactly.
+        // Canonical allocation: the message's tokens divide across BOTH linked tool calls
+        // (Read + skill), and the skill row is selected after that division.
         expect(summary.buckets).toEqual([
             {
                 bucketStart: '2026-06-01 09:55:00',
                 key: 'sp-code-testing',
-                freshInputTokens: 100,
-                cacheReadTokens: 900,
-                outputTokens: 50,
+                freshInputTokens: 50,
+                cacheReadTokens: 450,
+                outputTokens: 25,
             },
         ]);
+    });
+
+    test('skill series from the rollup is numerically equal to the aligned live fallback on a mixed tool/skill message', async () => {
+        const db = await setup();
+        await seedCorpusAndRefresh(db);
+        const rollup = await historyBoardSummaryFromRollup(db, ALL, '5m', 'skill');
+        const live = await bucketedTokenSeries(db, ALL, '5m', 'skill');
+        expect(rollup.buckets).toEqual(live);
+        // Both exclude blank skill names: only the sp-code-testing row exists.
+        expect(rollup.buckets.map((b) => b.key)).toEqual(['sp-code-testing']);
+        // Mixed message s1-a1 has 2 tool calls, so the skill row carries half its tokens.
+        expect(rollup.buckets[0]).toMatchObject({ freshInputTokens: 50, outputTokens: 25 });
     });
 
     test('tool filter switches aggregates to the tool read model; sessions keep counting sessions', async () => {

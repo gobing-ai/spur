@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyCliMigrations, CLI_SCHEMA_SQL } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { refreshHistoryRollups } from '../../src/services/history-analysis-service';
 import { LiveHistoryBoardService } from '../../src/services/history-board-service';
 
 async function setupTestDb(): Promise<DbAdapter> {
@@ -109,6 +110,85 @@ describe('LiveHistoryBoardService', () => {
         expect(summary.topTools.length).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.hitRatio).toBeGreaterThan(0);
         expect(summary.previousKpis).not.toBeNull();
+    });
+
+    test('fresh unfiltered Summary across all four dimensions reads only rollup tables (no raw scans)', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 6);
+        // Add a mixed message: one non-skill and one skill tool call on the same message.
+        const mixedTs = new Date(Date.now() - 3600_000).toISOString();
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            'msg-skill-mixed',
+            'claude',
+            'test.jsonl',
+            1,
+            'sess-1',
+            99,
+            50,
+            'assistant',
+            'message',
+            'ok',
+            mixedTs,
+            'claude-opus-4.6',
+            300,
+            90,
+            100,
+            'agent',
+            100,
+            '2026-06-01T00:00:00Z',
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+             VALUES ('tc-mixed-1', 'msg-skill-mixed', 'claude', 'test.jsonl', 1, 'sess-1', 1, 'Read', 'h1',
+                     '{"file": "a.ts"}', 'success', 10, '2026-06-01T00:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+             VALUES ('tc-mixed-2', 'msg-skill-mixed', 'claude', 'test.jsonl', 1, 'sess-1', 2, 'skill', 'h2',
+                     '{"skill": "sp-code-testing"}', 'success', 20, '2026-06-01T00:00:00Z')`,
+        );
+        const refreshed = await refreshHistoryRollups(db);
+        expect(refreshed.status).toBe('refreshed');
+
+        const queries: string[] = [];
+        const recording: DbAdapter = new Proxy(db, {
+            get(target, prop) {
+                const value = Reflect.get(target, prop, target);
+                if (typeof prop === 'string' && ['queryAll', 'queryFirst', 'run', 'exec'].includes(prop)) {
+                    return (sql: string, ...params: unknown[]) => {
+                        queries.push(sql);
+                        return (value as (...args: unknown[]) => unknown).call(target, sql, ...params);
+                    };
+                }
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+
+        const svc = new LiveHistoryBoardService({ db: recording });
+        for (const dimension of ['model', 'source', 'tool', 'skill'] as const) {
+            const summary = await svc.getSummary({ range: '24h', bucket: '10m', dimension });
+            expect(summary.kpis.totalBilledTokens).toBeGreaterThan(0);
+            expect(summary.skillTimeSeries).toBeDefined();
+            expect(summary.previousKpis).not.toBeNull();
+            expect(summary.kpiTrend.length).toBe(30);
+        }
+        // Skill extras appear for non-skill dimensions too, from the rollup.
+        const modelSummary = await svc.getSummary({ range: '24h', bucket: '10m', dimension: 'model' });
+        const allSeries = modelSummary.skillTimeSeries.flatMap((p) => Object.keys(p.series));
+        expect(allSeries).toContain('sp-code-testing');
+
+        // The only tolerated raw-table reference is the freshness version probe: a
+        // single-row `ORDER BY rowid DESC LIMIT 1` read, never a scan or aggregate.
+        const rawReads = queries.filter(
+            (sql) => /history_message|history_tool_call/.test(sql) && !sql.includes('ORDER BY rowid DESC LIMIT 1'),
+        );
+        expect(rawReads).toEqual([]);
     });
 
     test('getTimeline returns session metadata and blocks', async () => {
