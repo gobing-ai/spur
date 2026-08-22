@@ -18,6 +18,7 @@
     },
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:0.3.57",
+        "@gobing-ai/spur-contracts": "workspace:*",
         "@gobing-ai/spur-domain": "workspace:0.3.57",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-db": "catalog:",

@@ -13,7 +13,7 @@ tags: ["bug"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T00:57:56.579Z"
-updated_at: "2026-08-18T04:41:11.074Z"
+updated_at: "2026-08-22T03:48:11.602Z"
 done_forced: "true"
 ---
 
@@ -245,7 +245,7 @@ solved the same shape once for process spawning (`setDetachedServeSpawnForTests`
 - `packages/app/src/services/project-registry.ts:40-100`: Added `PortProbeResult` type (`'available' | 'in-use' | 'denied'`), `PortProbe` function type, `classifyPortBindError(err: unknown)`, `probePort(port: number)`, `portBindingAvailable()`, and `setPortProbeForTests(probe: PortProbe | undefined)`.
 - `packages/app/src/services/project-registry.ts:101-140`: Updated `isPortAvailable` to evaluate `(await probePort(port)) === 'available'` and `isPortLive` to consult `testPortProbe` when set.
 - `packages/app/src/services/project-registry.ts:367-390`: Updated `allocatePort` to track probe outcomes and throw permission-denied error when all candidate probes are `denied`, preserving the band exhaustion error when at least one port is in use / claimed.
-- `packages/app/src/index.ts:245-252`: Re-exported `PortProbe`, `PortProbeResult`, `classifyPortBindError`, `portBindingAvailable`, `probePort`, `setPortProbeForTests`.
+- `packages/app/src/index.ts:253-264`: Re-exported `PortProbe`, `PortProbeResult`, `classifyPortBindError`, `portBindingAvailable`, `probePort`, `setPortProbeForTests`.
 - `packages/app/tests/services/project-registry.test.ts`: Added unit tests for `classifyPortBindError`, `probePort`, `allocatePort` (all-denied vs in-use), `setPortProbeForTests` seam reset. Gated the 4 Bucket-A tests with `portBindingAvailable()` and printed skip reason with CI-dependency documentation.
 - `packages/app/tests/services/project-start.test.ts`: Converted 7 tests to use `setPortProbeForTests` and deleted socket `listen(0)` binds.
 - `apps/cli/tests/commands/projects.test.ts`: Converted 4 tests to use `setPortProbeForTests` and deleted socket `listen(0)` binds.

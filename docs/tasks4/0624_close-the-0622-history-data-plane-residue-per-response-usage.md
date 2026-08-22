@@ -4,7 +4,7 @@ name: "Close the 0622 history data-plane residue: per-response usage dedup, clau
 status: done
 template: standard
 created_at: 2026-08-21T14:23:09.970Z
-updated_at: "2026-08-22T02:55:02.531Z"
+updated_at: "2026-08-22T03:48:11.870Z"
 feature_id: E5
 ---
 
@@ -296,10 +296,10 @@ to read.
 ### Solution
 | Req | Change | Where |
 | --- | --- | --- |
-| R4 | `antigravity` key fixed into `DEFERRED_SOURCES`; deferred-set sources report `deferred` (not `empty`) and emit no source-empty warning | `packages/app/src/services/history-service.ts:251`, status union `packages/domain/src/analytics/artifact.ts:47` |
+| R4 | `antigravity` key fixed into `DEFERRED_SOURCES`; deferred-set sources report `deferred` (not `empty`) and emit no source-empty warning | `packages/app/src/services/history-service.ts:251`, status union `packages/domain/src/analytics/artifact.ts:53` |
 | R3 | RETIRE ruling executed: migrations `0018` (add `history_message.request_id`) and `0019` (drop ten `history_etl_*` tables); `EtlPayload` deleted | `packages/domain/src/migrations.ts:462-466` |
 | R2 | claude `request_id`, tool `call_id`, `result_bytes`, assistant `model` persisted at import (ts-libs `62ef896`, npm `@gobing-ai/ts-llm-jsonl-importer@0.4.41`; claude `duration_ms` stays NULL) | upstream mappers/schema-sql/dao; consumer rename in `packages/app/src/services/history-service.ts` (`ClaudeUsagePayload`) |
-| R1 | per-response fold moved into SQL at `messageRollup`: keep `MIN(rowid)` per non-null `request_id` | `packages/domain/src/analytics/forensic-query.ts:155-165` |
+| R1 | per-response fold moved into SQL at `messageRollup`: keep `MIN(rowid)` per non-null `request_id` | `packages/domain/src/analytics/forensic-query.ts:180-190` |
 | R5 | run-dir session files join the import discovery set: `runSessionAugmentedRoots` augments registry default roots with `<cwd>/.spur/run/*/agent-sessions/<source|source-*>`; injectable `historyHome`/`cwd` for hermetic tests; explicit `--file`/`--root` bypass | `packages/app/src/services/history-service.ts:216-217,287-310,337-344` |
 | R5 tests | hermetic augmented-discovery + bypass tests | `packages/app/tests/services/history-service.test.ts` (`run-session discovery augmentation (0624 R5)` block) |
 ### Testing

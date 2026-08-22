@@ -97,14 +97,7 @@
             "reason": "Accepted backlog: L4.orphan-scenarios",
             "since": "2026-08-19"
         },
-        {
-            "kind": "feature",
-            "id": "E8",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "E8 is newly planned with linked tasks 0626–0629 intentionally still todo; remove this two-sided entry as their PASS verdicts land.",
-            "since": "2026-08-21"
-        },
+
         {
             "kind": "feature",
             "id": "F1",
@@ -14890,30 +14883,6 @@
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "task scenarios sit at finer altitude than feature E5 AC; DD-09 subset rule fires — pre-existing, feature AC not extended",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0626",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "E8 execution order is intentional: 0626 remains todo until prerequisite 0627 is done; remove this two-sided entry when the dependency completes.",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0628",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "E8 execution order is intentional: 0628 remains todo until prerequisite 0627 is done; remove this two-sided entry when the dependency completes.",
-            "since": "2026-08-21"
-        },
-        {
-            "kind": "task",
-            "id": "0629",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning",
-            "reason": "E8 execution order is intentional: 0629 remains todo until prerequisites 0627 and 0628 are done; remove this two-sided entry when the dependencies complete.",
             "since": "2026-08-21"
         }
     ]

@@ -55,6 +55,7 @@
         "@commander-js/extra-typings": "catalog:",
         "@gobing-ai/spur-app": "workspace:0.3.57",
         "@gobing-ai/spur-config": "workspace:0.3.57",
+        "@gobing-ai/spur-contracts": "workspace:0.3.57",
         "@gobing-ai/spur-server": "workspace:*",
         "@gobing-ai/spur-domain": "workspace:0.3.57",
         "@gobing-ai/ts-db": "catalog:",
