@@ -2,12 +2,21 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bumpVer, dropTags } from '../src/release-ops';
+import { bumpVer as runBumpVer, dropTags as runDropTags } from '../src/release-ops';
+import { createCapturedOutput } from './helpers';
 
 // Task 0617 R3: the test sibling the spur-dev release command never had. Every case drives
 // a throwaway git repo so the tag/push paths run against real git (a local bare "origin").
 
 const repos: string[] = [];
+
+function bumpVer(args: string[], repo: string): Promise<void> {
+    return runBumpVer(args, repo, createCapturedOutput());
+}
+
+function dropTags(args: string[], repo: string): Promise<void> {
+    return runDropTags(args, repo, createCapturedOutput());
+}
 
 function sh(cwd: string, cmd: string[]): string {
     const result = Bun.spawnSync(cmd, { cwd });
