@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -742,6 +742,67 @@ describe('HistoryService', () => {
                 expect(await provenanceOf(db)).toEqual([]);
             });
         });
+
+        describe('run-session discovery augmentation (0624 R5)', () => {
+            test('run-dir sessions join the discovery set when neither file nor root is given, and a mapping promotes them to spur-run', async () => {
+                const home = emptyRoot();
+                const cwd = emptyRoot();
+                const runId = 'run-r5';
+                const stem = '2026-08-20T10-00-00-000Z_0123456789abcdef';
+                const sessionDir = join(cwd, '.spur', 'run', runId, 'agent-sessions', 'omp');
+                mkdirSync(sessionDir, { recursive: true });
+                writeFileSync(
+                    join(sessionDir, `${stem}.jsonl`),
+                    `${JSON.stringify({
+                        type: 'session',
+                        version: 3,
+                        id: 'evt-1',
+                        timestamp: '2026-08-20T10:00:00.000Z',
+                        cwd,
+                    })}\n`,
+                );
+                const ctx = { ...makeCtx(), historyHome: home, cwd };
+                const db = await ctx.getDb();
+                await new RunSessionDao(db).insert({
+                    runId,
+                    source: 'omp',
+                    sessionId: stem,
+                    exactness: 'exact',
+                    mechanism: 'observed',
+                    resolvedAt: '2026-08-20T10:01:00.000Z',
+                });
+                const svc = new HistoryService(ctx);
+
+                const result = await svc.import('omp');
+
+                expect(result.scannedFiles).toBe(1);
+                const rows = await db.queryAll<{ session_id: string; provenance: string }>(
+                    'SELECT session_id, provenance FROM history_message',
+                );
+                expect(rows.length).toBeGreaterThanOrEqual(1);
+                expect(rows.every((r) => r.session_id === stem && r.provenance === 'spur-run')).toBe(true);
+            });
+
+            test('an explicit root bypasses run-dir augmentation (caller-directed scan)', async () => {
+                const home = emptyRoot();
+                const cwd = emptyRoot();
+                const runId = 'run-r5b';
+                const sessionDir = join(cwd, '.spur', 'run', runId, 'agent-sessions', 'omp');
+                mkdirSync(sessionDir, { recursive: true });
+                writeFileSync(
+                    join(sessionDir, 's.jsonl'),
+                    `${JSON.stringify({ type: 'session', version: 3, id: 'evt-2', timestamp: '2026-08-20T11:00:00.000Z', cwd })}\n`,
+                );
+                const ctx = { ...makeCtx(), historyHome: home, cwd };
+                const svc = new HistoryService(ctx);
+
+                const result = await svc.import('omp', { root: emptyRoot() });
+
+                expect(result.scannedFiles).toBe(0);
+                const rows = await (await ctx.getDb()).queryAll('SELECT 1 FROM history_message');
+                expect(rows.length).toBe(0);
+            });
+        });
     });
 
     describe('importAll degraded classification (0504 R2)', () => {
@@ -781,6 +842,76 @@ describe('HistoryService', () => {
             try {
                 const result = await svc.importAll({ sources: ['antigravity'], file, mode: 'full' });
                 const entry = result.entries.find((e) => e.source === 'antigravity');
+                expect(entry?.status).toBe('ok');
+                expect(result.exitCode).toBe(0);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    });
+
+    describe('importAll deferred classification (0624 R4)', () => {
+        test('a deferred-set source scanning 0 files is deferred, not empty, and emits no source-empty warning', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-deferred-'));
+            const svc = new HistoryService(makeCtx());
+            try {
+                // emptyRoot scans 0 files: antigravity is in DEFERRED_SOURCES → deferred
+                const result = await svc.importAll({ sources: ['antigravity'], root: dir, mode: 'incremental' });
+                const entry = result.entries.find((e) => e.source === 'antigravity');
+                expect(entry?.status).toBe('deferred');
+                expect(result.warnings.some((w) => w.code === 'source-empty' && w.source === 'antigravity')).toBe(
+                    false,
+                );
+                // deferred is not a failure: exit code stays 0
+                expect(result.exitCode).toBe(0);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('a non-deferred source scanning 0 files stays empty; analyze warns source-empty while deferred does not', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-empty-'));
+            const svc = new HistoryService(makeCtx());
+            try {
+                const result = await svc.importAll({ sources: ['pi'], root: dir, mode: 'incremental' });
+                const entry = result.entries.find((e) => e.source === 'pi');
+                expect(entry?.status).toBe('empty');
+
+                // buildWarnings runs in analyze: importCoverage entries drive source-empty.
+                const deferredDir = mkdtempSync(join(tmpdir(), 'spur-hist-empty2-'));
+                try {
+                    const deferredResult = await svc.importAll({
+                        sources: ['antigravity'],
+                        root: deferredDir,
+                        mode: 'incremental',
+                    });
+                    const analyzed = await svc.analyze(ALL, {
+                        importCoverage: [...result.entries, ...deferredResult.entries],
+                    });
+                    expect(analyzed.warnings.some((w) => w.code === 'source-empty' && w.source === 'pi')).toBe(true);
+                    expect(analyzed.warnings.some((w) => w.code === 'source-empty' && w.source === 'antigravity')).toBe(
+                        false,
+                    );
+                } finally {
+                    rmSync(deferredDir, { recursive: true, force: true });
+                }
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('a deferred-set source that imports records keeps its import-derived status (label, not gate)', async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'spur-hist-deferred-ok-'));
+            const file = join(dir, 'history.jsonl');
+            writeFileSync(
+                file,
+                `${JSON.stringify({ id: 'ok-1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello' })}\n`,
+            );
+            const svc = new HistoryService(makeCtx());
+            try {
+                // gemini is in DEFERRED_SOURCES but scans a file with valid records → ok
+                const result = await svc.importAll({ sources: ['gemini'], file, mode: 'full' });
+                const entry = result.entries.find((e) => e.source === 'gemini');
                 expect(entry?.status).toBe('ok');
                 expect(result.exitCode).toBe(0);
             } finally {
@@ -860,7 +991,7 @@ describe('HistoryService', () => {
                 expect(result.coverage.refreshed.sort()).toEqual(['agy', 'claude', 'codex', 'grok', 'omp', 'pi']);
                 // Skipped = the five unsupported sources (operator ruling 2026-08-06).
                 expect(result.coverage.skipped.sort()).toEqual([
-                    'antigravity-ide',
+                    'antigravity',
                     'gemini',
                     'hermes',
                     'openclaw',
@@ -917,7 +1048,7 @@ describe('HistoryService', () => {
                 expect(result.coverage.refreshed.sort()).toEqual(['agy', 'codex', 'grok', 'omp', 'pi']);
                 // Skipped is a static ruling — still the five unsupported sources.
                 expect(result.coverage.skipped.sort()).toEqual([
-                    'antigravity-ide',
+                    'antigravity',
                     'gemini',
                     'hermes',
                     'openclaw',

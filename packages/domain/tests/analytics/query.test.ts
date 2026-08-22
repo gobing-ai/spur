@@ -5,9 +5,6 @@ describe('analytics query', () => {
     describe('extractClaudeTokens', () => {
         test('returns tokens from usage and flags usage as reported', () => {
             const result = extractClaudeTokens({
-                source_record_id: 'test-1',
-                created_at: '2026-01-01T00:00:00Z',
-                content: 'hello',
                 usage: { input_tokens: 100, output_tokens: 50 },
             });
             expect(result).toEqual({
@@ -21,9 +18,6 @@ describe('analytics query', () => {
 
         test('returns zeros and usageReported=false for null usage', () => {
             const result = extractClaudeTokens({
-                source_record_id: 'test-2',
-                created_at: '2026-01-01T00:00:00Z',
-                content: 'hello',
                 usage: null,
             });
             expect(result).toEqual({
@@ -36,20 +30,13 @@ describe('analytics query', () => {
         });
 
         test('returns zeros and usageReported=false for undefined usage', () => {
-            const result = extractClaudeTokens({
-                source_record_id: 'test-3',
-                created_at: '2026-01-01T00:00:00Z',
-                content: 'hello',
-            });
+            const result = extractClaudeTokens({});
             expect(result.usageReported).toBe(false);
             expect(result.inputTokens).toBe(0);
         });
 
         test('reports cache read tokens in the split AND folded into input total', () => {
             const result = extractClaudeTokens({
-                source_record_id: 'test-4',
-                created_at: '2026-01-01T00:00:00Z',
-                content: '',
                 usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 200 },
             });
             expect(result.inputTokens).toBe(300); // total stays fresh+read+create
@@ -59,9 +46,6 @@ describe('analytics query', () => {
 
         test('reports cache creation tokens in the split AND folded into input total', () => {
             const result = extractClaudeTokens({
-                source_record_id: 'test-5',
-                created_at: '2026-01-01T00:00:00Z',
-                content: '',
                 usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 75 },
             });
             expect(result.inputTokens).toBe(175);
@@ -70,9 +54,6 @@ describe('analytics query', () => {
 
         test('treats non-number token values as 0 but still flags usage present', () => {
             const result = extractClaudeTokens({
-                source_record_id: 'test-6',
-                created_at: '2026-01-01T00:00:00Z',
-                content: '',
                 usage: { input_tokens: 'not-a-number', output_tokens: null },
             });
             expect(result.inputTokens).toBe(0);

@@ -79,13 +79,12 @@ export interface ModelPricing {
     outputPricePer1M: number;
 }
 
-/** Canonical ETL record shape stored in history_etl_* tables' payload_json. */
-export interface EtlPayload {
-    source_record_id: string;
-    created_at: string;
-    content: string;
-    role?: string;
-    model?: string;
-    /** Passthrough fields from the original JSONL record. */
-    [key: string]: unknown;
+/**
+ * Structural input for `extractClaudeTokens`: any passthrough record carrying a
+ * Claude-style `usage` object. Replaces the retired `EtlPayload` (task 0624 R3) —
+ * the `history_etl_*` raw-payload tables are gone; the extractor only ever read
+ * `usage` off the record.
+ */
+export interface ClaudeUsagePayload {
+    usage?: unknown;
 }

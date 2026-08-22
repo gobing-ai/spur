@@ -36,13 +36,15 @@ export interface ArtifactSelector {
  * Per-source coverage entry. `status` is written by this task as `'ok' | 'empty'`
  * (`'failed'` arrives with 0470's per-source fan-out; `'degraded'` arrives with 0504's
  * R2 — a source imported records but also skipped malformed/schema-invalid ones, so it
- * must never read as clean `ok`). `parseErrors` / `validationErrors` are **counts**;
- * their samples are bounded to 20 per source in the artifact, with overflow streamed to
- * the `.errors.jsonl` sidecar (R6).
+ * must never read as clean `ok`; `'deferred'` arrives with 0624's R4 — a deferred-set
+ * source that scanned 0 files is deliberately not imported, a label rather than a gate:
+ * the same source scanning files keeps its import-derived status). `parseErrors` /
+ * `validationErrors` are **counts**; their samples are bounded to 20 per source in the
+ * artifact, with overflow streamed to the `.errors.jsonl` sidecar (R6).
  */
 export interface CoverageEntry {
     source: string;
-    status: 'ok' | 'failed' | 'empty' | 'degraded';
+    status: 'ok' | 'failed' | 'empty' | 'degraded' | 'deferred';
     files: number;
     messages: number;
     toolCalls: number;

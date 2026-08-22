@@ -9,6 +9,7 @@ import {
     unlinkSync,
     writeFileSync,
 } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { AgentConfig } from '@gobing-ai/spur-config';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -59,6 +60,7 @@ import {
     topStepsByTokens,
 } from '@gobing-ai/spur-domain';
 import {
+    getSourceDefinition,
     type ImportIssue,
     type ImportMode,
     type ImportResult,
@@ -206,6 +208,14 @@ export interface HistoryServiceContext {
      * absent (no `agent.executors`), the ladder is an empty array.
      */
     agentConfig?: AgentConfig;
+    /**
+     * Home dir for default session roots (0624 R5). Defaults to the real
+     * `homedir()`; tests inject an empty temp dir so augmented discovery stays
+     * hermetic.
+     */
+    historyHome?: string;
+    /** Working dir whose `.spur/run/<run-id>/agent-sessions/` augment import discovery (0624 R5). */
+    cwd?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,11 +242,13 @@ const SOURCES: readonly LlmJsonlSource[] = [
 const FULL_FIDELITY_SOURCES: readonly string[] = ['claude', 'codex', 'pi', 'omp', 'agy', 'grok'];
 
 /**
- * Sources without full-fidelity support — deferred by operator ruling 2026-08-06
- * (feature E1 § Out of scope). Named in the coverage report so a refresh never reads
- * as if it captured every source.
+ * Sources deferred from full-fidelity import — operator ruling 2026-08-06 (feature E1
+ * § Out of scope). Named in the coverage report so a refresh never reads as if it
+ * captured every source. Keys must match {@link SOURCES}; a source that still imports
+ * records (gemini, opencode) keeps its import-derived status — deferral is a label,
+ * never a gate (task 0624 R4).
  */
-const UNSUPPORTED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity-ide', 'openclaw', 'hermes'];
+const DEFERRED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity', 'openclaw', 'hermes'];
 
 /**
  * Build the honest coverage report (task 0550 R3/R4) from the import fan-out and the
@@ -252,7 +264,7 @@ async function buildRefreshCoverage(
     const statusBySource = new Map(fanOut.entries.map((e) => [e.source, e.status]));
     const refreshed = FULL_FIDELITY_SOURCES.filter((s) => statusBySource.has(s) && statusBySource.get(s) !== 'failed');
     const { since, until } = await dataWindow(db, selector);
-    return { refreshed, skipped: [...UNSUPPORTED_SOURCES], window: { since, until } };
+    return { refreshed, skipped: [...DEFERRED_SOURCES], window: { since, until } };
 }
 const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 const MAX_ERROR_SAMPLES = 20;
@@ -260,6 +272,33 @@ const MAX_ERROR_SAMPLES = 20;
 const DEFAULT_SOURCE_TIMEOUT_MS = 600_000;
 /** Report retention window for the daily prune (task 0470 R6). */
 const REPORT_RETENTION_DAYS = 90;
+
+/**
+ * R5 (task 0624): run-dispatched agent sessions are written under
+ * `<cwd>/.spur/run/<runId>/agent-sessions/<agent>/` (agent dir = source or
+ * `<source>-<flavor>`), never to the agent's live session root — so default
+ * discovery never sees them and even exact run→session mappings joined zero
+ * imported messages. Augment the registry defaults (resolved home-relative,
+ * matching the importer's own default-root semantics) with the run session
+ * dirs. One discovery set, so full-mode reconciliation cannot retire
+ * run-session rows on a later full import. Explicit `--file`/`--root` skip
+ * this entirely (the caller directed the scan).
+ */
+function runSessionAugmentedRoots(source: LlmJsonlSource, home: string, cwd: string): string[] {
+    const roots = getSourceDefinition(source).defaultRoots.map((root) => resolve(home, root));
+    const runRoot = join(cwd, '.spur', 'run');
+    if (!existsSync(runRoot)) return roots;
+    for (const runId of readdirSync(runRoot)) {
+        const sessionsRoot = join(runRoot, runId, 'agent-sessions');
+        if (!existsSync(sessionsRoot)) continue;
+        for (const agent of readdirSync(sessionsRoot)) {
+            if (agent === source || agent.startsWith(`${source}-`)) {
+                roots.push(join(sessionsRoot, agent));
+            }
+        }
+    }
+    return roots;
+}
 
 // ---------------------------------------------------------------------------
 // HistoryService
@@ -293,8 +332,17 @@ export class HistoryService {
                 : await runJsonlImport(parsedSource, {
                       db: await this.ctx.getDb(),
                       mode,
-                      ...(opts.file !== undefined && opts.file.length > 0 ? { files: [opts.file] } : {}),
-                      ...(opts.root !== undefined && opts.root.length > 0 ? { roots: [opts.root] } : {}),
+                      ...(opts.file !== undefined && opts.file.length > 0
+                          ? { files: [opts.file] }
+                          : opts.root !== undefined && opts.root.length > 0
+                            ? { roots: [opts.root] }
+                            : {
+                                  roots: runSessionAugmentedRoots(
+                                      parsedSource,
+                                      this.ctx.historyHome ?? homedir(),
+                                      this.ctx.cwd ?? process.cwd(),
+                                  ),
+                              }),
                       dryRun,
                   });
 
@@ -602,8 +650,18 @@ export class HistoryService {
             // R2 (task 0504): a source that imported records while skipping malformed or
             // schema-invalid ones is `degraded`, never clean `ok` — automated consumers must
             // not treat a partial import as healthy. `degraded` implies scannedFiles > 0.
+            // R4 (task 0624): a deferred-set source that scanned 0 files imports as
+            // `deferred`, not `empty` — deferral is a deliberate operator ruling, not drift.
+            // A deferred source that scans files keeps its import-derived status below.
             const hasDegradedInput = result.parseErrors.length > 0 || result.validationErrors.length > 0;
-            const status = result.scannedFiles === 0 ? 'empty' : hasDegradedInput ? 'degraded' : 'ok';
+            const status =
+                result.scannedFiles === 0
+                    ? DEFERRED_SOURCES.includes(source)
+                        ? 'deferred'
+                        : 'empty'
+                    : hasDegradedInput
+                      ? 'degraded'
+                      : 'ok';
             if (hasDegradedInput) {
                 sourceWarnings.push({
                     code: 'source-degraded',
@@ -841,6 +899,8 @@ function buildWarnings(
         warnings.push({ code: 'unknown-drift', source, detail: `${n} records with unknown disposition` });
     }
     for (const entry of coverage) {
+        // R4 (task 0624): `deferred` entries intentionally do NOT warn — deferral is a
+        // deliberate operator ruling, not drift; only `empty` is a source-empty signal.
         if (entry.status === 'empty') {
             warnings.push({ code: 'source-empty', source: entry.source, detail: '0 messages discovered' });
         }

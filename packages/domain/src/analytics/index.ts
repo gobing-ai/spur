@@ -111,7 +111,7 @@ export {
     attributeActionCost,
     foldTotals,
 } from './run-cost';
-export type { AnalyticsSummary, CostRecord, EtlPayload, ModelPricing, TokenTotals } from './types';
+export type { AnalyticsSummary, ClaudeUsagePayload, CostRecord, ModelPricing, TokenTotals } from './types';
 export {
     applyWatermarkToWhere,
     buildWatermarkFilter,

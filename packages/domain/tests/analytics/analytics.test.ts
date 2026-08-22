@@ -75,9 +75,6 @@ describe('analytics', () => {
 
     test('extracts Claude tokens from usage passthrough', () => {
         const tokens = extractClaudeTokens({
-            source_record_id: 'msg-1',
-            created_at: '2026-05-30T00:00:00Z',
-            content: 'hello',
             usage: { input_tokens: 1500, output_tokens: 800 },
         });
         expect(tokens).toEqual({
@@ -89,9 +86,6 @@ describe('analytics', () => {
         });
 
         const withCache = extractClaudeTokens({
-            source_record_id: 'msg-2',
-            created_at: '2026-05-30T00:00:00Z',
-            content: 'cached',
             usage: {
                 input_tokens: 100,
                 output_tokens: 200,
@@ -107,11 +101,7 @@ describe('analytics', () => {
             usageReported: true,
         });
 
-        const noUsage = extractClaudeTokens({
-            source_record_id: 'msg-3',
-            created_at: '2026-05-30T00:00:00Z',
-            content: 'no usage',
-        });
+        const noUsage = extractClaudeTokens({});
         expect(noUsage).toEqual({
             inputTokens: 0,
             outputTokens: 0,

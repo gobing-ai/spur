@@ -1,4 +1,4 @@
-import type { EtlPayload } from './types';
+import type { ClaudeUsagePayload } from './types';
 
 /** Token counts extracted from a provider `usage` object, with the cache split preserved. */
 export interface ExtractedTokens {
@@ -21,7 +21,7 @@ export interface ExtractedTokens {
  * folded in and discarded — without them a cache-hit ratio cannot be computed from an
  * imported record even though the source JSONL carries the numbers.
  */
-export function extractClaudeTokens(payload: EtlPayload): ExtractedTokens {
+export function extractClaudeTokens(payload: ClaudeUsagePayload): ExtractedTokens {
     const usage = payload.usage as Record<string, unknown> | undefined;
     const absent: ExtractedTokens = {
         inputTokens: 0,

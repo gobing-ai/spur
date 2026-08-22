@@ -297,6 +297,39 @@ ALTER TABLE history_tool_call ADD COLUMN call_id TEXT;
 `;
 
 /**
+ * Add the `request_id` column to the forensic `history_message` table (task 0624
+ * R1). Stores the API request id (`req_…`) that produced the message so the
+ * rollup can fold streaming duplicate lines — multiple JSONL lines sharing one
+ * request id carry identical usage. Idempotent via `addColumnIfMissing` — the
+ * `0015` call_id precedent.
+ */
+export const HISTORY_MESSAGE_REQUEST_ID_SCHEMA_SQL = `
+ALTER TABLE history_message ADD COLUMN request_id TEXT;
+`;
+
+/**
+ * Drop the ten vestigial `history_etl_<source>` raw-payload tables (task 0624
+ * R3). They were created unconditionally by the importer's
+ * `ensureTargetTables` but never written — the E1 keystone ruling (2026-08-07)
+ * fixed forensic granularity at `history_message` + `history_tool_call`, and
+ * every mapper emits only those two targets. Zero rows across all ten in
+ * `.spur/spur.db`. The importer-side CREATE remains (harmless empty tables on
+ * a fresh import); this migration drops them on the Spur side.
+ */
+export const HISTORY_ETL_TABLES_DROP_SCHEMA_SQL = `
+DROP TABLE IF EXISTS history_etl_pi;
+DROP TABLE IF EXISTS history_etl_claude;
+DROP TABLE IF EXISTS history_etl_codex;
+DROP TABLE IF EXISTS history_etl_gemini;
+DROP TABLE IF EXISTS history_etl_opencode;
+DROP TABLE IF EXISTS history_etl_antigravity;
+DROP TABLE IF EXISTS history_etl_openclaw;
+DROP TABLE IF EXISTS history_etl_omp;
+DROP TABLE IF EXISTS history_etl_agy;
+DROP TABLE IF EXISTS history_etl_grok;
+`;
+
+/**
  * Rebuild the forensic `history_message` table so `ts` is nullable (task 0580
  * D4/R5). The importer used to coerce missing timestamps to the epoch-0
  * sentinel `1970-01-01T00:00:00.000Z` because the column was `NOT NULL`;
@@ -425,6 +458,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0017_spur_cli_runs_status_completed_to_done',
         sql: "UPDATE runs SET status = 'done' WHERE status = 'completed'",
     },
+    {
+        id: '0018_spur_cli_history_message_request_id',
+        sql: HISTORY_MESSAGE_REQUEST_ID_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'history_message', column: 'request_id' },
+    },
+    { id: '0019_spur_cli_history_etl_tables_drop', sql: HISTORY_ETL_TABLES_DROP_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

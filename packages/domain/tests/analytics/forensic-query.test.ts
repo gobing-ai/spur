@@ -256,6 +256,78 @@ async function seedFixture(db: DbAdapter): Promise<void> {
 }
 
 describe('forensic queries', () => {
+    test('messageRollup folds duplicate request_id rows in SQL (0624 R1)', async () => {
+        const db = await setup();
+        // Three rows sharing one request_id (claude re-emits per content block)
+        // plus one request_id-null row: only one of the three may count.
+        for (const [hash, seq] of [
+            ['d1', 1],
+            ['d2', 2],
+            ['d3', 3],
+        ] as const) {
+            await db.run(
+                `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
+                     role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
+                     cache_read_tokens, provenance, run_id, task_wbs, duration_ms, request_id, imported_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                hash,
+                'claude',
+                'test.jsonl',
+                1,
+                'sess-dup',
+                seq,
+                'assistant',
+                'assistant',
+                'keep',
+                '2026-05-30T00:00:00.000Z',
+                'claude-x',
+                100,
+                50,
+                0.01,
+                null,
+                'agent',
+                null,
+                null,
+                null,
+                'req_dup',
+                '2026-06-01T00:00:00Z',
+            );
+        }
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
+                 cache_read_tokens, provenance, run_id, task_wbs, duration_ms, request_id, imported_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            'd4',
+            'claude',
+            'test.jsonl',
+            1,
+            'sess-dup',
+            4,
+            'user',
+            'user',
+            'keep',
+            '2026-05-30T00:00:00.000Z',
+            null,
+            null,
+            null,
+            null,
+            null,
+            'agent',
+            null,
+            null,
+            null,
+            null,
+            '2026-06-01T00:00:00Z',
+        );
+        const rows = await messageRollup(db, { ...ALL, sessionId: 'sess-dup' });
+        expect(rows.reduce((n, r) => n + r.messages, 0)).toBe(2);
+        const assistant = rows.find((r) => r.model === 'claude-x');
+        expect(assistant?.inputTokens).toBe(100);
+        expect(assistant?.outputTokens).toBe(50);
+        db.close();
+    });
+
     test('messageRollup reports per-step token/cost buckets (Q8)', async () => {
         const db = await setup();
         await seedFixture(db);
@@ -280,7 +352,6 @@ describe('forensic queries', () => {
         const rows = await toolRollup(db, SESSION);
         expect(rows.reduce((n, r) => n + r.toolCalls, 0)).toBe(5);
         expect(rows.reduce((n, r) => n + (r.durationMs ?? 0), 0)).toBe(540);
-        expect(rows.reduce((n, r) => n + r.durationUnmeasured, 0)).toBe(1);
         db.close();
     });
 

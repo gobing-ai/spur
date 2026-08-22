@@ -118,7 +118,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through args_raw plus history-run-session migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(18);
+            expect(CLI_MIGRATIONS).toHaveLength(20);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -137,6 +137,8 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[15]?.id).toBe('0015_spur_cli_history_tool_call_call_id');
             expect(CLI_MIGRATIONS[16]?.id).toBe('0016_spur_cli_history_message_ts_nullable');
             expect(CLI_MIGRATIONS[17]?.id).toBe('0017_spur_cli_runs_status_completed_to_done');
+            expect(CLI_MIGRATIONS[18]?.id).toBe('0018_spur_cli_history_message_request_id');
+            expect(CLI_MIGRATIONS[19]?.id).toBe('0019_spur_cli_history_etl_tables_drop');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -202,9 +204,10 @@ describe('db migrations', () => {
             // 0002–0011 plus 0012 args_raw (journaled, skipped: no history_tool_call
             // in stub) plus 0013 history-run-session plus 0014 name-occurred index
             // plus 0015 call_id (journaled, skipped: no history_tool_call in stub)
-            // applied on top.
+            // plus 0018 request_id (guarded: history_message exists here so it
+            // applies) plus 0019 etl-tables drop applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(16);
+            expect(applied).toBe(18);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -242,8 +245,8 @@ describe('db migrations', () => {
             // + coordination-runs + system-events-sequence-idx + args_raw
             // + history-run-session + name-occurred-index + call_id + 0017 status
             // retirements (0016 nullable-ts skips: CLI_SCHEMA_SQL's history_message
-            // is already nullable)
-            expect(applied).toBe(17);
+            // is already nullable) + 0018 request_id + 0019 etl drop
+            expect(applied).toBe(19);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -420,8 +423,9 @@ describe('db migrations', () => {
             // 0009 (history index, provisions importer tables first) + 0010 coordination-runs
             // + 0011 system-events-sequence-idx + 0012 args_raw + 0013 history-run-session
             // + 0014 name-occurred index + 0015 call_id + 0016 nullable-ts
-            // + 0017 completed→done status retirements.
-            expect(await applyCliMigrations(adapter)).toBe(9);
+            // + 0017 completed→done status retirements + 0018 request_id
+            // (history_message now exists, guarded apply runs) + 0019 etl drop.
+            expect(await applyCliMigrations(adapter)).toBe(11);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
