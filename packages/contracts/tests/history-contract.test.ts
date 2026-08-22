@@ -113,12 +113,99 @@ describe('historyContract', () => {
                 topTools: [{ id: 'Read', count: 45, errors: 0, errorRate: 0 }],
                 skillsUsed: [{ id: 'sp-dev-run', label: 'Sp Dev Run', color: '#199e70', count: 12 }],
                 cacheEfficiency: { hitRatio: 79, savedTokens: 450000, totalRead: 450000 },
+                kpiTrend: [
+                    {
+                        day: '2026-08-21',
+                        totalBilledTokens: 120000,
+                        cacheSavedTokens: 450000,
+                        sessionsCount: 15,
+                        toolCallsCount: 88,
+                        cacheHitRatio: 79,
+                    },
+                ],
+                previousKpis: {
+                    totalBilledTokens: 100000,
+                    cacheSavedTokens: 400000,
+                    cacheSavedPercent: 80,
+                    sessionsCount: 12,
+                    toolCallsCount: 80,
+                    errorRate: 1.0,
+                },
+                skillTimeSeries: [
+                    {
+                        bucketStart: '2026-08-20T00:00:00.000Z',
+                        cacheHitRatio: 85,
+                        series: { 'sp-dev-run': 12 },
+                    },
+                ],
             },
         });
         expect(parsed.ok).toBe(true);
         expect(parsed.data.kpis.totalBilledTokens).toBe(120000);
+        expect(parsed.data.kpiTrend.length).toBe(1);
+        expect(parsed.data.previousKpis?.sessionsCount).toBe(12);
+        expect(parsed.data.skillTimeSeries[0]?.series['sp-dev-run']).toBe(12);
     });
 
+    test('kpiTrend, previousKpis, and skillTimeSeries are REQUIRED on summary data', () => {
+        const validData = historySummaryResponseSchema.parse({
+            ok: true,
+            data: {
+                kpis: {
+                    totalBilledTokens: 120000,
+                    cacheSavedTokens: 450000,
+                    cacheSavedPercent: 79,
+                    sessionsCount: 15,
+                    toolCallsCount: 88,
+                    errorRate: 1.2,
+                },
+                timeSeries: [],
+                topModels: [],
+                topSources: [],
+                topTools: [],
+                skillsUsed: [],
+                cacheEfficiency: { hitRatio: 79, savedTokens: 450000, totalRead: 450000 },
+                kpiTrend: [],
+                previousKpis: null,
+                skillTimeSeries: [],
+            },
+        }).data;
+
+        for (const field of ['kpiTrend', 'previousKpis', 'skillTimeSeries'] as const) {
+            const missing = { ...validData } as Record<string, unknown>;
+            delete missing[field];
+            expect(() => historySummaryResponseSchema.parse({ ok: true, data: missing })).toThrow();
+        }
+    });
+
+    test('previousKpis accepts null but rejects non-KPI shapes', () => {
+        const data = {
+            kpis: {
+                totalBilledTokens: 1,
+                cacheSavedTokens: 1,
+                cacheSavedPercent: 1,
+                sessionsCount: 1,
+                toolCallsCount: 1,
+                errorRate: 0,
+            },
+            timeSeries: [],
+            topModels: [],
+            topSources: [],
+            topTools: [],
+            skillsUsed: [],
+            cacheEfficiency: { hitRatio: 1, savedTokens: 1, totalRead: 1 },
+            kpiTrend: [],
+            previousKpis: null,
+            skillTimeSeries: [],
+        };
+        expect(historySummaryResponseSchema.parse({ ok: true, data }).data.previousKpis).toBeNull();
+        expect(() =>
+            historySummaryResponseSchema.parse({
+                ok: true,
+                data: { ...data, previousKpis: { totalBilledTokens: 'lots' } },
+            }),
+        ).toThrow();
+    });
     test('historyTimelineResponseSchema parses valid timeline payload', () => {
         const parsed = historyTimelineResponseSchema.parse({
             ok: true,
@@ -287,6 +374,7 @@ describe('historyContract', () => {
                     corpusSizeBytes: 52000000,
                     dateCoverage: { from: '2026-05-20T00:00:00.000Z', to: '2026-08-21T00:00:00.000Z' },
                     totalSessions: 850,
+                    lastImportedAt: '2026-08-21T19:00:00.000Z',
                 },
                 agents: [
                     {
@@ -322,6 +410,34 @@ describe('historyContract', () => {
         });
         expect(parsed.ok).toBe(true);
         expect(parsed.data.agents.length).toBe(1);
+        expect(parsed.data.overview.lastImportedAt).toBe('2026-08-21T19:00:00.000Z');
+    });
+
+    test('overview.lastImportedAt is REQUIRED on sources data and nullable', () => {
+        const validData = historySourcesResponseSchema.parse({
+            ok: true,
+            data: {
+                overview: {
+                    totalFiles: 4200,
+                    corpusSizeBytes: 52000000,
+                    dateCoverage: { from: null, to: null },
+                    totalSessions: 850,
+                    lastImportedAt: null,
+                },
+                agents: [],
+                roots: [],
+            },
+        }).data;
+        expect(validData.overview.lastImportedAt).toBeNull();
+
+        const missing = { ...validData.overview } as Record<string, unknown>;
+        delete missing.lastImportedAt;
+        expect(() =>
+            historySourcesResponseSchema.parse({
+                ok: true,
+                data: { ...validData, overview: missing },
+            }),
+        ).toThrow();
     });
 
     test('historyTriggerImportInputSchema and Response schema', () => {

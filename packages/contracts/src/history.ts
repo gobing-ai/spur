@@ -58,6 +58,20 @@ export const historySummaryKpisSchema = z.object({
     toolCallsCount: z.number(),
     errorRate: z.number(),
 });
+/** Inferred type for HistorySummaryKpis. */
+export type HistorySummaryKpis = z.infer<typeof historySummaryKpisSchema>;
+
+/** Daily KPI trend point schema (last-N-days daily rollup for delta sparklines). */
+export const historyKpiTrendPointSchema = z.object({
+    day: z.string(),
+    totalBilledTokens: z.number(),
+    cacheSavedTokens: z.number(),
+    sessionsCount: z.number(),
+    toolCallsCount: z.number(),
+    cacheHitRatio: z.number(),
+});
+/** Inferred type for HistoryKpiTrendPoint. */
+export type HistoryKpiTrendPoint = z.infer<typeof historyKpiTrendPointSchema>;
 
 /** Single time series bucket data point schema. */
 export const historyTimeSeriesPointSchema = z.object({
@@ -65,6 +79,9 @@ export const historyTimeSeriesPointSchema = z.object({
     cacheHitRatio: z.number(),
     series: z.record(z.string(), z.number()),
 });
+
+/** Inferred type for HistoryTimeSeriesPoint. */
+export type HistoryTimeSeriesPoint = z.infer<typeof historyTimeSeriesPointSchema>;
 
 /** Top breakdown item schema (models, sources). */
 export const historyTopItemSchema = z.object({
@@ -115,6 +132,9 @@ export const historySummaryResponseDataSchema = z.object({
     topTools: z.array(historyTopToolSchema),
     skillsUsed: z.array(historySkillItemSchema),
     cacheEfficiency: historyCacheEfficiencySchema,
+    kpiTrend: z.array(historyKpiTrendPointSchema),
+    previousKpis: historySummaryKpisSchema.nullable(),
+    skillTimeSeries: z.array(historyTimeSeriesPointSchema),
 });
 
 /** Summary tab API response envelope schema. */
@@ -362,6 +382,7 @@ export const historySourcesOverviewSchema = z.object({
         to: z.string().nullable(),
     }),
     totalSessions: z.number(),
+    lastImportedAt: z.string().nullable(),
 });
 /** Inferred type for HistorySourcesOverview. */
 export type HistorySourcesOverview = z.infer<typeof historySourcesOverviewSchema>;
