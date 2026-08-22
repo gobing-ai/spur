@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-21T23:12:38.032Z"
-updated_at: "2026-08-22T03:42:14.505Z"
+updated_at: "2026-08-22T18:35:13.130Z"
 ---
 
 # E8: History Board module: Analytics Summary, Execution Timeline, Sessions, Forensic Insights, and Agent Sources Registry
@@ -107,6 +107,7 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 | 0627 | History Board oRPC API contracts, mock router, and DTO seam | done |
 | 0628 | History database access: schema optimization, domain DAOs, and live oRPC service implementation | done |
 | 0629 | History analytics pre-computation: enhance spur history analyze and import pipeline | done |
+| 0630 | History Board frontend UI parity refinement and gap remediation | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -115,3 +116,6 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 - 2026-08-22T03:42:13.683Z backlog → active (system)
 - 2026-08-22T03:42:14.092Z active → verifying (system)
 - 2026-08-22T03:42:14.505Z verifying → done (system)
+- 2026-08-22T13:18:52.536Z done → active (system)
+- 2026-08-22T18:35:12.915Z active → verifying (system)
+- 2026-08-22T18:35:13.130Z verifying → done (system)
