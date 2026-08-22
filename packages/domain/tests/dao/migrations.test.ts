@@ -2,12 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDbAdapter } from '@gobing-ai/ts-db';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import {
     applyCliMigrations,
     CLI_MIGRATION_FILE_MARKER,
     CLI_MIGRATIONS,
     CLI_SCHEMA_SQL,
+    HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
     loadSqlMigrations,
     RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
     SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
@@ -118,7 +119,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes and rollups', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(22);
+            expect(CLI_MIGRATIONS).toHaveLength(23);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -141,6 +142,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[19]?.id).toBe('0019_spur_cli_history_etl_tables_drop');
             expect(CLI_MIGRATIONS[20]?.id).toBe('0020_spur_cli_history_board_query_indexes');
             expect(CLI_MIGRATIONS[21]?.id).toBe('0021_spur_cli_history_board_rollups');
+            expect(CLI_MIGRATIONS[22]?.id).toBe('0022_spur_cli_history_performance_indexes');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -208,9 +210,11 @@ describe('db migrations', () => {
             // plus 0015 call_id (journaled, skipped: no history_tool_call in stub)
             // plus 0018 request_id (guarded: history_message exists here so it
             // applies) plus 0019 etl-tables drop, 0020 History Board indexes
-            // (journaled, skipped: the stub lacks their source columns), and 0021 rollups.
+            // (journaled, skipped: the stub lacks their source columns), 0021 rollups,
+            // and 0022 performance indexes (journaled, skipped: stub history_message
+            // lacks ts/model and history_tool_call is absent).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(20);
+            expect(applied).toBe(21);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -249,8 +253,8 @@ describe('db migrations', () => {
             // + history-run-session + name-occurred-index + call_id + 0017 status
             // retirements (0016 nullable-ts skips: CLI_SCHEMA_SQL's history_message
             // is already nullable) + 0018 request_id + 0019 etl drop + 0020 indexes
-            // + 0021 rollups
-            expect(applied).toBe(21);
+            // + 0021 rollups + 0022 performance indexes
+            expect(applied).toBe(22);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -429,13 +433,159 @@ describe('db migrations', () => {
             // + 0014 name-occurred index + 0015 call_id + 0016 nullable-ts
             // + 0017 completed→done status retirements + 0018 request_id
             // (history_message now exists, guarded apply runs) + 0019 etl drop
-            // + 0020 History Board indexes + 0021 rollups.
-            expect(await applyCliMigrations(adapter)).toBe(13);
+            // + 0020 History Board indexes + 0021 rollups + 0022 performance
+            // indexes.
+            expect(await applyCliMigrations(adapter)).toBe(14);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
             expect(columns.map((column) => column.name)).toEqual(['provenance', 'run_id']);
             expect(await applyCliMigrations(adapter)).toBe(0);
+            adapter.close();
+        });
+
+        test('0022 migration SQL matches HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL and is all idempotent DDL', () => {
+            const entry = CLI_MIGRATIONS[22];
+            expect(entry?.sql).toBe(HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL);
+            // No plain CREATE INDEX / CREATE TABLE / ALTER: every statement must be IF NOT EXISTS.
+            expect(entry?.sql).not.toMatch(/CREATE (INDEX|TABLE)(?! IF NOT EXISTS)/);
+        });
+
+        test('fresh DB gains the six E9 performance indexes with frozen column order and direction', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+
+            const expectIndex = async (table: string, index: string, columns: string[], desc: string[] = []) => {
+                const listed = await adapter.queryAll<{ name: string }>(`PRAGMA index_list(${table})`);
+                expect(listed.map((i) => i.name)).toContain(index);
+                const info = await adapter.queryAll<{ name: string; desc: number }>(`PRAGMA index_xinfo(${index})`);
+                const keyColumns = info.filter((c) => c.name != null);
+                expect(keyColumns.map((c) => c.name)).toEqual(columns);
+                for (const column of desc) {
+                    expect(keyColumns.find((c) => c.name === column)?.desc).toBe(1);
+                }
+                for (const column of columns.filter((c) => !desc.includes(c))) {
+                    expect(keyColumns.find((c) => c.name === column)?.desc).toBe(0);
+                }
+            };
+
+            await expectIndex('history_message', 'idx_history_message_source_ts', ['source', 'ts']);
+            await expectIndex('history_message', 'idx_history_message_model_ts', ['model', 'ts']);
+            await expectIndex('history_tool_call', 'idx_history_tool_call_session_id_seq', ['session_id', 'seq']);
+            await expectIndex('history_board_message_5m', 'idx_history_board_message_5m_bucket_model', [
+                'bucket_start',
+                'model',
+            ]);
+            await expectIndex('history_board_tool_5m', 'idx_history_board_tool_5m_bucket_skill', [
+                'bucket_start',
+                'skill_name',
+            ]);
+            await expectIndex(
+                'history_board_session_stats',
+                'idx_history_board_session_source_started',
+                ['source', 'started_at'],
+                ['started_at'],
+            );
+
+            // Second idempotent apply journals nothing new.
+            expect(await applyCliMigrations(adapter)).toBe(0);
+            adapter.close();
+        });
+
+        test('upgraded DB journaled through 0021 receives 0022 and converges with a fresh DB', async () => {
+            const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
+            expect(await applyCliMigrations(upgraded)).toBe(1);
+
+            const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(fresh);
+
+            const schemaOf = async (adapter: DbAdapter) =>
+                (
+                    await adapter.queryAll<{ sql: string }>(
+                        "SELECT name, sql FROM sqlite_master WHERE type IN ('table','index') AND name LIKE 'idx_history%' ORDER BY name",
+                    )
+                ).map((r) => r.sql);
+            expect(await schemaOf(upgraded)).toEqual(await schemaOf(fresh));
+            upgraded.close();
+            fresh.close();
+        });
+
+        test('EXPLAIN QUERY PLAN selects each E9 index for its intended access path', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            // Give the planner representative row counts so index choice is stable.
+            await adapter.exec(`
+                INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, provenance, imported_at)
+                VALUES ('h1', 'claude', 'f.jsonl', 1, 's1', 1, 'user', 'message', 'ok', '2026-08-01T00:00:00Z', 'sonnet', 'run', '2026-08-01T00:00:01Z');
+                INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, status, imported_at)
+                VALUES ('t1', 'h1', 'claude', 'f.jsonl', 1, 's1', 1, 'Read', 'ok', '2026-08-01T00:00:01Z');
+                INSERT INTO history_board_message_5m (bucket_start, session_id, source, model, fresh_input_tokens, cache_read_tokens, output_tokens, messages, assistant_duration_ms, assistant_duration_samples)
+                VALUES ('2026-08-01T00:00', 's1', 'claude', 'sonnet', 1, 0, 0, 1, 0, 1);
+                INSERT INTO history_board_tool_5m (bucket_start, session_id, source, model, tool_name, skill_name, fresh_input_tokens, cache_read_tokens, output_tokens, calls)
+                VALUES ('2026-08-01T00:00', 's1', 'claude', 'sonnet', 'Read', 'spur-dev', 1, 0, 0, 1);
+                INSERT INTO history_board_session_stats (source, session_id, started_at, ended_at, messages, tool_calls, fresh_input_tokens, cache_read_tokens, output_tokens, assistant_duration_ms)
+                VALUES ('claude', 's1', '2026-08-01T00:00:00Z', '2026-08-01T01:00:00Z', 1, 1, 1, 0, 0, 0);
+                ANALYZE;
+            `);
+
+            const planUses = async (index: string, sql: string) => {
+                const rows = await adapter.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`);
+                const detail = rows.map((r) => r.detail).join('\n');
+                expect(detail).toContain(index);
+                expect(detail).not.toContain('SCAN');
+            };
+
+            // (source, ts): source-filtered time-ordered message read.
+            await planUses(
+                'idx_history_message_source_ts',
+                "SELECT session_id FROM history_message WHERE source = 'claude' AND ts >= '2026-08-01' ORDER BY ts",
+            );
+            // (model, ts): model-filtered time-ordered message read.
+            await planUses(
+                'idx_history_message_model_ts',
+                "SELECT session_id FROM history_message WHERE model = 'sonnet' AND ts >= '2026-08-01' ORDER BY ts",
+            );
+            // (session_id, seq): session-ordered tool-call read.
+            await planUses(
+                'idx_history_tool_call_session_id_seq',
+                "SELECT tool_name FROM history_tool_call WHERE session_id = 's1' ORDER BY seq",
+            );
+            // (bucket_start, model): bucket-range model series from the message rollup.
+            await planUses(
+                'idx_history_board_message_5m_bucket_model',
+                "SELECT model, SUM(messages) FROM history_board_message_5m WHERE bucket_start >= '2026-08-01T00:00' AND bucket_start < '2026-08-02T00:00' GROUP BY bucket_start, model",
+            );
+            // (bucket_start, skill_name): bucket-range skill series from the tool rollup.
+            await planUses(
+                'idx_history_board_tool_5m_bucket_skill',
+                "SELECT skill_name, SUM(calls) FROM history_board_tool_5m WHERE bucket_start >= '2026-08-01T00:00' AND bucket_start < '2026-08-02T00:00' GROUP BY bucket_start, skill_name",
+            );
+            // (source, started_at DESC): source-filtered newest-first session list.
+            await planUses(
+                'idx_history_board_session_source_started',
+                "SELECT session_id FROM history_board_session_stats WHERE source = 'claude' ORDER BY started_at DESC LIMIT 20",
+            );
+            adapter.close();
+        });
+
+        test('checkpoint (source, updated_at) index rejected: PK covers the source lookup, freshness aggregates everything', async () => {
+            // R5: the source-filtered checkpoint lookup is served by the
+            // history_import_checkpoint primary key (source, source_file)...
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            const pk = await adapter.queryAll<{ name: string }>(
+                'PRAGMA index_info(sqlite_autoindex_history_import_checkpoint_1)',
+            );
+            expect(pk.map((c) => c.name)).toEqual(['source', 'source_file']);
+            // ...and the freshness query has no selective predicate, so no
+            // distinct access path exists for an (source, updated_at) index.
+            const rows = await adapter.queryAll<{ detail: string }>(
+                'EXPLAIN QUERY PLAN SELECT source, MAX(updated_at) FROM history_import_checkpoint GROUP BY source',
+            );
+            expect(rows.map((r) => r.detail).join('\n')).not.toContain('idx_history_import_checkpoint');
+            const indexes = await adapter.queryAll<{ name: string }>('PRAGMA index_list(history_import_checkpoint)');
+            expect(indexes.map((i) => i.name)).not.toContain('idx_history_import_checkpoint_source_updated_at');
             adapter.close();
         });
 

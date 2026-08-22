@@ -330,6 +330,29 @@ DROP TABLE IF EXISTS history_etl_grok;
 `;
 
 /**
+ * E9 feature indexes for the History data plane (task 0631, feature E9). The
+ * importer schema already provides (source, session_id, seq), (ts), and
+ * message_hash paths; these cover the remaining selector/order paths:
+ * source/ts and model/ts message reads, session-id-leading tool-call reads,
+ * bucket-leading rollup scans, and the source-filtered session-stats
+ * `ORDER BY started_at` access path.
+ */
+export const HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_source_ts
+    ON history_message (source, ts);
+CREATE INDEX IF NOT EXISTS idx_history_message_model_ts
+    ON history_message (model, ts);
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_session_id_seq
+    ON history_tool_call (session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_bucket_model
+    ON history_board_message_5m (bucket_start, model);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_bucket_skill
+    ON history_board_tool_5m (bucket_start, skill_name);
+CREATE INDEX IF NOT EXISTS idx_history_board_session_source_started
+    ON history_board_session_stats (source, started_at DESC);
+`;
+
+/**
  * Index the two measured History Board raw-read paths (task 0628 R3). On the
  * 1.70M-message corpus, Timeline took 61.42ms without a session-id-leading
  * index and ranked-step reads took 205–212ms without order-compatible indexes.
@@ -603,6 +626,7 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * survive import (task 0564 R1).
  * `0020` adds measured History Board raw-query indexes (task 0628 R3).
  * `0021` adds measured History Board aggregate read models (task 0629 R2).
+ * `0022` adds E9 History data-plane performance indexes (task 0631).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -665,6 +689,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0019_spur_cli_history_etl_tables_drop', sql: HISTORY_ETL_TABLES_DROP_SCHEMA_SQL },
     { id: '0020_spur_cli_history_board_query_indexes', sql: HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL },
     { id: '0021_spur_cli_history_board_rollups', sql: HISTORY_BOARD_ROLLUPS_SCHEMA_SQL },
+    {
+        id: '0022_spur_cli_history_performance_indexes',
+        sql: HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -749,6 +777,17 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
                 !(await columnExists(adapter, 'history_message', 'input_tokens')) ||
                 !(await columnExists(adapter, 'history_message', 'cache_read_tokens')));
 
+        // Migration 0022 indexes the E9 History read paths — legacy stub
+        // history_message tables (the 0000/0001 shape) lack `ts`/`model`, and
+        // history_tool_call may be absent. Journal without executing in those
+        // shapes; real DBs and fresh DBs (importer DDL) always have the columns.
+        const historyPerformanceIndexesSkip =
+            migration.id === '0022_spur_cli_history_performance_indexes' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'ts')) ||
+                !(await columnExists(adapter, 'history_message', 'model')) ||
+                !(await tableExists(adapter, 'history_tool_call')));
+
         // Migration 0017 retires the legacy `completed` runs status — a DML
         // against a table foreign/legacy journals may not have (the 0009
         // simulation shape: journaled foundation, no engine tables) or whose
@@ -765,6 +804,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !runsStatusDoneSkip &&
             !nameOccurredIndexSkip &&
             !historyBoardQueryIndexesSkip &&
+            !historyPerformanceIndexesSkip &&
             !callIdSkip &&
             !tsNullableSkip
         ) {
