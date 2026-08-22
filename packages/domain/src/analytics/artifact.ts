@@ -24,6 +24,12 @@ export interface ArtifactSelector {
     until: string | null;
     /** Source allowlist, or null for no source predicate. */
     sources: readonly string[] | null;
+    /** Model allowlist, or null for no model predicate (0628). */
+    models?: readonly string[] | null;
+    /** Tool name allowlist, or null for no tool predicate (0628). */
+    tools?: readonly string[] | null;
+    /** Skill name allowlist, or null for no skill predicate (0628). */
+    skills?: readonly string[] | null;
     /** Single session id. */
     sessionId: string | null;
     /** Single workflow run id (`provenance='spur-run'`). */

@@ -120,6 +120,28 @@ export function buildMessageWhereClauses(
         clauses.push(`${alias}.source IN (${sel.sources.map(() => '?').join(', ')})`);
         params.push(...sel.sources);
     }
+    if (sel.models != null && sel.models.length > 0) {
+        clauses.push(`${alias}.model IN (${sel.models.map(() => '?').join(', ')})`);
+        params.push(...sel.models);
+    }
+    if (sel.tools != null && sel.tools.length > 0) {
+        const placeholders = sel.tools.map(() => '?').join(', ');
+        clauses.push(
+            'EXISTS (SELECT 1 FROM ' +
+                `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND tc_filt.tool_name IN (${placeholders}))`,
+        );
+        params.push(...sel.tools);
+    }
+    if (sel.skills != null && sel.skills.length > 0) {
+        const skillConditions = sel.skills.map(() => 'tc_filt.tool_name LIKE ? OR tc_filt.args_raw LIKE ?');
+        clauses.push(
+            'EXISTS (SELECT 1 FROM ' +
+                `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND (${skillConditions.join(' OR ')}))`,
+        );
+        for (const sk of sel.skills) {
+            params.push(`%${sk}%`, `%${sk}%`);
+        }
+    }
     if (sel.sessionId != null) {
         clauses.push(`${alias}.session_id = ?`);
         params.push(sel.sessionId);
@@ -672,5 +694,191 @@ export async function todoToolCalls(
         ...params,
         ...wm.params,
         limit,
+    );
+}
+
+// ─── History Board Live Queries (task 0628 R2) ───────────────────────────────
+
+/** Supported bucket intervals for token time-series aggregations. */
+export type HistoryBucket = '5m' | '10m' | '30m' | '1h' | '4h' | '1d';
+
+/** Supported dimensions for breakdown in token time-series. */
+export type HistoryDimension = 'model' | 'source' | 'tool' | 'skill';
+
+/** Aggregate token row floored to a time bucket interval and grouped by dimension key. */
+export interface BucketedTokenRow {
+    bucketStart: string;
+    key: string;
+    freshInputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+}
+
+/** Chronological event row in a session execution timeline. */
+export interface TimelineEventRow {
+    seq: number;
+    ts: string | null;
+    role: string;
+    source: string;
+    model: string | null;
+    toolName: string | null;
+    durationMs: number | null;
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+    exitCode: number | null;
+    payload: string | null;
+}
+
+/** Per-(source, day) token aggregate row for heatmap visualizer. */
+export interface DailyTokenRow {
+    source: string;
+    day: string;
+    tokens: number | null;
+    cacheReadTokens: number | null;
+}
+
+/** Multi-axis model benchmark comparison metrics row. */
+export interface ModelComparisonRow {
+    model: string;
+    speedMsMean: number | null;
+    cacheRatio: number | null;
+    reliability: number | null;
+    outputRatio: number | null;
+}
+
+const BUCKET_SECONDS: Record<HistoryBucket, number> = {
+    '5m': 300,
+    '10m': 600,
+    '30m': 1800,
+    '1h': 3600,
+    '4h': 14400,
+    '1d': 86400,
+};
+
+/**
+ * Token metrics bucketed into regular time intervals across a given dimension.
+ */
+export async function bucketedTokenSeries(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    bucket: HistoryBucket,
+    dim: HistoryDimension,
+    opts?: WatermarkQueryOptions,
+): Promise<BucketedTokenRow[]> {
+    const { where, params } = buildMessageWhere(sel, 'm');
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+
+    const bucketExpr =
+        bucket === '1d'
+            ? 'DATE(m.ts)'
+            : `datetime(CAST(strftime('%s', m.ts) / ${BUCKET_SECONDS[bucket]} * ${BUCKET_SECONDS[bucket]} AS INTEGER), 'unixepoch')`;
+
+    if (dim === 'tool' || dim === 'skill') {
+        const keyExpr = dim === 'tool' ? "COALESCE(tc.tool_name, 'Other')" : "COALESCE(tc.tool_name, 'None')";
+        return db.queryAll<BucketedTokenRow>(
+            `SELECT ${bucketExpr} AS bucketStart,
+                    ${keyExpr} AS key,
+                    SUM(COALESCE(m.input_tokens, 0)) AS freshInputTokens,
+                    SUM(COALESCE(m.cache_read_tokens, 0)) AS cacheReadTokens,
+                    SUM(COALESCE(m.output_tokens, 0)) AS outputTokens
+             FROM history_message m
+             JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+             ${wm.where}
+             GROUP BY bucketStart, key
+             ORDER BY bucketStart ASC`,
+            ...params,
+            ...wm.params,
+        );
+    }
+
+    const keyExpr = dim === 'model' ? "COALESCE(m.model, 'unknown')" : 'm.source';
+    return db.queryAll<BucketedTokenRow>(
+        `SELECT ${bucketExpr} AS bucketStart,
+                ${keyExpr} AS key,
+                SUM(COALESCE(m.input_tokens, 0)) AS freshInputTokens,
+                SUM(COALESCE(m.cache_read_tokens, 0)) AS cacheReadTokens,
+                SUM(COALESCE(m.output_tokens, 0)) AS outputTokens
+         FROM history_message m
+         ${wm.where}
+         GROUP BY bucketStart, key
+         ORDER BY bucketStart ASC`,
+        ...params,
+        ...wm.params,
+    );
+}
+
+/**
+ * Chronological user/assistant/tool event stream for the timeline tab.
+ */
+export async function sessionTimeline(db: DbAdapter, sessionId: string, limit = 5000): Promise<TimelineEventRow[]> {
+    return db.queryAll<TimelineEventRow>(
+        `SELECT ROW_NUMBER() OVER (ORDER BY m.seq ASC, COALESCE(tc.seq, 0) ASC) AS seq,
+                m.ts AS ts,
+                m.role AS role,
+                m.source AS source,
+                m.model AS model,
+                tc.tool_name AS toolName,
+                COALESCE(tc.duration_ms, m.duration_ms) AS durationMs,
+                m.input_tokens AS inputTokens,
+                m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens,
+                CASE WHEN tc.status = 'error' THEN 1 WHEN tc.tool_name IS NOT NULL THEN 0 ELSE NULL END AS exitCode,
+                COALESCE(tc.args_raw, tc.args_digest, m.disposition) AS payload
+         FROM history_message m
+         LEFT JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+         WHERE m.session_id = ?
+         ORDER BY m.seq ASC, COALESCE(tc.seq, 0) ASC
+         LIMIT ?`,
+        sessionId,
+        limit,
+    );
+}
+
+/**
+ * Per (source, day) token matrix for the 90-day heatmap grid.
+ */
+export async function dailyTokenMatrix(db: DbAdapter, days = 90): Promise<DailyTokenRow[]> {
+    return db.queryAll<DailyTokenRow>(
+        `SELECT m.source AS source,
+                DATE(m.ts) AS day,
+                SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.output_tokens, 0)) AS tokens,
+                SUM(COALESCE(m.cache_read_tokens, 0)) AS cacheReadTokens
+         FROM history_message m
+         WHERE m.ts >= datetime('now', '-' || ? || ' days')
+         GROUP BY m.source, DATE(m.ts)
+         ORDER BY day ASC`,
+        days,
+    );
+}
+
+/**
+ * Model multi-axis comparison metrics (Speed, Cache ratio, Reliability, Output ratio).
+ */
+export async function modelComparison(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<ModelComparisonRow[]> {
+    const { where, params } = buildMessageWhere(sel, 'm');
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    return db.queryAll<ModelComparisonRow>(
+        `SELECT COALESCE(m.model, 'other') AS model,
+                AVG(CASE WHEN m.role = 'assistant' AND m.duration_ms > 0 THEN m.duration_ms END) AS speedMsMean,
+                CASE WHEN SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) > 0
+                     THEN CAST(SUM(COALESCE(m.cache_read_tokens, 0)) AS REAL) / CAST(SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) AS REAL)
+                     ELSE 0.0 END AS cacheRatio,
+                CASE WHEN COUNT(tc.rowid) > 0
+                     THEN 1.0 - (CAST(SUM(CASE WHEN tc.status = 'error' THEN 1 ELSE 0 END) AS REAL) / CAST(COUNT(tc.rowid) AS REAL))
+                     ELSE 1.0 END AS reliability,
+                CASE WHEN SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.output_tokens, 0)) > 0
+                     THEN CAST(SUM(COALESCE(m.output_tokens, 0)) AS REAL) / CAST(SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.output_tokens, 0)) AS REAL)
+                     ELSE 0.0 END AS outputRatio
+         FROM history_message m
+         LEFT JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+         ${wm.where}
+         GROUP BY m.model`,
+        ...params,
+        ...wm.params,
     );
 }
