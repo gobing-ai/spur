@@ -1,6 +1,7 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
 import { featureContract } from './feature';
+import { historyContract } from './history';
 import { planningEventContract } from './planning-event';
 import { taskContract } from './task';
 
@@ -27,12 +28,14 @@ export const contract = {
         .output(healthResponseSchema),
     task: { ...taskContract },
     feature: { ...featureContract },
+    history: { ...historyContract },
     ...planningEventContract,
 };
 
 /** Type-level alias for the public Spur oRPC contract. */
 export type SpurContract = typeof contract;
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
+export * from './history';
 // ─── Re-exported DTO schemas for handler return-type inference ───
 export {
     taskActionInputSchema,
