@@ -4,7 +4,7 @@ name: "History analytics pre-computation: enhance spur history analyze and impor
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:31.955Z
-updated_at: "2026-08-22T03:42:10.512Z"
+updated_at: "2026-08-22T06:13:22.650Z"
 feature_id: E8
 dependencies: ["0628"]
 ---
@@ -131,30 +131,37 @@ benchmark. Leaves nothing for a dependent task; E8's board is complete when this
 - [x] Add unit tests (incrementality, idempotence, staleness fallback) and integration tests proving rollup-backed and live results are numerically identical on one fixture corpus (R5)
 - [x] Re-run the benchmark post-materialization and record before/after in Testing; run `bun run lint`, `bun run test`, `bun run spur-check` (R1, R5)
 ### Solution
-- packages/contracts/src/history.ts:1 - Added complete TSDoc documentation across all schemas, types, and the `historyContract` oRPC router.
-- packages/domain/src/analytics/forensic-query.ts:700 - Added TSDoc comments for all exported types (`HistoryBucket`, `HistoryDimension`, `BucketedTokenRow`, `TimelineEventRow`, `DailyTokenRow`, `ModelComparisonRow`).
-- packages/app/src/services/history-board-service.ts:45 - Confirmed live indexed queries and `LiveHistoryBoardService` meet all performance requirements (<9ms on test corpus) without introducing materialized tables or write-path overhead to import.
-- apps/cli/src/commands/history.ts:130 - Verified `spur history analyze` functions on source-local binary with provenance tracking, satisfying R1 gate.
+#### Seams touched
+
+- `packages/domain/src/migrations.ts:351-365` — `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` adds only the four read models justified by real latency.
+- `packages/domain/src/analytics/history-board-rollup.ts:30-41` — `HISTORY_BOARD_ROLLUP_VERSION` makes freshness sensitive to projection semantics.
+- `packages/domain/src/analytics/history-board-rollup.ts:172-190` — `replaceHistoryBoardRollups` atomically replaces checkpoint-keyed projections.
+- `packages/app/src/services/history-analysis-service.ts:39-58` — `refreshHistoryRollups` reuses the existing forensic analyzers and no-ops on an unchanged corpus.
+- `packages/app/src/services/history-service.ts:518-524` — `refreshHistoryRollups` runs from the existing analyze path without a public CLI change.
 ### Testing
-1. Benchmark gate verification (R1):
-- Executed `bun test packages/app/tests/services/history-board-service.test.ts` on seeded corpus (50 sessions, 500 messages, 250 tool calls).
-- Recorded latencies: `getSummary` (9.25ms), `getTimeline` (1.83ms), `getSessions` (3.02ms), `getInsights` (4.29ms), `getSources` (2.66ms), `triggerImport` (0.06ms). Total execution: 8.97ms (<1.5ms average per endpoint), well below the 50ms bound.
-- Source-local provenance: `binary: bun apps/cli/src/index.ts`, `importerVersion: 0.1.0`.
-- Conclusion: All endpoints pass the <50ms gate; R2-R4 closed as not needed with evidence per design specification.
-2. Full quality verification:
-- `bun run spur-check`: PASS (0 lint errors, 6,160 tests passing across 336 files).
-- `bun run test-cf`: PASS (Cloudflare worker vitest suite passing).
-- `bun run build`: PASS (CLI, server, and web static bundles generated).
-3. Coverage claim:
-- `packages/app/src/services/history-board-service.ts`: 96.74% lines covered.
-- `packages/domain/src/analytics/forensic-query.ts`: 97.96% lines covered.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Source-local provenance was apps/cli/src/index.ts with importer 0.4.41; the 1,704,022-message pre-rollup benchmark measured Summary 27,019.49 ms, Timeline 61.42 ms, Sessions 2,648.62 ms, Insights 12,477.92 ms, Sources 5,453.31 ms, and trigger 0.05 ms. |
+| R2 | MET | `packages/domain/src/migrations.ts:351-365`; only measured Summary, Sessions, Insights, and Sources read models were added; Timeline stays live. |
+| R3 | MET | `packages/app/tests/services/history-analysis-service.test.ts:207-306`; refresh, unchanged no-op, stale fallback, and live/materialized equality pass. |
+| R4 | MET | `packages/app/src/services/history-service.ts:518-540`; the existing analyze path refreshes projections with no public surface change. |
+| R5 | MET | `packages/app/tests/services/history-analysis-service.test.ts:207-306`; builder and integration coverage pass in the 134-test matrix. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| oRPC contracts and DB query performance | MET | command | Five real runs put every endpoint below 50 ms, with a 37.89 ms worst case over 1,704,022 messages, and pure-token checks passed. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Category | Finding | Disposition |
-|---|---|---|---|
-| P1 | Performance | R1 measurement gate passed: all 6 endpoints execute in <10ms (<50ms requirement) | PASS |
-| P2 | Design & Scope | Evidence-before-optimization: avoided unneeded rollup tables and write-path overhead | PASS |
-| P3 | Accounting | Pure-token metrics maintained: zero currency/cost fields | PASS |
-| P4 | Documentation | Full TSDoc comments added to all public contracts and domain exports | PASS |
+| --- | --- | --- | --- |
+| P1 | Performance | Real live Summary, Sessions, Insights, and Sources missed 50 ms by large margins; measured rollups reduce the worst endpoint to 37.89 ms. | FIXED |
+| P2 | Freshness | Checkpoint-only freshness could accept projections built under older semantics; a versioned checkpoint invalidates them deterministically. | FIXED |
+| P3 | Scope | Timeline remains on its measured indexed live path; no unneeded rollup or public CLI flag was added. | PASS |
+| P4 | Equality | Fixture tests prove fresh rollups equal live projections and stale/unsupported filters fall back safely. | PASS |
 ### References
 - Feature: [E8: History Board module](file:///Users/robin/xprojects/spur-new/docs/features/E8_history-board-module-analytics-summary-execution-timeline-sessions-forensic-insights-and-agent-sources-registry.md)
 - Design Spec: [docs/design/history-board-module.md](file:///Users/robin/xprojects/spur-new/docs/design/history-board-module.md)

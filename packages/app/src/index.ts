@@ -150,6 +150,10 @@ export {
     type FindingCode,
     isFindingCode,
 } from './services/finding-codes';
+export {
+    type HistoryRollupRefreshResult,
+    refreshHistoryRollups,
+} from './services/history-analysis-service';
 export type { HistoryBoardService } from './services/history-board-mock-service';
 export { MockHistoryBoardService } from './services/history-board-mock-service';
 export { LiveHistoryBoardService, type LiveHistoryBoardServiceOptions } from './services/history-board-service';

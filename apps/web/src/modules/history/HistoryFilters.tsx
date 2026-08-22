@@ -14,7 +14,7 @@ export interface HistoryFiltersProps {
 export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
     filter,
     onChange,
-    availableSources = ['claude', 'codex', 'antigravity', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'],
+    availableSources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'],
     availableModels = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.6-sol', 'grok-4.6', 'other'],
     availableTools = ['Read', 'Bash', 'Edit', 'Grep', 'Write', 'Glob', 'Task', 'WebSearch'],
     availableSkills = ['sp-spur-cli', 'sp-dev-verify', 'sp-dev-run', 'sp-code-verification'],

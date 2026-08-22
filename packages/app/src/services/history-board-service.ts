@@ -13,23 +13,35 @@ import type {
     HistoryTimelineEventKind,
     HistoryTimelineResponse,
     HistoryTopItem,
-    HistoryTopTool,
     HistoryTriggerImportResponse,
 } from '@gobing-ai/spur-contracts';
 import {
     type ArtifactSelector,
     bucketedTokenSeries,
     bySession,
+    bySkill,
     byTool,
-    type DailyTokenRow,
     type DbAdapter,
     type HistoryBucket as DomainHistoryBucket,
     dailyTokenMatrix,
+    type HistoryBoardDailyRollupRow,
+    type HistoryBoardSourceRollupRow,
+    type HistoryBoardSummaryRollup,
+    historyBoardDatabaseBytes,
+    historyBoardHeavySessionsFromRollup,
+    historyBoardLoopsFromRollup,
+    historyBoardModelComparisonFromRollup,
+    historyBoardRankedStepsFromRollup,
+    historyBoardRollupsFresh,
+    historyBoardSessionsFromRollup,
+    historyBoardSourcesFromRollup,
+    historyBoardSummaryFromRollup,
     loops,
     messageRollup,
     modelComparison,
     sessionTimeline,
     sourceSummary,
+    toolRollup,
     topCacheWasteSteps,
     topStepsByDuration,
     topStepsByTokens,
@@ -42,7 +54,10 @@ import type { HistoryBoardService } from './history-board-mock-service';
 export interface LiveHistoryBoardServiceOptions {
     db?: DbAdapter;
     getDb?: () => Promise<DbAdapter | undefined> | DbAdapter | undefined;
+    triggerImport?: (mode: 'full' | 'incremental') => Promise<HistoryTriggerImportResponse['data']>;
 }
+
+const SERIES_COLORS = ['#3987e5', '#199e70', '#d95926', '#9085e9', '#c98500', '#ec4899', '#14b8a6'];
 
 const AGENT_CATALOG: Array<{
     id: string;
@@ -60,7 +75,7 @@ const AGENT_CATALOG: Array<{
     },
     { id: 'codex', name: 'Codex', color: '#d95926', path: '~/.codex/sessions/', pattern: 'rollout-*.jsonl' },
     {
-        id: 'antigravity',
+        id: 'agy',
         name: 'Antigravity CLI',
         color: '#c98500',
         path: '~/.gemini/antigravity-cli/brain/',
@@ -150,6 +165,149 @@ function classifyToolKind(toolName: string | null, role: string): HistoryTimelin
     return 'run';
 }
 
+function projectSummary(rows: HistoryBoardSummaryRollup): HistorySummaryResponse['data'] {
+    const tokenTotal = (row: { freshInputTokens: number; outputTokens: number }) =>
+        row.freshInputTokens + row.outputTokens;
+    const totalBilledTokens = rows.models.reduce((sum, row) => sum + tokenTotal(row), 0);
+    const cacheSavedTokens = rows.models.reduce((sum, row) => sum + row.cacheReadTokens, 0);
+    const cacheDenominator = totalBilledTokens + cacheSavedTokens;
+    const timeSeries = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    for (const row of rows.buckets) {
+        const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
+        const billed = (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        point.billed += billed;
+        point.cacheRead += row.cacheReadTokens ?? 0;
+        point.series[row.key] = (point.series[row.key] ?? 0) + billed;
+        timeSeries.set(row.bucketStart, point);
+    }
+
+    const toTopItems = (items: HistoryBoardSummaryRollup['models'], sourceColors: boolean): HistoryTopItem[] =>
+        items.slice(0, 5).map((row, index) => {
+            const tokens = tokenTotal(row);
+            return {
+                id: row.key,
+                label: row.key,
+                color:
+                    (sourceColors ? AGENT_CATALOG.find((agent) => agent.id === row.key)?.color : undefined) ??
+                    SERIES_COLORS[index % SERIES_COLORS.length] ??
+                    '#3987e5',
+                tokens,
+                share: totalBilledTokens > 0 ? Math.round((tokens / totalBilledTokens) * 100) : 0,
+            };
+        });
+
+    return {
+        kpis: {
+            totalBilledTokens,
+            cacheSavedTokens,
+            cacheSavedPercent: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
+            sessionsCount: rows.sessions,
+            toolCallsCount: rows.toolCalls,
+            errorRate: rows.toolCalls > 0 ? Math.round((rows.toolErrors / rows.toolCalls) * 1000) / 10 : 0,
+        },
+        timeSeries: Array.from(timeSeries.entries()).map(([bucketStart, point]) => ({
+            bucketStart,
+            cacheHitRatio:
+                point.billed + point.cacheRead > 0
+                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
+                    : 0,
+            series: point.series,
+        })),
+        topModels: toTopItems(rows.models, false),
+        topSources: toTopItems(rows.sources, true),
+        topTools: rows.tools.slice(0, 10).map((row) => ({
+            id: row.toolName,
+            count: row.calls,
+            errors: row.errors,
+            errorRate: row.calls > 0 ? Math.round((row.errors / row.calls) * 1000) / 10 : 0,
+        })),
+        skillsUsed: rows.skills.map((row, index) => ({
+            id: row.skillName,
+            label: row.skillName,
+            color: SERIES_COLORS[index % SERIES_COLORS.length] ?? '#3987e5',
+            count: row.calls,
+        })),
+        cacheEfficiency: {
+            hitRatio: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
+            savedTokens: cacheSavedTokens,
+            totalRead: cacheSavedTokens + rows.models.reduce((sum, row) => sum + row.freshInputTokens, 0),
+        },
+    };
+}
+
+function projectSources(
+    sources: readonly HistoryBoardSourceRollupRow[],
+    daily: readonly HistoryBoardDailyRollupRow[],
+    databaseBytes: number,
+): HistorySourcesResponse['data'] {
+    const sourceMap = new Map(sources.map((row) => [row.source, row]));
+    const dailyMap = new Map(daily.map((row) => [`${row.source}\0${row.day}`, row]));
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const agents = AGENT_CATALOG.map((catalog) => {
+        const source = sourceMap.get(catalog.id);
+        const heatmapDays = Array.from({ length: 90 }, (_, index) => {
+            const date = new Date(today.getTime() - (89 - index) * 86_400_000).toISOString().slice(0, 10);
+            const row = dailyMap.get(`${catalog.id}\0${date}`);
+            return {
+                date,
+                tokens: (row?.freshInputTokens ?? 0) + (row?.outputTokens ?? 0),
+                sessions: row?.sessions ?? 0,
+            };
+        });
+        return {
+            id: catalog.id,
+            name: catalog.name,
+            color: catalog.color,
+            importPath: catalog.path,
+            filePattern: catalog.pattern,
+            filesCount: source?.files ?? 0,
+            sizeMb: null,
+            sessionCount: source?.sessions ?? 0,
+            totalTokens: (source?.freshInputTokens ?? 0) + (source?.outputTokens ?? 0),
+            cacheSavedTokens: source?.cacheReadTokens ?? 0,
+            freshTokens: source?.freshInputTokens ?? 0,
+            toolCalls: source?.toolCalls ?? 0,
+            firstDate: source?.firstDate ?? null,
+            lastDate: source?.lastDate ?? null,
+            heatmapDays,
+            maxDailyTokens: Math.max(0, ...heatmapDays.map((day) => day.tokens)),
+        };
+    });
+    const from = sources.reduce<string | null>(
+        (earliest, source) =>
+            source.firstDate !== null && (earliest === null || source.firstDate < earliest)
+                ? source.firstDate
+                : earliest,
+        null,
+    );
+    const to = sources.reduce<string | null>(
+        (latest, source) =>
+            source.lastDate !== null && (latest === null || source.lastDate > latest) ? source.lastDate : latest,
+        null,
+    );
+    return {
+        overview: {
+            totalFiles: sources.reduce((sum, source) => sum + source.files, 0),
+            corpusSizeBytes: databaseBytes,
+            dateCoverage: { from, to },
+            totalSessions: sources.reduce((sum, source) => sum + source.sessions, 0),
+        },
+        agents,
+        roots: AGENT_CATALOG.map((catalog) => {
+            const files = sourceMap.get(catalog.id)?.files ?? 0;
+            return {
+                agentId: catalog.id,
+                agentName: catalog.name,
+                path: catalog.path,
+                matchPattern: catalog.pattern,
+                fileCount: files,
+                status: files > 0 ? ('active' as const) : ('empty' as const),
+            };
+        }),
+    };
+}
+
 /**
  * Live database-backed implementation of HistoryBoardService.
  */
@@ -185,124 +343,47 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
         const sel = toArtifactSelector(filter);
         const bucket = resolveBucket(filter?.bucket, filter?.range ?? '30d');
+        const dimension = filter?.dimension ?? 'model';
+        const exactSummaryRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
+        if (exactSummaryRollup && (await historyBoardRollupsFresh(db))) {
+            return projectSummary(await historyBoardSummaryFromRollup(db, sel, bucket, dimension));
+        }
 
-        const [bucketRows, rollups, toolStats, sessionRows] = await Promise.all([
-            bucketedTokenSeries(db, sel, bucket, 'model'),
+        const [bucketRows, rollups, toolStats, skillStats, sessionRows] = await Promise.all([
+            bucketedTokenSeries(db, sel, bucket, dimension),
             messageRollup(db, sel),
-            byTool(db, sel, 10),
-            bySession(db, sel, 1000),
+            byTool(db, sel, 1_000_000),
+            bySkill(db, sel, 1_000_000),
+            bySession(db, sel, 1_000_000),
         ]);
-
-        let freshTokensTotal = 0;
-        let cacheReadTokensTotal = 0;
-        let outputTokensTotal = 0;
-        const modelTokenMap = new Map<string, number>();
-        const sourceTokenMap = new Map<string, number>();
-
+        const models = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
+        const sources = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
         for (const row of rollups) {
-            const fresh = row.inputTokens ?? 0;
-            const cache = row.cacheReadTokens ?? 0;
-            const out = row.outputTokens ?? 0;
-            const billed = fresh + out;
-
-            freshTokensTotal += fresh;
-            cacheReadTokensTotal += cache;
-            outputTokensTotal += out;
-
-            const m = row.model ?? 'unknown';
-            modelTokenMap.set(m, (modelTokenMap.get(m) ?? 0) + billed);
-
-            const s = row.source;
-            sourceTokenMap.set(s, (sourceTokenMap.get(s) ?? 0) + billed);
+            for (const [key, target] of [
+                [row.model ?? 'unknown', models],
+                [row.source, sources],
+            ] as const) {
+                const aggregate = target.get(key) ?? { freshInputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+                aggregate.freshInputTokens += row.inputTokens ?? 0;
+                aggregate.cacheReadTokens += row.cacheReadTokens ?? 0;
+                aggregate.outputTokens += row.outputTokens ?? 0;
+                target.set(key, aggregate);
+            }
         }
-
-        const totalBilledTokens = freshTokensTotal + outputTokensTotal;
-        const cacheSavedTokens = cacheReadTokensTotal;
-        const denom = totalBilledTokens + cacheSavedTokens;
-        const cacheSavedPercent = denom > 0 ? Math.round((cacheSavedTokens / denom) * 100) : 0;
-        const sessionsCount = sessionRows.length;
-
-        let totalToolCalls = 0;
-        let totalErrors = 0;
-        for (const t of toolStats) {
-            totalToolCalls += t.calls;
-            totalErrors += t.errors;
-        }
-        const errorRate = totalToolCalls > 0 ? Math.round((totalErrors / totalToolCalls) * 1000) / 10 : 0;
-
-        // Bucket timeSeries points
-        const timeSeriesMap = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
-        for (const r of bucketRows) {
-            const entry = timeSeriesMap.get(r.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-            const billed = (r.freshInputTokens ?? 0) + (r.outputTokens ?? 0);
-            entry.billed += billed;
-            entry.cacheRead += r.cacheReadTokens ?? 0;
-            entry.series[r.key] = (entry.series[r.key] ?? 0) + billed;
-            timeSeriesMap.set(r.bucketStart, entry);
-        }
-
-        const timeSeries = Array.from(timeSeriesMap.entries()).map(([bucketStart, data]) => {
-            const sumTokens = data.billed + data.cacheRead;
-            const hitRatio = sumTokens > 0 ? Math.round((data.cacheRead / sumTokens) * 100) : 0;
-            return {
-                bucketStart,
-                cacheHitRatio: hitRatio,
-                series: data.series,
-            };
+        return projectSummary({
+            buckets: bucketRows,
+            models: Array.from(models, ([key, value]) => ({ key, ...value })).sort(
+                (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
+            ),
+            sources: Array.from(sources, ([key, value]) => ({ key, ...value })).sort(
+                (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
+            ),
+            tools: toolStats.map((row) => ({ toolName: row.toolName, calls: row.calls, errors: row.errors })),
+            skills: skillStats,
+            sessions: sessionRows.length,
+            toolCalls: toolStats.reduce((sum, row) => sum + row.calls, 0),
+            toolErrors: toolStats.reduce((sum, row) => sum + row.errors, 0),
         });
-
-        const topModels: HistoryTopItem[] = Array.from(modelTokenMap.entries())
-            .map(([id, tokens]) => ({
-                id,
-                label: id,
-                color: '#3987e5',
-                tokens,
-                share: totalBilledTokens > 0 ? Math.round((tokens / totalBilledTokens) * 100) : 0,
-            }))
-            .sort((a, b) => b.tokens - a.tokens)
-            .slice(0, 5);
-
-        const topSources: HistoryTopItem[] = Array.from(sourceTokenMap.entries())
-            .map(([id, tokens]) => ({
-                id,
-                label: id,
-                color: '#10b981',
-                tokens,
-                share: totalBilledTokens > 0 ? Math.round((tokens / totalBilledTokens) * 100) : 0,
-            }))
-            .sort((a, b) => b.tokens - a.tokens)
-            .slice(0, 5);
-
-        const topTools: HistoryTopTool[] = toolStats.slice(0, 10).map((t) => ({
-            id: t.toolName,
-            count: t.calls,
-            errors: t.errors,
-            errorRate: t.calls > 0 ? Math.round((t.errors / t.calls) * 1000) / 10 : 0,
-        }));
-
-        const totalRead = freshTokensTotal + cacheReadTokensTotal;
-        const cacheHitRatio = totalRead > 0 ? Math.round((cacheReadTokensTotal / totalRead) * 100) : 0;
-
-        return {
-            kpis: {
-                totalBilledTokens,
-                cacheSavedTokens,
-                cacheSavedPercent,
-                sessionsCount,
-                toolCallsCount: totalToolCalls,
-                errorRate,
-            },
-            timeSeries,
-            topModels,
-            topSources,
-            topTools,
-            skillsUsed: [],
-            cacheEfficiency: {
-                hitRatio: cacheHitRatio,
-                savedTokens: cacheSavedTokens,
-                totalRead,
-            },
-        };
     }
 
     async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
@@ -313,7 +394,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     id: sessionId,
                     source: 'unknown',
                     model: 'unknown',
-                    start: new Date().toISOString(),
+                    start: new Date(0).toISOString(),
                     durationMs: 0,
                     tokens: {
                         billedTokens: 0,
@@ -329,9 +410,17 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             };
         }
 
+        if (sessionId === '' || sessionId === 'unknown' || sessionId === 'session') {
+            throw new Error(`History session not found: ${sessionId || '(empty)'}`);
+        }
+
         const events = await sessionTimeline(db, sessionId, 5000);
+        if (events.length === 0) {
+            throw new Error(`History session not found: ${sessionId}`);
+        }
         let firstTs: string | null = null;
-        let source = 'claude';
+        let lastTs: string | null = null;
+        let source = 'unknown';
         let model = 'unknown';
         let totalFresh = 0;
         let totalCache = 0;
@@ -339,9 +428,11 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         let totalDuration = 0;
         let toolCallCount = 0;
 
-        const timelineEvents: HistoryTimelineEvent[] = [];
+        let messageCount = 0;
+        const blocksByTurn = new Map<number, HistoryTimelineBlock>();
         for (const ev of events) {
-            if (!firstTs && ev.ts) firstTs = ev.ts;
+            if (ev.ts && (firstTs === null || ev.ts < firstTs)) firstTs = ev.ts;
+            if (ev.ts && (lastTs === null || ev.ts > lastTs)) lastTs = ev.ts;
             if (ev.source) source = ev.source;
             if (ev.model) model = ev.model;
 
@@ -355,9 +446,10 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             totalCache += cache;
             totalOut += out;
             totalDuration += dur;
-            if (ev.toolName) toolCallCount += 1;
+            if (ev.eventType === 'tool') toolCallCount += 1;
+            else messageCount += 1;
 
-            timelineEvents.push({
+            const event: HistoryTimelineEvent = {
                 seq: ev.seq,
                 kind: classifyToolKind(ev.toolName, ev.role),
                 title: ev.toolName ? `${ev.toolName}` : `${ev.role} turn`,
@@ -370,16 +462,34 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 payload: ev.payload,
                 agent: ev.source,
                 model: ev.model ?? 'unknown',
-            });
+            };
+            const turn = blocksByTurn.get(ev.turnIndex) ?? {
+                turnIndex: ev.turnIndex,
+                timestamp: ev.ts ?? new Date(0).toISOString(),
+                source: ev.source,
+                model: ev.model ?? 'unknown',
+                totalDurationMs: 0,
+                totalTokens: 0,
+                operationCount: 0,
+                events: [],
+            };
+            turn.totalDurationMs += dur;
+            turn.totalTokens += billed;
+            turn.operationCount += 1;
+            turn.events.push(event);
+            blocksByTurn.set(ev.turnIndex, turn);
         }
 
         const totalBilled = totalFresh + totalOut;
+        const startMs = firstTs ? Date.parse(firstTs) : 0;
+        const endMs = lastTs ? Date.parse(lastTs) : startMs;
+        const spanMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, endMs - startMs) : 0;
         const sessionMeta = {
             id: sessionId,
             source,
             model,
-            start: firstTs ?? new Date().toISOString(),
-            durationMs: totalDuration,
+            start: firstTs ?? new Date(0).toISOString(),
+            durationMs: spanMs > 0 ? spanMs : totalDuration,
             tokens: {
                 billedTokens: totalBilled,
                 cacheSavedTokens: totalCache,
@@ -387,27 +497,13 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 freshInputTokens: totalFresh,
                 outputTokens: totalOut,
             },
-            messageCount: events.length,
+            messageCount,
             toolCallCount,
         };
 
-        const blocks: HistoryTimelineBlock[] = [];
-        if (timelineEvents.length > 0) {
-            blocks.push({
-                turnIndex: 1,
-                timestamp: firstTs ?? new Date().toISOString(),
-                source,
-                model,
-                totalDurationMs: totalDuration,
-                totalTokens: totalBilled,
-                operationCount: timelineEvents.length,
-                events: timelineEvents,
-            });
-        }
-
         return {
             session: sessionMeta,
-            blocks,
+            blocks: Array.from(blocksByTurn.values()).sort((a, b) => a.turnIndex - b.turnIndex),
         };
     }
 
@@ -418,24 +514,61 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         }
 
         const sel = toArtifactSelector(input.filter);
-        const rows = await bySession(db, sel, 2000);
+        const page = input.page ?? 1;
+        const pageSize = input.pageSize ?? 20;
+        const exactSessionRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
+        if (exactSessionRollup && (await historyBoardRollupsFresh(db))) {
+            const result = await historyBoardSessionsFromRollup(db, sel, {
+                page,
+                pageSize,
+                sortBy: input.sortBy ?? 'start',
+                sortDir: input.sortDir ?? 'desc',
+            });
+            return {
+                items: result.items.map((row) => {
+                    const start = row.startedAt ?? new Date(0).toISOString();
+                    const span = row.endedAt ? Math.max(0, Date.parse(row.endedAt) - Date.parse(start)) : 0;
+                    return {
+                        id: row.sessionId,
+                        source: row.source,
+                        model: row.model,
+                        start,
+                        durationMs: span > 0 ? span : row.assistantDurationMs,
+                        messages: row.messages,
+                        toolCalls: row.toolCalls,
+                        billedTokens: row.freshInputTokens + row.outputTokens,
+                        cacheReadTokens: row.cacheReadTokens,
+                        freshInputTokens: row.freshInputTokens,
+                        outputTokens: row.outputTokens,
+                        topTool: row.topTool ?? 'none',
+                        state: row.state,
+                    };
+                }),
+                total: result.total,
+                page,
+                pageSize,
+            };
+        }
+
+        const rows = await bySession(db, sel, 1_000_000);
 
         const items: HistorySessionItem[] = rows.map((r) => {
-            const billedTokens = r.tokens ?? 0;
+            const start = r.startedAt ?? new Date(0).toISOString();
+            const span = r.endedAt ? Math.max(0, Date.parse(r.endedAt) - Date.parse(start)) : 0;
             return {
                 id: r.sessionId,
                 source: r.source,
-                model: 'claude-opus-4.6',
-                start: r.startedAt ?? new Date().toISOString(),
-                durationMs: r.assistantDurationMs ?? 0,
+                model: r.model ?? 'unknown',
+                start,
+                durationMs: span > 0 ? span : (r.assistantDurationMs ?? 0),
                 messages: r.messages,
                 toolCalls: r.toolCalls,
-                billedTokens,
-                cacheReadTokens: 0,
-                freshInputTokens: billedTokens,
-                outputTokens: 0,
+                billedTokens: (r.inputTokens ?? 0) + (r.outputTokens ?? 0),
+                cacheReadTokens: r.cacheReadTokens ?? 0,
+                freshInputTokens: r.inputTokens ?? 0,
+                outputTokens: r.outputTokens ?? 0,
                 topTool: r.topTool ?? 'none',
-                state: 'completed',
+                state: r.state,
             };
         });
 
@@ -454,13 +587,15 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 diff = a.toolCalls - b.toolCalls;
             } else if (sortBy === 'billedTokens') {
                 diff = a.billedTokens - b.billedTokens;
+            } else if (sortBy === 'cacheRead') {
+                diff = a.cacheReadTokens - b.cacheReadTokens;
+            } else if (sortBy === 'freshInput') {
+                diff = a.freshInputTokens - b.freshInputTokens;
             }
             return sortDir === 'asc' ? diff : -diff;
         });
 
         const total = items.length;
-        const page = input.page ?? 1;
-        const pageSize = input.pageSize ?? 20;
         const startIdx = (page - 1) * pageSize;
         const paginated = items.slice(startIdx, startIdx + pageSize);
 
@@ -486,14 +621,25 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         }
 
         const sel = toArtifactSelector(filter);
-        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = await Promise.all([
-            loops(db, sel),
-            topCacheWasteSteps(db, sel, 10),
-            bySession(db, sel, 5),
-            topStepsByTokens(db, sel, 10),
-            topStepsByDuration(db, sel, 10),
-            modelComparison(db, sel),
-        ]);
+        const exactInsightRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
+        const rollupsFresh = exactInsightRollup && (await historyBoardRollupsFresh(db));
+        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = rollupsFresh
+            ? await Promise.all([
+                  historyBoardLoopsFromRollup(db, sel, 100),
+                  historyBoardRankedStepsFromRollup(db, sel, 'cache-waste', 10),
+                  historyBoardHeavySessionsFromRollup(db, sel, 5),
+                  historyBoardRankedStepsFromRollup(db, sel, 'tokens', 10),
+                  historyBoardRankedStepsFromRollup(db, sel, 'duration', 10),
+                  historyBoardModelComparisonFromRollup(db, sel),
+              ])
+            : await Promise.all([
+                  loops(db, sel),
+                  topCacheWasteSteps(db, sel, 10),
+                  bySession(db, sel, 5),
+                  topStepsByTokens(db, sel, 10),
+                  topStepsByDuration(db, sel, 10),
+                  modelComparison(db, sel),
+              ]);
 
         const loopFindings = loopRows.map((l) => ({
             tool: l.toolName,
@@ -512,7 +658,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             const reusePct = total > 0 ? Math.round((cache / total) * 100) : 0;
             return {
                 sessionId: c.sessionId,
-                timestamp: c.ts ?? new Date().toISOString(),
+                timestamp: c.ts ?? new Date(0).toISOString(),
                 freshTokens: fresh,
                 reason: `Low cache reuse (${reusePct}%)`,
             };
@@ -521,8 +667,8 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const heavySessions = sessionRows.map((s) => ({
             id: s.sessionId,
             source: s.source,
-            model: 'claude-opus-4.6',
-            tokens: s.tokens ?? 0,
+            model: s.model ?? 'unknown',
+            tokens: 'freshInputTokens' in s ? s.freshInputTokens + s.outputTokens : (s.tokens ?? 0),
             durationMs: s.assistantDurationMs ?? 0,
         }));
 
@@ -530,7 +676,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             stepIndex: idx + 1,
             sessionId: st.sessionId,
             toolName: 'assistant',
-            tokens: (st.inputTokens ?? 0) + (st.outputTokens ?? 0),
+            tokens: (st.inputTokens ?? 0) + (st.cacheReadTokens ?? 0) + (st.outputTokens ?? 0),
             durationMs: st.durationMs ?? undefined,
             agent: st.source,
             model: st.model ?? 'unknown',
@@ -540,7 +686,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             stepIndex: idx + 1,
             sessionId: st.sessionId,
             toolName: 'assistant',
-            tokens: (st.inputTokens ?? 0) + (st.outputTokens ?? 0),
+            tokens: (st.inputTokens ?? 0) + (st.cacheReadTokens ?? 0) + (st.outputTokens ?? 0),
             durationMs: st.durationMs ?? undefined,
             agent: st.source,
             model: st.model ?? 'unknown',
@@ -579,99 +725,74 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             };
         }
 
-        const [summaries, matrix] = await Promise.all([
-            sourceSummary(db, toArtifactSelector()),
+        if (await historyBoardRollupsFresh(db)) {
+            const result = await historyBoardSourcesFromRollup(db, 90);
+            return projectSources(result.sources, result.daily, result.databaseBytes);
+        }
+
+        const selector = toArtifactSelector();
+        const [summaries, matrix, messageRows, toolRows, sessions, databaseBytes] = await Promise.all([
+            sourceSummary(db, selector),
             dailyTokenMatrix(db, 90),
+            messageRollup(db, selector),
+            toolRollup(db, selector),
+            bySession(db, selector, 1_000_000),
+            historyBoardDatabaseBytes(db),
         ]);
-
-        const summaryMap = new Map<string, { files: number; messages: number; lastImported: string | null }>();
-        let totalFiles = 0;
-        let totalMessages = 0;
-        for (const s of summaries) {
-            summaryMap.set(s.source, { files: s.files, messages: s.messages, lastImported: s.lastImportedAt });
-            totalFiles += s.files;
-            totalMessages += s.messages;
-        }
-
-        const matrixBySource = new Map<string, DailyTokenRow[]>();
-        for (const row of matrix) {
-            const list = matrixBySource.get(row.source) ?? [];
-            list.push(row);
-            matrixBySource.set(row.source, list);
-        }
-
-        const agents = AGENT_CATALOG.map((cat) => {
-            const sumInfo = summaryMap.get(cat.id);
-            const sourceDaily = matrixBySource.get(cat.id) ?? [];
-
-            let totalTokens = 0;
-            let cacheSavedTokens = 0;
-            let maxDaily = 0;
-            const heatmapDays = sourceDaily.map((d) => {
-                const tok = d.tokens ?? 0;
-                if (tok > maxDaily) maxDaily = tok;
-                totalTokens += tok;
-                cacheSavedTokens += d.cacheReadTokens ?? 0;
-                return {
-                    date: d.day,
-                    tokens: tok,
-                    sessions: 1,
-                };
+        const sources = new Map<string, HistoryBoardSourceRollupRow>();
+        for (const row of summaries) {
+            sources.set(row.source, {
+                source: row.source,
+                files: row.files,
+                messages: row.messages,
+                lastImportedAt: row.lastImportedAt,
+                sessions: 0,
+                freshInputTokens: 0,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+                toolCalls: 0,
+                firstDate: null,
+                lastDate: null,
             });
-
-            return {
-                id: cat.id,
-                name: cat.name,
-                color: cat.color,
-                importPath: cat.path,
-                filePattern: cat.pattern,
-                filesCount: sumInfo?.files ?? 0,
-                sizeMb: Math.round(((sumInfo?.files ?? 0) * 12.5) / 10) / 100,
-                sessionCount: sumInfo?.messages ? Math.max(1, Math.round(sumInfo.messages / 10)) : 0,
-                totalTokens,
-                cacheSavedTokens,
-                freshTokens: totalTokens,
-                toolCalls: sumInfo?.messages ? Math.round(sumInfo.messages * 1.5) : 0,
-                firstDate: heatmapDays[0]?.date ?? null,
-                lastDate: heatmapDays[heatmapDays.length - 1]?.date ?? null,
-                heatmapDays,
-                maxDailyTokens: maxDaily,
-            };
-        });
-
-        const roots = AGENT_CATALOG.map((cat) => {
-            const sumInfo = summaryMap.get(cat.id);
-            const hasFiles = (sumInfo?.files ?? 0) > 0;
-            return {
-                agentId: cat.id,
-                agentName: cat.name,
-                path: cat.path,
-                matchPattern: cat.pattern,
-                fileCount: sumInfo?.files ?? 0,
-                status: (hasFiles ? 'active' : 'empty') as 'active' | 'empty' | 'missing',
-            };
-        });
-
-        return {
-            overview: {
-                totalFiles,
-                corpusSizeBytes: totalFiles * 125000,
-                dateCoverage: {
-                    from: matrix[0]?.day ?? null,
-                    to: matrix[matrix.length - 1]?.day ?? null,
-                },
-                totalSessions: Math.max(1, Math.round(totalMessages / 10)),
-            },
-            agents,
-            roots,
-        };
+        }
+        for (const row of messageRows) {
+            const source = sources.get(row.source);
+            if (!source) continue;
+            source.freshInputTokens += row.inputTokens ?? 0;
+            source.cacheReadTokens += row.cacheReadTokens ?? 0;
+            source.outputTokens += row.outputTokens ?? 0;
+        }
+        for (const row of sessions) {
+            const source = sources.get(row.source);
+            if (!source) continue;
+            source.sessions += 1;
+            if (row.startedAt && (source.firstDate === null || row.startedAt < source.firstDate)) {
+                source.firstDate = row.startedAt;
+            }
+            if (row.endedAt && (source.lastDate === null || row.endedAt > source.lastDate)) {
+                source.lastDate = row.endedAt;
+            }
+        }
+        for (const row of toolRows) {
+            const source = sources.get(row.source);
+            if (source) source.toolCalls += row.toolCalls;
+        }
+        const daily: HistoryBoardDailyRollupRow[] = matrix.map((row) => ({
+            source: row.source,
+            day: row.day,
+            freshInputTokens: row.freshInputTokens ?? 0,
+            cacheReadTokens: row.cacheReadTokens ?? 0,
+            outputTokens: (row.tokens ?? 0) - (row.freshInputTokens ?? 0),
+            sessions: row.sessions,
+            toolCalls: row.toolCalls,
+        }));
+        return projectSources(Array.from(sources.values()), daily, databaseBytes);
     }
 
     async triggerImport(mode: 'full' | 'incremental'): Promise<HistoryTriggerImportResponse['data']> {
-        return {
-            runId: `import-${Date.now()}`,
-            status: 'started',
-            message: `History transcript import initiated in ${mode} mode.`,
-        };
+        if (!this.deps.triggerImport) {
+            throw new Error('History import queue is not configured');
+        }
+        return this.deps.triggerImport(mode);
     }
 }

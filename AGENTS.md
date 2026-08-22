@@ -384,6 +384,13 @@ when the task used the pipeline.
 - Clients consume contract types via `OpenAPILink` only.
 - Domain types stay in owning `@gobing-ai/ts-*` packages, never in contracts.
 
+## History Board surface
+
+The Board's `history` oRPC group exposes `getSummary`, `getTimeline`, `getSessions`, `getInsights`,
+`getSources`, and `triggerImport`; DTOs are pure-token only. Indexed live queries fall back whenever
+the checkpoint-keyed read models are absent or stale; `HistoryService.analyze()` refreshes them.
+Shapes and the canonical nine source ids: `docs/design/history-board-module.md`.
+
 ## System Event surface
 
 Persisted and SSE System Event payloads use the canonical v2 envelope built in `packages/app`;

@@ -330,6 +330,203 @@ DROP TABLE IF EXISTS history_etl_grok;
 `;
 
 /**
+ * Index the two measured History Board raw-read paths (task 0628 R3). On the
+ * 1.70M-message corpus, Timeline took 61.42ms without a session-id-leading
+ * index and ranked-step reads took 205–212ms without order-compatible indexes.
+ */
+export const HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_session_id_seq
+    ON history_message (session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_history_message_duration_rank
+    ON history_message (duration_ms DESC)
+    WHERE role = 'assistant' AND duration_ms IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_history_message_token_rank
+    ON history_message ((COALESCE(input_tokens, 0) + COALESCE(cache_read_tokens, 0)) DESC)
+    WHERE role = 'assistant';
+CREATE INDEX IF NOT EXISTS idx_history_message_input_rank
+    ON history_message (input_tokens DESC)
+    WHERE role = 'assistant';
+`;
+
+/**
+ * Materialized History Board read models (task 0629 R2). The real-corpus gate
+ * measured Summary 27.02s, Sessions 2.65s, Insights 12.48s, and Sources 5.45s;
+ * these tables move only those aggregate paths off the 1.70M raw-message scan.
+ */
+export const HISTORY_BOARD_ROLLUPS_SCHEMA_SQL = `
+-- Freshness gate shared by Summary (27.02s), Sessions (2.65s), Insights (12.48s), and Sources (5.45s).
+CREATE TABLE IF NOT EXISTS history_board_rollup_meta (
+    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    history_version TEXT NOT NULL,
+    refreshed_at    TEXT NOT NULL
+);
+
+-- Summary (27.02s): bounded daily token series and breakdowns.
+CREATE TABLE IF NOT EXISTS history_daily_stats (
+    source                TEXT NOT NULL,
+    model                 TEXT NOT NULL,
+    day                   TEXT NOT NULL,
+    fresh_input_tokens     INTEGER NOT NULL,
+    cache_read_tokens      INTEGER NOT NULL,
+    output_tokens          INTEGER NOT NULL,
+    messages               INTEGER NOT NULL,
+    assistant_duration_ms  INTEGER NOT NULL,
+    tool_calls             INTEGER NOT NULL,
+    PRIMARY KEY (source, model, day)
+);
+
+-- Summary (27.02s): sub-day token series, also feeding the Sources (5.45s) refresh projection.
+CREATE TABLE IF NOT EXISTS history_board_message_5m (
+    bucket_start          TEXT NOT NULL,
+    session_id            TEXT NOT NULL,
+    source                TEXT NOT NULL,
+    model                 TEXT NOT NULL,
+    fresh_input_tokens    INTEGER NOT NULL,
+    cache_read_tokens     INTEGER NOT NULL,
+    output_tokens         INTEGER NOT NULL,
+    messages              INTEGER NOT NULL,
+    assistant_duration_ms INTEGER NOT NULL,
+    assistant_duration_samples INTEGER NOT NULL,
+    PRIMARY KEY (bucket_start, session_id, source, model)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_source
+    ON history_board_message_5m (source, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_model
+    ON history_board_message_5m (model, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_session
+    ON history_board_message_5m (session_id, source);
+
+-- Summary (27.02s): tool/skill series and call totals, also feeding Insights (12.48s) model reliability.
+CREATE TABLE IF NOT EXISTS history_board_tool_5m (
+    bucket_start       TEXT NOT NULL,
+    session_id         TEXT NOT NULL,
+    source             TEXT NOT NULL,
+    model              TEXT NOT NULL,
+    tool_name          TEXT NOT NULL,
+    skill_name         TEXT NOT NULL DEFAULT '',
+    fresh_input_tokens REAL NOT NULL,
+    cache_read_tokens  REAL NOT NULL,
+    output_tokens      REAL NOT NULL,
+    calls              INTEGER NOT NULL,
+    errors             INTEGER NOT NULL,
+    duration_ms        INTEGER NOT NULL,
+    PRIMARY KEY (bucket_start, session_id, source, model, tool_name, skill_name)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_source
+    ON history_board_tool_5m (source, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_model
+    ON history_board_tool_5m (model, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_tool
+    ON history_board_tool_5m (tool_name, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_skill
+    ON history_board_tool_5m (skill_name, bucket_start);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_session
+    ON history_board_tool_5m (session_id, source);
+
+-- Sessions (2.65s): paginated rows, also feeding Insights (12.48s) and Sources (5.45s).
+CREATE TABLE IF NOT EXISTS history_board_session_stats (
+    source                TEXT NOT NULL,
+    session_id            TEXT NOT NULL,
+    model                 TEXT NOT NULL,
+    started_at            TEXT,
+    ended_at              TEXT,
+    messages              INTEGER NOT NULL,
+    tool_calls            INTEGER NOT NULL,
+    errors                INTEGER NOT NULL,
+    fresh_input_tokens     INTEGER NOT NULL,
+    cache_read_tokens      INTEGER NOT NULL,
+    output_tokens          INTEGER NOT NULL,
+    assistant_duration_ms  INTEGER NOT NULL,
+    top_tool               TEXT,
+    state                  TEXT NOT NULL,
+    PRIMARY KEY (source, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_session_started
+    ON history_board_session_stats (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_board_session_model
+    ON history_board_session_stats (model, started_at DESC);
+
+-- Insights (12.48s): bounded all-time model comparison axes.
+CREATE TABLE IF NOT EXISTS history_board_model_stats (
+    model                       TEXT PRIMARY KEY,
+    assistant_duration_ms       INTEGER NOT NULL,
+    assistant_duration_samples  INTEGER NOT NULL,
+    fresh_input_tokens          INTEGER NOT NULL,
+    cache_read_tokens           INTEGER NOT NULL,
+    output_tokens               INTEGER NOT NULL,
+    tool_calls                  INTEGER NOT NULL,
+    errors                      INTEGER NOT NULL
+);
+
+-- Summary (27.02s): bounded all-time Top Tools and Skills Used aggregates.
+CREATE TABLE IF NOT EXISTS history_board_tool_stats (
+    tool_name  TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    calls      INTEGER NOT NULL,
+    errors     INTEGER NOT NULL,
+    PRIMARY KEY (tool_name, skill_name)
+);
+
+-- Insights (12.48s): reused loop-analyzer findings.
+CREATE TABLE IF NOT EXISTS history_board_loop_findings (
+    source        TEXT NOT NULL,
+    session_id    TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    started_at    TEXT,
+    tool_name     TEXT NOT NULL,
+    args_digest   TEXT NOT NULL,
+    repeats       INTEGER NOT NULL,
+    first_seq     INTEGER NOT NULL,
+    last_seq      INTEGER NOT NULL,
+    PRIMARY KEY (source, session_id, tool_name, args_digest)
+);
+
+-- Insights (12.48s): bounded token, duration, and cache-waste rankings.
+CREATE TABLE IF NOT EXISTS history_board_ranked_steps (
+    kind              TEXT NOT NULL,
+    rank              INTEGER NOT NULL,
+    session_id        TEXT NOT NULL,
+    source            TEXT NOT NULL,
+    ts                TEXT,
+    model             TEXT,
+    input_tokens      INTEGER,
+    cache_read_tokens INTEGER,
+    output_tokens     INTEGER,
+    duration_ms       INTEGER,
+    PRIMARY KEY (kind, rank)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_ranked_steps_filter
+    ON history_board_ranked_steps (kind, source, model, ts);
+
+-- Sources (5.45s): all-time source cards and registry totals.
+CREATE TABLE IF NOT EXISTS history_board_source_stats (
+    source             TEXT PRIMARY KEY,
+    files              INTEGER NOT NULL,
+    messages           INTEGER NOT NULL,
+    last_imported_at   TEXT,
+    sessions           INTEGER NOT NULL DEFAULT 0,
+    fresh_input_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    tool_calls         INTEGER NOT NULL DEFAULT 0,
+    first_date         TEXT,
+    last_date          TEXT
+);
+
+-- Sources (5.45s): bounded 90-day heatmap reads.
+CREATE TABLE IF NOT EXISTS history_board_source_daily (
+    source             TEXT NOT NULL,
+    day                TEXT NOT NULL,
+    fresh_input_tokens INTEGER NOT NULL,
+    cache_read_tokens  INTEGER NOT NULL,
+    output_tokens      INTEGER NOT NULL,
+    sessions           INTEGER NOT NULL,
+    tool_calls         INTEGER NOT NULL,
+    PRIMARY KEY (source, day)
+);
+`;
+
+/**
  * Rebuild the forensic `history_message` table so `ts` is nullable (task 0580
  * D4/R5). The importer used to coerce missing timestamps to the epoch-0
  * sentinel `1970-01-01T00:00:00.000Z` because the column was `NOT NULL`;
@@ -404,6 +601,8 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * aggregate (task 0546).
  * `0015` adds the `call_id` column to `history_tool_call` so omp tool durations
  * survive import (task 0564 R1).
+ * `0020` adds measured History Board raw-query indexes (task 0628 R3).
+ * `0021` adds measured History Board aggregate read models (task 0629 R2).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -464,6 +663,8 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         addColumnIfMissing: { table: 'history_message', column: 'request_id' },
     },
     { id: '0019_spur_cli_history_etl_tables_drop', sql: HISTORY_ETL_TABLES_DROP_SCHEMA_SQL },
+    { id: '0020_spur_cli_history_board_query_indexes', sql: HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL },
+    { id: '0021_spur_cli_history_board_rollups', sql: HISTORY_BOARD_ROLLUPS_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -539,6 +740,15 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0014_spur_cli_system_events_name_occurred_idx' &&
             !(await tableExists(adapter, 'system_events'));
 
+        const historyBoardQueryIndexesSkip =
+            migration.id === '0020_spur_cli_history_board_query_indexes' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'seq')) ||
+                !(await columnExists(adapter, 'history_message', 'duration_ms')) ||
+                !(await columnExists(adapter, 'history_message', 'role')) ||
+                !(await columnExists(adapter, 'history_message', 'input_tokens')) ||
+                !(await columnExists(adapter, 'history_message', 'cache_read_tokens')));
+
         // Migration 0017 retires the legacy `completed` runs status — a DML
         // against a table foreign/legacy journals may not have (the 0009
         // simulation shape: journaled foundation, no engine tables) or whose
@@ -554,6 +764,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !argsRawSkip &&
             !runsStatusDoneSkip &&
             !nameOccurredIndexSkip &&
+            !historyBoardQueryIndexesSkip &&
             !callIdSkip &&
             !tsNullableSkip
         ) {

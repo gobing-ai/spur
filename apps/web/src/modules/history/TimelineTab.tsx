@@ -2,6 +2,7 @@ import type { HistoryTimelineResponse } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { useState } from 'react';
 import { fmtDur, fmtMs, fmtTok, SparkBar } from './charts';
+import { AgentIcon } from './SourcesTab';
 
 export interface TimelineTabProps {
     data?: HistoryTimelineResponse['data'];
@@ -136,6 +137,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                     Turn #{block.turnIndex + 1}
                                 </span>
                                 <span className="font-mono text-base-content/70">{block.timestamp.slice(11, 19)}</span>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-content">
+                                    <AgentIcon id={block.source} />
+                                    {block.source}
+                                </span>
+                                <span className="rounded-full border border-base-content/20 px-2 py-0.5 font-mono">
+                                    {block.model}
+                                </span>
                             </div>
                             <div className="flex items-center gap-3 font-mono text-[11px] text-base-content/70">
                                 <span>{block.operationCount} operations</span>
@@ -154,8 +162,17 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         className="flex flex-col sm:flex-row gap-4 p-3 bg-base-100 rounded-lg border border-base-content/5 hover:border-base-content/20 transition-colors"
                                     >
                                         {/* Left Column: Visual Metrics */}
-                                        <div className="sm:w-48 shrink-0 flex flex-col justify-center gap-1.5 font-mono text-[11px]">
-                                            <div className="flex justify-between items-center text-amber-400">
+                                        <div
+                                            className="sm:w-48 shrink-0 flex flex-col justify-center gap-1.5 font-mono text-[11px]"
+                                            title={`Step #${ev.seq} · ${ev.title}\nDuration: ${fmtMs(ev.durationMs)}\nFresh input: ${fmtTok(ev.freshInputTokens)}\nCache read: ${fmtTok(ev.cacheReadTokens)}\nOutput: ${fmtTok(ev.outputTokens)}\nAgent/model: ${ev.agent} · ${ev.model}`}
+                                        >
+                                            <div
+                                                className={`flex justify-between items-center ${
+                                                    ev.durationMs >= 5_000
+                                                        ? 'font-bold text-amber-400'
+                                                        : 'text-base-content/70'
+                                                }`}
+                                            >
                                                 <span>Duration:</span>
                                                 <span className="font-bold">{fmtMs(ev.durationMs)}</span>
                                             </div>
@@ -166,7 +183,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 height={4}
                                             />
 
-                                            <div className="flex justify-between items-center text-cyan-400 mt-1">
+                                            <div
+                                                className={`flex justify-between items-center mt-1 ${
+                                                    ev.tokens >= 50_000
+                                                        ? 'font-bold text-cyan-300'
+                                                        : 'text-base-content/70'
+                                                }`}
+                                            >
                                                 <span>Tokens:</span>
                                                 <span className="font-bold">{fmtTok(ev.tokens)}</span>
                                             </div>
@@ -192,12 +215,6 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                     </span>
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-base-300 uppercase font-mono text-base-content">
                                                         {ev.kind}
-                                                    </span>
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-base-content/60">
-                                                        {ev.agent}
-                                                    </span>
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-base-content/60">
-                                                        {ev.model}
                                                     </span>
                                                     {ev.exitCode !== null && (
                                                         <span

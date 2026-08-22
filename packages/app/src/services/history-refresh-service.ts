@@ -21,7 +21,7 @@ import type { SystemEventBus } from './system-event-tap';
 export const HISTORY_REFRESH_JOB = 'history.refresh';
 
 /** Named completion points that may fire the trigger — never "every CLI invocation". */
-export type HistoryRefreshTriggerPoint = 'task-done' | 'pipeline-run';
+export type HistoryRefreshTriggerPoint = 'task-done' | 'pipeline-run' | 'manual';
 
 /** Payload of a `history.refresh` queue job. */
 export interface HistoryRefreshPayload {
@@ -33,6 +33,8 @@ export interface HistoryRefreshPayload {
     windowStart: number;
     /** Epoch ms of the LATEST completion in the coalesced burst. */
     windowEnd: number;
+    /** Manual board refresh mode; completion-triggered refreshes default to incremental. */
+    importMode?: 'full' | 'incremental';
 }
 
 /** Outcome of {@link enqueueHistoryRefresh}. */
@@ -56,12 +58,17 @@ export interface HistoryRefreshEnqueueOptions {
 function parsePayload(raw: unknown): HistoryRefreshPayload {
     const candidate = (typeof raw === 'string' ? safeJsonParse(raw) : raw) as Partial<HistoryRefreshPayload> | null;
     const trigger: HistoryRefreshTriggerPoint =
-        candidate?.trigger === 'task-done' || candidate?.trigger === 'pipeline-run' ? candidate.trigger : 'task-done';
+        candidate?.trigger === 'task-done' || candidate?.trigger === 'pipeline-run' || candidate?.trigger === 'manual'
+            ? candidate.trigger
+            : 'task-done';
     return {
         trigger,
         triggerId: typeof candidate?.triggerId === 'string' ? candidate.triggerId : null,
         windowStart: typeof candidate?.windowStart === 'number' ? candidate.windowStart : 0,
         windowEnd: typeof candidate?.windowEnd === 'number' ? candidate.windowEnd : 0,
+        ...(candidate?.importMode === 'full' || candidate?.importMode === 'incremental'
+            ? { importMode: candidate.importMode }
+            : {}),
     };
 }
 
@@ -156,7 +163,7 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, paylo
     const startMs = Date.now();
     let result: DailyResult;
     try {
-        result = await svc.daily({ cwd: deps.cwd });
+        result = await svc.daily({ cwd: deps.cwd, importMode: job.importMode ?? 'incremental' });
     } catch (e) {
         await emitDailyFailed(deps, job, Date.now() - startMs, e instanceof Error ? e.message : String(e));
         throw e;

@@ -258,6 +258,28 @@ describe('createServerContext', () => {
         expect(stats.pending).toBe(0);
     });
 
+    test('historyBoardService queues a manual import with the requested mode', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test-history-board',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+
+        const receipt = await ctx.historyBoardService().triggerImport('full');
+        const db = await ctx.getDb();
+        const row = await db.queryFirst<{ type: string; payload: string; status: string }>(
+            'SELECT type, payload, status FROM queue_jobs WHERE id = ?',
+            receipt.runId,
+        );
+
+        expect(receipt.status).toBe('queued');
+        expect(row?.type).toBe('history.refresh');
+        expect(row?.status).toBe('pending');
+        expect(JSON.parse(row?.payload ?? '{}')).toMatchObject({ trigger: 'manual', importMode: 'full' });
+    });
+
     test('queueConsumer() throws when the job queue is disabled', async () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

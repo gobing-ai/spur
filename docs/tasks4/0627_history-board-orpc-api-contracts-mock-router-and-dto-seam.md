@@ -4,7 +4,7 @@ name: "History Board oRPC API contracts, mock router, and DTO seam"
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:26.320Z
-updated_at: "2026-08-22T03:46:15.954Z"
+updated_at: "2026-08-22T06:13:21.847Z"
 feature_id: E8
 ---
 
@@ -110,21 +110,12 @@ workaround.
 - [x] Run `bun run lint`, `bun run test`, `bun run test-cf`, then `bun run spur-check` (R5)
 ### Solution
 #### Seams touched
-- `packages/contracts/src/history.ts:397`: Defined `historyContract` with 6 endpoints and pure-token schemas
-- `packages/contracts/src/index.ts:31`: Mounted `historyContract` in root contract
-- `packages/app/src/services/history-board-mock-service.ts:15`: `HistoryBoardService` interface defined
-- `packages/app/src/services/history-board-mock-service.ts:284`: `MockHistoryBoardService` implemented with 120 deterministic sessions across 9 sources
-- `apps/server/src/modules/history/handlers.ts:10`: `createHistoryHandlers` implemented
-- `apps/server/src/modules/history/index.ts:12`: `historyModule: ServerModule` exported
-- `apps/server/src/modules/registry.ts:36`: `historyModule` registered in builtins
-- `apps/server/src/router.ts:35`: `createHistoryHandlers` mounted on router
-- `apps/server/src/context.ts:140`: `historyBoardService` bound in `ServerContext`
 
-#### Tests
-- `packages/contracts/tests/history-contract.test.ts:1`
-- `packages/app/tests/services/history-board-mock-service.test.ts:1`
-- `apps/server/tests/modules/history/handlers.test.ts:1`
-- `apps/server/tests/router.test.ts:1`
+- `packages/contracts/src/history.ts:17-20` — `historyDimensionEnum` adds model, source, tool, and skill summary dimensions without currency.
+- `packages/contracts/src/history.ts:402-453` — `historyContract` defines all six typed procedures.
+- `packages/app/src/services/history-board-mock-service.ts:259-266` — `MockHistoryBoardService` provides deterministic filter-aware empty, single, and nine-source fixtures.
+- `apps/server/src/modules/history/handlers.ts:7-18` — `createHistoryHandlers` binds the typed procedures to the service seam.
+- `apps/server/src/context.ts:408-420` — `historyBoardService` composes live queries and queues manual refresh work.
 ### Testing
 **Pipeline verify results**
 
@@ -132,23 +123,23 @@ workaround.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1. History contract module | MET | historyContract defined in packages/contracts/src/history.ts with 6 endpoints and mounted in root contract in packages/contracts/src/index.ts |
-| R2. Pure-token DTO schemas | MET | packages/contracts/src/history.ts uses purely token fields with 0 currency/cost/usd fields, verified by history-contract.test.ts |
-| R3. Mock service in packages/app | MET | MockHistoryBoardService implemented in packages/app/src/services/history-board-mock-service.ts with filter-aware deterministic data across 9 sources |
-| R4. Server module + router wiring | MET | apps/server/src/modules/history/{index.ts,handlers.ts} created, registered in registry.ts builtins, and router.history wired in router.ts with ServerContext.historyBoardService |
-| R5. Tests | MET | history-contract.test.ts, history-board-mock-service.test.ts, apps/server/tests/modules/history/handlers.test.ts, and router.test.ts all pass |
+| R1 | MET | `packages/contracts/src/history.ts:403-453`; all six procedures are defined and mounted. |
+| R2 | MET | `packages/contracts/tests/history-contract.test.ts:1-80`; contract traversal proves pure-token schemas and nullable unknown size. |
+| R3 | MET | `packages/app/tests/services/history-board-mock-service.test.ts:40-138`; filters and honest empty, single-source, and nine-source fixtures pass. |
+| R4 | MET | `apps/server/tests/modules/history/handlers.test.ts:6-71`; all six handlers and queued import pass. |
+| R5 | MET | `packages/contracts/tests/history-contract.test.ts:1-80`; contract generation and procedure coverage pass in the 134-test matrix. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: oRPC contracts and DB query performance | MET |  | History oRPC endpoints return typed responses in mock service under 5ms, zero currency fields in DTOs |
+| oRPC contracts and DB query performance | MET | command | Focused typed seam tests passed 134 of 134; the real-corpus worst endpoint was 37.89 ms and contract traversal found no currency fields. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | contracts and mock tests | — |  |
-| P4 | server router and handlers tests | — |  |
+| Priority | Category | Finding | Disposition |
+| --- | --- | --- | --- |
+| P1 | Contract | Six procedures are mounted and generated from the typed oRPC contract. | PASS |
+| P2 | Accounting | Contract traversal finds no cost, USD, price, or other currency fields. | PASS |
+| P3 | Fixture integrity | Empty/single/nine-source cases and filter composition are deterministic and honest. | PASS |
+| P4 | Composition | Server handlers use the live board service and queue manual import without blocking the request. | PASS |
 ### References
 - Feature: [E8: History Board module](file:///Users/robin/xprojects/spur-new/docs/features/E8_history-board-module-analytics-summary-execution-timeline-sessions-forensic-insights-and-agent-sources-registry.md)
 - Design Spec: [docs/design/history-board-module.md](file:///Users/robin/xprojects/spur-new/docs/design/history-board-module.md)

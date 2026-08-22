@@ -19,7 +19,7 @@ async function seedCorpus(
     sessionCount = 50,
     messagesPerSession = 10,
 ): Promise<{ messages: number; toolCalls: number }> {
-    const sources = ['claude', 'codex', 'antigravity', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'];
+    const sources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'];
     const models = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.6-sol', 'gemini-3.0-flash'];
     const tools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
 
@@ -39,16 +39,17 @@ async function seedCorpus(
             ).toISOString();
 
             await db.run(
-                `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
+                `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
                      role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
                      cache_read_tokens, provenance, duration_ms, imported_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
                 recordHash,
                 source,
                 'test.jsonl',
                 m,
                 sessionId,
                 m,
+                Math.ceil(m / 2),
                 role,
                 'message',
                 'ok',
@@ -117,8 +118,35 @@ describe('LiveHistoryBoardService', () => {
         const timeline = await svc.getTimeline('sess-1');
         expect(timeline.session.id).toBe('sess-1');
         expect(timeline.session.messageCount).toBe(6);
-        expect(timeline.blocks.length).toBe(1);
-        expect(timeline.blocks[0]?.events.length).toBe(6);
+        expect(timeline.session.toolCallCount).toBe(3);
+        expect(timeline.blocks.length).toBe(3);
+        expect(timeline.blocks[0]?.events.length).toBe(3);
+    });
+
+    test('sentinel session ids stay out of navigable session projections', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 2, 2);
+        await db.run(
+            `INSERT INTO history_message (
+                 record_hash, source, source_file, source_line, session_id, seq, role,
+                 record_type, disposition, ts, provenance, imported_at
+             ) VALUES ('unknown-message', 'agy', 'legacy.jsonl', 1, 'unknown', 1, 'assistant',
+                       'message', 'ok', '2026-08-21T00:00:00Z', 'agent', '2026-08-21T00:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_message (
+                 record_hash, source, source_file, source_line, session_id, seq, role,
+                 record_type, disposition, ts, provenance, imported_at
+             ) VALUES ('generic-session-message', 'agy', 'legacy.jsonl', 2, 'session', 2, 'assistant',
+                       'message', 'ok', '2026-08-21T00:00:01Z', 'agent', '2026-08-21T00:00:01Z')`,
+        );
+        const svc = new LiveHistoryBoardService({ db });
+
+        const sessions = await svc.getSessions({ page: 1, pageSize: 20 });
+        expect(sessions.total).toBe(2);
+        expect(sessions.items.some((session) => session.id === 'unknown')).toBe(false);
+        await expect(svc.getTimeline('unknown')).rejects.toThrow('History session not found');
+        await expect(svc.getTimeline('session')).rejects.toThrow('History session not found');
     });
 
     test('getSessions returns sorted paginated session items', async () => {
@@ -152,10 +180,17 @@ describe('LiveHistoryBoardService', () => {
         expect(sources.agents.length).toBe(9);
         expect(sources.roots.length).toBe(9);
         expect(sources.overview.totalSessions).toBeGreaterThan(0);
+        expect(sources.agents.find((agent) => agent.id === 'agy')?.sessionCount).toBeGreaterThan(0);
     });
 
     test('triggerImport returns pending job status', async () => {
-        const svc = new LiveHistoryBoardService();
+        const svc = new LiveHistoryBoardService({
+            triggerImport: async (mode) => ({
+                runId: 'history-refresh-test',
+                status: 'started',
+                message: `${mode} import queued`,
+            }),
+        });
         const res = await svc.triggerImport('incremental');
         expect(res.status).toBe('started');
     });
@@ -166,7 +201,10 @@ describe('LiveHistoryBoardService', () => {
         expect(stats.messages).toBe(500);
         expect(stats.toolCalls).toBe(250);
 
-        const svc = new LiveHistoryBoardService({ db });
+        const svc = new LiveHistoryBoardService({
+            db,
+            triggerImport: async () => ({ runId: 'history-refresh-benchmark', status: 'started', message: 'queued' }),
+        });
 
         const startSummary = performance.now();
         await svc.getSummary({ range: '30d' });

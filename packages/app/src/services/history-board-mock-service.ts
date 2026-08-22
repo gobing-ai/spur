@@ -65,7 +65,7 @@ const SOURCES_CATALOG = [
         size: 9.8,
     },
     {
-        id: 'antigravity',
+        id: 'agy',
         name: 'Antigravity CLI',
         color: '#c98500',
         w: 14,
@@ -161,28 +161,6 @@ const SKILLS_CATALOG = [
     { id: 'sp-dev-run', label: 'Sp Dev Run', color: '#199e70' },
     { id: 'sp-code-verification', label: 'Sp Code Verification', color: '#c98500' },
 ];
-
-const DEFAULT_SESSION: RawMockSession = {
-    id: 'sess-0001-claude',
-    source: 'claude',
-    model: 'claude-opus-4.6',
-    modelDetail: 'claude-opus-4.6',
-    start: 1787342400000,
-    durationMs: 120000,
-    messages: 6,
-    toolCalls: 12,
-    errors: 0,
-    tokens: {
-        billedTokens: 10000,
-        cacheSavedTokens: 50000,
-        cacheReadTokens: 50000,
-        freshInputTokens: 8000,
-        outputTokens: 2000,
-    },
-    toolMix: { Read: 6, Bash: 6 },
-    skillMix: { 'sp-dev-run': 1 },
-    state: 'complete',
-};
 
 function generateDeterministicSessions(): RawMockSession[] {
     const sessions: RawMockSession[] = [];
@@ -363,7 +341,23 @@ export class MockHistoryBoardService implements HistoryBoardService {
         const errorRate = totalTools > 0 ? Math.round((totalErrors / totalTools) * 1000) / 10 : 0;
 
         // Build time series buckets
-        const bucketInterval = 86400 * 1000; // 1d default
+        const bucket =
+            filter?.bucket === 'auto' || filter?.bucket === undefined
+                ? filter?.range === '24h'
+                    ? '10m'
+                    : filter?.range === '7d'
+                      ? '30m'
+                      : '1d'
+                : filter.bucket;
+        const bucketInterval = {
+            '5m': 5 * 60_000,
+            '10m': 10 * 60_000,
+            '30m': 30 * 60_000,
+            '1h': 60 * 60_000,
+            '4h': 4 * 60 * 60_000,
+            '1d': 86_400_000,
+        }[bucket];
+        const dimension = filter?.dimension ?? 'model';
         const buckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
 
         for (const s of matching) {
@@ -371,7 +365,25 @@ export class MockHistoryBoardService implements HistoryBoardService {
             if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, series: {} };
             buckets[bKey].total += s.tokens.billedTokens;
             buckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            buckets[bKey].series[s.model] = (buckets[bKey].series[s.model] ?? 0) + s.tokens.billedTokens;
+            const dimensions: Array<[string, number]> =
+                dimension === 'model'
+                    ? [[s.model, s.tokens.billedTokens]]
+                    : dimension === 'source'
+                      ? [[s.source, s.tokens.billedTokens]]
+                      : Object.entries(dimension === 'tool' ? s.toolMix : s.skillMix).map(([key, count]) => [
+                            key,
+                            count,
+                        ]);
+            const weight = dimensions.reduce((sum, [, count]) => sum + count, 0);
+            for (const [key, count] of dimensions) {
+                const tokens =
+                    dimension === 'model' || dimension === 'source'
+                        ? count
+                        : weight > 0
+                          ? (s.tokens.billedTokens * count) / weight
+                          : 0;
+                buckets[bKey].series[key] = (buckets[bKey].series[key] ?? 0) + tokens;
+            }
         }
 
         const timeSeries = Object.entries(buckets)
@@ -439,7 +451,8 @@ export class MockHistoryBoardService implements HistoryBoardService {
     }
 
     async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
-        const session = this.sessions.find((s) => s.id === sessionId) ?? this.sessions[0] ?? DEFAULT_SESSION;
+        const session = this.sessions.find((s) => s.id === sessionId);
+        if (!session) throw new Error(`History session not found: ${sessionId}`);
         const sessionStart = session.start;
 
         const blocks = [
@@ -621,7 +634,17 @@ export class MockHistoryBoardService implements HistoryBoardService {
 
     async getInsights(filter?: HistoryFilter): Promise<HistoryInsightsResponse['data']> {
         const matching = this.filterSessions(filter);
-        const s0 = matching[0] ?? this.sessions[0] ?? DEFAULT_SESSION;
+        const s0 = matching[0];
+        if (!s0) {
+            return {
+                loops: [],
+                cacheWaste: [],
+                heavySessions: [],
+                largestTokenSteps: [],
+                slowSteps: [],
+                modelComparison: [],
+            };
+        }
         const s1 = matching[1] ?? s0;
 
         const loops = [
@@ -754,7 +777,8 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 });
             }
 
-            const maxDailyTokens = Math.max(1, ...heatmapDays.map((h) => h.tokens));
+            const maxDailyTokens = Math.max(0, ...heatmapDays.map((h) => h.tokens));
+            const hasData = srcSessions.length > 0;
 
             return {
                 id: src.id,
@@ -762,8 +786,8 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 color: src.color,
                 importPath: src.path,
                 filePattern: src.pattern,
-                filesCount: src.files,
-                sizeMb: src.size,
+                filesCount: hasData ? src.files : 0,
+                sizeMb: hasData ? src.size : 0,
                 sessionCount: srcSessions.length,
                 totalTokens,
                 cacheSavedTokens,
@@ -782,25 +806,29 @@ export class MockHistoryBoardService implements HistoryBoardService {
             };
         });
 
-        const totalFiles = SOURCES_CATALOG.reduce((acc, s) => acc + s.files, 0);
-        const corpusSizeBytes = Math.round(SOURCES_CATALOG.reduce((acc, s) => acc + s.size, 0) * 1024 * 1024);
+        const totalFiles = agents.reduce((sum, agent) => sum + agent.filesCount, 0);
+        const corpusSizeBytes = Math.round(agents.reduce((sum, agent) => sum + (agent.sizeMb ?? 0), 0) * 1024 * 1024);
 
-        const roots = SOURCES_CATALOG.map((s) => ({
-            agentId: s.id,
-            agentName: s.name,
-            path: s.path,
-            matchPattern: s.pattern,
-            fileCount: s.files,
-            status: 'active' as const,
-        }));
+        const roots = SOURCES_CATALOG.map((source) => {
+            const files = agents.find((agent) => agent.id === source.id)?.filesCount ?? 0;
+            return {
+                agentId: source.id,
+                agentName: source.name,
+                path: source.path,
+                matchPattern: source.pattern,
+                fileCount: files,
+                status: files > 0 ? ('active' as const) : ('empty' as const),
+            };
+        });
+        const starts = this.sessions.map((session) => session.start);
 
         return {
             overview: {
                 totalFiles,
                 corpusSizeBytes,
                 dateCoverage: {
-                    from: new Date(baseDate - 90 * DAY_MS).toISOString(),
-                    to: new Date(baseDate).toISOString(),
+                    from: starts.length > 0 ? new Date(Math.min(...starts)).toISOString() : null,
+                    to: starts.length > 0 ? new Date(Math.max(...starts)).toISOString() : null,
                 },
                 totalSessions: this.sessions.length,
             },

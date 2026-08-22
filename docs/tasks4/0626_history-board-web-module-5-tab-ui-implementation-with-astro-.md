@@ -4,7 +4,7 @@ name: "History Board web module: 5-tab UI implementation with Astro, SVG charts,
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:23.336Z
-updated_at: "2026-08-22T03:44:06.154Z"
+updated_at: "2026-08-22T06:10:46.804Z"
 feature_id: E8
 dependencies: ["0627"]
 ---
@@ -142,46 +142,42 @@ absent from 0627's contract, raise it against 0627 — do not invent a client-si
 - [x] Add `bun:test` tests under `apps/web/tests/modules/history/` (bucket resolver, axis scaling, heatmap binning, tab registration, no-currency assertion), then run `bun run lint` and `bun run spur-check` (R1, R2, R3)
 ### Solution
 #### Seams touched
-- `apps/web/src/modules/history/index.tsx:11`: Registered History WebModule (`id: 'history'`, `order: 3`, `icon: '📊'`)
-- `apps/web/src/modules/history/tabs.ts:14`: Defined `HistoryTab` contract and exported `HISTORY_TABS`
-- `apps/web/src/modules/history/HistoryShell.tsx:20`: Implemented `HistoryShell` with tab strip and data-fetching hooks
-- `apps/web/src/modules/history/HistoryFilters.tsx:14`: Implemented `HistoryFilters` with range presets, multi-selects, chips, and bucket selector
-- `apps/web/src/modules/history/SummaryTab.tsx:12`: Implemented `SummaryTab` with 4 KPI cards and dual-axis chart
-- `apps/web/src/modules/history/TimelineTab.tsx:15`: Implemented `TimelineTab` with chronological turn groups and sparkbars
-- `apps/web/src/modules/history/SessionsTab.tsx:20`: Implemented `SessionsTab` with sortable columns and click-to-timeline navigation
-- `apps/web/src/modules/history/InsightsTab.tsx:12`: Implemented `InsightsTab` with loop detection, slow steps, and radar chart
-- `apps/web/src/modules/history/SourcesTab.tsx:13`: Implemented `SourcesTab` with overview banner, 9 agent activity heatmaps, and roots table
-- `apps/web/src/modules/history/charts.tsx:120`: Implemented pure SVG chart renderers and formatting helpers
 
-#### Tests
-- `apps/web/tests/modules/history/history-module.test.ts:1`
+- `apps/web/src/modules/history/index.tsx:10-17` — `module` registers the append-only five-tab history surface.
+- `apps/web/src/modules/history/HistoryFilters.tsx:14-41` — `HistoryFilters` owns range, bucket, multi-filter, chip, and source-tab visibility behavior.
+- `apps/web/src/modules/history/SummaryTab.tsx:13-19` — `SummaryTab` renders server-backed metrics and dimension-aware token/cache charts.
+- `apps/web/src/modules/history/TimelineTab.tsx:133-151` — `AgentIcon` and model identity live once per chronological turn with aggregate telemetry.
+- `apps/web/src/modules/history/SessionsTab.tsx:20-28` — `SessionsTab` provides sortable session navigation into the timeline.
+- `apps/web/src/modules/history/InsightsTab.tsx:12-20` — `InsightsTab` renders loop, cache, token, latency, and model projections.
+- `apps/web/src/modules/history/SourcesTab.tsx:86-96` — `SourcesTab` renders honest nine-agent activity, telemetry, roots, and queued import state.
 ### Testing
+**Pipeline verify results**
+
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|---|---|---|
-| R1. Module registration, 5-tab shell, pure-token guard | MET | Registered apps/web/src/modules/history/index.tsx with order: 3, tabs.ts with 5 tabs, pure-token test asserted zero currency fields. |
-| R2. Global filter bar | MET | HistoryFilters.tsx implemented with range presets, custom dates, multi-selects, chips, and bucket selector (hidden on sources tab). |
-| R3. Summary tab | MET | SummaryTab.tsx implemented with 4 KPI cards, dual-axis stacked token column & cache-hit % line chart, dimension switchers, and breakdowns. |
-| R4. Timeline + Sessions tabs | MET | TimelineTab.tsx and SessionsTab.tsx implemented with turn-grouped events, sparkbars, and click-to-timeline row navigation. |
-| R5. Insights + Sources tabs | MET | InsightsTab.tsx (loops, cache waste, slow steps, radar) and SourcesTab.tsx (overview banner, 9 agent activity heatmaps, roots table) implemented. |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/tests/modules/history/history-module.test.ts:28`; registration and the five append-only tabs pass. |
+| R2 | MET | `apps/web/src/modules/history/HistoryFilters.tsx:14-39`; range, bucket, filter, chip, and hidden-on-sources behavior are implemented. |
+| R3 | MET | `apps/web/tests/modules/history/components.test.tsx:120`; server-backed dimension restacking and chart helpers pass. |
+| R4 | MET | `apps/web/tests/modules/history/components.test.tsx:151`; turn-level identity badges and hover telemetry pass. |
+| R5 | MET | `apps/web/tests/modules/history/components.test.tsx:130`; vector icons, source telemetry, heatmaps, and queued import pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---|---|---|---|
-| Scenario: Summary tab displays KPIs, dynamic time-bucketed token chart, and dual-axis cache hit ratio | MET | unit test | SummaryTab renders 4 KPI cards, dual-axis StackedColumnsChart with cache-hit line, auto bucket mapping, and dimension restacking. |
-| Scenario: Timeline tab inspects session execution with Agent and Model tags | MET | unit test | TimelineTab renders session metadata, turn headers, visual sparkbars, agent/model tags, and expandable event payloads. |
-| Scenario: Sessions tab lists and filters sessions with click-to-timeline navigation | MET | unit test | SessionsTab renders sortable table with 12 columns, header sorting, pagination, and click-to-timeline handler. |
-| Scenario: Insights tab identifies loops, cache waste, and latency bottlenecks | MET | unit test | InsightsTab renders loop cards (>=3 repeats), cache waste table, heaviest sessions, slow steps sparkbars, and model comparison radar + table. |
-| Scenario: Sources tab provides an all-time registry with 9 coding agent activity heatmaps | MET | unit test | SourcesTab hides global filter bar, renders overview banner, import button, 9 agent heatmap cards, and roots registry table. |
-
-- Coverage: N/A (verdict-based; React UI components in apps/web excluded from per-file coverage gate; helper functions and tab definitions verified at 100% coverage via bun:test)
+|---------------------|--------|---------------|----------|
+| Summary tab displays KPIs, dynamic time-bucketed token chart, and dual-axis cache hit ratio | MET | test | `apps/web/tests/modules/history/components.test.tsx:1-128`; summary KPIs, buckets, axes, and dimensions pass. |
+| Timeline tab inspects session execution with Agent and Model tags | MET | test | `apps/web/tests/modules/history/components.test.tsx:151-159`; timeline identity and event telemetry pass. |
+| Sessions tab lists and filters sessions with click-to-timeline navigation | MET | test | `packages/app/tests/services/history-board-service.test.ts:126-149`; only valid sessions remain navigable and click-through data is complete. |
+| Insights tab identifies loops, cache waste, and latency bottlenecks | MET | test | `packages/app/tests/services/history-analysis-service.test.ts:207-306`; loop, cache, token, and latency projections pass live and materialized paths. |
+| Sources tab provides an all-time registry with 9 coding agent activity heatmaps | MET | test | `apps/web/tests/modules/history/components.test.tsx:130-149`; all-time nine-source registry behavior passes. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|---|---|---|---|
-| P4 | pure-token validation | `apps/web/tests/modules/history/history-module.test.ts:65` | Verified zero currency fields across all web history module files |
-| P4 | svg chart rendering | `apps/web/src/modules/history/charts.tsx:120` | Pure inline SVG charting primitives without external runtime charting dependencies |
+| Priority | Category | Finding | Disposition |
+| --- | --- | --- | --- |
+| P1 | Correctness | Canonical Antigravity id was `agy`, not the legacy `antigravity`; the shared UI/source mapping now uses `agy`. | FIXED |
+| P2 | Traceability | Timeline agent/model identity and hover telemetry were missing from the non-repetitive turn header. | FIXED |
+| P3 | Data honesty | Empty and single-source mock states previously implied activity for absent sources. | FIXED |
+| P4 | Verification | Five tabs, filters, charts, navigation, Insights, Sources, accessibility labels, and pure-token behavior have executable coverage. | PASS |
 ### References
 - Feature: [E8: History Board module](file:///Users/robin/xprojects/spur-new/docs/features/E8_history-board-module-analytics-summary-execution-timeline-sessions-forensic-insights-and-agent-sources-registry.md)
 - Design Spec: [docs/design/history-board-module.md](file:///Users/robin/xprojects/spur-new/docs/design/history-board-module.md)

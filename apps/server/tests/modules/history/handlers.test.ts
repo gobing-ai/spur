@@ -27,12 +27,16 @@ describe('history handlers', () => {
     });
 
     test('getTimeline handler returns ok:true with timeline data', async () => {
-        const ctx = makeCtx();
+        const service = new MockHistoryBoardService();
+        const sessions = await service.getSessions({ page: 1, pageSize: 1 });
+        const sessionId = sessions.items[0]?.id;
+        expect(sessionId).toBeDefined();
+        const ctx = { historyBoardService: () => service } as unknown as ServerContext;
         const handlers = createHistoryHandlers(ctx);
         const handler = (
             handlers.getTimeline as unknown as { '~orpc': { handler: (arg: unknown) => Promise<unknown> } }
         )['~orpc'].handler;
-        const result = (await handler({ input: { sessionId: 'sess-0001' } })) as {
+        const result = (await handler({ input: { sessionId } })) as {
             ok: boolean;
             data: { session: { id: string } };
         };

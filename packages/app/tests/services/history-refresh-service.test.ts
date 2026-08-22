@@ -6,7 +6,7 @@ import {
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
 } from '../../src/services/history-refresh-service';
-import type { DailyResult, HistoryService } from '../../src/services/history-service';
+import type { DailyOptions, DailyResult, HistoryService } from '../../src/services/history-service';
 import type { SystemEventBus } from '../../src/services/system-event-tap';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
@@ -125,12 +125,13 @@ describe('handleHistoryRefreshJob (task 0549 R3/R5)', () => {
     /** HistoryService stub via the handler's `service` test seam. */
     function stubService(result: DailyResult | Error): {
         service: Pick<HistoryService, 'daily'>;
-        state: { calls: number };
+        state: { calls: number; options: DailyOptions[] };
     } {
-        const state = { calls: 0 };
+        const state: { calls: number; options: DailyOptions[] } = { calls: 0, options: [] };
         const service = {
-            daily: async () => {
+            daily: async (options: DailyOptions) => {
                 state.calls += 1;
+                state.options.push(options);
                 if (result instanceof Error) throw result;
                 return result;
             },
@@ -152,6 +153,20 @@ describe('handleHistoryRefreshJob (task 0549 R3/R5)', () => {
         const importEvent = emitted.find((e) => e.name === 'history.import.completed');
         expect(importEvent?.payload).toMatchObject({ sources: 2, okSources: 2, failedSources: 0, files: 6 });
         expect(importEvent?.payload).toMatchObject({ trigger: 'task-done', windowStart: 1, windowEnd: 2 });
+        expect(state.options).toEqual([{ cwd: '/tmp', importMode: 'incremental' }]);
+    });
+
+    test('manual refresh forwards the requested full import mode', async () => {
+        const { service, state } = stubService(dailyResult(0, ['ok']));
+        const { bus } = fakeBus();
+        const getDb = async () => createMigratedDb({ url: ':memory:' });
+
+        await handleHistoryRefreshJob(
+            { getDb, cwd: '/tmp', bus, service },
+            { trigger: 'manual', triggerId: null, windowStart: 1, windowEnd: 1, importMode: 'full' },
+        );
+
+        expect(state.options).toEqual([{ cwd: '/tmp', importMode: 'full' }]);
     });
 
     test('degraded fan-out emits history.daily.failed and does NOT rethrow (per-source isolation, R5)', async () => {

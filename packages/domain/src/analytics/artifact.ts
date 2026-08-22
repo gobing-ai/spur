@@ -236,9 +236,12 @@ export function selectorDigest(selector: ArtifactSelector): string {
         runId: selector.runId ?? null,
         sessionId: selector.sessionId ?? null,
         since: selector.since ?? null,
+        skills: selector.skills ? [...selector.skills].sort() : null,
         sources: selector.sources ? [...selector.sources].sort() : null,
         taskWbs: selector.taskWbs ?? null,
+        tools: selector.tools ? [...selector.tools].sort() : null,
         until: selector.until ?? null,
+        models: selector.models ? [...selector.models].sort() : null,
     };
     const json = JSON.stringify(canonical);
     return createHash('sha256').update(json).digest('hex').slice(0, 8);

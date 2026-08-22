@@ -26,6 +26,40 @@ describe('MockHistoryBoardService', () => {
         expect(filteredSummary.topSources.find((s: { id: string }) => s.id === 'claude')?.tokens).toBeGreaterThan(0);
     });
 
+    test('getSummary honors bucket granularity and chart dimension', async () => {
+        const byModel = await service.getSummary({ range: '7d', bucket: '30m', dimension: 'model' });
+        const byTool = await service.getSummary({ range: '7d', bucket: '30m', dimension: 'tool' });
+        const modelKeys = new Set(byModel.timeSeries.flatMap((point) => Object.keys(point.series)));
+        const toolKeys = new Set(byTool.timeSeries.flatMap((point) => Object.keys(point.series)));
+
+        expect(modelKeys.has('claude-opus-4.6') || modelKeys.has('gpt-5.6-sol')).toBe(true);
+        expect(toolKeys.has('Read') || toolKeys.has('Bash')).toBe(true);
+        expect(toolKeys).not.toEqual(modelKeys);
+    });
+
+    test('tool and skill filters preserve an honest empty result', async () => {
+        const byTool = await service.getSummary({ range: 'all', tools: ['missing-tool'] });
+        const bySkill = await service.getSummary({ range: 'all', skills: ['missing-skill'] });
+        const sessions = await service.getSessions({
+            filter: { range: 'all', tools: ['missing-tool'] },
+            page: 1,
+            pageSize: 20,
+        });
+        const insights = await service.getInsights({ range: 'all', skills: ['missing-skill'] });
+
+        expect(byTool.kpis.sessionsCount).toBe(0);
+        expect(bySkill.kpis.sessionsCount).toBe(0);
+        expect(sessions.total).toBe(0);
+        expect(insights).toEqual({
+            loops: [],
+            cacheWaste: [],
+            heavySessions: [],
+            largestTokenSteps: [],
+            slowSteps: [],
+            modelComparison: [],
+        });
+    });
+
     test('getTimeline returns valid session metadata and grouped blocks', async () => {
         const sessions = await service.getSessions({ page: 1, pageSize: 5 });
         const targetId = sessions.items[0]?.id ?? 'sess-0001';
@@ -75,6 +109,43 @@ describe('MockHistoryBoardService', () => {
         expect(sources.agents.length).toBe(9);
         expect(sources.roots.length).toBe(9);
         expect(sources.agents[0]?.heatmapDays.length).toBe(90);
+    });
+
+    test('getSources keeps empty and single-source fixtures honest', async () => {
+        const empty = await new MockHistoryBoardService([]).getSources();
+        expect(empty.overview).toEqual({
+            totalFiles: 0,
+            corpusSizeBytes: 0,
+            dateCoverage: { from: null, to: null },
+            totalSessions: 0,
+        });
+        expect(empty.roots.every((root) => root.status === 'empty')).toBe(true);
+
+        const single = await new MockHistoryBoardService([
+            {
+                id: 'single',
+                source: 'claude',
+                model: 'claude-opus-4.6',
+                start: Date.parse('2026-08-21T12:00:00Z'),
+                durationMs: 1_000,
+                messages: 2,
+                toolCalls: 1,
+                errors: 0,
+                tokens: {
+                    billedTokens: 150,
+                    cacheSavedTokens: 200,
+                    cacheReadTokens: 200,
+                    freshInputTokens: 100,
+                    outputTokens: 50,
+                },
+                toolMix: { Read: 1 },
+                skillMix: {},
+                state: 'complete',
+            },
+        ]).getSources();
+        expect(single.overview.totalSessions).toBe(1);
+        expect(single.roots.filter((root) => root.status === 'active').map((root) => root.agentId)).toEqual(['claude']);
+        expect(single.agents.find((agent) => agent.id === 'claude')?.sessionCount).toBe(1);
     });
 
     test('triggerImport returns receipt with runId', async () => {

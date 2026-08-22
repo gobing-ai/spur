@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.30.0
+version: 1.31.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-21
@@ -339,6 +339,15 @@ importer. The analyze rollup estimates per-model cost for the artifact from `his
 `history_tool_call` (ADR-049). The workflow-trace cost path (ADR-060) joins the run→session
 mapping to `history_message`'s typed token columns — exact and estimated figures folded apart,
 never priced; the ETL `CostRecord` read path is retired on the read side.
+
+**History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
+`HistoryBoardService`; `LiveHistoryBoardService` composes the existing forensic queries and keeps
+the server transport SQL-free. `HistoryService.analyze()` refreshes checkpoint-keyed SQLite read
+models after producing the forensic artifact. Board reads use those models only when their recorded
+history version matches the current projection version and import checkpoint; absent or stale models
+fall back to the exact indexed queries. Manual Board imports enqueue the existing `history.refresh`
+job, whose worker runs
+`HistoryService.daily()` with the requested import mode. Shapes: `docs/design/history-board-module.md`.
 
 **Run→session correlation (E6, ADR-059).** Every DB-backed `spur agent run` watermarks the
 agent's session root before dispatch and resolves the produced session after exit

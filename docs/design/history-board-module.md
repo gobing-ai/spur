@@ -4,7 +4,7 @@ feature_id: E8
 tasks: [0626, 0627, 0628, 0629]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-22
+updated_at: 2026-08-21
 ---
 
 # History Board module — Conversation Analytics & Agent Forensic Plane
@@ -106,6 +106,7 @@ export const historyFilterSchema = z.object({
   tools: z.array(z.string()).optional(),
   skills: z.array(z.string()).optional(),
   bucket: z.enum(['auto', '5m', '10m', '30m', '1h', '4h', '1d']).default('auto'),
+  dimension: z.enum(['model', 'source', 'tool', 'skill']).default('model'),
 });
 ```
 
@@ -117,9 +118,52 @@ Endpoints:
 5. `history.getSources()` $\rightarrow$ Corpus summary, 9 agent sources, 90-day daily token matrices, directory registry.
 6. `history.triggerImport({ mode })` $\rightarrow$ Asynchronous import & analysis execution receipt.
 
+`HistoryAgentSourceCard.sizeMb` is nullable: the live projection reports the SQLite corpus byte size
+in `overview.corpusSizeBytes` and does not fabricate per-source raw-file sizes.
+
+### 4.1 Live read path (`packages/domain` + `packages/app`)
+
+`LiveHistoryBoardService` implements the six-procedure seam. It maps the board filter to the existing
+`ArtifactSelector`, including `models`, `tools`, and `skills`; `apps/server` handlers only delegate.
+The raw-query migration is `0020_spur_cli_history_board_query_indexes`:
+
+| Index | Query path |
+| :--- | :--- |
+| `idx_history_message_session_id_seq` | Timeline session/sequence lookup |
+| `idx_history_message_duration_rank` | Insights slow-step ranking |
+| `idx_history_message_token_rank` | Insights token-step ranking |
+| `idx_history_message_input_rank` | Insights cache-waste ranking |
+
+`history.triggerImport` enqueues the existing `history.refresh` job with the requested `full` or
+`incremental` import mode. The job runs `HistoryService.daily()`; no import runs in the request path.
+Generic importer sentinels (`session_id = 'unknown' | 'session'`) retain their tokens in corpus-wide
+aggregates but are excluded from navigable session rows, Timeline, and session-level loop findings.
+
+### 4.2 Materialized read models (`0021_spur_cli_history_board_rollups`)
+
+`HistoryService.analyze()` invokes `refreshHistoryRollups()`. The refresh is keyed by the aggregate
+import checkpoint: an unchanged checkpoint is a no-op. `LiveHistoryBoardService` uses the following
+tables only while `history_board_rollup_meta.history_version` matches the current projection version
+and checkpoint, and
+falls back to the exact live queries when the read models are absent or stale. Tool/skill-filtered
+Summary, Sessions, and Insights requests stay on the exact live path.
+
+| Table | Board projection |
+| :--- | :--- |
+| `history_daily_stats`, `history_board_message_5m` | Summary daily/sub-day token series and model/source breakdowns |
+| `history_board_tool_5m`, `history_board_tool_stats` | Summary tool/skill series and totals; model reliability input |
+| `history_board_session_stats` | Sessions page; Insights heavy sessions; Sources session totals |
+| `history_board_model_stats` | Insights model comparison |
+| `history_board_loop_findings` | Insights loop findings from the existing analyzer |
+| `history_board_ranked_steps` | Insights token, duration, and cache-waste rankings |
+| `history_board_source_stats`, `history_board_source_daily` | Sources cards, registry totals, and 90-day heatmaps |
+
+The nine board source ids are `claude`, `codex`, `agy` (Antigravity CLI), `omp`, `openclaw`,
+`hermes`, `grok`, `opencode`, and `pi`.
+
 ---
 
-## 4.1 Path corrections (task 0627/0628 refine, 2026-08-22)
+## 4.3 Path corrections (task 0627/0628 refine, 2026-08-22)
 
 Earlier revisions of this document named paths that do not exist in the tree. Corrected here so the
 tasks and the doc agree:
@@ -144,4 +188,4 @@ carries no charting dependency, and adding one needs operator approval.
 | **0626** | Pure UI Implementation | `apps/web/src/modules/history/` | [`prototypes/history-module/`](prototypes/history-module/) |
 | **0627** | oRPC Contracts & Mock Router | `packages/contracts/src/history.ts`, `apps/server/src/modules/history/` | Section 4 & `history-data.js` |
 | **0628** | Live DB Access & Query Layer | `packages/domain/src/analytics/forensic-query.ts`, `packages/app/src/services/history-board-service.ts` | Extend the existing analytics queries; indexes via `migrations.ts` + `drizzle/` |
-| **0629** | Analytics Pre-Computation | `apps/cli/src/commands/history.ts`, `packages/app/` | `spur history analyze` |
+| **0629** | Analytics Pre-Computation | `packages/app/src/services/history-analysis-service.ts`, `packages/domain/src/analytics/history-board-rollup.ts`, `drizzle/0021_spur_cli_history_board_rollups.sql` | `HistoryService.analyze()` refresh; no CLI surface change |

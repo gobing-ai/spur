@@ -8,7 +8,7 @@ import {
     sessionTimeline,
 } from '../../src/analytics/forensic-query';
 
-import { applyCliMigrations, CLI_SCHEMA_SQL } from '../../src/migrations';
+import { applyCliMigrations, CLI_SCHEMA_SQL, HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL } from '../../src/migrations';
 
 async function setup(): Promise<DbAdapter> {
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
@@ -146,6 +146,83 @@ describe('forensic-query history live extensions (task 0628)', () => {
         expect(rows1d.length).toBe(2);
     });
 
+    test('tool dimensions allocate each message once and model metrics do not multiply by tool count', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            record_hash: 'm1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T12:00:00Z',
+            model: 'gpt-5.6-sol',
+            input: 100,
+            output: 50,
+            cache_read: 200,
+            duration_ms: 1_000,
+        });
+        await insertMessage(db, {
+            record_hash: 'm2',
+            session_id: 's1',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T12:01:00Z',
+            model: 'gpt-5.6-sol',
+            input: 100,
+            output: 10,
+            cache_read: 0,
+            duration_ms: 100,
+        });
+        await insertToolCall(db, {
+            record_hash: 't1',
+            message_hash: 'm1',
+            session_id: 's1',
+            seq: 1,
+            tool_name: 'Read',
+            status: 'success',
+            duration_ms: 10,
+        });
+        await insertToolCall(db, {
+            record_hash: 't2',
+            message_hash: 'm1',
+            session_id: 's1',
+            seq: 2,
+            tool_name: 'Edit',
+            status: 'success',
+            duration_ms: 20,
+        });
+        await insertToolCall(db, {
+            record_hash: 't3',
+            message_hash: 'm2',
+            session_id: 's1',
+            seq: 3,
+            tool_name: 'Read',
+            status: 'success',
+            duration_ms: 30,
+        });
+        const selector: ArtifactSelector = {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        };
+
+        const byTool = await bucketedTokenSeries(db, selector, '1d', 'tool');
+        expect(byTool.reduce((sum, row) => sum + (row.freshInputTokens ?? 0), 0)).toBe(200);
+        expect(byTool.reduce((sum, row) => sum + (row.outputTokens ?? 0), 0)).toBe(60);
+        expect(byTool.reduce((sum, row) => sum + (row.cacheReadTokens ?? 0), 0)).toBe(200);
+
+        const comparison = await modelComparison(db, selector);
+        expect(comparison[0]?.speedMsMean).toBe(550);
+        expect(comparison[0]?.cacheRatio).toBeCloseTo(0.5);
+        expect(comparison[0]?.outputRatio).toBeCloseTo(60 / 260);
+    });
+
     test('ArtifactSelector filters by models, tools, and skills', async () => {
         const db = await setup();
         await insertMessage(db, {
@@ -280,11 +357,40 @@ describe('forensic-query history live extensions (task 0628)', () => {
         });
 
         const timeline = await sessionTimeline(db, 's1');
-        expect(timeline.length).toBe(2);
+        expect(timeline.length).toBe(3);
         expect(timeline[0]?.role).toBe('user');
         expect(timeline[1]?.role).toBe('assistant');
-        expect(timeline[1]?.toolName).toBe('Write');
-        expect(timeline[1]?.durationMs).toBe(350);
+        expect(timeline[2]?.toolName).toBe('Write');
+        expect(timeline[2]?.durationMs).toBe(350);
+        expect(timeline.reduce((sum, row) => sum + (row.inputTokens ?? 0), 0)).toBe(150);
+        expect(timeline.reduce((sum, row) => sum + (row.outputTokens ?? 0), 0)).toBe(200);
+    });
+
+    test('sessionTimeline stays bounded on a 6,500-message session', async () => {
+        const db = await setup();
+        await db.exec(
+            `WITH RECURSIVE numbers(n) AS (
+                 VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 6500
+             )
+             INSERT INTO history_message (
+                 record_hash, source, source_file, source_line, session_id, seq,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens,
+                 cache_read_tokens, provenance, imported_at
+             )
+             SELECT printf('large-%d', n), 'codex', 'large.jsonl', n, 'large-session', n,
+                    'assistant', 'message', 'ok', '2026-06-01T12:00:00Z', 'gpt-5.6-sol',
+                    1, 1, 0, 'agent', '2026-06-01T12:00:00Z'
+             FROM numbers`,
+        );
+
+        const started = performance.now();
+        const rows = await sessionTimeline(db, 'large-session', 5000);
+        const durationMs = performance.now() - started;
+
+        expect(rows).toHaveLength(5000);
+        expect(rows[0]?.seq).toBe(1);
+        expect(rows.at(-1)?.seq).toBe(5000);
+        expect(durationMs).toBeLessThan(50);
     });
 
     test('dailyTokenMatrix returns daily token metrics per source', async () => {
@@ -358,8 +464,52 @@ describe('forensic-query history live extensions (task 0628)', () => {
     });
 
     test('indexes and EXPLAIN QUERY PLAN on history queries', async () => {
-        const db = await setup();
-        const indexes = await db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'index'");
-        expect(indexes.length).toBeGreaterThan(0);
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        for (const statement of CLI_SCHEMA_SQL.split(';')
+            .map((value) => value.trim())
+            .filter(Boolean)) {
+            await db.exec(statement);
+        }
+        const queries = [
+            {
+                index: 'idx_history_message_session_id_seq',
+                sql: `SELECT seq FROM history_message WHERE session_id = 's1' ORDER BY seq LIMIT 5000`,
+            },
+            {
+                index: 'idx_history_message_duration_rank',
+                sql: `SELECT duration_ms FROM history_message
+                      WHERE role = 'assistant' AND duration_ms IS NOT NULL
+                      ORDER BY duration_ms DESC LIMIT 10`,
+            },
+            {
+                index: 'idx_history_message_token_rank',
+                sql: `SELECT input_tokens FROM history_message
+                      WHERE role = 'assistant' AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)
+                      ORDER BY (COALESCE(input_tokens, 0) + COALESCE(cache_read_tokens, 0)) DESC LIMIT 10`,
+            },
+            {
+                index: 'idx_history_message_input_rank',
+                sql: `SELECT input_tokens FROM history_message
+                      WHERE role = 'assistant' AND input_tokens > 100000
+                        AND cache_read_tokens < input_tokens * 0.1
+                      ORDER BY input_tokens DESC LIMIT 10`,
+            },
+        ];
+        const plan = async (sql: string) =>
+            (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`)).map((row) => row.detail).join('\n');
+        const before = await Promise.all(queries.map(({ sql }) => plan(sql)));
+        for (const [index, query] of queries.entries()) {
+            expect(before[index]).not.toContain(query.index);
+        }
+
+        for (const statement of HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL.split(';')
+            .map((value) => value.trim())
+            .filter(Boolean)) {
+            await db.exec(statement);
+        }
+        const after = await Promise.all(queries.map(({ sql }) => plan(sql)));
+        for (const [index, query] of queries.entries()) {
+            expect(after[index]).toContain(query.index);
+        }
     });
 });

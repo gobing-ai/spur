@@ -69,6 +69,7 @@ import {
     runOpenCodeImport,
 } from '@gobing-ai/ts-llm-jsonl-importer';
 import { getExecutorTier } from './agent-service';
+import { refreshHistoryRollups } from './history-analysis-service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -136,6 +137,8 @@ export interface ImportAllOptions {
 
 /** Options for {@link HistoryService.daily}. */
 export interface DailyOptions {
+    /** Import mode for the refresh fan-out; manual board refreshes may request full reconciliation. */
+    importMode?: 'full' | 'incremental';
     /** Inclusive lower bound on message timestamp for the analyze step only (never the import). */
     since?: string;
     /** Inclusive upper bound on message timestamp for the analyze step only. */
@@ -512,6 +515,8 @@ export class HistoryService {
             stepSupport: stepSupportRows,
         };
 
+        await refreshHistoryRollups(db);
+
         if (opts.out !== undefined || opts.cwd !== undefined) {
             writeArtifact(artifact, { out: opts.out, cwd: opts.cwd ?? process.cwd() });
         }
@@ -571,6 +576,7 @@ export class HistoryService {
             sources: opts.sources,
             sourceTimeout: opts.sourceTimeout,
             root: opts.root,
+            mode: opts.importMode,
         });
 
         const selector: ArtifactSelector = {

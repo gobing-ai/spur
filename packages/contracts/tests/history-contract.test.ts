@@ -31,6 +31,7 @@ describe('historyContract', () => {
         const parsedDefault = historyFilterSchema.parse({});
         expect(parsedDefault.range).toBe('30d');
         expect(parsedDefault.bucket).toBe('auto');
+        expect(parsedDefault.dimension).toBe('model');
 
         const parsedFull = historyFilterSchema.parse({
             range: 'custom',
@@ -41,15 +42,18 @@ describe('historyContract', () => {
             tools: ['Read', 'Bash'],
             skills: ['sp-dev-run'],
             bucket: '1h',
+            dimension: 'skill',
         });
         expect(parsedFull.range).toBe('custom');
         expect(parsedFull.sources).toEqual(['claude', 'codex']);
         expect(parsedFull.bucket).toBe('1h');
+        expect(parsedFull.dimension).toBe('skill');
     });
 
     test('historyFilterSchema rejects invalid range or bucket values', () => {
         expect(() => historyFilterSchema.parse({ range: 'invalid_range' })).toThrow();
         expect(() => historyFilterSchema.parse({ bucket: '2d' })).toThrow();
+        expect(() => historyFilterSchema.parse({ dimension: 'agent' })).toThrow();
         expect(() => historyFilterSchema.parse({ from: 'not-a-date' })).toThrow();
     });
 
@@ -292,7 +296,7 @@ describe('historyContract', () => {
                         importPath: '~/.claude/projects/',
                         filePattern: '*.jsonl',
                         filesCount: 1428,
-                        sizeMb: 18.4,
+                        sizeMb: null,
                         sessionCount: 320,
                         totalTokens: 5400000,
                         cacheSavedTokens: 18000000,

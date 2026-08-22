@@ -1,17 +1,22 @@
-import type { HistorySummaryResponse } from '@gobing-ai/spur-contracts';
+import type { HistoryDimension, HistorySummaryResponse } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { useState } from 'react';
 import { type ChartSeries, fmtInt, fmtPct, fmtTok, type StackedColumnBucket, StackedColumnsChart } from './charts';
 
 export interface SummaryTabProps {
     data?: HistorySummaryResponse['data'];
     loading?: boolean;
     error?: string | null;
+    dimension?: HistoryDimension;
+    onDimensionChange?: (dimension: HistoryDimension) => void;
 }
 
-export const SummaryTab: React.FC<SummaryTabProps> = ({ data, loading, error }) => {
-    const [dimension, setDimension] = useState<'model' | 'source' | 'tool' | 'skill'>('model');
-
+export const SummaryTab: React.FC<SummaryTabProps> = ({
+    data,
+    loading,
+    error,
+    dimension = 'model',
+    onDimensionChange,
+}) => {
     if (loading) {
         return (
             <div className="flex items-center justify-center p-16">
@@ -132,7 +137,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ data, loading, error }) 
                                         ? 'bg-primary text-primary-content font-bold'
                                         : 'text-base-content/70 hover:bg-base-content/10'
                                 }`}
-                                onClick={() => setDimension(dim)}
+                                onClick={() => onDimensionChange?.(dim)}
                             >
                                 By {dim.charAt(0).toUpperCase() + dim.slice(1)}
                             </button>

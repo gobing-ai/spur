@@ -40,6 +40,9 @@ describe('history artifact', () => {
         expect(selectorDigest(selector({ since: '2026-08-02T00:00:00Z' }))).not.toBe(base);
         expect(selectorDigest(selector({ sessionId: 'sess-1' }))).not.toBe(base);
         expect(selectorDigest(selector({ sources: ['claude'] }))).not.toBe(base);
+        expect(selectorDigest(selector({ models: ['gpt-5.6-sol'] }))).not.toBe(base);
+        expect(selectorDigest(selector({ tools: ['Bash'] }))).not.toBe(base);
+        expect(selectorDigest(selector({ skills: ['sp-dev-verify'] }))).not.toBe(base);
         expect(selectorDigest(selector({ runId: 'run-1' }))).not.toBe(base);
     });
 

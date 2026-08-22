@@ -14,6 +14,11 @@ export const historyBucketEnum = z.enum(['auto', '5m', '10m', '30m', '1h', '4h',
 /** Inferred type for HistoryBucket enum. */
 export type HistoryBucket = z.infer<typeof historyBucketEnum>;
 
+/** Supported stacked-series dimensions for the Summary chart. */
+export const historyDimensionEnum = z.enum(['model', 'source', 'tool', 'skill']);
+/** Inferred type for HistoryDimension enum. */
+export type HistoryDimension = z.infer<typeof historyDimensionEnum>;
+
 /** Input filter schema for history queries. */
 export const historyFilterSchema = z.object({
     range: historyRangeEnum.default('30d'),
@@ -24,6 +29,7 @@ export const historyFilterSchema = z.object({
     tools: z.array(z.string()).optional(),
     skills: z.array(z.string()).optional(),
     bucket: historyBucketEnum.default('auto'),
+    dimension: historyDimensionEnum.default('model'),
 });
 /** Inferred type for HistoryFilter input. */
 export type HistoryFilter = z.input<typeof historyFilterSchema>;
@@ -321,7 +327,7 @@ export const historyAgentSourceCardSchema = z.object({
     importPath: z.string(),
     filePattern: z.string(),
     filesCount: z.number(),
-    sizeMb: z.number(),
+    sizeMb: z.number().nullable(),
     sessionCount: z.number(),
     totalTokens: z.number(),
     cacheSavedTokens: z.number(),

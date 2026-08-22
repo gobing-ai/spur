@@ -23,6 +23,7 @@ import {
     createPsProcessInspector,
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
+    HISTORY_REFRESH_JOB,
     hitlConfirmDefault,
     LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
@@ -408,6 +409,22 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             if (!historyBoardSvc) {
                 historyBoardSvc = new LiveHistoryBoardService({
                     getDb: this.getDb.bind(this),
+                    triggerImport: async (mode) => {
+                        const queue = await this.jobQueue();
+                        const now = Date.now();
+                        const runId = await queue.enqueue(HISTORY_REFRESH_JOB, {
+                            trigger: 'manual',
+                            triggerId: null,
+                            windowStart: now,
+                            windowEnd: now,
+                            importMode: mode,
+                        });
+                        return {
+                            runId,
+                            status: 'queued',
+                            message: `History ${mode} import and analysis queued.`,
+                        };
+                    },
                 });
             }
             return historyBoardSvc;

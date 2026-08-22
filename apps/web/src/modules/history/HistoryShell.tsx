@@ -22,6 +22,7 @@ export const HistoryShell: React.FC = () => {
     const [filter, setFilter] = useState<HistoryFilter>({
         range: '30d',
         bucket: 'auto',
+        dimension: 'model',
     });
     const [selectedSessionId, setSelectedSessionId] = useState<string>('');
 
@@ -54,7 +55,24 @@ export const HistoryShell: React.FC = () => {
                     const res = await api.history.getSummary(filter);
                     if (mounted && res?.data) setSummaryData(res.data);
                 } else if (activeTab === 'timeline') {
-                    const res = await api.history.getTimeline({ sessionId: selectedSessionId || 'sess-0001' });
+                    let sessionId = selectedSessionId;
+                    if (!sessionId) {
+                        const sessions = await api.history.getSessions({
+                            filter,
+                            page: 1,
+                            pageSize: 100,
+                            sortBy: 'start',
+                            sortDir: 'desc',
+                        });
+                        if (mounted && sessions?.data) setSessionsData(sessions.data);
+                        sessionId = sessions?.data?.items[0]?.id ?? '';
+                        if (!sessionId) {
+                            if (mounted) setTimelineData(undefined);
+                            return;
+                        }
+                        if (mounted) setSelectedSessionId(sessionId);
+                    }
+                    const res = await api.history.getTimeline({ sessionId });
                     if (mounted && res?.data) {
                         setTimelineData(res.data);
                         if (!selectedSessionId && res.data.session?.id) {
@@ -98,11 +116,8 @@ export const HistoryShell: React.FC = () => {
     };
 
     const handleTriggerImport = async (mode: 'full' | 'incremental') => {
-        await api.history.triggerImport({ mode });
-        const freshSources = await api.history.getSources();
-        if (freshSources?.data) {
-            setSourcesData(freshSources.data);
-        }
+        const response = await api.history.triggerImport({ mode });
+        return response.data;
     };
 
     return (
@@ -143,7 +158,15 @@ export const HistoryShell: React.FC = () => {
 
             {/* Tab Views */}
             <div className="mt-2">
-                {activeTab === 'summary' && <SummaryTab data={summaryData} loading={loading} error={error} />}
+                {activeTab === 'summary' && (
+                    <SummaryTab
+                        data={summaryData}
+                        loading={loading}
+                        error={error}
+                        dimension={filter.dimension ?? 'model'}
+                        onDimensionChange={(dimension) => setFilter((current) => ({ ...current, dimension }))}
+                    />
+                )}
                 {activeTab === 'timeline' && (
                     <TimelineTab
                         data={timelineData}
