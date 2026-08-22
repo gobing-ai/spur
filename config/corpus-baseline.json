@@ -97,6 +97,14 @@
             "reason": "Accepted backlog: L4.orphan-scenarios",
             "since": "2026-08-19"
         },
+        {
+            "kind": "feature",
+            "id": "E9",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Feature E9 in backlog with tasks 0631, 0632, 0633 pending implementation",
+            "since": "2026-08-22"
+        },
 
         {
             "kind": "feature",
@@ -14884,6 +14892,22 @@
             "severity": "warning",
             "reason": "task scenarios sit at finer altitude than feature E5 AC; DD-09 subset rule fires — pre-existing, feature AC not extended",
             "since": "2026-08-21"
+        },
+        {
+            "kind": "task",
+            "id": "0632",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "Intentional E9 dependency chain: 0632 remains todo until prerequisite 0631 is implemented and verified",
+            "since": "2026-08-22"
+        },
+        {
+            "kind": "task",
+            "id": "0633",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "Intentional E9 dependency chain: final verification task 0633 remains todo until 0632 (and transitive 0631) are done",
+            "since": "2026-08-22"
         }
     ]
 }
