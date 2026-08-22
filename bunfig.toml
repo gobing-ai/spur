@@ -19,6 +19,7 @@ coveragePathIgnorePatterns = [
     "**/*.tsx",
     "**/tests/**/fixtures/**",
     "**/spur-wf-ext-*/**",
+    "tests/setup.ts",
     "apps/server/src/index.ts",
     "../ts-libs/**",
     "packages/domain/src/schema/**",

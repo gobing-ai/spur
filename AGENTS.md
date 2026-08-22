@@ -368,7 +368,8 @@ when the task used the pipeline.
   sets `[test] coverage = true` with `coverageThreshold = { lines = 0.9, functions = 0.9 }`, so plain
   `bun run test` measures and enforces it too; `bun run test:coverage` only adds the explicit
   `--coverage` reporter. Instrumentation costs ~1 % of suite wall-clock, so there is no faster
-  no-coverage mode to reach for. React `.tsx` excluded from the per-file gate (happy-dom).
+  no-coverage mode to reach for. React `.tsx` and the test-harness preload `tests/setup.ts` are
+  excluded from the product-code gate.
 - DAOs: in-memory SQLite (`:memory:`), fresh adapter per test.
 - Names describe behavior under conditions; assert the requirement, not the implementation.
 - Extension path: `/sp:dev-unit`; evidence path: `/sp:dev-verify`.

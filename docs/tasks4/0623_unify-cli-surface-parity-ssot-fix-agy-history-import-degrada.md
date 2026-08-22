@@ -4,7 +4,7 @@ name: "Unify CLI-surface parity SSOT + fix agy history import degradation"
 status: done
 template: meta
 created_at: 2026-08-21T06:23:20.243Z
-updated_at: "2026-08-22T00:30:50.074Z"
+updated_at: "2026-08-22T02:09:39.424Z"
 priority: P1
 ---
 
@@ -128,38 +128,30 @@ until parseErrors = 0.
 ### Solution
 **R1–R3 — parity test derives from SKILL.md (single edit surface)**
 
-- `apps/cli/tests/spur-cli-parity.test.ts:77` — `SKILL_MD` loads `plugins/sp/skills/spur-cli/SKILL.md` as the SSOT; all expectations derive from it at test time.
-- `apps/cli/tests/spur-cli-parity.test.ts:79-154` — `tableCells`/`tableUnderHeading`/`nounsFromCell`/`refFileFromCell`/`routingRows` parse the `## Noun routing` table (Tier B :46-49, Tier C :50) and `### Tier C exclusion reasons` (:54, rows :60-62) into `TIER_B_REF_FILES`, `EXCLUDED_TIER_C_NOUNS`, `EXPECTED_TIER_B_VERBS`.
-- `apps/cli/tests/spur-cli-parity.test.ts:161-167` — `verbsFromReference` reads each Tier B reference file's `## Verb map` first token, mirroring plugins/sp `verbTable()`.
-- `apps/cli/tests/spur-cli-parity.test.ts:56-64` — `TIER_B_VERB_FLOOR` stays hardcoded (task Q&A decision) and merges with reference-derived verbs.
+- `apps/cli/tests/spur-cli-parity.test.ts:61` — `SKILL_MD` loads `plugins/sp/skills/spur-cli/SKILL.md` as the SSOT; all expectations derive from it at test time.
+- `apps/cli/tests/spur-cli-parity.test.ts:63-125` — `tableCells`/`tableUnderHeading` parse Markdown tables; `nounsFromCell`/`refFileFromCell`/`routingRows` parse `## Noun routing` into typed rows.
+- `apps/cli/tests/spur-cli-parity.test.ts:128` — `TIER_B_REF_FILES` derives Tier B noun→reference mappings from those rows.
+- `apps/cli/tests/spur-cli-parity.test.ts:141` — `EXCLUDED_TIER_C_NOUNS` derives from the exclusion table's first column.
+- `apps/cli/tests/spur-cli-parity.test.ts:146` — `verbsFromReference` reads each Tier B reference file's `## Verb map`; `EXPECTED_TIER_B_VERBS` at line 156 derives its noun set from `TIER_B_REF_FILES`.
+- `apps/cli/tests/spur-cli-parity.test.ts:43` — `TIER_B_VERB_FLOOR` stays hardcoded (task Q&A decision) and merges with reference-derived verbs.
 
 **R4 — plugins/sp suites verified already SKILL.md-derived (no repair)**
 
-- `plugins/sp/tests/cli-surface-parity.test.ts` — 0516 parsers read SKILL.md by path; suite green without edits.
-- `plugins/sp/tests/helpers/cli-surface.test.ts` — shared parser helpers already single-sourced.
-- `plugins/sp/tests/surface-drift-inventory.test.ts` — no diverging Tier C pin; `nounOfReference` is a path→noun mapper, not an exclusion list.
-- Verification: `bun test` on the three suites → 109 pass / 0 fail.
+- `plugins/sp/tests/cli-surface-parity.test.ts:138-154` — Tier C exclusions are parsed from the facade SKILL.md; `facadeRoutingNouns()` supplies the live noun set.
+- `plugins/sp/tests/helpers/cli-surface.test.ts:141` — the helper test parses the live Tier C table and verifies its reasoned entries.
+- `plugins/sp/tests/surface-drift-inventory.test.ts` — no divergent Tier C pin; `nounOfReference` is a path→noun mapper, not an exclusion list.
+- Verification: the exact three-suite acceptance command passes 45 tests / 0 failures.
 
 **R5 — agy import degradation fixed in ts-libs (upstream, released 0.4.40)**
 
-Diagnosis (disproves task's "unmapped record shapes" hypothesis): all 422 failures were JSON.parse failures — 789 bad lines / 89,818 total (0.88%), max 3/file; 392 torn tails (truncated final-line writes), 397 foreign fragments (HTML/prose interleaved by the producer), 0 valid-JSON-non-object lines. All unrecoverable.
+Diagnosis disproved the task's "unmapped record shapes" hypothesis: all failures were JSON parse failures from unrecoverable torn tails and foreign fragments interleaved by the producer.
 
-- `packages/llm-jsonl-importer/src/types.ts` (ts-libs, `SourceDefinition.corruptLinePolicy` after `filePatterns`) — `SourceDefinition.corruptLinePolicy?: 'error' | 'skip'` (default `'error'`).
-- `packages/llm-jsonl-importer/src/types.ts` (ts-libs, `ImportResult.skippedCorruptLines` after `unknownRecords`) — additive `ImportResult.skippedCorruptLines: number` (does not enter `parseErrors`, so degraded classification is untouched).
-- `packages/llm-jsonl-importer/src/importer.ts` (ts-libs, line-loop policy pass + skip counter) — line loop passes policy to `parseJsonLine`, counts skips.
-- `packages/llm-jsonl-importer/src/importer.ts` (ts-libs, `parseJsonLine` policy param, both failure paths) — both parse-failure paths (JSON.parse catch + non-object) respect the policy.
-- `packages/llm-jsonl-importer/src/sources.ts` (ts-libs, agy entry) — agy opts in via spread `corruptLinePolicy: 'skip'`; every other source keeps `'error'`.
-- `packages/llm-jsonl-importer/src/opencode-importer.ts` (ts-libs, both `ImportResult` literals) — the other `ImportResult` constructor gets the new required field (0).
-- `packages/llm-jsonl-importer/tests/importer.test.ts` (ts-libs, `runJsonlImport corruptLinePolicy (0623)` describe block) — skip-policy test (corrupt+good → parseErrors empty, skippedCorruptLines=2, good records imported) + default-policy-unchanged test. 45→47 file / 234 package tests green.
+- `@gobing-ai/ts-llm-jsonl-importer` `packages/llm-jsonl-importer/src/types.ts` line 59 — additive per-source `corruptLinePolicy?: 'error' | 'skip'`; line 127 adds `ImportResult.skippedCorruptLines` without entering `parseErrors`.
+- `@gobing-ai/ts-llm-jsonl-importer` `packages/llm-jsonl-importer/src/importer.ts` line 165 — the line loop applies the policy and counts skipped corrupt lines; line 408 keeps the default error policy for every other source.
+- `@gobing-ai/ts-llm-jsonl-importer` `packages/llm-jsonl-importer/src/sources.ts` line 193 — only `agy` opts into `corruptLinePolicy: 'skip'`.
+- `@gobing-ai/ts-llm-jsonl-importer` `packages/llm-jsonl-importer/tests/importer.test.ts` line 911 — tests cover both agy skip behavior and the unchanged default error behavior; the current full importer suite passes 241 tests / 0 failures.
 
-Release: `bump-version 0.4.40 --push` → aggregate tag `@gobing-ai/ts-libs-v0.4.40` → GitHub Actions Publish (OIDC) → npm `0.4.40` confirmed. spur-new pins: `package.json:36` (`^0.4.39`→`^0.4.40`), `package.json:98` (`0.4.39`→`0.4.40`) + `bun install`.
-
-Verification (source-local binary per task 0504 R4; provenance `binary: …/apps/cli/src/index.ts`, `importer: 0.4.40`):
-- Dry-run `history import --source agy --mode full --dry-run --json` → parseErrors=0, status ok, exitCode 0 (was 422 errors / degraded / exit 2).
-- Real import → 679 files, 6082 messages, 1881 toolCalls, parseErrors=0.
-- `history analyze` → agy coverage status ok, 89,423 cumulative messages, parseErrors=0.
-
-File-count note: importer discovers 679 files vs 673 counted on disk by the scan — discovery walks roots and dedupes by `normalizeSourceFilePath` realpath; the importer-discovered set is the AC universe.
+The fix shipped in `@gobing-ai/ts-libs-v0.4.40`; Spur now resolves `0.4.41`. A source-local full import on 2026-08-21 completed with 682 files, `parseErrors: 0`, `validationErrors: 0`, status `ok`, and importer provenance `0.4.41`.
 ### Root Cause
 <!-- For issue/bug tasks: the verified underlying cause, with a `file:line` anchor. -->
 
@@ -173,43 +165,91 @@ File-count note: importer discovers 679 files vs 673 counted on disk by the scan
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/spur-cli-parity.test.ts:77-167` — `SKILL_MD` loads facade SKILL.md; `routingRows`/`refFileFromCell`/`verbsFromReference` derive `TIER_B_REF_FILES` + `EXPECTED_TIER_B_VERBS` at test time; hardcoded literal removed. `bun test apps/cli/tests/spur-cli-parity.test.ts` → 14 pass. |
-| R2 | MET | `apps/cli/tests/spur-cli-parity.test.ts:157-159` — `EXCLUDED_TIER_C_NOUNS` = first column of the exclusion table (:60-62 rows), no hardcoded literal. |
-| R3 | MET | apps/cli suite parses `plugins/sp/skills/spur-cli/SKILL.md` by path (:77); plugins/sp suites already read the same SSOT (0516). `bun test` both → 14 + 109 pass; full `bun run spur-check` → 6115 pass / 0 fail. |
-| R4 | MET | Verified all three suites (`cli-surface-parity`, `helpers/cli-surface`, `surface-drift-inventory`) parse SKILL.md; no diverging Tier C pin (`nounOfReference` is a path→noun mapper). No repair needed: 109 pass unedited. |
-| R5 | MET | Source-local binary + importer 0.4.40 (provenance header recorded in transcript). Dry-run `--source agy --mode full --dry-run --json`: parseErrors=0, status ok, exitCode 0 (was 422 errors / degraded / exit 2). Real import: 679 files, 6082 messages, 1881 toolCalls, parseErrors=0. `history analyze`: agy status ok, parseErrors=0. Root cause: 789 corrupt JSON lines of 89,818 (0.88%) — 392 torn tails + 397 foreign fragments, all unrecoverable; fixed via per-source `corruptLinePolicy: 'skip'` in ts-libs 0.4.40 (ts-libs `sources.ts` agy-only opt-in). |
+| R1 | MET | `apps/cli/tests/spur-cli-parity.test.ts:120-162` parses Tier B rows from `SKILL_MD`; `EXPECTED_TIER_B_VERBS` derives its noun set from those rows and each routed reference. |
+| R2 | MET | `apps/cli/tests/spur-cli-parity.test.ts:128` derives `TIER_B_REF_FILES` from each Tier B routing row's Reference column. |
+| R3 | MET | `apps/cli/tests/spur-cli-parity.test.ts:141` derives `EXCLUDED_TIER_C_NOUNS` from the Tier C exclusion table's first column. |
+| R4 | MET | `plugins/sp/tests/cli-surface-parity.test.ts` derives the facade noun set through `facadeRoutingNouns`; the helper suite parses the same SKILL.md surface and the exact three-suite command passes 45 tests / 0 failures / 256 assertions. |
+| R5 | MET | `@gobing-ai/ts-llm-jsonl-importer` scopes `corruptLinePolicy: 'skip'` to agy in `sources.ts`; its importer tests cover agy skip plus unchanged default-error behavior in the 241-test package suite. Source-local full import resolved importer 0.4.41 and returned 682 files, `parseErrors: 0`, `validationErrors: 0`, status `ok`; the fix shipped in 0.4.40. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: surface change is a single edit | MET | test | Given a Tier B noun `X` with ref `X.md` in SKILL.md, the parity test derives membership: `TIER_B_REF_FILES`/`EXPECTED_TIER_B_VERBS` are computed from `SKILL_MD` at test time (test :79-167). `bun test apps/cli/tests/spur-cli-parity.test.ts` → 14 pass; `bun run spur-check` (includes `spur task check --corpus` equivalent gates) → PASS, 6115 tests. |
-| Scenario: Tier C exclusions track the exclusion table | MET | test | `EXCLUDED_TIER_C_NOUNS` derives from the exclusion-reasons table (:157-159); equals {history, projects, help} today and tracks any table edit without test changes. |
-| Scenario: parity suites agree on the surface | MET | test | `bun test apps/cli/tests/spur-cli-parity.test.ts plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/helpers/cli-surface.test.ts` → 14 + 109 pass with zero hardcoded noun-map edits (only TIER_B_VERB_FLOOR pin, per task Q&A). |
-| Scenario: agy import is clean | MET | command | `bun run apps/cli/src/index.ts history import --source agy --mode full --json` (importer 0.4.40) → parseErrors 0, 679 files imported, status ok; `history analyze` → agy parseErrors 0. |
+| Scenario: surface change is a single edit | MET | command | `bun run spur-check` passes 6,117 tests / 0 failures with 99.04% line and 99.19% function coverage; `bun run corpus-check` passes with 0 new / 0 stale findings. |
+| Scenario: Tier C exclusions track the exclusion table | MET | test | `apps/cli/tests/spur-cli-parity.test.ts:141` derives the exact current set from SKILL.md; its parity assertions pass. |
+| Scenario: parity suites agree on the surface | MET | test | `bun test apps/cli/tests/spur-cli-parity.test.ts plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/helpers/cli-surface.test.ts` passes 45 tests / 0 failures / 256 assertions. |
+| Scenario: agy import is clean | MET | command | `bun run apps/cli/src/index.ts history import --source agy --mode full --json` via the source-local binary and importer 0.4.41 returns 682 files, `parseErrors: 0`, `validationErrors: 0`, status `ok`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
+**Scope:** Task 0623 intended changes and evidence only: `AGENTS.md` coverage wording,
+`apps/cli/tests/spur-cli-parity.test.ts`, `bunfig.toml`, the 0623 task-corpus evidence, and
+the external `@gobing-ai/ts-llm-jsonl-importer@0.4.40` release. Concurrent E8/0624 changes
+under `packages/app`, `packages/domain`, and `config/corpus-baseline.json` are excluded from
+the implementation review; the corpus baseline is mentioned only as shared-gate evidence.
+
+**Dimensions:** functional traceability, security, efficiency, correctness, usability, architecture
+
+**Verdict:** PASS
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:bc2726971e9868e42fc386dadabc55465846651c7afd8024722738f803f313db |
+| --- | --- | --- | --- |
+| P3 | usability / observability (advisory, out of scope) | `apps/cli/src/commands/history.ts:123-126` | The upstream importer’s `src/types.ts` line 136 counts skipped corrupt lines separately, but the 0623 evidence only exposes `parseErrors: 0` and the fan-out result. A future history-data-plane task should surface `skippedCorruptLines` so “clean” cannot be read as lossless. This is not a 0623 AC blocker and no concurrent app code was reviewed or changed. |
+| P4 | security | 0623 intended scope | No P1–P2 security finding: the local parser reads repository-controlled Markdown, performs no evaluation or shell interpolation, and the corrupt-line policy is scoped to the named agy source. |
+| P4 | efficiency | `apps/cli/tests/spur-cli-parity.test.ts:5-8` | Removing duplicate in-process Commander registration leaves live CLI capture to the plugin subprocess suite and keeps this suite focused on the SKILL/reference contract; no new runtime cost was introduced. |
+| P4 | architecture | `apps/cli/tests/spur-cli-parity.test.ts:51-162`; `plugins/sp/tests/cli-surface-parity.test.ts:141-154` | The two suites intentionally parse the same `SKILL.md` by path because `plugins/sp` is not a workspace package. `REFERENCE_LAYOUT` remains a structural metadata map as approved by the task design; no blocker or major seam issue found. |
+
+**Functional Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/cli/tests/spur-cli-parity.test.ts:118-162` parses Tier B routing rows and derives `EXPECTED_TIER_B_VERBS` from routed nouns plus reference verb maps; the hardcoded floor is the explicit Q&A exception. |
+| R2 | MET | `apps/cli/tests/spur-cli-parity.test.ts:127-138` derives `TIER_B_REF_FILES` from the routing table Reference cell and fails on an unparseable Tier B row. |
+| R3 | MET | `apps/cli/tests/spur-cli-parity.test.ts:140-143` derives `EXCLUDED_TIER_C_NOUNS` from the `### Tier C exclusion reasons` table. |
+| R4 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:141-154` derives facade nouns from `SKILL.md`; `plugins/sp/tests/helpers/cli-surface.test.ts:141-147` parses and validates the same live Tier C table. The recorded three-suite command passes 45 tests / 0 failures. |
+| R5 | MET | @gobing-ai/ts-llm-jsonl-importer \`src/types.ts\` lines 59-71, 126-138 — defines the source-scoped skip policy and counter; @gobing-ai/ts-llm-jsonl-importer \`src/importer.ts\` lines 160-169 — applies it; @gobing-ai/ts-llm-jsonl-importer \`src/sources.ts\` lines 193-206 — scopes it to agy; importer tests at @gobing-ai/ts-llm-jsonl-importer \`tests/importer.test.ts\` lines 911-939 cover skip and default-error behavior. The source-local full import recorded 682 files, `parseErrors: 0`, `validationErrors: 0`, status `ok`, provenance `0.4.41`; the agy corrupt-line fix is from `0.4.40`. |
+
+**Acceptance-Criteria Cross-check**
+
+| AC | Status | Evidence |
+| --- | --- | --- |
+| Scenario: surface change is a single edit | MET | `apps/cli/tests/spur-cli-parity.test.ts:127-162`; recorded parity and `spur-check` evidence passed, and fresh `bun run corpus-check` exited 0 with 0 new / 0 stale findings. |
+| Scenario: Tier C exclusions track the exclusion table | MET | `apps/cli/tests/spur-cli-parity.test.ts:140-143` plus the exact-set assertion in the recorded parity run. |
+| Scenario: parity suites agree on the surface | MET | `bun test apps/cli/tests/spur-cli-parity.test.ts plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/helpers/cli-surface.test.ts` — 45 passed, 0 failed, 256 assertions. |
+| Scenario: agy import is clean | MET | Source-local `bun run apps/cli/src/index.ts history import --source agy --mode full --json` — current importer `0.4.41`, status `ok`, `parseErrors: 0`, `validationErrors: 0`; the policy under test was introduced in `0.4.40`. |
+
+**Design Conformance**
+
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| R1–R4 derive the CLI surface from the facade SSOT | DONE | `apps/cli/tests/spur-cli-parity.test.ts:61-162` and the existing plugin parser at `plugins/sp/tests/cli-surface-parity.test.ts:141-154`. |
+| R5 fixes agy degradation in the importer | CHANGED, documented | The written design expected mapper shape additions; the Solution records the verified alternative: unrecoverable corrupt JSON lines handled by the agy-only skip policy in importer `0.4.40`. |
+| Coverage harness documents the preload exclusion | DONE | `bunfig.toml:18-27` and `AGENTS.md:367-372` agree on `tests/setup.ts` as a test-harness exclusion. |
+
+**SECUA / Architecture Summary**
+
+Security, efficiency, usability, and architecture are clean for the intended scope. The local
+Markdown parser is bounded and fails loudly on missing headings or malformed Tier B routing rows;
+the plugin helper independently validates Tier C reasons and duplicates. The two prior evidence
+findings are closed: References now distinguishes current importer 0.4.41 from the 0.4.40 fix
+release, and Notes records the verified producer-corruption diagnosis. The corpus check currently
+passes (`errors 2278 observed, 764 baselined, 0 new, 0 stale; warnings 2423 observed, 1146
+baselined, 0 new, 0 stale`); its four two-sided E8 baseline entries are shared integration hygiene,
+not 0623 implementation.
+
+**Next:** no in-scope action remains. Keep the skipped-line visibility item as a separate
+history-data-plane follow-up unless the operator expands 0623 scope.
 ### References
 - Fixall session: `/Users/robin/.pi/agent/sessions/--Users-robin-xprojects-spur-new--/2026-08-21T04-14-28-625Z_01a02287-0311-7e8d-a158-fcd678f791d8.jsonl` (pi, 04:14–05:12 UTC fixall window)
 - Forensics artifact: `.spur/reports/history/2026-08-21/analyze-38efcab3.json`
 - Facade SSOT: `plugins/sp/skills/spur-cli/SKILL.md` (`## Noun routing`, `### Tier C exclusion reasons`)
 - Parity tests: `plugins/sp/tests/cli-surface-parity.test.ts`, `plugins/sp/tests/helpers/cli-surface.test.ts`, `apps/cli/tests/spur-cli-parity.test.ts`, `plugins/sp/tests/surface-drift-inventory.test.ts`
 - Fixall reference (Fix 1 landed): `plugins/sp/skills/spur-dev/references/dev-operations.md` §10 step 3
-- Importer (R5): `@gobing-ai/ts-llm-jsonl-importer` (agy mapper)
-- Import provenance: `apps/cli/src/index.ts` · importer `0.4.39`
+- Importer (R5): `@gobing-ai/ts-llm-jsonl-importer` (agy corrupt-line policy)
+- Import provenance: `apps/cli/src/index.ts` · importer `0.4.41` (agy corrupt-line policy introduced in `0.4.40`)
 ### History
 - 2026-08-21T23:54:17.377Z backlog → todo (system)
 - 2026-08-22T00:22:27.181Z todo → wip (system)
 - 2026-08-22T00:28:08.034Z wip → testing (system)
 - 2026-08-22T00:28:21.751Z testing → done (system)
 ### Notes
-
-- **RC1 — Fragmented CLI-surface SSOT.** The noun→reference map is hand-copied into ≥4 test files. Forensic evidence: 3 sequential discovery waves in one fixall, each surfaced by a full-suite probe after the previous targeted fix passed. Estimated waste: ~30–40 min of the ~58 min fixall.
+- **RC1 — Fragmented CLI-surface SSOT.** The noun→reference map was hand-copied into ≥4 test files. Forensic evidence: 3 sequential discovery waves in one fixall, each surfaced by a full-suite probe after the previous targeted fix passed. Estimated waste: ~30–40 min of the ~58 min fixall.
 - **RC2 — Discovery-by-gate instead of sweep-by-`rg`.** The fixall ran the full suite (52 s) to find the initial 5 failures, then each sibling probe (2× plugins/sp ~9.7 s, apps/cli) revealed one more pinned file. An upfront `rg -l "<old-noun>|<old-ref>.md" apps/*/tests plugins/sp/tests plugins/sp/skills docs` would have produced the complete edit set in one pass. Mitigation already landed: `dev-operations.md` §10 fixall step 3 (surface-change sweep).
-- **RC3 — agy importer coverage gap.** `agy` degraded: 366/916 records unparseable. Root cause unverified (needs dry-run sample inspection); likely unmapped envelope variants in the agy mapper.
-
+- **RC3 — agy producer corruption, not mapper coverage.** Diagnosis found 789 of 89,818 JSONL lines (0.88%) were unrecoverable: 392 torn tails and 397 foreign HTML/prose fragments, with zero valid-JSON non-object records. Importer `0.4.40` applies `corruptLinePolicy: 'skip'` only to agy, counts the skipped lines separately, and preserves the default error policy for every other source.
