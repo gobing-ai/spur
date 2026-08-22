@@ -4,13 +4,14 @@ import {
     readdirSync,
     readFileSync,
     readlinkSync,
+    realpathSync,
     rmSync,
     symlinkSync,
     unlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { AgentConfig } from '@gobing-ai/spur-config';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
@@ -276,7 +277,7 @@ const REPORT_RETENTION_DAYS = 90;
 /**
  * R5 (task 0624): run-dispatched agent sessions are written under
  * `<cwd>/.spur/run/<runId>/agent-sessions/<agent>/` (agent dir = source or
- * `<source>-<flavor>`), never to the agent's live session root — so default
+ * `<source>-<flavor>` or a workflow role such as `coder`), never to the agent's live session root — so default
  * discovery never sees them and even exact run→session mappings joined zero
  * imported messages. Augment the registry defaults (resolved home-relative,
  * matching the importer's own default-root semantics) with the run session
@@ -284,20 +285,36 @@ const REPORT_RETENTION_DAYS = 90;
  * run-session rows on a later full import. Explicit `--file`/`--root` skip
  * this entirely (the caller directed the scan).
  */
-function runSessionAugmentedRoots(source: LlmJsonlSource, home: string, cwd: string): string[] {
+async function runSessionAugmentedRoots(
+    source: LlmJsonlSource,
+    home: string,
+    cwd: string,
+    dao: RunSessionDao,
+): Promise<{ roots: string[]; runRoots: Array<{ runId: string; root: string }> }> {
     const roots = getSourceDefinition(source).defaultRoots.map((root) => resolve(home, root));
+    const runRoots: Array<{ runId: string; root: string }> = [];
     const runRoot = join(cwd, '.spur', 'run');
-    if (!existsSync(runRoot)) return roots;
+    if (!existsSync(runRoot)) return { roots, runRoots };
+    const sourcesByRun = new Map<string, Set<string>>();
+    for (const row of await dao.listRunSources()) {
+        const sources = sourcesByRun.get(row.run_id) ?? new Set<string>();
+        sources.add(row.source);
+        sourcesByRun.set(row.run_id, sources);
+    }
     for (const runId of readdirSync(runRoot)) {
         const sessionsRoot = join(runRoot, runId, 'agent-sessions');
         if (!existsSync(sessionsRoot)) continue;
+        const mappedSources = sourcesByRun.get(runId);
         for (const agent of readdirSync(sessionsRoot)) {
-            if (agent === source || agent.startsWith(`${source}-`)) {
-                roots.push(join(sessionsRoot, agent));
-            }
+            const directMatch = agent === source || agent.startsWith(`${source}-`);
+            const soleMappedSource = mappedSources?.size === 1 && mappedSources.has(source);
+            if (!directMatch && !soleMappedSource) continue;
+            const root = realpathSync(join(sessionsRoot, agent));
+            roots.push(root);
+            runRoots.push({ runId, root });
         }
     }
-    return roots;
+    return { roots, runRoots };
 }
 
 // ---------------------------------------------------------------------------
@@ -320,29 +337,34 @@ export class HistoryService {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
         const dryRun = opts.dryRun ?? false;
+        const db = await this.ctx.getDb();
+        const dao = new RunSessionDao(db);
+        const discovery =
+            parsedSource !== 'opencode' && opts.file === undefined && opts.root === undefined
+                ? await runSessionAugmentedRoots(
+                      parsedSource,
+                      this.ctx.historyHome ?? homedir(),
+                      this.ctx.cwd ?? process.cwd(),
+                      dao,
+                  )
+                : undefined;
 
         const result =
             parsedSource === 'opencode' && opts.file === undefined && opts.root === undefined
                 ? await runOpenCodeImport({
-                      db: await this.ctx.getDb(),
+                      db,
                       sourceDatabase: this.ctx.openCodeSourceDatabase,
                       mode,
                       dryRun,
                   })
                 : await runJsonlImport(parsedSource, {
-                      db: await this.ctx.getDb(),
+                      db,
                       mode,
                       ...(opts.file !== undefined && opts.file.length > 0
                           ? { files: [opts.file] }
                           : opts.root !== undefined && opts.root.length > 0
                             ? { roots: [opts.root] }
-                            : {
-                                  roots: runSessionAugmentedRoots(
-                                      parsedSource,
-                                      this.ctx.historyHome ?? homedir(),
-                                      this.ctx.cwd ?? process.cwd(),
-                                  ),
-                              }),
+                            : { roots: discovery?.roots ?? [] }),
                       dryRun,
                   });
 
@@ -353,7 +375,16 @@ export class HistoryService {
         // present in `history_run_session` is spur-run, anything else is ambient. The
         // two-way alignment also self-heals rows imported by the old heuristic.
         if (!dryRun) {
-            await new RunSessionDao(await this.ctx.getDb()).alignMessageProvenance();
+            for (const runRoot of discovery?.runRoots ?? []) {
+                const sourceFilePrefix = runRoot.root.endsWith(sep) ? runRoot.root : `${runRoot.root}${sep}`;
+                await dao.observeImportedSessions({
+                    runId: runRoot.runId,
+                    source: parsedSource,
+                    sourceFilePrefix,
+                    resolvedAt: new Date().toISOString(),
+                });
+            }
+            await dao.alignMessageProvenance();
         }
         return result;
     }

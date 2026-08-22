@@ -401,7 +401,8 @@ J91 table cells are human-only (built, task 0605): optional
   (+ history / workflow engine SQL + `_spur_cli_` increments).
 - New migrations take `max(prefix)+1` (four-digit numeric prefix, e.g. `0015_...`). If a merge surfaces a duplicate prefix, the incoming branch renumbers to `max(prefix)+1` (the E6 precedent, commit `fa41669c`).
 - Migrator: top-level `drizzle/*.sql` with `_spur_cli_` marker only.
-- History: raw in files; DB holds ETL rows, import ledger, checkpoints.
+- History: raw in files; DB holds typed rows, lazy generic ETL rows, import ledger, and checkpoints.
+  Repeated Claude response snapshots share `request_id`; rollups retain the final cumulative row.
 - `drizzle/_legacy_reference/` inert — never activate.
 
 ---

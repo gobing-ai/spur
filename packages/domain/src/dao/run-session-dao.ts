@@ -43,9 +43,9 @@ export interface InsertRunSessionInput {
 
 /**
  * DAO for the `history_run_session` table (feature E6): the run→session
- * mapping captured at the agent invoke boundary. Populated only by the run
- * path (AgentService's RunSessionObserver) — never by import. Both lookup
- * directions (by run_id, by (source, session_id)) are index-backed (R4).
+ * mapping captured at the agent invoke boundary. The import path may promote
+ * an unresolved row when a session is observed inside that run's own session
+ * directory. Both lookup directions are index-backed (R4).
  */
 export class RunSessionDao {
     constructor(private readonly db: DbAdapter) {}
@@ -93,6 +93,53 @@ export class RunSessionDao {
             if (error instanceof Error && error.message.includes('no such table: history_run_session')) {
                 return [];
             }
+            throw error;
+        }
+    }
+
+    /** Distinct importer sources recorded for each run, including unresolved rows. */
+    async listRunSources(): Promise<Array<Pick<RunSessionRow, 'run_id' | 'source'>>> {
+        try {
+            return await this.db.queryAll<Pick<RunSessionRow, 'run_id' | 'source'>>(
+                `SELECT DISTINCT run_id, source FROM history_run_session ORDER BY run_id, source`,
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: history_run_session')) return [];
+            throw error;
+        }
+    }
+
+    /** Promote sessions imported from one run-owned directory to exact observed mappings. */
+    async observeImportedSessions(input: {
+        runId: string;
+        source: string;
+        sourceFilePrefix: string;
+        resolvedAt: string;
+    }): Promise<void> {
+        try {
+            await this.db.run(
+                `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at)
+                 SELECT DISTINCT ?, ?, h.session_id, 'exact', 'observed', ?
+                 FROM history_message h
+                 WHERE h.source = ? AND h.session_id IS NOT NULL
+                   AND substr(h.source_file, 1, length(?)) = ?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM history_run_session m
+                       WHERE m.run_id = ? AND m.source = ? AND m.session_id = h.session_id
+                         AND m.exactness = 'exact'
+                   )`,
+                input.runId,
+                input.source,
+                input.resolvedAt,
+                input.source,
+                input.sourceFilePrefix,
+                input.sourceFilePrefix,
+                input.runId,
+                input.source,
+            );
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: history_run_session')) return;
+            if (error instanceof Error && error.message.includes('no such table: history_message')) return;
             throw error;
         }
     }

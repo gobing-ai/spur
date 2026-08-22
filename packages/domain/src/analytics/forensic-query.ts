@@ -158,11 +158,10 @@ export async function messageRollup(
     opts?: WatermarkQueryOptions,
 ): Promise<MessageRollupRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    // 0624 R1: claude re-emits an assistant message per attached content block —
-    // all copies share `request_id`. Fold duplicates in SQL (keep MIN(rowid) per
-    // request_id) instead of double-counting them; rows without a request_id
-    // (all other sources, plus claude user/system lines) pass through untouched.
-    const dedup = `(m.rowid IN (SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id) OR m.request_id IS NULL)`;
+    // 0624 R1: claude re-emits an assistant message while a response streams —
+    // all copies share `request_id`, and the final row carries the complete
+    // cumulative usage. Keep that row once; unidentified responses stay distinct.
+    const dedup = `(m.rowid IN (SELECT MAX(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id) OR m.request_id IS NULL)`;
     const folded = where ? `${where} AND ${dedup}` : `WHERE ${dedup}`;
     const wm = applyWatermarkToWhere(folded, opts?.watermark);
     return db.queryAll<MessageRollupRow>(
