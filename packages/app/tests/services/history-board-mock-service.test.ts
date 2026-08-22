@@ -14,6 +14,7 @@ describe('MockHistoryBoardService', () => {
         expect(summary.topSources.length).toBeGreaterThan(0);
         expect(summary.topTools.length).toBeGreaterThan(0);
         expect(summary.timeSeries.length).toBeGreaterThan(0);
+        expect(summary.skillTimeSeries.length).toBeGreaterThan(0);
     });
 
     test('getSummary filters by sources and models', async () => {
@@ -118,34 +119,40 @@ describe('MockHistoryBoardService', () => {
             corpusSizeBytes: 0,
             dateCoverage: { from: null, to: null },
             totalSessions: 0,
+            lastImportedAt: null,
         });
         expect(empty.roots.every((root) => root.status === 'empty')).toBe(true);
 
-        const single = await new MockHistoryBoardService([
-            {
-                id: 'single',
-                source: 'claude',
-                model: 'claude-opus-4.6',
-                start: Date.parse('2026-08-21T12:00:00Z'),
-                durationMs: 1_000,
-                messages: 2,
-                toolCalls: 1,
-                errors: 0,
-                tokens: {
-                    billedTokens: 150,
-                    cacheSavedTokens: 200,
-                    cacheReadTokens: 200,
-                    freshInputTokens: 100,
-                    outputTokens: 50,
-                },
-                toolMix: { Read: 1 },
-                skillMix: {},
-                state: 'complete',
+        const sameStartSession = {
+            id: 'single',
+            source: 'claude',
+            model: 'claude-opus-4.6',
+            start: Date.parse('2026-08-21T12:00:00Z'),
+            durationMs: 1_000,
+            messages: 2,
+            toolCalls: 1,
+            errors: 0,
+            tokens: {
+                billedTokens: 150,
+                cacheSavedTokens: 200,
+                cacheReadTokens: 200,
+                freshInputTokens: 100,
+                outputTokens: 50,
             },
-        ]).getSources();
-        expect(single.overview.totalSessions).toBe(1);
+            toolMix: { Read: 1 },
+            skillMix: {},
+            state: 'complete',
+        };
+        const singleSourceService = new MockHistoryBoardService([
+            sameStartSession,
+            { ...sameStartSession, id: 'same-start' },
+        ]);
+        const single = await singleSourceService.getSources();
+        expect(single.overview.totalSessions).toBe(2);
         expect(single.roots.filter((root) => root.status === 'active').map((root) => root.agentId)).toEqual(['claude']);
-        expect(single.agents.find((agent) => agent.id === 'claude')?.sessionCount).toBe(1);
+        expect(single.agents.find((agent) => agent.id === 'claude')?.sessionCount).toBe(2);
+        const sameStartSummary = await singleSourceService.getSummary({ range: '24h' });
+        expect(sameStartSummary.kpiTrend.find((point) => point.day === '2026-08-21')?.sessionsCount).toBe(2);
     });
 
     test('triggerImport returns receipt with runId', async () => {

@@ -108,6 +108,7 @@ describe('LiveHistoryBoardService', () => {
         expect(summary.topSources.length).toBeGreaterThan(0);
         expect(summary.topTools.length).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.hitRatio).toBeGreaterThan(0);
+        expect(summary.previousKpis).not.toBeNull();
     });
 
     test('getTimeline returns session metadata and blocks', async () => {

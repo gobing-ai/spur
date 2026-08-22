@@ -1,22 +1,26 @@
 import type {
     HistoryFilter,
     HistoryInsightsResponse,
+    HistoryKpiTrendPoint,
     HistoryModelComparisonItem,
     HistoryRange,
     HistorySessionItem,
     HistorySessionsInput,
     HistorySessionsResponse,
     HistorySourcesResponse,
+    HistorySummaryKpis,
     HistorySummaryResponse,
     HistoryTimelineBlock,
     HistoryTimelineEvent,
     HistoryTimelineEventKind,
     HistoryTimelineResponse,
+    HistoryTimeSeriesPoint,
     HistoryTopItem,
     HistoryTriggerImportResponse,
 } from '@gobing-ai/spur-contracts';
 import {
     type ArtifactSelector,
+    type BucketedTokenRow,
     bucketedTokenSeries,
     bySession,
     bySkill,
@@ -25,10 +29,13 @@ import {
     type HistoryBucket as DomainHistoryBucket,
     dailyTokenMatrix,
     type HistoryBoardDailyRollupRow,
+    type HistoryBoardKpiTrendRow,
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
+    type HistoryDimension,
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
+    historyBoardKpiTrendFromRollup,
     historyBoardLoopsFromRollup,
     historyBoardModelComparisonFromRollup,
     historyBoardRankedStepsFromRollup,
@@ -36,6 +43,7 @@ import {
     historyBoardSessionsFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    historyKpiTrend,
     loops,
     messageRollup,
     modelComparison,
@@ -165,7 +173,7 @@ function classifyToolKind(toolName: string | null, role: string): HistoryTimelin
     return 'run';
 }
 
-function projectSummary(rows: HistoryBoardSummaryRollup): HistorySummaryResponse['data'] {
+function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras): HistorySummaryResponse['data'] {
     const tokenTotal = (row: { freshInputTokens: number; outputTokens: number }) =>
         row.freshInputTokens + row.outputTokens;
     const totalBilledTokens = rows.models.reduce((sum, row) => sum + tokenTotal(row), 0);
@@ -232,6 +240,162 @@ function projectSummary(rows: HistoryBoardSummaryRollup): HistorySummaryResponse
             savedTokens: cacheSavedTokens,
             totalRead: cacheSavedTokens + rows.models.reduce((sum, row) => sum + row.freshInputTokens, 0),
         },
+        kpiTrend: extras.kpiTrend,
+        previousKpis: extras.previousKpis,
+        skillTimeSeries: extras.skillTimeSeries,
+    };
+}
+
+/** Extra summary fields (KPI trend, previous window, skill series) computed alongside the rollup. */
+interface SummaryExtras {
+    kpiTrend: HistoryKpiTrendPoint[];
+    previousKpis: HistorySummaryKpis | null;
+    skillTimeSeries: HistoryTimeSeriesPoint[];
+}
+
+/** Trend-selector resolution: end = bounded custom upper bound else current UTC day; start = end - 29d. */
+function resolveTrendSelector(sel: ArtifactSelector): ArtifactSelector & { until: string } {
+    let until = sel.until;
+    if (until === null) {
+        const now = new Date();
+        now.setUTCHours(0, 0, 0, 0);
+        until = now.toISOString();
+    }
+    const end = new Date(until);
+    end.setUTCHours(23, 59, 59, 999);
+    const start = new Date(end.getTime() - 29 * 86_400_000);
+    start.setUTCHours(0, 0, 0, 0);
+    return { ...sel, since: start.toISOString(), until: end.toISOString() };
+}
+
+/** Zero-fill 30 UTC day buckets ending at the trend window end; domain returns only days with rows. */
+function projectKpiTrend(rows: HistoryBoardKpiTrendRow[], endDay: string): HistoryKpiTrendPoint[] {
+    const byDay = new Map(rows.map((row) => [row.day, row]));
+    const points: HistoryKpiTrendPoint[] = [];
+    const end = new Date(`${endDay}T00:00:00Z`);
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date(end.getTime() - i * 86_400_000);
+        const day = date.toISOString().slice(0, 10);
+        const row = byDay.get(day);
+        const fresh = row?.freshInputTokens ?? 0;
+        const output = row?.outputTokens ?? 0;
+        points.push({
+            day,
+            totalBilledTokens: fresh + output,
+            cacheSavedTokens: row?.cacheReadTokens ?? 0,
+            sessionsCount: row?.sessions ?? 0,
+            toolCallsCount: row?.toolCalls ?? 0,
+            cacheHitRatio:
+                fresh + output + (row?.cacheReadTokens ?? 0) > 0
+                    ? Math.round(((row?.cacheReadTokens ?? 0) / (fresh + output + (row?.cacheReadTokens ?? 0))) * 100)
+                    : 0,
+        });
+    }
+    return points;
+}
+
+/** Shift both time bounds back by the inclusive window duration to get the previous comparable window. */
+function previousWindowSelector(sel: ArtifactSelector): ArtifactSelector | null {
+    if (sel.since === null) return null;
+    const until = sel.until === null ? Date.now() : new Date(sel.until).getTime();
+    const since = new Date(sel.since).getTime();
+    const duration = until - since + 1;
+    return {
+        ...sel,
+        since: new Date(since - duration).toISOString(),
+        until: new Date(until - duration).toISOString(),
+    };
+}
+
+/** Project skill-dimension buckets into the wire skillTimeSeries shape. */
+function projectSkillTimeSeries(buckets: BucketedTokenRow[]): HistoryTimeSeriesPoint[] {
+    const byBucket = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    for (const row of buckets) {
+        const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
+        const billed = (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        point.billed += billed;
+        point.cacheRead += row.cacheReadTokens ?? 0;
+        point.series[row.key] = (point.series[row.key] ?? 0) + billed;
+        byBucket.set(row.bucketStart, point);
+    }
+    return Array.from(byBucket.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([bucketStart, point]) => ({
+            bucketStart,
+            cacheHitRatio:
+                point.billed + point.cacheRead > 0
+                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
+                    : 0,
+            series: point.series,
+        }));
+}
+
+/** KPIs of a rollup-shaped summary — used for the previous window baseline. */
+function projectPreviousKpis(rows: HistoryBoardSummaryRollup): HistorySummaryKpis {
+    const totalBilledTokens = rows.models.reduce((sum, row) => sum + row.freshInputTokens + row.outputTokens, 0);
+    const cacheSavedTokens = rows.models.reduce((sum, row) => sum + row.cacheReadTokens, 0);
+    const cacheDenominator = totalBilledTokens + cacheSavedTokens;
+    return {
+        totalBilledTokens,
+        cacheSavedTokens,
+        cacheSavedPercent: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
+        sessionsCount: rows.sessions,
+        toolCallsCount: rows.toolCalls,
+        errorRate: rows.toolCalls > 0 ? Math.round((rows.toolErrors / rows.toolCalls) * 1000) / 10 : 0,
+    };
+}
+
+/** Previous-window KPIs via exact (non-rollup) reads. */
+async function previousExactKpis(db: DbAdapter, sel: ArtifactSelector): Promise<HistorySummaryKpis> {
+    const [rollups, toolStats, sessionRows] = await Promise.all([
+        messageRollup(db, sel),
+        byTool(db, sel, 1_000_000),
+        bySession(db, sel, 1_000_000),
+    ]);
+    const totalBilledTokens = rollups.reduce((sum, row) => sum + (row.inputTokens ?? 0) + (row.outputTokens ?? 0), 0);
+    const cacheSavedTokens = rollups.reduce((sum, row) => sum + (row.cacheReadTokens ?? 0), 0);
+    const cacheDenominator = totalBilledTokens + cacheSavedTokens;
+    const toolCalls = toolStats.reduce((sum, row) => sum + row.calls, 0);
+    const toolErrors = toolStats.reduce((sum, row) => sum + row.errors, 0);
+    return {
+        totalBilledTokens,
+        cacheSavedTokens,
+        cacheSavedPercent: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
+        sessionsCount: sessionRows.length,
+        toolCallsCount: toolCalls,
+        errorRate: toolCalls > 0 ? Math.round((toolErrors / toolCalls) * 1000) / 10 : 0,
+    };
+}
+
+/** Compute trend/previous-window/skill-series extras alongside the primary summary reads. */
+async function computeSummaryExtras(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    bucket: DomainHistoryBucket,
+    dimension: HistoryDimension,
+    exact: boolean,
+    activeBuckets: BucketedTokenRow[] | undefined,
+): Promise<SummaryExtras> {
+    const trendSel = resolveTrendSelector(sel);
+    const endDay = trendSel.until.slice(0, 10);
+    const previousSel = previousWindowSelector(sel);
+    const [trendRows, previousKpis, skillBuckets] = await Promise.all([
+        exact ? historyKpiTrend(db, trendSel) : historyBoardKpiTrendFromRollup(db, trendSel),
+        (async () => {
+            if (previousSel === null) return null;
+            if (exact) return await previousExactKpis(db, previousSel);
+            return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, bucket, dimension));
+        })(),
+        (async () => {
+            if (dimension === 'skill') return activeBuckets ?? [];
+            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'skill');
+            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'skill')).buckets;
+        })(),
+    ]);
+    return {
+        kpiTrend: projectKpiTrend(trendRows, endDay),
+        previousKpis,
+        skillTimeSeries: projectSkillTimeSeries(skillBuckets),
     };
 }
 
@@ -286,12 +450,20 @@ function projectSources(
             source.lastDate !== null && (latest === null || source.lastDate > latest) ? source.lastDate : latest,
         null,
     );
+    const lastImportedAt = sources.reduce<string | null>(
+        (latest, source) =>
+            source.lastImportedAt !== null && (latest === null || source.lastImportedAt > latest)
+                ? source.lastImportedAt
+                : latest,
+        null,
+    );
     return {
         overview: {
             totalFiles: sources.reduce((sum, source) => sum + source.files, 0),
             corpusSizeBytes: databaseBytes,
             dateCoverage: { from, to },
             totalSessions: sources.reduce((sum, source) => sum + source.sessions, 0),
+            lastImportedAt,
         },
         agents,
         roots: AGENT_CATALOG.map((catalog) => {
@@ -338,6 +510,9 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 topTools: [],
                 skillsUsed: [],
                 cacheEfficiency: { hitRatio: 0, savedTokens: 0, totalRead: 0 },
+                kpiTrend: [],
+                previousKpis: null,
+                skillTimeSeries: [],
             };
         }
 
@@ -346,7 +521,9 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const dimension = filter?.dimension ?? 'model';
         const exactSummaryRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
         if (exactSummaryRollup && (await historyBoardRollupsFresh(db))) {
-            return projectSummary(await historyBoardSummaryFromRollup(db, sel, bucket, dimension));
+            const rows = await historyBoardSummaryFromRollup(db, sel, bucket, dimension);
+            const extras = await computeSummaryExtras(db, sel, bucket, dimension, false, rows.buckets);
+            return projectSummary(rows, extras);
         }
 
         const [bucketRows, rollups, toolStats, skillStats, sessionRows] = await Promise.all([
@@ -370,20 +547,31 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 target.set(key, aggregate);
             }
         }
-        return projectSummary({
-            buckets: bucketRows,
-            models: Array.from(models, ([key, value]) => ({ key, ...value })).sort(
-                (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
-            ),
-            sources: Array.from(sources, ([key, value]) => ({ key, ...value })).sort(
-                (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
-            ),
-            tools: toolStats.map((row) => ({ toolName: row.toolName, calls: row.calls, errors: row.errors })),
-            skills: skillStats,
-            sessions: sessionRows.length,
-            toolCalls: toolStats.reduce((sum, row) => sum + row.calls, 0),
-            toolErrors: toolStats.reduce((sum, row) => sum + row.errors, 0),
-        });
+        const extras = await computeSummaryExtras(
+            db,
+            sel,
+            bucket,
+            dimension,
+            true,
+            dimension === 'skill' ? bucketRows : undefined,
+        );
+        return projectSummary(
+            {
+                buckets: bucketRows,
+                models: Array.from(models, ([key, value]) => ({ key, ...value })).sort(
+                    (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
+                ),
+                sources: Array.from(sources, ([key, value]) => ({ key, ...value })).sort(
+                    (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
+                ),
+                tools: toolStats.map((row) => ({ toolName: row.toolName, calls: row.calls, errors: row.errors })),
+                skills: skillStats,
+                sessions: sessionRows.length,
+                toolCalls: toolStats.reduce((sum, row) => sum + row.calls, 0),
+                toolErrors: toolStats.reduce((sum, row) => sum + row.errors, 0),
+            },
+            extras,
+        );
     }
 
     async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
@@ -719,6 +907,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     corpusSizeBytes: 0,
                     dateCoverage: { from: null, to: null },
                     totalSessions: 0,
+                    lastImportedAt: null,
                 },
                 agents: [],
                 roots: [],

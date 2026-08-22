@@ -1,6 +1,7 @@
 import type {
     HistoryFilter,
     HistoryInsightsResponse,
+    HistoryKpiTrendPoint,
     HistorySessionsInput,
     HistorySessionsResponse,
     HistorySourcesResponse,
@@ -359,12 +360,16 @@ export class MockHistoryBoardService implements HistoryBoardService {
         }[bucket];
         const dimension = filter?.dimension ?? 'model';
         const buckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
+        const skillBuckets: typeof buckets = {};
 
         for (const s of matching) {
             const bKey = new Date(Math.floor(s.start / bucketInterval) * bucketInterval).toISOString();
             if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+            if (!skillBuckets[bKey]) skillBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
             buckets[bKey].total += s.tokens.billedTokens;
             buckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            skillBuckets[bKey].total += s.tokens.billedTokens;
+            skillBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
             const dimensions: Array<[string, number]> =
                 dimension === 'model'
                     ? [[s.model, s.tokens.billedTokens]]
@@ -384,6 +389,12 @@ export class MockHistoryBoardService implements HistoryBoardService {
                           : 0;
                 buckets[bKey].series[key] = (buckets[bKey].series[key] ?? 0) + tokens;
             }
+            const skillWeight = Object.values(s.skillMix).reduce((sum, count) => sum + count, 0);
+            for (const [skill, count] of Object.entries(s.skillMix)) {
+                skillBuckets[bKey].series[skill] =
+                    (skillBuckets[bKey].series[skill] ?? 0) +
+                    (skillWeight > 0 ? (s.tokens.billedTokens * count) / skillWeight : 0);
+            }
         }
 
         const timeSeries = Object.entries(buckets)
@@ -397,6 +408,16 @@ export class MockHistoryBoardService implements HistoryBoardService {
                     series: bVal.series,
                 };
             });
+        const skillTimeSeries = Object.entries(skillBuckets)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([bucketStart, point]) => ({
+                bucketStart,
+                cacheHitRatio:
+                    point.total + point.cacheRead > 0
+                        ? Math.round((point.cacheRead / (point.total + point.cacheRead)) * 100)
+                        : 0,
+                series: point.series,
+            }));
 
         const topModels = MODELS_CATALOG.map((m) => {
             const tokens = modelTokens[m.id] ?? 0;
@@ -445,9 +466,53 @@ export class MockHistoryBoardService implements HistoryBoardService {
             cacheEfficiency: {
                 hitRatio,
                 savedTokens: totalCacheSaved,
-                totalRead: totalCacheRead,
+                totalRead: totalCacheRead + matching.reduce((sum, session) => sum + session.tokens.freshInputTokens, 0),
             },
+            kpiTrend: this.buildKpiTrend(matching),
+            previousKpis: null,
+            skillTimeSeries,
         };
+    }
+
+    private buildKpiTrend(
+        sessions: Array<{
+            id: string;
+            start: number;
+            tokens: { billedTokens: number; cacheReadTokens: number };
+            toolCalls: number;
+        }>,
+    ): HistoryKpiTrendPoint[] {
+        const end = new Date();
+        end.setUTCHours(0, 0, 0, 0);
+        const byDay = new Map<
+            string,
+            { billed: number; cacheRead: number; sessions: Set<string>; toolCalls: number }
+        >();
+        for (const s of sessions) {
+            const day = new Date(s.start).toISOString().slice(0, 10);
+            const entry = byDay.get(day) ?? { billed: 0, cacheRead: 0, sessions: new Set<string>(), toolCalls: 0 };
+            entry.billed += s.tokens.billedTokens;
+            entry.cacheRead += s.tokens.cacheReadTokens;
+            entry.sessions.add(s.id);
+            entry.toolCalls += s.toolCalls;
+            byDay.set(day, entry);
+        }
+        const points: HistoryKpiTrendPoint[] = [];
+        for (let i = 29; i >= 0; i--) {
+            const day = new Date(end.getTime() - i * 86_400_000).toISOString().slice(0, 10);
+            const entry = byDay.get(day);
+            const billed = entry?.billed ?? 0;
+            const cacheRead = entry?.cacheRead ?? 0;
+            points.push({
+                day,
+                totalBilledTokens: billed,
+                cacheSavedTokens: cacheRead,
+                sessionsCount: entry?.sessions.size ?? 0,
+                toolCallsCount: entry?.toolCalls ?? 0,
+                cacheHitRatio: billed + cacheRead > 0 ? Math.round((cacheRead / (billed + cacheRead)) * 100) : 0,
+            });
+        }
+        return points;
     }
 
     async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
@@ -831,6 +896,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                     to: starts.length > 0 ? new Date(Math.max(...starts)).toISOString() : null,
                 },
                 totalSessions: this.sessions.length,
+                lastImportedAt: starts.length > 0 ? new Date(Math.max(...starts)).toISOString() : null,
             },
             agents,
             roots,
