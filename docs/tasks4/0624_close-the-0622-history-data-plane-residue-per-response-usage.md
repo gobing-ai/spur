@@ -4,7 +4,7 @@ name: "Close the 0622 history data-plane residue: per-response usage dedup, clau
 status: done
 template: standard
 created_at: 2026-08-21T14:23:09.970Z
-updated_at: "2026-08-22T03:42:15.375Z"
+updated_at: "2026-08-22T03:43:10.709Z"
 feature_id: E5
 ---
 
@@ -302,7 +302,7 @@ to read.
 |-------------|--------|----------|
 | R1 | MET | packages/domain/tests/analytics/forensic-query.test.ts:259 proves final cumulative MAX(rowid) wins and NULL identities remain distinct; packages/domain/tests/dao/migrations.test.ts:407 proves the partial index; live SQLite measured 24,215 identified rows, 12,011 IDs, and 33 IDs where MIN undercounted output by 104,315 tokens |
 | R2 | PARTIAL | Live SQLite: Claude result_bytes populated 17,338 of 17,338 and assistant model NULL count 0, but duration_ms populated 0 of 17,338; source inspection found no exact duration field and the never-fabricate contract forbids synthesis; /Users/robin/xprojects/ts-libs-wt-0624/packages/llm-jsonl-importer/tests/importer.test.ts:1452 |
-| R3 | PARTIAL | Live SQLite still has ten history_etl tables although migration 0019 is journaled; upstream lazy materialization commit 22f891f passes 2,036 tests, but published 0.4.41 remains Spur's dependency until the normal release and update |
+| R3 | PARTIAL | Live SQLite still has ten history_etl tables although migration 0019 is journaled; upstream lazy materialization commit 22f891f passes 2,036 tests, but published 0.4.41 remains Spur's dependency until the normal release and update; .spur/run/0624-verdict.json:1-150 records the forced re-audit and fix pass |
 | R4 | MET | packages/app/tests/services/history-service.test.ts:855 verifies deferred, expected-empty, and deferred-label-with-records semantics; packages/app/src/services/history-service.ts:252 preserves openclaw and uses the real antigravity key |
 | R5 | MET | packages/app/tests/services/history-service.test.ts:747 proves a role-named coder directory resolves through its sole omp mapping, imports, persists an exact session, and aligns spur-run provenance; explicit root bypass remains covered at line 788 |
 
