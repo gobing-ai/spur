@@ -2,6 +2,7 @@ import { contract } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
 import type { ServerContext } from './context';
 import { createFeatureHandlers } from './modules/feature';
+import { createHistoryHandlers } from './modules/history';
 import { createTaskHandlers } from './modules/task';
 
 const version = '0.0.0';
@@ -30,6 +31,8 @@ export function createRouter(ctx?: ServerContext) {
         task: createTaskHandlers(ctx ?? stubCtx),
 
         feature: createFeatureHandlers(ctx ?? stubCtx),
+
+        history: createHistoryHandlers(ctx ?? stubCtx),
 
         stream: os.stream.handler(async () => {
             throw new Error('SSE stream served by raw Hono route (modules/events)');

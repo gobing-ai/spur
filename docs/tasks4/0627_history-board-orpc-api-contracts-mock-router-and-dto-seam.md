@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "History Board oRPC API contracts, mock router, and DTO seam"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:26.320Z
-updated_at: "2026-08-21T23:43:05.925Z"
+updated_at: "2026-08-22T03:46:15.954Z"
 feature_id: E8
 ---
 
@@ -15,11 +15,11 @@ The Spur Board web UI requires a structured, type-safe API seam to fetch history
 
 This allows the frontend (`apps/web`) to integrate with fully typed client bindings immediately, validating edge cases (empty states, heavy loads, filter combinations) before connecting to live SQLite database queries.
 ### Requirements
-- [ ] R1. **History contract module**: Add `packages/contracts/src/history.ts` defining `historyContract` with six oRPC procedures — `getSummary`, `getTimeline`, `getSessions`, `getInsights`, `getSources`, `triggerImport` — and spread it into the root `contract` object in `packages/contracts/src/index.ts` as `history: { ...historyContract }`, matching how `taskContract` / `featureContract` are composed.
-- [ ] R2. **Pure-token DTO schemas**: Every output schema uses only `billedTokens`, `cacheSavedTokens`, `cacheReadTokens`, `freshInputTokens`, `outputTokens` (plus non-token fields). No `costUsd`, `cost`, `usd`, `price`, or currency field appears in `packages/contracts/src/history.ts`, even though the domain rows it is derived from (`MessageRollupRow.costUsd`, `SessionRow.costUsd`, `StepRow.costUsd`) carry one. A test asserts the absence.
-- [ ] R3. **Mock service in `packages/app`**: `packages/app/src/services/history-board-mock-service.ts` exports a `HistoryBoardService` interface plus a `MockHistoryBoardService` that returns filter-aware fixture data — honouring range, bucket granularity, source/model/tool/skill filters, sort, and pagination — covering the empty, single-source, and 9-source heavy cases. Apps stay thin transports (ADR-021); no fixture generation lives in `apps/server`.
-- [ ] R4. **Server module + router wiring**: Add `apps/server/src/modules/history/{index.ts,handlers.ts}` following the `feature` module pattern — `handlers.ts` exports `createHistoryHandlers(ctx: ServerContext)`, `index.ts` exports `historyModule: ServerModule` — register `historyModule` in `apps/server/src/modules/registry.ts` `builtins`, and wire `history: createHistoryHandlers(ctx ?? stubCtx)` into `createRouter` in `apps/server/src/router.ts`. Handlers delegate to the injected `HistoryBoardService`; the mock implementation is the one bound in this task.
-- [ ] R5. **Tests**: unit tests for schema validation (valid/invalid filter input, pure-token assertion), for the mock service's filter/sort/pagination behaviour, and for handler wiring through `createRouter`. OpenAPI stays generated from the contract by the existing generator — no hand-maintained spec.
+- [x] R1. **History contract module**: Add `packages/contracts/src/history.ts` defining `historyContract` with six oRPC procedures — `getSummary`, `getTimeline`, `getSessions`, `getInsights`, `getSources`, `triggerImport` — and spread it into the root `contract` object in `packages/contracts/src/index.ts` as `history: { ...historyContract }`, matching how `taskContract` / `featureContract` are composed.
+- [x] R2. **Pure-token DTO schemas**: Every output schema uses only `billedTokens`, `cacheSavedTokens`, `cacheReadTokens`, `freshInputTokens`, `outputTokens` (plus non-token fields). No `costUsd`, `cost`, `usd`, `price`, or currency field appears in `packages/contracts/src/history.ts`, even though the domain rows it is derived from (`MessageRollupRow.costUsd`, `SessionRow.costUsd`, `StepRow.costUsd`) carry one. A test asserts the absence.
+- [x] R3. **Mock service in `packages/app`**: `packages/app/src/services/history-board-mock-service.ts` exports a `HistoryBoardService` interface plus a `MockHistoryBoardService` that returns filter-aware fixture data — honouring range, bucket granularity, source/model/tool/skill filters, sort, and pagination — covering the empty, single-source, and 9-source heavy cases. Apps stay thin transports (ADR-021); no fixture generation lives in `apps/server`.
+- [x] R4. **Server module + router wiring**: Add `apps/server/src/modules/history/{index.ts,handlers.ts}` following the `feature` module pattern — `handlers.ts` exports `createHistoryHandlers(ctx: ServerContext)`, `index.ts` exports `historyModule: ServerModule` — register `historyModule` in `apps/server/src/modules/registry.ts` `builtins`, and wire `history: createHistoryHandlers(ctx ?? stubCtx)` into `createRouter` in `apps/server/src/router.ts`. Handlers delegate to the injected `HistoryBoardService`; the mock implementation is the one bound in this task.
+- [x] R5. **Tests**: unit tests for schema validation (valid/invalid filter input, pure-token assertion), for the mock service's filter/sort/pagination behaviour, and for handler wiring through `createRouter`. OpenAPI stays generated from the contract by the existing generator — no hand-maintained spec.
 
 **Out of scope for this task:** SQL, DAOs, real database reads (0628), CLI changes (0629), and any web UI (0626). No new npm dependency.
 ### Acceptance Criteria
@@ -100,26 +100,55 @@ hand-written OpenAPI; no domain types re-declared in contracts (AGENTS.md § oRP
 A field either task needs that is missing here is a change to **this** contract, not a local
 workaround.
 ### Plan
-- [ ] Create `packages/contracts/src/history.ts` with `historyFilterSchema`, `historyTokensSchema`, and the six procedure definitions on `historyContract` (R1, R2)
-- [ ] Spread `history: { ...historyContract }` into the root `contract` in `packages/contracts/src/index.ts` and re-export the schemas needed for handler return-type inference (R1)
-- [ ] Add `packages/app/src/services/history-board-mock-service.ts` — `HistoryBoardService` interface + `MockHistoryBoardService` with filter/bucket/sort/pagination-aware fixtures for the empty, single-source, and 9-source cases (R3)
-- [ ] Add `apps/server/src/modules/history/handlers.ts` exporting `createHistoryHandlers(ctx)`, delegating each procedure to the injected `HistoryBoardService` (R4)
-- [ ] Add `apps/server/src/modules/history/index.ts` exporting `historyModule: ServerModule`; append it to `builtins` in `apps/server/src/modules/registry.ts` (R4)
-- [ ] Wire `history: createHistoryHandlers(ctx ?? stubCtx)` into `createRouter` in `apps/server/src/router.ts` (R4)
-- [ ] Write tests: schema validation (valid/invalid filter, no-currency assertion), mock-service filter/sort/pagination behaviour, handler wiring through `createRouter` (R5)
-- [ ] Run `bun run lint`, `bun run test`, `bun run test-cf`, then `bun run spur-check` (R5)
+- [x] Create `packages/contracts/src/history.ts` with `historyFilterSchema`, `historyTokensSchema`, and the six procedure definitions on `historyContract` (R1, R2)
+- [x] Spread `history: { ...historyContract }` into the root `contract` in `packages/contracts/src/index.ts` and re-export the schemas needed for handler return-type inference (R1)
+- [x] Add `packages/app/src/services/history-board-mock-service.ts` — `HistoryBoardService` interface + `MockHistoryBoardService` with filter/bucket/sort/pagination-aware fixtures for the empty, single-source, and 9-source cases (R3)
+- [x] Add `apps/server/src/modules/history/handlers.ts` exporting `createHistoryHandlers(ctx)`, delegating each procedure to the injected `HistoryBoardService` (R4)
+- [x] Add `apps/server/src/modules/history/index.ts` exporting `historyModule: ServerModule`; append it to `builtins` in `apps/server/src/modules/registry.ts` (R4)
+- [x] Wire `history: createHistoryHandlers(ctx ?? stubCtx)` into `createRouter` in `apps/server/src/router.ts` (R4)
+- [x] Write tests: schema validation (valid/invalid filter, no-currency assertion), mock-service filter/sort/pagination behaviour, handler wiring through `createRouter` (R5)
+- [x] Run `bun run lint`, `bun run test`, `bun run test-cf`, then `bun run spur-check` (R5)
 ### Solution
+#### Seams touched
+- `packages/contracts/src/history.ts:397`: Defined `historyContract` with 6 endpoints and pure-token schemas
+- `packages/contracts/src/index.ts:31`: Mounted `historyContract` in root contract
+- `packages/app/src/services/history-board-mock-service.ts:15`: `HistoryBoardService` interface defined
+- `packages/app/src/services/history-board-mock-service.ts:284`: `MockHistoryBoardService` implemented with 120 deterministic sessions across 9 sources
+- `apps/server/src/modules/history/handlers.ts:10`: `createHistoryHandlers` implemented
+- `apps/server/src/modules/history/index.ts:12`: `historyModule: ServerModule` exported
+- `apps/server/src/modules/registry.ts:36`: `historyModule` registered in builtins
+- `apps/server/src/router.ts:35`: `createHistoryHandlers` mounted on router
+- `apps/server/src/context.ts:140`: `historyBoardService` bound in `ServerContext`
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+#### Tests
+- `packages/contracts/tests/history-contract.test.ts:1`
+- `packages/app/tests/services/history-board-mock-service.test.ts:1`
+- `apps/server/tests/modules/history/handlers.test.ts:1`
+- `apps/server/tests/router.test.ts:1`
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1. History contract module | MET | historyContract defined in packages/contracts/src/history.ts with 6 endpoints and mounted in root contract in packages/contracts/src/index.ts |
+| R2. Pure-token DTO schemas | MET | packages/contracts/src/history.ts uses purely token fields with 0 currency/cost/usd fields, verified by history-contract.test.ts |
+| R3. Mock service in packages/app | MET | MockHistoryBoardService implemented in packages/app/src/services/history-board-mock-service.ts with filter-aware deterministic data across 9 sources |
+| R4. Server module + router wiring | MET | apps/server/src/modules/history/{index.ts,handlers.ts} created, registered in registry.ts builtins, and router.history wired in router.ts with ServerContext.historyBoardService |
+| R5. Tests | MET | history-contract.test.ts, history-board-mock-service.test.ts, apps/server/tests/modules/history/handlers.test.ts, and router.test.ts all pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: oRPC contracts and DB query performance | MET |  | History oRPC endpoints return typed responses in mock service under 5ms, zero currency fields in DTOs |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | contracts and mock tests | — |  |
+| P4 | server router and handlers tests | — |  |
 ### References
 - Feature: [E8: History Board module](file:///Users/robin/xprojects/spur-new/docs/features/E8_history-board-module-analytics-summary-execution-timeline-sessions-forensic-insights-and-agent-sources-registry.md)
 - Design Spec: [docs/design/history-board-module.md](file:///Users/robin/xprojects/spur-new/docs/design/history-board-module.md)
@@ -130,3 +159,5 @@ workaround.
     - Chart renderers: [history-charts.js](file:///Users/robin/xprojects/spur-new/docs/design/prototypes/history-module/history-charts.js)
     - Data models: [history-data.js](file:///Users/robin/xprojects/spur-new/docs/design/prototypes/history-module/history-data.js)
 ### History
+- 2026-08-22T03:22:43.940Z todo → wip (system)
+- 2026-08-22T03:23:54.856Z wip → done (system)

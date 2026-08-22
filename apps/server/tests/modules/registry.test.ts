@@ -15,6 +15,7 @@ describe('module registry', () => {
             'team',
             'observability',
             'runs',
+            'history',
         ]);
     });
 

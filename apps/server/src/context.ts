@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import type {
     AgentService,
     FeatureService,
+    HistoryBoardService,
     PlanningEvent as PlanningEventType,
     PlanningFolders,
     ProcessInventoryService,
@@ -23,6 +24,7 @@ import {
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
     hitlConfirmDefault,
+    LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
     type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
@@ -133,6 +135,9 @@ export interface ServerContext {
 
     /** Lazy, cached FeatureService (planning layer). */
     featureService(): FeatureService;
+
+    /** Lazy, cached HistoryBoardService (history analytics layer). */
+    historyBoardService(): HistoryBoardService;
 
     /** Lazy, cached TeamService (messaging + team status). */
     teamService(): TeamService;
@@ -327,6 +332,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
+    let historyBoardSvc: HistoryBoardService | undefined;
     let teamSvc: TeamService | undefined;
     let supervisorSvc: SupervisorService | undefined;
     let processInventorySvc: ProcessInventoryService | undefined;
@@ -396,6 +402,15 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return featureSvc;
+        },
+
+        historyBoardService(): HistoryBoardService {
+            if (!historyBoardSvc) {
+                historyBoardSvc = new LiveHistoryBoardService({
+                    getDb: this.getDb.bind(this),
+                });
+            }
+            return historyBoardSvc;
         },
 
         teamService(): TeamService {

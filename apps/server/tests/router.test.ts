@@ -13,10 +13,11 @@ describe('router', () => {
         expect(typeof result.timestamp).toBe('string');
     });
 
-    test('has task and feature route keys when created without context', () => {
+    test('has task, feature, and history route keys when created without context', () => {
         const router = createRouter();
         expect(router.task).toBeDefined();
         expect(router.feature).toBeDefined();
+        expect(router.history).toBeDefined();
         expect(router.stream).toBeDefined();
     });
 
@@ -30,11 +31,12 @@ describe('router', () => {
         expect(() => (stubCtx as unknown as Record<string, unknown>).featureService).toThrow('featureService');
     });
 
-    test('createRouter with context creates task and feature handlers', () => {
+    test('createRouter with context creates task, feature, and history handlers', () => {
         const ctx = stubCtx;
         const router = createRouter(ctx);
         expect(router.task).toBeDefined();
         expect(router.feature).toBeDefined();
+        expect(router.history).toBeDefined();
     });
 
     test('stream handler rejects with events module placeholder', async () => {

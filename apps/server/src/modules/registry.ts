@@ -3,6 +3,7 @@ import type { ServerContext } from '../context';
 import { eventsModule } from './events';
 import { featureModule } from './feature';
 import { healthModule } from './health';
+import { historyModule } from './history';
 import { jobsModule } from './jobs';
 import { messagesModule } from './messages';
 import { observabilityModule } from './observability';
@@ -32,6 +33,7 @@ const builtins: ServerModule[] = [
     teamModule,
     observabilityModule,
     runsModule,
+    historyModule,
 ];
 
 /**
