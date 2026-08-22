@@ -389,6 +389,8 @@ when the task used the pipeline.
 The Board's `history` oRPC group exposes `getSummary`, `getTimeline`, `getSessions`, `getInsights`,
 `getSources`, and `triggerImport`; DTOs are pure-token only. Indexed live queries fall back whenever
 the checkpoint-keyed read models are absent or stale; `HistoryService.analyze()` refreshes them.
+Summary includes daily KPI trends, a nullable previous-window baseline, and bucketed skill-token series;
+Sources overview includes the nullable last-import timestamp.
 Shapes and the canonical nine source ids: `docs/design/history-board-module.md`.
 
 ## System Event surface

@@ -1,10 +1,10 @@
 ---
 doc: design/history-board-module
 feature_id: E8
-tasks: [0626, 0627, 0628, 0629]
+tasks: [0626, 0627, 0628, 0629, 0630]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-21
+updated_at: 2026-08-22
 ---
 
 # History Board module — Conversation Analytics & Agent Forensic Plane
@@ -118,6 +118,16 @@ Endpoints:
 5. `history.getSources()` $\rightarrow$ Corpus summary, 9 agent sources, 90-day daily token matrices, directory registry.
 6. `history.triggerImport({ mode })` $\rightarrow$ Asynchronous import & analysis execution receipt.
 
+`history.getSummary` additionally returns the following additive telemetry:
+
+| Field | Shape |
+| :--- | :--- |
+| `kpiTrend` | 30 daily `HistoryKpiTrendPoint` rows for KPI sparklines and cache-hit trend |
+| `previousKpis` | `HistorySummaryKpis \| null`; null only when no bounded comparison window exists |
+| `skillTimeSeries` | Bucketed `HistoryTimeSeriesPoint[]` projected on the skill dimension |
+
+`history.getSources().overview.lastImportedAt` is a nullable ISO timestamp used by the global live-status chip.
+
 `HistoryAgentSourceCard.sizeMb` is nullable: the live projection reports the SQLite corpus byte size
 in `overview.corpusSizeBytes` and does not fabricate per-source raw-file sizes.
 
@@ -189,3 +199,4 @@ carries no charting dependency, and adding one needs operator approval.
 | **0627** | oRPC Contracts & Mock Router | `packages/contracts/src/history.ts`, `apps/server/src/modules/history/` | Section 4 & `history-data.js` |
 | **0628** | Live DB Access & Query Layer | `packages/domain/src/analytics/forensic-query.ts`, `packages/app/src/services/history-board-service.ts` | Extend the existing analytics queries; indexes via `migrations.ts` + `drizzle/` |
 | **0629** | Analytics Pre-Computation | `packages/app/src/services/history-analysis-service.ts`, `packages/domain/src/analytics/history-board-rollup.ts`, `drizzle/0021_spur_cli_history_board_rollups.sql` | `HistoryService.analyze()` refresh; no CLI surface change |
+| **0630** | Frontend Parity Refinement | `apps/web/src/modules/history/`, additive Summary/Sources telemetry above | Prototype parity, accessibility, and data-driven deltas/trends |
