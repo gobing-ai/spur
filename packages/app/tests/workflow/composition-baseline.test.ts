@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { resolve } from 'node:path';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
@@ -50,6 +52,40 @@ describe('Workflow Composition Baseline', () => {
         expect(result.pass).toBe(true);
         expect(result.errors).toEqual([]);
         expect(result.diffs).toEqual([]);
+    });
+
+    test('feature-transition runs the corpus gate when sync fails after a possible partial transition (0625 R1)', async () => {
+        const def = await loadWorkflowDef(resolve(PROJECT_ROOT, '.spur/workflows/wrapup-pipeline.yaml'), {
+            validateSchema: false,
+        });
+        const command = extractResolvedWorkflowFacts(def).actions['feature-transition:onEnter:0']?.invocation;
+        expect(command).toBeTruthy();
+
+        const dir = mkdtempSync(join(tmpdir(), 'spur-wrapup-partial-'));
+        const fakeSpur = join(dir, 'spur');
+        const transitionMarker = join(dir, 'transitioned');
+        const gateMarker = join(dir, 'gate-ran');
+        writeFileSync(fakeSpur, `#!/bin/sh\n: > '${transitionMarker}'\nexit 1\n`);
+        chmodSync(fakeSpur, 0o755);
+
+        try {
+            const result = Bun.spawnSync({
+                cmd: ['/bin/sh', '-c', command ?? 'exit 1'],
+                cwd: dir,
+                env: {
+                    ...process.env,
+                    feature: 'F91',
+                    spurBin: fakeSpur,
+                    featureGateCmd: `: > '${gateMarker}'`,
+                },
+            });
+            expect(result.exitCode).toBe(0);
+            expect(existsSync(transitionMarker)).toBe(true);
+            expect(existsSync(gateMarker)).toBe(true);
+            expect(new TextDecoder().decode(result.stdout)).toContain('corpus-aware gate PASS for feature F91');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('checkWorkflowComposition fails when live definition has a modified action kind (two-sided)', async () => {

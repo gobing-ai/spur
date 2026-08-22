@@ -158,7 +158,7 @@ work under H.
 - [ ] Sibling set stays MECE at that parent.
 - [ ] Name is capability/outcome, not a package path.
 - [ ] Will attach tasks with `--feature <new-id>` (or parent if intentionally epic-only).
-- [ ] After create: `spur feature refresh` if INDEX must update; `spur feature check <id>`.
+- [ ] After create: `spur feature refresh --feature <new-id>` if INDEX must update; `spur feature check <new-id>`.
 
 ## Checklist: before restructure / `/sp:dev-feature-change`
 
@@ -166,7 +166,7 @@ work under H.
 - [ ] False merges rejected (name overlap ≠ one Goal).
 - [ ] Apply via CLI (`spur feature move`, `spur task update --feature`), not raw ID edits.
 - [ ] Dry-run reviewed; doc rewrites limited to agreed surface (e.g. root `docs/*.md`).
-- [ ] `spur feature refresh` + `spur feature check` after apply.
+- [ ] `spur feature refresh --all` + `spur feature check --json` after apply.
 
 ---
 

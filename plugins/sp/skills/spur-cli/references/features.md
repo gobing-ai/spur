@@ -195,7 +195,7 @@ reopens. It computes a proposal (`from → to` with a `reason`) and, unless `--d
 via real lifecycle transitions (dogfood / one-active-goal / L4 gates may deny a hop).
 
 **Not for roster tables.** A stale `## Tasks` line (e.g. task still listed `todo` after it is `done`)
-is fixed with `spur feature refresh`, not `sync`. Use `sync --dry-run` first when you only want to
+is fixed with `spur feature refresh --feature <id>` (or explicit `--all`), not `sync`. Use `sync --dry-run` first when you only want to
 see the proposed status hop.
 
 ```bash

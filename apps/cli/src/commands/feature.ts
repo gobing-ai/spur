@@ -311,6 +311,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
+                if (options.all && options.feature) {
+                    context.output.error('--feature <id> and --all are mutually exclusive');
+                    context.setExitCode(2);
+                    return;
+                }
                 if (!options.all && !options.feature) {
                     context.output.error('--feature <id> or --all is required (refusing silent all-features sweep)');
                     context.setExitCode(2);
@@ -418,7 +423,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 'Applies real lifecycle transitions — gates such as dogfood, one-active-goal, and',
                 'L4 AC readiness may deny a hop. Preview with --dry-run first.',
                 '',
-                'Does NOT rewrite INDEX.md or ## Tasks tables. For stale rosters use `spur feature refresh`.',
+                'Does NOT rewrite INDEX.md or ## Tasks tables. For stale rosters use `spur feature refresh --feature <id>`.',
             ].join('\n'),
         )
         .argument('[id]', 'Feature ID to sync (optional if --all is passed)')

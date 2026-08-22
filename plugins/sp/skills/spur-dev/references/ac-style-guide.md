@@ -193,7 +193,7 @@ During decomposition, each core scenario maps to ≥1 task:
 | R3 — Login with email and password | 0043, 0044 | Auth service + UI |
 
 The mapping is recorded in the task's `## Background` or in the feature's `## Notes`.
-`spur feature check` warns on unmapped core scenarios after `spur feature refresh`
+`spur feature check` warns on unmapped core scenarios after `spur feature refresh --feature <id>`
 regenerates the `## Tasks` block.
 
 ## Decision-trace → AC-scenario mapping

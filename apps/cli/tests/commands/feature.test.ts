@@ -464,6 +464,13 @@ describe('spur feature CLI', () => {
         expect(output.errors.join('')).toContain('--feature <id> or --all is required');
     });
 
+    test('refresh rejects ambiguous --feature plus --all breadth (R5a, 0625)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'refresh', '--feature', 'A', '--all'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('')).toContain('--feature <id> and --all are mutually exclusive');
+    });
+
     test('check with no id validates all features in the folder (--json)', async () => {
         // Exercises the validate-all branch (no <id>): every feature file is checked.
         const output = createCapturedOutput();

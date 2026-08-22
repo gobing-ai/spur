@@ -601,7 +601,7 @@ All planning entities (tasks and features) share a common lifecycle, managed by 
 | **check**   | `spur task check`                   | `spur feature check`                | 4-layer readiness matrix (schema, sections, traceability, AC)                                        |
 | **update**  | `spur task update <wbs> [status]`   | `spur feature update <id> [status]` | Lifecycle transition or scalar field set                                                             |
 | **record**  | `spur task record <wbs>`            | —                                   | Write Testing/Review from a verify verdict; optional Solution backfill (never transitions to `done`) |
-| **refresh** | `spur task refresh`                 | `spur feature refresh`              | Index + feature-tree roll-up regeneration                                                            |
+| **refresh** | `spur task refresh`                 | `spur feature refresh --feature <id> \| --all` | Index + feature-tree roll-up regeneration                                                   |
 
 The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace /
 refine), documented in their respective `sp:spur-cli` references.

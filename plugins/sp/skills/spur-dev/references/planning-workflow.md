@@ -146,7 +146,7 @@ that is the pre-check's job above). Common shape failures:
 - WBS collisions (already-allocated range).
 
 Loop until the command exits 0 — then the batch is created and each task appears in the
-feature's `## Tasks` block on next `spur feature refresh`.
+feature's `## Tasks` block on next `spur feature refresh --feature <id>`.
 
 **If you decomposed a parent task into sub-task files** (the children carry `parent_wbs`), the
 sub-task roster is **auto-generated** — `spur task batch-create` invokes `spur task refresh-roster`

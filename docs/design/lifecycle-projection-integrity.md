@@ -11,16 +11,16 @@ checks for task/feature projections.
 | Surface | Shape |
 | --- | --- |
 | `wrapup-pipeline.yaml` var | `featureGateCmd`, default `bun run spur-check-new`; trusted project config executed through `sh -c` |
-| wrap-up `feature-transition` | Capture feature-sync JSON; when `.applied == true`, run `featureGateCmd` and print PASS/FAIL before returning; otherwise skip the gate. Gate failure is advisory and the shell exits 0. |
-| `spur feature sync [id]` | After one or more applied lifecycle hops, call `refresh({ featureId: id })` before returning. Dry-run, confirmation refusal, and no-op proposals do not refresh. |
+| wrap-up `feature-transition` | Capture feature-sync output and exit code; when `.applied == true` or sync exits non-zero after a possible partial transition, run `featureGateCmd` and print PASS/FAIL before returning. A clean no-op skips the gate. Gate failure is advisory and the shell exits 0. |
+| `spur feature sync [id]` | After any lifecycle hop lands, call `refresh({ featureId: id })` in `finally` before returning or rethrowing a later-hop failure. Dry-run, confirmation refusal, and no-op proposals do not refresh. |
 | `spur feature refresh --feature <id>` | Regenerate the global deterministic `INDEX.md`; rewrite only the named feature's `## Tasks` marker region. |
 | `spur feature refresh --all` | Regenerate `INDEX.md`; rewrite every feature's `## Tasks` marker region. |
 | bare `spur feature refresh` | Refuse before calling the service; print scope guidance and exit 2. |
 | `spur task check` | Add the warning `L4.testing-verdict-stub`; widen the existing `L4.anchor-subject-mismatch` check for prose-free Solution change-map rows. |
 | `spur feature check` | `L4.dogfood-missing` accepts a dogfood filename only when the feature ID is a non-alphanumeric-delimited segment. |
 
-`--feature` and `--all` select write breadth only. Refresh never changes feature lifecycle status;
-`sync` owns status alignment.
+`--feature` and `--all` are mutually exclusive write-breadth selectors. Refresh never changes
+feature lifecycle status; `sync` owns status alignment.
 
 ## 2. Task projection checks
 
@@ -60,14 +60,14 @@ check and becomes blocking under the existing strict feature-done gate.
 
 ## 4. Write-scope and gate invariants
 
-1. `syncFeature` refreshes only after `appliedHops.length > 0`, and always passes the current
-   `featureId`; it never invokes the global sweep.
+1. `syncFeature` refreshes in `finally` only after `appliedHops.length > 0`, and always passes the
+   current `featureId`; it converges partial multi-hop failures and never invokes the global sweep.
 2. `FeatureService.refresh({ featureId })` always regenerates the deterministic index but writes a
    feature file only when that feature's rendered marker region differs.
 3. The CLI requires an explicit breadth token before calling `refresh`; `--all` is the only public
    opt-in to the all-feature roster sweep.
-4. The feature-transition gate runs only after an applied sync, once per feature transition. It does
-   not move the corpus sweep into the per-task fast gate.
+4. The feature-transition gate runs after an applied sync or a non-zero sync exit that may follow a
+   partial transition. It does not move the corpus sweep into the per-task fast gate.
 5. New or widened findings are reconciled two-sided by key and severity in the implementing change;
    historical task/feature corpus is not silently rewritten by the check implementation.
 

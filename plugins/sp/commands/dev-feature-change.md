@@ -62,7 +62,7 @@ Do **not** fire independent dry-runs that all claim the same next id. Walk rows 
 3. After predicting `new_id`, add it to the occupancy set so the next sibling under the same parent gets the next free digit.
 4. Record `mapping` and `tasksUpdated[]` from each dry-run (with multi-folder scan, tasksUpdated should list every linked WBS).
 
-Plan `spur feature refresh` + `spur feature check --json` after apply.
+Plan `spur feature refresh --all` + `spur feature check --json` after apply.
 
 **Root docs/\*.md references (high-confidence only)**
 
@@ -95,7 +95,7 @@ spur feature move <old_id> --parent <new_parent> --json
 After all moves (or per wave):
 
 ```bash
-spur feature refresh --json
+spur feature refresh --all --json
 spur feature check --json
 ```
 

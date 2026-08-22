@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.26.0
+version: 1.27.0
 owner: Robin Min
 updated_at: 2026-08-21
 read_before: any structural change; before diverging from a decision
@@ -443,6 +443,14 @@ is already crowded.
   transition action returns. This supersedes the phrase "on `spur-check`" above. The split keeps
   the measured corpus-sweep cost out of every task loop without leaving feature-level findings
   unobserved. **Detail:** `03 §12.5` and
+  `docs/design/lifecycle-projection-integrity.md`.
+
+  **Amendment (2026-08-21, task 0625 forced re-audit):** A multi-hop sync that lands an earlier
+  hop and then fails a later guard is a changed feature state, even though no `{ applied: true }`
+  result is returned. The service therefore refreshes the touched roster in `finally` after any
+  landed hop, and wrap-up runs the corpus-aware gate on either an applied result or a non-zero sync
+  exit. **Why:** `active → verifying` can persist before the strict `→ done` guard rejects — the
+  exact A3 residue this decision must observe. **Detail:** `03 §12.5` and
   `docs/design/lifecycle-projection-integrity.md`.
 
 ## ADR-051: Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate

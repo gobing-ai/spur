@@ -351,7 +351,7 @@ After a completed task, decide next action:
 - **More tasks in the feature?** Pick the next one, run again.
 - **Feature complete?** Run `spur feature update <id> verifying` to mark it for
   acceptance verification.
-- **All done?** Run `spur task refresh` + `spur feature refresh` to regenerate the kanban
+- **All done?** Run `spur task refresh` + `spur feature refresh --all` to regenerate the kanban
   and index.
 
 ## Skipping HITL

@@ -532,38 +532,38 @@ export class FeatureService {
         }
 
         const appliedHops: string[] = [];
-        for (const hop of hops) {
-            // 0418 R3: the lifecycle must not silently create a state its own rules
-            // forbid. A P0 feature auto-activating into `active` while another P0 is
-            // already active would manufacture the two-active-goal corpus — refuse
-            // the hop, surface the conflict, and leave the corpus legal. The
-            // operator still has a CLI path (advance the older goal first, or
-            // transition manually once a goal slot is free).
-            if (hop === 'active') {
-                const conflict = await this.findOneActiveGoalConflict(featureId);
-                if (conflict !== null) {
-                    return {
-                        proposal: {
-                            ...proposal,
-                            reason: `Activation blocked by one-active-goal: P0 feature "${conflict.featureId}" is already ${conflict.status}`,
-                        },
-                        applied: false,
-                        appliedHops,
-                        goalConflict: conflict,
-                    };
+        try {
+            for (const hop of hops) {
+                // 0418 R3: the lifecycle must not silently create a state its own rules
+                // forbid. A P0 feature auto-activating into `active` while another P0 is
+                // already active would manufacture the two-active-goal corpus — refuse
+                // the hop, surface the conflict, and leave the corpus legal. The
+                // operator still has a CLI path (advance the older goal first, or
+                // transition manually once a goal slot is free).
+                if (hop === 'active') {
+                    const conflict = await this.findOneActiveGoalConflict(featureId);
+                    if (conflict !== null) {
+                        return {
+                            proposal: {
+                                ...proposal,
+                                reason: `Activation blocked by one-active-goal: P0 feature "${conflict.featureId}" is already ${conflict.status}`,
+                            },
+                            applied: false,
+                            appliedHops,
+                            goalConflict: conflict,
+                        };
+                    }
                 }
+                await this.transition(featureId, hop);
+                appliedHops.push(hop);
             }
-            await this.transition(featureId, hop);
-            appliedHops.push(hop);
-        }
-
-        // R2 (0625): converge status and its ## Tasks projection. `deriveFeatureStatus`
-        // read the linked task edges to derive the status we just applied; refresh the
-        // touched feature's Tasks table from those same edges so a bare `spur feature
-        // sync` cannot leave the roster contradicting the status it derived (the
-        // A3/F81 recurrence). Scoped to this featureId — never the global sweep (R5).
-        if (appliedHops.length > 0) {
-            await this.refresh({ featureId });
+        } finally {
+            // R2 (0625): a multi-hop sync may land an earlier hop before a later
+            // lifecycle guard rejects. Refresh in `finally` whenever any hop landed,
+            // so both successful and partial syncs converge the touched roster.
+            if (appliedHops.length > 0) {
+                await this.refresh({ featureId });
+            }
         }
 
         return { proposal, applied: true, appliedHops };

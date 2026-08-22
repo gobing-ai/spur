@@ -163,9 +163,10 @@ states:
       # back to the plain `spur feature sync` verb.
       # R1 (0625): a feature transition that changed state may have armed a
       # feature-level finding the per-task fast gate (spur-check) never sees.
-      # Run the corpus-aware gate AFTER an applied sync and report PASS/FAIL —
-      # soft by design (like the blocked-sync path): the operator decides, and
-      # wrap-up never hard-fails on a red corpus gate here. NOTE: do not add
+      # Run the corpus-aware gate after an applied sync OR a non-zero exit that
+      # may follow a partial multi-hop transition, then report PASS/FAIL. Soft
+      # by design: the operator decides, and wrap-up never hard-fails here.
+      # NOTE: do not add
       # `#` comments INSIDE the folded shell string — YAML `>-` folds them onto
       # the following statement line and comments it out.
       - kind: shell
@@ -183,8 +184,8 @@ states:
             SYNC_RC=$?;
             printf '%s\n' "$SYNC_OUTPUT";
             APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
-            if [ "$APPLIED" = "true" ]; then
-              echo "feature-transition: sync applied for $feature — running corpus-aware gate: $featureGateCmd";
+            if [ "$APPLIED" = "true" ] || [ "$SYNC_RC" -ne 0 ]; then
+              echo "feature-transition: sync applied or failed after a possible partial transition for $feature — running corpus-aware gate: $featureGateCmd";
               if sh -c "$featureGateCmd"; then
                 echo "feature-transition: corpus-aware gate PASS for feature $feature";
               else

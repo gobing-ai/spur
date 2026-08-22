@@ -78,7 +78,7 @@ For roadmap adjustment work:
 3. Present the proposed moves/status/priority changes before mutating if the blast radius spans
    multiple features.
 4. Apply each accepted deterministic change through `spur feature update` or `spur feature move`.
-5. Run `spur feature refresh` and `spur feature check --json`.
+5. Run `spur feature refresh --all` and `spur feature check --json`.
 
 Do not add `/sp:prd-adjust` for this. The current CLI already has the deterministic primitives; the
 PM value is the ranking and tradeoff judgment.

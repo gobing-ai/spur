@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.29.0
+version: 1.30.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-21
@@ -531,25 +531,26 @@ task ## Acceptance Criteria (subset coverage)
 ### 12.5 Lifecycle projection and corpus-gate convergence (task 0625)
 
 Lifecycle state and its generated markdown projection converge at the application-service seam that
-applies the transition. A successful `FeatureService.syncFeature` refreshes only the touched
-feature's `## Tasks` marker region after at least one lifecycle hop; dry runs, refused confirmations,
-and no-op proposals perform no refresh. The global `INDEX.md` remains a deterministic derived view.
+applies the transition. `FeatureService.syncFeature` refreshes only the touched feature's `## Tasks`
+marker region after at least one lifecycle hop, including when a later hop rejects and the method
+rethrows; dry runs, refused confirmations, and no-op proposals perform no refresh. The global
+`INDEX.md` remains a deterministic derived view.
 
 ```text
 linked task edges
   -> derive feature status
-  -> apply lifecycle hop(s)
-  -> refresh({ featureId })
-  -> return applied sync result
-  -> wrap-up feature-transition runs the corpus-aware gate
+  -> try apply lifecycle hop(s)
+  -> finally refresh({ featureId }) when any hop landed
+  -> return applied result or rethrow the later-hop failure
+  -> wrap-up runs the corpus-aware gate on applied result or non-zero sync exit
 ```
 
 The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
-`feature-transition` action reads the sync JSON result and, only when `applied` is true, runs the
-trusted project command `featureGateCmd` (default `bun run spur-check-new`) before the action
-returns. The shell remains advisory: it emits an explicit corpus-gate PASS or FAIL and exits 0 so
-the operator owns the recovery decision; an applied feature transition can no longer leave the
-corpus gate unobserved.
+`feature-transition` action reads the sync result and runs trusted project command `featureGateCmd`
+(default `bun run spur-check-new`) when either `applied` is true or sync exits non-zero (a
+conservative signal that an earlier hop may already have landed). The shell remains advisory: it
+emits an explicit corpus-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
+a complete or partial feature transition cannot leave the corpus gate unobserved.
 
 Content checks close the remaining projection gaps at read time. `TaskCheckService` flags the
 record-generated hollow Testing row and derives subject tokens from a bare Solution change-map
@@ -559,12 +560,12 @@ per-severity two-sided corpus baseline.
 
 Enforceable invariants:
 
-1. An applied feature sync returns only after a scoped roster refresh; it never triggers the
-   all-feature sweep.
+1. A feature sync that lands any hop refreshes the scoped roster before returning or rethrowing; it
+   never triggers the all-feature sweep.
 2. Broad refresh is opt-in at the CLI boundary; a bare `spur feature refresh` cannot mutate feature
    projections.
-3. An applied wrap-up feature transition executes and reports the corpus-aware gate before the
-   transition action returns.
+3. An applied or possibly-partial wrap-up feature transition executes and reports the corpus-aware
+   gate before the transition action returns.
 4. A lifecycle projection is not accepted as proof merely because it exists; the check layer
    validates its content or identity.
 

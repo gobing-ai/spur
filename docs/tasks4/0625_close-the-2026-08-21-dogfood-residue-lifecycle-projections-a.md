@@ -4,7 +4,7 @@ name: "Close the 2026-08-21 dogfood residue: lifecycle projections and gates tha
 status: done
 template: meta
 created_at: 2026-08-21T21:34:00.042Z
-updated_at: "2026-08-21T23:23:05.853Z"
+updated_at: "2026-08-22T00:43:15.381Z"
 feature_id: F91
 ac_altitude: task-local
 ---
@@ -360,8 +360,8 @@ Five requirements, five code seams, one baseline reconciliation. All anchors liv
 
 | Change | Anchor |
 |---|---|
-| R1 — wrapup `feature-transition` runs `featureGateCmd` (corpus-aware gate) only after an applied sync | `config/workflows/wrapup-pipeline.yaml:187` |
-| R2 — `syncFeature` refreshes the roster when `appliedHops.length > 0`, closing the invariant at the service seam | `packages/app/src/services/feature-service.ts:560` |
+| R1 — wrapup `feature-transition` runs `featureGateCmd` (corpus-aware gate) only after an applied sync | `config/workflows/wrapup-pipeline.yaml:188` |
+| R2 — `syncFeature` refreshes the roster when `appliedHops.length > 0`, closing the invariant at the service seam | `packages/app/src/services/feature-service.ts:564` |
 | R3 — `TESTING_VERDICT_STUB_RE` matches the record-UNKNOWN stub row in `### Testing` | `packages/app/src/services/task-check.ts:83` |
 | R3 — finding code `L4.testing-verdict-stub` registered | `packages/config/src/finding-codes.ts:135` |
 | R3 — `runL4` fires the stub finding on a Testing body matching the stub | `packages/app/src/services/task-check.ts:876` |
@@ -395,7 +395,7 @@ Prose-only anchors (underscore-bearing filenames can never match cited-line cont
 | Hollow-Testing stub detection (fires / populated doesn't / prose doesn't) | `packages/app/tests/services/task-check.test.ts:1` |
 | Solution change-map anchor-drift e2e (drifted fires / correct passes) | `packages/app/tests/services/task-check.test.ts:1` |
 | R5b delimited-segment match (`M3` vs `M3A` filename) | `packages/app/tests/services/feature-check.test.ts:1845` |
-| R2 `syncFeature` convergence (roster refreshes after applied hops) | `packages/app/tests/services/feature-service.test.ts:763` |
+| R2 `syncFeature` convergence after a later-hop rejection | `packages/app/tests/services/feature-service.test.ts:814` |
 | CLI bare-refresh refusal + `--all` acceptance | `apps/cli/tests/commands/feature.test.ts:460` |
 
 All suites green at authoring time: task-check + anchor-qualifier + feature-check (261 pass), feature-service (48 pass), apps/cli feature tests (45 pass), plugin parity suite (112 pass).
@@ -406,13 +406,21 @@ All suites green at authoring time: task-check + anchor-qualifier + feature-chec
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — A feature transition cannot leave the corpus gate red | MET | config/workflows/wrapup-pipeline.yaml:161 — corpus-aware gate runs after an applied sync (APPLIED=$(... \| jq -r '.applied // false')), reporting PASS/FAIL; soft-by-design matches blocked-sync precedent |
-| R2 — Feature status and the task roster agree after a sync | MET | packages/app/src/services/feature-service.ts:560-566 — refresh({featureId}) runs after appliedHops.length > 0, rewriting the feature's ## Tasks marker region from the same task edges the status derived from |
-| R3 — A hollow Testing section is reported | MET | packages/app/src/services/task-check.ts:83 (TESTING_VERDICT_STUB_RE), fired at :887-906; code L4_TESTING_VERDICT_STUB at packages/config/src/finding-codes.ts:135; tested in packages/app/tests/services/task-check.test.ts (stub row trips, populated table does not) |
-| R3 — The new finding is reconciled two-sided in the same commit | MET | config/corpus-baseline.json — 1881→1906 entries (−7 stale, +32 new); sweep after: 2264 errors observed / 764 baselined / 0 new / 0 stale; 2413 warnings observed / 1142 baselined / 0 new / 0 stale |
-| R4 — Change-map anchor drift is caught | MET | packages/app/src/services/task-check.ts:414 (extractPathSubjectTokens), substitution at :1384-1390 — bare Solution rows derive subject tokens from the path basename; drifted anchor now reports L4.anchor-subject-mismatch |
-| R5 — A refresh touches only what it was asked to touch | MET | apps/cli/src/commands/feature.ts:314 — bare refresh refuses with exit 2 + scope guidance; --all opts into the broad sweep; --feature <id> rewrites exactly that feature |
-| R5 — The dogfood gate matches the feature it is named for | MET | packages/app/src/services/feature-check.ts:573 — segment regex (^\|[^A-Za-z0-9])ID([^A-Za-z0-9]\|$) anchors the id to a filename segment; incidental substring no longer clears the gate |
+| R1 | MET | `packages/app/tests/workflow/composition-baseline.test.ts:57-85` executes the resolved feature-transition shell and proves a possibly-partial failed sync still runs the corpus gate. |
+| R2 | MET | `packages/app/src/services/feature-service.ts:560-566` refreshes in `finally` after any landed hop; regression at `packages/app/tests/services/feature-service.test.ts:814-861`. |
+| R3 | MET | The full root suite passed the hollow-Testing and populated-table regressions; the fresh corpus sweep reports 0 new/stale errors and no new 0625 finding codes after anchor repair. Fix-pass artifacts: repo-root `.spur/run/0625-verify-answer.txt` lines 1-41 and `.spur/run/0625-verdict.json` lines 1-143. |
+| R4 | MET | Drifted and correct change-map anchors are exercised at `packages/app/tests/services/task-check.test.ts:3387-3411`; fresh strict checks pass for 0625 and all six shifted historical anchors. |
+| R5 | MET | `packages/app/tests/services/feature-service.test.ts:392-403` proves scoped refresh writes; the same full suite passed the explicit breadth and dogfood identity regressions. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — A feature transition cannot leave the corpus gate red | MET | test | `packages/app/tests/workflow/composition-baseline.test.ts:57-85` executes the resolved shell with sync exit 1 and asserts the corpus gate ran and reported PASS. |
+| Scenario: R2 — Feature status and the task roster agree after a sync | MET | test | `packages/app/tests/services/feature-service.test.ts:814-861` asserts a landed `verifying` hop, rejected `done` hop, and converged done-task roster. |
+| Scenario: R3 — A hollow Testing section is reported | MET | test | `packages/app/tests/services/task-check.test.ts:3298-3333` asserts the UNKNOWN stub warns and a populated requirement table does not. |
+| Scenario: R3 — The new finding is reconciled two-sided in the same commit | MET | command | `bun run corpus-check` after repair reports errors 2270 observed / 764 baselined / 0 new / 0 stale; its 10 remaining new warnings are exclusively unrelated E8/0626-0629 WIP, with no 0625 finding code. |
+| Scenario: R4 — Change-map anchor drift is caught | MET | test | `packages/app/tests/services/task-check.test.ts:3387-3411` asserts a drifted bare row reports `L4.anchor-subject-mismatch` and a correct row does not. |
+| Scenario: R5 — A refresh touches only what it was asked to touch | MET | test | `packages/app/tests/services/feature-service.test.ts:392-403` proves a named feature is the only roster rewritten; full-suite command cases prove explicit all, missing breadth, and conflicting breadth. |
+| Scenario: R5 — The dogfood gate matches the feature it is named for | MET | test | `packages/app/tests/services/feature-check.test.ts:1766-1778,1781-1858` proves a delimited ID satisfies the gate and an incidental substring does not. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Reviewer:** inline pipeline review (session host-session-6F2763B0-B936-49AB-8D2A-6F77363D110E), 2026-08-21.

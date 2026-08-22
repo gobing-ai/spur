@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.43.0
+version: 1.44.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-21
@@ -953,17 +953,18 @@ Sync feature status with linked task states via conservative forward-only deriva
 - `--dry-run` — report proposed status sync transitions without applying writes.
 - `--force` — force applying reopen proposals (`done/cancelled -> active` when non-terminal tasks are linked) without confirmation.
 - Applied-hop projection (task 0625): after one or more lifecycle hops, `syncFeature` calls
-  `refresh({ featureId: id })` before returning, so the touched feature's `## Tasks` marker region
-  reflects the task edges used to derive status. Dry-run, confirmation-refused, and no-op results do
-  not refresh.
+  `refresh({ featureId: id })` from `finally` before returning or rethrowing a later-hop guard
+  failure, so the touched feature's `## Tasks` marker region reflects the task edges used to derive
+  status. Dry-run, confirmation-refused, and no-op results do not refresh.
 - `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, applied, newStatus }` — `affectedTasks` = number of tasks linked to the feature, `applied` = whether a status transition was applied); `push` direction returns HTTP 501 structured error (not supported; use pull or CLI `spur feature sync`).
 - Pipeline integration (task 0328; bounded by 0411, amended by 0625): `task-pipeline.yaml`'s
   post-record step syncs the linked feature or records an orphan proposal. `wrapup-pipeline.yaml`'s
-  `feature-transition` step syncs `${vars.feature}`, captures the JSON result, and when `applied` is
-  true runs trusted workflow var `featureGateCmd` (default `bun run spur-check-new`) before
-  returning. Both prefer `feature-sync-bounded.ts` and fall back to plain `spur feature sync` in a
-  seeded project. The shells remain advisory (`exit 0`); the wrap-up gate emits explicit PASS/FAIL
-  while leaving recovery to the operator. An empty wrap-up feature id fails loud with exit 1.
+  `feature-transition` step syncs `${vars.feature}`, captures the result and exit code, and runs
+  trusted workflow var `featureGateCmd` (default `bun run spur-check-new`) when `applied` is true or
+  sync exits non-zero after a possible partial transition. Both prefer `feature-sync-bounded.ts` and
+  fall back to plain `spur feature sync` in a seeded project. The shells remain advisory (`exit 0`);
+  the wrap-up gate emits explicit PASS/FAIL while leaving recovery to the operator. An empty wrap-up
+  feature id fails loud with exit 1.
 
 Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
 
@@ -1513,7 +1514,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature advance <id>`            | `--to <status>` `--folder <path>` `--json`                                                   | 0/1   | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `spur feature list`                    | `--status <s>` `--priority <p>` `--folder <path>` `--json`                                   | 0/1   | Lists features sorted by ID; optional status/priority filters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `spur feature check [<id>]`            | `--strict` `--as <status>` `--fix` `--folder <path>` `--json`                                        | 0/1   | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over `active` (0418: `verifying` is terminal-bound and no longer counts as a goal; `--as <status>` evaluates the rule against the post-transition status so lifecycle guards never deny the exit they relieve) + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09) + verdict-backed AC satisfaction from canonical `id` rows or the `scenario` compatibility alias + bounded malformed-artifact diagnostics + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. Details: [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md). |
-| `spur feature refresh`                 | `--feature <id>` `--all` `--folder <path>` `--json`                                          | 0/1/2 | Regenerate the deterministic global `INDEX.md`; `--feature <id>` rewrites only that feature's `## Tasks` marker region, while `--all` opts into every feature. A bare invocation refuses with exit 2. Feature lifecycle status, non-marker feature content, and all task files are preserved (task 0625; ADR-051 consent).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `spur feature refresh`                 | `--feature <id>` `--all` `--folder <path>` `--json`                                          | 0/1/2 | Regenerate the deterministic global `INDEX.md`; exactly one of `--feature <id>` or `--all` is required. `--feature` rewrites only that feature's `## Tasks` marker region, while `--all` opts into every feature. Missing or conflicting breadth exits 2. Feature lifecycle status, non-marker feature content, and all task files are preserved (task 0625; ADR-051 consent).                                                                                                                                                                                                                                                                                                                                                         |
 | `spur feature move <id> --parent <id>` | `--parent <id>` `--dry-run` `--folder <path>` `--json`                                       | 0/1   | Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames their files, rewrites each `id` frontmatter + appends a move History line, and updates every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 / not-into-own-subtree); applies atomically with best-effort rollback. `--dry-run` returns the old→new map + affected tasks with zero writes. Omit `--parent` to move to a top-level group.                                                                                                                                                                                                                                                                                                                                                                           |
 
 **Dogfood identity (task 0625).** For self-referential workflow work, `feature check` accepts a
