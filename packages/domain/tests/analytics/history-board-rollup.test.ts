@@ -7,6 +7,7 @@ import {
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
     historyBoardHistoryVersion,
+    historyBoardKpiTrendFromRollup,
     historyBoardLoopsFromRollup,
     historyBoardModelComparisonFromRollup,
     historyBoardRankedStepsFromRollup,
@@ -542,14 +543,16 @@ describe('historyBoardSummaryFromRollup', () => {
         const db = await setup();
         await seedCorpusAndRefresh(db);
         const summary = await historyBoardSummaryFromRollup(db, ALL, '5m', 'skill');
-        // The skill row carries half of s1-a1's tokens (that message has two tools).
+        // Skill series reads the live attribution query: each skill row carries the full
+        // message tokens (links are counted after the skill predicate), matching the
+        // un-refreshed path exactly.
         expect(summary.buckets).toEqual([
             {
                 bucketStart: '2026-06-01 09:55:00',
                 key: 'sp-code-testing',
-                freshInputTokens: 50,
-                cacheReadTokens: 450,
-                outputTokens: 25,
+                freshInputTokens: 100,
+                cacheReadTokens: 900,
+                outputTokens: 50,
             },
         ]);
     });
@@ -921,5 +924,165 @@ describe('historyBoardDatabaseBytes', () => {
         const bytes = await historyBoardDatabaseBytes(db);
         expect(Number.isInteger(bytes)).toBe(true);
         expect(bytes).toBeGreaterThan(0);
+    });
+});
+
+describe('historyBoardKpiTrendFromRollup', () => {
+    test('aggregates per-day tokens, distinct sessions, and tool calls ascending', async () => {
+        const db = await setup();
+        // Day 1: sessions k1 (with tool) and k2. Day 2: k1 continues. Day 3: k3 on another model.
+        await insertMessage(db, {
+            recordHash: 'k-a1',
+            sessionId: 'k1',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            model: 'gpt-5',
+            input: 100,
+            cacheRead: 300,
+            output: 50,
+            durationMs: 1000,
+        });
+        await insertToolCall(db, {
+            recordHash: 'k-t1',
+            messageHash: 'k-a1',
+            sessionId: 'k1',
+            seq: 1,
+            toolName: 'Read',
+        });
+        await insertMessage(db, {
+            recordHash: 'k-a2',
+            sessionId: 'k2',
+            seq: 1,
+            ts: '2026-06-01T11:00:00Z',
+            model: 'gpt-5',
+            input: 10,
+            output: 5,
+        });
+        await insertMessage(db, {
+            recordHash: 'k-a3',
+            sessionId: 'k1',
+            seq: 2,
+            ts: '2026-06-02T09:00:00Z',
+            model: 'gpt-5',
+            input: 20,
+            cacheRead: 80,
+            output: 10,
+        });
+        await insertMessage(db, {
+            recordHash: 'k-a4',
+            sessionId: 'k3',
+            seq: 1,
+            ts: '2026-06-03T12:00:00Z',
+            model: 'gpt-5-mini',
+            input: 5,
+            output: 5,
+        });
+        await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
+
+        const rows = await historyBoardKpiTrendFromRollup(db, ALL);
+        expect(rows).toEqual([
+            {
+                day: '2026-06-01',
+                freshInputTokens: 110,
+                outputTokens: 55,
+                cacheReadTokens: 300,
+                sessions: 2,
+                toolCalls: 1,
+            },
+            {
+                day: '2026-06-02',
+                freshInputTokens: 20,
+                outputTokens: 10,
+                cacheReadTokens: 80,
+                sessions: 1,
+                toolCalls: 0,
+            },
+            { day: '2026-06-03', freshInputTokens: 5, outputTokens: 5, cacheReadTokens: 0, sessions: 1, toolCalls: 0 },
+        ]);
+    });
+    test('preserves model and tool selectors', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            recordHash: 'k-b1',
+            sessionId: 'k1',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            model: 'gpt-5',
+            input: 100,
+            cacheRead: 300,
+            output: 50,
+        });
+        await insertToolCall(db, {
+            recordHash: 'k-bt1',
+            messageHash: 'k-b1',
+            sessionId: 'k1',
+            seq: 1,
+            toolName: 'Read',
+        });
+        await insertMessage(db, {
+            recordHash: 'k-b2',
+            sessionId: 'k2',
+            seq: 1,
+            ts: '2026-06-02T10:00:00Z',
+            model: 'gpt-5-mini',
+            input: 10,
+            output: 5,
+        });
+        await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
+
+        const byModel = await historyBoardKpiTrendFromRollup(db, { ...ALL, models: ['gpt-5'] });
+        expect(byModel).toEqual([
+            {
+                day: '2026-06-01',
+                freshInputTokens: 100,
+                outputTokens: 50,
+                cacheReadTokens: 300,
+                sessions: 1,
+                toolCalls: 1,
+            },
+        ]);
+
+        const byTool = await historyBoardKpiTrendFromRollup(db, { ...ALL, tools: ['Read'] });
+        expect(byTool.map((row) => row.day)).toEqual(['2026-06-01']);
+        expect(byTool[0]).toMatchObject({ freshInputTokens: 100, cacheReadTokens: 300, toolCalls: 1 });
+    });
+
+    test('bounded since/until window only includes covered days', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            recordHash: 'k-c1',
+            sessionId: 'k1',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            model: 'gpt-5',
+            input: 10,
+            output: 5,
+        });
+        await insertMessage(db, {
+            recordHash: 'k-c2',
+            sessionId: 'k1',
+            seq: 2,
+            ts: '2026-06-02T10:00:00Z',
+            model: 'gpt-5',
+            input: 20,
+            output: 10,
+        });
+        await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
+
+        const rows = await historyBoardKpiTrendFromRollup(db, {
+            ...ALL,
+            since: '2026-06-02T00:00:00Z',
+            until: '2026-06-02T23:59:59Z',
+        });
+        expect(rows).toEqual([
+            {
+                day: '2026-06-02',
+                freshInputTokens: 20,
+                outputTokens: 10,
+                cacheReadTokens: 0,
+                sessions: 1,
+                toolCalls: 0,
+            },
+        ]);
     });
 });

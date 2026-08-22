@@ -4,6 +4,7 @@ import type { ArtifactSelector } from '../../src/analytics/artifact';
 import {
     bucketedTokenSeries,
     dailyTokenMatrix,
+    historyKpiTrend,
     modelComparison,
     sessionTimeline,
 } from '../../src/analytics/forensic-query';
@@ -31,6 +32,7 @@ interface Msg {
     ts: string;
     model: string | null;
     input?: number | null;
+    request_id?: string | null;
     output?: number | null;
     cost?: number | null;
     cache_read?: number | null;
@@ -42,8 +44,8 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
     await db.run(
         `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
              role, record_type, disposition, ts, model, input_tokens, output_tokens, cost_usd,
-             cache_read_tokens, provenance, duration_ms, imported_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             cache_read_tokens, provenance, duration_ms, request_id, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         m.record_hash,
         m.source ?? 'claude',
         'test.jsonl',
@@ -61,6 +63,7 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         m.cache_read ?? null,
         'agent',
         m.duration_ms ?? null,
+        m.request_id ?? null,
         '2026-06-01T00:00:00Z',
     );
 }
@@ -511,5 +514,165 @@ describe('forensic-query history live extensions (task 0628)', () => {
         for (const [index, query] of queries.entries()) {
             expect(after[index]).toContain(query.index);
         }
+    });
+
+    test('historyKpiTrend groups days, sums tokens, counts sessions and tool calls', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            record_hash: 'k1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:00Z',
+            model: 'claude-opus-4.6',
+            input: 100,
+            output: 25,
+            cache_read: 300,
+            duration_ms: 600,
+        });
+        await insertToolCall(db, {
+            record_hash: 'kt1',
+            message_hash: 'k1',
+            session_id: 's1',
+            seq: 1,
+            tool_name: 'Edit',
+            args_raw: '{}',
+            status: 'success',
+            duration_ms: 100,
+        });
+        await insertMessage(db, {
+            record_hash: 'k2',
+            session_id: 's2',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T11:00:00Z',
+            model: 'claude-opus-4.6',
+            input: 10,
+            output: 5,
+        });
+        await insertMessage(db, {
+            record_hash: 'k3',
+            session_id: 's1',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-02T09:00:00Z',
+            model: 'claude-sonnet-4.6',
+            input: 20,
+            output: 10,
+            cache_read: 80,
+        });
+
+        const sel: ArtifactSelector = {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        };
+
+        const rows = await historyKpiTrend(db, sel);
+        expect(rows).toEqual([
+            {
+                day: '2026-06-01',
+                freshInputTokens: 110,
+                outputTokens: 30,
+                cacheReadTokens: 300,
+                sessions: 2,
+                toolCalls: 1,
+            },
+            {
+                day: '2026-06-02',
+                freshInputTokens: 20,
+                outputTokens: 10,
+                cacheReadTokens: 80,
+                sessions: 1,
+                toolCalls: 0,
+            },
+        ]);
+    });
+
+    test('historyKpiTrend dedups repeated request_id and preserves filters', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            record_hash: 'd1',
+            session_id: 's1',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:00Z',
+            model: 'gpt-5',
+            input: 100,
+            output: 25,
+            cache_read: 50,
+            request_id: 'req_1',
+        });
+        await insertMessage(db, {
+            record_hash: 'd2',
+            session_id: 's1',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:01Z',
+            model: 'gpt-5',
+            input: 100,
+            output: 25,
+            cache_read: 50,
+            request_id: 'req_1',
+        });
+        await insertMessage(db, {
+            record_hash: 'd3',
+            session_id: 's2',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-02T10:00:00Z',
+            model: 'gpt-5-mini',
+            input: 7,
+            output: 3,
+        });
+
+        const base: ArtifactSelector = {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        };
+
+        const all = await historyKpiTrend(db, base);
+        expect(all).toEqual([
+            {
+                day: '2026-06-01',
+                freshInputTokens: 100,
+                outputTokens: 25,
+                cacheReadTokens: 50,
+                sessions: 1,
+                toolCalls: 0,
+            },
+            { day: '2026-06-02', freshInputTokens: 7, outputTokens: 3, cacheReadTokens: 0, sessions: 1, toolCalls: 0 },
+        ]);
+
+        const byModel = await historyKpiTrend(db, { ...base, models: ['gpt-5'] });
+        expect(byModel).toEqual([
+            {
+                day: '2026-06-01',
+                freshInputTokens: 100,
+                outputTokens: 25,
+                cacheReadTokens: 50,
+                sessions: 1,
+                toolCalls: 0,
+            },
+        ]);
     });
 });

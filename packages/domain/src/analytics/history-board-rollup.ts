@@ -10,6 +10,7 @@ import type {
     StepRow,
     ToolRollupRow,
 } from './forensic-query';
+import { bucketedTokenSeries } from './forensic-query';
 
 const MESSAGE_DEDUP = `(m.rowid IN (
     SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
@@ -110,6 +111,16 @@ export interface HistoryBoardModelComparisonRow {
     cacheRatio: number;
     reliability: number;
     outputRatio: number;
+}
+
+/** Daily KPI trend derived from bounded board read models. */
+export interface HistoryBoardKpiTrendRow {
+    day: string;
+    freshInputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+    sessions: number;
+    toolCalls: number;
 }
 
 /** Source-card aggregate derived from board read models. */
@@ -528,7 +539,7 @@ export async function historyBoardSummaryFromRollup(
     const useDaily = bucket === '1d' && (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
     const aggregateTable = useDaily ? 'history_daily_stats' : filteredTokenTable(sel);
     const aggregateIsTool = aggregateTable === 'history_board_tool_5m';
-    const seriesTable = dimension === 'tool' || dimension === 'skill' ? 'history_board_tool_5m' : aggregateTable;
+    const seriesTable = dimension === 'tool' ? 'history_board_tool_5m' : aggregateTable;
     const seriesIsTool = seriesTable === 'history_board_tool_5m';
     const aggregateWhere = buildRollupWhere(sel, 'r', {
         timestamp: useDaily ? 'day' : 'bucket_start',
@@ -541,15 +552,7 @@ export async function historyBoardSummaryFromRollup(
         dateOnly: seriesUsesDaily,
         toolFields: seriesIsTool,
     });
-    const seriesExtra = dimension === 'skill' ? `${seriesWhere.where ? ' AND' : ' WHERE'} r.skill_name <> ''` : '';
-    const seriesKey =
-        dimension === 'model'
-            ? 'r.model'
-            : dimension === 'source'
-              ? 'r.source'
-              : dimension === 'tool'
-                ? 'r.tool_name'
-                : 'r.skill_name';
+    const seriesKey = dimension === 'model' ? 'r.model' : dimension === 'source' ? 'r.source' : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
     const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
                          SUM(r.cache_read_tokens) AS cacheReadTokens,
@@ -566,15 +569,19 @@ export async function historyBoardSummaryFromRollup(
         (sel.skills?.length ?? 0) === 0;
     const toolTable = allTimeTools ? 'history_board_tool_stats' : 'history_board_tool_5m';
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
-
     const [buckets, models, sources, tools, skills, sessionCount] = await Promise.all([
-        db.queryAll<BucketedTokenRow>(
-            `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${tokenSelect}
-             FROM ${seriesTable} r
-             ${seriesWhere.where}${seriesExtra}
-             GROUP BY bucketStart, key ORDER BY bucketStart ASC`,
-            ...seriesWhere.params,
-        ),
+        // Skill attribution is live-only: the 5m tool split (tokens / tools_in_message) cannot
+        // reproduce the live skill view (tokens / skill links), so the skill series reads the
+        // same live attribution query as the un-refreshed path — equality by construction.
+        dimension === 'skill'
+            ? bucketedTokenSeries(db, sel, bucket, 'skill')
+            : db.queryAll<BucketedTokenRow>(
+                  `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${tokenSelect}
+                   FROM ${seriesTable} r
+                   ${seriesWhere.where}
+                   GROUP BY bucketStart, key ORDER BY bucketStart ASC`,
+                  ...seriesWhere.params,
+              ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.model AS key, ${tokenSelect} FROM ${aggregateTable} r
              ${aggregateWhere.where} GROUP BY r.model ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
@@ -866,4 +873,46 @@ export async function historyBoardDatabaseBytes(db: DbAdapter): Promise<number> 
         db.queryFirst<{ page_size: number }>('PRAGMA page_size'),
     ]);
     return (pageCount?.page_count ?? 0) * (pageSize?.page_size ?? 0);
+}
+/**
+ * Daily KPI trend from materialized 5-minute read models.
+ * Tokens and sessions come from the filter-routed token table; tool calls
+ * always come from history_board_tool_5m so message-only views stay honest.
+ */
+export async function historyBoardKpiTrendFromRollup(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+): Promise<HistoryBoardKpiTrendRow[]> {
+    const table = filteredTokenTable(sel);
+    const tokens = buildRollupWhere(sel, 'r', {
+        timestamp: 'bucket_start',
+        toolFields: table === 'history_board_tool_5m',
+    });
+    const calls = buildRollupWhere(sel, 't', { timestamp: 'bucket_start', toolFields: true });
+    const [tokenRows, callRows] = await Promise.all([
+        db.queryAll<{
+            day: string;
+            freshInputTokens: number;
+            cacheReadTokens: number;
+            outputTokens: number;
+            sessions: number;
+        }>(
+            `SELECT SUBSTR(r.bucket_start, 1, 10) AS day,
+                    SUM(r.fresh_input_tokens) AS freshInputTokens,
+                    SUM(r.cache_read_tokens) AS cacheReadTokens,
+                    SUM(r.output_tokens) AS outputTokens,
+                    COUNT(DISTINCT CASE WHEN r.session_id NOT IN ('', 'unknown', 'session') THEN r.session_id END) AS sessions
+             FROM ${table} r ${tokens.where}
+             GROUP BY day ORDER BY day ASC`,
+            ...tokens.params,
+        ),
+        db.queryAll<{ day: string; toolCalls: number }>(
+            `SELECT SUBSTR(t.bucket_start, 1, 10) AS day, SUM(t.calls) AS toolCalls
+             FROM history_board_tool_5m t ${calls.where}
+             GROUP BY day ORDER BY day ASC`,
+            ...calls.params,
+        ),
+    ]);
+    const callsByDay = new Map(callRows.map((row) => [row.day, row.toolCalls]));
+    return tokenRows.map((row) => ({ ...row, toolCalls: callsByDay.get(row.day) ?? 0 }));
 }

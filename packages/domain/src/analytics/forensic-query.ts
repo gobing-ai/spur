@@ -1085,3 +1085,48 @@ export async function modelComparison(
         ...wm.params,
     );
 }
+
+/**
+ * Daily KPI trend rows (fresh input / output / cache-read tokens, sessions, tool calls)
+ * grouped by UTC day from the message table with request_id dedup applied.
+ */
+export interface KpiTrendRow {
+    day: string;
+    freshInputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    sessions: number;
+    toolCalls: number;
+}
+
+/** Daily KPI trend rows (tokens, sessions, tool calls) across the selected artifact slice. */
+export async function historyKpiTrend(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<KpiTrendRow[]> {
+    const { where, params } = buildMessageWhere(sel, 'm');
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const folded = withMessageDedup(wm.where);
+    return db.queryAll<KpiTrendRow>(
+        `WITH selected AS (
+             SELECT m.record_hash, m.ts, m.input_tokens, m.cache_read_tokens, m.output_tokens, m.session_id
+             FROM history_message m ${folded}
+         ), tools AS (
+             SELECT s.record_hash, COUNT(*) AS toolCalls
+             FROM selected s JOIN history_tool_call tc ON tc.message_hash = s.record_hash
+             GROUP BY s.record_hash
+         )
+         SELECT DATE(s.ts) AS day,
+                SUM(COALESCE(s.input_tokens, 0)) AS freshInputTokens,
+                SUM(COALESCE(s.output_tokens, 0)) AS outputTokens,
+                SUM(COALESCE(s.cache_read_tokens, 0)) AS cacheReadTokens,
+                COUNT(DISTINCT CASE WHEN s.session_id NOT IN ('', 'unknown', 'session') THEN s.session_id END) AS sessions,
+                SUM(COALESCE(t.toolCalls, 0)) AS toolCalls
+         FROM selected s LEFT JOIN tools t ON t.record_hash = s.record_hash
+         GROUP BY DATE(s.ts)
+         ORDER BY day ASC`,
+        ...params,
+        ...wm.params,
+    );
+}
