@@ -1,15 +1,15 @@
-import type { HistoryInsightsResponse } from '@gobing-ai/spur-contracts';
+import type { HistoryInsightsResponse, HistoryKpiTrendPoint } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { fmtMs, fmtPct, fmtTok, RadarChart, type RadarSeries, SparkBar } from './charts';
+import { fmtMs, fmtPct, fmtTok, LineChart, RadarChart, type RadarSeries, SparkBar } from './charts';
 
 export interface InsightsTabProps {
     data?: HistoryInsightsResponse['data'];
     loading?: boolean;
     error?: string | null;
+    cacheHitTrend?: readonly HistoryKpiTrendPoint[];
     onSelectSession?: (sessionId: string) => void;
 }
-
-export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, onSelectSession }) => {
+export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, cacheHitTrend, onSelectSession }) => {
     if (loading) {
         return (
             <div className="flex items-center justify-center p-16">
@@ -31,6 +31,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
     const { loops, cacheWaste, heavySessions, largestTokenSteps, slowSteps, modelComparison } = data;
 
     const maxHeavyTokens = Math.max(1, ...heavySessions.map((s) => s.tokens));
+    const maxSlowDuration = Math.max(1, ...slowSteps.map((s) => s.durationMs ?? 0));
 
     // Radar Series: Map model comparisons (Speed, Cache ratio, Reliability, Output ratio)
     const radarAxes = ['Speed', 'Cache Ratio', 'Reliability', 'Output Ratio'];
@@ -41,13 +42,21 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
         'grok-4.6': '#d95926',
         other: '#898781',
     };
+    // Cohort-normalized radar: Speed INVERTED so fastest model scores highest.
+    const speeds = modelComparison.map((m) => m.speedMsMean);
+    const minSpeed = Math.min(...speeds);
+    const maxSpeed = Math.max(...speeds);
+    const speedScore = (ms: number): number => {
+        if (maxSpeed === minSpeed) return 100;
+        return Math.max(0, Math.min(100, Math.round(((maxSpeed - ms) / (maxSpeed - minSpeed)) * 100)));
+    };
+    const percentageScore = (ratio: number): number => Math.max(0, Math.min(100, Math.round(ratio * 100)));
 
     const radarSeries: RadarSeries[] = modelComparison.map((m) => {
-        // Speed normalized to 0-100 (where 1200ms = 100, 400ms = 33)
-        const speedNorm = Math.min(100, Math.round((m.speedMsMean / 1200) * 100));
-        const cacheNorm = Math.round(m.cacheRatio * 100);
-        const relNorm = Math.round(m.reliability * 100);
-        const outNorm = Math.round(m.outputRatio * 100 * 5); // scale 0.2 to 100
+        const speedNorm = speedScore(m.speedMsMean);
+        const cacheNorm = percentageScore(m.cacheRatio);
+        const relNorm = percentageScore(m.reliability);
+        const outNorm = percentageScore(m.outputRatio * 5); // scale 0.2 to 100
         return {
             label: m.model,
             color: modelColors[m.model] ?? '#3987e5',
@@ -110,36 +119,51 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                     <p className="text-xs text-base-content/60 mb-3">
                         Steps that re-sent full context without cache hits
                     </p>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left font-mono">
-                            <thead>
-                                <tr className="border-b border-base-content/10 text-base-content/60">
-                                    <th className="py-1.5">Session</th>
-                                    <th className="py-1.5">Fresh Tokens</th>
-                                    <th className="py-1.5">Cause</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {cacheWaste.map((cw) => (
-                                    <tr
-                                        key={`${cw.sessionId}-${cw.freshTokens}-${cw.timestamp}`}
-                                        className="border-b border-base-content/5 hover:bg-base-300/30"
-                                    >
-                                        <td className="py-1.5">
-                                            <button
-                                                type="button"
-                                                className="text-primary hover:underline"
-                                                onClick={() => onSelectSession?.(cw.sessionId)}
-                                            >
-                                                {cw.sessionId}
-                                            </button>
-                                        </td>
-                                        <td className="py-1.5 text-error font-bold">{fmtTok(cw.freshTokens)}</td>
-                                        <td className="py-1.5 text-base-content/70">{cw.reason}</td>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+                        {(cacheHitTrend?.length ?? 0) > 1 && (
+                            <div data-testid="cache-hit-trend-chart">
+                                <LineChart
+                                    points={(cacheHitTrend ?? []).map((p) => ({
+                                        id: p.day,
+                                        label: p.day.slice(5),
+                                        v: p.cacheHitRatio,
+                                    }))}
+                                    color="#22d3ee"
+                                    height={140}
+                                />
+                            </div>
+                        )}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left font-mono">
+                                <thead>
+                                    <tr className="border-b border-base-content/10 text-base-content/60">
+                                        <th className="py-1.5">Session</th>
+                                        <th className="py-1.5">Fresh Tokens</th>
+                                        <th className="py-1.5">Cause</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {cacheWaste.map((cw) => (
+                                        <tr
+                                            key={`${cw.sessionId}-${cw.freshTokens}-${cw.timestamp}`}
+                                            className="border-b border-base-content/5 hover:bg-base-300/30"
+                                        >
+                                            <td className="py-1.5">
+                                                <button
+                                                    type="button"
+                                                    className="text-primary hover:underline"
+                                                    onClick={() => onSelectSession?.(cw.sessionId)}
+                                                >
+                                                    {cw.sessionId}
+                                                </button>
+                                            </td>
+                                            <td className="py-1.5 text-error font-bold">{fmtTok(cw.freshTokens)}</td>
+                                            <td className="py-1.5 text-base-content/70">{cw.reason}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -202,8 +226,16 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                                 {ss.sessionId}
                                             </button>
                                         </td>
-                                        <td className="py-1.5 text-right text-amber-400 font-bold">
-                                            {fmtMs(ss.durationMs ?? 0)}
+                                        <td className="py-1.5 text-right text-amber-400 font-bold w-24">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span>{fmtMs(ss.durationMs ?? 0)}</span>
+                                                <SparkBar
+                                                    value={ss.durationMs ?? 0}
+                                                    max={maxSlowDuration}
+                                                    color="#fbbf24"
+                                                    height={4}
+                                                />
+                                            </div>
                                         </td>
                                         <td className="py-1.5 text-right">{fmtTok(ss.tokens)}</td>
                                     </tr>

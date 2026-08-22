@@ -126,7 +126,11 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({
                                         onClick={() => onSelectSession?.(s.id)}
                                         title="Click to view execution timeline"
                                     >
-                                        <td className="p-3 font-bold text-primary">{s.id}</td>
+                                        <td className="p-3 font-bold text-primary">
+                                            <span className="font-mono text-xs" title={s.id}>
+                                                {s.id.length > 18 ? `${s.id.slice(0, 16)}…` : s.id}
+                                            </span>
+                                        </td>
                                         <td className="p-3">
                                             <span className="px-1.5 py-0.5 rounded text-[10px] bg-base-300 uppercase font-mono text-base-content">
                                                 {s.source}
@@ -134,14 +138,18 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({
                                         </td>
                                         <td className="p-3 text-base-content/70">{s.model}</td>
                                         <td className="p-3">{s.start.slice(0, 19).replace('T', ' ')}</td>
-                                        <td className="p-3 text-right font-semibold">{fmtDur(s.durationMs / 60000)}</td>
-                                        <td className="p-3 text-right">{fmtInt(s.messages)}</td>
-                                        <td className="p-3 text-right">{fmtInt(s.toolCalls)}</td>
-                                        <td className="p-3 text-right font-bold text-primary">
+                                        <td className="p-3 text-right font-semibold tabular-nums">
+                                            {fmtDur(s.durationMs / 60000)}
+                                        </td>
+                                        <td className="p-3 text-right tabular-nums">{fmtInt(s.messages)}</td>
+                                        <td className="p-3 text-right tabular-nums">{fmtInt(s.toolCalls)}</td>
+                                        <td className="p-3 text-right font-bold text-primary tabular-nums">
                                             {fmtTok(s.billedTokens)}
                                         </td>
-                                        <td className="p-3 text-right text-emerald-400">{fmtTok(s.cacheReadTokens)}</td>
-                                        <td className="p-3 text-right text-base-content/70">
+                                        <td className="p-3 text-right text-emerald-400 tabular-nums">
+                                            {fmtTok(s.cacheReadTokens)}
+                                        </td>
+                                        <td className="p-3 text-right text-base-content/70 tabular-nums">
                                             {fmtTok(s.freshInputTokens)}
                                         </td>
                                         <td className="p-3">

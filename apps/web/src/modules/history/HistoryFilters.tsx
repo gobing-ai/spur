@@ -1,23 +1,181 @@
 import type { HistoryFilter } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AgentIcon } from './AgentIcon';
+
+export interface HistoryFilterOption {
+    id: string;
+    label: string;
+    color?: string;
+}
+
+export interface HistoryFiltersScope {
+    rangeLabel: string;
+    sessionCount: number | null | undefined;
+    sourceCount: number | undefined;
+}
 
 export interface HistoryFiltersProps {
     filter: HistoryFilter;
     onChange: (next: HistoryFilter) => void;
-    availableSources?: string[];
-    availableModels?: string[];
-    availableTools?: string[];
-    availableSkills?: string[];
+    sourceOptions?: HistoryFilterOption[];
+    modelOptions?: HistoryFilterOption[];
+    toolOptions?: HistoryFilterOption[];
+    skillOptions?: HistoryFilterOption[];
+    scope?: HistoryFiltersScope;
 }
+
+const AGENT_ICON_IDS = new Set(['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi']);
+
+const toggleId = (ids: readonly string[], id: string): string[] =>
+    ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+
+interface MultiSelectFilterProps {
+    label: string;
+    unconstrainedLabel: string;
+    options: HistoryFilterOption[];
+    selected: readonly string[];
+    onChange: (next: string[] | undefined) => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    showIcon?: boolean;
+}
+
+const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
+    label,
+    unconstrainedLabel,
+    options,
+    selected,
+    onChange,
+    open,
+    onOpenChange,
+    showIcon = false,
+}) => {
+    const rootRef = useRef<HTMLDivElement>(null);
+    const [query, setQuery] = useState('');
+
+    // Close on outside pointer press.
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) onOpenChange(false);
+        };
+        document.addEventListener('mousedown', onPointerDown);
+        return () => document.removeEventListener('mousedown', onPointerDown);
+    }, [open, onOpenChange]);
+
+    const needle = query.trim().toLowerCase();
+    const visible = needle
+        ? options.filter((o) => o.label.toLowerCase().includes(needle) || o.id.toLowerCase().includes(needle))
+        : options;
+
+    const setSelection = (ids: string[]) => onChange(ids.length > 0 ? ids : undefined);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            onOpenChange(false);
+            return;
+        }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const items = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('input[type="checkbox"]') ?? []);
+        if (items.length === 0) return;
+        const idx = items.indexOf(document.activeElement as HTMLElement);
+        const next =
+            e.key === 'ArrowDown'
+                ? items[(idx + 1 + items.length) % items.length]
+                : items[(idx - 1 + items.length) % items.length];
+        next?.focus();
+    };
+
+    const triggerLabel = selected.length === 0 ? unconstrainedLabel : `${selected.length} selected`;
+
+    return (
+        <div ref={rootRef} className="relative">
+            <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                className="px-2.5 py-1 text-xs rounded border border-base-content/20 hover:bg-base-content/10 font-medium text-base-content"
+                onClick={() => onOpenChange(!open)}
+            >
+                {label}: {triggerLabel}
+            </button>
+            {open && (
+                <div
+                    role="dialog"
+                    aria-label={`Filter by ${label}`}
+                    onKeyDown={handleKeyDown}
+                    className="absolute left-0 mt-1 z-20 p-2 shadow-lg bg-base-300 rounded-lg border border-base-content/10 w-60 text-xs flex flex-col gap-1.5"
+                >
+                    <input
+                        type="search"
+                        aria-label={`Search ${label}`}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search…"
+                        className="px-2 py-1 rounded border border-base-content/20 bg-base-100 text-base-content focus:outline-none focus:border-primary"
+                    />
+                    <div className="flex items-center justify-between gap-2 text-[10px]">
+                        <button
+                            type="button"
+                            className="text-primary hover:underline cursor-pointer"
+                            onClick={() => setSelection(visible.map((o) => o.id))}
+                        >
+                            Select all
+                        </button>
+                        <button
+                            type="button"
+                            className="text-error/80 hover:text-error underline cursor-pointer"
+                            onClick={() => onChange(undefined)}
+                        >
+                            Clear all
+                        </button>
+                    </div>
+                    <div className="flex flex-col gap-0.5 max-h-56 overflow-y-auto">
+                        {visible.map((o) => (
+                            <label
+                                key={o.id}
+                                className="flex items-center gap-2 cursor-pointer py-1 px-1.5 hover:bg-base-200 rounded"
+                            >
+                                {showIcon && (
+                                    <span className="w-3.5 inline-flex items-center justify-center shrink-0">
+                                        {AGENT_ICON_IDS.has(o.id) ? (
+                                            <AgentIcon id={o.id} />
+                                        ) : (
+                                            <span
+                                                className="w-2.5 h-2.5 rounded-full"
+                                                style={{ backgroundColor: o.color ?? '#5e6ad2' }}
+                                            />
+                                        )}
+                                    </span>
+                                )}
+                                <span className="font-mono text-[11px] flex-1 truncate">{o.label}</span>
+                                <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 rounded border-base-content/30 text-primary"
+                                    checked={selected.includes(o.id)}
+                                    onChange={() => setSelection(toggleId(selected, o.id))}
+                                />
+                            </label>
+                        ))}
+                        {visible.length === 0 && <span className="text-base-content/50 px-1.5 py-1">No matches</span>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
     filter,
     onChange,
-    availableSources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'],
-    availableModels = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.6-sol', 'grok-4.6', 'other'],
-    availableTools = ['Read', 'Bash', 'Edit', 'Grep', 'Write', 'Glob', 'Task', 'WebSearch'],
-    availableSkills = ['sp-spur-cli', 'sp-dev-verify', 'sp-dev-run', 'sp-code-verification'],
+    sourceOptions = [],
+    modelOptions = [],
+    toolOptions = [],
+    skillOptions = [],
+    scope,
 }) => {
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -25,20 +183,14 @@ export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
         onChange({ ...filter, range });
     };
 
-    const handleBucketChange = (bucket: 'auto' | '5m' | '10m' | '30m' | '1h' | '4h' | '1d') => {
-        onChange({ ...filter, bucket });
-    };
-
-    const toggleArrayItem = (key: 'sources' | 'models' | 'tools' | 'skills', item: string) => {
-        const current = filter[key] || [];
-        const next = current.includes(item) ? current.filter((x) => x !== item) : [...current, item];
-        onChange({ ...filter, [key]: next.length > 0 ? next : undefined });
-    };
-
     const removeFilter = (key: 'sources' | 'models' | 'tools' | 'skills', item: string) => {
         const current = filter[key] || [];
         const next = current.filter((x) => x !== item);
         onChange({ ...filter, [key]: next.length > 0 ? next : undefined });
+    };
+
+    const setKey = (key: 'sources' | 'models' | 'tools' | 'skills', next: string[] | undefined) => {
+        onChange({ ...filter, [key]: next });
     };
 
     return (
@@ -73,24 +225,33 @@ export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
                     </button>
                 </div>
 
-                {/* Granularity / Bucket Selector */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-base-content/70">Granularity:</span>
-                    <select
-                        aria-label="Granularity"
-                        className="px-2 py-1 text-xs rounded border border-base-content/20 bg-base-300 font-mono text-base-content focus:outline-none"
-                        value={filter.bucket || 'auto'}
-                        onChange={(e) => handleBucketChange((e.target.value as HistoryFilter['bucket']) || 'auto')}
+                {/* Effective Scope Summary */}
+                {scope && (
+                    <div
+                        className="flex items-center gap-2 text-xs text-base-content/70 font-mono"
+                        data-testid="history-filter-scope"
                     >
-                        <option value="auto">Auto</option>
-                        <option value="5m">5m</option>
-                        <option value="10m">10m</option>
-                        <option value="30m">30m</option>
-                        <option value="1h">1h</option>
-                        <option value="4h">4h</option>
-                        <option value="1d">1d</option>
-                    </select>
-                </div>
+                        <span>{scope.rangeLabel}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                            {scope.sessionCount === undefined
+                                ? '… sessions'
+                                : scope.sessionCount === null
+                                  ? '— sessions'
+                                  : `${scope.sessionCount} sessions`}
+                        </span>
+                        {scope.sourceCount !== undefined && (
+                            <>
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                    {filter.sources?.length
+                                        ? `${filter.sources.length} sources selected`
+                                        : `${scope.sourceCount} sources available`}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Custom Date Pickers */}
@@ -127,123 +288,45 @@ export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
                 </div>
             )}
 
-            {/* Multi-Select Dropdowns */}
+            {/* Multi-Select Filters */}
             <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-base-content/10">
-                {/* Sources */}
-                <div className="relative">
-                    <button
-                        type="button"
-                        className="px-2.5 py-1 text-xs rounded border border-base-content/20 hover:bg-base-content/10 font-medium text-base-content"
-                        onClick={() => setOpenDropdown(openDropdown === 'sources' ? null : 'sources')}
-                    >
-                        Agents ({filter.sources?.length ?? 0})
-                    </button>
-                    {openDropdown === 'sources' && (
-                        <div className="absolute left-0 mt-1 z-20 p-2 shadow-lg bg-base-300 rounded-lg border border-base-content/10 w-52 text-xs flex flex-col gap-1">
-                            {availableSources.map((src) => (
-                                <label
-                                    key={src}
-                                    className="flex items-center justify-between cursor-pointer py-1 px-1.5 hover:bg-base-200 rounded"
-                                >
-                                    <span className="capitalize">{src}</span>
-                                    <input
-                                        type="checkbox"
-                                        className="h-3.5 w-3.5 rounded border-base-content/30 text-primary"
-                                        checked={filter.sources?.includes(src) ?? false}
-                                        onChange={() => toggleArrayItem('sources', src)}
-                                    />
-                                </label>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Models */}
-                <div className="relative">
-                    <button
-                        type="button"
-                        className="px-2.5 py-1 text-xs rounded border border-base-content/20 hover:bg-base-content/10 font-medium text-base-content"
-                        onClick={() => setOpenDropdown(openDropdown === 'models' ? null : 'models')}
-                    >
-                        Models ({filter.models?.length ?? 0})
-                    </button>
-                    {openDropdown === 'models' && (
-                        <div className="absolute left-0 mt-1 z-20 p-2 shadow-lg bg-base-300 rounded-lg border border-base-content/10 w-56 text-xs flex flex-col gap-1">
-                            {availableModels.map((m) => (
-                                <label
-                                    key={m}
-                                    className="flex items-center justify-between cursor-pointer py-1 px-1.5 hover:bg-base-200 rounded"
-                                >
-                                    <span className="font-mono text-[11px]">{m}</span>
-                                    <input
-                                        type="checkbox"
-                                        className="h-3.5 w-3.5 rounded border-base-content/30 text-primary"
-                                        checked={filter.models?.includes(m) ?? false}
-                                        onChange={() => toggleArrayItem('models', m)}
-                                    />
-                                </label>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Tools */}
-                <div className="relative">
-                    <button
-                        type="button"
-                        className="px-2.5 py-1 text-xs rounded border border-base-content/20 hover:bg-base-content/10 font-medium text-base-content"
-                        onClick={() => setOpenDropdown(openDropdown === 'tools' ? null : 'tools')}
-                    >
-                        Tools ({filter.tools?.length ?? 0})
-                    </button>
-                    {openDropdown === 'tools' && (
-                        <div className="absolute left-0 mt-1 z-20 p-2 shadow-lg bg-base-300 rounded-lg border border-base-content/10 w-48 text-xs flex flex-col gap-1">
-                            {availableTools.map((t) => (
-                                <label
-                                    key={t}
-                                    className="flex items-center justify-between cursor-pointer py-1 px-1.5 hover:bg-base-200 rounded"
-                                >
-                                    <span className="font-mono text-[11px]">{t}</span>
-                                    <input
-                                        type="checkbox"
-                                        className="h-3.5 w-3.5 rounded border-base-content/30 text-primary"
-                                        checked={filter.tools?.includes(t) ?? false}
-                                        onChange={() => toggleArrayItem('tools', t)}
-                                    />
-                                </label>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Skills */}
-                <div className="relative">
-                    <button
-                        type="button"
-                        className="px-2.5 py-1 text-xs rounded border border-base-content/20 hover:bg-base-content/10 font-medium text-base-content"
-                        onClick={() => setOpenDropdown(openDropdown === 'skills' ? null : 'skills')}
-                    >
-                        Skills ({filter.skills?.length ?? 0})
-                    </button>
-                    {openDropdown === 'skills' && (
-                        <div className="absolute left-0 mt-1 z-20 p-2 shadow-lg bg-base-300 rounded-lg border border-base-content/10 w-56 text-xs flex flex-col gap-1">
-                            {availableSkills.map((sk) => (
-                                <label
-                                    key={sk}
-                                    className="flex items-center justify-between cursor-pointer py-1 px-1.5 hover:bg-base-200 rounded"
-                                >
-                                    <span className="font-mono text-[11px]">{sk}</span>
-                                    <input
-                                        type="checkbox"
-                                        className="h-3.5 w-3.5 rounded border-base-content/30 text-primary"
-                                        checked={filter.skills?.includes(sk) ?? false}
-                                        onChange={() => toggleArrayItem('skills', sk)}
-                                    />
-                                </label>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <MultiSelectFilter
+                    label="Agents"
+                    unconstrainedLabel="All"
+                    options={sourceOptions}
+                    selected={filter.sources ?? []}
+                    onChange={(next) => setKey('sources', next)}
+                    open={openDropdown === 'sources'}
+                    onOpenChange={(o) => setOpenDropdown(o ? 'sources' : null)}
+                    showIcon
+                />
+                <MultiSelectFilter
+                    label="Models"
+                    unconstrainedLabel="Any"
+                    options={modelOptions}
+                    selected={filter.models ?? []}
+                    onChange={(next) => setKey('models', next)}
+                    open={openDropdown === 'models'}
+                    onOpenChange={(o) => setOpenDropdown(o ? 'models' : null)}
+                />
+                <MultiSelectFilter
+                    label="Tools"
+                    unconstrainedLabel="Any"
+                    options={toolOptions}
+                    selected={filter.tools ?? []}
+                    onChange={(next) => setKey('tools', next)}
+                    open={openDropdown === 'tools'}
+                    onOpenChange={(o) => setOpenDropdown(o ? 'tools' : null)}
+                />
+                <MultiSelectFilter
+                    label="Skills"
+                    unconstrainedLabel="Any"
+                    options={skillOptions}
+                    selected={filter.skills ?? []}
+                    onChange={(next) => setKey('skills', next)}
+                    open={openDropdown === 'skills'}
+                    onOpenChange={(o) => setOpenDropdown(o ? 'skills' : null)}
+                />
 
                 {/* Active Filter Chips */}
                 <div className="flex flex-wrap items-center gap-1.5 ml-auto">

@@ -65,6 +65,7 @@ export function niceTicks(max: number, count = 4): number[] {
 // ─── Dual-Axis Stacked Column & Line Overlay ─────────────────────────────────
 
 export interface StackedColumnBucket {
+    id?: string;
     label: string;
     v: Record<string, number>;
     lineValue?: number;
@@ -169,7 +170,7 @@ export const StackedColumnsChart: React.FC<{
                     const x = PL + i * band + (band - bw) / 2;
                     let acc = 0;
                     return (
-                        <g key={b.label} opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.45}>
+                        <g key={b.id ?? `${b.label}-${i}`} opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.45}>
                             {series
                                 .slice()
                                 .reverse()
@@ -278,7 +279,7 @@ export const StackedColumnsChart: React.FC<{
 // ─── Stacked Area Chart ──────────────────────────────────────────────────────
 
 export const StackedAreaChart: React.FC<{
-    buckets: { label: string; v: Record<string, number> }[];
+    buckets: { id?: string; label: string; v: Record<string, number> }[];
     series: ChartSeries[];
     height?: number;
 }> = ({ buckets, series, height = 200 }) => {
@@ -329,7 +330,7 @@ export const StackedAreaChart: React.FC<{
             {buckets.map((b, i) =>
                 i % Math.ceil(n / 6) === 0 ? (
                     <text
-                        key={b.label}
+                        key={b.id ?? b.label}
                         x={x(i)}
                         y={height - 6}
                         textAnchor="middle"
@@ -346,7 +347,7 @@ export const StackedAreaChart: React.FC<{
 // ─── Single Series Line Chart ────────────────────────────────────────────────
 
 export const LineChart: React.FC<{
-    points: { label: string; v: number }[];
+    points: { id?: string; label: string; v: number }[];
     color?: string;
     height?: number;
     valueFmt?: (v: number) => string;
@@ -382,7 +383,7 @@ export const LineChart: React.FC<{
             {points.map((p, i) =>
                 i % Math.ceil(n / 6) === 0 || i === n - 1 ? (
                     <text
-                        key={p.label}
+                        key={p.id ?? p.label}
                         x={x(i)}
                         y={height - 6}
                         textAnchor="middle"
@@ -484,28 +485,117 @@ export const RadarChart: React.FC<{
 
 // ─── 90-Day Daily Activity Heatmap Grid ──────────────────────────────────────
 
+const HEAT_LEVEL_OPACITY = [0, 0.3, 0.5, 0.75, 1] as const;
+
+const heatLevel = (tokens: number, max: number): 0 | 1 | 2 | 3 | 4 => {
+    if (tokens <= 0 || max <= 0) return 0;
+    const q = tokens / max;
+    if (q <= 0.25) return 1;
+    if (q <= 0.5) return 2;
+    if (q <= 0.75) return 3;
+    return 4;
+};
+
+interface HeatDay {
+    date: string;
+    tokens: number;
+    sessions: number;
+}
+
 export const HeatmapGrid: React.FC<{
     days: Array<{ date: string; tokens: number; sessions: number }>;
     color?: string;
     maxDailyTokens?: number;
 }> = ({ days, color = '#3987e5', maxDailyTokens = 1 }) => {
+    // The prototype contract is exactly 90 sequential days: 13 columns, seven rows.
+    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    const weeks: HeatDay[][] = [];
+    for (let i = 0; i < sorted.length; i += 7) weeks.push(sorted.slice(i, i + 7));
+
+    const monthLabel = (wi: number): string => {
+        const firstReal = weeks[wi]?.[0];
+        if (!firstReal) return '';
+        const month = new Date(`${firstReal.date}T00:00:00Z`).toLocaleString('en-US', {
+            month: 'short',
+            timeZone: 'UTC',
+        });
+        if (wi === 0) return month;
+        const prevFirst = weeks[wi - 1]?.[0];
+        if (!prevFirst) return month;
+        return prevFirst.date.slice(0, 7) === firstReal.date.slice(0, 7) ? '' : month;
+    };
+
     return (
-        <div className="grid grid-flow-col grid-rows-7 gap-1 w-full overflow-hidden p-1">
-            {days.map((d) => {
-                const intensity = maxDailyTokens > 0 ? Math.min(1, d.tokens / maxDailyTokens) : 0;
-                const opacity = d.tokens > 0 ? Math.max(0.2, intensity) : 0.06;
-                return (
-                    <div
-                        key={d.date}
-                        className="w-2.5 h-2.5 rounded-xs transition-transform hover:scale-125"
-                        style={{
-                            backgroundColor: color,
-                            opacity,
-                        }}
-                        title={`${d.date}: ${fmtTok(d.tokens)} tokens (${d.sessions} sessions)`}
-                    />
-                );
-            })}
+        <div className="flex flex-col gap-1.5" data-testid="heatmap-calendar">
+            <div className="flex items-start gap-1.5">
+                <div
+                    className="w-6 shrink-0 pt-4 flex flex-col gap-1 text-[9px] text-base-content/50"
+                    aria-hidden="true"
+                >
+                    {['Mon', '', 'Wed', '', 'Fri', '', ''].map((label, index) => (
+                        <span key={label || `weekday-${index}`} className="h-2.5 leading-[10px]">
+                            {label}
+                        </span>
+                    ))}
+                </div>
+                <div className="flex gap-1 overflow-x-auto">
+                    {weeks.map((week, wi) => {
+                        const firstDay = week[0];
+                        return (
+                            // Every week slice holds ≥1 real day, so firstDay is never undefined here.
+                            <div
+                                key={firstDay?.date ?? `week-${wi}`}
+                                className="flex flex-col gap-1"
+                                data-testid="heatmap-week"
+                            >
+                                <div className="h-3 text-[9px] leading-3 text-base-content/50">{monthLabel(wi)}</div>
+                                <div className="flex flex-col gap-1">
+                                    {week.map((cell) => (
+                                        <div
+                                            key={cell.date}
+                                            className="w-2.5 h-2.5 rounded-xs transition-transform hover:scale-125"
+                                            style={
+                                                heatLevel(cell.tokens, maxDailyTokens) === 0
+                                                    ? { backgroundColor: 'currentColor', opacity: 0.08 }
+                                                    : {
+                                                          backgroundColor: color,
+                                                          opacity:
+                                                              HEAT_LEVEL_OPACITY[
+                                                                  heatLevel(cell.tokens, maxDailyTokens)
+                                                              ],
+                                                      }
+                                            }
+                                            title={`${cell.date}: ${fmtTok(cell.tokens)} tokens (${cell.sessions} sessions)`}
+                                        >
+                                            <span className="sr-only">
+                                                {`${cell.date}: ${fmtTok(cell.tokens)} tokens, ${cell.sessions} sessions`}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <div className="w-6 shrink-0" aria-hidden="true" />
+                <div className="flex items-center gap-1 text-[9px] text-base-content/50 pl-6">
+                    <span>Less</span>
+                    {HEAT_LEVEL_OPACITY.map((opacity) => (
+                        <span
+                            key={opacity}
+                            className="w-2.5 h-2.5 rounded-xs inline-block"
+                            style={
+                                opacity === 0
+                                    ? { backgroundColor: 'currentColor', opacity: 0.08 }
+                                    : { backgroundColor: color, opacity }
+                            }
+                        />
+                    ))}
+                    <span>More</span>
+                </div>
+            </div>
         </div>
     );
 };
@@ -526,5 +616,38 @@ export const SparkBar: React.FC<{
                 style={{ width: `${pct}%`, backgroundColor: color }}
             />
         </div>
+    );
+};
+
+// ─── Sparkline ───────────────────────────────────────────────────────────────
+
+export const Sparkline: React.FC<{
+    values: number[];
+    color?: string;
+    width?: number;
+    height?: number;
+}> = ({ values, color = '#3987e5', width = 120, height = 36 }) => {
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const span = max - min || 1;
+    const n = values.length;
+    const x = (i: number) => (n <= 1 ? width / 2 : (i / (n - 1)) * (width - 4) + 2);
+    const y = (v: number) => height - 3 - ((v - min) / span) * (height - 6);
+    let d = '';
+    if (n > 0) {
+        d = `M${x(0)},${y(values[0] ?? 0)}`;
+        for (let i = 1; i < n; i++) d += `L${x(i)},${y(values[i] ?? 0)}`;
+    }
+    return (
+        <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="inline-block select-none overflow-visible"
+            style={{ width, height }}
+            role="img"
+            aria-label="Trend sparkline"
+        >
+            {n > 1 && <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" />}
+            {n === 1 && <circle cx={x(0)} cy={y(values[0] ?? 0)} r={2} fill={color} />}
+        </svg>
     );
 };
