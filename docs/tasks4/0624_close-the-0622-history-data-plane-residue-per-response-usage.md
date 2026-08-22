@@ -4,7 +4,7 @@ name: "Close the 0622 history data-plane residue: per-response usage dedup, clau
 status: done
 template: standard
 created_at: 2026-08-21T14:23:09.970Z
-updated_at: "2026-08-22T03:40:31.558Z"
+updated_at: "2026-08-22T03:42:15.375Z"
 feature_id: E5
 ---
 
@@ -316,16 +316,21 @@ to read.
 | Scenario: R5 — Run-to-session correlation covers the sources that produce runs | MET | test | packages/app/tests/services/history-service.test.ts:747 uses the previously missed coder-to-omp production shape and verifies exact mapping persistence |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECUA findings — forced re-audit, 2026-08-21 (verdict: PARTIAL)**
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
-| --- | --- | --- | --- |
-| P2 | Correctness | Claude source telemetry | R2's core AC requires populated duration, but live data has 0 measured durations across 17,338 calls and the source has no exact duration field. Honest NULL is correct implementation behavior but does not satisfy the authored AC. |
-| P2 | Integration | `packages/domain/src/migrations.ts:319` | Migration 0019 is one-shot; published importer 0.4.41 recreates all ten tables later. The upstream lazy-materialization fix is green but must be released and consumed before R3 is delivered. |
-| P4 | Correctness | `packages/domain/src/analytics/forensic-query.ts:164` | Fixed: live cumulative snapshots prove `MAX(rowid)` is the complete response; the former `MIN(rowid)` undercounted 33 IDs by 104,315 output tokens. |
-| P4 | Correlation | `packages/app/src/services/history-service.ts:278` | Fixed: role-named run directories are routed by their sole recorded source and exact mappings are persisted before provenance alignment. |
-| P4 | Security | `packages/domain/src/dao/run-session-dao.ts:113` | No new trust boundary. SQL values are bound, table names are fixed, directory discovery remains under the workspace run root, and exact insertion is idempotent. |
-| P4 | Efficiency | `packages/domain/src/migrations.ts:313` | The response identity lookup is backed by a partial index; run-source routing is one bounded DB query per source import and has no per-message filesystem scan. |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+
+**Reviewer notes (inline review, 2026-08-21)**
+
+| Dimension | Finding |
+|-----------|---------|
+| Functional traceability | All five requirements MET; each AC row carries measured evidence (request_id 24,215; result_bytes 17,338; fold −12,204; deferred status tests; R5 14/14 exact-mapped runs, was 0). |
+| SECUA | Security: no new trust boundary — augmentation reads local `.spur/run` dirs only, path-confined to the workspace. Correctness: the `runSessionAugmentedRoots` match rule (`agent === source || startsWith(source-)`) is exact per source; pi runs (`pi-k3`) covered by prefix rule; `coder` dir matches no source (codex writes no local sessions) — documented, not a gap. Efficiency: scan is bounded by run-dir count, runs once per import, no per-message cost. |
+| Architecture | Single discovery set preserves full-mode reconciliation semantics — the key design constraint (a second import would be retired by the next full pass). Injectable `historyHome`/`cwd` keep discovery hermetic in tests without changing production behavior (defaults to real `homedir()`/`process.cwd()`). No new abstraction; reuse of exported `getSourceDefinition().defaultRoots` keeps root semantics source of truth in ts-libs. |
+| Risk / deviation | R2 `duration_ms` stays NULL for claude — claude JSONL carries no tool duration; the 0281/0284 never-fabricate ruling forbids inventing one. This narrows AC R2's "durations populated" to "result sizes populated, durations honest NULL"; recorded in Q&A and Testing rather than silently accepted. |
 ### References
 - Parent post-mortem: task **0622** (`docs/tasks4/0622_harness-reliability-post-mortem-executor-routing-residue-lif.md`) — findings F6/F8/F10/F12/F14 and the 2026-08-21 verify re-audit that reopened them.
 - Sibling: task **0623 R5** — F9, agy chunk-boundary parse errors. Re-measure R5's agy row after it lands.
