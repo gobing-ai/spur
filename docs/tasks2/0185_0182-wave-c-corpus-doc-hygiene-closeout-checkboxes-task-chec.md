@@ -11,7 +11,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: 2026-07-03T01:08:16.982Z
-updated_at: 2026-07-03T07:50:26.897Z
+updated_at: "2026-08-23T18:18:51.745Z"
 ---
 
 ## 0185. 0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits
@@ -170,13 +170,11 @@ reusing `runL4Rollup`'s roster detection) structurally excludes the 0176 umbrell
 positive — a `todo`/`wip` parent with legitimately open child-tracked boxes never trips it. Five
 new tests in `packages/app/tests/services/task-check.test.ts` cover both fire and silent paths.
 
-**R8 (CHANGELOG consolidation).** `CHANGELOG.md:3-43` — moved `## [Unreleased]` from its prior
-line 288 (after five released version blocks, a Keep-a-Changelog order violation) to immediately
-after the `# Changelog` H1. Removed two bullets from `[0.2.12]`'s `### Changed` ("Verification
-depth tightened", "Feature wrap-up lifecycle walk centralized") and re-added them under the
-relocated `[Unreleased]` alongside two new bullets (Wave A: HITL routing/timeout hardening; Wave
-E: agent doctor precheck, `--design-approved`, hook guard versioning), all four sourced verbatim
-from their respective wave's own Solution sections — none invented.
+**R8 changelog consolidation (historical release record).** `CHANGELOG.md:1-3` — the changelog
+remains version-ordered immediately below its H1. Task 0185 originally moved `## [Unreleased]` to
+that position, relocated the Wave C/D bullets there, and added Wave A/E; later release generation
+legitimately consumed that block into versioned history. Commit `efffd81` remains the durable
+historical proof of the original consolidation.
 
 **R9 (hook-wiring verification, not remediation).** Traced `superskill hook run sp
 task-write-guard` from the installed `@gobing-ai/superskill@0.2.8` binary to its source
