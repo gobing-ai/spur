@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Default filter checkboxes to checked, rename 
 status: done
 template: feature-impl
 created_at: 2026-08-23T13:59:01.053Z
-updated_at: "2026-08-23T14:38:51.771Z"
+updated_at: "2026-08-23T18:21:36.659Z"
 feature_id: E8
 ---
 
@@ -97,16 +97,16 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:319-321` initializes `hideAssistant`, `hideUnknown`, and `hideOtherEmpty` to `true`; `:369-385` removes assistant, unknown, truly empty events, and empty blocks; `:471-500` binds the three checked controls and exact `Hide other empty` label. `apps/web/tests/modules/history/components.test.tsx:300-313,486-568` exercises the defaults, label, and filtering behavior. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:319-321` initializes `hideAssistant`, `hideUnknown`, and `hideOtherEmpty` to `true`; `:369-385` removes assistant, unknown, truly empty events, and empty blocks; `:471-500` binds the three checked controls and exact `Hide other empty` label. `apps/web/tests/modules/history/components.test.tsx:300-313,486-627` exercises the defaults, label, and filtering behavior. |
 | R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:599-601` renders the user card as exact `w-[80%]` inside `justify-end`; `:696-699` renders the operation card as exact `w-[80%]` inside `justify-start`. `apps/web/tests/modules/history/components.test.tsx:375-406` asserts all four classes with non-vacuous `not.toBeNull()` checks. |
 | R3 | MET | `apps/web/src/modules/history/TimelineTab.tsx:231,287` places AgentBadge and ToolTokenBadge popovers at `z-50`; the operation card at `:699` has no `overflow-hidden`; its expanded drawer at `:766-774` owns `overflow-x-auto rounded-b-lg`. Component tests at `apps/web/tests/modules/history/components.test.tsx:408-448` exercise both accessible tooltip layers and their focus, hover, blur, and Escape behavior. |
-| R4 | MET | `apps/web/tests/modules/history/components.test.tsx:300-313,375-406` asserts all filter defaults, exact third label, user right alignment plus exact width, and operation left alignment plus exact width. The strengthened selector assertions first failed against `w-full sm:w-[80%]`, then passed after the production repair; the full file exited 0 with 15 tests and 186 assertions. |
-| R5 | MET | `docs/design/history-board-module.md:64-70,187` records the exact Timeline behavior and maps task 0636; `docs/04_DESIGN.md` indexes that satellite. Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,107 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |
-| AC-2 | MET | The E8 Timeline scenario is exercised by `apps/web/tests/modules/history/components.test.tsx:300-568`; the full component file exited 0 with 15 tests and 186 assertions, and the repository suite exited 0 with 6,233 tests. |
+| R4 | MET | `apps/web/tests/modules/history/components.test.tsx:300-313,375-406` asserts all filter defaults, exact third label, user right alignment plus exact width, and operation left alignment plus exact width. The strengthened selector assertions first failed against `w-full sm:w-[80%]`, then passed after the production repair; the full file exited 0 with 15 tests and 189 assertions. |
+| R5 | MET | `docs/design/history-board-module.md:64-70,187` records the exact Timeline behavior and maps task 0636; `docs/04_DESIGN.md` indexes that satellite. Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,112 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |
+| AC-2 | MET | The E8 Timeline scenario is exercised by `apps/web/tests/modules/history/components.test.tsx:300-627`; the full component file exited 0 with 15 tests and 189 assertions, and the repository suite exited 0 with 6,233 tests. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Timeline tab inspects session execution with Agent and Model tags | MET | test | `apps/web/tests/modules/history/components.test.tsx:300-568` proves the session metadata, chronological user/tool rows, Agent/Model and token/duration telemetry, filtering, alignment, tooltips, and payload disclosure; `bun test apps/web/tests/modules/history/components.test.tsx` exited 0 with 15 tests and 186 assertions. |
+| Scenario: Timeline tab inspects session execution with Agent and Model tags | MET | test | `apps/web/tests/modules/history/components.test.tsx:300-627` proves the session metadata, chronological user/tool rows, Agent/Model and token/duration telemetry, filtering, alignment, tooltips, and payload disclosure; `bun test apps/web/tests/modules/history/components.test.tsx` exited 0 with 15 tests and 189 assertions. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Phase | Focus | Status | Findings |

@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Remove redundant USER tag and add token break
 status: done
 template: feature-impl
 created_at: 2026-08-23T14:12:24.823Z
-updated_at: "2026-08-23T18:05:32.009Z"
+updated_at: "2026-08-23T18:21:37.046Z"
 feature_id: E8
 ---
 
@@ -139,7 +139,7 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 | R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:149-199` implements `UserTokenBadge` around `UserIcon` with `relative z-20`, an accessible button, hover/focus/blur handlers, Escape dismissal, a `z-50` tooltip, and fresh-input/cache-read/output/total values. |
 | R3 | MET | `apps/web/tests/modules/history/components.test.tsx:375-403` asserts USER removal, every required token label, hidden/default state, focus reveal, blur hide, Escape dismissal, hover reveal, and mouse-leave hide. The full component file exited 0 with 15 tests and 189 assertions. |
 | R4 | MET | `docs/design/history-board-module.md:67,188` records the UserTokenBadge tooltip, four token categories, z-index, redundant USER removal, and task mapping; `docs/04_DESIGN.md` indexes the synchronized History Board satellite through 0637. |
-| R5 | MET | Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,111 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |
+| R5 | MET | Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,112 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |
 | AC-2 | MET | The E8 Timeline scenario is exercised by `apps/web/tests/modules/history/components.test.tsx:300-471`; the component file exited 0 with 15 tests and 189 assertions, and the repository suite exited 0 with 6,233 tests. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
