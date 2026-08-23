@@ -8,7 +8,8 @@
  *
  * Exposes:
  * - {@link loadSpurConfig} — the one loader: `loadSpurConfig(cwd) → SpurConfig`
- * - {@link resolveConfigFile} — project→global config path fallback
+ * - {@link resolveConfigLayers} — both layer paths (project + global, task 0640)
+ * - {@link resolveConfigFile} — single-path view (project→global fallback)
  * - {@link resolvePlanningFolders} — folder derivation over `loadSpurConfig`
  * - Re-exports of bundled-config / template-renderer (moved here from the core so the
  *   core stays CF-safe — they use `node:fs`).
@@ -18,8 +19,9 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { createNodeFileSystem, loadStructuredConfig } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, loadStructuredConfig, validateDeclaredJsonSchema } from '@gobing-ai/ts-runtime';
 import { parse as parseYaml } from 'yaml';
+import { ZodError } from 'zod';
 
 import {
     DEFAULT_FEATURES_DIR,
@@ -34,6 +36,7 @@ import {
 // Re-export Node-only concerns that were previously in the core entry.
 // They use `node:fs` and must not be importable from the CF-safe core.
 export {
+    BUNDLED_GLOBAL_CONFIG,
     bundledConfigRoot,
     listBundledConfigFiles,
     listBundledProjectSeedFiles,
@@ -141,20 +144,48 @@ function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): s
 }
 
 /**
- * Resolve the config file path following the project→global fallback order.
+ * Resolve both config layers following the layered contract (ADR-015 ladder, task 0640).
  *
- * 1. Project `.spur/config.yaml` (cwd).
- * 2. Fallback to global `~/.config/spur/config.yaml` when the project file is missing.
+ * - Project layer: `<cwd>/.spur/config.yaml`.
+ * - Global layer: `~/.config/spur/config.yaml` (skipped when `SPUR_SKIP_GLOBAL_CONFIG=true`,
+ *   which under layering means *project layer only*).
  *
- * Returns `undefined` when neither file exists (e.g. before `spur init`).
- * Set `SPUR_SKIP_GLOBAL_CONFIG=true` to skip the global fallback.
+ * Both keys are present when both files exist; a missing file leaves the key `undefined`.
+ * When neither exists (pre-`spur init`), both are `undefined`.
+ */
+export interface ResolvedConfigLayers {
+    /** `~/.config/spur/config.yaml` when it exists (and the skip env is unset). */
+    global?: string;
+    /** `<cwd>/.spur/config.yaml` when it exists. */
+    project?: string;
+}
+
+/**
+ * Resolve both config layer paths for a working directory: the project layer
+ * (`<cwd>/.spur/config.yaml`) and the global layer (`~/.config/spur/config.yaml`).
+ * Each layer is included only when its file exists; `SPUR_SKIP_GLOBAL_CONFIG=true`
+ * suppresses the global layer (tests and hermetic environments).
+ */
+export function resolveConfigLayers(cwd?: string): ResolvedConfigLayers {
+    const layers: ResolvedConfigLayers = {};
+    const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
+    if (existsSync(projectConfig)) layers.project = projectConfig;
+    if (process.env.SPUR_SKIP_GLOBAL_CONFIG !== 'true' && existsSync(GLOBAL_CONFIG_FILE)) {
+        layers.global = GLOBAL_CONFIG_FILE;
+    }
+    return layers;
+}
+
+/**
+ * Resolve the single config file path following the project→global fallback order.
+ *
+ * Thin wrapper over {@link resolveConfigLayers}: the project layer's path when it exists,
+ * else the global path. Returns `undefined` when neither layer exists. Consumers that
+ * need one path keep compiling; layered consumers call {@link resolveConfigLayers}.
  */
 export function resolveConfigFile(cwd?: string): string | undefined {
-    const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
-    if (existsSync(projectConfig)) return projectConfig;
-    if (process.env.SPUR_SKIP_GLOBAL_CONFIG === 'true') return undefined;
-    if (existsSync(GLOBAL_CONFIG_FILE)) return GLOBAL_CONFIG_FILE;
-    return undefined;
+    const { global, project } = resolveConfigLayers(cwd);
+    return project ?? global;
 }
 
 // ---- Embedded-schema resolution (bun --compile support) ----
@@ -189,14 +220,18 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
 }
 
 /**
- * Load and validate `.spur/config.yaml` from a project directory.
+ * Load and validate the layered Spur configuration (task 0640).
  *
  * THE single loader — every surface calls this instead of rolling its own YAML parse +
- * schema validate. Returns a fully-typed, validated {@link SpurConfig} covering all
- * sections (tasks, features, agent, rules, workflows, redaction).
+ * schema validate. Reads the global (`~/.config/spur/config.yaml`) and project
+ * (`<cwd>/.spur/config.yaml`) layers, deep-merges them (project wins; executors merge by
+ * `name`, team members by `id ?? executor`, `rules.paths`/`workflows.paths` concatenate),
+ * then validates the MERGED object once. Returns a fully-typed {@link SpurConfig}.
  *
- * - Missing file → returns schema defaults (all-optional config).
- * - Invalid YAML / schema → throws (fail loud at startup).
+ * - Neither layer → returns schema defaults (all-optional config).
+ * - `SPUR_SKIP_GLOBAL_CONFIG=true` → project layer only.
+ * - Invalid YAML / schema → throws (fail loud at startup); errors name the layer
+ *   each offending key came from (R7).
  *
  * By default, validation is zod-only (fast). Pass `{ validateJsonSchema: true }` to also
  * validate against the `$schema` JSON Schema declaration via ts-runtime — the CLI uses this
@@ -210,17 +245,23 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
  * @param opts - Validation + embedded-schema options.
  */
 export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpurConfigOptions): Promise<SpurConfig> {
-    const configPath = resolveConfigFile(cwd);
-    if (configPath === undefined) {
+    const layers = resolveConfigLayers(cwd);
+    if (layers.global === undefined && layers.project === undefined) {
         return spurConfigSchema.parse({});
     }
 
     const validateJsonSchema = opts?.validateJsonSchema ?? process.env.NODE_ENV !== 'test';
-    const mtimeMs = statSync(configPath).mtimeMs;
-    const key = `${cacheKey(configPath, opts, validateJsonSchema)}\0${mtimeMs}`;
+    const mtimeOf = (path?: string): string => (path !== undefined ? String(statSync(path).mtimeMs) : '-');
+    // Key on BOTH layers (paths + mtimes, R4): editing either file must invalidate.
+    const key = [
+        cacheKey(layers.project ?? layers.global ?? '', opts, validateJsonSchema),
+        layers.global ?? '-',
+        mtimeOf(layers.project),
+        mtimeOf(layers.global),
+    ].join('\0');
     const cached = spurConfigCache.get(key);
     if (cached !== undefined) return cached;
-    const promise = loadSpurConfigFile(configPath, opts, validateJsonSchema);
+    const promise = loadMergedConfig(layers, opts, validateJsonSchema);
     spurConfigCache.set(key, promise);
     promise.catch(() => spurConfigCache.delete(key));
     return promise;
@@ -229,12 +270,13 @@ export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpu
 /**
  * Invalidate the cached {@link SpurConfig} for one config path or the entire cache.
  *
- * {@link loadSpurConfig} includes the file's mtime in its cache key so stale entries
- * naturally expire after an edit. Call this function when you need to force a reload
- * without waiting for the next file stat (e.g. after a programmatic config update that
- * hasn't yet been flushed to disk).
+ * {@link loadSpurConfig} keys the cache on both layers' paths + mtimes, so stale entries
+ * naturally expire after either file is edited. Call this function when you need to force
+ * a reload without waiting for the next file stat (e.g. after a programmatic config
+ * update that hasn't yet been flushed to disk).
  *
- * @param configPath - Optional path to invalidate; clears the entire cache when omitted.
+ * @param configPath - Optional layer path (project or global) to invalidate; clears the
+ *   entire cache when omitted.
  */
 export function invalidateSpurConfig(configPath?: string): void {
     if (configPath === undefined) {
@@ -242,7 +284,8 @@ export function invalidateSpurConfig(configPath?: string): void {
         return;
     }
     for (const key of spurConfigCache.keys()) {
-        if (key.startsWith(`${configPath}\0`)) {
+        // The path may sit at the key head (primary layer) or in the global slot.
+        if (key.startsWith(`${configPath}\0`) || key.includes(`\0${configPath}\0`)) {
             spurConfigCache.delete(key);
         }
     }
@@ -284,39 +327,314 @@ function expandTeamTildes(config: SpurConfig): SpurConfig {
     return { ...config, agent: { ...config.agent, team: expanded } };
 }
 
-async function loadSpurConfigFile(
-    configPath: string,
+// ---- Layered load: raw read -> deep merge -> single validation (task 0640) ----
+
+/** Shared ts-runtime schema-resolution context (embedded schemas, manifest specifier). */
+function schemaValidationContext(opts: LoadSpurConfigOptions | undefined) {
+    const embeddedSchemas = opts?.embeddedSchemas;
+    const manifestSpecifier = opts?.schemaManifestSpecifier ?? '@gobing-ai/spur/package.json';
+    const resolve = (specifier: string): string => {
+        if (embeddedSchemas !== undefined && specifier === manifestSpecifier) {
+            return `${EMBEDDED_PREFIX}/package.json`;
+        }
+        return resolveSchemaSpecifier(specifier, manifestSpecifier);
+    };
+    const fileSystem = embeddedSchemas ? { readFile: makeEmbeddedReader(embeddedSchemas) } : undefined;
+    return { resolve, ...(fileSystem !== undefined ? { fileSystem } : {}) };
+}
+
+/** One parsed layer; raw YAML objects (pre-zod). `{}` for an absent or empty file. */
+type RawConfig = Record<string, unknown>;
+
+/** Read and YAML-parse one layer, failing loud with the layer named (R7). */
+async function readRawYamlLayer(configPath: string, kind: 'global' | 'project'): Promise<RawConfig> {
+    const nodeFs = createNodeFileSystem();
+    let text: string;
+    try {
+        text = await nodeFs.readFile(nodeFs.resolve(configPath));
+    } catch (error) {
+        throw new Error(`Failed to read ${kind} config ${configPath}: ${(error as Error).message}`);
+    }
+    try {
+        return (parseYaml(text) ?? {}) as RawConfig;
+    } catch (error) {
+        throw new Error(`Failed to parse ${kind} config ${configPath}: ${(error as Error).message}`);
+    }
+}
+
+function isPlainObject(value: unknown): value is RawConfig {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Member identity for merge-by-key: `id ?? executor`; a bare string is its own id. */
+function memberIdentityOf(item: unknown): string | undefined {
+    if (typeof item === 'string') return item;
+    if (isPlainObject(item)) {
+        if (typeof item.id === 'string') return item.id;
+        if (typeof item.executor === 'string') return item.executor;
+    }
+    return undefined;
+}
+
+/** Executor identity for merge-by-key: the `name` field. */
+function executorNameOf(item: unknown): string | undefined {
+    return isPlainObject(item) && typeof item.name === 'string' ? item.name : undefined;
+}
+
+/** Arrays at these paths concatenate across layers (global first, project second). */
+function isConcatPath(segments: (string | number)[]): boolean {
+    return (
+        (segments.length === 2 && segments[0] === 'rules' && segments[1] === 'paths') ||
+        (segments.length === 2 && segments[0] === 'workflows' && segments[1] === 'paths')
+    );
+}
+
+/** Identity function for arrays that merge by key (`agent.executors`, `*.members`). */
+function byKeyIdentityFor(segments: (string | number)[]): ((item: unknown) => string | undefined) | undefined {
+    if (segments.length === 2 && segments[0] === 'agent' && segments[1] === 'executors') {
+        return executorNameOf;
+    }
+    if (segments.length === 4 && segments[0] === 'agent' && segments[1] === 'team' && segments[3] === 'members') {
+        return memberIdentityOf;
+    }
+    return undefined;
+}
+
+/** Concatenate with exact-duplicate removal (a project path redeclaring a global one). */
+function concatUnique(globalItems: unknown[], projectItems: unknown[]): unknown[] {
+    const out = [...globalItems];
+    for (const item of projectItems) {
+        if (!out.includes(item)) out.push(item);
+    }
+    return out;
+}
+
+function mergeByKeyIdentity(
+    globalItems: unknown[],
+    projectItems: unknown[],
+    identityOf: (item: unknown) => string | undefined,
+    segments: (string | number)[],
+): unknown[] {
+    const merged: unknown[] = [];
+    const indexByIdentity = new Map<string, number>();
+    for (const item of globalItems) {
+        const identity = identityOf(item);
+        if (identity === undefined || !indexByIdentity.has(identity)) {
+            if (identity !== undefined) indexByIdentity.set(identity, merged.length);
+            merged.push(item);
+        }
+    }
+    for (const item of projectItems) {
+        const identity = identityOf(item);
+        const existing = identity === undefined ? undefined : indexByIdentity.get(identity);
+        if (existing === undefined) {
+            if (identity !== undefined) indexByIdentity.set(identity, merged.length);
+            merged.push(item);
+            continue;
+        }
+        const base = merged[existing];
+        // A bare-string member re-declares wholesale; object forms merge per field.
+        merged[existing] =
+            isPlainObject(base) && isPlainObject(item) ? mergeDeep(base, item, [...segments, existing]) : item;
+    }
+    return merged;
+}
+
+/**
+ * Deep-merge two raw layer values per the 0639 strategy table: maps recurse, scalars and
+ * plain arrays replace (project wins), by-key arrays merge per item, `*.paths` concats.
+ */
+/** A raw YAML value from a config layer before zod parsing (object, array, or scalar). */
+type RawYamlNode = unknown;
+
+function mergeDeep(globalValue: unknown, projectValue: unknown, segments: (string | number)[]): RawYamlNode {
+    if (isPlainObject(globalValue) && isPlainObject(projectValue)) {
+        const out: RawConfig = { ...globalValue };
+        for (const [key, projectItem] of Object.entries(projectValue)) {
+            out[key] = key in out ? mergeDeep(out[key], projectItem, [...segments, key]) : projectItem;
+        }
+        return out;
+    }
+    if (Array.isArray(globalValue) && Array.isArray(projectValue)) {
+        if (isConcatPath(segments)) return concatUnique(globalValue, projectValue);
+        const identityOf = byKeyIdentityFor(segments);
+        if (identityOf !== undefined) return mergeByKeyIdentity(globalValue, projectValue, identityOf, segments);
+        return projectValue;
+    }
+    return projectValue;
+}
+
+/** Merge the two raw layers (project over global). An absent layer contributes `{}`. */
+export function mergeSpurConfigLayers(globalRaw: RawConfig, projectRaw: RawConfig): RawConfig {
+    return mergeDeep(globalRaw, projectRaw, []) as RawConfig;
+}
+
+// ---- Provenance: name the layer a failing key came from (R7) ----
+
+function formatZodPath(path: (string | number)[]): string {
+    return path
+        .map((segment, index) => (typeof segment === 'number' ? `[${segment}]` : index === 0 ? segment : `.${segment}`))
+        .join('');
+}
+
+/** Parse a JSON-Schema violation path (`agent.executors[0].agent`) into segments. */
+function parseViolationPath(path: string): (string | number)[] {
+    const segments: (string | number)[] = [];
+    for (const part of path.split('.')) {
+        const bracket = part.indexOf('[');
+        const key = bracket === -1 ? part : part.slice(0, bracket);
+        if (key !== '') segments.push(key);
+        if (bracket !== -1) {
+            for (const match of part.slice(bracket).matchAll(/\[(\d+)\]/g)) {
+                segments.push(Number(match[1]));
+            }
+        }
+    }
+    return segments;
+}
+
+function findItemByIdentity(
+    node: unknown,
+    identityOf: (item: unknown) => string | undefined,
+    identity: string,
+): RawYamlNode {
+    return Array.isArray(node) ? node.find((entry) => identityOf(entry) === identity) : undefined;
+}
+
+/**
+ * Name the layer(s) that contributed the value at `issuePath`, so merged-config
+ * validation errors point at the file the offending key came from (R7). Walks both raw
+ * layers in parallel; by-key array indices are remapped through the merged item's
+ * identity (executor name / member id) so fragment declarations are attributed.
+ */
+export function describeIssueProvenance(
+    issuePath: (string | number)[],
+    merged: unknown,
+    globalRaw: RawConfig,
+    projectRaw: RawConfig,
+): string {
+    let g: unknown = globalRaw;
+    let p: unknown = projectRaw;
+    let m: unknown = merged;
+    let segments: (string | number)[] = [];
+    let parentG: unknown = globalRaw;
+    let parentP: unknown = projectRaw;
+    let identityPrefix = '';
+
+    for (const segment of issuePath) {
+        parentG = g;
+        parentP = p;
+        segments = [...segments, segment];
+        if (typeof segment === 'number') {
+            const mergedItem = Array.isArray(m) ? m[segment] : undefined;
+            const identityOf = byKeyIdentityFor(segments.slice(0, -1));
+            if (identityOf !== undefined && mergedItem !== undefined) {
+                const identity = identityOf(mergedItem);
+                if (identity !== undefined) {
+                    identityPrefix = `${segments.length === 3 ? 'executor' : 'member'} "${identity}" `;
+                    g = findItemByIdentity(g, identityOf, identity);
+                    p = findItemByIdentity(p, identityOf, identity);
+                }
+            } else {
+                g = Array.isArray(g) && segment < g.length ? g[segment] : undefined;
+                p = Array.isArray(p) && segment < p.length ? p[segment] : undefined;
+            }
+            m = mergedItem;
+            continue;
+        }
+        g = isPlainObject(g) ? g[segment] : undefined;
+        p = isPlainObject(p) ? p[segment] : undefined;
+        m = isPlainObject(m) ? m[segment] : undefined;
+    }
+
+    let label: string;
+    if (g !== undefined && p !== undefined) {
+        label = 'set in both layers (project value wins)';
+    } else if (g !== undefined) {
+        label = 'from global layer';
+    } else if (p !== undefined) {
+        label = 'from project layer';
+    } else if (parentP !== undefined && parentG === undefined) {
+        label = 'from project layer (key absent there)';
+    } else if (parentG !== undefined && parentP === undefined) {
+        label = 'from global layer (key absent there)';
+    } else {
+        label = 'missing in both layers';
+    }
+    return `${identityPrefix}${label}`;
+}
+
+/** Parse the merged object with zod, enriching failures with per-issue layer provenance. */
+export function parseMergedWithProvenance(
+    merged: RawConfig,
+    globalRaw: RawConfig,
+    projectRaw: RawConfig,
+    layers: ResolvedConfigLayers,
+): SpurConfig {
+    try {
+        return spurConfigSchema.parse(merged);
+    } catch (error) {
+        if (!(error instanceof ZodError)) throw error;
+        const details = error.issues
+            .map((issue) => {
+                // zod types issue paths as PropertyKey[]; symbol segments never occur in
+                // YAML-derived configs, so drop them for the (string|number) walk.
+                const path = issue.path.filter((segment): segment is string | number => typeof segment !== 'symbol');
+                return `  ${formatZodPath(path)}: ${issue.message} (${describeIssueProvenance(path, merged, globalRaw, projectRaw)})`;
+            })
+            .join('\n');
+        throw new Error(
+            `Spur config validation failed after merging global ${layers.global ?? '(absent)'} with project ${layers.project ?? '(absent)'}:\n${details}`,
+        );
+    }
+}
+
+/** Enrich a JSON-Schema violation error with per-violation layer provenance. */
+export function enrichSchemaViolationError(
+    error: unknown,
+    merged: RawConfig,
+    globalRaw: RawConfig,
+    projectRaw: RawConfig,
+    layers: ResolvedConfigLayers,
+): Error {
+    const violations = (error as { violations?: unknown }).violations;
+    if (!Array.isArray(violations)) return error as Error;
+    const details = violations
+        .map((violation) => {
+            const v = violation as { path?: unknown; message?: unknown };
+            const path = typeof v.path === 'string' ? v.path : '(root)';
+            const message = typeof v.message === 'string' ? v.message : 'schema violation';
+            const label = describeIssueProvenance(parseViolationPath(path), merged, globalRaw, projectRaw);
+            return `  ${path}: ${message} (${label})`;
+        })
+        .join('\n');
+    return new Error(
+        `Merged Spur config failed JSON Schema validation (global ${layers.global ?? '(absent)'} + project ${layers.project ?? '(absent)'}):\n${details}`,
+    );
+}
+
+async function loadMergedConfig(
+    layers: ResolvedConfigLayers,
     opts: LoadSpurConfigOptions | undefined,
     validateJsonSchema: boolean,
 ): Promise<SpurConfig> {
-    let raw: unknown;
+    const globalRaw = layers.global !== undefined ? await readRawYamlLayer(layers.global, 'global') : {};
+    const projectRaw = layers.project !== undefined ? await readRawYamlLayer(layers.project, 'project') : {};
+    const merged = mergeSpurConfigLayers(globalRaw, projectRaw);
 
     if (validateJsonSchema) {
-        const embeddedSchemas = opts?.embeddedSchemas;
-        const manifestSpecifier = opts?.schemaManifestSpecifier ?? '@gobing-ai/spur/package.json';
-
-        const resolveFn = (specifier: string): string => {
-            if (embeddedSchemas !== undefined && specifier === manifestSpecifier) {
-                return `${EMBEDDED_PREFIX}/package.json`;
-            }
-            return resolveSchemaSpecifier(specifier, manifestSpecifier);
-        };
-
-        const fileSystem = embeddedSchemas ? { readFile: makeEmbeddedReader(embeddedSchemas) } : undefined;
-
-        raw = await loadStructuredConfig(configPath, {
-            validateSchema: true,
-            resolve: resolveFn,
-            ...(fileSystem !== undefined ? { fileSystem } : {}),
-        });
-    } else {
-        const nodeFs = createNodeFileSystem();
-        const resolved = nodeFs.resolve(configPath);
-        const text = await nodeFs.readFile(resolved);
-        raw = parseYaml(text) ?? {};
+        // R2/R3: validate the MERGED object once — per-layer validation would reject
+        // legal fragments (an executor whose `agent` comes from the other layer).
+        // Relative `$schema` refs resolve against the project layer's directory.
+        const source = layers.project ?? layers.global ?? '';
+        try {
+            await validateDeclaredJsonSchema(merged, source, schemaValidationContext(opts));
+        } catch (error) {
+            throw enrichSchemaViolationError(error, merged, globalRaw, projectRaw, layers);
+        }
     }
 
-    return expandTeamTildes(spurConfigSchema.parse(raw));
+    return expandTeamTildes(parseMergedWithProvenance(merged, globalRaw, projectRaw, layers));
 }
 
 /**
@@ -344,19 +662,9 @@ export async function loadStructuredSpurConfig(
         const text = await nodeFs.readFile(resolved);
         return (parseYaml(text) ?? {}) as Record<string, unknown>;
     }
-    const embeddedSchemas = opts?.embeddedSchemas;
-    const manifestSpecifier = opts?.schemaManifestSpecifier ?? '@gobing-ai/spur/package.json';
-    const resolveFn = (specifier: string): string => {
-        if (embeddedSchemas !== undefined && specifier === manifestSpecifier) {
-            return `${EMBEDDED_PREFIX}/package.json`;
-        }
-        return resolveSchemaSpecifier(specifier, manifestSpecifier);
-    };
-    const fileSystem = embeddedSchemas ? { readFile: makeEmbeddedReader(embeddedSchemas) } : undefined;
     return (await loadStructuredConfig(configPath, {
         validateSchema: true,
-        resolve: resolveFn,
-        ...(fileSystem !== undefined ? { fileSystem } : {}),
+        ...schemaValidationContext(opts),
     })) as Record<string, unknown>;
 }
 

@@ -1109,3 +1109,41 @@ gate it on measured real-run data, not on a fixture bar.
   role→starting-tier rationale (~:1285-1303). Tests:
   `packages/app/tests/services/agent-service.test.ts:2574` (declared-role escalation climbs the
   ladder) and `:2645` (pinned executor bypasses role routing).
+
+## ADR-078: The Role→Tier SSOT Moves to the Config Layer; Code Keeps a Byte-Identical Fallback
+
+**Status:** Accepted · **Date:** 2026-08-23 · **Supersedes:** ADR-061 · **Feature:** A4
+
+**Decision.** The role→tier/stages table's single source of truth is the config layer: the
+machine-wide `config/config.global.yaml` (0641 R4) carries the full base table, project
+`.spur/config.yaml` applies per-field `agent.roles` overrides on top, and the merged object is
+validated once at load (0640). `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts` is demoted
+to a minimal hardcoded fallback, **byte-identical to the shipped global default** — all four roles
+at their current tiers and stage sets. The fallback applies only when the merged config provides
+no `agent.roles` table at all (no global file and no project file): the CF-safe core must resolve
+roles with no filesystem access. A fallback that differed from the shipped default would turn a
+missing config file into a silent behavior change — precisely the failure ADR-061 existed to
+prevent — so byte-identity is the requirement, not a nicety.
+
+**Why.** ADR-061 put the SSOT in code because, on 2026-08-16, "config-owned" meant "per-project
+duplicated" — no machine-wide config file existed, so config ownership implied N copies drifting
+apart. The operator ruled on 2026-08-23 to overturn on that premise change: A4's layered loader
+(0640) supplies the machine-wide file, retiring the duplication argument. ADR-061's other reason
+survives and constrains this design: a code default must exist for the no-filesystem case. Also
+surviving from 061: the closed four-role vocabulary (`scribe`, `coder`, `reviewer`, `planner` —
+0536; the inversion changes *where the table is read from*, never *how many roles exist*), the
+per-field override semantics (re-tier/re-stage, never invent), `roles.md` remaining a projection
+rather than a runtime input, and the deletion of the runtime markdown regex parse.
+
+**Detail.** Blast radius: `packages/config/src/index.ts` (`AgentRoleSpec:158`,
+`DEFAULT_AGENT_ROLES:173` demoted to fallback, `AgentRoleConfigSchema:221`, and the
+`AgentConfigSchema.superRefine` role-key closure + executor/role namespace disjointness — unchanged,
+now guarding the merged object whatever its provenance); `apps/cli/src/context.ts:49`
+(`resolveAgentRoles` merges the config-sourced base with project overrides instead of the constant;
+signature fate deferred to the implementation ticket); `plugins/sp/tests/roles.test.ts` R9 (`:310`)
+retargets from "markdown ≡ constant" to three-way parity: `roles.md` ≡ `config/config.global.yaml`
+table ≡ fallback constant (byte-identical). The gate does not retire — pointed only at the demoted
+constant it would stop guarding the real SSOT. Layer merge per 0639's classification:
+`agent.roles` object-deep-merge, `<role>.tier` scalar-replace, `<role>.stages` array-replace
+(whole-set semantics; concat misroutes). Implementation task follows this ADR + the 0642 Solution
+blast-radius table.

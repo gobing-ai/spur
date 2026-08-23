@@ -4,7 +4,6 @@
     "title": "Spur Project Configuration",
     "description": "Schema for .spur/config.yaml \u2014 the single project configuration surface consumed by spur and (future) spur-server.",
     "type": "object",
-    "required": ["version", "name"],
     "properties": {
         "$schema": {
             "type": "string",
