@@ -74,7 +74,7 @@ Feature: Role-addressed coordination for agent wait and message
 
 - `apps/cli/src/commands/agent.ts:95` — the `agent wait <specId>` surface (`--run`, `--until`, `--timeout`, `--json`).
 - `apps/cli/src/commands/message.ts:121` — where the `{ specId, runId, generation }` pin is captured before send.
-- `packages/config/src/index.ts:173` — `DEFAULT_AGENT_ROLES`, the closed role vocabulary (ADR-061, feature B3).
+- `packages/config/src/index.ts:178` — `DEFAULT_AGENT_ROLES`, the closed role vocabulary (ADR-061, feature B3).
 - `docs/00_ADR.md` — the dated decision entry, in either direction.
 - `docs/features/D5_*.md` R6 — amend the deferral to point at that entry once it exists.
 
@@ -157,7 +157,7 @@ vocabulary is untouched.
 
 ## R5 — role vocabulary stays closed and singly-owned: holds
 
-No new role list introduced. `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts:173` remains
+No new role list introduced. `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts:178` remains
 the SSOT (ADR-061); `plugins/sp/references/roles.md` remains its parity-checked projection.
 
 ## Change map
@@ -179,7 +179,7 @@ design (feature D6 R6 allows "a dated decision record closing the question" as t
 | R2 | MET | `docs/00_ADR.md:1002-1010` — ADR-075 "Wait and Message Stay Identity-Pinned — No Role Addressing", **Status: Accepted · Date: 2026-08-20 · Feature: D6 · Task: 0609**. Outcome (b): a dated record closing the question, stating why identity pinning stays authoritative (the occupant pin `{specId, runId, generation}` from ADR-057 wave 2 is what actually binds a wait to a run). R2's mandatory "what evidence would reopen it" clause is present and concrete — three enumerated reopening conditions plus the exact-one/no-fan-out preconditions any future proposal must meet. The D5 R6 deferral now points at it: `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md:87,89`. The question is closed, which is the one thing R2 forbids leaving open. |
 | R3 | MET | Nothing shipped, so there is no resolution path that could silently first-match. Verified by absence this run: `git status --porcelain` shows **no** `apps/cli` or `packages/config` file in this task's change scope. The exact-one rule is preserved as a precondition in ADR-075's reopening clause ("zero/multi-occupant are hard errors naming the role and count, the pin is written before proceed"), so the constraint survives the deferral rather than lapsing with it. |
 | R4 | MET | No broadcast or fan-out path exists or was introduced. `apps/cli/src/commands/message.ts:104` types the recipient as a single `to: string`; the command description and `--wait` semantics are singular throughout ("the recipient occupant"). No CLI command file is modified by this task. ADR-075 restates the no-fan-out constraint as binding on any future reopening. |
-| R5 | MET | The role vocabulary stays closed and singly-owned: `packages/config/src/index.ts:173` `DEFAULT_AGENT_ROLES` remains the sole SSOT (ADR-061), unmodified this run, and no new surface accepts a role, so no second role list was introduced and no role was invented. |
+| R5 | MET | The role vocabulary stays closed and singly-owned: `packages/config/src/index.ts:178` `DEFAULT_AGENT_ROLES` remains the sole SSOT (ADR-061), unmodified this run, and no new surface accepts a role, so no second role list was introduced and no role was invented. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -214,7 +214,7 @@ design (feature D6 R6 allows "a dated decision record closing the question" as t
 - Origin of the request: the operator's original workflow-refactor brief — *"if we can continously to add role support to the other `spur agent` comands and `spur message` commands"*
 - The deferral this task converts into a decision: `docs/features/D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md` R6, and task `0603` R6 / `0604`
 - Decisions: `docs/00_ADR.md` — ADR-051 (public-surface consent, noun-first), ADR-057 (inter-agent control plane; identity-pinned occupant semantics), **ADR-061** (role→tier SSOT is code in `packages/config`, Accepted 2026-08-16, feature B3)
-- Role vocabulary SSOT: `packages/config/src/index.ts:173` (`DEFAULT_AGENT_ROLES`); projection `plugins/sp/references/roles.md`
+- Role vocabulary SSOT: `packages/config/src/index.ts:178` (`DEFAULT_AGENT_ROLES`); projection `plugins/sp/references/roles.md`
 - Surfaces in question: `apps/cli/src/commands/agent.ts:95` (`agent wait`), `apps/cli/src/commands/message.ts:121` (pin capture before send)
 - Existing role plumbing to mirror, not duplicate: `packages/app/src/workflow/actions/agent-run.ts:144` (role option) and `:204` (schema-gate enforcement, task 0538 R2)
 - Occupant pin + wait/message shipped in: task `0530` (identity-pinned `agent wait`, atomic `message send --wait`), task `0531` (`followSystemEventsAfter`)
