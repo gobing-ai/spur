@@ -25,12 +25,15 @@ import { DefaultHitlResponder } from './workflow/hitl/default-responder';
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the Layer-1 role table (task 0572 / ADR-061): project config
- * `agent.roles` (validated against the closed vocabulary at config load)
- * wins per-field over `DEFAULT_AGENT_ROLES` from `@gobing-ai/spur-config`;
- * with no override the defaults are returned wholesale. The roles.md runtime
- * parse was deleted in this move — the plugin file survives only as a
- * parity-gated projection (`plugins/sp/tests/roles.test.ts` R9).
+ * Resolve the Layer-1 role table (ADR-078, superseding ADR-061): the config
+ * layer is the SSOT. `agent.roles` — merged global-then-project by the layered
+ * loader (task 0640) and validated against the closed vocabulary at config load
+ * — wins per-field over `DEFAULT_AGENT_ROLES`, which ADR-078 demotes to a
+ * byte-identical fallback used only when NO layer supplies a table (the CF-safe
+ * core must resolve roles with no filesystem). The shipped table lives in
+ * `config/config.global.yaml`; the roles.md runtime parse stays deleted — the
+ * plugin file survives as a parity-gated projection
+ * (`plugins/sp/tests/roles.test.ts` R9, three-way since 0647).
  *
  * Override stage ids are validated HERE (0572 R10): the CF-safe config core
  * cannot import the stage registry, and `AgentService.stageForRole` silently

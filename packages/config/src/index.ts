@@ -161,8 +161,13 @@ export interface AgentRoleSpec {
 }
 
 /**
- * The Layer-1 role table SSOT (task 0572 / ADR-061): role → tier + folded
- * stages. Values are byte-identical to the pre-0572
+ * The Layer-1 role table FALLBACK (ADR-078, task 0647 — was the SSOT under
+ * ADR-061): role → tier + folded stages. The SSOT is now the config layer's
+ * `agent.roles`, shipped in `config/config.global.yaml`; this constant applies
+ * only when no config layer supplies a table at all, which the CF-safe core
+ * requires since it must resolve roles with no filesystem access. Its values
+ * must stay BYTE-IDENTICAL to the shipped table — a fallback that differed
+ * would turn a missing config file into a silent behavior change. Values are byte-identical to the pre-0572
  * `plugins/sp/references/roles.md` table (zero-behavior-change move), which
  * survives as a parity-gated projection — edit this constant, not the
  * markdown. `stages` is load-bearing: it is how a role-only dispatch reaches

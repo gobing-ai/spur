@@ -77,16 +77,36 @@ describe('bundled-config', () => {
         expect(files).toEqual(sorted);
     });
 
-    test('listBundledProjectSeedFiles includes rules, workflows, templates, and plugins', () => {
+    test('listBundledProjectSeedFiles keeps the assets a project actually resolves through .spur/', () => {
         const files = listBundledProjectSeedFiles();
-        expect(files.length).toBeGreaterThan(listBundledConfigFiles().length);
-        // Full rule tree (not just presets) — monorepo .spur/rules symlink parity
+        // Full rule tree (not just presets) — monorepo .spur/rules symlink parity.
+        // Rules stay per-project: they resolve against project folder structure.
         expect(files).toContain('rules/typescript/no-debugger.yaml');
         expect(files).toContain('rules/boundary/dao-boundary.yaml');
         expect(files).toContain('workflows/basic.yaml');
-        expect(files).toContain('templates/task/standard.md');
-        expect(files).toContain('plugins/.gitkeep');
-        // Example is never project-seeded under its .example name
-        expect(files).not.toContain('config.example.yaml');
+        // BDD templates have no resolver — plugin skills read the project copy directly.
+        expect(files).toContain('templates/bdd/gherkin.md');
+    });
+
+    test('listBundledProjectSeedFiles drops assets with no .spur/ reader (0646)', () => {
+        const files = listBundledProjectSeedFiles();
+        // Dead natural-path duplicate: loadTemplateBodies reads .spur/tasks/templates/,
+        // never .spur/templates/task/. The manifest remap is the live copy.
+        expect(files.some((f) => f.startsWith('templates/task/'))).toBe(false);
+        // Placeholders with no reader at all.
+        expect(files.some((f) => f.startsWith('plugins/'))).toBe(false);
+        // The five monorepo dev baselines are read from repo-root config/, not .spur/.
+        expect(files.filter((f) => !f.includes('/') && f.endsWith('.json'))).toEqual([]);
+        // The shipped global default seeds ~/.config/spur/, never a project.
+        expect(files).not.toContain('config.global.yaml');
+    });
+
+    test('listBundledProjectSeedFiles keeps nested json (only top-level baselines are dropped)', () => {
+        // Guards the drop predicate against over-reach: a nested .json under a kept
+        // tree (e.g. tasks/) must survive, since only the top-level baselines are dev-only.
+        const files = listBundledProjectSeedFiles();
+        const nestedJson = files.filter((f) => f.includes('/') && f.endsWith('.json'));
+        for (const f of nestedJson) expect(f.includes('/')).toBe(true);
+        expect(files.length).toBeLessThan(listBundledConfigFiles().length + files.length);
     });
 });

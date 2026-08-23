@@ -960,7 +960,7 @@ dangling executor reference fails loudly at drain, spawning nothing.
    on the default role visibly.
 
 Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
-`AgentRoleConfigSchema`); `config/config.example.yaml`; `plugins/sp/references/roles.md` (projection).
+`AgentRoleConfigSchema`); `config/config.global.yaml` (the ADR-078 SSOT); `plugins/sp/references/roles.md` (projection).
 
 ## 20. Workflow Composition and Canonical Pipelines (ADR-072 accepted; ADR-069/071 proposed — taste gate pending)
 

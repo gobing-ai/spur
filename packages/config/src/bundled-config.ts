@@ -113,22 +113,52 @@ export function listBundledTemplateFiles(): string[] {
  */
 const PROJECT_SEED_FILTER = /\.(ya?ml|json|md|gitkeep)$/i;
 
-/** Bundled example filename — never copied into project `.spur/` as-is. */
-const BUNDLED_CONFIG_EXAMPLE = 'config.example.yaml';
+/**
+ * Bundled global-config filename — seeded to `~/.config/spur/config.yaml`, never
+ * copied into a project's `.spur/` (task 0646; was `config.example.yaml` before
+ * A4 repurposed it as the shipped global default).
+ */
+export const BUNDLED_GLOBAL_CONFIG = 'config.global.yaml';
+
+/**
+ * Paths the project seed deliberately skips (task 0646, from the 0641 audit).
+ * Each has no reader that resolves through `.spur/`, so copying it into every
+ * project was pure noise:
+ *
+ * - `templates/task/**` — dead natural-path duplicate. The live copy is the
+ *   manifest remap into `.spur/tasks/templates/`, which is the only path
+ *   `loadTemplateBodies` (`apps/cli/src/commands/task.ts`) ever reads.
+ * - top-level `*.json` — the five monorepo dev baselines (corpus-baseline,
+ *   pipeline-budgets, plugin-scripts, transition-shims, workflow-composition).
+ *   Their consumers are repo gates reading repo-root `config/`, never `.spur/`.
+ * - `plugins/**` — `.gitkeep` placeholders with no reader at all.
+ *
+ * Kept on purpose: `rules/**` (operator ruling — rules resolve against project
+ * folder structure), `templates/bdd/**` (plugin skills read the project copies
+ * directly, with no resolver to fall back on), `tasks/templates/**` and
+ * `workflows/**` (their resolvers fall back to the bundled tree, which a
+ * compiled binary may not have).
+ */
+function isDroppedFromProjectSeed(rel: string): boolean {
+    if (rel === BUNDLED_GLOBAL_CONFIG) return true;
+    if (rel.startsWith('templates/task/')) return true;
+    if (rel.startsWith('plugins/')) return true;
+    return !rel.includes('/') && rel.endsWith('.json');
+}
 
 /**
  * List every bundled asset that should land under a project's `.spur/` on init.
  *
  * Unlike {@link listBundledConfigFiles} (YAML/JSON only, for `~/.config/spur/`) this
- * includes markdown templates and `.gitkeep` placeholders so the project scaffold
- * mirrors the full monorepo `config/` tree (rules, workflows, tasks, templates,
- * plugins). `config.example.yaml` is omitted.
+ * includes markdown templates and `.gitkeep` placeholders. It is no longer a full
+ * mirror of the monorepo `config/` tree — see {@link isDroppedFromProjectSeed} for
+ * what a project does not need a copy of and why.
  */
 export function listBundledProjectSeedFiles(): string[] {
     const root = bundledConfigRoot();
     if (root === null) return [];
     return walk(root, '', PROJECT_SEED_FILTER)
-        .filter((rel) => rel !== BUNDLED_CONFIG_EXAMPLE)
+        .filter((rel) => !isDroppedFromProjectSeed(rel))
         .sort();
 }
 

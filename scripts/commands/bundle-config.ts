@@ -39,7 +39,7 @@ const SCHEMA_PREFIX = '@gobing-ai/spur/schemas/';
 
 /** Map a YAML file path (relative to config root) to its $schema specifier. */
 function schemaFor(relPath: string): string | null {
-    if (basename(relPath) === 'config.example.yaml') return null; // already has $schema
+    if (basename(relPath) === 'config.global.yaml') return null; // already has $schema
     if (relPath.startsWith('workflows/')) return `${SCHEMA_PREFIX}state-machine-workflow.schema.json`;
     // Presets are at the rules/ root; rule files live in category subdirs.
     if (dirname(relPath) === 'rules') return `${SCHEMA_PREFIX}preset.schema.json`;

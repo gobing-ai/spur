@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
@@ -53,26 +53,52 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'workflows', 'task-pipeline.yaml'))).toBe(true);
     });
 
-    test('full-tree seed copies the entire bundled rules/workflows/templates tree into .spur/', async () => {
+    test('seed copies the full rules/workflows tree into .spur/, not just manifest presets', async () => {
         // Monorepo convenience: .spur/{rules,workflows,…} may symlink into the repo-root
-        // SSOT tree. End-user projects must get real copies of the full tree, not only
-        // SCAFFOLD_MANIFEST presets.
+        // SSOT tree. End-user projects must get real copies of the kept trees, not only
+        // SCAFFOLD_MANIFEST presets. What is deliberately NOT copied: the sibling test.
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        // Nested rule categories (full tree)
+        // Nested rule categories (full tree). Rules stay per-project by operator
+        // ruling — they resolve against project folder structure (A4).
         expect(existsSync(join(cwd, '.spur', 'rules', 'typescript', 'no-debugger.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'boundary', 'dao-boundary.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'quality', 'coverage-gate.yaml'))).toBe(true);
-        // Natural template path (full-tree) AND remapped tasks/templates path (manifest)
-        expect(existsSync(join(cwd, '.spur', 'templates', 'task', 'standard.md'))).toBe(true);
+        // The remapped manifest path is the LIVE template copy — loadTemplateBodies
+        // reads .spur/tasks/templates/, so this one is load-bearing.
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
-        // Plugins placeholder
-        expect(existsSync(join(cwd, '.spur', 'plugins', '.gitkeep'))).toBe(true);
         // Extra workflows beyond the original curated subset
         expect(existsSync(join(cwd, '.spur', 'workflows', 'docs-pipeline.yaml'))).toBe(true);
+    });
+
+    test('init no longer seeds assets with no .spur/ reader (0646)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        // Dead natural-path duplicate of the manifest remap above — zero readers.
+        expect(existsSync(join(cwd, '.spur', 'templates', 'task', 'standard.md'))).toBe(false);
+        // Placeholder tree with no reader at all.
+        expect(existsSync(join(cwd, '.spur', 'plugins', '.gitkeep'))).toBe(false);
+        // Monorepo dev baselines — read from repo-root config/, never from .spur/.
+        expect(existsSync(join(cwd, '.spur', 'corpus-baseline.json'))).toBe(false);
+        expect(existsSync(join(cwd, '.spur', 'plugin-scripts.json'))).toBe(false);
+        // The shipped global default belongs in ~/.config/spur/, not a project.
+        expect(existsSync(join(cwd, '.spur', 'config.global.yaml'))).toBe(false);
+    });
+
+    test('init writes the 1.2 config version label (0646)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const config = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
+        expect(config).toContain('version: "1.2"');
     });
 
     test('seeds the global rules directory from the bundled presets', async () => {
@@ -97,7 +123,7 @@ describe('init command', () => {
         // The bundled example is seeded under its canonical name, never verbatim:
         // a fresh install gets a working ~/.config/spur/config.yaml automatically.
         expect(existsSync(join(globalDir, 'config.yaml'))).toBe(true);
-        expect(existsSync(join(globalDir, 'config.example.yaml'))).toBe(false);
+        expect(existsSync(join(globalDir, 'config.global.yaml'))).toBe(false);
     });
 
     test('--minimal skips local rules and workflow scaffold', async () => {

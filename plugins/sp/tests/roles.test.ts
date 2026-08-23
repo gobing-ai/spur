@@ -343,6 +343,49 @@ describe('roles — R9: roles.md is a projection of DEFAULT_AGENT_ROLES (0572)',
         }
     });
 
+    // ADR-078 (task 0647) inverted the SSOT: `config/config.global.yaml` is now
+    // authoritative and `DEFAULT_AGENT_ROLES` is the no-filesystem fallback. The
+    // gate becomes three-way — pointed only at the demoted constant it would stop
+    // guarding the real source. Byte-identity between the shipped table and the
+    // fallback is the requirement: a fallback that differed would turn a missing
+    // config file into a silent behavior change (the failure ADR-061 prevented).
+    test('a config.global.yaml tier drifting from the fallback fails (gate is real)', () => {
+        // Negative twin of the test above — the roles.md leg already has one, and a
+        // parity assertion nobody has watched fail is not yet a gate. Same parse, run
+        // over a mutated copy: flipping one shipped tier must surface as a mismatch.
+        const globalConfigPath = join(REPO_ROOT, 'config', 'config.global.yaml');
+        const mutated = readFileSync(globalConfigPath, 'utf8').replace('tier: cheap', 'tier: standard');
+        const table = (YAML.parse(mutated) as { agent: { roles: Record<string, { tier: string; stages: string[] }> } })
+            .agent.roles;
+        const defaults = defaultRoles();
+        const drifted = Object.entries(table).filter(([id, row]) => row.tier !== defaults.get(id)?.tier);
+        expect(
+            drifted.map(([id]) => id),
+            'mutating one shipped tier must be detectable',
+        ).toEqual(['scribe']);
+    });
+
+    test('the shipped config.global.yaml role table equals DEFAULT_AGENT_ROLES (ADR-078)', () => {
+        const globalConfigPath = join(REPO_ROOT, 'config', 'config.global.yaml');
+        const shipped = YAML.parse(readFileSync(globalConfigPath, 'utf8')) as {
+            agent?: { roles?: Record<string, { tier: string; stages: string[] }> };
+        };
+        const table = shipped.agent?.roles;
+        expect(table, 'config.global.yaml must ship an agent.roles table (ADR-078 SSOT)').toBeDefined();
+
+        const defaults = defaultRoles();
+        expect(Object.keys(table ?? {}).sort(), 'shipped role ids must match the fallback constant').toEqual(
+            [...defaults.keys()].sort(),
+        );
+        for (const [id, row] of Object.entries(table ?? {})) {
+            const def = defaults.get(id);
+            expect(row.tier, `role ${id} tier drifted between config.global.yaml and the fallback`).toBe(def?.tier);
+            expect(row.stages, `role ${id} stages drifted between config.global.yaml and the fallback`).toEqual(
+                def?.stages,
+            );
+        }
+    });
+
     test('a hand-edit to roles.md tiers without a constant change fails (gate is real)', () => {
         // Same parser, run over a mutated copy of roles.md: flipping one tier
         // must produce a mismatch — proves the assertion above has teeth.
