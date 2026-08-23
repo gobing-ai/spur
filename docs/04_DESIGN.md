@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.46.0
+version: 1.46.1
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-22
@@ -48,7 +48,7 @@ When collaborating with the design team:
 | [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md)             | Features detail action progress — F83 job-queue runner, queue.job.\* SSE correlation, floating progress layer (implements F81/0352–0354)                                                              | design                          |
 | [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md)             | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410)                                                                                         | implemented                     |
 | [`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md)                         | Feature sync/roster convergence, explicit refresh breadth, wrap-up corpus observation, and task/feature projection-content findings (0625)                                                            | implemented (0625)              |
-| [`history-data-processing.md`](design/history-data-processing.md)                                     | History data plane — importer source catalog vs nine-card Board catalog, checkpoint/ledger truth, single `refreshHistoryRollups` choke point, rollup read models, canonical all-tool skill allocation, stale fallback, accounting boundary (E9/0632)                                                | implemented (0632)              |
+| [`history-data-processing.md`](design/history-data-processing.md)                                     | History data plane — importer vs Board catalogs, checkpoint/ledger truth, Q1–Q10 query map, single rollup-refresh choke point, five-tab/eight-path latency matrix, canonical skill allocation, stale fallback, accounting boundary (E9/0632–0633)                                                       | implemented (0632–0633)         |
 | [`project-switcher.md`](design/project-switcher.md)                                                     | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1)                                                                                                                       | design                          |
 | [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — shipped unified timeline (M4/0422); accepted message-only boundary under G3 (ADR-052)                                                                                           | transition design               |
 | [`workflow-run-log.md`](design/workflow-run-log.md)                                                     | Consolidated per-run workflow run log — all-in-one `.spur/run/RUNID.log`, retain-by-default + `--no-log`, `clean` log retention, `trace --follow --output` source (D2; ADR-045)                       | built                           |

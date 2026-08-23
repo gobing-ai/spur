@@ -1,3 +1,4 @@
+
 CREATE INDEX IF NOT EXISTS idx_history_message_source_ts
     ON history_message (source, ts);
 CREATE INDEX IF NOT EXISTS idx_history_message_model_ts

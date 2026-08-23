@@ -4,7 +4,7 @@ name: "Automated rollup materialization and latency regression tests for History
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:32.112Z
-updated_at: "2026-08-23T00:20:26.202Z"
+updated_at: "2026-08-23T00:55:47.034Z"
 feature_id: E9
 dependencies: ["0632"]
 ---
@@ -90,36 +90,39 @@ No ADR is required: this adds verification to existing seams and introduces no d
 - [x] Run the read-only current-corpus benchmark through the source-local TypeScript service, recording counts, samples, medians, date, and environment in Testing (R4).
 - [x] Run `bun run autofix`, `bun run spur-check`, `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`, and `bun run corpus-check`; record all results and the final E9 scenario evidence (R5).
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Task 0633 adds regression evidence only; production behavior is unchanged.
 
-| Change (`file:line`) |
-|----------------------|
-| `packages/app/tests/services/history-board-service.test.ts:279` |
-| `packages/app/tests/services/history-board-service.test.ts:284` |
-| `packages/app/tests/services/history-board-service.test.ts:292` |
-| `packages/app/tests/services/history-board-service.test.ts:320` |
-| `packages/app/tests/services/history-board-service.test.ts:326` |
-| `packages/app/tests/services/history-board-service.test.ts:341` |
-| `packages/app/tests/services/history-board-service.test.ts:367` |
-| `packages/app/tests/services/history-board-service.test.ts:373` |
-| `packages/app/tests/services/history-service.test.ts:10` |
-| `packages/app/tests/services/history-service.test.ts:194` |
+| Change (`file:line`) | Evidence |
+| --- | --- |
+| `packages/app/tests/services/history-service.test.ts:194` | Proves `HistoryService.analyze()` materializes all 11 rollup tables, stamps the current history version, and skips duplicate refresh work. |
+| `packages/app/tests/services/history-board-service.test.ts:279` | Measures a warmed median of five serial reads for all eight Board read paths and requires each median to stay below 50 ms. |
+| `packages/app/tests/services/history-board-service.test.ts:332` | Records SQL access to prove fresh non-Timeline reads stay on rollups and recursively rejects currency fields from every Board response. |
 ### Testing
 **Pipeline verify results**
 
-- Verdict: UNKNOWN (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| — | — | No requirements recorded; verify verdict UNKNOWN |
+| R1 | MET | `packages/app/tests/services/history-service.test.ts:194` proves `HistoryService.analyze()` stamps the current version, populates all 11 rollup tables including legitimate zero counts, and returns `unchanged` on a second refresh. `daily()` and the history-refresh consumer remain composition paths to the same analyze-owned refresh. |
+| R2 | MET | The fresh-rollup latency regression at `packages/app/tests/services/history-board-service.test.ts:279` seeds 50 sessions / 500 messages / 252 mixed calls, warms once, then takes five serial samples for the eight Board read paths; the enqueue path is outside the matrix. |
+| R3 | MET | The deterministic access-path and currency-omission test at `packages/app/tests/services/history-board-service.test.ts:320` keeps fresh materialized reads on rollups, preserves Timeline as the indexed exception, and rejects currency-named response keys. |
+| R4 | MET | Fresh source-local run against `/tmp/spur-prodscale.db`, copied from `.spur/spur.db`: 1,724,061 messages, 441,117 tool calls, 122,977 rollup rows. Median ms: model 34.4, source 34.6, tool 41.6, skill 24.7, Timeline 20.3, Sessions 0.7, Insights 2.5, Sources 0.9; every path is below 50 ms. |
+| Performance Regression Tests (R5) | MET | Targeted migration check: 47/47 pass; initial seven-file selection had 146 test passes and no assertion failures but correctly returned nonzero because partial-suite aggregate coverage was below 90%, so no threshold was waived. Canonical gates then passed: `bun run autofix`; `bun run spur-check` (6,230/0); `bun run lint`; `bun run test` (6,230/0, 99.07% lines); `bun run test-cf` (1/1); `bun run build`; `bun run corpus-check` (0 new, 0 stale). No skips or waivers. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Rollup Materialization During spur history analyze (R3) | MET | test | Direct analyze and both composition paths converge on one refresh; metadata matches the current version, all 11 tables have deterministic aggregates, and unchanged input does not refresh twice. |
+| Performance Regression Tests (R5) | MET | test | The committed median-of-five test proves timing, deterministic access paths, Timeline's raw exception, and currency omission; the production-scale run repeats the eight-path sub-50 ms result with corpus counts. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**Reviewed:** 2026-08-22 · Dimensions: functional, security, efficiency, correctness, usability, architecture · **Verdict: PASS**
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| Priority | Dimension | Finding |
+| --- | --- | --- |
+| P4 | Performance | No P1–P3 findings. `summary:tool` is the tightest production path at 41.6 ms median; the committed regression test guards the remaining 8.4 ms of SLA headroom. |
+
+Requirements, access-path assertions, currency-boundary checks, production-scale latency evidence, and repository gates all pass.
 ### References
 - **Architecture Document:** [docs/design/history-data-processing.md](file:///Users/robin/xprojects/spur-new/docs/design/history-data-processing.md)
 - **Parent Feature:** [docs/features/E9_history-plane-performance-optimization-precalculated-rollup-tables-database-indexing-and-data-processing-architecture.md](file:///Users/robin/xprojects/spur-new/docs/features/E9_history-plane-performance-optimization-precalculated-rollup-tables-database-indexing-and-data-processing-architecture.md)

@@ -1,6 +1,6 @@
 # History Data Processing Architecture — Ingestion, Materialization, and Query Plane
 
-**Document Version:** 1.0.0  
+**Document Version:** 1.0.1
 **Status:** Design (current-tree corrected; task 0632 R4)  
 **Date:** 2026-08-22  
 **Owner:** Spur Architecture (Feature E9)  
@@ -84,7 +84,7 @@ sequenceDiagram
     participant LD as history_import_ledger
 
     CLI->>FS: Scan source roots & resolve realpaths
-    CLI->>CK: Query last_imported_line & file hash
+    CLI->>CK: Query last_imported_line
     alt File Unchanged (mtime + size + line count match)
         CLI-->>CLI: Skip file (0ms overhead)
     else File Appended (Incremental)
@@ -162,6 +162,24 @@ const checkpoint = await db.queryFirst(
 const version = `v2:checkpoint:${checkpoint.updatedAt}:${checkpoint.files}:${checkpoint.lines}`;
 ```
 If `history_board_rollup_meta.history_version === version`, the rollups are guaranteed 100% fresh, allowing `LiveHistoryBoardService` to bypass all raw scans.
+
+### 3.3 Forensic Query Contract (Q1–Q10)
+
+Q1–Q10 are logical forensic questions, not ten mandatory SQL statements. The current query plane
+consolidates compatible aggregates while retaining each question's semantics:
+
+| Query | Question | Current owner |
+| :---: | :--- | :--- |
+| Q1 | Tool wall-clock cost | `byTool`; `history_board_tool_5m` duration aggregates |
+| Q2 | Tool result/context/token footprint | `byTool.resultBytes`; allocated token columns in `history_board_tool_5m` |
+| Q3 | Tool-call counts | `byTool`; `history_board_tool_stats` |
+| Q4 | Repeated `args_digest` loops | `loops`; `history_board_loop_findings` |
+| Q5 | Session leaderboard | `bySession`; `history_board_session_stats` |
+| Q6 | Tool error concentration | `byTool`; `history_board_tool_stats` |
+| Q7 | Turn shape by `disposition` / `record_type` | Raw forensic contract; materialization excludes `meta` rows when deriving session state |
+| Q8 | Source/model/day token and spend rollups | `messageRollup` / `toolRollup`; `history_daily_stats` and the 5-minute tables |
+| Q9 | Exact Spur run/task attribution | `buildMessageWhereClauses` applies `provenance = 'spur-run'` with `run_id` / `task_wbs` |
+| Q10 | Unknown-disposition drift | `drift`, grouped by source and `record_type` |
 
 ---
 
@@ -252,7 +270,7 @@ There is no `history_tool_call (message_hash)` or `(tool_name)` index in the cur
 ## 6. Architectural Evolution & Verification
 
 - **Task Traceability:** Feature E9 establishes and enforces the performance boundaries documented here.
-- **Verification Gates:** `packages/app/tests/services/history-board-service.test.ts` asserts all six endpoints respond in <50 ms on a seeded corpus; production-scale latency evidence is owned by task 0633.
+- **Verification Gates:** `packages/app/tests/services/history-board-service.test.ts` asserts the five Board tabs across eight read paths respond in <50 ms on a seeded corpus; production-scale latency evidence is owned by task 0633.
 - **Reference Code Locations:**
   - Ingestion Engine: `packages/app/src/services/history-service.ts` & `@gobing-ai/ts-llm-jsonl-importer`
   - Forensic Query & Materialization: `packages/domain/src/analytics/history-board-rollup.ts` & `forensic-query.ts`

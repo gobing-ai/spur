@@ -4,7 +4,7 @@ name: "Eliminate raw scan fallback in getSummary by routing skill time series an
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:28.891Z
-updated_at: "2026-08-22T23:56:37.790Z"
+updated_at: "2026-08-23T00:53:22.898Z"
 feature_id: E9
 dependencies: ["0631"]
 ---
@@ -103,20 +103,20 @@ Rationale: the already-materialized `history_board_tool_5m` allocation (tokens /
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | `historyBoardSummaryFromRollup` routes both `tool` and `skill` dimensions to `history_board_tool_5m` via `skillOnly` where-option and `r.skill_name` with `<> ''` exclusion — packages/domain/src/analytics/history-board-rollup.ts:478-556; the live `bucketedTokenSeries` call is gone from the summary path (grep: no remaining reference in history-board-rollup.ts); rollup/live parity tests in packages/domain/tests/analytics/history-board-rollup.test.ts (53 pass / 0 fail, fresh run) |
-| R2 | MET | Canonical allocation: live skill fallback in `bucketedTokenSeries` computes the `links` denominator across all linked tool calls (`JOIN history_message m ON m.record_hash = tc.message_hash`, lines 252-298) and filters blank/non-skill rows in the outer select (`HISTORY_SKILL_NAME_SQL <> ''`, forensic-query.ts:298); parity test `forensic-query-history.test.ts` (mixed skill/non-skill rows, allocation equality) — 53/53 pass |
-| R3 | MET | `computeSummaryExtras` reuses active buckets for `skill` dimension (history-board-service.ts:394) and computes previous-window KPIs via the existing domain seam `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')` (history-board-service.ts:389); no new exported helper, no app-layer SQL (app diff only wires the seam, lines 45/381-394) |
-| Comprehensive History Data Processing Architecture Documentation (R4) | MET | docs/design/history-data-processing.md (260 lines) documents importer's 10 source ids vs nine-card Board catalog, actual checkpoint/ledger columns, single analyze refresh choke point + stale fallback, "pure token" limited to Board DTOs; registered in docs/04_DESIGN.md:51 satellite index ("implemented (0632)"); review independently verified source-id match against importer dist and index catalog match against migrations.ts |
-| R5 | MET | Mixed skill/non-skill tool-call tests in domain + app: rollup/live parity, blank-skill exclusion, all four Summary dimensions, bounded previous-window, and SQL-recording wrapper asserting no raw `history_message`/`history_tool_call` reads on the fresh unfiltered Summary path — packages/domain/tests/analytics/{history-board-rollup,forensic-query-history}.test.ts, packages/app/tests/services/history-board-service.test.ts; `bun test` 3 files → 53 pass / 0 fail / 189 expects (2026-08-22, fresh run in verify); existing `DbAdapter` seam used, no new observability abstraction |
+| Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | `historyBoardSummaryFromRollup()` routes tool and skill dimensions through `history_board_tool_5m`, selects `r.skill_name`, and excludes blanks at `packages/domain/src/analytics/history-board-rollup.ts:535`; the canonical suite covers the fresh four-dimension path. |
+| R2 | MET | `bucketedTokenSeries()` owns the canonical all-tool allocation and outer skill filter at `packages/domain/src/analytics/forensic-query.ts:859`; the canonical suite proves mixed skill/non-skill parity and blank exclusion. |
+| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:371`. No app-layer SQL or new exported helper was added. |
+| Comprehensive History Data Processing Architecture Documentation (R4) | MET | The current History data-processing architecture defines the Q1–Q10 forensic query contract at `docs/design/history-data-processing.md:166` and also covers the importer/Board catalogs, checkpoint/ledger truth, refresh/fallback/accounting boundaries, and five-tab gate. |
+| R5 | MET | Domain/app tests cover mixed calls, parity, blanks, all four dimensions, bounded previous-window reads, and SQL-recorded absence of raw scans. Canonical root suite: 6,230 pass, 0 fail, 99.07% lines; production `summary:skill` median: 24.7 ms. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Sub-50ms Summary Load with Precalculated Skill Series | MET | test | packages/app/tests/services/history-board-service.test.ts — SQL-recording wrapper proves fresh unfiltered Summary reads only `history_board_*` rollup tables for all dimensions incl. skill extras and previous-window KPIs; parity tests prove skill series equals canonical history_board_tool_5m aggregate (53/53 pass). Sub-50ms wall-clock on production-scale corpus is 0633's regression-gate scope (task Testing section records this boundary). |
-| Scenario: Comprehensive History Data Processing Architecture Documentation | PARTIAL | static-ref | docs/design/history-data-processing.md + docs/04_DESIGN.md:51 index entry; importer source catalog and index catalog claims cross-checked against `@gobing-ai/ts-llm-jsonl-importer` SOURCE_DEFINITIONS and HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL during review |
+| Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | Fresh unfiltered Summary reads bounded rollups for model/source/tool/skill; parity tests match canonical allocation; the production-scale skill median is 24.7 ms. |
+| Comprehensive History Data Processing Architecture Documentation (R4) | MET | command | The satellite and `docs/04_DESIGN.md` index are synchronized and match current code, catalogs, schema, query owners, fallback semantics, accounting boundary, and recorded measurements. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict:** PASS

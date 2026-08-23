@@ -4,7 +4,7 @@ name: "Database indexing and schema optimization for History data plane"
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:26.674Z
-updated_at: "2026-08-22T23:38:04.474Z"
+updated_at: "2026-08-23T00:52:53.023Z"
 feature_id: E9
 ---
 
@@ -106,11 +106,15 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL defines idx_history_message_source_ts(source, ts), idx_history_message_model_ts(model, ts), idx_history_tool_call_session_id_seq(session_id, seq) — packages/domain/src/migrations.ts:336-344 (uncommitted diff); PRAGMA index_xinfo order checks + EXPLAIN QUERY PLAN usage assertions in packages/domain/tests/dao/migrations.test.ts:456-478, 513-562 (fresh run, 47/47 pass) |
-| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | idx_history_board_message_5m_bucket_model(bucket_start, model), idx_history_board_tool_5m_bucket_skill(bucket_start, skill_name), idx_history_board_session_source_started(source, started_at DESC) — migrations.ts:345-351; started_at DESC bit asserted via index_xinfo desc=1 (migrations.test.ts:472-477); reverse-order draft index absent (no such DDL in diff) |
-| R3 | MET | CLI_MIGRATIONS extended to 23 entries with 0022_spur_cli_history_performance_indexes (migrations.ts:692-695); every statement uses CREATE INDEX IF NOT EXISTS (regex-asserted, migrations.test.ts:447-453); drizzle/0022_spur_cli_history_performance_indexes.sql is statement-identical to the embedded constant with the same no-leading-newline convention as 0020; CLI_SCHEMA_SQL and drizzle/_legacy_reference/ untouched (git diff confirms) |
-| R4 | MET | 23-entry sequence assertion (migrations.test.ts:119-145), fresh/upgraded schema convergence via sqlite_master DDL equality (503-532), second-apply idempotence = 0 journaled (499), per-index EXPLAIN QUERY PLAN with ANALYZE seeding asserts index selection and no SCAN (535-584); bun test packages/domain/tests/dao/migrations.test.ts → 47 pass / 0 fail / 180 expects (re-run this session) |
-| R5 | MET | history_import_checkpoint(source, updated_at) NOT added — rejection test asserts PK is (source, source_file), the freshness GROUP BY plan uses no such index, and the index does not exist (migrations.test.ts:587-604); no matching DDL anywhere in the diff |
+| R1 | MET | `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three required raw-plane indexes at `packages/domain/src/migrations.ts:340`; the targeted migration suite verifies their exact names and order. |
+| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | `idx_history_board_session_source_started` implements the retained `(source, started_at DESC)` access path at `packages/domain/src/migrations.ts:351`; the targeted suite verifies all three rollup/session indexes with `PRAGMA index_xinfo`. |
+| R3 | MET | Migration 0022 is registered at `packages/domain/src/migrations.ts:693`; the source-local byte check reports the embedded SQL and `drizzle/0022_spur_cli_history_performance_indexes.sql` are identical at 672 bytes; every statement is `CREATE INDEX IF NOT EXISTS`. No legacy-reference or `CLI_SCHEMA_SQL` change exists. |
+| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:447` covers idempotent DDL, the 23-entry sequence, fresh/upgraded convergence, exact order/direction, and six representative `EXPLAIN QUERY PLAN` selections. Fresh targeted run: 47 pass, 0 fail, 180 assertions, 100% coverage. |
+| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:577` proves the checkpoint PK already covers the source lookup, the freshness aggregate has no distinct selective path, and the rejected index is absent. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | test | Fresh and 0021-upgraded databases converge; a second apply journals zero migrations; `PRAGMA index_xinfo` fixes all six column orders/directions; every representative plan selects its retained index. Targeted migration suite: 47/47 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Reviewed:** 2026-08-22 · Dimensions: functional, security, efficiency, correctness, usability, architecture · **Verdict: PASS**
