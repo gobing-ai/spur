@@ -417,7 +417,10 @@ async function bumpVersion(
     }
 
     output.write(`\nPushing branch ${branch} (tags excluded)...`);
-    await git(ctx.repoRoot, ['push', 'origin', branch]);
+    // --no-follow-tags: push.followTags in user git config would silently bundle all
+    // annotated release tags into this branch push; >3 tags in one push makes GitHub
+    // drop every tag push event, so the publish workflow never triggers.
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
     output.write(`Pushing release trigger tag ${tag}...`);
     await git(ctx.repoRoot, ['push', 'origin', tag]);
 
@@ -513,7 +516,9 @@ async function bumpAll(
     }
 
     output.write(`\nPushing branch ${branch} (tags excluded)...`);
-    await git(ctx.repoRoot, ['push', 'origin', branch]);
+    // Same followTags guard as bumpVersion: the branch push must not smuggle the
+    // per-package trace tags past GitHub's >3-tags-per-push event limit.
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
     output.write(`Pushing release trigger tag ${aggregateTag}...`);
     await git(ctx.repoRoot, ['push', 'origin', aggregateTag]);
 
