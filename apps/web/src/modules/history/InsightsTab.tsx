@@ -1,6 +1,7 @@
 import type { HistoryInsightsResponse, HistoryKpiTrendPoint } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { fmtMs, fmtPct, fmtTok, LineChart, RadarChart, type RadarSeries, SparkBar } from './charts';
+import { useState } from 'react';
+import { fmtInt, fmtMs, fmtPct, fmtTok, LineChart, RadarChart, type RadarSeries, SparkBar } from './charts';
 
 export interface InsightsTabProps {
     data?: HistoryInsightsResponse['data'];
@@ -10,6 +11,10 @@ export interface InsightsTabProps {
     onSelectSession?: (sessionId: string) => void;
 }
 export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, cacheHitTrend, onSelectSession }) => {
+    type ModelSortKey = 'model' | 'speedMsMean' | 'cacheRatio' | 'reliability' | 'outputRatio';
+    const [modelSortKey, setModelSortKey] = useState<ModelSortKey>('model');
+    const [modelSortDir, setModelSortDir] = useState<'asc' | 'desc'>('asc');
+
     if (loading) {
         return (
             <div className="flex items-center justify-center p-16">
@@ -29,6 +34,28 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
     if (!data) return null;
 
     const { loops, cacheWaste, heavySessions, largestTokenSteps, slowSteps, modelComparison } = data;
+
+    const handleModelSort = (key: ModelSortKey) => {
+        if (modelSortKey === key) {
+            setModelSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setModelSortKey(key);
+            setModelSortDir(key === 'model' ? 'asc' : 'desc');
+        }
+    };
+
+    const sortedModelComparison = [...modelComparison].sort((a, b) => {
+        const mult = modelSortDir === 'asc' ? 1 : -1;
+        if (modelSortKey === 'model') {
+            return mult * a.model.localeCompare(b.model);
+        }
+        return mult * ((a[modelSortKey] ?? 0) - (b[modelSortKey] ?? 0));
+    });
+
+    const sortIndicator = (key: ModelSortKey) => {
+        if (modelSortKey !== key) return <span className="opacity-30 ml-1 text-[10px]">↕</span>;
+        return <span className="text-primary ml-1 text-[10px]">{modelSortDir === 'asc' ? '▲' : '▼'}</span>;
+    };
 
     const maxHeavyTokens = Math.max(1, ...heavySessions.map((s) => s.tokens));
     const maxSlowDuration = Math.max(1, ...slowSteps.map((s) => s.durationMs ?? 0));
@@ -66,51 +93,6 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
 
     return (
         <div className="flex flex-col gap-6">
-            {/* Loop Detection Section */}
-            {loops.length > 0 && (
-                <div className="bg-base-200 rounded-xl shadow-sm border border-warning/30 p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="text-warning text-lg">⚠️</span>
-                        <h3 className="font-bold text-base">Detected Execution Loops (Repeats ≥ 3)</h3>
-                    </div>
-                    <p className="text-xs text-base-content/60 mb-4">
-                        Identified consecutive identical tool invocations without intervening state changes.
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {loops.map((lp) => (
-                            <div
-                                key={`${lp.tool}-${lp.sessionId}-${lp.fromSeq}`}
-                                className="p-4 bg-base-300/70 rounded-xl border border-base-content/10 flex flex-col justify-between gap-3"
-                            >
-                                <div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-warning/20 text-warning border border-warning/30">
-                                            {lp.tool} × {lp.repeats} repeats
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className="text-xs font-mono text-primary hover:underline"
-                                            onClick={() => onSelectSession?.(lp.sessionId)}
-                                        >
-                                            {lp.sessionId}
-                                        </button>
-                                    </div>
-                                    <div className="font-mono text-xs text-base-content/80 mt-2">{lp.argsHint}</div>
-                                    <div className="text-[11px] text-base-content/50 mt-1">
-                                        Step sequence: #{lp.fromSeq} → #{lp.toSeq}
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-base-content/10">
-                                    <span className="text-base-content/60">Estimated Wasted Tokens:</span>
-                                    <span className="text-error font-bold">{fmtTok(lp.wastedTokens)}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* Cache Waste & Heaviest Sessions Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Top Cache Wasting Steps */}
@@ -308,15 +290,40 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                         <table className="w-full text-xs text-left font-mono">
                             <thead>
                                 <tr className="border-b border-base-content/10 text-base-content/60">
-                                    <th className="py-1.5">Model</th>
-                                    <th className="py-1.5 text-right">Mean Speed</th>
-                                    <th className="py-1.5 text-right">Cache Ratio</th>
-                                    <th className="py-1.5 text-right">Reliability</th>
-                                    <th className="py-1.5 text-right">Output Ratio</th>
+                                    <th
+                                        className="py-1.5 cursor-pointer select-none hover:text-base-content"
+                                        onClick={() => handleModelSort('model')}
+                                    >
+                                        Model {sortIndicator('model')}
+                                    </th>
+                                    <th
+                                        className="py-1.5 text-right cursor-pointer select-none hover:text-base-content"
+                                        onClick={() => handleModelSort('speedMsMean')}
+                                    >
+                                        Mean Speed (ms) {sortIndicator('speedMsMean')}
+                                    </th>
+                                    <th
+                                        className="py-1.5 text-right cursor-pointer select-none hover:text-base-content"
+                                        onClick={() => handleModelSort('cacheRatio')}
+                                    >
+                                        Cache Ratio {sortIndicator('cacheRatio')}
+                                    </th>
+                                    <th
+                                        className="py-1.5 text-right cursor-pointer select-none hover:text-base-content"
+                                        onClick={() => handleModelSort('reliability')}
+                                    >
+                                        Reliability {sortIndicator('reliability')}
+                                    </th>
+                                    <th
+                                        className="py-1.5 text-right cursor-pointer select-none hover:text-base-content"
+                                        onClick={() => handleModelSort('outputRatio')}
+                                    >
+                                        Output Ratio {sortIndicator('outputRatio')}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {modelComparison.map((m) => (
+                                {sortedModelComparison.map((m) => (
                                     <tr key={m.model} className="border-b border-base-content/5 hover:bg-base-300/30">
                                         <td className="py-1.5 font-bold flex items-center gap-1.5">
                                             <span
@@ -325,14 +332,14 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                             />
                                             {m.model}
                                         </td>
-                                        <td className="py-1.5 text-right">{m.speedMsMean}ms</td>
-                                        <td className="py-1.5 text-right text-cyan-400">
+                                        <td className="py-1.5 text-right font-mono">{fmtInt(m.speedMsMean)}</td>
+                                        <td className="py-1.5 text-right text-cyan-400 font-mono">
                                             {fmtPct(m.cacheRatio * 100)}
                                         </td>
-                                        <td className="py-1.5 text-right text-emerald-400">
+                                        <td className="py-1.5 text-right text-emerald-400 font-mono">
                                             {fmtPct(m.reliability * 100)}
                                         </td>
-                                        <td className="py-1.5 text-right">{fmtPct(m.outputRatio * 100)}</td>
+                                        <td className="py-1.5 text-right font-mono">{fmtPct(m.outputRatio * 100)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -340,6 +347,51 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                     </div>
                 </div>
             </div>
+
+            {/* Loop Detection Section */}
+            {loops.length > 0 && (
+                <div className="bg-base-200 rounded-xl shadow-sm border border-warning/30 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-warning text-lg">⚠️</span>
+                        <h3 className="font-bold text-base">Detected Execution Loops (Repeats ≥ 3)</h3>
+                    </div>
+                    <p className="text-xs text-base-content/60 mb-4">
+                        Identified consecutive identical tool invocations without intervening state changes.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {loops.map((lp) => (
+                            <div
+                                key={`${lp.tool}-${lp.sessionId}-${lp.fromSeq}`}
+                                className="p-4 bg-base-300/70 rounded-xl border border-base-content/10 flex flex-col justify-between gap-3"
+                            >
+                                <div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-warning/20 text-warning border border-warning/30">
+                                            {lp.tool} × {lp.repeats} repeats
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="text-xs font-mono text-primary hover:underline"
+                                            onClick={() => onSelectSession?.(lp.sessionId)}
+                                        >
+                                            {lp.sessionId}
+                                        </button>
+                                    </div>
+                                    <div className="font-mono text-xs text-base-content/80 mt-2">{lp.argsHint}</div>
+                                    <div className="text-[11px] text-base-content/50 mt-1">
+                                        Step sequence: #{lp.fromSeq} → #{lp.toSeq}
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-base-content/10">
+                                    <span className="text-base-content/60">Estimated Wasted Tokens:</span>
+                                    <span className="text-error font-bold">{fmtTok(lp.wastedTokens)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

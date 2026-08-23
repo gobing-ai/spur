@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ─── Formatters & Pure Math Helpers ──────────────────────────────────────────
 
@@ -82,13 +82,33 @@ export const StackedColumnsChart: React.FC<{
     series: ChartSeries[];
     lineColor?: string;
     height?: number;
-}> = ({ buckets, series, lineColor = '#22d3ee', height = 240 }) => {
+}> = ({ buckets, series, lineColor = '#22d3ee', height = 260 }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(1000);
     const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
-    const W = 900;
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const el = containerRef.current;
+        const updateWidth = () => {
+            const w = el.clientWidth;
+            if (w > 0) setWidth(w);
+        };
+        updateWidth();
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = Math.round(entry.contentRect.width);
+                if (w > 0) setWidth(w);
+            }
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    const W = width;
     const PL = 54;
     const PR = 50;
-    const PT = 14;
+    const PT = 16;
     const PB = 26;
     const iw = Math.max(60, W - PL - PR);
     const ih = height - PT - PB;
@@ -101,11 +121,11 @@ export const StackedColumnsChart: React.FC<{
     const yPct = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
 
     const band = iw / Math.max(1, buckets.length);
-    const bw = Math.max(1, Math.min(24, band - 2));
+    const bw = Math.max(2, band * 0.85);
     const cx = (i: number) => PL + i * band + band / 2;
 
     const maxLabels = Math.max(2, Math.floor(iw / 70));
-    const labelEvery = Math.ceil(buckets.length / maxLabels);
+    const labelEvery = Math.max(1, Math.ceil(buckets.length / maxLabels));
 
     const linePoints = buckets
         .map((b, i) => (b.lineValue !== undefined ? { x: cx(i), y: yPct(b.lineValue) } : null))
@@ -118,6 +138,7 @@ export const StackedColumnsChart: React.FC<{
 
     const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
         const rect = e.currentTarget.getBoundingClientRect();
+        if (rect.width <= 0) return;
         const svgX = ((e.clientX - rect.left) / rect.width) * W;
         const colX = svgX - PL;
         if (colX >= 0 && colX <= iw) {
@@ -130,12 +151,15 @@ export const StackedColumnsChart: React.FC<{
         setHoverIdx(null);
     };
 
+    const tooltipLeft = hoverIdx !== null ? Math.max(110, Math.min(W - 110, cx(hoverIdx))) : W / 2;
+
     return (
-        <div className="relative w-full overflow-x-auto">
+        <div ref={containerRef} className="relative w-full overflow-hidden">
             <svg
                 viewBox={`0 0 ${W} ${height}`}
-                className="w-full h-auto select-none"
-                style={{ maxHeight: height }}
+                width="100%"
+                height={height}
+                className="w-full block select-none"
                 role="img"
                 aria-label="Stacked column token chart with cache hit ratio overlay"
                 onMouseMove={handleSvgMouseMove}
@@ -164,6 +188,19 @@ export const StackedColumnsChart: React.FC<{
                         {pct}%
                     </text>
                 ))}
+
+                {/* Hover Column Highlight Band */}
+                {hoverIdx !== null && (
+                    <rect
+                        x={PL + hoverIdx * band}
+                        y={PT}
+                        width={band}
+                        height={ih}
+                        fill="currentColor"
+                        fillOpacity={0.04}
+                        rx={2}
+                    />
+                )}
 
                 {/* Stacked Columns */}
                 {buckets.map((b, i) => {
@@ -245,7 +282,10 @@ export const StackedColumnsChart: React.FC<{
 
             {/* Hover Tooltip Overlay */}
             {hoverIdx !== null && buckets[hoverIdx] && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-base-300 border border-base-content/10 shadow-lg rounded-lg px-3 py-2 text-xs pointer-events-none z-10 flex flex-col gap-1 min-w-[160px]">
+                <div
+                    className="absolute top-2 bg-base-300 border border-base-content/15 shadow-xl rounded-lg px-3 py-2 text-xs pointer-events-none z-20 flex flex-col gap-1 min-w-[180px] backdrop-blur-sm"
+                    style={{ left: `${tooltipLeft}px`, transform: 'translateX(-50%)' }}
+                >
                     <div className="font-semibold text-base-content/90 border-b border-base-content/10 pb-1">
                         {buckets[hoverIdx]?.label}
                     </div>
@@ -283,7 +323,28 @@ export const StackedAreaChart: React.FC<{
     series: ChartSeries[];
     height?: number;
 }> = ({ buckets, series, height = 200 }) => {
-    const W = 540;
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(540);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const el = containerRef.current;
+        const updateWidth = () => {
+            const w = el.clientWidth;
+            if (w > 0) setWidth(w);
+        };
+        updateWidth();
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = Math.round(entry.contentRect.width);
+                if (w > 0) setWidth(w);
+            }
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    const W = width;
     const PL = 46;
     const PR = 12;
     const PT = 10;
@@ -310,37 +371,41 @@ export const StackedAreaChart: React.FC<{
     });
 
     return (
-        <svg
-            viewBox={`0 0 ${W} ${height}`}
-            className="w-full h-auto select-none"
-            role="img"
-            aria-label="Stacked area chart"
-        >
-            {niceTicks(top, 3).map((t) => (
-                <g key={t}>
-                    <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
-                    <text x={PL - 7} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
-                        {fmtTokAxis(t)}
-                    </text>
-                </g>
-            ))}
-            {areas.map((ar) => (
-                <path key={ar.id} d={ar.d} fill={ar.color} opacity={0.8} />
-            ))}
-            {buckets.map((b, i) =>
-                i % Math.ceil(n / 6) === 0 ? (
-                    <text
-                        key={b.id ?? b.label}
-                        x={x(i)}
-                        y={height - 6}
-                        textAnchor="middle"
-                        className="text-[10px] fill-base-content/60"
-                    >
-                        {b.label}
-                    </text>
-                ) : null,
-            )}
-        </svg>
+        <div ref={containerRef} className="w-full overflow-hidden">
+            <svg
+                viewBox={`0 0 ${W} ${height}`}
+                width="100%"
+                height={height}
+                className="w-full block select-none"
+                role="img"
+                aria-label="Stacked area chart"
+            >
+                {niceTicks(top, 3).map((t) => (
+                    <g key={t}>
+                        <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
+                        <text x={PL - 7} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
+                            {fmtTokAxis(t)}
+                        </text>
+                    </g>
+                ))}
+                {areas.map((ar) => (
+                    <path key={ar.id} d={ar.d} fill={ar.color} opacity={0.8} />
+                ))}
+                {buckets.map((b, i) =>
+                    i % Math.ceil(n / 6) === 0 ? (
+                        <text
+                            key={b.id ?? b.label}
+                            x={x(i)}
+                            y={height - 6}
+                            textAnchor="middle"
+                            className="text-[10px] fill-base-content/60"
+                        >
+                            {b.label}
+                        </text>
+                    ) : null,
+                )}
+            </svg>
+        </div>
     );
 };
 
@@ -352,7 +417,28 @@ export const LineChart: React.FC<{
     height?: number;
     valueFmt?: (v: number) => string;
 }> = ({ points, color = '#3987e5', height = 190, valueFmt: _valueFmt = fmtPct }) => {
-    const W = 540;
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(540);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const el = containerRef.current;
+        const updateWidth = () => {
+            const w = el.clientWidth;
+            if (w > 0) setWidth(w);
+        };
+        updateWidth();
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = Math.round(entry.contentRect.width);
+                if (w > 0) setWidth(w);
+            }
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    const W = width;
     const PL = 44;
     const PR = 12;
     const PT = 14;
@@ -369,31 +455,40 @@ export const LineChart: React.FC<{
     for (let i = 1; i < n; i++) d += `L${x(i)},${y(points[i]?.v ?? 0)}`;
 
     return (
-        <svg viewBox={`0 0 ${W} ${height}`} className="w-full h-auto select-none" role="img" aria-label="Line chart">
-            {[0, 25, 50, 75, 100].map((t) => (
-                <g key={t}>
-                    <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
-                    <text x={PL - 7} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
-                        {t}%
-                    </text>
-                </g>
-            ))}
-            <path d={`${d}L${x(n - 1)},${PT + ih}L${x(0)},${PT + ih}Z`} fill={color} opacity={0.1} />
-            <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-            {points.map((p, i) =>
-                i % Math.ceil(n / 6) === 0 || i === n - 1 ? (
-                    <text
-                        key={p.id ?? p.label}
-                        x={x(i)}
-                        y={height - 6}
-                        textAnchor="middle"
-                        className="text-[10px] fill-base-content/60"
-                    >
-                        {p.label}
-                    </text>
-                ) : null,
-            )}
-        </svg>
+        <div ref={containerRef} className="w-full overflow-hidden">
+            <svg
+                viewBox={`0 0 ${W} ${height}`}
+                width="100%"
+                height={height}
+                className="w-full block select-none"
+                role="img"
+                aria-label="Line chart"
+            >
+                {[0, 25, 50, 75, 100].map((t) => (
+                    <g key={t}>
+                        <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
+                        <text x={PL - 7} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
+                            {t}%
+                        </text>
+                    </g>
+                ))}
+                <path d={`${d}L${x(n - 1)},${PT + ih}L${x(0)},${PT + ih}Z`} fill={color} opacity={0.1} />
+                <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                {points.map((p, i) =>
+                    i % Math.ceil(n / 6) === 0 || i === n - 1 ? (
+                        <text
+                            key={p.id ?? p.label}
+                            x={x(i)}
+                            y={height - 6}
+                            textAnchor="middle"
+                            className="text-[10px] fill-base-content/60"
+                        >
+                            {p.label}
+                        </text>
+                    ) : null,
+                )}
+            </svg>
+        </div>
     );
 };
 
@@ -507,6 +602,13 @@ export const HeatmapGrid: React.FC<{
     color?: string;
     maxDailyTokens?: number;
 }> = ({ days, color = '#3987e5', maxDailyTokens = 1 }) => {
+    const [hoveredCell, setHoveredCell] = useState<{
+        date: string;
+        tokens: number;
+        sessions: number;
+        colIdx: number;
+    } | null>(null);
+
     // The prototype contract is exactly 90 sequential days: 13 columns, seven rows.
     const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
     const weeks: HeatDay[][] = [];
@@ -526,66 +628,102 @@ export const HeatmapGrid: React.FC<{
     };
 
     return (
-        <div className="flex flex-col gap-1.5" data-testid="heatmap-calendar">
-            <div className="flex items-start gap-1.5">
+        <section
+            className="relative flex flex-col gap-1.5 w-full"
+            data-testid="heatmap-calendar"
+            aria-label="Daily activity heatmap"
+            onMouseLeave={() => setHoveredCell(null)}
+        >
+            {/* Interactive Hover Tooltip */}
+            {hoveredCell && (
                 <div
-                    className="w-6 shrink-0 pt-4 flex flex-col gap-1 text-[9px] text-base-content/50"
+                    className="absolute -top-1 pointer-events-none z-30 transform -translate-x-1/2 -translate-y-full flex flex-col items-center min-w-[140px] transition-all duration-75"
+                    style={{
+                        left: `${Math.max(20, Math.min(80, ((hoveredCell.colIdx + 0.5) / 13) * 100))}%`,
+                    }}
+                >
+                    <div className="bg-base-100 border border-base-content/20 shadow-xl rounded-md px-2.5 py-1.5 text-[10px] font-mono text-center text-base-content backdrop-blur-md">
+                        <div className="font-bold text-primary">{hoveredCell.date}</div>
+                        <div className="text-base-content/90 font-medium">
+                            <span className="text-base-content font-bold">{fmtTok(hoveredCell.tokens)}</span> tokens
+                        </div>
+                        <div className="text-base-content/60 text-[9px]">
+                            {hoveredCell.sessions} {hoveredCell.sessions === 1 ? 'session' : 'sessions'}
+                        </div>
+                    </div>
+                    <div className="w-1.5 h-1.5 bg-base-100 border-r border-b border-base-content/20 transform rotate-45 -mt-0.5" />
+                </div>
+            )}
+
+            <div className="flex items-start gap-1 w-full">
+                <div
+                    className="w-5 shrink-0 pt-3 flex flex-col gap-[3px] text-[9px] font-mono text-base-content/50 select-none"
                     aria-hidden="true"
                 >
                     {['Mon', '', 'Wed', '', 'Fri', '', ''].map((label, index) => (
-                        <span key={label || `weekday-${index}`} className="h-2.5 leading-[10px]">
+                        <div
+                            key={label || `weekday-${index}`}
+                            className="w-full aspect-square flex items-center justify-end pr-1 leading-none"
+                        >
                             {label}
-                        </span>
+                        </div>
                     ))}
                 </div>
-                <div className="flex gap-1 overflow-x-auto">
+                <div
+                    className="flex-1 w-full"
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(13, minmax(0, 1fr))', gap: '3px' }}
+                >
                     {weeks.map((week, wi) => {
                         const firstDay = week[0];
                         return (
-                            // Every week slice holds ≥1 real day, so firstDay is never undefined here.
                             <div
                                 key={firstDay?.date ?? `week-${wi}`}
-                                className="flex flex-col gap-1"
+                                className="flex flex-col gap-[3px]"
                                 data-testid="heatmap-week"
                             >
-                                <div className="h-3 text-[9px] leading-3 text-base-content/50">{monthLabel(wi)}</div>
-                                <div className="flex flex-col gap-1">
-                                    {week.map((cell) => (
-                                        <div
-                                            key={cell.date}
-                                            className="w-2.5 h-2.5 rounded-xs transition-transform hover:scale-125"
-                                            style={
-                                                heatLevel(cell.tokens, maxDailyTokens) === 0
-                                                    ? { backgroundColor: 'currentColor', opacity: 0.08 }
-                                                    : {
-                                                          backgroundColor: color,
-                                                          opacity:
-                                                              HEAT_LEVEL_OPACITY[
-                                                                  heatLevel(cell.tokens, maxDailyTokens)
-                                                              ],
-                                                      }
-                                            }
-                                            title={`${cell.date}: ${fmtTok(cell.tokens)} tokens (${cell.sessions} sessions)`}
-                                        >
-                                            <span className="sr-only">
-                                                {`${cell.date}: ${fmtTok(cell.tokens)} tokens, ${cell.sessions} sessions`}
-                                            </span>
-                                        </div>
-                                    ))}
+                                <div className="h-3 text-[9px] leading-3 text-base-content/50 truncate font-mono">
+                                    {monthLabel(wi)}
+                                </div>
+                                <div className="flex flex-col gap-[3px]">
+                                    {week.map((cell) => {
+                                        const lvl = heatLevel(cell.tokens, maxDailyTokens);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={cell.date}
+                                                className="w-full aspect-square rounded-[2px] p-0 border-0 transition-transform hover:scale-125 focus:scale-125 focus:outline-hidden cursor-pointer"
+                                                style={
+                                                    lvl === 0
+                                                        ? { backgroundColor: 'currentColor', opacity: 0.08 }
+                                                        : {
+                                                              backgroundColor: color,
+                                                              opacity: HEAT_LEVEL_OPACITY[lvl],
+                                                          }
+                                                }
+                                                onMouseEnter={() => setHoveredCell({ ...cell, colIdx: wi })}
+                                                onFocus={() => setHoveredCell({ ...cell, colIdx: wi })}
+                                                onBlur={() => setHoveredCell(null)}
+                                                title={`${cell.date}: ${fmtTok(cell.tokens)} tokens (${cell.sessions} sessions)`}
+                                            >
+                                                <span className="sr-only">
+                                                    {`${cell.date}: ${fmtTok(cell.tokens)} tokens, ${cell.sessions} sessions`}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-6 shrink-0" aria-hidden="true" />
-                <div className="flex items-center gap-1 text-[9px] text-base-content/50 pl-6">
+            <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                <div className="flex items-center gap-1 text-[9px] font-mono text-base-content/50">
                     <span>Less</span>
                     {HEAT_LEVEL_OPACITY.map((opacity) => (
                         <span
                             key={opacity}
-                            className="w-2.5 h-2.5 rounded-xs inline-block"
+                            className="w-2.5 h-2.5 rounded-[2px] inline-block"
                             style={
                                 opacity === 0
                                     ? { backgroundColor: 'currentColor', opacity: 0.08 }
@@ -596,7 +734,7 @@ export const HeatmapGrid: React.FC<{
                     <span>More</span>
                 </div>
             </div>
-        </div>
+        </section>
     );
 };
 

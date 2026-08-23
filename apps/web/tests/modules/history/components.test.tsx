@@ -420,6 +420,16 @@ describe('History Board components', () => {
 
         view.rerender(<InsightsTab data={insights} />);
         expect(view.queryByTestId('cache-hit-trend-chart')).toBeNull();
+
+        // Model Comparison table renders Mean Speed (ms) header without ms in body cells
+        expect(view.getByText(/Mean Speed \(ms\)/)).toBeDefined();
+        expect(view.getByText('1,000')).toBeDefined(); // Formatted speed without 'ms'
+        expect(view.getByText('4,000')).toBeDefined();
+
+        // Sorting by speed toggles order
+        fireEvent.click(view.getByText(/Mean Speed \(ms\)/));
+        const cells = view.container.querySelectorAll('tbody tr td:nth-child(2)');
+        expect(cells[0]?.textContent).toBe('4,000'); // desc default for numeric
     });
 
     test('Heatmap calendar carries weekday chrome and a screen-reader token digest', () => {
