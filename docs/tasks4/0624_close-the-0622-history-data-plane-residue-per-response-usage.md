@@ -4,7 +4,7 @@ name: "Close the 0622 history data-plane residue: per-response usage dedup, clau
 status: done
 template: standard
 created_at: 2026-08-21T14:23:09.970Z
-updated_at: "2026-08-22T03:43:10.709Z"
+updated_at: "2026-08-22T04:07:35.304Z"
 feature_id: E5
 ---
 
@@ -103,8 +103,10 @@ A: Three conclusions were too broad. `MIN(rowid)` keeps the first incomplete cum
 response, migration 0019 cannot drop tables recreated after it has been journaled, and the 14/14
 R5 denominator excluded unresolved runs that do have local role-named session directories. The
 re-audit changes the fold to `MAX(rowid)`, prevents the importer from eagerly recreating generic
-ETL tables, and resolves role-named run directories through `history_run_session`. R2 remains
-PARTIAL because Claude JSONL provides no exact duration to extract.
+ETL tables, and resolves role-named run directories through `history_run_session`. A later
+structured-key scan found sparse native Claude `toolUseResult.durationMs` / `durationSeconds`
+telemetry that the original text-only grep missed; the mapper now preserves it without synthesizing
+timing for records where it is absent.
 
 **Q: Why five findings in one task instead of five tasks?**
 A: They came from one forensic pass and share one root — the history plane records what it ingested
@@ -141,8 +143,16 @@ scenarios are verified directly and feature shippability reports the uncovered-s
 A: RETIRE the empty built-in tables. Migration 0019 drops existing tables. The forced re-audit found
 that published importer 0.4.41 eagerly recreates all ten after that one-shot migration is journaled.
 Upstream commit `22f891f` makes schema setup create only checkpoint, ledger, and typed tables; a generic ETL
-table is now created lazily only when an accepted generic/custom record targets it. That upstream
-change still requires the normal release and Spur dependency update, so R3 is PARTIAL until shipped.
+table is now created lazily only when an accepted generic/custom record targets it. A temporary
+source link into Spur produced a migrated database with zero `history_etl_*` tables and passed the
+full Spur gate. The change still requires the normal release and Spur dependency update, so R3 is
+PARTIAL until shipped.
+
+**Q (R2): which Claude duration is safe to persist?**
+A: Only source-native telemetry. A structured parse of 319 local Claude JSONL files found three
+`toolUseResult.durationMs` records and one `durationSeconds` record. The mapper rounds milliseconds,
+converts seconds to milliseconds, joins by `tool_use_id`, and leaves every missing duration NULL.
+Message timestamp subtraction remains forbidden by the 0281/0284 never-fabricate invariant.
 
 **Q (R5): why augmented local discovery instead of a second import of run dirs?**
 A: Full-mode reconciliation needs one discovery set. Default import augments live roots with
@@ -220,10 +230,12 @@ does not imply the intent. Do not leave the type behind after dropping the table
 schema change** — `history_tool_call.duration_ms`, `.result_bytes`, `.call_id` and
 `history_message.model` all already exist.
 
-**WHAT:** populate them. 17,219/17,219 claude tool calls carry null-or-zero `duration_ms` and
-`result_bytes`; `model` is `NULL` for 53,631/87,753 claude messages. `call_id` (migration 0015,
-task 0564) is the join key from a `toolResult` back to its `tool_use` — the same pairing that
-carries the elapsed time and the result payload size.
+**WHAT:** populate source-native fields and preserve unknowns. Published 0.4.41 already extracts
+`request_id`, `result_bytes`, and model but leaves every Claude tool duration NULL. A structured
+parse of 319 local Claude JSONL files found sparse exact telemetry: three
+`toolUseResult.durationMs` records and one `durationSeconds` record. Extract both, convert seconds
+to milliseconds, and use `call_id` (migration 0015, task 0564) to join the result line back to its
+`tool_use`. When neither field exists, keep `duration_ms` NULL.
 
 **Handoff:** after the mapper ships, republish and `bun update` the dependent workspaces, then
 re-import claude. Follow the 0504 R4 contract: source-local binary
@@ -282,14 +294,14 @@ to read.
 - [x] Fold identified responses on the final cumulative row and add the request-id index (R1).
 - [x] Resolve role-named run session directories through recorded sources and persist exact observed mappings (R5).
 - [x] Stop eager ETL-table creation in the upstream importer and verify its full gate (R3 implementation).
-- [ ] Release the importer, update Spur's pinned dependency, re-import, and confirm the ten tables stay absent (R3 delivery).
-- [ ] Resolve the authored Claude-duration requirement with real source telemetry or an explicit scope/AC amendment; do not fabricate it (R2).
-- [x] Record the forced all-focus re-audit, repository gates, live-data deltas, feature check, and residual blockers.
+- [x] Extract sparse native Claude `durationMs` / `durationSeconds` telemetry while preserving NULL for absent timing (R2 implementation).
+- [ ] After commit, release the importer, update Spur's pinned dependency, re-import, and confirm native Claude timings populate and the ten ETL tables stay absent (R2/R3 delivery).
+- [x] Record the forced all-focus re-audit, repository gates, live-data deltas, feature check, and residual delivery blocker.
 ### Solution
 | Req | Change | Where |
 | --- | --- | --- |
 | R1 | Keep the final cumulative row per non-null `request_id` and add a partial request-id index. | `packages/domain/src/analytics/forensic-query.ts:164` |
-| R2 | Preserve published extraction of `request_id`, `result_bytes`, and model. Do not fabricate Claude duration telemetry that the source does not contain. | `@gobing-ai/ts-llm-jsonl-importer`; R2 remains PARTIAL |
+| R2 | Extract native Claude `toolUseResult.durationMs` / `durationSeconds`, convert seconds to milliseconds, and attach by `tool_use_id`; preserve NULL when timing is absent. | `@gobing-ai/ts-llm-jsonl-importer` `src/mappers.ts` line 585 and `src/importer.ts` line 381; release/update still pending |
 | R3 | Keep migration 0019 and stop schema setup or empty imports from recreating built-in ETL tables; generic/custom ETL targets materialize on first accepted row. External `ts-libs` commit `22f891f` still needs release/update. | `packages/domain/src/migrations.ts:319` |
 | R4 | Preserve the corrected `DEFERRED_SOURCES` semantics and executable classification coverage. | `packages/app/src/services/history-service.ts:252` |
 | R5 | Resolve role-named run directories through the run's sole recorded source, import them in the same discovery set, and persist observed sessions as exact mappings before provenance alignment. | `packages/app/src/services/history-service.ts:278` |
@@ -301,16 +313,16 @@ to read.
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | packages/domain/tests/analytics/forensic-query.test.ts:259 proves final cumulative MAX(rowid) wins and NULL identities remain distinct; packages/domain/tests/dao/migrations.test.ts:407 proves the partial index; live SQLite measured 24,215 identified rows, 12,011 IDs, and 33 IDs where MIN undercounted output by 104,315 tokens |
-| R2 | PARTIAL | Live SQLite: Claude result_bytes populated 17,338 of 17,338 and assistant model NULL count 0, but duration_ms populated 0 of 17,338; source inspection found no exact duration field and the never-fabricate contract forbids synthesis; /Users/robin/xprojects/ts-libs-wt-0624/packages/llm-jsonl-importer/tests/importer.test.ts:1452 |
-| R3 | PARTIAL | Live SQLite still has ten history_etl tables although migration 0019 is journaled; upstream lazy materialization commit 22f891f passes 2,036 tests, but published 0.4.41 remains Spur's dependency until the normal release and update; .spur/run/0624-verdict.json:1-150 records the forced re-audit and fix pass |
+| R2 | PARTIAL | A structured parse of 319 local Claude JSONL files found three native toolUseResult.durationMs records and one durationSeconds record. The upstream mapper now persists those values, converts seconds to milliseconds, and leaves absent timing NULL; @gobing-ai/ts-llm-jsonl-importer `tests/importer.test.ts` line 1452 and `tests/mappers.test.ts` line 1631 pass in the 241-test package suite. Published 0.4.41 and the live DB remain unupdated until release and re-import. |
+| R3 | PARTIAL | Live SQLite still has ten history_etl tables although migration 0019 is journaled. Upstream lazy materialization commit 22f891f passes 2,036 tests; a temporary source link into Spur resolved to the fixed dist and createMigratedDb returned etlTables: [], followed by the 6,118-test Spur gate. Published 0.4.41 remains pinned until the normal release and update; .spur/run/0624-verdict.json:1-150 records the forced re-audit and fix pass. |
 | R4 | MET | packages/app/tests/services/history-service.test.ts:855 verifies deferred, expected-empty, and deferred-label-with-records semantics; packages/app/src/services/history-service.ts:252 preserves openclaw and uses the real antigravity key |
 | R5 | MET | packages/app/tests/services/history-service.test.ts:747 proves a role-named coder directory resolves through its sole omp mapping, imports, persists an exact session, and aligns spur-run provenance; explicit root bypass remains covered at line 788 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — Usage is counted once per identified API response | MET | test | packages/domain/tests/analytics/forensic-query.test.ts:259; live SQLite delta confirms final cumulative usage rather than the first partial snapshot |
-| Scenario: R2 — A claude-source session yields an actionable bottleneck ranking | PARTIAL | command | Live SQLite has populated result sizes and models but zero measured Claude durations across 17,338 calls; the authored core scenario explicitly requires durations populated |
-| Scenario: R3 — The ETL tables are either populated or removed | PARTIAL | command | Live SQLite reports ten recreated ETL tables after journaled migration 0019; the upstream root fix is green but not yet released into Spur |
+| Scenario: R2 — A claude-source session yields an actionable bottleneck ranking | PARTIAL | command | Executable importer tests populate native durationMs/durationSeconds, result sizes, request identity, and model while preserving NULL for missing timing; published 0.4.41 and the live DB still require release/update/re-import before the runtime scenario is complete |
+| Scenario: R3 — The ETL tables are either populated or removed | PARTIAL | command | A temporary source-linked Spur database completes all migrations with zero history_etl tables and both full gates pass; the live published dependency still recreates the tables until release/update/re-import |
 | Scenario: R4 — A source that imports nothing says which kind of nothing | MET | test | packages/app/tests/services/history-service.test.ts:856 and line 874 |
 | Scenario: R4 — Correcting the antigravity key does not re-open waived work | MET | test | packages/app/tests/services/history-service.test.ts:905 verifies a deferred-labelled source still imports records; packages/app/src/services/history-service.ts:252 preserves openclaw |
 | Scenario: R5 — Run-to-session correlation covers the sources that produce runs | MET | test | packages/app/tests/services/history-service.test.ts:747 uses the previously missed coder-to-omp production shape and verifies exact mapping persistence |
