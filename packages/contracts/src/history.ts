@@ -158,17 +158,47 @@ export const historyTimelineEventKindEnum = z.enum([
 /** Inferred type for HistoryTimelineEventKind. */
 export type HistoryTimelineEventKind = z.infer<typeof historyTimelineEventKindEnum>;
 
+/** Duration source enum. */
+export const historyDurationSourceEnum = z.enum(['measured', 'inferred', 'unmeasured']);
+/** Inferred type for HistoryDurationSource. */
+export type HistoryDurationSource = z.infer<typeof historyDurationSourceEnum>;
+
+/** Correlation exactness enum for consolidated timeline blocks. */
+export const historyCorrelationExactnessEnum = z.enum(['exact', 'estimated']);
+/** Inferred type for HistoryCorrelationExactness. */
+export type HistoryCorrelationExactness = z.infer<typeof historyCorrelationExactnessEnum>;
+
+/** Discriminated input schema for session or consolidated timeline. */
+export const historyTimelineInputSchema = z.discriminatedUnion('mode', [
+    z.object({
+        mode: z.literal('session'),
+        source: z.string().min(1),
+        sessionId: z.string().min(1),
+    }),
+    z.object({
+        mode: z.literal('consolidated'),
+        filter: historyFilterSchema.optional(),
+        taskWbs: z.string().optional(),
+        runId: z.string().optional(),
+    }),
+]);
+/** Inferred type for HistoryTimelineInput. */
+export type HistoryTimelineInput = z.infer<typeof historyTimelineInputSchema>;
+
 /** Single event in session timeline schema. */
 export const historyTimelineEventSchema = z.object({
     seq: z.number(),
     eventType: z.enum(['message', 'tool']),
     kind: historyTimelineEventKindEnum,
     title: z.string(),
-    durationMs: z.number(),
+    toolName: z.string().nullable(),
+    durationMs: z.number().nullable(),
+    durationSource: historyDurationSourceEnum,
     tokens: z.number(),
     freshInputTokens: z.number(),
     cacheReadTokens: z.number(),
     outputTokens: z.number(),
+    promptTokens: historyTokensSchema.nullable(),
     exitCode: z.number().nullable(),
     payload: z.string().nullable(),
     agent: z.string(),
@@ -179,10 +209,13 @@ export type HistoryTimelineEvent = z.infer<typeof historyTimelineEventSchema>;
 
 /** Grouped turn block in session timeline schema. */
 export const historyTimelineBlockSchema = z.object({
+    key: z.string(),
+    sessionId: z.string(),
     turnIndex: z.number(),
-    timestamp: z.string(),
+    timestamp: z.string().nullable(),
     source: z.string(),
     model: z.string(),
+    correlationExactness: historyCorrelationExactnessEnum.nullable(),
     totalDurationMs: z.number(),
     totalTokens: z.number(),
     operationCount: z.number(),
@@ -191,24 +224,31 @@ export const historyTimelineBlockSchema = z.object({
 /** Inferred type for HistoryTimelineBlock. */
 export type HistoryTimelineBlock = z.infer<typeof historyTimelineBlockSchema>;
 
-/** Session metadata schema for timeline header. */
-export const historyTimelineSessionMetaSchema = z.object({
-    id: z.string(),
-    source: z.string(),
-    model: z.string(),
-    modelDetail: z.string().optional(),
-    start: z.string(),
+/** Scope metadata schema for timeline header. */
+export const historyTimelineScopeSchema = z.object({
+    sessionId: z.string().nullable(),
+    source: z.string().nullable(),
+    model: z.string().nullable(),
+    start: z.string().nullable(),
+    end: z.string().nullable(),
     durationMs: z.number(),
     tokens: historyTokensSchema,
     messageCount: z.number(),
     toolCallCount: z.number(),
+    sessionCount: z.number(),
 });
+/** Inferred type for HistoryTimelineScope. */
+export type HistoryTimelineScope = z.infer<typeof historyTimelineScopeSchema>;
 
 /** Timeline tab response payload data schema. */
 export const historyTimelineResponseDataSchema = z.object({
-    session: historyTimelineSessionMetaSchema,
+    mode: z.enum(['session', 'consolidated']),
+    scope: historyTimelineScopeSchema,
+    truncated: z.boolean(),
     blocks: z.array(historyTimelineBlockSchema),
 });
+/** Inferred type for HistoryTimelineResponseData. */
+export type HistoryTimelineResponseData = z.infer<typeof historyTimelineResponseDataSchema>;
 
 /** Timeline tab API response envelope schema. */
 export const historyTimelineResponseSchema = apiSuccessSchema(historyTimelineResponseDataSchema);
@@ -444,12 +484,12 @@ export const historyContract = {
 
     getTimeline: oc
         .route({
-            method: 'GET',
-            path: '/history/timeline/{sessionId}',
-            summary: 'Get chronological session execution timeline',
+            method: 'POST',
+            path: '/history/timeline',
+            summary: 'Get chronological session or consolidated execution timeline',
             tags: ['history'],
         })
-        .input(z.object({ sessionId: z.string() }))
+        .input(historyTimelineInputSchema)
         .output(historyTimelineResponseSchema),
 
     getSessions: oc

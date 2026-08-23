@@ -29,20 +29,22 @@ describe('history handlers', () => {
     test('getTimeline handler returns ok:true with timeline data', async () => {
         const service = new MockHistoryBoardService();
         const sessions = await service.getSessions({ page: 1, pageSize: 1 });
-        const sessionId = sessions.items[0]?.id;
-        expect(sessionId).toBeDefined();
+        const item = sessions.items[0];
+        expect(item).toBeDefined();
         const ctx = { historyBoardService: () => service } as unknown as ServerContext;
         const handlers = createHistoryHandlers(ctx);
         const handler = (
             handlers.getTimeline as unknown as { '~orpc': { handler: (arg: unknown) => Promise<unknown> } }
         )['~orpc'].handler;
-        const result = (await handler({ input: { sessionId } })) as {
+        const result = (await handler({
+            input: { mode: 'session', source: item?.source ?? 'claude', sessionId: item?.id ?? 'sess-1' },
+        })) as {
             ok: boolean;
-            data: { session: { id: string } };
+            data: { scope: { sessionId: string } };
         };
 
         expect(result.ok).toBe(true);
-        expect(result.data.session.id).toBeDefined();
+        expect(result.data.scope.sessionId).toBeDefined();
     });
 
     test('getSessions handler returns ok:true with session list', async () => {

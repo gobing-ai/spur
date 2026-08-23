@@ -15,7 +15,7 @@ export function createHistoryHandlers(ctx: ServerContext) {
         }),
 
         getTimeline: os.history.getTimeline.handler(async ({ input }) => {
-            const data = await ctx.historyBoardService().getTimeline(input.sessionId);
+            const data = await ctx.historyBoardService().getTimeline(input);
             return { ok: true as const, data };
         }),
 

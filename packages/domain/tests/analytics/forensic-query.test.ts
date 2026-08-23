@@ -46,11 +46,17 @@ async function setup(): Promise<DbAdapter> {
         .filter(Boolean)) {
         await adapter.exec(statement);
     }
-    // The (provenance, run_id) index this task adds Spur-side (0009 migration) must
-    // exist here so the --run/--task EXPLAIN check resolves against it.
+    await adapter.exec(`CREATE TABLE history_run_session (
+        run_id TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT, exactness TEXT NOT NULL,
+        mechanism TEXT NOT NULL, resolved_at TEXT NOT NULL
+    )`);
+    await adapter.exec('CREATE INDEX idx_history_run_session_run ON history_run_session (run_id)');
     await adapter.exec(
-        'CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message (provenance, run_id)',
+        'CREATE INDEX idx_history_run_session_source_session ON history_run_session (source, session_id)',
     );
+    await adapter.exec(`CREATE TABLE task_run_links (
+        id TEXT PRIMARY KEY, wbs TEXT NOT NULL, run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL
+    )`);
     return adapter;
 }
 
@@ -178,7 +184,7 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         model: null,
         duration_ms: null,
     });
-    // Spur-run attributed record — feeds --run/--task selectors.
+    // Direct run/task columns stay null: mapping tables are the selector authority.
     await insertMessage(db, {
         record_hash: 'm4',
         session_id: 'sess-1',
@@ -192,10 +198,16 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         output: 0,
         cost: 0,
         duration_ms: 2000,
-        provenance: 'spur-run',
-        run_id: 'run-1',
-        task_wbs: '0042',
     });
+
+    await db.run(
+        `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at)
+         VALUES ('run-1', 'claude', 'sess-1', 'exact', 'observed', '2026-06-01T00:00:00Z')`,
+    );
+    await db.run(
+        `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at)
+         VALUES ('fixture-link', '0042', 'run-1', 'task', '2026-06-01T00:00:00Z')`,
+    );
 
     await insertToolCall(db, {
         record_hash: 'tc1',
@@ -434,9 +446,9 @@ describe('forensic queries', () => {
         };
         const rows = await bySession(db, runSel, 10);
         expect(rows).toHaveLength(1);
-        expect(rows[0]?.messages).toBe(1); // m4 only
-        expect(rows[0]?.toolCalls).toBe(0); // m4 has no tool calls; old code reported 5 (F1)
-        expect(rows[0]?.topTool).toBe(null);
+        expect(rows[0]?.messages).toBe(4);
+        expect(rows[0]?.toolCalls).toBe(5);
+        expect(rows[0]?.topTool).toBe('Read');
         db.close();
     });
 
@@ -500,37 +512,16 @@ describe('forensic queries', () => {
         db.close();
     });
 
-    test('--run/--task selectors resolve against the (provenance, run_id) index (R3)', async () => {
+    test('--run/--task selectors resolve through mapping authorities when message columns are null (0638 R5)', async () => {
         const db = await setup();
         await seedFixture(db);
-        // Seed enough rows that the planner prefers the index over a full scan. A tiny
-        // fixture would always "SCAN" regardless of indexes, so this test needs real
-        // selectivity to prove the --run/--task path is index-backed.
-        await db.exec(`
-            INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
-                role, record_type, disposition, ts, provenance, run_id, task_wbs, imported_at)
-            SELECT 'bulk'||x, 'claude', 'bulk.jsonl', 1, 's'||(x%50), x, 'assistant', 'message', 'conversation',
-                datetime('2026-01-01','+'||(x%1000)||' minutes'),
-                CASE WHEN x%2=0 THEN 'spur-run' ELSE 'agent' END,
-                CASE WHEN x%2=0 THEN 'run-'||(x%100) ELSE NULL END,
-                CASE WHEN x%2=0 THEN '0042' ELSE NULL END,
-                '2026-06-01'
-            FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 2000) SELECT x FROM c)`);
-        await db.exec('ANALYZE');
 
-        const runWhere = buildMessageWhere({ ...ALL, runId: 'run-5' });
-        const runPlan = await db.queryAll<{ detail: string }>(
-            `EXPLAIN QUERY PLAN SELECT m.source FROM history_message m ${runWhere.where}`,
-            ...runWhere.params,
-        );
-        expect(runPlan.map((p) => p.detail).join('\n')).toContain('idx_history_message_provenance_run');
-
-        const taskWhere = buildMessageWhere({ ...ALL, taskWbs: '0042' });
-        const taskPlan = await db.queryAll<{ detail: string }>(
-            `EXPLAIN QUERY PLAN SELECT m.source FROM history_message m ${taskWhere.where}`,
-            ...taskWhere.params,
-        );
-        expect(taskPlan.map((p) => p.detail).join('\n')).toContain('idx_history_message_provenance_run');
+        const byRun = await messageRollup(db, { ...ALL, runId: 'run-1' });
+        expect(byRun.reduce((sum, row) => sum + row.messages, 0)).toBe(4);
+        const byTask = await messageRollup(db, { ...ALL, taskWbs: '0042' });
+        expect(byTask.reduce((sum, row) => sum + row.messages, 0)).toBe(4);
+        const wrongPair = await messageRollup(db, { ...ALL, runId: 'run-1', taskWbs: '9999' });
+        expect(wrongPair).toEqual([]);
         db.close();
     });
 
@@ -547,10 +538,12 @@ describe('forensic queries', () => {
         expect(where).toContain('m.ts <= ?');
         expect(where).toContain('m.source IN (?, ?)');
         expect(where).toContain('m.session_id = ?');
-        // --run/--task must predicate the leading index column so the index is usable.
-        expect(where).toContain("m.provenance = 'spur-run'");
-        expect(where).toContain('m.run_id = ?');
-        expect(where).toContain('m.task_wbs = ?');
+        expect(where).toContain('history_run_session hrs_scope');
+        expect(where).toContain('task_run_links trl_scope');
+        expect(where).toContain('hrs_scope.source = m.source');
+        expect(where).toContain('hrs_scope.session_id = m.session_id');
+        expect(where).not.toContain('m.run_id');
+        expect(where).not.toContain('m.task_wbs');
         expect(where).toContain('AND');
         expect(params).toHaveLength(7);
     });

@@ -4,7 +4,7 @@ name: "Automated rollup materialization and latency regression tests for History
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:32.112Z
-updated_at: "2026-08-23T07:17:27.399Z"
+updated_at: "2026-08-23T21:47:38.078Z"
 feature_id: E9
 dependencies: ["0632"]
 ---
@@ -95,8 +95,8 @@ Task 0633 adds regression evidence only; production behavior is unchanged.
 | Change | Evidence |
 | --- | --- |
 | History analyze rollup materialization test | `packages/app/tests/services/history-service.test.ts:194` proves `HistoryService.analyze()` materializes all 11 rollup tables, stamps the current history version, and skips duplicate refresh work. |
-| Fresh-rollup latency regression test | `packages/app/tests/services/history-board-service.test.ts:284` measures a warmed median of five serial reads for all eight Board read paths and requires each median to stay below 50 ms. |
-| Deterministic SQL access and currency leak test | `packages/app/tests/services/history-board-service.test.ts:325-337` records SQL access to prove fresh non-Timeline reads stay on rollups and recursively rejects currency fields from every Board response. |
+| Fresh-rollup latency regression test | `packages/app/tests/services/history-board-service.test.ts:321` measures a warmed median of five serial reads for all eight Board read paths and requires each median to stay below 50 ms. |
+| Deterministic SQL access and currency leak test | `packages/app/tests/services/history-board-service.test.ts:362-376` records SQL access to prove fresh non-Timeline reads stay on rollups and recursively rejects currency fields from every Board response. |
 ### Testing
 **Pipeline verify results**
 

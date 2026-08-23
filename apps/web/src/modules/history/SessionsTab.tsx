@@ -14,7 +14,7 @@ export interface SessionsTabProps {
         field: 'start' | 'duration' | 'messages' | 'toolCalls' | 'billedTokens' | 'cacheRead' | 'freshInput',
     ) => void;
     onPageChange?: (page: number) => void;
-    onSelectSession?: (sessionId: string) => void;
+    onSelectSession?: (source: string, sessionId: string) => void;
 }
 
 export const SessionsTab: React.FC<SessionsTabProps> = ({
@@ -121,9 +121,9 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({
                             ) : (
                                 items.map((s) => (
                                     <tr
-                                        key={s.id}
+                                        key={`${s.source}:::${s.id}`}
                                         className="border-b border-base-content/5 hover:bg-primary/10 cursor-pointer transition-colors"
-                                        onClick={() => onSelectSession?.(s.id)}
+                                        onClick={() => onSelectSession?.(s.source, s.id)}
                                         title="Click to view execution timeline"
                                     >
                                         <td className="p-3 font-bold text-primary">

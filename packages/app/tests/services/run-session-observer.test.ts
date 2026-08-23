@@ -320,4 +320,108 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
             rmSync(fx.home, { recursive: true, force: true });
         }
     });
+
+    test('R4 — agy transcript.jsonl derives canonical session id from brain/<uuid> path', async () => {
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-agy');
+            await obs.watermark('antigravity-cli');
+            const agyPath = join(
+                fx.home,
+                '.gemini',
+                'antigravity-cli',
+                'brain',
+                '11111111-1111-4111-8111-111111111111',
+                '.system_generated',
+                'logs',
+                'transcript.jsonl',
+            );
+            await writeSessionFile(agyPath, '{"type":"USER_INPUT","content":"hello"}\n');
+            await obs.resolve();
+
+            const dao = new RunSessionDao(await fx.getDb());
+            const rows = await dao.getByRunId('run-agy');
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe(
+                '11111111-1111-4111-8111-111111111111',
+            );
+            expect(rows[0]?.exactness).toBe('exact');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
+
+    test('R4 — unreadable codex metadata falls back to canonical uuid in rollout filename', async () => {
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-codex-unreadable');
+            await obs.watermark('codex');
+            const codexPath = join(
+                fx.home,
+                '.codex',
+                'sessions',
+                '2026',
+                '08',
+                '23',
+                'rollout-2026-08-23T12-00-00-22222222-2222-4222-8222-222222222222.jsonl',
+            );
+            await writeSessionFile(codexPath, 'INVALID_JSON_FIRST_LINE\n');
+            await obs.resolve();
+
+            const dao = new RunSessionDao(await fx.getDb());
+            const rows = await dao.getByRunId('run-codex-unreadable');
+            expect(rows[0]?.session_id, `warnings: ${fx.warnings.join(' | ')}`).toBe(
+                '22222222-2222-4222-8222-222222222222',
+            );
+            expect(rows[0]?.exactness).toBe('exact');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
+
+    test('R4 — codex generic event ids cannot override the canonical rollout path', async () => {
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-codex-event-id');
+            await obs.watermark('codex');
+            const codexPath = join(
+                fx.home,
+                '.codex',
+                'sessions',
+                '2026',
+                '08',
+                '23',
+                'rollout-2026-08-23T12-00-00-33333333-3333-4333-8333-333333333333.jsonl',
+            );
+            await writeSessionFile(
+                codexPath,
+                '{"id":"event-id","type":"response_item","payload":{"id":"payload-id","type":"message"}}\n',
+            );
+            await obs.resolve();
+
+            const rows = await new RunSessionDao(await fx.getDb()).getByRunId('run-codex-event-id');
+            expect(rows[0]?.session_id).toBe('33333333-3333-4333-8333-333333333333');
+            expect(rows[0]?.exactness).toBe('exact');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
+
+    test('R4 — agy transcript without explicit or UUID path identity stays unresolved', async () => {
+        const fx = await makeFixture();
+        try {
+            const obs = fx.observer('run-agy-unresolved');
+            await obs.watermark('antigravity-cli');
+            await writeSessionFile(
+                join(fx.home, '.gemini', 'antigravity-cli', 'brain', 'not-a-uuid', 'logs', 'transcript.jsonl'),
+                '{"type":"USER_INPUT","content":"hello"}\n',
+            );
+            await obs.resolve();
+
+            const rows = await new RunSessionDao(await fx.getDb()).getByRunId('run-agy-unresolved');
+            expect(rows[0]?.session_id).toBeNull();
+            expect(rows[0]?.exactness).toBe('unresolved');
+        } finally {
+            rmSync(fx.home, { recursive: true, force: true });
+        }
+    });
 });

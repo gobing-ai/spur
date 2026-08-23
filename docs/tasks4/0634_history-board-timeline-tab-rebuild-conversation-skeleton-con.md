@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Rebuild conversation skeleton, continuous tim
 status: done
 template: feature-impl
 created_at: 2026-08-23T04:52:47.905Z
-updated_at: "2026-08-23T14:19:20.170Z"
+updated_at: "2026-08-23T21:47:38.816Z"
 feature_id: E8
 ---
 
@@ -275,9 +275,9 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| `TimelineTab` — rebuilt Conversation skeleton header, nine-field metadata, 136px continuous rail, assistant block headers, prompt rows, tool presentation map, and telemetry popovers | `apps/web/src/modules/history/TimelineTab.tsx:309` |
+| `TimelineTab` — rebuilt Conversation skeleton header, nine-field metadata, 136px continuous rail, assistant block headers, prompt rows, tool presentation map, and telemetry popovers | `apps/web/src/modules/history/TimelineTab.tsx:306` |
 | `HistoryShell` — added `tokenLoad` to `TimelineRosterEntry` derived from fresh input + cache read + output tokens | `apps/web/src/modules/history/HistoryShell.tsx:21` |
-| Timeline component tests covering formulas, 9-field metadata, tool category mapping, bounded roster traversal, disclosures, and telemetry | `apps/web/tests/modules/history/components.test.tsx:300` |
+| Timeline component tests covering formulas, 9-field metadata, tool category mapping, bounded roster traversal, disclosures, and telemetry | `apps/web/tests/modules/history/components.test.tsx:390` |
 | Synchronized Timeline specification and task mapping in History Board design satellite | `docs/design/history-board-module.md:10` |
 | Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
@@ -287,18 +287,18 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the Conversation skeleton controls and receives the start-desc roster with full token load; the focused test named 'Timeline prev/next are disabled at roster bounds and options include formatted token load' verifies labels, bounds, traversal, and absent-session behavior. |
-| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the ordered nine-field metadata strip and formulas; the focused test named 'Timeline renders Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations' verifies field order, full load, cache ratio, zero denominator, and pure-token output. |
-| R3 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the single responsive rail and full-load duration/token meters with hot/heavy thresholds; the focused test named 'Timeline renders compact cards with Sources AgentIcon tooltip, as-is tool badge, UserTokenBadge prompt, and filters' verifies rail geometry and node counts. |
-| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns prompt rows built from trimmed payload/title fallback with disclosure state; the focused telemetry test verifies the badge, summary, character count, accessible drawer, and trimmed full prompt. |
-| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns one assistant header per block with desktop/mobile UTC time, agent, model, operation count, summed duration, and summed full load; the focused telemetry test verifies both headers. |
-| R6 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns title-first glob/grep/edit recognition, closed-kind fallbacks, accent cards, exit/token metadata, and verbatim payloads; the focused honest-badges test verifies mapping, empty payload, exit codes, and honest fields. |
-| R7 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns per-session disclosure state, keyboard telemetry, 44px mobile targets, reduced motion, 8px/136px rail reflow, and semantic surfaces; the focused telemetry test verifies hover/focus/blur/Escape and session isolation. Headless Chrome confirmed both themes, zero page overflow, no inner scrollers or undersized Timeline controls, 136px/8px rail positions, and the visible mobile UTC clock. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns the Conversation skeleton controls and receives the start-desc roster with full token load; the focused test named 'Timeline prev/next are disabled at roster bounds and options include formatted token load' verifies labels, bounds, traversal, and absent-session behavior. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns the ordered nine-field metadata strip and formulas; the focused test named 'Timeline renders Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations' verifies field order, full load, cache ratio, zero denominator, and pure-token output. |
+| R3 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns the single responsive rail and full-load duration/token meters with hot/heavy thresholds; the focused test named 'Timeline renders compact cards with Sources AgentIcon tooltip, as-is tool badge, UserTokenBadge prompt, and filters' verifies rail geometry and node counts. |
+| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns prompt rows built from trimmed payload/title fallback with disclosure state; the focused telemetry test verifies the badge, summary, character count, accessible drawer, and trimmed full prompt. |
+| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns one assistant header per block with desktop/mobile UTC time, agent, model, operation count, summed duration, and summed full load; the focused telemetry test verifies both headers. |
+| R6 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns title-first glob/grep/edit recognition, closed-kind fallbacks, accent cards, exit/token metadata, and verbatim payloads; the focused honest-badges test verifies mapping, empty payload, exit codes, and honest fields. |
+| R7 | MET | `apps/web/src/modules/history/TimelineTab.tsx:306` owns per-session disclosure state, keyboard telemetry, 44px mobile targets, reduced motion, 8px/136px rail reflow, and semantic surfaces; the focused telemetry test verifies hover/focus/blur/Escape and session isolation. Headless Chrome confirmed both themes, zero page overflow, no inner scrollers or undersized Timeline controls, 136px/8px rail positions, and the visible mobile UTC clock. |
 | R8 | MET | `docs/design/history-board-module.md:10` carries the synchronized Timeline contract and the numbered design index references it. Fresh gates: focused Timeline 4 pass/73 assertions; History components 14 pass/147 assertions; autofix/typecheck clean; spur-check 6232 pass with 99.07% lines/99.20% functions; test-cf 1 pass; build exit 0. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx --test-name-pattern Timeline` exited 0: 4 pass, 73 assertions. `bun run spur-check` exited 0: 6232 pass; `bun run test-cf` and `bun run build` exited 0. Headless Chrome at 1440x1000 and 390x844 verified the collapsed/expanded Timeline in light/dark themes with zero page overflow. Static review at `apps/web/src/modules/history/TimelineTab.tsx:309` confirms no contract/service/database/dependency surface was added. |
+| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx --test-name-pattern Timeline` exited 0: 4 pass, 73 assertions. `bun run spur-check` exited 0: 6232 pass; `bun run test-cf` and `bun run build` exited 0. Headless Chrome at 1440x1000 and 390x844 verified the collapsed/expanded Timeline in light/dark themes with zero page overflow. Static review at `apps/web/src/modules/history/TimelineTab.tsx:306` confirms no contract/service/database/dependency surface was added. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

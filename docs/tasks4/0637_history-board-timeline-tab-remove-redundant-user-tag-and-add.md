@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Remove redundant USER tag and add token break
 status: done
 template: feature-impl
 created_at: 2026-08-23T14:12:24.823Z
-updated_at: "2026-08-23T18:21:37.046Z"
+updated_at: "2026-08-23T21:47:36.984Z"
 feature_id: E8
 ---
 
@@ -124,8 +124,8 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| `UserTokenBadge` — added user icon trigger button with accessible hover/focus token breakdown popover (`z-50`), and removed redundant static `USER` text badge from user prompt cards | `apps/web/src/modules/history/TimelineTab.tsx:149` |
-| Component test suite in `components.test.tsx` asserting removal of `USER` text badge and verifying `UserTokenBadge` hover/focus/Escape tooltip interactions | `apps/web/tests/modules/history/components.test.tsx:365` |
+| `UserTokenBadge` — added user icon trigger button with accessible hover/focus token breakdown popover (`z-50`), and removed redundant static `USER` text badge from user prompt cards | `apps/web/src/modules/history/TimelineTab.tsx:137` |
+| Component test suite in `components.test.tsx` asserting removal of `USER` text badge and verifying `UserTokenBadge` hover/focus/Escape tooltip interactions | `apps/web/tests/modules/history/components.test.tsx:390` |
 | Synchronized Timeline specification and task mapping in History Board module design satellite | `docs/design/history-board-module.md:10` |
 | Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
@@ -135,7 +135,7 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:599-613` renders the prompt header with `UserTokenBadge` and summary only; no static USER badge remains. `apps/web/tests/modules/history/components.test.tsx:375-378` deterministically asserts the rendered prompt contains no `USER` text. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:784-788` renders the prompt header with `UserTokenBadge` and summary only; no static USER badge remains. `apps/web/tests/modules/history/components.test.tsx:400-415` deterministically asserts the rendered prompt contains no `USER` text. |
 | R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:149-199` implements `UserTokenBadge` around `UserIcon` with `relative z-20`, an accessible button, hover/focus/blur handlers, Escape dismissal, a `z-50` tooltip, and fresh-input/cache-read/output/total values. |
 | R3 | MET | `apps/web/tests/modules/history/components.test.tsx:375-403` asserts USER removal, every required token label, hidden/default state, focus reveal, blur hide, Escape dismissal, hover reveal, and mouse-leave hide. The full component file exited 0 with 15 tests and 189 assertions. |
 | R4 | MET | `docs/design/history-board-module.md:67,188` records the UserTokenBadge tooltip, four token categories, z-index, redundant USER removal, and task mapping; `docs/04_DESIGN.md` indexes the synchronized History Board satellite through 0637. |

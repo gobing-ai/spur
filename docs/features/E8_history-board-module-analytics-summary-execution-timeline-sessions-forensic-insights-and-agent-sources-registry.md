@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-21T23:12:38.032Z"
-updated_at: "2026-08-23T14:18:06.900Z"
+updated_at: "2026-08-23T20:52:08.984Z"
 ---
 
 # E8: History Board module: Analytics Summary, Execution Timeline, Sessions, Forensic Insights, and Agent Sources Registry
@@ -112,6 +112,7 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 | 0635 | History Board Timeline Tab: Compact Antigravity-CLI stream, per-card Sources AgentIcon, as-is tool telemetry tooltips, USER prompt cards, and conversation item filters | done |
 | 0636 | History Board Timeline Tab: Default filter checkboxes to checked, rename Hide other empty, 80% card width with left/right alignment, and unclipped top-layer tooltips | done |
 | 0637 | History Board Timeline Tab: Remove redundant USER tag and add token breakdown tooltip to UserIcon in prompt cards | done |
+| 0638 | History Board Timeline Tab: Fix step duration, user token telemetry, duplicate tool labels, raw digest payloads, agy/codex session extraction, and multi-agent consolidated timeline | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -135,3 +136,6 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 - 2026-08-23T14:12:22.849Z done → active (system)
 - 2026-08-23T14:18:06.581Z active → verifying (system)
 - 2026-08-23T14:18:06.900Z verifying → done (system)
+- 2026-08-23T20:51:42.289Z done → active (system)
+- 2026-08-23T20:52:08.615Z active → verifying (system)
+- 2026-08-23T20:52:08.984Z verifying → done (system)

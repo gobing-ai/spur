@@ -82,11 +82,13 @@ const sources: HistorySourcesResponse['data'] = {
 };
 
 const timeline: HistoryTimelineResponse['data'] = {
-    session: {
-        id: 'session-1',
+    mode: 'session',
+    scope: {
+        sessionId: 'session-1',
         source: 'agy',
         model: 'gemini-3-pro',
         start: '2026-08-21T10:00:00Z',
+        end: '2026-08-21T10:05:01Z',
         durationMs: 6_000,
         tokens: {
             billedTokens: 60_000,
@@ -97,13 +99,18 @@ const timeline: HistoryTimelineResponse['data'] = {
         },
         messageCount: 1,
         toolCallCount: 1,
+        sessionCount: 1,
     },
+    truncated: false,
     blocks: [
         {
+            key: 'agy:::session-1:::0',
+            sessionId: 'session-1',
             turnIndex: 0,
             timestamp: '2026-08-21T10:00:00Z',
             source: 'agy',
             model: 'gemini-3-pro',
+            correlationExactness: null,
             totalDurationMs: 6_000,
             totalTokens: 60_000,
             operationCount: 1,
@@ -113,11 +120,20 @@ const timeline: HistoryTimelineResponse['data'] = {
                     eventType: 'message',
                     kind: 'user',
                     title: 'Fix the failing bun test',
-                    durationMs: 0,
+                    toolName: null,
+                    durationMs: null,
+                    durationSource: 'unmeasured',
                     tokens: 0,
                     freshInputTokens: 0,
                     cacheReadTokens: 0,
                     outputTokens: 0,
+                    promptTokens: {
+                        billedTokens: 60_000,
+                        cacheSavedTokens: 1_000,
+                        cacheReadTokens: 1_000,
+                        freshInputTokens: 55_000,
+                        outputTokens: 5_000,
+                    },
                     exitCode: null,
                     payload: '  Fix the failing bun test\nand keep coverage green.  ',
                     agent: 'agy',
@@ -127,12 +143,15 @@ const timeline: HistoryTimelineResponse['data'] = {
                     seq: 1,
                     eventType: 'tool',
                     kind: 'bash',
-                    title: 'Bash',
+                    title: 'bun test',
+                    toolName: 'Bash',
                     durationMs: 6_000,
+                    durationSource: 'measured',
                     tokens: 60_000,
                     freshInputTokens: 55_000,
                     cacheReadTokens: 1_000,
                     outputTokens: 5_000,
+                    promptTokens: null,
                     exitCode: 0,
                     payload: 'bun test',
                     agent: 'agy',
@@ -141,10 +160,13 @@ const timeline: HistoryTimelineResponse['data'] = {
             ],
         },
         {
+            key: 'agy:::session-1:::1',
+            sessionId: 'session-1',
             turnIndex: 1,
             timestamp: '2026-08-21T10:05:00Z',
             source: 'agy',
             model: 'gemini-3-pro',
+            correlationExactness: null,
             totalDurationMs: 1_000,
             totalTokens: 10_000,
             operationCount: 1,
@@ -153,12 +175,15 @@ const timeline: HistoryTimelineResponse['data'] = {
                     seq: 1,
                     eventType: 'tool',
                     kind: 'read',
-                    title: 'Read',
+                    title: 'src/index.ts',
+                    toolName: 'Read',
                     durationMs: 1_000,
+                    durationSource: 'measured',
                     tokens: 10_000,
                     freshInputTokens: 8_000,
                     cacheReadTokens: 1_000,
                     outputTokens: 1_000,
+                    promptTokens: null,
                     exitCode: null,
                     payload: 'src/index.ts',
                     agent: 'agy',
@@ -342,8 +367,8 @@ describe('History Board components', () => {
         // Zero-denominator cache read maps to 0.0%
         const zeroCacheTimeline: HistoryTimelineResponse['data'] = {
             ...timeline,
-            session: {
-                ...timeline.session,
+            scope: {
+                ...timeline.scope,
                 tokens: {
                     billedTokens: 0,
                     cacheSavedTokens: 0,
@@ -373,22 +398,22 @@ describe('History Board components', () => {
         expect(rail.querySelectorAll('[data-timeline-node="operation"]')).toHaveLength(2);
 
         // User prompt renders as a unified card with UserTokenBadge and character count (no redundant USER text), right-aligned at 80% width.
-        const userRow = view.getByTestId('timeline-user-event-0-0');
+        const userRow = view.getByTestId('timeline-user-event-agy:::session-1:::0-0');
         expect(userRow.textContent).toContain('Fix the failing bun test');
         expect(userRow.textContent).not.toContain('USER');
         expect(userRow.textContent).toContain('0 in');
-        expect(userRow.textContent).toContain('49 chars');
         expect(userRow.querySelector('.flex.justify-end')).not.toBeNull();
         expect(userRow.querySelector('.w-\\[80\\%\\]')).not.toBeNull();
         // User prompt has UserTokenBadge with hover/focus token breakdown tooltip elevated at z-50
-        const userBadge = view.getByTestId('timeline-user-badge-user-tt-0-0');
+        const userBadge = view.getByTestId('timeline-user-badge-user-tt-agy---session-1---0-0');
         expect(userBadge).toBeDefined();
-        const userTooltip = view.getByTestId('user-tt-0-0');
+        const userTooltip = view.getByTestId('user-tt-agy---session-1---0-0');
         expect(userTooltip.getAttribute('role')).toBe('tooltip');
         expect(userTooltip.className).toContain('z-50');
-        for (const label of ['User Prompt Tokens', 'Fresh input:', 'Cache read:', 'Output:', '⚡ Total:']) {
+        for (const label of ['User Prompt Telemetry', 'Fresh input:', 'Cache read:', 'Output:', '⚡ Turn load:']) {
             expect(userTooltip.textContent).toContain(label);
         }
+        expect(userTooltip.textContent).toContain('49 chars');
         expect(userTooltip.className).toContain('hidden');
         fireEvent.focus(userBadge);
         expect(userTooltip.className).not.toContain('hidden');
@@ -402,13 +427,13 @@ describe('History Board components', () => {
         fireEvent.mouseLeave(userBadge);
         expect(userTooltip.className).toContain('hidden');
         // Operation row has left alignment and 80% width class
-        const opRow = view.getByTestId('timeline-op-event-0-1');
+        const opRow = view.getByTestId('timeline-op-event-agy:::session-1:::0-1');
         expect(opRow.querySelector('.flex.justify-start')).not.toBeNull();
         expect(opRow.querySelector('.w-\\[80\\%\\]')).not.toBeNull();
         // Operation card has AgentIcon with tooltip elevated at z-50
-        const agentBadge = view.getByTestId('timeline-agent-badge-agent-tt-0-1');
+        const agentBadge = view.getByTestId('timeline-agent-badge-agent-tt-agy---session-1---0-1');
         expect(agentBadge).toBeDefined();
-        const agentTooltip = view.getByTestId('agent-tt-0-1');
+        const agentTooltip = view.getByTestId('agent-tt-agy---session-1---0-1');
         expect(agentTooltip.getAttribute('role')).toBe('tooltip');
         expect(agentTooltip.className).toContain('z-50');
         expect(agentTooltip.textContent).toContain('agy');
@@ -425,9 +450,9 @@ describe('History Board components', () => {
         expect(agentTooltip.className).toContain('hidden');
 
         // Operation card has tool tag with token breakdown tooltip elevated at z-50
-        const toolBadge = view.getByTestId('timeline-tool-badge-tool-tt-0-1');
-        expect(toolBadge.textContent).toBe('bash');
-        const toolTooltip = view.getByTestId('tool-tt-0-1');
+        const toolBadge = view.getByTestId('timeline-tool-badge-tool-tt-agy---session-1---0-1');
+        expect(toolBadge.textContent).toBe('Bash');
+        const toolTooltip = view.getByTestId('tool-tt-agy---session-1---0-1');
         expect(toolTooltip.getAttribute('role')).toBe('tooltip');
         expect(toolTooltip.className).toContain('z-50');
         expect(toolTooltip.textContent).toContain('55.0K');
@@ -460,15 +485,14 @@ describe('History Board components', () => {
         const promptDrawerId = promptButton?.getAttribute('aria-controls');
         const promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
         expect(promptDrawer?.textContent).toBe('Fix the failing bun test\nand keep coverage green.');
-        expect(view.getByText('49 chars').className).toContain('rounded');
 
         // Expand all reveals operation payloads.
         const expandAllBtn = view.getByRole('button', { name: 'Expand all' });
         expect(expandAllBtn.getAttribute('aria-pressed')).toBe('false');
         fireEvent.click(expandAllBtn);
         expect(view.getByRole('button', { name: 'Collapse all' }).getAttribute('aria-pressed')).toBe('true');
-        expect(view.getByText('bun test')).toBeDefined();
-        expect(view.getByText('src/index.ts')).toBeDefined();
+        expect(view.getAllByText('bun test').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('src/index.ts').length).toBeGreaterThanOrEqual(1);
 
         // Hide other empty filter test
         const filterEmpty = view.getByTestId('timeline-filter-empty') as HTMLInputElement;
@@ -483,13 +507,94 @@ describe('History Board components', () => {
         expect(filterAssistant.checked).toBe(false);
     });
 
+    test('Timeline reports zero prompt characters and lines when prompt content is absent', () => {
+        const emptyPromptTimeline = structuredClone(timeline);
+        const userEvent = emptyPromptTimeline.blocks[0]?.events[0];
+        if (!userEvent) throw new Error('missing user event fixture');
+        userEvent.payload = '';
+        userEvent.title = 'user turn';
+        userEvent.promptTokens = null;
+
+        const view = render(<TimelineTab data={emptyPromptTimeline} />);
+        fireEvent.click(view.getByTestId('timeline-filter-empty'));
+        const tooltip = view.getByTestId('user-tt-agy---session-1---0-0');
+        expect(tooltip.textContent).toContain('0 lines (0 chars)');
+        expect(tooltip.textContent).toContain('⚡ Turn load:0');
+    });
+
+    test('Timeline renders assistant and tool cards without conflating their identity or payload', () => {
+        const cardTimeline = structuredClone(timeline);
+        const block = cardTimeline.blocks[0];
+        if (!block) throw new Error('missing timeline block fixture');
+        block.events = [
+            {
+                seq: 0,
+                eventType: 'message',
+                kind: 'assistant',
+                title: 'assistant turn',
+                toolName: null,
+                durationMs: null,
+                durationSource: 'unmeasured',
+                tokens: 123,
+                freshInputTokens: 0,
+                cacheReadTokens: 0,
+                outputTokens: 123,
+                promptTokens: null,
+                exitCode: null,
+                payload: 'assistant response body',
+                agent: 'agy',
+                model: 'gemini-3-pro',
+            },
+            {
+                seq: 1,
+                eventType: 'tool',
+                kind: 'read',
+                title: 'src/file.ts',
+                toolName: 'Read',
+                durationMs: 10,
+                durationSource: 'measured',
+                tokens: 10,
+                freshInputTokens: 10,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+                promptTokens: null,
+                exitCode: 0,
+                payload:
+                    'tool: Read\nstatus: success\nargs_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (raw payload omitted at import)',
+                agent: 'agy',
+                model: 'gemini-3-pro',
+            },
+        ];
+
+        const view = render(<TimelineTab data={cardTimeline} />);
+        fireEvent.click(view.getByTestId('timeline-filter-assistant'));
+
+        const assistant = view.getByTestId('timeline-op-event-agy:::session-1:::0-0');
+        expect(assistant.textContent).toContain('gemini-3-pro');
+        expect(assistant.textContent).toContain('📤 123');
+        expect(assistant.querySelector('[data-testid^="timeline-tool-badge-"]')).toBeNull();
+        expect(assistant.textContent).not.toContain('EXIT_CODE');
+        fireEvent.click(view.getByRole('button', { name: 'Expand response' }));
+        expect(view.getAllByText('assistant response body').length).toBeGreaterThanOrEqual(1);
+
+        const tool = view.getByTestId('timeline-op-event-agy:::session-1:::0-1');
+        expect(tool.textContent?.match(/Read/g)).toHaveLength(1);
+        expect(tool.textContent).toContain('src/file.ts');
+        const toolDisclosure = tool.querySelector('button[aria-label="Expand operation payload"]');
+        if (!toolDisclosure) throw new Error('missing tool disclosure');
+        fireEvent.click(toolDisclosure);
+        expect(tool.textContent).toContain('raw payload omitted at import');
+    });
+
     test('Timeline filters assistant, unknown, and truly empty events without hiding tool runs or cache-only work', () => {
         const event = {
-            durationMs: 0,
+            durationMs: null,
+            durationSource: 'unmeasured',
             tokens: 0,
             freshInputTokens: 0,
             cacheReadTokens: 0,
             outputTokens: 0,
+            promptTokens: null,
             exitCode: null,
             payload: null,
             agent: 'codex',
@@ -499,30 +604,57 @@ describe('History Board components', () => {
             ...timeline,
             blocks: [
                 {
+                    key: 'codex:::sess:::0',
+                    sessionId: 'sess',
                     turnIndex: 0,
                     timestamp: '2026-08-21T10:00:00Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 0,
                     totalTokens: 0,
                     operationCount: 1,
-                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'assistant', title: 'assistant turn' }],
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'message',
+                            kind: 'assistant',
+                            title: 'assistant turn',
+                            toolName: null,
+                        },
+                    ],
                 },
                 {
+                    key: 'codex:::sess:::1',
+                    sessionId: 'sess',
                     turnIndex: 1,
                     timestamp: '2026-08-21T10:00:01Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 0,
                     totalTokens: 0,
                     operationCount: 1,
-                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'run', title: 'legacy assistant run' }],
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'message',
+                            kind: 'run',
+                            title: 'legacy assistant run',
+                            toolName: null,
+                        },
+                    ],
                 },
                 {
+                    key: 'codex:::sess:::2',
+                    sessionId: 'sess',
                     turnIndex: 2,
                     timestamp: '2026-08-21T10:00:02Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 1,
                     totalTokens: 0,
                     operationCount: 1,
@@ -533,26 +665,43 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'run',
                             title: 'run tool',
+                            toolName: 'Run',
                             durationMs: 1,
+                            durationSource: 'measured',
                             exitCode: 0,
                         },
                     ],
                 },
                 {
+                    key: 'codex:::sess:::3',
+                    sessionId: 'sess',
                     turnIndex: 3,
                     timestamp: '2026-08-21T10:00:03Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 0,
                     totalTokens: 0,
                     operationCount: 1,
-                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'unknown', title: 'unknown turn' }],
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'message',
+                            kind: 'unknown',
+                            title: 'unknown turn',
+                            toolName: null,
+                        },
+                    ],
                 },
                 {
+                    key: 'codex:::sess:::4',
+                    sessionId: 'sess',
                     turnIndex: 4,
                     timestamp: '2026-08-21T10:00:04Z',
                     source: 'unknown',
                     model: 'unknown',
+                    correlationExactness: null,
                     totalDurationMs: 1,
                     totalTokens: 0,
                     operationCount: 1,
@@ -563,26 +712,43 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'read',
                             title: 'unknown agent tool',
+                            toolName: 'Read',
                             durationMs: 1,
+                            durationSource: 'measured',
                             agent: 'unknown',
                         },
                     ],
                 },
                 {
+                    key: 'codex:::sess:::5',
+                    sessionId: 'sess',
                     turnIndex: 5,
                     timestamp: '2026-08-21T10:00:05Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 0,
                     totalTokens: 0,
                     operationCount: 1,
-                    events: [{ ...event, seq: 0, eventType: 'tool', kind: 'read', title: 'empty tool event' }],
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'tool',
+                            kind: 'read',
+                            title: 'empty tool event',
+                            toolName: 'Read',
+                        },
+                    ],
                 },
                 {
+                    key: 'codex:::sess:::6',
+                    sessionId: 'sess',
                     turnIndex: 6,
                     timestamp: '2026-08-21T10:00:06Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 0,
                     totalTokens: 10,
                     operationCount: 1,
@@ -593,6 +759,7 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'read',
                             title: 'cache-only tool event',
+                            toolName: 'Read',
                             cacheReadTokens: 10,
                         },
                     ],
@@ -602,28 +769,28 @@ describe('History Board components', () => {
 
         const view = render(<TimelineTab data={filterTimeline} />);
         // By default, assistant, unknown, and empty events are already filtered out
-        expect(view.queryByTestId('timeline-op-event-0-0')).toBeNull();
-        expect(view.queryByTestId('timeline-op-event-1-0')).toBeNull();
-        expect(view.getByTestId('timeline-op-event-2-0')).toBeDefined();
-        expect(view.queryByTestId('timeline-op-event-3-0')).toBeNull();
-        expect(view.queryByTestId('timeline-op-event-4-0')).toBeNull();
-        expect(view.queryByTestId('timeline-op-event-5-0')).toBeNull();
-        expect(view.getByTestId('timeline-op-event-6-0')).toBeDefined();
+        expect(view.queryByTestId('timeline-op-event-codex:::sess:::0-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-codex:::sess:::1-0')).toBeNull();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::2-0')).toBeDefined();
+        expect(view.queryByTestId('timeline-op-event-codex:::sess:::3-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-codex:::sess:::4-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-codex:::sess:::5-0')).toBeNull();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::6-0')).toBeDefined();
         expect(view.getByTestId('timeline-rail').children).toHaveLength(2);
 
         // Unchecking hideAssistant reveals assistant events
         fireEvent.click(view.getByTestId('timeline-filter-assistant'));
-        expect(view.getByTestId('timeline-op-event-0-0')).toBeDefined();
-        expect(view.getByTestId('timeline-op-event-1-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::0-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::1-0')).toBeDefined();
 
         // Unchecking hideUnknown reveals unknown events
         fireEvent.click(view.getByTestId('timeline-filter-unknown'));
-        expect(view.getByTestId('timeline-op-event-3-0')).toBeDefined();
-        expect(view.getByTestId('timeline-op-event-4-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::3-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::4-0')).toBeDefined();
 
         // Unchecking hideEmpty reveals empty tool events
         fireEvent.click(view.getByTestId('timeline-filter-empty'));
-        expect(view.getByTestId('timeline-op-event-5-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-codex:::sess:::5-0')).toBeDefined();
     });
 
     test('Timeline recognizes glob, grep, edit in titles and displays as-is lowercase tool tags', () => {
@@ -631,10 +798,13 @@ describe('History Board components', () => {
             ...timeline,
             blocks: [
                 {
+                    key: 'codex:::sess:::0',
+                    sessionId: 'sess',
                     turnIndex: 0,
                     timestamp: '2026-08-21T10:00:00Z',
                     source: 'codex',
                     model: 'gpt-5.6-sol',
+                    correlationExactness: null,
                     totalDurationMs: 5000,
                     totalTokens: 20000,
                     operationCount: 4,
@@ -644,11 +814,14 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'bash',
                             title: 'glob files in src',
+                            toolName: 'glob',
                             durationMs: 500,
+                            durationSource: 'measured',
                             tokens: 2000,
                             freshInputTokens: 1500,
                             cacheReadTokens: 500,
                             outputTokens: 0,
+                            promptTokens: null,
                             exitCode: 0,
                             payload: 'src/**/*.ts',
                             agent: 'codex',
@@ -659,11 +832,14 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'search',
                             title: 'ripgrep pattern in tests',
+                            toolName: 'grep',
                             durationMs: 800,
+                            durationSource: 'measured',
                             tokens: 4000,
                             freshInputTokens: 3000,
                             cacheReadTokens: 1000,
                             outputTokens: 0,
+                            promptTokens: null,
                             exitCode: null,
                             payload: null,
                             agent: 'codex',
@@ -674,11 +850,14 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'write',
                             title: 'edit file content at line 10',
+                            toolName: 'edit',
                             durationMs: 1200,
+                            durationSource: 'measured',
                             tokens: 6000,
                             freshInputTokens: 4000,
                             cacheReadTokens: 1000,
                             outputTokens: 1000,
+                            promptTokens: null,
                             exitCode: 1,
                             payload: 'line edit diff',
                             agent: 'codex',
@@ -689,11 +868,14 @@ describe('History Board components', () => {
                             eventType: 'tool',
                             kind: 'run',
                             title: 'run build command',
+                            toolName: 'run',
                             durationMs: 2500,
+                            durationSource: 'measured',
                             tokens: 8000,
                             freshInputTokens: 6000,
                             cacheReadTokens: 1000,
                             outputTokens: 1000,
+                            promptTokens: null,
                             exitCode: 0,
                             payload: 'build output',
                             agent: 'codex',
@@ -722,7 +904,7 @@ describe('History Board components', () => {
         expect(view.getByText('EXIT_CODE=1')).toBeDefined();
 
         // Empty payload (seq 1) does not have disclosure button
-        const grepBadge = view.getByTestId('timeline-tool-badge-tool-tt-0-1');
+        const grepBadge = view.getByTestId('timeline-tool-badge-tool-tt-codex---sess---0-1');
         expect(grepBadge.closest('.bg-base-100')?.querySelector('button[aria-expanded]')).toBeNull();
     });
 
@@ -848,11 +1030,16 @@ describe('History Board components', () => {
     });
 
     test('Sessions table truncates long IDs behind a full-ID title and surfaces loading/error states', () => {
-        const view = render(<SessionsTab data={sessions} />);
+        let selected: { source: string; id: string } | undefined;
+        const view = render(
+            <SessionsTab data={sessions} onSelectSession={(source, id) => (selected = { source, id })} />,
+        );
 
         const longId = view.container.querySelector('td span[title="abcdefghijklmnopqrst"]');
         expect(longId?.textContent).toBe('abcdefghijklmnop…');
         expect(view.container.querySelector('span[title="short-id"]')?.textContent).toBe('short-id');
+        fireEvent.click(view.container.querySelector('tbody tr') as Element);
+        expect(selected).toEqual({ source: 'codex', id: 'abcdefghijklmnopqrst' });
 
         const busy = render(<SessionsTab loading />);
         expect(busy.container.querySelector('.animate-spin')).not.toBeNull();
@@ -872,9 +1059,9 @@ describe('History Board components', () => {
         // Active session is first in roster: Previous disabled, Next enabled
         const view = render(
             <TimelineTab
-                data={{ ...timeline, session: { ...timeline.session, id: firstId } }}
+                data={{ ...timeline, scope: { ...timeline.scope, source: 'agy', sessionId: firstId } }}
                 availableSessions={roster}
-                onSelectSession={(id) => (selectedId = id)}
+                onSelectSession={(_source, id) => (selectedId = id)}
             />,
         );
 
@@ -900,9 +1087,9 @@ describe('History Board components', () => {
         // Middle session: both buttons enabled
         view.rerender(
             <TimelineTab
-                data={{ ...timeline, session: { ...timeline.session, id: 'session-2' } }}
+                data={{ ...timeline, scope: { ...timeline.scope, source: 'codex', sessionId: 'session-2' } }}
                 availableSessions={roster}
-                onSelectSession={(id) => (selectedId = id)}
+                onSelectSession={(_source, id) => (selectedId = id)}
             />,
         );
         expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).toBeNull();
@@ -911,9 +1098,9 @@ describe('History Board components', () => {
         // Last session: Previous enabled, Next disabled
         view.rerender(
             <TimelineTab
-                data={{ ...timeline, session: { ...timeline.session, id: 'session-3' } }}
+                data={{ ...timeline, scope: { ...timeline.scope, source: 'claude', sessionId: 'session-3' } }}
                 availableSessions={roster}
-                onSelectSession={(id) => (selectedId = id)}
+                onSelectSession={(_source, id) => (selectedId = id)}
             />,
         );
         expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).toBeNull();
@@ -922,12 +1109,34 @@ describe('History Board components', () => {
         // Absent session: both disabled
         view.rerender(
             <TimelineTab
-                data={{ ...timeline, session: { ...timeline.session, id: 'session-unknown' } }}
+                data={{ ...timeline, scope: { ...timeline.scope, source: 'agy', sessionId: 'session-unknown' } }}
                 availableSessions={roster}
-                onSelectSession={(id) => (selectedId = id)}
+                onSelectSession={(_source, id) => (selectedId = id)}
             />,
         );
         expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).not.toBeNull();
         expect(view.getByRole('button', { name: 'Next session' }).getAttribute('disabled')).not.toBeNull();
+    });
+
+    test('Timeline session selection distinguishes equal ids from different sources', () => {
+        const roster = [
+            { id: 'shared', source: 'agy', model: 'gemini-3-pro', start: '2026-08-21T10:00:00Z', tokenLoad: 10 },
+            { id: 'shared', source: 'codex', model: 'gpt-5.6-sol', start: '2026-08-21T11:00:00Z', tokenLoad: 20 },
+        ];
+        let selected: { source: string; id: string } | undefined;
+        const view = render(
+            <TimelineTab
+                data={{ ...timeline, scope: { ...timeline.scope, source: 'codex', sessionId: 'shared' } }}
+                availableSessions={roster}
+                onSelectSession={(source, id) => (selected = { source, id })}
+            />,
+        );
+
+        expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).toBeNull();
+        expect(view.getByRole('button', { name: 'Next session' }).getAttribute('disabled')).not.toBeNull();
+        fireEvent.change(view.getByTestId('timeline-session-select'), {
+            target: { value: JSON.stringify(['agy', 'shared']) },
+        });
+        expect(selected).toEqual({ source: 'agy', id: 'shared' });
     });
 });

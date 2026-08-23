@@ -4,7 +4,7 @@ name: "History Board oRPC API contracts, mock router, and DTO seam"
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:26.320Z
-updated_at: "2026-08-22T06:13:21.847Z"
+updated_at: "2026-08-23T21:47:36.240Z"
 feature_id: E8
 ---
 
@@ -112,7 +112,7 @@ workaround.
 #### Seams touched
 
 - `packages/contracts/src/history.ts:17-20` — `historyDimensionEnum` adds model, source, tool, and skill summary dimensions without currency.
-- `packages/contracts/src/history.ts:402-453` — `historyContract` defines all six typed procedures.
+- `packages/contracts/src/history.ts:474-533` — `historyContract` defines all six typed procedures.
 - `packages/app/src/services/history-board-mock-service.ts:259-266` — `MockHistoryBoardService` provides deterministic filter-aware empty, single, and nine-source fixtures.
 - `apps/server/src/modules/history/handlers.ts:7-18` — `createHistoryHandlers` binds the typed procedures to the service seam.
 - `apps/server/src/context.ts:408-420` — `historyBoardService` composes live queries and queues manual refresh work.

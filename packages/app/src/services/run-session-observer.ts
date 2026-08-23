@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { type DbAdapter, type InsertRunSessionInput, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName } from '@gobing-ai/ts-ai-runner';
-import { type LlmJsonlSource, SOURCE_DEFINITIONS } from '@gobing-ai/ts-llm-jsonl-importer';
+import { type LlmJsonlSource, SOURCE_DEFINITIONS, sessionIdFromSourcePath } from '@gobing-ai/ts-llm-jsonl-importer';
 import { createNodeFileSystem, walkDir } from '@gobing-ai/ts-runtime';
 
 /**
@@ -176,6 +176,11 @@ export class RunSessionObserver {
                     return;
                 }
                 const sessionId = await this.sessionIdFor(wm.source, candidates[0] as string);
+                if (sessionId === undefined) {
+                    this.warn(`run-session resolve for ${wm.source}: candidate has no canonical session id`);
+                    await this.writeUnresolved(wm.source);
+                    return;
+                }
                 await this.write({
                     runId: this.options.runId,
                     source: wm.source,
@@ -235,24 +240,43 @@ export class RunSessionObserver {
     /**
      * Session id for a candidate file. Prefer the id the file itself records
      * (matches the importer's extraction — `history_message.session_id`, the
-     * join key 0558/0559 use); fall back to the file stem. Codex session
-     * files are `rollout-<ts>-<uuid>.jsonl` — the stem is *not* the session
-     * id, only the first record (`session_meta.payload.id`) carries it.
+     * join key 0558/0559 use), then the importer's canonical path helper.
+     * AGY/Codex never claim a generic file stem as an exact identity.
      */
-    private async sessionIdFor(source: string, filePath: string): Promise<string> {
-        const stem = basename(filePath).replace(/\.[^.]+$/, '');
+    private async sessionIdFor(source: string, filePath: string): Promise<string | undefined> {
+        let firstRecordId: string | undefined;
         try {
             const firstLine = (await createNodeFileSystem().readFile(filePath)).split('\n', 1)[0] ?? '';
             const raw = JSON.parse(firstLine) as Record<string, unknown>;
-            if (source === 'claude') return firstString(raw.sessionId, raw.conversation_uuid) ?? stem;
-            if (source === 'codex') {
+            if (source === 'claude') firstRecordId = firstString(raw.sessionId, raw.conversation_uuid);
+            else if (source === 'codex') {
                 const payload = asRecord(raw.payload);
-                return firstString(raw.session_id, payload?.id, raw.id) ?? stem;
+                const recordType = typeof raw.type === 'string' ? raw.type : '';
+                const isShortFormat =
+                    recordType === '' &&
+                    raw.id !== undefined &&
+                    raw.timestamp !== undefined &&
+                    raw.instructions !== undefined;
+                firstRecordId = firstString(raw.session_id, asRecord(raw.session_meta)?.id);
+                if (firstRecordId === undefined && recordType === 'session_meta') {
+                    firstRecordId = firstString(payload?.id);
+                }
+                if (firstRecordId === undefined && isShortFormat) {
+                    firstRecordId = firstString(raw.id);
+                }
+            } else if (source === 'pi') {
+                firstRecordId = firstString(raw.id, asRecord(raw.session)?.id);
+            } else if (source === 'agy' || source === 'antigravity') {
+                firstRecordId = firstString(raw.session_id, raw.conversation_id);
             }
-            if (source === 'pi') return firstString(raw.id, asRecord(raw.session)?.id) ?? stem;
         } catch {
-            // Unparseable first record — the file stem is the fallback.
+            // Unparseable first record — path extraction / stem fallback applies.
         }
+        if (firstRecordId) return firstRecordId;
+        const fromPath = sessionIdFromSourcePath(source, filePath);
+        if (fromPath) return fromPath;
+        if (source === 'agy' || source === 'antigravity' || source === 'codex') return undefined;
+        const stem = basename(filePath).replace(/\.[^.]+$/, '');
         return stem;
     }
 

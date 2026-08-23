@@ -3,6 +3,7 @@ import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from '../../src/analytics/artifact';
 import {
     bucketedTokenSeries,
+    consolidatedTimeline,
     dailyTokenMatrix,
     historyKpiTrend,
     modelComparison,
@@ -428,14 +429,47 @@ describe('forensic-query history live extensions (task 0628)', () => {
             duration_ms: 350,
         });
 
-        const timeline = await sessionTimeline(db, 's1');
+        const timelineResult = await sessionTimeline(db, 'claude', 's1');
+        const timeline = timelineResult.events;
         expect(timeline.length).toBe(3);
         expect(timeline[0]?.role).toBe('user');
         expect(timeline[1]?.role).toBe('assistant');
         expect(timeline[2]?.toolName).toBe('Write');
         expect(timeline[2]?.durationMs).toBe(350);
+        expect(timeline[2]?.durationSource).toBe('measured');
         expect(timeline.reduce((sum, row) => sum + (row.inputTokens ?? 0), 0)).toBe(150);
         expect(timeline.reduce((sum, row) => sum + (row.outputTokens ?? 0), 0)).toBe(200);
+    });
+
+    test('sessionTimeline labels a digest-only tool payload instead of exposing a bare hash', async () => {
+        const db = await setup();
+        const digest = 'a'.repeat(64);
+        await insertMessage(db, {
+            record_hash: 'digest-message',
+            session_id: 'digest-session',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:00Z',
+            model: 'claude-opus-4.6',
+        });
+        await insertToolCall(db, {
+            record_hash: 'digest-tool',
+            message_hash: 'digest-message',
+            session_id: 'digest-session',
+            seq: 1,
+            tool_name: 'Bash',
+            args_digest: digest,
+            status: 'success',
+        });
+
+        const result = await sessionTimeline(db, 'claude', 'digest-session');
+        const tool = result.events.find((event) => event.eventType === 'tool');
+        expect(tool?.payload).toBe(
+            `tool: Bash\nstatus: success\nargs_digest: ${digest} (raw payload omitted at import)`,
+        );
+        expect(tool?.payload).not.toBe(digest);
     });
 
     test('sessionTimeline stays bounded on a 6,500-message session', async () => {
@@ -456,13 +490,106 @@ describe('forensic-query history live extensions (task 0628)', () => {
         );
 
         const started = performance.now();
-        const rows = await sessionTimeline(db, 'large-session', 5000);
+        const result = await sessionTimeline(db, 'codex', 'large-session', 5000);
         const durationMs = performance.now() - started;
 
-        expect(rows).toHaveLength(5000);
-        expect(rows[0]?.seq).toBe(1);
-        expect(rows.at(-1)?.seq).toBe(5000);
-        expect(durationMs).toBeLessThan(50);
+        expect(result.truncated).toBe(true);
+        expect(result.events).toHaveLength(5000);
+        expect(result.events[0]?.seq).toBe(1);
+        expect(result.events.at(-1)?.seq).toBe(5000);
+        expect(durationMs).toBeLessThan(100);
+    });
+
+    test('duration projection distinguishes measured, inferred, and unmeasured values', async () => {
+        const db = await setup();
+        // S1: 3 events
+        // 1. 10:00:00, duration 500ms -> measured
+        // 2. 10:00:01, duration null -> inferred (delta 2s to next at 10:00:03)
+        // 3. 10:00:03, duration null -> next event at 10:15:00 is > 10m gap -> unmeasured
+        // 4. 10:15:00, duration null -> last event in session -> unmeasured
+        await insertMessage(db, {
+            record_hash: 'd1',
+            session_id: 's-dur',
+            seq: 1,
+            role: 'user',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:00.000Z',
+            model: null,
+            input: 50,
+            output: null,
+            source: 'claude',
+            duration_ms: 500,
+        });
+        await insertMessage(db, {
+            record_hash: 'd2',
+            session_id: 's-dur',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:01.000Z',
+            model: 'claude-3-7-sonnet',
+            input: 100,
+            output: 200,
+            source: 'claude',
+            duration_ms: null,
+        });
+        await insertMessage(db, {
+            record_hash: 'd3',
+            session_id: 's-dur',
+            seq: 3,
+            role: 'user',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:03.000Z',
+            model: null,
+            input: 50,
+            output: null,
+            source: 'claude',
+            duration_ms: null,
+        });
+        await insertMessage(db, {
+            record_hash: 'd4',
+            session_id: 's-dur',
+            seq: 4,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:15:00.000Z',
+            model: 'claude-3-7-sonnet',
+            input: 100,
+            output: 200,
+            source: 'claude',
+            duration_ms: null,
+        });
+
+        // Interleaved S2 event at 10:00:02 must NOT affect S1 duration inference
+        await insertMessage(db, {
+            record_hash: 'd-other',
+            session_id: 's-other',
+            seq: 1,
+            role: 'user',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:02.000Z',
+            model: null,
+            input: 50,
+            output: null,
+            source: 'claude',
+            duration_ms: null,
+        });
+
+        const timeline = await sessionTimeline(db, 'claude', 's-dur');
+        expect(timeline.events).toHaveLength(4);
+        expect(timeline.events[0]?.durationMs).toBe(500);
+        expect(timeline.events[0]?.durationSource).toBe('measured');
+        expect(timeline.events[1]?.durationMs).toBe(2000);
+        expect(timeline.events[1]?.durationSource).toBe('inferred');
+        expect(timeline.events[2]?.durationMs).toBeNull();
+        expect(timeline.events[2]?.durationSource).toBe('unmeasured');
+        expect(timeline.events[3]?.durationMs).toBeNull();
+        expect(timeline.events[3]?.durationSource).toBe('unmeasured');
     });
 
     test('dailyTokenMatrix returns daily token metrics per source', async () => {
@@ -743,5 +870,163 @@ describe('forensic-query history live extensions (task 0628)', () => {
                 toolCalls: 0,
             },
         ]);
+    });
+
+    test('consolidatedTimeline retrieves multi-session events correlated via history_run_session and task_run_links', async () => {
+        const db = await setup();
+
+        await insertMessage(db, {
+            record_hash: 'c1',
+            session_id: 's-run-1',
+            seq: 1,
+            role: 'user',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:00Z',
+            model: null,
+            source: 'agy',
+        });
+        await insertMessage(db, {
+            record_hash: 'c2',
+            session_id: 's-run-1',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:00:05Z',
+            model: 'gemini-3-pro',
+            source: 'agy',
+            input: 1000,
+            output: 200,
+        });
+        await insertToolCall(db, {
+            record_hash: 'tc-c1',
+            message_hash: 'c2',
+            session_id: 's-run-1',
+            seq: 1,
+            tool_name: 'Bash',
+            args_raw: '{"skill":"sp-code-testing"}',
+            status: 'ok',
+            duration_ms: 3000,
+        });
+
+        await insertMessage(db, {
+            record_hash: 'c3',
+            session_id: 's-run-2',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'ok',
+            ts: '2026-06-01T10:01:00Z',
+            model: 'gpt-5.6-sol',
+            source: 'codex',
+            input: 500,
+            output: 100,
+        });
+
+        // Seed history_run_session
+        await db.run(
+            `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            'run-test-1',
+            'agy',
+            's-run-1',
+            'exact',
+            'env-var',
+        );
+        await db.run(
+            `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            'run-test-1',
+            'codex',
+            's-run-2',
+            'estimated',
+            'env-var',
+        );
+
+        // Seed task_run_links
+        await db.run(
+            `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+            'link-1',
+            '0638',
+            'run-test-1',
+            'task',
+        );
+        await db.run(
+            `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+            'link-other',
+            '9999',
+            'run-other',
+            'task',
+        );
+        await db.run(
+            `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            'run-test-1',
+            'agy',
+            null,
+            'unresolved',
+            'observed',
+        );
+
+        // 1. By runId
+        const resRun = await consolidatedTimeline(db, {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: 'run-test-1',
+            taskWbs: null,
+        });
+        expect(resRun.events.length).toBeGreaterThanOrEqual(3);
+        expect(resRun.truncated).toBe(false);
+        const exactEv = resRun.events.find((e) => e.sessionId === 's-run-1');
+        expect(exactEv?.correlationExactness).toBe('exact');
+        const estEv = resRun.events.find((e) => e.sessionId === 's-run-2');
+        expect(estEv?.correlationExactness).toBe('estimated');
+
+        // 2. By taskWbs
+        const resTask = await consolidatedTimeline(db, {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: '0638',
+        });
+        expect(resTask.events.length).toBeGreaterThanOrEqual(3);
+
+        // 3. Combined correlation and every active global filter compose by AND.
+        const resCombined = await consolidatedTimeline(db, {
+            since: '2026-06-01T09:59:00Z',
+            until: '2026-06-01T10:02:00Z',
+            sources: ['agy'],
+            models: ['gemini-3-pro'],
+            tools: ['Bash'],
+            skills: ['sp-code-testing'],
+            sessionId: null,
+            runId: 'run-test-1',
+            taskWbs: '0638',
+        });
+        expect(resCombined.events.map((event) => event.sessionId)).toEqual(['s-run-1', 's-run-1']);
+        expect(resCombined.events.every((event) => event.correlationExactness === 'exact')).toBe(true);
+
+        const wrongPair = await consolidatedTimeline(db, {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: 'run-test-1',
+            taskWbs: '9999',
+        });
+        expect(wrongPair.events).toEqual([]);
+
+        // 4. General filter (all sessions)
+        const resAll = await consolidatedTimeline(db, {
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        });
+        expect(resAll.events.length).toBeGreaterThanOrEqual(3);
     });
 });

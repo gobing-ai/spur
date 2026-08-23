@@ -10,6 +10,7 @@ import {
     historySessionsResponseSchema,
     historySourcesResponseSchema,
     historySummaryResponseSchema,
+    historyTimelineInputSchema,
     historyTimelineResponseSchema,
     historyTokensSchema,
     historyTriggerImportInputSchema,
@@ -25,6 +26,27 @@ describe('historyContract', () => {
         expect(contract.history.getInsights).toBe(historyContract.getInsights);
         expect(contract.history.getSources).toBe(historyContract.getSources);
         expect(contract.history.triggerImport).toBe(historyContract.triggerImport);
+    });
+
+    test('timeline is POST and requires source-safe session or composable consolidated input', () => {
+        const route = (historyContract.getTimeline as unknown as Record<string, unknown>)['~orpc'] as {
+            route: { method: string; path: string };
+        };
+        expect(route.route).toMatchObject({ method: 'POST', path: '/history/timeline' });
+        expect(historyTimelineInputSchema.parse({ mode: 'session', source: 'codex', sessionId: 'shared-id' })).toEqual({
+            mode: 'session',
+            source: 'codex',
+            sessionId: 'shared-id',
+        });
+        expect(() => historyTimelineInputSchema.parse({ mode: 'session', sessionId: 'shared-id' })).toThrow();
+        expect(
+            historyTimelineInputSchema.parse({
+                mode: 'consolidated',
+                filter: { range: '24h', sources: ['agy'] },
+                taskWbs: '0638',
+                runId: 'run-1',
+            }),
+        ).toMatchObject({ mode: 'consolidated', taskWbs: '0638', runId: 'run-1' });
     });
 
     test('historyFilterSchema parses valid filters and assigns defaults', () => {
@@ -210,11 +232,13 @@ describe('historyContract', () => {
         const parsed = historyTimelineResponseSchema.parse({
             ok: true,
             data: {
-                session: {
-                    id: 'sess-1234',
+                mode: 'session',
+                scope: {
+                    sessionId: 'sess-1234',
                     source: 'claude',
                     model: 'claude-opus-4.6',
                     start: '2026-08-21T18:00:00.000Z',
+                    end: '2026-08-21T18:00:45.000Z',
                     durationMs: 45000,
                     tokens: {
                         billedTokens: 5000,
@@ -225,13 +249,18 @@ describe('historyContract', () => {
                     },
                     messageCount: 5,
                     toolCallCount: 12,
+                    sessionCount: 1,
                 },
+                truncated: false,
                 blocks: [
                     {
+                        key: 'claude:::sess-1234:::0',
+                        sessionId: 'sess-1234',
                         turnIndex: 0,
                         timestamp: '2026-08-21T18:00:00.000Z',
                         source: 'claude',
                         model: 'claude-opus-4.6',
+                        correlationExactness: null,
                         totalDurationMs: 3200,
                         totalTokens: 12000,
                         operationCount: 1,
@@ -241,11 +270,14 @@ describe('historyContract', () => {
                                 eventType: 'message',
                                 kind: 'assistant',
                                 title: 'assistant turn',
+                                toolName: null,
                                 durationMs: 400,
+                                durationSource: 'measured',
                                 tokens: 5000,
                                 freshInputTokens: 500,
                                 cacheReadTokens: 4000,
                                 outputTokens: 500,
+                                promptTokens: null,
                                 exitCode: null,
                                 payload: 'File content',
                                 agent: 'claude',
@@ -257,7 +289,7 @@ describe('historyContract', () => {
             },
         });
         expect(parsed.ok).toBe(true);
-        expect(parsed.data.session.id).toBe('sess-1234');
+        expect(parsed.data.scope.sessionId).toBe('sess-1234');
     });
 
     test('historySessionsInputSchema parses pagination and sorting defaults', () => {

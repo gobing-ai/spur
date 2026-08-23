@@ -26,6 +26,11 @@ interface TimelineRosterEntry {
     tokenLoad: number;
 }
 
+interface SelectedSession {
+    source: string;
+    id: string;
+}
+
 const unionOptions = (
     loaded: HistoryFilterOption[],
     selected: readonly string[] | undefined,
@@ -55,7 +60,11 @@ export const HistoryShell: React.FC = () => {
         bucket: 'auto',
         dimension: 'model',
     });
-    const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+
+    // Timeline mode & selected session
+    const [timelineMode, setTimelineMode] = useState<'session' | 'consolidated'>('session');
+    const [selectedSession, setSelectedSession] = useState<SelectedSession | null>(null);
+    const [timelineCorrelationScope, setTimelineCorrelationScope] = useState({ taskWbs: '', runId: '' });
 
     // Sessions tab query state
     const [sessionsPage, setSessionsPage] = useState<number>(1);
@@ -158,15 +167,18 @@ export const HistoryShell: React.FC = () => {
                     sortDir: 'desc',
                 });
                 if (!mounted) return;
-                setTimelineRoster(
-                    (res?.data?.items ?? []).map((s) => ({
-                        id: s.id,
-                        source: s.source,
-                        model: s.model,
-                        start: s.start,
-                        tokenLoad: s.freshInputTokens + s.cacheReadTokens + s.outputTokens,
-                    })),
-                );
+                const items = (res?.data?.items ?? []).map((s) => ({
+                    id: s.id,
+                    source: s.source,
+                    model: s.model,
+                    start: s.start,
+                    tokenLoad: s.freshInputTokens + s.cacheReadTokens + s.outputTokens,
+                }));
+                setTimelineRoster(items);
+                const firstItem = items[0];
+                if (firstItem && !selectedSession) {
+                    setSelectedSession({ source: firstItem.source, id: firstItem.id });
+                }
             } catch {
                 if (mounted) setTimelineRoster([]);
             } finally {
@@ -176,7 +188,7 @@ export const HistoryShell: React.FC = () => {
         return () => {
             mounted = false;
         };
-    }, [activeTab, filter]);
+    }, [activeTab, filter, selectedSession]);
 
     // Sessions tab rows follow pagination/sort state.
     useEffect(() => {
@@ -210,25 +222,40 @@ export const HistoryShell: React.FC = () => {
         };
     }, [activeTab, filter, sessionsPage, sessionsSortBy, sessionsSortDir]);
 
-    // Timeline follows the selected session; auto-pick the first roster entry once.
+    // Timeline query follows mode and selected session.
     useEffect(() => {
         if (activeTab !== 'timeline') return;
-        if (!selectedSessionId) {
-            if (!rosterLoading) {
-                if (timelineRoster.length > 0) {
-                    if (timelineRoster[0]?.id) setSelectedSessionId(timelineRoster[0].id);
-                } else {
-                    setTimelineData(undefined);
+
+        if (timelineMode === 'session') {
+            if (!selectedSession) {
+                const firstRoster = timelineRoster[0];
+                if (!rosterLoading && firstRoster) {
+                    setSelectedSession({ source: firstRoster.source, id: firstRoster.id });
                 }
+                return;
             }
-            return;
         }
+
         let mounted = true;
         setTimelineLoading(true);
         setTimelineError(null);
         (async () => {
             try {
-                const res = await api.history.getTimeline({ sessionId: selectedSessionId });
+                const res =
+                    timelineMode === 'session' && selectedSession
+                        ? await api.history.getTimeline({
+                              mode: 'session',
+                              source: selectedSession.source,
+                              sessionId: selectedSession.id,
+                          })
+                        : await api.history.getTimeline({
+                              mode: 'consolidated',
+                              filter,
+                              ...(timelineCorrelationScope.taskWbs
+                                  ? { taskWbs: timelineCorrelationScope.taskWbs }
+                                  : {}),
+                              ...(timelineCorrelationScope.runId ? { runId: timelineCorrelationScope.runId } : {}),
+                          });
                 if (!mounted) return;
                 if (res?.data) {
                     setTimelineData(res.data);
@@ -244,11 +271,20 @@ export const HistoryShell: React.FC = () => {
         return () => {
             mounted = false;
         };
-    }, [activeTab, selectedSessionId, rosterLoading, timelineRoster]);
+    }, [activeTab, timelineMode, selectedSession, filter, rosterLoading, timelineRoster, timelineCorrelationScope]);
 
-    const handleSelectSessionFromList = (sessionId: string) => {
-        setSelectedSessionId(sessionId);
+    const selectTimelineSession = (source: string, id: string) => {
+        setSelectedSession({ source, id });
+        setTimelineMode('session');
         setActiveTab('timeline');
+    };
+
+    const handleSelectSessionFromList = (sessionId: string, source?: string) => {
+        const found = source
+            ? { source, id: sessionId }
+            : (sessionsData?.items.find((session) => session.id === sessionId) ??
+              timelineRoster.find((session) => session.id === sessionId));
+        if (found) selectTimelineSession(found.source, found.id);
     };
 
     const handleTriggerImport = async (mode: 'full' | 'incremental') => {
@@ -407,9 +443,15 @@ export const HistoryShell: React.FC = () => {
                         data={timelineData}
                         loading={timelineLoading}
                         error={timelineError}
-                        sessionId={selectedSessionId}
+                        mode={timelineMode}
+                        sessionId={selectedSession?.id}
+                        sessionSource={selectedSession?.source}
                         availableSessions={timelineRoster}
-                        onSelectSession={setSelectedSessionId}
+                        onSelectSession={selectTimelineSession}
+                        onModeChange={setTimelineMode}
+                        consolidatedTaskWbs={timelineCorrelationScope.taskWbs}
+                        consolidatedRunId={timelineCorrelationScope.runId}
+                        onConsolidatedScopeSubmit={setTimelineCorrelationScope}
                     />
                 )}
                 {activeTab === 'sessions' && (
@@ -430,7 +472,7 @@ export const HistoryShell: React.FC = () => {
                             }
                         }}
                         onPageChange={setSessionsPage}
-                        onSelectSession={handleSelectSessionFromList}
+                        onSelectSession={selectTimelineSession}
                     />
                 )}
                 {activeTab === 'insights' && (

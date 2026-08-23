@@ -176,17 +176,38 @@ export function buildMessageWhereClauses(
         clauses.push(`${alias}.session_id = ?`);
         params.push(sel.sessionId);
     }
-    if (sel.runId != null) {
-        // `run_id`/`task_wbs` only exist on `provenance='spur-run'` rows, and the 0009 index
-        // is `(provenance, run_id)` — the provenance equality is what makes the --run/--task
-        // selectors resolve against an index rather than a scan (R3).
-        clauses.push(`${alias}.provenance = 'spur-run'`);
-        clauses.push(`${alias}.run_id = ?`);
+    if (sel.runId != null && sel.taskWbs != null) {
+        clauses.push(
+            `EXISTS (
+                SELECT 1 FROM history_run_session hrs_scope
+                JOIN task_run_links trl_scope ON trl_scope.run_id = hrs_scope.run_id
+                WHERE hrs_scope.run_id = ? AND trl_scope.wbs = ?
+                  AND hrs_scope.session_id IS NOT NULL
+                  AND hrs_scope.source = ${alias}.source
+                  AND hrs_scope.session_id = ${alias}.session_id
+            )`,
+        );
+        params.push(sel.runId, sel.taskWbs);
+    } else if (sel.runId != null) {
+        clauses.push(
+            `EXISTS (
+                SELECT 1 FROM history_run_session hrs_scope
+                WHERE hrs_scope.run_id = ? AND hrs_scope.session_id IS NOT NULL
+                  AND hrs_scope.source = ${alias}.source
+                  AND hrs_scope.session_id = ${alias}.session_id
+            )`,
+        );
         params.push(sel.runId);
-    }
-    if (sel.taskWbs != null) {
-        clauses.push(`${alias}.provenance = 'spur-run'`);
-        clauses.push(`${alias}.task_wbs = ?`);
+    } else if (sel.taskWbs != null) {
+        clauses.push(
+            `EXISTS (
+                SELECT 1 FROM task_run_links trl_scope
+                JOIN history_run_session hrs_scope ON hrs_scope.run_id = trl_scope.run_id
+                WHERE trl_scope.wbs = ? AND hrs_scope.session_id IS NOT NULL
+                  AND hrs_scope.source = ${alias}.source
+                  AND hrs_scope.session_id = ${alias}.session_id
+            )`,
+        );
         params.push(sel.taskWbs);
     }
     return { clauses, params };
@@ -796,20 +817,30 @@ export interface BucketedTokenRow {
 /** Chronological event row in a session execution timeline. */
 export interface TimelineEventRow {
     seq: number;
+    sessionId: string;
     messageSeq: number;
     turnIndex: number;
     eventType: 'message' | 'tool';
+    recordType: string;
     ts: string | null;
     role: string;
     source: string;
     model: string | null;
     toolName: string | null;
     durationMs: number | null;
+    durationSource: 'measured' | 'inferred' | 'unmeasured';
     inputTokens: number | null;
     cacheReadTokens: number | null;
     outputTokens: number | null;
     exitCode: number | null;
     payload: string | null;
+    correlationExactness?: 'exact' | 'estimated' | null;
+}
+
+/** Result of a timeline query with truncation status. */
+export interface TimelineQueryResult {
+    truncated: boolean;
+    events: TimelineEventRow[];
 }
 
 /** Per-(source, day) token aggregate row for heatmap visualizer. */
@@ -919,99 +950,345 @@ export async function bucketedTokenSeries(
     );
 }
 
-/**
- * Chronological user/assistant/tool event stream for the timeline tab.
- */
-export async function sessionTimeline(db: DbAdapter, sessionId: string, limit = 5000): Promise<TimelineEventRow[]> {
-    interface JoinedRow {
-        messageHash: string;
-        messageSeq: number;
-        turnIndex: number;
-        messageTs: string | null;
-        messageRole: string;
-        source: string;
-        model: string | null;
-        messageDurationMs: number | null;
-        inputTokens: number | null;
-        cacheReadTokens: number | null;
-        outputTokens: number | null;
-        messagePayload: string | null;
-        links: number;
-        toolName: string | null;
-        toolTs: string | null;
-        toolDurationMs: number | null;
-        toolStatus: string | null;
-        toolPayload: string | null;
+function formatToolPayload(
+    toolName: string | null,
+    status: string | null,
+    argsRaw: string | null,
+    argsDigest: string | null,
+    errorText: string | null,
+): string | null {
+    if (errorText != null && errorText.trim().length > 0) return errorText;
+    if (argsRaw != null && argsRaw.trim().length > 0) return argsRaw;
+    if (argsDigest != null && argsDigest.trim().length > 0) {
+        return `tool: ${toolName ?? ''}\nstatus: ${status ?? 'ok'}\nargs_digest: ${argsDigest} (raw payload omitted at import)`;
     }
-    const rows = await db.queryAll<JoinedRow>(
+    return null;
+}
+
+interface JoinedTimelineRow {
+    messageHash: string;
+    messageSeq: number;
+    turnIndex: number;
+    messageTs: string | null;
+    messageRole: string;
+    recordType: string;
+    source: string;
+    sessionId: string;
+    model: string | null;
+    messageDurationMs: number | null;
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+    messagePayload: string | null;
+    links: number;
+    toolName: string | null;
+    toolTs: string | null;
+    toolDurationMs: number | null;
+    toolStatus: string | null;
+    toolArgsRaw: string | null;
+    toolArgsDigest: string | null;
+    toolErrorText: string | null;
+    toolSeq: number | null;
+    messageRowId: number;
+}
+
+interface RawTimelineEvent {
+    sessionId: string;
+    messageSeq: number;
+    turnIndex: number;
+    eventType: 'message' | 'tool';
+    recordType: string;
+    ts: string | null;
+    role: string;
+    source: string;
+    model: string | null;
+    toolName: string | null;
+    durationMs: number | null;
+    durationSource: 'measured' | 'inferred' | 'unmeasured';
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+    exitCode: number | null;
+    payload: string | null;
+    messageRowId: number;
+    toolSeq: number;
+    correlationExactness?: 'exact' | 'estimated' | null;
+}
+
+function finalizeSessionDurations(events: RawTimelineEvent[]): void {
+    events.sort((a, b) => {
+        const aTs = a.ts ? Date.parse(a.ts) : Infinity;
+        const bTs = b.ts ? Date.parse(b.ts) : Infinity;
+        if (aTs !== bTs) return (Number.isNaN(aTs) ? Infinity : aTs) - (Number.isNaN(bTs) ? Infinity : bTs);
+        if (a.messageRowId !== b.messageRowId) return a.messageRowId - b.messageRowId;
+        if (a.eventType !== b.eventType) return a.eventType === 'message' ? -1 : 1;
+        return a.toolSeq - b.toolSeq;
+    });
+
+    for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        if (!ev) continue;
+        if (ev.durationMs != null && Number.isFinite(ev.durationMs) && ev.durationMs > 0) {
+            ev.durationSource = 'measured';
+        } else {
+            if (i + 1 < events.length) {
+                const nextEv = events[i + 1];
+                const currTs = ev.ts ? Date.parse(ev.ts) : Number.NaN;
+                const nextTs = nextEv?.ts ? Date.parse(nextEv.ts) : Number.NaN;
+                const delta = !Number.isNaN(currTs) && !Number.isNaN(nextTs) ? nextTs - currTs : Number.NaN;
+                if (delta > 0 && delta <= 600_000) {
+                    ev.durationMs = delta;
+                    ev.durationSource = 'inferred';
+                } else {
+                    ev.durationMs = null;
+                    ev.durationSource = 'unmeasured';
+                }
+            } else {
+                ev.durationMs = null;
+                ev.durationSource = 'unmeasured';
+            }
+        }
+    }
+}
+
+async function queryTimelineEvents(
+    db: DbAdapter,
+    whereClause: string,
+    params: unknown[],
+    subWhereClause: string,
+    subParams: unknown[],
+    limit: number,
+    correlationMap?: Map<string, 'exact' | 'estimated'>,
+): Promise<TimelineQueryResult> {
+    const fetchLimit = limit + 1;
+    const mainCondition = whereClause.startsWith('WHERE ') ? whereClause.slice(6) : whereClause;
+    const subCondition = subWhereClause.startsWith('WHERE ') ? subWhereClause.slice(6) : subWhereClause;
+
+    const dedupSubWhere = subCondition ? `WHERE ${subCondition} AND ` : 'WHERE ';
+    const fullWhere = mainCondition
+        ? `WHERE ${mainCondition} AND (m.request_id IS NULL OR m.rowid IN (SELECT MIN(dm.rowid) FROM history_message dm ${dedupSubWhere}dm.request_id IS NOT NULL GROUP BY dm.request_id))`
+        : `WHERE (m.request_id IS NULL OR m.rowid IN (SELECT MIN(dm.rowid) FROM history_message dm ${dedupSubWhere}dm.request_id IS NOT NULL GROUP BY dm.request_id))`;
+
+    const rows = await db.queryAll<JoinedTimelineRow>(
         `SELECT m.record_hash AS messageHash, m.seq AS messageSeq,
                 COALESCE(m.turn_index, m.seq) AS turnIndex,
-                m.ts AS messageTs, m.role AS messageRole, m.source, m.model,
+                m.ts AS messageTs, m.role AS messageRole, COALESCE(m.record_type, m.role) AS recordType,
+                m.source, m.session_id AS sessionId, m.model,
                 m.duration_ms AS messageDurationMs, m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens, m.output_tokens AS outputTokens,
                 m.content_text AS messagePayload,
                 (SELECT COUNT(*) FROM history_tool_call links WHERE links.message_hash = m.record_hash) AS links,
                 tc.tool_name AS toolName, COALESCE(tc.started_at, m.ts) AS toolTs,
                 tc.duration_ms AS toolDurationMs, tc.status AS toolStatus,
-                COALESCE(tc.error_text, tc.args_raw, tc.args_digest) AS toolPayload
+                tc.args_raw AS toolArgsRaw, tc.args_digest AS toolArgsDigest, tc.error_text AS toolErrorText,
+                COALESCE(tc.seq, 0) AS toolSeq, m.rowid AS messageRowId
          FROM history_message m
          LEFT JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-         WHERE m.session_id = ? AND (
-             m.request_id IS NULL OR m.rowid IN (
-                 SELECT MIN(dm.rowid) FROM history_message dm
-                 WHERE dm.session_id = ? AND dm.request_id IS NOT NULL
-                 GROUP BY dm.request_id
-             )
-         )
-         ORDER BY m.seq, m.rowid, COALESCE(tc.seq, 0)
+         ${fullWhere}
+         ORDER BY COALESCE(m.ts, '0000-00-00') DESC, m.rowid DESC, COALESCE(tc.seq, 0) DESC
          LIMIT ?`,
-        sessionId,
-        sessionId,
-        limit,
+        ...params,
+        ...subParams,
+        fetchLimit,
     );
-    const events: Array<Omit<TimelineEventRow, 'seq'>> = [];
+
+    const rawEvents: RawTimelineEvent[] = [];
     let previousMessage = '';
     for (const row of rows) {
         if (row.messageHash !== previousMessage) {
-            events.push({
+            rawEvents.push({
+                sessionId: row.sessionId,
                 messageSeq: row.messageSeq,
                 turnIndex: row.turnIndex,
                 eventType: 'message',
+                recordType: row.recordType,
                 ts: row.messageTs,
                 role: row.messageRole,
                 source: row.source,
                 model: row.model,
                 toolName: null,
                 durationMs: row.messageDurationMs,
+                durationSource: 'unmeasured',
                 inputTokens: row.links > 0 ? 0 : row.inputTokens,
                 cacheReadTokens: row.links > 0 ? 0 : row.cacheReadTokens,
                 outputTokens: row.links > 0 ? 0 : row.outputTokens,
                 exitCode: null,
                 payload: row.messagePayload,
+                messageRowId: row.messageRowId,
+                toolSeq: 0,
             });
             previousMessage = row.messageHash;
         }
-        if (row.toolName !== null && events.length < limit) {
-            events.push({
+        if (row.toolName !== null) {
+            rawEvents.push({
+                sessionId: row.sessionId,
                 messageSeq: row.messageSeq,
                 turnIndex: row.turnIndex,
                 eventType: 'tool',
+                recordType: row.recordType,
                 ts: row.toolTs,
                 role: 'tool',
                 source: row.source,
                 model: row.model,
                 toolName: row.toolName,
                 durationMs: row.toolDurationMs,
-                inputTokens: (row.inputTokens ?? 0) / row.links,
-                cacheReadTokens: (row.cacheReadTokens ?? 0) / row.links,
-                outputTokens: (row.outputTokens ?? 0) / row.links,
+                durationSource: 'unmeasured',
+                inputTokens: row.links > 0 ? (row.inputTokens ?? 0) / row.links : row.inputTokens,
+                cacheReadTokens: row.links > 0 ? (row.cacheReadTokens ?? 0) / row.links : row.cacheReadTokens,
+                outputTokens: row.links > 0 ? (row.outputTokens ?? 0) / row.links : row.outputTokens,
                 exitCode: row.toolStatus === 'error' ? 1 : 0,
-                payload: row.toolPayload,
+                payload: formatToolPayload(
+                    row.toolName,
+                    row.toolStatus,
+                    row.toolArgsRaw,
+                    row.toolArgsDigest,
+                    row.toolErrorText,
+                ),
+                messageRowId: row.messageRowId,
+                toolSeq: row.toolSeq ?? 0,
             });
         }
-        if (events.length >= limit) break;
     }
-    return events.map((row, index) => ({ ...row, seq: index + 1 }));
+
+    const truncated = rows.length > limit || rawEvents.length > limit;
+
+    // Stable sort ascending to keep the newest `limit` events
+    rawEvents.sort((a, b) => {
+        const aTs = a.ts ? Date.parse(a.ts) : Infinity;
+        const bTs = b.ts ? Date.parse(b.ts) : Infinity;
+        if (aTs !== bTs) return (Number.isNaN(aTs) ? Infinity : aTs) - (Number.isNaN(bTs) ? Infinity : bTs);
+        if (a.source !== b.source) return a.source.localeCompare(b.source);
+        if (a.sessionId !== b.sessionId) return a.sessionId.localeCompare(b.sessionId);
+        if (a.messageRowId !== b.messageRowId) return a.messageRowId - b.messageRowId;
+        if (a.eventType !== b.eventType) return a.eventType === 'message' ? -1 : 1;
+        return a.toolSeq - b.toolSeq;
+    });
+
+    const boundedEvents = rawEvents.length > limit ? rawEvents.slice(rawEvents.length - limit) : rawEvents;
+
+    // Group by session to finalize durations independently per (source, sessionId)
+    const sessionMap = new Map<string, RawTimelineEvent[]>();
+    for (const ev of boundedEvents) {
+        const sessionKey = `${ev.source}:::${ev.sessionId}`;
+        let list = sessionMap.get(sessionKey);
+        if (list === undefined) {
+            list = [];
+            sessionMap.set(sessionKey, list);
+        }
+        list.push(ev);
+        if (correlationMap !== undefined) {
+            ev.correlationExactness = correlationMap.get(sessionKey) ?? null;
+        } else {
+            ev.correlationExactness = null;
+        }
+    }
+
+    for (const sessionEvents of sessionMap.values()) {
+        finalizeSessionDurations(sessionEvents);
+    }
+
+    // Stable sort overall consolidated stream oldest-to-newest
+    boundedEvents.sort((a, b) => {
+        const aTs = a.ts ? Date.parse(a.ts) : Infinity;
+        const bTs = b.ts ? Date.parse(b.ts) : Infinity;
+        if (aTs !== bTs) return (Number.isNaN(aTs) ? Infinity : aTs) - (Number.isNaN(bTs) ? Infinity : bTs);
+        if (a.source !== b.source) return a.source.localeCompare(b.source);
+        if (a.sessionId !== b.sessionId) return a.sessionId.localeCompare(b.sessionId);
+        if (a.messageRowId !== b.messageRowId) return a.messageRowId - b.messageRowId;
+        if (a.eventType !== b.eventType) return a.eventType === 'message' ? -1 : 1;
+        return a.toolSeq - b.toolSeq;
+    });
+
+    return {
+        truncated,
+        events: boundedEvents.map((row, index) => ({
+            seq: index + 1,
+            sessionId: row.sessionId,
+            messageSeq: row.messageSeq,
+            turnIndex: row.turnIndex,
+            eventType: row.eventType,
+            recordType: row.recordType,
+            ts: row.ts,
+            role: row.role,
+            source: row.source,
+            model: row.model,
+            toolName: row.toolName,
+            durationMs: row.durationMs,
+            durationSource: row.durationSource,
+            inputTokens: row.inputTokens,
+            cacheReadTokens: row.cacheReadTokens,
+            outputTokens: row.outputTokens,
+            exitCode: row.exitCode,
+            payload: row.payload,
+            correlationExactness: row.correlationExactness,
+        })),
+    };
+}
+
+/**
+ * Chronological user/assistant/tool event stream for a single session.
+ */
+export async function sessionTimeline(
+    db: DbAdapter,
+    source: string,
+    sessionId: string,
+    limit = 5000,
+): Promise<TimelineQueryResult> {
+    return queryTimelineEvents(
+        db,
+        'WHERE m.source = ? AND m.session_id = ?',
+        [source, sessionId],
+        'WHERE dm.source = ? AND dm.session_id = ?',
+        [source, sessionId],
+        limit,
+    );
+}
+
+/**
+ * Chronological consolidated event stream across multiple sessions / agents.
+ */
+export async function consolidatedTimeline(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    limit = 5000,
+): Promise<TimelineQueryResult> {
+    const built = buildMessageWhere(sel, 'm');
+    const subBuilt = buildMessageWhere(sel, 'dm');
+    let correlationMap: Map<string, 'exact' | 'estimated'> | undefined;
+
+    if (sel.runId != null || sel.taskWbs != null) {
+        correlationMap = new Map();
+        const correlationClauses = ['hrs.session_id IS NOT NULL'];
+        const correlationParams: unknown[] = [];
+        if (sel.runId != null) {
+            correlationClauses.push('hrs.run_id = ?');
+            correlationParams.push(sel.runId);
+        }
+        if (sel.taskWbs != null) {
+            correlationClauses.push(
+                'EXISTS (SELECT 1 FROM task_run_links trl WHERE trl.run_id = hrs.run_id AND trl.wbs = ?)',
+            );
+            correlationParams.push(sel.taskWbs);
+        }
+        const rows = await db.queryAll<{ source: string; session_id: string; exactness: string }>(
+            `SELECT hrs.source, hrs.session_id, hrs.exactness
+             FROM history_run_session hrs
+             WHERE ${correlationClauses.join(' AND ')}`,
+            ...correlationParams,
+        );
+
+        for (const r of rows) {
+            const key = `${r.source}:::${r.session_id}`;
+            const existing = correlationMap.get(key);
+            if (r.exactness === 'exact') {
+                correlationMap.set(key, 'exact');
+            } else if (r.exactness === 'estimated' && existing !== 'exact') {
+                correlationMap.set(key, 'estimated');
+            }
+        }
+    }
+
+    return queryTimelineEvents(db, built.where, built.params, subBuilt.where, subBuilt.params, limit, correlationMap);
 }
 
 /**

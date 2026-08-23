@@ -1,7 +1,7 @@
 ---
 doc: design/history-board-module
 feature_id: E8
-tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637]
+tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637, 0638]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
 updated_at: 2026-08-23
@@ -61,16 +61,21 @@ export const HISTORY_TABS = [
 - **Breakdown Cards:** Top Models horizontal bars, Top Sources horizontal bars, Top Tools ranked table, Skills Used area chart, Cache Efficiency progress bar.
 
 ### 3.2 Tab 2: Timeline
-- **Header & Navigation (Conversation):** Single panel titled `Conversation` containing the global `Expand all` / `Collapse all` button (`aria-pressed`) followed by filter checkboxes (`Hide assistant`, `Hide unknown`, `Hide other empty`, all checked by default), a native session selector (`<first8…last4> · <source> · <UTC month/day time> · <formatted token load>`), and bounded Previous/Next icon buttons. Timeline events preserve `message | tool` provenance plus `assistant | unknown` kinds: the assistant filter removes assistant messages and legacy non-tool `run` rows, the unknown filter matches kind or agent id, and the empty filter requires blank payload, zero duration, and zero fresh/cache/output tokens.
-- **Nine-Field Metadata Strip:** Ordered fields `SESSION`, `AGENT`, `MODEL`, `STARTED`, `DURATION`, `TOTAL TOKENS` (`fresh + cache read + output`), `CACHE READ` (`cache / (fresh + cache) * 100`), `OUTPUT TOKENS`, and `TOOL CALLS`.
-- **Continuous Vertical Rail & Left Gutter:** Fixed 136px vertical rail on desktop (reflows to 8px below 640px) with centered nodes for prompt rows and operation cards. The desktop left gutter displays turn timestamps (`HH:MM:SS`) and step duration (`⏱ ...`, bold amber $\ge 5$s).
-- **User Prompt Cards:** 80% width (`w-[80%]`) card aligned to the right side (`flex justify-end`) with interactive user vector icon badge (`UserTokenBadge`, hover/focus popover tooltip at `z-50` showing token breakdown `📥 fresh`, `💾 cache`, `📤 output`, `⚡ total`), prompt summary, character count, and expandable verbatim dark monospace drawer (`#0d141f`). Standalone text `USER` badge eliminated.
-- **Compact Single-Line Operation Cards (Antigravity-CLI Compact Style):** Flat chronological stream without standalone block header pills, 80% width (`w-[80%]`) aligned to the left side (`flex justify-start`). Each card renders as a single-line flex row (~38px):
-  - **Embedded `AgentIcon`:** Sources-matching vector icon for the specific coding agent with hover/focus top-layer popover (`z-50`, Agent name, Model name, UTC timestamp).
-  - **As-Is Tool Tag:** Monospace tool name as-is in lowercase (`glob`, `grep`, `edit`, `read`, `write`, `bash`, `search`, `run`) with hover/focus top-layer popover (`z-50`) displaying token breakdown (`📥 fresh`, `💾 cache`, `📤 output`, `⚡ total`).
-  - **Title:** Centered monospace action/file string truncated.
-  - **Result & Disclosure:** Right-aligned `EXIT_CODE=0` (emerald) / `EXIT_CODE=N` (rose) badge and `›` toggle button expanding verbatim `#0d141f` monospace payload drawer.
-- **Document Flow Layout:** Renders full session traces in standard document flow without artificial height limits or inner scrollbars (`max-height: none`).
+- **Modes:** Single Session view (with session selector and prev/next buttons) vs Consolidated Mode (multi-agent cross-session event stream scoped to a task, run, or active filter).
+- **Timeline Scrubber:** 96-bin interactive SVG activity histogram displaying event density across the time window with range slider controls.
+- **Header & Navigation (Conversation):** Single panel titled `Conversation` containing mode toggle (`Single Session | Consolidated`), global `Expand all` / `Collapse all` button (`aria-pressed`), filter checkboxes (`Hide assistant`, `Hide unknown`, `Hide other empty`), native session selector (`<first8…last4> · <source> · <UTC month/day time> · <formatted token load>`), and bounded Previous/Next buttons.
+- **Nine-Field Metadata Strip:** Ordered fields `SESSION`/`SESSIONS`, `AGENT`, `MODEL`, `STARTED`, `DURATION`, `TOTAL TOKENS` (`fresh + cache read + output`), `CACHE READ` (`cache / (fresh + cache) * 100`), `OUTPUT TOKENS`, and `TOOL CALLS`.
+- **Honest Gutter Duration:** Gutter step duration evaluates strictly within each `(source, sessionId)`:
+  - `measured`: finite positive imported duration (`⏱ 5.0s`, bold amber $\ge 5$s).
+  - `inferred`: positive timestamp delta to the next event in the same session $\le 10$ minutes (`⏱ ~12s`).
+  - `unmeasured`: gaps $> 10$ minutes, negative deltas, or missing next event (`⏱ —`).
+- **User Prompt Cards:** 80% width (`w-[80%]`) card aligned to the right side (`flex justify-end`) with interactive `UserTokenBadge` popover (displaying prompt lines, characters, fresh input, cache read, output, and full turn load), prompt summary, and expandable verbatim dark monospace drawer (`#0d141f`).
+- **Distinct Assistant vs Tool Cards:**
+  - **Assistant Cards:** Left-aligned response cards displaying `AgentIcon`, model tag, output tokens, and message preview. No tool badges and no exit codes.
+  - **Tool Cards:** Left-aligned action cards displaying `AgentIcon`, as-is tool tag (`glob`, `grep`, `edit`, `read`, `write`, `bash`, `search`, `run`), title, exit code (`EXIT_CODE=0` emerald / `EXIT_CODE=N` rose), and expandable verbatim drawer.
+- **Verbatim Tool Payload Precedence:** Payloads prioritize raw error text $\rightarrow$ retained raw arguments $\rightarrow$ formatted multiline digest metadata $\rightarrow$ null (collapses drawer).
+- **Consolidated Multi-Agent Traces:** Renders chronological multi-agent blocks carrying correlation exactness badges (`Exact` emerald / `Estimated` amber) and session markers. Truncation banner renders if stream exceeds 5,000 newest events.
+- **Session Identity Extraction:** Canonical session IDs extracted from JSONL paths (`brain/<uuid>` for AGY, `rollout-*-<uuid>.jsonl` or `session_meta.payload.id` for Codex).
 
 ### 3.3 Tab 3: Sessions
 - **Sortable DataTable:** Columns for Session ID, Agent, Model, Start Time, Duration, Messages, Tool Calls, Billed Tokens, Cache Read, Fresh Input, Top Tool, and State badge.
@@ -113,7 +118,7 @@ export const historyFilterSchema = z.object({
 
 Endpoints:
 1. `history.getSummary(filter)` $\rightarrow$ Summary KPIs, time buckets, breakdowns.
-2. `history.getTimeline({ sessionId })` $\rightarrow$ Session metadata and chronological event stream.
+2. `POST history.getTimeline({ mode: 'session', source, sessionId } | { mode: 'consolidated', filter, taskWbs?, runId? })` $\rightarrow$ Source-safe session or bounded newest-5,000 multi-agent blocks with nullable duration source, prompt attribution, and correlation exactness.
 3. `history.getSessions(filter, pagination, sort)` $\rightarrow$ Paginated, sortable session records.
 4. `history.getInsights(filter)` $\rightarrow$ Loop findings, cache waste, slow steps, model comparison.
 5. `history.getSources()` $\rightarrow$ Corpus summary, 9 agent sources, 90-day daily token matrices, directory registry.
@@ -186,3 +191,4 @@ tasks and the doc agree:
 | **0635** | Timeline Tab Compact Antigravity-CLI Stream | `apps/web/src/modules/history/TimelineTab.tsx` | Compact single-line cards, Sources AgentIcon tooltips, as-is tool telemetry tooltips, USER prompt cards, and conversation item filters |
 | **0636** | Timeline Tab Filter Defaults, 80% Alignment & Top-Layer Tooltips | `apps/web/src/modules/history/TimelineTab.tsx` | Default-checked filters, Hide other empty label, 80% width with right/left alignment, and z-50 unclipped tooltips |
 | **0637** | Timeline Tab Prompt Token Tooltip & Redundant Tag Removal | `apps/web/src/modules/history/TimelineTab.tsx` | UserTokenBadge token breakdown tooltip, eliminate redundant USER badge, and single-line prompt row |
+| **0638** | Honest & Consolidated History Timeline | contracts, domain analytics, app projection, observer, server, and Timeline UI | Discriminated POST seam; canonical AGY/Codex identity; authority-table correlation; measured/inferred/unmeasured duration; source-safe prompt telemetry; bounded scrubber and consolidated view |

@@ -4,7 +4,7 @@ name: "History database access: schema optimization, domain DAOs, and live oRPC 
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:29.156Z
-updated_at: "2026-08-22T18:31:11.230Z"
+updated_at: "2026-08-23T21:47:39.180Z"
 feature_id: E8
 dependencies: ["0627"]
 ---
@@ -156,9 +156,9 @@ Testing and hand the materialization decision to 0629 — do not add a rollup ta
 - `packages/domain/src/analytics/artifact.ts:20-31` — `ArtifactSelector` carries canonical model, tool, and skill predicates through the existing selector seam.
 - `packages/domain/src/analytics/forensic-query.ts:132-164` — `buildMessageWhereClauses` composes all selector predicates once for sibling queries.
 - `packages/domain/src/analytics/forensic-query.ts:859-919` — `bucketedTokenSeries` provides bounded time and dimension aggregation.
-- `packages/domain/src/analytics/forensic-query.ts:921-984` — `sessionTimeline` uses one indexed query and a hard event ceiling.
+- `packages/domain/src/analytics/forensic-query.ts:1231-1244` — `sessionTimeline` uses one indexed query and a hard event ceiling.
 - `packages/domain/src/migrations.ts:360` — `HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL` contains only the four indexes justified by measured plans.
-- `packages/app/src/services/history-board-service.ts:486-494` — `LiveHistoryBoardService` implements the six live projections and explicit materialized fallback policy.
+- `packages/app/src/services/history-board-service.ts:514-515` — `LiveHistoryBoardService` implements the six live projections and explicit materialized fallback policy.
 ### Testing
 **Pipeline verify results**
 

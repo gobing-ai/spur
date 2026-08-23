@@ -8,7 +8,7 @@ export interface InsightsTabProps {
     loading?: boolean;
     error?: string | null;
     cacheHitTrend?: readonly HistoryKpiTrendPoint[];
-    onSelectSession?: (sessionId: string) => void;
+    onSelectSession?: (sessionId: string, source?: string) => void;
 }
 export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, cacheHitTrend, onSelectSession }) => {
     type ModelSortKey = 'model' | 'speedMsMean' | 'cacheRatio' | 'reliability' | 'outputRatio';
@@ -160,7 +160,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                     <button
                                         type="button"
                                         className="text-primary hover:underline font-bold"
-                                        onClick={() => onSelectSession?.(s.id)}
+                                        onClick={() => onSelectSession?.(s.id, s.source)}
                                     >
                                         {s.id} ({s.source} · {s.model})
                                     </button>
@@ -203,7 +203,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                             <button
                                                 type="button"
                                                 className="text-primary hover:underline"
-                                                onClick={() => onSelectSession?.(ss.sessionId)}
+                                                onClick={() => onSelectSession?.(ss.sessionId, ss.agent)}
                                             >
                                                 {ss.sessionId}
                                             </button>
@@ -255,7 +255,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                             <button
                                                 type="button"
                                                 className="text-primary hover:underline"
-                                                onClick={() => onSelectSession?.(ls.sessionId)}
+                                                onClick={() => onSelectSession?.(ls.sessionId, ls.agent)}
                                             >
                                                 {ls.sessionId}
                                             </button>

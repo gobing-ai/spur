@@ -63,13 +63,18 @@ describe('MockHistoryBoardService', () => {
 
     test('getTimeline returns valid session metadata and grouped blocks', async () => {
         const sessions = await service.getSessions({ page: 1, pageSize: 5 });
-        const targetId = sessions.items[0]?.id ?? 'sess-0001';
+        const target = sessions.items[0] ?? { id: 'sess-0001', source: 'claude' };
 
-        const timeline = await service.getTimeline(targetId);
-        expect(timeline.session.id).toBe(targetId);
-        expect(timeline.session.tokens.billedTokens).toBeGreaterThan(0);
+        const timeline = await service.getTimeline({ mode: 'session', source: target.source, sessionId: target.id });
+        expect(timeline.scope.sessionId).toBe(target.id);
+        expect(timeline.scope.tokens.billedTokens).toBeGreaterThan(0);
         expect(timeline.blocks.length).toBeGreaterThan(0);
         expect(timeline.blocks[0]?.events.length).toBeGreaterThan(0);
+
+        const consolidated = await service.getTimeline({ mode: 'consolidated' });
+        expect(consolidated.mode).toBe('consolidated');
+        expect(consolidated.scope.sessionCount).toBeGreaterThan(0);
+        expect(consolidated.scope.tokens.billedTokens).toBeGreaterThan(0);
     });
 
     test('getSessions handles pagination and sorting', async () => {
@@ -79,6 +84,12 @@ describe('MockHistoryBoardService', () => {
         expect(page1.items.length).toBe(5);
         expect(page2.items.length).toBe(5);
         expect(page1.items[0]?.id).not.toBe(page2.items[0]?.id);
+
+        await service.getSessions({ page: 1, pageSize: 5, sortBy: 'duration', sortDir: 'asc' });
+        await service.getSessions({ page: 1, pageSize: 5, sortBy: 'messages', sortDir: 'asc' });
+        await service.getSessions({ page: 1, pageSize: 5, sortBy: 'toolCalls', sortDir: 'asc' });
+        await service.getSessions({ page: 1, pageSize: 5, sortBy: 'cacheRead', sortDir: 'asc' });
+        await service.getSessions({ page: 1, pageSize: 5, sortBy: 'freshInput', sortDir: 'asc' });
 
         const sortedByBilled = await service.getSessions({
             page: 1,

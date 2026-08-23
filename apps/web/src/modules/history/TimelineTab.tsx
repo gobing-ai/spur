@@ -1,19 +1,30 @@
-import type { HistoryTimelineEvent, HistoryTimelineResponse } from '@gobing-ai/spur-contracts';
+import type { HistoryTimelineEvent, HistoryTimelineResponse, HistoryTokens } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { useState } from 'react';
 import { AgentIcon } from './AgentIcon';
 import { fmtDur, fmtInt, fmtMs, fmtTok } from './charts';
+import TimelineScrubber from './TimelineScrubber';
 
 export interface TimelineTabProps {
     data?: HistoryTimelineResponse['data'];
     loading?: boolean;
     error?: string | null;
+    mode?: 'session' | 'consolidated';
     sessionId?: string;
+    sessionSource?: string;
     availableSessions?: Array<{ id: string; source: string; model: string; start: string; tokenLoad: number }>;
-    onSelectSession?: (id: string) => void;
+    onSelectSession?: (source: string, id: string) => void;
+    onModeChange?: (mode: 'session' | 'consolidated') => void;
+    consolidatedTaskWbs?: string;
+    consolidatedRunId?: string;
+    onConsolidatedScopeSubmit?: (scope: { taskWbs: string; runId: string }) => void;
 }
 
-const eventKey = (turnIndex: number, seq: number): string => `${turnIndex}:${seq}`;
+const eventKey = (blockKey: string, seq: number): string => `${blockKey}:${seq}`;
+
+const sessionKey = (source: string, id: string): string => JSON.stringify([source, id]);
+
+const sanitizeHtmlId = (id: string): string => id.replace(/[^a-zA-Z0-9_-]/g, '-');
 
 const tokenLoad = (fresh: number, cache: number, output: number): number => fresh + cache + output;
 
@@ -29,7 +40,8 @@ const shortSessionId = (id: string): string => {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
-const fmtUtcDayTime = (ts: string): string => {
+const fmtUtcDayTime = (ts: string | null): string => {
+    if (!ts) return '—';
     const d = new Date(ts);
     if (Number.isNaN(d.getTime())) return ts;
     const m = MONTH_NAMES[d.getUTCMonth()];
@@ -39,7 +51,8 @@ const fmtUtcDayTime = (ts: string): string => {
     return `${m} ${day} ${hh}:${mm}`;
 };
 
-const fmtUtcClock = (ts: string): string => {
+const fmtUtcClock = (ts: string | null): string => {
+    if (!ts) return '—';
     const d = new Date(ts);
     if (Number.isNaN(d.getTime())) return ts.slice(11, 19) || ts;
     const hh = String(d.getUTCHours()).padStart(2, '0');
@@ -66,7 +79,7 @@ const promptSummary = (text: string): string => {
 };
 
 const isAssistantEvent = (event: HistoryTimelineEvent): boolean =>
-    event.kind === 'assistant' || (event.kind === 'run' && event.eventType === 'message');
+    event.kind === 'assistant' || (event.eventType === 'message' && event.kind !== 'user');
 
 interface ToolPresentation {
     label: string;
@@ -74,57 +87,32 @@ interface ToolPresentation {
 }
 
 const toolPresentation = (event: HistoryTimelineEvent): ToolPresentation => {
-    const t = event.title.toLowerCase();
-    if (t.includes('glob')) {
-        return {
-            label: 'glob',
-            color: '#6366f1',
-        };
+    const raw = (event.toolName || event.kind || '').toLowerCase();
+    if (raw.includes('glob')) {
+        return { label: event.toolName || 'glob', color: '#6366f1' };
     }
-    if (t.includes('grep')) {
-        return {
-            label: 'grep',
-            color: '#a855f7',
-        };
+    if (raw.includes('grep')) {
+        return { label: event.toolName || 'grep', color: '#a855f7' };
     }
-    if (t.includes('edit')) {
-        return {
-            label: 'edit',
-            color: '#eab308',
-        };
+    if (raw.includes('edit') || raw.includes('write') || raw.includes('patch')) {
+        return { label: event.toolName || 'edit', color: '#eab308' };
     }
-    switch (event.kind) {
-        case 'read':
-            return {
-                label: 'read',
-                color: '#10b981',
-            };
-        case 'write':
-            return {
-                label: 'write',
-                color: '#f43f5e',
-            };
-        case 'bash':
-            return {
-                label: 'bash',
-                color: '#3b82f6',
-            };
-        case 'search':
-            return {
-                label: 'search',
-                color: '#a855f7',
-            };
-        case 'run':
-            return {
-                label: 'run',
-                color: '#f59e0b',
-            };
-        default:
-            return {
-                label: event.kind,
-                color: '#64748b',
-            };
+    if (raw.includes('read') || raw.includes('view') || raw.includes('list')) {
+        return { label: event.toolName || 'read', color: '#10b981' };
     }
+    if (raw.includes('bash') || raw.includes('exec') || raw.includes('command') || raw.includes('terminal')) {
+        return { label: event.toolName || 'bash', color: '#3b82f6' };
+    }
+    if (raw.includes('search') || raw.includes('find')) {
+        return { label: event.toolName || 'search', color: '#a855f7' };
+    }
+    if (raw.includes('run')) {
+        return { label: event.toolName || 'run', color: '#f59e0b' };
+    }
+    return {
+        label: event.toolName || event.kind,
+        color: '#64748b',
+    };
 };
 
 const UserIcon: React.FC = () => (
@@ -147,13 +135,18 @@ const UserIcon: React.FC = () => (
 
 /** User prompt icon badge with hover/focus token breakdown tooltip. */
 const UserTokenBadge: React.FC<{
-    freshInputTokens: number;
-    cacheReadTokens: number;
-    outputTokens: number;
+    promptTokens: HistoryTokens | null;
+    fullText: string;
     tooltipId: string;
-}> = ({ freshInputTokens, cacheReadTokens, outputTokens, tooltipId }) => {
+}> = ({ promptTokens, fullText, tooltipId }) => {
     const [open, setOpen] = useState(false);
-    const total = tokenLoad(freshInputTokens, cacheReadTokens, outputTokens);
+    const fresh = promptTokens?.freshInputTokens ?? 0;
+    const cache = promptTokens?.cacheReadTokens ?? 0;
+    const output = promptTokens?.outputTokens ?? 0;
+    const total = tokenLoad(fresh, cache, output);
+    const lineCount = fullText.length > 0 ? fullText.split(/\r?\n/).length : 0;
+    const charCount = fullText.length;
+
     return (
         <div className="relative inline-flex items-center z-20">
             <button
@@ -176,19 +169,23 @@ const UserTokenBadge: React.FC<{
                 id={tooltipId}
                 role="tooltip"
                 data-testid={tooltipId}
-                className={`absolute left-0 top-full z-50 mt-1.5 w-52 p-2 rounded-lg bg-base-300 border border-base-content/20 shadow-2xl text-[11px] font-mono leading-relaxed pointer-events-none ${
+                className={`absolute left-0 top-full z-50 mt-1.5 w-56 p-2 rounded-lg bg-base-300 border border-base-content/20 shadow-2xl text-[11px] font-mono leading-relaxed pointer-events-none ${
                     open ? 'block' : 'hidden'
                 }`}
             >
-                <div className="font-bold text-base-content mb-1">User Prompt Tokens</div>
+                <div className="font-bold text-base-content mb-1">User Prompt Telemetry</div>
                 <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-base-content/80">
+                    <span className="text-base-content/60">Lines / chars:</span>
+                    <span>
+                        {lineCount} lines ({charCount} chars)
+                    </span>
                     <span className="text-base-content/60">📥 Fresh input:</span>
-                    <span>{fmtTok(freshInputTokens)}</span>
+                    <span>{fmtTok(fresh)}</span>
                     <span className="text-base-content/60">💾 Cache read:</span>
-                    <span className="text-cyan-400">{fmtTok(cacheReadTokens)}</span>
+                    <span className="text-cyan-400">{fmtTok(cache)}</span>
                     <span className="text-base-content/60">📤 Output:</span>
-                    <span>{fmtTok(outputTokens)}</span>
-                    <span className="text-base-content/60 border-t border-base-content/10 pt-0.5">⚡ Total:</span>
+                    <span>{fmtTok(output)}</span>
+                    <span className="text-base-content/60 border-t border-base-content/10 pt-0.5">⚡ Turn load:</span>
                     <span className="font-bold border-t border-base-content/10 pt-0.5 text-primary">
                         {fmtTok(total)}
                     </span>
@@ -202,7 +199,7 @@ const UserTokenBadge: React.FC<{
 const AgentBadge: React.FC<{
     agentId: string;
     model: string;
-    timestamp: string;
+    timestamp: string | null;
     tooltipId: string;
 }> = ({ agentId, model, timestamp, tooltipId }) => {
     const [open, setOpen] = useState(false);
@@ -310,27 +307,36 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     data,
     loading,
     error,
+    mode = 'session',
     sessionId: _sessionId,
     availableSessions = [],
     onSelectSession,
+    onModeChange,
+    consolidatedTaskWbs = '',
+    consolidatedRunId = '',
+    onConsolidatedScopeSubmit,
 }) => {
-    const activeSessionId = data?.session.id;
+    const activeSessionId = data?.scope.sessionId;
+    const activeSessionSource = data?.scope.source;
     const [expandedBySession, setExpandedBySession] = useState<Record<string, Record<string, boolean>>>({});
     const [hideAssistant, setHideAssistant] = useState(true);
     const [hideUnknown, setHideUnknown] = useState(true);
     const [hideOtherEmpty, setHideOtherEmpty] = useState(true);
+    const [taskWbsDraft, setTaskWbsDraft] = useState(consolidatedTaskWbs);
+    const [runIdDraft, setRunIdDraft] = useState(consolidatedRunId);
 
-    const expandedEvents = (activeSessionId && expandedBySession[activeSessionId]) || {};
+    const activeScopeKey =
+        activeSessionId && activeSessionSource ? sessionKey(activeSessionSource, activeSessionId) : 'consolidated';
+    const expandedEvents = expandedBySession[activeScopeKey] || {};
     const setExpandedEvents = (update: (prev: Record<string, boolean>) => Record<string, boolean>) => {
-        if (!activeSessionId) return;
         setExpandedBySession((prev) => ({
             ...prev,
-            [activeSessionId]: update(prev[activeSessionId] || {}),
+            [activeScopeKey]: update(prev[activeScopeKey] || {}),
         }));
     };
 
-    const toggleEvent = (turnIndex: number, seq: number) => {
-        const key = eventKey(turnIndex, seq);
+    const toggleEvent = (blockKey: string, seq: number) => {
+        const key = eventKey(blockKey, seq);
         setExpandedEvents((prev) => ({ ...prev, [key]: !prev[key] }));
     };
 
@@ -353,18 +359,18 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     if (!data) {
         return (
             <div className="p-4 rounded-lg bg-info/10 border border-info/20 text-info">
-                <span>No timeline data available for the selected session.</span>
+                <span>No timeline data available.</span>
             </div>
         );
     }
 
-    const { session, blocks } = data;
+    const { scope, blocks, truncated } = data;
     const sessionTokenLoad = tokenLoad(
-        session.tokens.freshInputTokens,
-        session.tokens.cacheReadTokens,
-        session.tokens.outputTokens,
+        scope.tokens.freshInputTokens,
+        scope.tokens.cacheReadTokens,
+        scope.tokens.outputTokens,
     );
-    const sessionCacheReadPct = cacheReadPercent(session.tokens.freshInputTokens, session.tokens.cacheReadTokens);
+    const sessionCacheReadPct = cacheReadPercent(scope.tokens.freshInputTokens, scope.tokens.cacheReadTokens);
 
     const filteredBlocks = blocks
         .map((block) => {
@@ -374,7 +380,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                 if (
                     hideOtherEmpty &&
                     !ev.payload?.trim() &&
-                    ev.durationMs === 0 &&
+                    (ev.durationMs === null || ev.durationMs === 0) &&
                     tokenLoad(ev.freshInputTokens, ev.cacheReadTokens, ev.outputTokens) === 0
                 )
                     return false;
@@ -385,17 +391,30 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         .filter((block) => block.events.length > 0);
 
     const expandableKeys = filteredBlocks.flatMap((block) =>
-        block.events.filter((ev) => !!ev.payload?.trim()).map((ev) => eventKey(block.turnIndex, ev.seq)),
+        block.events.filter((ev) => !!ev.payload?.trim()).map((ev) => eventKey(block.key, ev.seq)),
     );
     const allExpanded = expandableKeys.length > 0 && expandableKeys.every((key) => expandedEvents[key]);
     const toggleAll = () =>
         setExpandedEvents(() => (allExpanded ? {} : Object.fromEntries(expandableKeys.map((key) => [key, true]))));
 
     // Prev/Next walk the roster order only; disabled at bounds, no wrap.
-    const rosterIndex = availableSessions.findIndex((s) => s.id === session.id);
+    const rosterIndex = availableSessions.findIndex((s) => s.id === scope.sessionId && s.source === scope.source);
     const prevSession = rosterIndex > 0 ? availableSessions[rosterIndex - 1] : undefined;
     const nextSession =
         rosterIndex >= 0 && rosterIndex < availableSessions.length - 1 ? availableSessions[rosterIndex + 1] : undefined;
+
+    const jumpToTime = (timestamp: string) => {
+        const selectedMs = Date.parse(timestamp);
+        const target =
+            filteredBlocks.find((block) => {
+                const blockMs = block.timestamp ? Date.parse(block.timestamp) : Number.NaN;
+                return Number.isFinite(blockMs) && blockMs >= selectedMs;
+            }) ?? filteredBlocks.at(-1);
+        if (!target) return;
+        document
+            .getElementById(`timeline-block-${sanitizeHtmlId(target.key)}`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
 
     return (
         <div className="flex flex-col gap-6">
@@ -403,59 +422,159 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
             <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4">
                 {/* Header Toolbar */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
                         <h3 className="text-base font-bold tracking-tight">Conversation</h3>
+                        {/* Mode Switch: Single Session vs Consolidated */}
+                        <fieldset className="inline-flex border border-base-content/20 rounded-lg p-0.5 bg-base-300 font-mono text-xs">
+                            <legend className="sr-only">Timeline mode</legend>
+                            <button
+                                type="button"
+                                data-testid="timeline-mode-session"
+                                aria-pressed={mode === 'session'}
+                                className={`px-2.5 py-1 rounded-md transition-colors ${
+                                    mode === 'session'
+                                        ? 'bg-primary text-primary-content font-bold'
+                                        : 'text-base-content/70 hover:text-base-content'
+                                }`}
+                                onClick={() => onModeChange?.('session')}
+                            >
+                                Single Session
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="timeline-mode-consolidated"
+                                aria-pressed={mode === 'consolidated'}
+                                className={`px-2.5 py-1 rounded-md transition-colors ${
+                                    mode === 'consolidated'
+                                        ? 'bg-primary text-primary-content font-bold'
+                                        : 'text-base-content/70 hover:text-base-content'
+                                }`}
+                                onClick={() => onModeChange?.('consolidated')}
+                            >
+                                Consolidated
+                            </button>
+                        </fieldset>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <label className="flex items-center gap-2">
-                            <span className="sr-only">Session</span>
-                            <select
-                                aria-label="Select Session"
-                                data-testid="timeline-session-select"
-                                className="px-3 py-1.5 min-h-[44px] text-xs rounded-lg border border-base-content/20 bg-base-300 font-mono text-base-content max-w-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                                value={session.id}
-                                onChange={(e) => onSelectSession?.(e.target.value)}
-                            >
-                                {availableSessions.length > 0 ? (
-                                    availableSessions.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                            {sessionOptionLabel(s)}
-                                        </option>
-                                    ))
-                                ) : (
-                                    <option value={session.id}>
-                                        {sessionOptionLabel({
-                                            id: session.id,
-                                            source: session.source,
-                                            start: session.start,
-                                            tokenLoad: sessionTokenLoad,
-                                        })}
-                                    </option>
-                                )}
-                            </select>
-                        </label>
+                        {mode === 'session' ? (
+                            <>
+                                <label className="flex items-center gap-2">
+                                    <span className="sr-only">Session</span>
+                                    <select
+                                        aria-label="Select Session"
+                                        data-testid="timeline-session-select"
+                                        className="px-3 py-1.5 min-h-[44px] text-xs rounded-lg border border-base-content/20 bg-base-300 font-mono text-base-content max-w-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        value={
+                                            scope.source && scope.sessionId
+                                                ? sessionKey(scope.source, scope.sessionId)
+                                                : ''
+                                        }
+                                        onChange={(e) => {
+                                            const target = availableSessions.find(
+                                                (session) => sessionKey(session.source, session.id) === e.target.value,
+                                            );
+                                            if (target) onSelectSession?.(target.source, target.id);
+                                        }}
+                                    >
+                                        {availableSessions.length > 0 ? (
+                                            availableSessions.map((s) => (
+                                                <option
+                                                    key={sessionKey(s.source, s.id)}
+                                                    value={sessionKey(s.source, s.id)}
+                                                >
+                                                    {sessionOptionLabel(s)}
+                                                </option>
+                                            ))
+                                        ) : (
+                                            <option
+                                                value={
+                                                    scope.source && scope.sessionId
+                                                        ? sessionKey(scope.source, scope.sessionId)
+                                                        : ''
+                                                }
+                                            >
+                                                {scope.sessionId
+                                                    ? sessionOptionLabel({
+                                                          id: scope.sessionId,
+                                                          source: scope.source ?? 'unknown',
+                                                          start: scope.start ?? '',
+                                                          tokenLoad: sessionTokenLoad,
+                                                      })
+                                                    : 'No session selected'}
+                                            </option>
+                                        )}
+                                    </select>
+                                </label>
 
-                        <div className="flex items-center gap-1">
-                            <button
-                                type="button"
-                                aria-label="Previous session"
-                                disabled={!prevSession}
-                                className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
-                                onClick={() => prevSession && onSelectSession?.(prevSession.id)}
-                            >
-                                ←
-                            </button>
-                            <button
-                                type="button"
-                                aria-label="Next session"
-                                disabled={!nextSession}
-                                className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
-                                onClick={() => nextSession && onSelectSession?.(nextSession.id)}
-                            >
-                                →
-                            </button>
-                        </div>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        aria-label="Previous session"
+                                        disabled={!prevSession}
+                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                                        onClick={() =>
+                                            prevSession && onSelectSession?.(prevSession.source, prevSession.id)
+                                        }
+                                    >
+                                        ←
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label="Next session"
+                                        disabled={!nextSession}
+                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                                        onClick={() =>
+                                            nextSession && onSelectSession?.(nextSession.source, nextSession.id)
+                                        }
+                                    >
+                                        →
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-base-300 border border-base-content/20 text-xs font-mono">
+                                    <span className="text-base-content/60">Scope:</span>
+                                    <span className="font-semibold text-primary">{scope.sessionCount} sessions</span>
+                                </div>
+                                <form
+                                    className="flex flex-wrap items-end gap-2"
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        onConsolidatedScopeSubmit?.({
+                                            taskWbs: taskWbsDraft.trim(),
+                                            runId: runIdDraft.trim(),
+                                        });
+                                    }}
+                                >
+                                    <label className="flex flex-col gap-1 text-[10px] font-mono text-base-content/60">
+                                        Task WBS
+                                        <input
+                                            type="text"
+                                            value={taskWbsDraft}
+                                            onInput={(event) => setTaskWbsDraft(event.currentTarget.value)}
+                                            className="min-h-[44px] w-28 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-[10px] font-mono text-base-content/60">
+                                        Run ID
+                                        <input
+                                            type="text"
+                                            value={runIdDraft}
+                                            onInput={(event) => setRunIdDraft(event.currentTarget.value)}
+                                            className="min-h-[44px] w-40 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        />
+                                    </label>
+                                    <button
+                                        type="submit"
+                                        className="min-h-[44px] rounded-lg bg-primary px-3 text-xs font-semibold text-primary-content focus-visible:ring-2 focus-visible:ring-primary"
+                                    >
+                                        Apply scope
+                                    </button>
+                                </form>
+                            </div>
+                        )}
 
                         <button
                             type="button"
@@ -508,32 +627,43 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3 pt-3 border-t border-base-content/10 text-xs font-mono"
                 >
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase tracking-wider text-base-content/60">SESSION</span>
-                        <span className="font-semibold truncate" title={session.id}>
-                            {shortSessionId(session.id)}
+                        <span className="text-[10px] uppercase tracking-wider text-base-content/60">
+                            {mode === 'session' ? 'SESSION' : 'SESSIONS'}
+                        </span>
+                        <span
+                            className="font-semibold truncate"
+                            title={scope.sessionId ?? `${scope.sessionCount} sessions`}
+                        >
+                            {scope.sessionId ? shortSessionId(scope.sessionId) : `${scope.sessionCount} total`}
                         </span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">AGENT</span>
                         <span className="inline-flex items-center gap-1 font-semibold truncate">
-                            <AgentIcon id={session.source} />
-                            {session.source}
+                            {scope.source ? (
+                                <>
+                                    <AgentIcon id={scope.source} />
+                                    {scope.source}
+                                </>
+                            ) : (
+                                'multiple'
+                            )}
                         </span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">MODEL</span>
                         <span className="inline-flex items-center gap-1.5 truncate">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary/70 shrink-0" />
-                            {session.modelDetail || session.model}
+                            {scope.model ?? 'multiple'}
                         </span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">STARTED</span>
-                        <span className="truncate">{fmtUtcDayTime(session.start)}</span>
+                        <span className="truncate">{fmtUtcDayTime(scope.start)}</span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">DURATION</span>
-                        <span className="font-semibold truncate">{fmtDur(session.durationMs / 60000)}</span>
+                        <span className="font-semibold truncate">{fmtDur(scope.durationMs / 60000)}</span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">TOTAL TOKENS</span>
@@ -545,14 +675,35 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">OUTPUT TOKENS</span>
-                        <span className="truncate">{fmtTok(session.tokens.outputTokens)}</span>
+                        <span className="truncate">{fmtTok(scope.tokens.outputTokens)}</span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">TOOL CALLS</span>
-                        <span className="truncate">{fmtInt(session.toolCallCount)}</span>
+                        <span className="truncate">{fmtInt(scope.toolCallCount)}</span>
                     </div>
                 </div>
+
+                {/* Scrubber Navigation */}
+                <TimelineScrubber
+                    blocks={filteredBlocks}
+                    start={scope.start}
+                    end={scope.end}
+                    onJumpToTime={jumpToTime}
+                />
             </div>
+
+            {/* Truncation Notice Banner */}
+            {truncated && (
+                <div
+                    data-testid="timeline-truncated-banner"
+                    className="p-3 rounded-lg bg-info/10 border border-info/20 text-info font-mono text-xs flex items-center gap-2"
+                >
+                    <span>ℹ️</span>
+                    <span>
+                        Showing newest 5,000 events. Apply a narrower filter or time window to inspect earlier events.
+                    </span>
+                </div>
+            )}
 
             {/* Continuous Vertical Rail & Chronological Stream */}
             <div
@@ -564,20 +715,49 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     const nonUserEvents = block.events.filter((e) => e.kind !== 'user');
 
                     return (
-                        <div key={block.turnIndex} className="flex flex-col gap-2.5">
+                        <div
+                            key={block.key}
+                            id={`timeline-block-${sanitizeHtmlId(block.key)}`}
+                            data-testid={`timeline-block-${block.key}`}
+                            className="flex flex-col gap-2.5"
+                        >
+                            {/* Consolidated Block Header with Correlation Badge */}
+                            {mode === 'consolidated' && (
+                                <div className="flex items-center gap-2 pl-6 sm:pl-[144px] pt-2 pb-1 font-mono text-xs text-base-content/70">
+                                    <AgentIcon id={block.source} />
+                                    <span className="font-bold text-base-content">{block.source}</span>
+                                    <span>· {shortSessionId(block.sessionId)}</span>
+                                    <span>· Turn #{block.turnIndex}</span>
+                                    {block.correlationExactness && (
+                                        <span
+                                            data-testid={`timeline-exactness-${block.key}`}
+                                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                                block.correlationExactness === 'exact'
+                                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                            }`}
+                                        >
+                                            {block.correlationExactness}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Prompt Rows (User Events - 80% Width Right-Aligned) */}
                             {userEvents.map((ev) => {
                                 const fullText = promptText(ev);
+                                const telemetryText = ev.payload?.trim() ?? '';
                                 const summary = promptSummary(fullText);
                                 const hasPayload = !!ev.payload?.trim();
-                                const isExpanded = !!expandedEvents[eventKey(block.turnIndex, ev.seq)];
-                                const drawerId = `timeline-user-drawer-${block.turnIndex}-${ev.seq}`;
+                                const isExpanded = !!expandedEvents[eventKey(block.key, ev.seq)];
+                                const drawerId = sanitizeHtmlId(`timeline-user-drawer-${block.key}-${ev.seq}`);
+                                const tooltipId = sanitizeHtmlId(`user-tt-${block.key}-${ev.seq}`);
 
                                 return (
                                     <div
-                                        key={eventKey(block.turnIndex, ev.seq)}
+                                        key={eventKey(block.key, ev.seq)}
                                         className="relative flex flex-col sm:grid sm:grid-cols-[136px_minmax(0,1fr)] py-1"
-                                        data-testid={`timeline-user-event-${block.turnIndex}-${ev.seq}`}
+                                        data-testid={`timeline-user-event-${block.key}-${ev.seq}`}
                                     >
                                         {/* Left Column (Desktop UTC Clock & Input Tokens) */}
                                         <div className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/70">
@@ -602,10 +782,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 <div className="flex items-center justify-between gap-2 min-h-[32px]">
                                                     <div className="flex items-center gap-2 min-w-0 flex-1">
                                                         <UserTokenBadge
-                                                            freshInputTokens={ev.freshInputTokens}
-                                                            cacheReadTokens={ev.cacheReadTokens}
-                                                            outputTokens={ev.outputTokens}
-                                                            tooltipId={`user-tt-${block.turnIndex}-${ev.seq}`}
+                                                            promptTokens={ev.promptTokens}
+                                                            fullText={telemetryText}
+                                                            tooltipId={tooltipId}
                                                         />
                                                         <span className="font-mono text-xs font-semibold text-base-content/90 truncate min-w-0">
                                                             {summary}
@@ -613,9 +792,6 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                     </div>
 
                                                     <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] text-base-content/60">
-                                                        <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-base-300 border border-base-content/10">
-                                                            {fullText.length} chars
-                                                        </span>
                                                         {hasPayload ? (
                                                             <button
                                                                 type="button"
@@ -626,7 +802,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                 }
                                                                 aria-expanded={isExpanded}
                                                                 aria-controls={drawerId}
-                                                                onClick={() => toggleEvent(block.turnIndex, ev.seq)}
+                                                                onClick={() => toggleEvent(block.key, ev.seq)}
                                                                 className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
                                                             >
                                                                 <span
@@ -659,30 +835,52 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                             {/* Operation Cards (Single-Line Compact Antigravity-CLI Style - 80% Width Left-Aligned) */}
                             {nonUserEvents.map((ev) => {
                                 const presentation = toolPresentation(ev);
-                                const isExpanded = !!expandedEvents[eventKey(block.turnIndex, ev.seq)];
+                                const isExpanded = !!expandedEvents[eventKey(block.key, ev.seq)];
                                 const hasPayload = !!ev.payload?.trim();
-                                const drawerId = `timeline-op-drawer-${block.turnIndex}-${ev.seq}`;
-                                const isHotDur = ev.durationMs >= 5_000;
+                                const drawerId = sanitizeHtmlId(`timeline-op-drawer-${block.key}-${ev.seq}`);
+                                const agentTooltipId = sanitizeHtmlId(`agent-tt-${block.key}-${ev.seq}`);
+                                const toolTooltipId = sanitizeHtmlId(`tool-tt-${block.key}-${ev.seq}`);
+                                const isAssistant = isAssistantEvent(ev);
 
                                 return (
                                     <div
-                                        key={eventKey(block.turnIndex, ev.seq)}
+                                        key={eventKey(block.key, ev.seq)}
                                         className="relative flex flex-col sm:grid sm:grid-cols-[136px_minmax(0,1fr)] py-1 hover:z-30 focus-within:z-30"
-                                        data-testid={`timeline-op-event-${block.turnIndex}-${ev.seq}`}
+                                        data-testid={`timeline-op-event-${block.key}-${ev.seq}`}
                                     >
                                         {/* Left Gutter: Timestamp & Step Duration */}
                                         <div className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/70">
                                             <span className="font-semibold text-base-content/90">
                                                 {fmtUtcClock(block.timestamp)}
                                             </span>
-                                            <span
-                                                data-testid={`timeline-step-duration-${block.turnIndex}-${ev.seq}`}
-                                                className={
-                                                    isHotDur ? 'font-bold text-amber-400' : 'text-base-content/60'
-                                                }
-                                            >
-                                                ⏱ {fmtMs(ev.durationMs)}
-                                            </span>
+                                            {ev.durationSource === 'measured' && ev.durationMs !== null ? (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    className={
+                                                        ev.durationMs >= 5_000
+                                                            ? 'font-bold text-amber-400'
+                                                            : 'text-base-content/60'
+                                                    }
+                                                >
+                                                    ⏱ {fmtMs(ev.durationMs)}
+                                                </span>
+                                            ) : ev.durationSource === 'inferred' && ev.durationMs !== null ? (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    title="Inferred from next event timestamp within session"
+                                                    className="text-base-content/60 italic"
+                                                >
+                                                    ⏱ ~{fmtMs(ev.durationMs)}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    title="Unmeasured (gap > 10m or last event)"
+                                                    className="text-base-content/40"
+                                                >
+                                                    ⏱ —
+                                                </span>
+                                            )}
                                         </div>
 
                                         {/* Continuous Rail Node */}
@@ -693,86 +891,150 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                             aria-hidden="true"
                                         />
 
-                                        {/* Right Column (Single-Line Card, 80% Width Left-Aligned) */}
+                                        {/* Right Column: Assistant Card or Tool Card */}
                                         <div className="pl-6 sm:pl-5 min-w-0 flex justify-start">
-                                            <div
-                                                className="w-[80%] max-w-none bg-base-100 rounded-lg border border-base-content/10 border-l-[3px] transition-colors relative"
-                                                style={{ borderLeftColor: presentation.color }}
-                                            >
-                                                <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 min-h-[38px]">
-                                                    {/* Left side: Agent Icon, Tool Tag, Title */}
-                                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                        <AgentBadge
-                                                            agentId={ev.agent || block.source}
-                                                            model={ev.model || block.model}
-                                                            timestamp={block.timestamp}
-                                                            tooltipId={`agent-tt-${block.turnIndex}-${ev.seq}`}
-                                                        />
-
-                                                        <ToolTokenBadge
-                                                            title={presentation.label}
-                                                            freshInputTokens={ev.freshInputTokens}
-                                                            cacheReadTokens={ev.cacheReadTokens}
-                                                            outputTokens={ev.outputTokens}
-                                                            color={presentation.color}
-                                                            tooltipId={`tool-tt-${block.turnIndex}-${ev.seq}`}
-                                                        />
-
-                                                        <span className="font-mono text-xs font-semibold text-base-content/90 truncate min-w-0">
-                                                            {ev.title}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Right side: Exit Code & Chevron */}
-                                                    <div className="flex items-center gap-2 shrink-0 font-mono">
-                                                        {ev.exitCode !== null && (
-                                                            <span
-                                                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                                                    ev.exitCode === 0
-                                                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                                        : 'bg-error/20 text-error border border-error/30'
-                                                                }`}
-                                                            >
-                                                                EXIT_CODE={ev.exitCode}
+                                            {isAssistant ? (
+                                                /* Assistant Message Card */
+                                                <div className="w-[80%] max-w-none bg-base-100 rounded-lg border border-base-content/10 border-l-[3px] border-l-primary/70 transition-colors relative">
+                                                    <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 min-h-[38px]">
+                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                            <AgentBadge
+                                                                agentId={ev.agent || block.source}
+                                                                model={ev.model || block.model}
+                                                                timestamp={block.timestamp}
+                                                                tooltipId={agentTooltipId}
+                                                            />
+                                                            <span className="font-mono text-xs text-base-content/60 truncate">
+                                                                {ev.model}
                                                             </span>
-                                                        )}
+                                                            <span className="font-mono text-xs text-base-content/90 truncate min-w-0">
+                                                                {promptSummary(ev.payload || ev.title)}
+                                                            </span>
+                                                        </div>
 
-                                                        {hasPayload ? (
-                                                            <button
-                                                                type="button"
-                                                                aria-label={
-                                                                    isExpanded
-                                                                        ? 'Collapse operation payload'
-                                                                        : 'Expand operation payload'
-                                                                }
-                                                                aria-expanded={isExpanded}
-                                                                aria-controls={drawerId}
-                                                                onClick={() => toggleEvent(block.turnIndex, ev.seq)}
-                                                                className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-                                                            >
-                                                                <span
-                                                                    className={`text-xs font-mono transition-transform duration-150 ${
-                                                                        isExpanded ? 'rotate-90' : ''
-                                                                    }`}
-                                                                    aria-hidden="true"
+                                                        <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] text-base-content/60">
+                                                            <span>📤 {fmtTok(ev.outputTokens)}</span>
+                                                            {hasPayload ? (
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={
+                                                                        isExpanded
+                                                                            ? 'Collapse response'
+                                                                            : 'Expand response'
+                                                                    }
+                                                                    aria-expanded={isExpanded}
+                                                                    aria-controls={drawerId}
+                                                                    onClick={() => toggleEvent(block.key, ev.seq)}
+                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
                                                                 >
-                                                                    ›
-                                                                </span>
-                                                            </button>
-                                                        ) : null}
+                                                                    <span
+                                                                        className={`text-xs font-mono transition-transform duration-150 ${
+                                                                            isExpanded ? 'rotate-90' : ''
+                                                                        }`}
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        ›
+                                                                    </span>
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
                                                     </div>
-                                                </div>
 
-                                                {/* Verbatim Monospace Payload Drawer */}
-                                                {isExpanded && ev.payload && (
-                                                    <div
-                                                        id={drawerId}
-                                                        className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-lg border-t border-base-content/10"
-                                                    >
-                                                        {ev.payload}
+                                                    {isExpanded && ev.payload && (
+                                                        <div
+                                                            id={drawerId}
+                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-lg border-t border-base-content/10"
+                                                        >
+                                                            {ev.payload}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                /* Tool Execution Card */
+                                                <div
+                                                    className="w-[80%] max-w-none bg-base-100 rounded-lg border border-base-content/10 border-l-[3px] transition-colors relative"
+                                                    style={{ borderLeftColor: presentation.color }}
+                                                >
+                                                    <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 min-h-[38px]">
+                                                        {/* Left side: Agent Icon, Tool Tag, Title */}
+                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                            <AgentBadge
+                                                                agentId={ev.agent || block.source}
+                                                                model={ev.model || block.model}
+                                                                timestamp={block.timestamp}
+                                                                tooltipId={agentTooltipId}
+                                                            />
+
+                                                            <ToolTokenBadge
+                                                                title={presentation.label}
+                                                                freshInputTokens={ev.freshInputTokens}
+                                                                cacheReadTokens={ev.cacheReadTokens}
+                                                                outputTokens={ev.outputTokens}
+                                                                color={presentation.color}
+                                                                tooltipId={toolTooltipId}
+                                                            />
+
+                                                            {ev.title && ev.title.trim().length > 0 ? (
+                                                                <span
+                                                                    className="font-mono text-xs font-semibold text-base-content/90 truncate min-w-0"
+                                                                    title={ev.title}
+                                                                >
+                                                                    {ev.title}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+
+                                                        {/* Right side: Exit Code & Chevron */}
+                                                        <div className="flex items-center gap-2 shrink-0 font-mono">
+                                                            {ev.exitCode !== null && (
+                                                                <span
+                                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                                        ev.exitCode === 0
+                                                                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                                                            : 'bg-error/20 text-error border border-error/30'
+                                                                    }`}
+                                                                >
+                                                                    EXIT_CODE={ev.exitCode}
+                                                                </span>
+                                                            )}
+
+                                                            {hasPayload ? (
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={
+                                                                        isExpanded
+                                                                            ? 'Collapse operation payload'
+                                                                            : 'Expand operation payload'
+                                                                    }
+                                                                    aria-expanded={isExpanded}
+                                                                    aria-controls={drawerId}
+                                                                    onClick={() => toggleEvent(block.key, ev.seq)}
+                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                                                                >
+                                                                    <span
+                                                                        className={`text-xs font-mono transition-transform duration-150 ${
+                                                                            isExpanded ? 'rotate-90' : ''
+                                                                        }`}
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        ›
+                                                                    </span>
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
+
+                                                    {/* Verbatim Monospace Payload Drawer */}
+                                                    {isExpanded && ev.payload && (
+                                                        <div
+                                                            id={drawerId}
+                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-lg border-t border-base-content/10"
+                                                        >
+                                                            {ev.payload}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );

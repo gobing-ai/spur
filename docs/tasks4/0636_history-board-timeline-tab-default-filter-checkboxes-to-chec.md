@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Default filter checkboxes to checked, rename 
 status: done
 template: feature-impl
 created_at: 2026-08-23T13:59:01.053Z
-updated_at: "2026-08-23T18:21:36.659Z"
+updated_at: "2026-08-23T21:47:35.870Z"
 feature_id: E8
 ---
 
@@ -86,8 +86,8 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| `TimelineTab` — initialized filter checkboxes to `true` by default, renamed 3rd toggle to `Hide other empty`, set 80% card width with right-aligned user cards (`justify-end`) and left-aligned operation cards (`justify-start`), and elevated popovers to `z-50` with unclipped outer card containers | `apps/web/src/modules/history/TimelineTab.tsx:309` |
-| Timeline component test suite asserting Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations | `apps/web/tests/modules/history/components.test.tsx:300` |
+| `TimelineTab` — initialized filter checkboxes to `true` by default, renamed 3rd toggle to `Hide other empty`, set 80% card width with right-aligned user cards (`justify-end`) and left-aligned operation cards (`justify-start`), and elevated popovers to `z-50` with unclipped outer card containers | `apps/web/src/modules/history/TimelineTab.tsx:306` |
+| Timeline component test suite asserting Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations | `apps/web/tests/modules/history/components.test.tsx:390` |
 | Synchronized Timeline specification and task mapping in History Board design satellite | `docs/design/history-board-module.md:10` |
 | Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
@@ -97,8 +97,8 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:319-321` initializes `hideAssistant`, `hideUnknown`, and `hideOtherEmpty` to `true`; `:369-385` removes assistant, unknown, truly empty events, and empty blocks; `:471-500` binds the three checked controls and exact `Hide other empty` label. `apps/web/tests/modules/history/components.test.tsx:300-313,486-627` exercises the defaults, label, and filtering behavior. |
-| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:599-601` renders the user card as exact `w-[80%]` inside `justify-end`; `:696-699` renders the operation card as exact `w-[80%]` inside `justify-start`. `apps/web/tests/modules/history/components.test.tsx:375-406` asserts all four classes with non-vacuous `not.toBeNull()` checks. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:322-324` initializes `hideAssistant`, `hideUnknown`, and `hideOtherEmpty` to `true`; `:369-385` removes assistant, unknown, truly empty events, and empty blocks; `:471-500` binds the three checked controls and exact `Hide other empty` label. `apps/web/tests/modules/history/components.test.tsx:300-313,486-627` exercises the defaults, label, and filtering behavior. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:780-781` renders the user card as exact `w-[80%]` inside `justify-end`; `:696-699` renders the operation card as exact `w-[80%]` inside `justify-start`. `apps/web/tests/modules/history/components.test.tsx:375-406` asserts all four classes with non-vacuous `not.toBeNull()` checks. |
 | R3 | MET | `apps/web/src/modules/history/TimelineTab.tsx:231,287` places AgentBadge and ToolTokenBadge popovers at `z-50`; the operation card at `:699` has no `overflow-hidden`; its expanded drawer at `:766-774` owns `overflow-x-auto rounded-b-lg`. Component tests at `apps/web/tests/modules/history/components.test.tsx:408-448` exercise both accessible tooltip layers and their focus, hover, blur, and Escape behavior. |
 | R4 | MET | `apps/web/tests/modules/history/components.test.tsx:300-313,375-406` asserts all filter defaults, exact third label, user right alignment plus exact width, and operation left alignment plus exact width. The strengthened selector assertions first failed against `w-full sm:w-[80%]`, then passed after the production repair; the full file exited 0 with 15 tests and 189 assertions. |
 | R5 | MET | `docs/design/history-board-module.md:64-70,187` records the exact Timeline behavior and maps task 0636; `docs/04_DESIGN.md` indexes that satellite. Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,112 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |

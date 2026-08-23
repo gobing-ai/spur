@@ -6,6 +6,7 @@ import type {
     HistorySessionsResponse,
     HistorySourcesResponse,
     HistorySummaryResponse,
+    HistoryTimelineInput,
     HistoryTimelineResponse,
     HistoryTriggerImportResponse,
 } from '@gobing-ai/spur-contracts';
@@ -15,7 +16,7 @@ import type {
  */
 export interface HistoryBoardService {
     getSummary(filter?: HistoryFilter): Promise<HistorySummaryResponse['data']>;
-    getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']>;
+    getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']>;
     getSessions(input: HistorySessionsInput): Promise<HistorySessionsResponse['data']>;
     getInsights(filter?: HistoryFilter): Promise<HistoryInsightsResponse['data']>;
     getSources(): Promise<HistorySourcesResponse['data']>;
@@ -515,124 +516,183 @@ export class MockHistoryBoardService implements HistoryBoardService {
         return points;
     }
 
-    async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
-        const session = this.sessions.find((s) => s.id === sessionId);
-        if (!session) throw new Error(`History session not found: ${sessionId}`);
-        const sessionStart = session.start;
+    async getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']> {
+        if (input.mode === 'session') {
+            const session = this.sessions.find((s) => s.id === input.sessionId);
+            if (!session) throw new Error(`History session not found: ${input.sessionId}`);
+            const sessionStart = session.start;
 
-        const blocks = [
-            {
-                turnIndex: 0,
-                timestamp: new Date(sessionStart).toISOString(),
-                source: session.source,
-                model: session.model,
-                totalDurationMs: 4200,
-                totalTokens: 18500,
-                operationCount: 3,
-                events: [
-                    {
-                        seq: 1,
-                        eventType: 'message' as const,
-                        kind: 'user' as const,
-                        title: 'User Prompt: Analyze repository architecture and find performance bottlenecks',
-                        durationMs: 0,
-                        tokens: 450,
-                        freshInputTokens: 450,
-                        cacheReadTokens: 0,
-                        outputTokens: 0,
-                        exitCode: null,
-                        payload: 'User prompt content',
-                        agent: session.source,
-                        model: session.model,
-                    },
-                    {
-                        seq: 2,
-                        eventType: 'tool' as const,
-                        kind: 'search' as const,
-                        title: 'Glob: src/**/*.ts',
-                        durationMs: 320,
-                        tokens: 4200,
-                        freshInputTokens: 200,
-                        cacheReadTokens: 3800,
-                        outputTokens: 200,
-                        exitCode: 0,
-                        payload: 'Matched 48 files',
-                        agent: session.source,
-                        model: session.model,
-                    },
-                    {
-                        seq: 3,
-                        eventType: 'tool' as const,
-                        kind: 'read' as const,
-                        title: 'Read: docs/03_ARCHITECTURE.md',
-                        durationMs: 780,
-                        tokens: 13850,
-                        freshInputTokens: 600,
-                        cacheReadTokens: 12500,
-                        outputTokens: 750,
-                        exitCode: 0,
-                        payload: '# Architecture\n\nSystem components and dataflow...',
-                        agent: session.source,
-                        model: session.model,
-                    },
-                ],
-            },
-            {
-                turnIndex: 1,
-                timestamp: new Date(sessionStart + 60000).toISOString(),
-                source: session.source,
-                model: session.model,
-                totalDurationMs: 8900,
-                totalTokens: 32400,
-                operationCount: 2,
-                events: [
-                    {
-                        seq: 4,
-                        eventType: 'tool' as const,
-                        kind: 'bash' as const,
-                        title: 'Bash: bun run test',
-                        durationMs: 6400,
-                        tokens: 18200,
-                        freshInputTokens: 800,
-                        cacheReadTokens: 16500,
-                        outputTokens: 900,
-                        exitCode: 0,
-                        payload: 'All 64 tests passed',
-                        agent: session.source,
-                        model: session.model,
-                    },
-                    {
-                        seq: 5,
-                        eventType: 'tool' as const,
-                        kind: 'write' as const,
-                        title: 'Edit: packages/contracts/src/history.ts',
-                        durationMs: 2500,
-                        tokens: 14200,
-                        freshInputTokens: 400,
-                        cacheReadTokens: 13000,
-                        outputTokens: 800,
-                        exitCode: 0,
-                        payload: 'Replaced 42 lines',
-                        agent: session.source,
-                        model: session.model,
-                    },
-                ],
-            },
-        ];
+            const blocks = [
+                {
+                    key: `${session.source}:::${session.id}:::0`,
+                    sessionId: session.id,
+                    turnIndex: 0,
+                    timestamp: new Date(sessionStart).toISOString(),
+                    source: session.source,
+                    model: session.model,
+                    correlationExactness: null,
+                    totalDurationMs: 4200,
+                    totalTokens: 18500,
+                    operationCount: 3,
+                    events: [
+                        {
+                            seq: 1,
+                            eventType: 'message' as const,
+                            kind: 'user' as const,
+                            title: 'user turn',
+                            toolName: null,
+                            durationMs: null,
+                            durationSource: 'unmeasured' as const,
+                            tokens: 450,
+                            freshInputTokens: 450,
+                            cacheReadTokens: 0,
+                            outputTokens: 0,
+                            promptTokens: {
+                                billedTokens: 18050,
+                                cacheSavedTokens: 16300,
+                                cacheReadTokens: 16300,
+                                freshInputTokens: 800,
+                                outputTokens: 950,
+                            },
+                            exitCode: null,
+                            payload: 'User prompt content',
+                            agent: session.source,
+                            model: session.model,
+                        },
+                        {
+                            seq: 2,
+                            eventType: 'tool' as const,
+                            kind: 'search' as const,
+                            title: 'src/**/*.ts',
+                            toolName: 'Glob',
+                            durationMs: 320,
+                            durationSource: 'measured' as const,
+                            tokens: 4200,
+                            freshInputTokens: 200,
+                            cacheReadTokens: 3800,
+                            outputTokens: 200,
+                            promptTokens: null,
+                            exitCode: 0,
+                            payload: 'Matched 48 files',
+                            agent: session.source,
+                            model: session.model,
+                        },
+                        {
+                            seq: 3,
+                            eventType: 'tool' as const,
+                            kind: 'read' as const,
+                            title: 'docs/03_ARCHITECTURE.md',
+                            toolName: 'Read',
+                            durationMs: 780,
+                            durationSource: 'measured' as const,
+                            tokens: 13850,
+                            freshInputTokens: 600,
+                            cacheReadTokens: 12500,
+                            outputTokens: 750,
+                            promptTokens: null,
+                            exitCode: 0,
+                            payload: '# Architecture\n\nSystem components and dataflow...',
+                            agent: session.source,
+                            model: session.model,
+                        },
+                    ],
+                },
+                {
+                    key: `${session.source}:::${session.id}:::1`,
+                    sessionId: session.id,
+                    turnIndex: 1,
+                    timestamp: new Date(sessionStart + 60000).toISOString(),
+                    source: session.source,
+                    model: session.model,
+                    correlationExactness: null,
+                    totalDurationMs: 8900,
+                    totalTokens: 32400,
+                    operationCount: 2,
+                    events: [
+                        {
+                            seq: 4,
+                            eventType: 'tool' as const,
+                            kind: 'bash' as const,
+                            title: 'bun run test',
+                            toolName: 'Bash',
+                            durationMs: 6400,
+                            durationSource: 'measured' as const,
+                            tokens: 18200,
+                            freshInputTokens: 800,
+                            cacheReadTokens: 16500,
+                            outputTokens: 900,
+                            promptTokens: null,
+                            exitCode: 0,
+                            payload: 'All 64 tests passed',
+                            agent: session.source,
+                            model: session.model,
+                        },
+                        {
+                            seq: 5,
+                            eventType: 'tool' as const,
+                            kind: 'write' as const,
+                            title: 'packages/contracts/src/history.ts',
+                            toolName: 'Edit',
+                            durationMs: 2500,
+                            durationSource: 'measured' as const,
+                            tokens: 14200,
+                            freshInputTokens: 400,
+                            cacheReadTokens: 13000,
+                            outputTokens: 800,
+                            promptTokens: null,
+                            exitCode: 0,
+                            payload: 'Replaced 42 lines',
+                            agent: session.source,
+                            model: session.model,
+                        },
+                    ],
+                },
+            ];
+
+            return {
+                mode: 'session',
+                scope: {
+                    sessionId: session.id,
+                    source: session.source,
+                    model: session.model,
+                    start: new Date(session.start).toISOString(),
+                    end: new Date(session.start + session.durationMs).toISOString(),
+                    durationMs: session.durationMs,
+                    tokens: session.tokens,
+                    messageCount: session.messages,
+                    toolCallCount: session.toolCalls,
+                    sessionCount: 1,
+                },
+                truncated: false,
+                blocks,
+            };
+        }
 
         return {
-            session: {
-                id: session.id,
-                source: session.source,
-                model: session.model,
-                modelDetail: session.modelDetail,
-                start: new Date(session.start).toISOString(),
-                durationMs: session.durationMs,
-                tokens: session.tokens,
-                messageCount: session.messages,
-                toolCallCount: session.toolCalls,
+            mode: 'consolidated',
+            scope: {
+                sessionId: null,
+                source: null,
+                model: null,
+                start: this.sessions[0] ? new Date(this.sessions[0].start).toISOString() : null,
+                end:
+                    this.sessions.length > 0 && this.sessions[this.sessions.length - 1]
+                        ? new Date(this.sessions[this.sessions.length - 1]?.start ?? '').toISOString()
+                        : null,
+                durationMs: this.sessions.reduce((s, x) => s + x.durationMs, 0),
+                tokens: {
+                    billedTokens: this.sessions.reduce((s, x) => s + x.tokens.billedTokens, 0),
+                    cacheSavedTokens: this.sessions.reduce((s, x) => s + x.tokens.cacheSavedTokens, 0),
+                    cacheReadTokens: this.sessions.reduce((s, x) => s + x.tokens.cacheReadTokens, 0),
+                    freshInputTokens: this.sessions.reduce((s, x) => s + x.tokens.freshInputTokens, 0),
+                    outputTokens: this.sessions.reduce((s, x) => s + x.tokens.outputTokens, 0),
+                },
+                messageCount: this.sessions.reduce((s, x) => s + x.messages, 0),
+                toolCallCount: this.sessions.reduce((s, x) => s + x.toolCalls, 0),
+                sessionCount: this.sessions.length,
             },
-            blocks,
+            truncated: false,
+            blocks: [],
         };
     }
 

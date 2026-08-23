@@ -4,7 +4,7 @@ name: "History Board frontend UI parity refinement and gap remediation"
 status: done
 template: feature-impl
 created_at: 2026-08-22T13:17:58.379Z
-updated_at: "2026-08-23T14:22:51.359Z"
+updated_at: "2026-08-23T21:47:34.386Z"
 feature_id: E8
 ---
 
@@ -152,8 +152,8 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| `HistoryShell` / `SummaryTab` / `TimelineTab` / `SessionsTab` / `InsightsTab` / `SourcesTab` — UI parity refinement, accessibility, data-driven deltas and trends | `apps/web/src/modules/history/TimelineTab.tsx:309` |
-| Component tests for History Board module search, filters, deltas, and telemetry | `apps/web/tests/modules/history/components.test.tsx:249` |
+| `HistoryShell` / `SummaryTab` / `TimelineTab` / `SessionsTab` / `InsightsTab` / `SourcesTab` — UI parity refinement, accessibility, data-driven deltas and trends | `apps/web/src/modules/history/TimelineTab.tsx:306` |
+| Component tests for History Board module search, filters, deltas, and telemetry | `apps/web/tests/modules/history/components.test.tsx:390` |
 | History Board design satellite synchronization | `docs/design/history-board-module.md:10` |
 | 04_DESIGN.md satellite index update | `docs/04_DESIGN.md:66` |
 ### Testing

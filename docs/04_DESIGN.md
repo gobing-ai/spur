@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.47.0
+version: 1.48.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-23
@@ -63,8 +63,9 @@ When collaborating with the design team:
 | [`event-tracking.md`](design/event-tracking.md)                                                         | System Event 5W1H + semantic presentation SSOT — 71-event audit, J9 presenter matrix, planning/workflow producer contracts, two-sided gate (ADR-066/068)                                           | audit current; J9 built (0601/0602); J91 built (0605) |
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
-| [`history-board-module.md`](design/history-board-module.md)                                             | History Board — six-procedure oRPC seam, live indexed reads, additive Summary/Sources telemetry, and five-tab module (feature E8 / 0626–0630, 0634–0637)                                            | built (0626–0630, 0634–0637)                                                                                                                                   |
+| [`history-board-module.md`](design/history-board-module.md)                                             | History Board — six-procedure oRPC seam, live indexed reads, additive Summary/Sources telemetry, and five-tab module (feature E8 / 0626–0630, 0634–0638)                                            | built (0626–0630, 0634–0638)                                                                                                                                   |
 | [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures, four-surface script placement, and dated ADR-051 consent applications (feature A3/0613; explicit feature-refresh breadth/0625)                                                 | authority landed; current through 0625                                                                                                                         |
+| [`features-board-layout-refactor.md`](design/features-board-layout-refactor.md)                         | Features Board — History layout alignment, collapsible tree/metadata panels, markdown width constraints, dynamic action bar, and floating agent prompt bar (feature F84)                           | design                                                                                                                                                         |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -906,7 +907,7 @@ the 02:00 nightly loop.
    `continue` path. The `--async` launcher itself does **not** trigger — its worker does when the run
    completes.
 
-**Config (`config/config.example.yaml`, `packages/config/src/index.ts`)** — explicit/opt-in, disable-able
+**Config (`config/config.global.yaml`, `packages/config/src/index.ts`)** — explicit/opt-in, disable-able
 with no code edits:
 
 ```yaml

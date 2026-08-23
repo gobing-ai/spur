@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Compact Antigravity-CLI stream, per-card Sour
 status: done
 template: feature-impl
 created_at: 2026-08-23T06:38:10.533Z
-updated_at: "2026-08-23T14:24:05.277Z"
+updated_at: "2026-08-23T21:47:35.130Z"
 feature_id: E8
 ---
 
@@ -86,8 +86,8 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| `TimelineTab` — renamed panel header to Conversation, added filter checkboxes (Hide assistant, Hide unknown, Hide empty), integrated dedicated Sources `AgentIcon` vector badge with metadata tooltip popover, as-is tool tag with token breakdown tooltip popover, single-line operation cards with right-aligned exit code badges, and `<UserIcon />` prompt cards | `apps/web/src/modules/history/TimelineTab.tsx:309` |
-| Component test suite asserting Conversation panel header, filter checkboxes, embedded AgentIcon tooltip, as-is tool badge tooltip, right-aligned exit codes, and UserTokenBadge prompt card | `apps/web/tests/modules/history/components.test.tsx:365` |
+| `TimelineTab` — renamed panel header to Conversation, added filter checkboxes (Hide assistant, Hide unknown, Hide empty), integrated dedicated Sources `AgentIcon` vector badge with metadata tooltip popover, as-is tool tag with token breakdown tooltip popover, single-line operation cards with right-aligned exit code badges, and `<UserIcon />` prompt cards | `apps/web/src/modules/history/TimelineTab.tsx:306` |
+| Component test suite asserting Conversation panel header, filter checkboxes, embedded AgentIcon tooltip, as-is tool badge tooltip, right-aligned exit codes, and UserTokenBadge prompt card | `apps/web/tests/modules/history/components.test.tsx:390` |
 | Synchronized Timeline specification and task mapping in History Board design satellite | `docs/design/history-board-module.md:10` |
 | Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
@@ -97,17 +97,17 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:479` renames the panel header to `Conversation` and adds filter checkboxes for `Hide assistant`, `Hide unknown`, and `Hide empty`. Component tests verify panel header and filter checkbox rendering. |
-| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:225` embeds the dedicated `AgentIcon` vector badge with hover/focus metadata popover (Agent name, Model name, UTC timestamp) and Escape key dismissal on each operation card. Component tests verify tooltip attributes, contents, and interactions. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:426` renames the panel header to `Conversation` and adds filter checkboxes for `Hide assistant`, `Hide unknown`, and `Hide empty`. Component tests verify panel header and filter checkbox rendering. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:198-240` embeds the dedicated `AgentIcon` vector badge with hover/focus metadata popover (Agent name, Model name, UTC timestamp) and Escape key dismissal on each operation card. Component tests verify tooltip attributes, contents, and interactions. |
 | R3 | MET | `apps/web/tests/modules/history/components.test.tsx:629` tests that tool names render as-is in lowercase monospace (glob, grep, edit, read, write, bash, search, run) and embeds hover/focus token breakdown tooltip (📥 fresh, 💾 cache, 📤 output, ⚡ total). |
-| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:736` formats operation cards into single-line flex rows (~38px) with right-aligned `EXIT_CODE=0` / `EXIT_CODE=N` badges directly before the `›` chevron and verbatim payload drawers. Component tests verify layout and payload expansion. |
-| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:130` replaces multi-line bubbles with `<UserIcon />` prompt cards, character count badges, and expandable drawers. Component tests verify prompt drawer expansion. |
-| R6 | MET | `apps/web/tests/modules/history/components.test.tsx:365` has 15 passing tests covering panel header, filters, AgentIcon tooltips, tool token badges, exit code badges, and prompt cards. |
+| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:997` formats operation cards into single-line flex rows (~38px) with right-aligned `EXIT_CODE=0` / `EXIT_CODE=N` badges directly before the `›` chevron and verbatim payload drawers. Component tests verify layout and payload expansion. |
+| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:118` replaces multi-line bubbles with `<UserIcon />` prompt cards, character count badges, and expandable drawers. Component tests verify prompt drawer expansion. |
+| R6 | MET | `apps/web/tests/modules/history/components.test.tsx:390` has 15 passing tests covering panel header, filters, AgentIcon tooltips, tool token badges, exit code badges, and prompt cards. |
 | R7 | MET | `docs/design/history-board-module.md:10` is synchronized with task 0635 specifications and full quality gates pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx` exited 0: 15 pass, 186 assertions. `bun run spur-check` exited 0: 6233 pass; `bun run test-cf` and `bun run build` exited 0. Static review at `apps/web/src/modules/history/TimelineTab.tsx:309` confirms no contract/service/database/dependency surface was added. |
+| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx` exited 0: 15 pass, 186 assertions. `bun run spur-check` exited 0: 6233 pass; `bun run test-cf` and `bun run build` exited 0. Static review at `apps/web/src/modules/history/TimelineTab.tsx:306` confirms no contract/service/database/dependency surface was added. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

@@ -13,9 +13,9 @@ import type { SessionState } from './watermark';
 export const HISTORY_ARTIFACT_SCHEMA_VERSION = 1;
 
 /**
- * The six composable analyze selectors. Each maps to an indexed column; `AND`-joined,
- * narrowing never widening. `null` means "no predicate" for that axis; `sources: null`
- * means no source filter (equivalent to `--source all`).
+ * Composable analyze selectors. They are `AND`-joined, narrowing never widening.
+ * Run/task scope resolves through the run-session/task-run mapping authorities;
+ * `null` means "no predicate" for that axis and `sources: null` means no source filter.
  */
 export interface ArtifactSelector {
     /** Inclusive lower bound on `history_message.ts` (ISO). */
@@ -32,9 +32,9 @@ export interface ArtifactSelector {
     skills?: readonly string[] | null;
     /** Single session id. */
     sessionId: string | null;
-    /** Single workflow run id (`provenance='spur-run'`). */
+    /** Single workflow run id resolved through `history_run_session`. */
     runId: string | null;
-    /** Single task WBS. */
+    /** Single task WBS resolved through `task_run_links` and `history_run_session`. */
     taskWbs: string | null;
 }
 

@@ -196,10 +196,10 @@ describe('LiveHistoryBoardService', () => {
         await seedCorpus(db, 5, 6);
         const svc = new LiveHistoryBoardService({ db });
 
-        const timeline = await svc.getTimeline('sess-1');
-        expect(timeline.session.id).toBe('sess-1');
-        expect(timeline.session.messageCount).toBe(6);
-        expect(timeline.session.toolCallCount).toBe(3);
+        const timeline = await svc.getTimeline({ mode: 'session', source: 'codex', sessionId: 'sess-1' });
+        expect(timeline.scope.sessionId).toBe('sess-1');
+        expect(timeline.scope.messageCount).toBe(6);
+        expect(timeline.scope.toolCallCount).toBe(3);
         expect(timeline.blocks.length).toBe(3);
         expect(timeline.blocks[0]?.events.length).toBe(3);
         expect(timeline.blocks[0]?.events.map(({ eventType, kind }) => ({ eventType, kind }))).toEqual([
@@ -207,6 +207,39 @@ describe('LiveHistoryBoardService', () => {
             { eventType: 'message', kind: 'assistant' },
             { eventType: 'tool', kind: 'bash' },
         ]);
+        // Check prompt token telemetry on user event
+        expect(timeline.blocks[0]?.events[0]?.promptTokens).toBeDefined();
+        expect(timeline.blocks[0]?.events[0]?.promptTokens?.billedTokens).toBeGreaterThan(0);
+    });
+
+    test('consolidated timeline keeps same-id sessions and prompt attribution source-safe', async () => {
+        const db = await setupTestDb();
+        await db.exec(`INSERT INTO history_message (
+            record_hash, source, source_file, source_line, session_id, seq, turn_index, role,
+            record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+            content_text, provenance, imported_at
+        ) VALUES
+            ('agy-user', 'agy', 'agy.jsonl', 1, 'shared-id', 1, 1, 'user', 'message', 'ok',
+             '2026-08-23T10:00:00Z', NULL, NULL, NULL, NULL, 'agy prompt', 'ambient', '2026-08-23T12:00:00Z'),
+            ('agy-assistant', 'agy', 'agy.jsonl', 2, 'shared-id', 2, 1, 'assistant', 'message', 'ok',
+             '2026-08-23T10:00:01Z', 'gemini-3-pro', 10, 2, 5, 'agy reply', 'ambient', '2026-08-23T12:00:00Z'),
+            ('codex-user', 'codex', 'codex.jsonl', 1, 'shared-id', 1, 1, 'user', 'message', 'ok',
+             '2026-08-23T10:00:02Z', NULL, NULL, NULL, NULL, 'codex prompt', 'ambient', '2026-08-23T12:00:00Z'),
+            ('codex-assistant', 'codex', 'codex.jsonl', 2, 'shared-id', 2, 1, 'assistant', 'message', 'ok',
+             '2026-08-23T10:00:03Z', 'gpt-5.6-sol', 100, 20, 50, 'codex reply', 'ambient', '2026-08-23T12:00:00Z')`);
+
+        const timeline = await new LiveHistoryBoardService({ db }).getTimeline({ mode: 'consolidated' });
+        expect(timeline.scope.sessionCount).toBe(2);
+        expect(timeline.scope.tokens).toMatchObject({ billedTokens: 132, cacheReadTokens: 55 });
+        expect(timeline.blocks.map((block) => block.key)).toEqual(['agy:::shared-id:::1', 'codex:::shared-id:::1']);
+        const agyPrompt = timeline.blocks[0]?.events.find((event) => event.kind === 'user');
+        const codexPrompt = timeline.blocks[1]?.events.find((event) => event.kind === 'user');
+        expect(agyPrompt?.promptTokens).toMatchObject({ freshInputTokens: 10, cacheReadTokens: 5, outputTokens: 2 });
+        expect(codexPrompt?.promptTokens).toMatchObject({
+            freshInputTokens: 100,
+            cacheReadTokens: 50,
+            outputTokens: 20,
+        });
     });
 
     test('sentinel session ids stay out of navigable session projections', async () => {
@@ -231,8 +264,12 @@ describe('LiveHistoryBoardService', () => {
         const sessions = await svc.getSessions({ page: 1, pageSize: 20 });
         expect(sessions.total).toBe(2);
         expect(sessions.items.some((session) => session.id === 'unknown')).toBe(false);
-        await expect(svc.getTimeline('unknown')).rejects.toThrow('History session not found');
-        await expect(svc.getTimeline('session')).rejects.toThrow('History session not found');
+        await expect(svc.getTimeline({ mode: 'session', source: 'agy', sessionId: 'unknown' })).rejects.toThrow(
+            'History session not found',
+        );
+        await expect(svc.getTimeline({ mode: 'session', source: 'agy', sessionId: 'session' })).rejects.toThrow(
+            'History session not found',
+        );
     });
 
     test('getSessions returns sorted paginated session items', async () => {
@@ -299,7 +336,7 @@ describe('LiveHistoryBoardService', () => {
             ['summary:source', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'source' })],
             ['summary:tool', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'tool' })],
             ['summary:skill', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'skill' })],
-            ['timeline', () => svc.getTimeline('sess-1')],
+            ['timeline', () => svc.getTimeline({ mode: 'session', source: 'codex', sessionId: 'sess-1' })],
             ['sessions', () => svc.getSessions({ page: 1, pageSize: 20 })],
             ['insights', () => svc.getInsights()],
             ['sources', () => svc.getSources()],
@@ -357,7 +394,7 @@ describe('LiveHistoryBoardService', () => {
         await read('sessions', () => svc.getSessions({ page: 1, pageSize: 20 }));
         await read('insights', () => svc.getInsights());
         await read('sources', () => svc.getSources());
-        await read('timeline', () => svc.getTimeline('sess-1'));
+        await read('timeline', () => svc.getTimeline({ mode: 'session', source: 'codex', sessionId: 'sess-1' }));
 
         // Timeline is the documented indexed raw-read exception; the other four must not
         // touch history_message/history_tool_call beyond the single-row freshness probe.

@@ -13,7 +13,9 @@ import type {
     HistoryTimelineBlock,
     HistoryTimelineEvent,
     HistoryTimelineEventKind,
+    HistoryTimelineInput,
     HistoryTimelineResponse,
+    HistoryTimelineScope,
     HistoryTimeSeriesPoint,
     HistoryTopItem,
     HistoryTriggerImportResponse,
@@ -25,6 +27,7 @@ import {
     bySession,
     bySkill,
     byTool,
+    consolidatedTimeline,
     type DbAdapter,
     type HistoryBucket as DomainHistoryBucket,
     dailyTokenMatrix,
@@ -49,6 +52,7 @@ import {
     modelComparison,
     sessionTimeline,
     sourceSummary,
+    type TimelineQueryResult,
     toolRollup,
     topCacheWasteSteps,
     topStepsByDuration,
@@ -174,6 +178,25 @@ function classifyTimelineKind(toolName: string | null, role: string): HistoryTim
         return 'search';
     }
     return 'run';
+}
+
+function extractToolTitle(payload: string | null): string {
+    if (payload == null || payload.trim().length === 0) return '';
+    try {
+        const parsed = JSON.parse(payload);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return '';
+        const summaryKeys = ['path', 'file_path', 'target', 'cmd', 'command', 'query', 'pattern', 'url'] as const;
+        for (const key of summaryKeys) {
+            const val = parsed[key];
+            if (val !== undefined && val !== null) {
+                if (typeof val === 'string' && val.length > 0) return val;
+                if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+            }
+        }
+    } catch {
+        // Not JSON
+    }
+    return '';
 }
 
 function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras): HistorySummaryResponse['data'] {
@@ -579,15 +602,17 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         );
     }
 
-    async getTimeline(sessionId: string): Promise<HistoryTimelineResponse['data']> {
+    async getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']> {
         const db = await this.resolveDb();
         if (!db) {
             return {
-                session: {
-                    id: sessionId,
-                    source: 'unknown',
-                    model: 'unknown',
-                    start: new Date(0).toISOString(),
+                mode: input.mode,
+                scope: {
+                    sessionId: input.mode === 'session' ? input.sessionId : null,
+                    source: input.mode === 'session' ? input.source : null,
+                    model: null,
+                    start: null,
+                    end: null,
                     durationMs: 0,
                     tokens: {
                         billedTokens: 0,
@@ -598,36 +623,89 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     },
                     messageCount: 0,
                     toolCallCount: 0,
+                    sessionCount: 0,
                 },
+                truncated: false,
                 blocks: [],
             };
         }
 
-        if (sessionId === '' || sessionId === 'unknown' || sessionId === 'session') {
-            throw new Error(`History session not found: ${sessionId || '(empty)'}`);
+        let queryResult: TimelineQueryResult;
+        if (input.mode === 'session') {
+            if (input.sessionId === '' || input.sessionId === 'unknown' || input.sessionId === 'session') {
+                throw new Error(`History session not found: ${input.sessionId || '(empty)'}`);
+            }
+            if (input.source === '' || input.source === 'unknown') {
+                throw new Error(`History source not found: ${input.source || '(empty)'}`);
+            }
+            queryResult = await sessionTimeline(db, input.source, input.sessionId, 5000);
+            if (queryResult.events.length === 0) {
+                throw new Error(`History session not found: ${input.sessionId}`);
+            }
+        } else {
+            const sel = toArtifactSelector(input.filter);
+            if (input.runId) sel.runId = input.runId;
+            if (input.taskWbs) sel.taskWbs = input.taskWbs;
+            queryResult = await consolidatedTimeline(db, sel, 5000);
         }
 
-        const events = await sessionTimeline(db, sessionId, 5000);
+        const events = queryResult.events;
         if (events.length === 0) {
-            throw new Error(`History session not found: ${sessionId}`);
+            return {
+                mode: input.mode,
+                scope: {
+                    sessionId: input.mode === 'session' ? input.sessionId : null,
+                    source: input.mode === 'session' ? input.source : null,
+                    model: null,
+                    start: null,
+                    end: null,
+                    durationMs: 0,
+                    tokens: {
+                        billedTokens: 0,
+                        cacheSavedTokens: 0,
+                        cacheReadTokens: 0,
+                        freshInputTokens: 0,
+                        outputTokens: 0,
+                    },
+                    messageCount: 0,
+                    toolCallCount: 0,
+                    sessionCount: 0,
+                },
+                truncated: false,
+                blocks: [],
+            };
         }
-        let firstTs: string | null = null;
-        let lastTs: string | null = null;
-        let source = 'unknown';
-        let model = 'unknown';
+
+        const projectedEvents: Array<
+            HistoryTimelineEvent & {
+                source: string;
+                sessionId: string;
+                turnIndex: number;
+                ts: string | null;
+                correlationExactness?: 'exact' | 'estimated' | null;
+            }
+        > = [];
+
         let totalFresh = 0;
         let totalCache = 0;
         let totalOut = 0;
         let totalDuration = 0;
         let toolCallCount = 0;
-
         let messageCount = 0;
-        const blocksByTurn = new Map<number, HistoryTimelineBlock>();
+        const uniqueSources = new Set<string>();
+        const uniqueModels = new Set<string>();
+        const uniqueSessions = new Set<string>();
+        let firstTs: string | null = null;
+        let lastTs: string | null = null;
+
         for (const ev of events) {
-            if (ev.ts && (firstTs === null || ev.ts < firstTs)) firstTs = ev.ts;
-            if (ev.ts && (lastTs === null || ev.ts > lastTs)) lastTs = ev.ts;
-            if (ev.source) source = ev.source;
-            if (ev.model) model = ev.model;
+            if (ev.ts) {
+                if (firstTs === null || ev.ts < firstTs) firstTs = ev.ts;
+                if (lastTs === null || ev.ts > lastTs) lastTs = ev.ts;
+            }
+            if (ev.source) uniqueSources.add(ev.source);
+            if (ev.model) uniqueModels.add(ev.model);
+            if (ev.sessionId) uniqueSessions.add(`${ev.source}:::${ev.sessionId}`);
 
             const fresh = ev.inputTokens ?? 0;
             const cache = ev.cacheReadTokens ?? 0;
@@ -642,48 +720,149 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             if (ev.eventType === 'tool') toolCallCount += 1;
             else messageCount += 1;
 
-            const event: HistoryTimelineEvent = {
+            const title =
+                ev.eventType === 'tool'
+                    ? extractToolTitle(ev.payload)
+                    : ev.role === 'user'
+                      ? 'user turn'
+                      : `${ev.role} turn`;
+
+            projectedEvents.push({
                 seq: ev.seq,
                 eventType: ev.eventType,
                 kind: classifyTimelineKind(ev.toolName, ev.role),
-                title: ev.toolName ? `${ev.toolName}` : `${ev.role} turn`,
-                durationMs: dur,
+                title,
+                toolName: ev.toolName,
+                durationMs: ev.durationMs,
+                durationSource: ev.durationSource,
                 tokens: billed,
                 freshInputTokens: fresh,
                 cacheReadTokens: cache,
                 outputTokens: out,
+                promptTokens: null,
                 exitCode: ev.exitCode,
                 payload: ev.payload,
                 agent: ev.source,
                 model: ev.model ?? 'unknown',
-            };
-            const turn = blocksByTurn.get(ev.turnIndex) ?? {
-                turnIndex: ev.turnIndex,
-                timestamp: ev.ts ?? new Date(0).toISOString(),
                 source: ev.source,
-                model: ev.model ?? 'unknown',
-                totalDurationMs: 0,
-                totalTokens: 0,
-                operationCount: 0,
-                events: [],
-            };
-            turn.totalDurationMs += dur;
-            turn.totalTokens += billed;
-            turn.operationCount += 1;
-            turn.events.push(event);
-            blocksByTurn.set(ev.turnIndex, turn);
+                sessionId: ev.sessionId,
+                turnIndex: ev.turnIndex,
+                ts: ev.ts,
+                correlationExactness: ev.correlationExactness,
+            });
         }
+
+        // Build promptTokens in a separate per-(source, sessionId) scan
+        const eventsBySession = new Map<string, typeof projectedEvents>();
+        for (const ev of projectedEvents) {
+            const sKey = `${ev.source}:::${ev.sessionId}`;
+            let list = eventsBySession.get(sKey);
+            if (list === undefined) {
+                list = [];
+                eventsBySession.set(sKey, list);
+            }
+            list.push(ev);
+        }
+
+        for (const sessionEvents of eventsBySession.values()) {
+            let activeUserEvent: (typeof projectedEvents)[number] | null = null;
+            let accFresh = 0;
+            let accCache = 0;
+            let accOut = 0;
+
+            for (const ev of sessionEvents) {
+                if (ev.kind === 'user' || (ev.eventType === 'message' && ev.title === 'user turn')) {
+                    if (activeUserEvent !== null) {
+                        activeUserEvent.promptTokens = {
+                            billedTokens: accFresh + accOut,
+                            cacheSavedTokens: accCache,
+                            cacheReadTokens: accCache,
+                            freshInputTokens: accFresh,
+                            outputTokens: accOut,
+                        };
+                    }
+                    activeUserEvent = ev;
+                    accFresh = 0;
+                    accCache = 0;
+                    accOut = 0;
+                } else {
+                    accFresh += ev.freshInputTokens;
+                    accCache += ev.cacheReadTokens;
+                    accOut += ev.outputTokens;
+                }
+            }
+            if (activeUserEvent !== null) {
+                activeUserEvent.promptTokens = {
+                    billedTokens: accFresh + accOut,
+                    cacheSavedTokens: accCache,
+                    cacheReadTokens: accCache,
+                    freshInputTokens: accFresh,
+                    outputTokens: accOut,
+                };
+            }
+        }
+
+        // Group into blocks keyed by `${source}:::${sessionId}:::${turnIndex}`
+        const blocksByKey = new Map<string, HistoryTimelineBlock>();
+        for (const ev of projectedEvents) {
+            const blockKey = `${ev.source}:::${ev.sessionId}:::${ev.turnIndex}`;
+            let block = blocksByKey.get(blockKey);
+            if (block === undefined) {
+                block = {
+                    key: blockKey,
+                    sessionId: ev.sessionId,
+                    turnIndex: ev.turnIndex,
+                    timestamp: ev.ts,
+                    source: ev.source,
+                    model: ev.model,
+                    correlationExactness: ev.correlationExactness ?? null,
+                    totalDurationMs: 0,
+                    totalTokens: 0,
+                    operationCount: 0,
+                    events: [],
+                };
+                blocksByKey.set(blockKey, block);
+            }
+            block.totalDurationMs += ev.durationMs ?? 0;
+            block.totalTokens += ev.tokens;
+            block.operationCount += 1;
+            if (block.timestamp === null && ev.ts !== null) {
+                block.timestamp = ev.ts;
+            }
+            const { source: _s, sessionId: _sid, turnIndex: _t, ts: _ts, correlationExactness: _ce, ...cleanEv } = ev;
+            block.events.push(cleanEv);
+        }
+
+        // Sort blocks by timestamp ascending (nulls last) and stable key
+        const sortedBlocks = Array.from(blocksByKey.values()).sort((a, b) => {
+            const aTs = a.timestamp ? Date.parse(a.timestamp) : Infinity;
+            const bTs = b.timestamp ? Date.parse(b.timestamp) : Infinity;
+            if (aTs !== bTs) return (Number.isNaN(aTs) ? Infinity : aTs) - (Number.isNaN(bTs) ? Infinity : bTs);
+            return a.key.localeCompare(b.key);
+        });
 
         const totalBilled = totalFresh + totalOut;
         const startMs = firstTs ? Date.parse(firstTs) : 0;
         const endMs = lastTs ? Date.parse(lastTs) : startMs;
         const spanMs = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, endMs - startMs) : 0;
-        const sessionMeta = {
-            id: sessionId,
-            source,
-            model,
-            start: firstTs ?? new Date(0).toISOString(),
-            durationMs: spanMs > 0 ? spanMs : totalDuration,
+
+        const firstSource = Array.from(uniqueSources)[0] ?? null;
+        const firstModel = Array.from(uniqueModels)[0] ?? null;
+
+        const scope: HistoryTimelineScope = {
+            sessionId: input.mode === 'session' ? input.sessionId : null,
+            source: input.mode === 'session' ? input.source : uniqueSources.size === 1 ? firstSource : null,
+            model:
+                input.mode === 'session'
+                    ? uniqueModels.size > 0
+                        ? firstModel
+                        : null
+                    : uniqueModels.size === 1
+                      ? firstModel
+                      : null,
+            start: firstTs,
+            end: lastTs,
+            durationMs: input.mode === 'session' && spanMs > 0 ? spanMs : totalDuration,
             tokens: {
                 billedTokens: totalBilled,
                 cacheSavedTokens: totalCache,
@@ -693,11 +872,14 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             },
             messageCount,
             toolCallCount,
+            sessionCount: input.mode === 'session' ? 1 : uniqueSessions.size,
         };
 
         return {
-            session: sessionMeta,
-            blocks: Array.from(blocksByTurn.values()).sort((a, b) => a.turnIndex - b.turnIndex),
+            mode: input.mode,
+            scope,
+            truncated: queryResult.truncated,
+            blocks: sortedBlocks,
         };
     }
 
