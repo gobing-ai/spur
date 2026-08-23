@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-21T23:12:38.032Z"
-updated_at: "2026-08-22T18:35:13.130Z"
+updated_at: "2026-08-23T14:18:06.900Z"
 ---
 
 # E8: History Board module: Analytics Summary, Execution Timeline, Sessions, Forensic Insights, and Agent Sources Registry
@@ -108,6 +108,10 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 | 0628 | History database access: schema optimization, domain DAOs, and live oRPC service implementation | done |
 | 0629 | History analytics pre-computation: enhance spur history analyze and import pipeline | done |
 | 0630 | History Board frontend UI parity refinement and gap remediation | done |
+| 0634 | History Board Timeline Tab: Rebuild conversation skeleton, continuous timeline rail, and chat execution flow to match prototype | done |
+| 0635 | History Board Timeline Tab: Compact Antigravity-CLI stream, per-card Sources AgentIcon, as-is tool telemetry tooltips, USER prompt cards, and conversation item filters | done |
+| 0636 | History Board Timeline Tab: Default filter checkboxes to checked, rename Hide other empty, 80% card width with left/right alignment, and unclipped top-layer tooltips | done |
+| 0637 | History Board Timeline Tab: Remove redundant USER tag and add token breakdown tooltip to UserIcon in prompt cards | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -119,3 +123,15 @@ Feature: History Board module: Analytics Summary, Execution Timeline, Sessions, 
 - 2026-08-22T13:18:52.536Z done → active (system)
 - 2026-08-22T18:35:12.915Z active → verifying (system)
 - 2026-08-22T18:35:13.130Z verifying → done (system)
+- 2026-08-23T04:53:51.348Z done → active (system)
+- 2026-08-23T05:20:03.935Z active → verifying (system)
+- 2026-08-23T05:20:04.262Z verifying → done (system)
+- 2026-08-23T06:38:50.433Z done → active (system)
+- 2026-08-23T06:45:57.344Z active → verifying (system)
+- 2026-08-23T06:45:57.656Z verifying → done (system)
+- 2026-08-23T13:58:56.790Z done → active (system)
+- 2026-08-23T14:07:06.810Z active → verifying (system)
+- 2026-08-23T14:07:07.276Z verifying → done (system)
+- 2026-08-23T14:12:22.849Z done → active (system)
+- 2026-08-23T14:18:06.581Z active → verifying (system)
+- 2026-08-23T14:18:06.900Z verifying → done (system)

@@ -4,7 +4,7 @@ name: "History Board web module: 5-tab UI implementation with Astro, SVG charts,
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:23.336Z
-updated_at: "2026-08-22T18:31:10.959Z"
+updated_at: "2026-08-23T05:17:35.976Z"
 feature_id: E8
 dependencies: ["0627"]
 ---
@@ -146,9 +146,9 @@ absent from 0627's contract, raise it against 0627 — do not invent a client-si
 - `apps/web/src/modules/history/index.tsx:10-17` — `module` registers the append-only five-tab history surface.
 - `apps/web/src/modules/history/HistoryFilters.tsx:14-41` — `HistoryFilters` owns range, bucket, multi-filter, chip, and source-tab visibility behavior.
 - `apps/web/src/modules/history/SummaryTab.tsx:13-19` — `SummaryTab` renders server-backed metrics and dimension-aware token/cache charts.
-- `apps/web/src/modules/history/TimelineTab.tsx:270-288` — `AgentIcon` and model identity live once per chronological turn with aggregate telemetry.
+- `apps/web/src/modules/history/TimelineTab.tsx:223-385` — `AgentIcon` and `TimelineTab` identity live once per chronological turn with aggregate telemetry.
 - `apps/web/src/modules/history/SessionsTab.tsx:20-28` — `SessionsTab` provides sortable session navigation into the timeline.
-- `apps/web/src/modules/history/InsightsTab.tsx:12-20` — `InsightsTab` renders loop, cache, token, latency, and model projections.
+- `apps/web/src/modules/history/InsightsTab.tsx:13-20` — `InsightsTab` renders loop, cache, token, latency, and model projections.
 - `apps/web/src/modules/history/SourcesTab.tsx:14` — `SourcesTab` renders honest nine-agent activity, telemetry, roots, and queued import state.
 ### Testing
 **Pipeline verify results**

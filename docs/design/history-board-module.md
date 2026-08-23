@@ -1,10 +1,10 @@
 ---
 doc: design/history-board-module
 feature_id: E8
-tasks: [0626, 0627, 0628, 0629, 0630]
+tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-22
+updated_at: 2026-08-23
 ---
 
 # History Board module — Conversation Analytics & Agent Forensic Plane
@@ -61,14 +61,16 @@ export const HISTORY_TABS = [
 - **Breakdown Cards:** Top Models horizontal bars, Top Sources horizontal bars, Top Tools ranked table, Skills Used area chart, Cache Efficiency progress bar.
 
 ### 3.2 Tab 2: Timeline
-- **Header Metadata:** Session ID selector, Coding Agent badge, Model badge, duration, and token breakdown.
-- **Tool Block Grouping:** Consecutive tool calls within an agent turn are wrapped in a `.tl-block` with a single block header displaying the turn start timestamp, Coding Agent SVG badge, Model badge, and aggregated block stats (`N operations · ⏱ total duration · ⚡ total tokens`).
-- **Two-Line Left-Side Visual Metrics:** For each timeline tool item, the left column renders:
-  - **Line 1 (Latency Cost):** Monospace duration `⏱ ${V.fmtMs(durMs)}` with an amber visual spark-bar meter (`.dur`), highlighted in bold amber (`#fbbf24`) when $\ge 5$s.
-  - **Line 2 (Token Cost):** Monospace step tokens `⚡ ${V.fmtTok(tokens)}` with a cyan visual spark-bar meter (`.tok`), highlighted in bold cyan (`#7dd3fc`) when $\ge 50$K.
-  - **Hover Tooltip:** Hovering over the left cell displays a telemetry popover with step index, action name, duration, fresh input, cache read, output tokens, and agent/model.
-- **Decluttered Right-Side Cards:** Removed redundant agent and model tag pills from individual tool cards, keeping the right side clean and focused on action kind, summary, command exit code, and details.
-- **Document Flow Layout:** Renders the full session trace directly in the main page document flow without artificial height limits or inner scrollbars (`max-height: none`).
+- **Header & Navigation (Conversation):** Single panel titled `Conversation` containing the global `Expand all` / `Collapse all` button (`aria-pressed`) followed by filter checkboxes (`Hide assistant`, `Hide unknown`, `Hide other empty`, all checked by default), a native session selector (`<first8…last4> · <source> · <UTC month/day time> · <formatted token load>`), and bounded Previous/Next icon buttons. Timeline events preserve `message | tool` provenance plus `assistant | unknown` kinds: the assistant filter removes assistant messages and legacy non-tool `run` rows, the unknown filter matches kind or agent id, and the empty filter requires blank payload, zero duration, and zero fresh/cache/output tokens.
+- **Nine-Field Metadata Strip:** Ordered fields `SESSION`, `AGENT`, `MODEL`, `STARTED`, `DURATION`, `TOTAL TOKENS` (`fresh + cache read + output`), `CACHE READ` (`cache / (fresh + cache) * 100`), `OUTPUT TOKENS`, and `TOOL CALLS`.
+- **Continuous Vertical Rail & Left Gutter:** Fixed 136px vertical rail on desktop (reflows to 8px below 640px) with centered nodes for prompt rows and operation cards. The desktop left gutter displays turn timestamps (`HH:MM:SS`) and step duration (`⏱ ...`, bold amber $\ge 5$s).
+- **User Prompt Cards:** 80% width (`w-[80%]`) card aligned to the right side (`flex justify-end`) with interactive user vector icon badge (`UserTokenBadge`, hover/focus popover tooltip at `z-50` showing token breakdown `📥 fresh`, `💾 cache`, `📤 output`, `⚡ total`), prompt summary, character count, and expandable verbatim dark monospace drawer (`#0d141f`). Standalone text `USER` badge eliminated.
+- **Compact Single-Line Operation Cards (Antigravity-CLI Compact Style):** Flat chronological stream without standalone block header pills, 80% width (`w-[80%]`) aligned to the left side (`flex justify-start`). Each card renders as a single-line flex row (~38px):
+  - **Embedded `AgentIcon`:** Sources-matching vector icon for the specific coding agent with hover/focus top-layer popover (`z-50`, Agent name, Model name, UTC timestamp).
+  - **As-Is Tool Tag:** Monospace tool name as-is in lowercase (`glob`, `grep`, `edit`, `read`, `write`, `bash`, `search`, `run`) with hover/focus top-layer popover (`z-50`) displaying token breakdown (`📥 fresh`, `💾 cache`, `📤 output`, `⚡ total`).
+  - **Title:** Centered monospace action/file string truncated.
+  - **Result & Disclosure:** Right-aligned `EXIT_CODE=0` (emerald) / `EXIT_CODE=N` (rose) badge and `›` toggle button expanding verbatim `#0d141f` monospace payload drawer.
+- **Document Flow Layout:** Renders full session traces in standard document flow without artificial height limits or inner scrollbars (`max-height: none`).
 
 ### 3.3 Tab 3: Sessions
 - **Sortable DataTable:** Columns for Session ID, Agent, Model, Start Time, Duration, Messages, Tool Calls, Billed Tokens, Cache Read, Fresh Input, Top Tool, and State badge.
@@ -96,7 +98,6 @@ export const HISTORY_TABS = [
 All endpoints use strictly pure token accounting (zero currency/USD fields):
 
 ```ts
-// packages/contracts/src/history.ts  (flat file — `packages/contracts/src` has no subdirectories)
 export const historyFilterSchema = z.object({
   range: z.enum(['24h', '7d', '30d', 'all', 'custom']).default('30d'),
   from: z.string().datetime().optional(),
@@ -154,22 +155,7 @@ aggregates but are excluded from navigable session rows, Timeline, and session-l
 `HistoryService.analyze()` invokes `refreshHistoryRollups()`. The refresh is keyed by the aggregate
 import checkpoint: an unchanged checkpoint is a no-op. `LiveHistoryBoardService` uses the following
 tables only while `history_board_rollup_meta.history_version` matches the current projection version
-and checkpoint, and
-falls back to the exact live queries when the read models are absent or stale. Tool/skill-filtered
-Summary, Sessions, and Insights requests stay on the exact live path.
-
-| Table | Board projection |
-| :--- | :--- |
-| `history_daily_stats`, `history_board_message_5m` | Summary daily/sub-day token series and model/source breakdowns |
-| `history_board_tool_5m`, `history_board_tool_stats` | Summary tool/skill series and totals; model reliability input |
-| `history_board_session_stats` | Sessions page; Insights heavy sessions; Sources session totals |
-| `history_board_model_stats` | Insights model comparison |
-| `history_board_loop_findings` | Insights loop findings from the existing analyzer |
-| `history_board_ranked_steps` | Insights token, duration, and cache-waste rankings |
-| `history_board_source_stats`, `history_board_source_daily` | Sources cards, registry totals, and 90-day heatmaps |
-
-The nine board source ids are `claude`, `codex`, `agy` (Antigravity CLI), `omp`, `openclaw`,
-`hermes`, `grok`, `opencode`, and `pi`.
+and checkpoint, and falls back to the exact live queries when the read models are absent or stale.
 
 ---
 
@@ -180,14 +166,10 @@ tasks and the doc agree:
 
 | Named previously | Actual | Why |
 | :--- | :--- | :--- |
-| `packages/contracts/src/history/history.contracts.ts` | `packages/contracts/src/history.ts` | `packages/contracts/src` is flat (`feature.ts`, `task.ts`, `planning-event.ts`, `shared.ts`) |
-| `apps/server/src/routes/history.ts` | `apps/server/src/modules/history/{index.ts,handlers.ts}` + `registry.ts` + `router.ts` | there is no `routes/` directory; nine sibling modules use `modules/<name>/` |
-| `packages/domain/src/daos/history/` (5 new DAOs) | extend `packages/domain/src/analytics/forensic-query.ts` | dir is `dao/` (singular); the history query layer already lives in `analytics/` and implements most of the proposed DAOs |
-| `packages/domain/src/schema/history.ts` | `packages/domain/src/migrations.ts` (`_spur_cli_` increment) + `drizzle/<max+1>_*.sql` | history DDL ships from `@gobing-ai/ts-llm-jsonl-importer`; Spur additions follow the `history_run_session` precedent |
-
-The board module itself is React-only (`.tsx`): `apps/web/src/pages/index.astro` is the sole Astro
-page and mounts `BoardApp` with `client:only="react"`. Charts are hand-rolled inline SVG — `apps/web`
-carries no charting dependency, and adding one needs operator approval.
+| `packages/contracts/src/history/history.contracts.ts` | `packages/contracts/src/history.ts` | `packages/contracts/src` is flat |
+| `apps/server/src/routes/history.ts` | `apps/server/src/modules/history/{index.ts,handlers.ts}` + `registry.ts` + `router.ts` | no `routes/` directory |
+| `packages/domain/src/daos/history/` | extend `packages/domain/src/analytics/forensic-query.ts` | dir is `dao/` (singular) |
+| `packages/domain/src/schema/history.ts` | `packages/domain/src/migrations.ts` | history DDL ships from `@gobing-ai/ts-llm-jsonl-importer` |
 
 ---
 
@@ -200,3 +182,7 @@ carries no charting dependency, and adding one needs operator approval.
 | **0628** | Live DB Access & Query Layer | `packages/domain/src/analytics/forensic-query.ts`, `packages/app/src/services/history-board-service.ts` | Extend the existing analytics queries; indexes via `migrations.ts` + `drizzle/` |
 | **0629** | Analytics Pre-Computation | `packages/app/src/services/history-analysis-service.ts`, `packages/domain/src/analytics/history-board-rollup.ts`, `drizzle/0021_spur_cli_history_board_rollups.sql` | `HistoryService.analyze()` refresh; no CLI surface change |
 | **0630** | Frontend Parity Refinement | `apps/web/src/modules/history/`, additive Summary/Sources telemetry above | Prototype parity, accessibility, and data-driven deltas/trends |
+| **0634** | Timeline Tab Prototype-Parity Rebuild | `apps/web/src/modules/history/TimelineTab.tsx`, `HistoryShell.tsx` | Conversation skeleton header, nine-field metadata, 136px continuous rail, assistant block headers, prompt rows, and tool presentation map |
+| **0635** | Timeline Tab Compact Antigravity-CLI Stream | `apps/web/src/modules/history/TimelineTab.tsx` | Compact single-line cards, Sources AgentIcon tooltips, as-is tool telemetry tooltips, USER prompt cards, and conversation item filters |
+| **0636** | Timeline Tab Filter Defaults, 80% Alignment & Top-Layer Tooltips | `apps/web/src/modules/history/TimelineTab.tsx` | Default-checked filters, Hide other empty label, 80% width with right/left alignment, and z-50 unclipped tooltips |
+| **0637** | Timeline Tab Prompt Token Tooltip & Redundant Tag Removal | `apps/web/src/modules/history/TimelineTab.tsx` | UserTokenBadge token breakdown tooltip, eliminate redundant USER badge, and single-line prompt row |

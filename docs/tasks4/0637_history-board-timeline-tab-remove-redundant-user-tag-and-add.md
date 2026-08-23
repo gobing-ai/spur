@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Remove redundant USER tag and add token break
 status: done
 template: feature-impl
 created_at: 2026-08-23T14:12:24.823Z
-updated_at: "2026-08-23T14:18:04.086Z"
+updated_at: "2026-08-23T18:05:32.009Z"
 feature_id: E8
 ---
 
@@ -135,15 +135,16 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:149` removes the text `USER` badge from user prompt cards, retaining `<UserIcon />` as the single clean card anchor. Verified via component tests. |
-| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:149` implements `UserTokenBadge` wrapping `<UserIcon />` with an accessible hover/focus popover tooltip (`z-50`, `relative z-20`, Escape key dismissal) displaying fresh input, cache read, output, and total token loads. |
-| R3 | MET | `apps/web/tests/modules/history/components.test.tsx:365` tests `UserTokenBadge` popover interactions (focus, hover, blur, Escape) and asserts that prompt cards no longer contain the redundant text `USER` badge across 15 passing tests. |
-| R4 | MET | `docs/design/history-board-module.md:10` is synchronized with History Board module specifications and satellite task mapping. |
-| R5 | MET | `apps/web/tests/modules/history/components.test.tsx:365` confirms comprehensive verification; full quality gates `bun run spur-check` (6,233 pass across 340 test files), `bun run test-cf` (1 pass), `bun run build`, and `spur task check --corpus` all pass. |
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:599-613` renders the prompt header with `UserTokenBadge` and summary only; no static USER badge remains. `apps/web/tests/modules/history/components.test.tsx:375-378` deterministically asserts the rendered prompt contains no `USER` text. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:149-199` implements `UserTokenBadge` around `UserIcon` with `relative z-20`, an accessible button, hover/focus/blur handlers, Escape dismissal, a `z-50` tooltip, and fresh-input/cache-read/output/total values. |
+| R3 | MET | `apps/web/tests/modules/history/components.test.tsx:375-403` asserts USER removal, every required token label, hidden/default state, focus reveal, blur hide, Escape dismissal, hover reveal, and mouse-leave hide. The full component file exited 0 with 15 tests and 189 assertions. |
+| R4 | MET | `docs/design/history-board-module.md:67,188` records the UserTokenBadge tooltip, four token categories, z-index, redundant USER removal, and task mapping; `docs/04_DESIGN.md` indexes the synchronized History Board satellite through 0637. |
+| R5 | MET | Fresh gates all exited 0: `bun run autofix`, `bun run spur-check` (6,233 tests / 340 files / 24,111 assertions / 99.07% lines), `bun run test-cf` (1/1), `bun run build`, and `bun run corpus-check` (0 new / 0 stale). |
+| AC-2 | MET | The E8 Timeline scenario is exercised by `apps/web/tests/modules/history/components.test.tsx:300-471`; the component file exited 0 with 15 tests and 189 assertions, and the repository suite exited 0 with 6,233 tests. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx` exited 0: 15 pass, 186 assertions. `bun run spur-check` exited 0: 6233 pass; `bun run test-cf` and `bun run build` exited 0. Static review at `apps/web/src/modules/history/TimelineTab.tsx:149` confirms pure Tailwind implementation. |
+| Scenario: Timeline tab inspects session execution with Agent and Model tags | MET | test | `apps/web/tests/modules/history/components.test.tsx:300-471` proves session metadata, chronological prompt/tool rows, Agent/Model and token/duration telemetry, prompt token tooltip interactions, and payload disclosure; `bun test apps/web/tests/modules/history/components.test.tsx` exited 0 with 15 tests and 189 assertions. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Phase | Focus | Status | Findings |

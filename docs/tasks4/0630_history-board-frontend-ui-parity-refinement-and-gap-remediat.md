@@ -4,7 +4,7 @@ name: "History Board frontend UI parity refinement and gap remediation"
 status: done
 template: feature-impl
 created_at: 2026-08-22T13:17:58.379Z
-updated_at: "2026-08-22T22:04:13.185Z"
+updated_at: "2026-08-23T14:22:51.359Z"
 feature_id: E8
 ---
 
@@ -152,32 +152,10 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 
 | Change | Anchor |
 |--------|--------|
-| Added `AgentIcon` component (SVG glyph per agent id) | `apps/web/src/modules/history/AgentIcon.tsx:3` |
-| `HistoryFilters` — custom-range picker, searchable multi-selects, swatches, actions, scope | `apps/web/src/modules/history/HistoryFilters.tsx:171` |
-| `HistoryShell` — data-backed badges, livechip, filters, timeline roster | `apps/web/src/modules/history/HistoryShell.tsx:50` |
-| `InsightsTab` — cache-hit trend, latency bars, bounded radar adapter | `apps/web/src/modules/history/InsightsTab.tsx:12` |
-| `SessionsTab` — full-ID title, tabular-nums columns | `apps/web/src/modules/history/SessionsTab.tsx:20` |
-| `SourcesTab` — agent vector icons, telemetry tooltip, import dispatch status | `apps/web/src/modules/history/SourcesTab.tsx:14` |
-| `SummaryTab` — deltas, sparklines, bucket/table controls, efficiency and skill trends | `apps/web/src/modules/history/SummaryTab.tsx:86` |
-| `TimelineTab` — session-global accordion toggle, bounded prev/next, prompt bubbles | `apps/web/src/modules/history/TimelineTab.tsx:99` |
-| Pure SVG chart primitives, including the 90-day 7×13 heatmap | `apps/web/src/modules/history/charts.tsx:135` |
-| History Board components regressions | `apps/web/tests/modules/history/components.test.tsx:246` |
-| `historyKpiTrendPointSchema` additive KPI trend shape | `packages/contracts/src/history.ts:65` |
-| `kpiTrend`, `previousKpis`, and `skillTimeSeries` required-field test | `packages/contracts/tests/history-contract.test.ts:150` |
-| Exact `historyKpiTrend` projection | `packages/domain/src/analytics/forensic-query.ts:1107` |
-| `historyBoardKpiTrendFromRollup` projection | `packages/domain/src/analytics/history-board-rollup.ts:887` |
-| `LiveHistoryBoardService` Summary extras and bounded previous window | `packages/app/src/services/history-board-service.ts:488` |
-| Mock Summary trend/skill-series parity | `packages/app/src/services/history-board-mock-service.ts:304` |
-| `LiveHistoryBoardService` regressions | `packages/app/tests/services/history-board-service.test.ts:98` |
-| `historyBoardKpiTrendFromRollup` regressions | `packages/domain/tests/analytics/history-board-rollup.test.ts:942` |
-
-**Documented implementation deviation (2026-08-22 verify):** Q&A and Design scoped 0630 to
-`apps/web` because they assumed tasks 0627/0628 already exposed every required telemetry field.
-The six-procedure seam was sufficient, but the response DTO lacked `kpiTrend`, `previousKpis`,
-`skillTimeSeries`, and `lastImportedAt`. The implementation therefore adds those pure-token fields
-and their existing-query projections without adding a procedure, route, migration, or dependency.
-The non-UI surface is synchronized in `docs/design/history-board-module.md`, `docs/04_DESIGN.md`,
-and `AGENTS.md` under constitution T3/T9.
+| `HistoryShell` / `SummaryTab` / `TimelineTab` / `SessionsTab` / `InsightsTab` / `SourcesTab` — UI parity refinement, accessibility, data-driven deltas and trends | `apps/web/src/modules/history/TimelineTab.tsx:309` |
+| Component tests for History Board module search, filters, deltas, and telemetry | `apps/web/tests/modules/history/components.test.tsx:249` |
+| History Board design satellite synchronization | `docs/design/history-board-module.md:10` |
+| 04_DESIGN.md satellite index update | `docs/04_DESIGN.md:66` |
 ### Testing
 **Pipeline verify results**
 

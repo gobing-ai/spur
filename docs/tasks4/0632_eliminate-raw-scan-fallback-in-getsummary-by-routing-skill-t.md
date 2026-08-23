@@ -4,7 +4,7 @@ name: "Eliminate raw scan fallback in getSummary by routing skill time series an
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:28.891Z
-updated_at: "2026-08-23T00:53:22.898Z"
+updated_at: "2026-08-23T07:18:04.751Z"
 feature_id: E9
 dependencies: ["0631"]
 ---
@@ -109,7 +109,7 @@ Rationale: the already-materialized `history_board_tool_5m` allocation (tokens /
 |-------------|--------|----------|
 | Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | `historyBoardSummaryFromRollup()` routes tool and skill dimensions through `history_board_tool_5m`, selects `r.skill_name`, and excludes blanks at `packages/domain/src/analytics/history-board-rollup.ts:535`; the canonical suite covers the fresh four-dimension path. |
 | R2 | MET | `bucketedTokenSeries()` owns the canonical all-tool allocation and outer skill filter at `packages/domain/src/analytics/forensic-query.ts:859`; the canonical suite proves mixed skill/non-skill parity and blank exclusion. |
-| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:371`. No app-layer SQL or new exported helper was added. |
+| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:374`. No app-layer SQL or new exported helper was added. |
 | Comprehensive History Data Processing Architecture Documentation (R4) | MET | The current History data-processing architecture defines the Q1–Q10 forensic query contract at `docs/design/history-data-processing.md:166` and also covers the importer/Board catalogs, checkpoint/ledger truth, refresh/fallback/accounting boundaries, and five-tab gate. |
 | R5 | MET | Domain/app tests cover mixed calls, parity, blanks, all four dimensions, bounded previous-window reads, and SQL-recorded absence of raw scans. Canonical root suite: 6,230 pass, 0 fail, 99.07% lines; production `summary:skill` median: 24.7 ms. |
 

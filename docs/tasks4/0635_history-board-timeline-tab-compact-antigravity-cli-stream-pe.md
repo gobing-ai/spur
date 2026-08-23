@@ -4,7 +4,7 @@ name: "History Board Timeline Tab: Compact Antigravity-CLI stream, per-card Sour
 status: done
 template: feature-impl
 created_at: 2026-08-23T06:38:10.533Z
-updated_at: "2026-08-23T06:45:54.490Z"
+updated_at: "2026-08-23T14:24:05.277Z"
 feature_id: E8
 ---
 
@@ -82,29 +82,33 @@ Feature: History Board Timeline Compact Antigravity-CLI Stream
 - [x] Synchronize satellite documentation in `docs/design/history-board-module.md` and `docs/04_DESIGN.md` (R8).
 - [x] Run full quality gate (`bun run autofix && bun run spur-check`), Cloudflare worker test (`bun run test-cf`), build (`bun run build`), and corpus check (`bun run corpus-check`) (R7, R8).
 ### Solution
-- `apps/web/src/modules/history/TimelineTab.tsx:73-125`: Refactored `toolPresentation` to return as-is lowercase tool tags (`glob`, `grep`, `edit`, `read`, `write`, `bash`, `search`, `run`).
-- `apps/web/src/modules/history/TimelineTab.tsx:127-143`: Added `<UserIcon />` SVG component for consistent prompt card headers.
-- `apps/web/src/modules/history/TimelineTab.tsx:146-191`: Added `AgentBadge` component embedding the Sources-matching vector `AgentIcon` with accessible hover/focus metadata tooltip popover (Agent name, Model name, UTC timestamp) supporting Escape key dismissal.
-- `apps/web/src/modules/history/TimelineTab.tsx:194-245`: Added `ToolTokenBadge` component displaying as-is lowercase tool name with interactive hover/focus token breakdown tooltip popover (`📥 fresh`, `💾 cache`, `📤 output`, `⚡ total`).
-- `apps/web/src/modules/history/TimelineTab.tsx:310-335`: Added filter predicates for `Hide assistant` (`kind === 'assistant' | 'run'`), `Hide unknown` (`kind === 'unknown' | agent === 'unknown'`), and `Hide empty` (empty payload, 0 duration, 0 tokens), omitting empty blocks.
-- `apps/web/src/modules/history/TimelineTab.tsx:350-390`: Renamed header title `Conversation skeleton` → `Conversation` and added inline filter checkboxes with pure Tailwind utility styling (`w-3.5 h-3.5 rounded border border-base-content/30 accent-primary`).
-- `apps/web/src/modules/history/TimelineTab.tsx:550-590`: Standardized user prompt cards to full right-column width with `<UserIcon />`, `USER` badge, first-line prompt summary, character count, and expandable verbatim prompt drawer (`#0d141f`).
-- `apps/web/src/modules/history/TimelineTab.tsx:670-684`: Rendered right-aligned `EXIT_CODE=0` / `EXIT_CODE=N` result badges directly before the `›` disclosure chevron on the single-line operation card.
-- `apps/web/tests/modules/history/components.test.tsx:297-526`: Updated component test suite asserting `Conversation` title, filter checkboxes (`Hide assistant`, `Hide unknown`, `Hide empty`), embedded `AgentIcon` tooltip, as-is tool badges (`glob`, `grep`, `edit`, `run`) with token breakdown tooltips, right-aligned exit codes, and `USER` prompt cards.
-- `docs/design/history-board-module.md:63-72`: Updated Section 3.2 Timeline specification and Section 5 Workstream Mapping to document task 0635 Antigravity-CLI compact stream.
-- `docs/04_DESIGN.md:66`: Updated History Board satellite citation to include task 0635.
+Curated change-map — one row per changed file, anchored at the primary symbol each change implements.
+
+| Change | Anchor |
+|--------|--------|
+| `TimelineTab` — renamed panel header to Conversation, added filter checkboxes (Hide assistant, Hide unknown, Hide empty), integrated dedicated Sources `AgentIcon` vector badge with metadata tooltip popover, as-is tool tag with token breakdown tooltip popover, single-line operation cards with right-aligned exit code badges, and `<UserIcon />` prompt cards | `apps/web/src/modules/history/TimelineTab.tsx:309` |
+| Component test suite asserting Conversation panel header, filter checkboxes, embedded AgentIcon tooltip, as-is tool badge tooltip, right-aligned exit codes, and UserTokenBadge prompt card | `apps/web/tests/modules/history/components.test.tsx:365` |
+| Synchronized Timeline specification and task mapping in History Board design satellite | `docs/design/history-board-module.md:10` |
+| Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
-- `bun test apps/web/tests/modules/history/components.test.tsx`:
-  - 14 tests passing across 1 file, 134 expect() calls.
-- `bun run autofix && bun run spur-check`:
-  - Full comprehensive quality gate PASS across 6,232 unit/component tests in 340 files (24,052 expect() calls), with clean link-check, transition-shim-check, script-contract-check, Biome lint/format, typecheck, and rule checks.
-- `bun run test-cf`:
-  - Cloudflare Worker vitest test suite 1/1 PASS.
-- `bun run build`:
-  - Successfully built CLI, server worker, and static web bundle with zero errors.
-- `bun run apps/cli/src/index.ts task check 0635`:
-  - Task check structural validation PASS.
-- Coverage: N/A (UI component test coverage via `apps/web/tests/modules/history/components.test.tsx`).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:479` renames the panel header to `Conversation` and adds filter checkboxes for `Hide assistant`, `Hide unknown`, and `Hide empty`. Component tests verify panel header and filter checkbox rendering. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:225` embeds the dedicated `AgentIcon` vector badge with hover/focus metadata popover (Agent name, Model name, UTC timestamp) and Escape key dismissal on each operation card. Component tests verify tooltip attributes, contents, and interactions. |
+| R3 | MET | `apps/web/tests/modules/history/components.test.tsx:629` tests that tool names render as-is in lowercase monospace (glob, grep, edit, read, write, bash, search, run) and embeds hover/focus token breakdown tooltip (📥 fresh, 💾 cache, 📤 output, ⚡ total). |
+| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:736` formats operation cards into single-line flex rows (~38px) with right-aligned `EXIT_CODE=0` / `EXIT_CODE=N` badges directly before the `›` chevron and verbatim payload drawers. Component tests verify layout and payload expansion. |
+| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:130` replaces multi-line bubbles with `<UserIcon />` prompt cards, character count badges, and expandable drawers. Component tests verify prompt drawer expansion. |
+| R6 | MET | `apps/web/tests/modules/history/components.test.tsx:365` has 15 passing tests covering panel header, filters, AgentIcon tooltips, tool token badges, exit code badges, and prompt cards. |
+| R7 | MET | `docs/design/history-board-module.md:10` is synchronized with task 0635 specifications and full quality gates pass. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx` exited 0: 15 pass, 186 assertions. `bun run spur-check` exited 0: 6233 pass; `bun run test-cf` and `bun run build` exited 0. Static review at `apps/web/src/modules/history/TimelineTab.tsx:309` confirms no contract/service/database/dependency surface was added. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

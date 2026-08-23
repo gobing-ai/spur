@@ -1,221 +1,329 @@
 ---
 schema_version: 1
 name: "History Board Timeline Tab: Rebuild conversation skeleton, continuous timeline rail, and chat execution flow to match prototype"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-23T04:52:47.905Z
-updated_at: "2026-08-23T04:53:46.003Z"
+updated_at: "2026-08-23T14:19:20.170Z"
 feature_id: E8
 ---
 
 ## 0634. History Board Timeline Tab: Rebuild conversation skeleton, continuous timeline rail, and chat execution flow to match prototype
 
 ### Background
-During visual and functional verification of the History Board module (`/board/history`), a significant implementation drift was identified in the **Timeline** tabview between the original design prototype (`docs/design/prototypes/spur-board-history.html`, `history-app.js`, `docs/design/prototypes/review-artifacts/proto-timeline.png`, `proto-timeline-expanded.png`) and the current live implementation in `apps/web/src/modules/history/TimelineTab.tsx` (captured in `live-timeline.png`).
+E8 already ships a typed Timeline read path, but the live React composition does not preserve the
+prototype's information hierarchy. `apps/web/src/modules/history/TimelineTab.tsx:163` renders session
+controls inside a generic selector row, `apps/web/src/modules/history/TimelineTab.tsx:257` wraps each
+turn in an isolated card, and `apps/web/src/modules/history/TimelineTab.tsx:343` places telemetry inside
+each card. The reference instead uses one compact `Conversation skeleton` panel and a continuous rail
+at 136 px (`docs/design/prototypes/history-module/history.css:1196`) with prompt rows, block headers,
+and operation rows sharing that rail.
 
-#### Identified Architecture & Visual Gaps:
-1. **Container & Header Navigation Disconnect:**
-   - *Prototype:* Features a cohesive `Conversation skeleton` header with a streamlined right-aligned control group: a custom-styled pill session combobox (`id… · Agent · Date · Tokens`), compact previous/next stepper buttons (`[ ← ]` `[ → ]`), and a global `[ Expand all ]` / `[ Collapse all ]` toggle.
-   - *Current Implementation:* Wraps controls in a clunky "SELECT SESSION" box with disjointed dropdowns, raw labels, and fragmented buttons.
+Ready-depth premise verification corrected four draft assumptions:
 
-2. **Session Metadata Bar:**
-   - *Prototype:* Displays a high-density, 8-field horizontal metadata strip with subtle muted labels and bold values: `SESSION` (tail-truncated `1b4bdef8…fdc4`), `AGENT` (pill with colored indicator dot `• OMP`), `MODEL` (pill with model family dot `• claude-sonnet-4.6`), `STARTED`, `DURATION`, `TOTAL TOKENS`, `CACHE READ` (accented cyan `%`), `OUTPUT TOKENS`, and `TOOL CALLS`.
-   - *Current Implementation:* Broken into an asymmetrical 6-column grid with generic text labels and missing agent/model status badges.
+- The prototype metadata strip has **nine** fields, not eight (`docs/design/prototypes/history-module/history-app.js:695`).
+- The transport event-kind vocabulary is `read | write | bash | search | run | user`; it does not expose
+  separate `grep`, `glob`, or `edit` kinds (`packages/contracts/src/history.ts:148`). Presentation may
+  derive a finer badge/accent from the existing event title, but this task must not widen the contract.
+- `HistoryTimelineEvent.tokens` and `HistoryTimelineBlock.totalTokens` are billed-token values that omit
+  cache reads (`packages/app/src/services/history-board-service.ts:632` and
+  `packages/app/src/services/history-board-service.ts:667`). Prototype-style token load must therefore be
+  derived as `freshInputTokens + cacheReadTokens + outputTokens`.
+- The Timeline roster currently projects only id/source/model/start
+  (`apps/web/src/modules/history/HistoryShell.tsx:160`), while the already-returned Sessions DTO contains
+  the three token inputs needed for the selector label (`packages/contracts/src/history.ts:220`). No API
+  or database change is required.
 
-3. **Loss of the Continuous Vertical Timeline Rail (Execution Flow):**
-   - *Prototype:* Features a single, continuous vertical thread line running down the entire conversation. Each step is anchored to this rail with colored node dots (`tl-node`, `tl-block-node`) representing the event kind. On the left side of the rail (~130px fixed column), each step displays execution micro-metrics: timestamp/clock pill (`16:49:53`), duration row (`⏱ 485ms` + spark progress bar `█`), and token load row (`⚡ 298.5K` + spark progress bar `█`). Hovering or focusing on the left telemetry cell reveals a comprehensive floating popover badge showing complete step metrics (Action, Agent, Model, Latency, Total Tokens, Fresh Input, Cache Read, Output Tokens).
-   - *Current Implementation:* Completely abandoned the vertical timeline rail in favor of disconnected, bulky rectangular card blocks (`Turn #2`, `Turn #3`) with large text rows (`Duration: ... Tokens: ... Fresh: ... Cache: ...`) that destroy the feeling of a chronological execution stream.
+The outcome is structural and behavioral parity with the checked-in Timeline prototype—not a literal
+port of its imperative JavaScript or stylesheet—while preserving the Board's React, Tailwind/DaisyUI,
+responsive, theme, and pure-token contracts.
 
-4. **Chat-Mode User Prompt Bubbles:**
-   - *Prototype:* User turns are rendered as elegant chat prompt bubbles along the timeline rail, featuring a `[ PROMPT ]` badge, user prompt summary, metadata chips (`📥 38.6K input tokens  71 characters`), and an expandable payload drawer.
-   - *Current Implementation:* Clumsy right-aligned prompt bubble that looks detached from the execution thread.
+**In scope**
 
-5. **Assistant Turn Block Headers:**
-   - *Prototype:* Compact, single-line horizontal header attached to the timeline thread: timestamp (`16:50:12`), timeline node dot, and a consolidated pill containing the Agent icon & name (`[ ▷ OMP ]`), Model badge (`• claude-sonnet-4.6`), and block summary (`8 operations · ⏱ 59.4s · ⚡ 2.8M`).
-   - *Current Implementation:* Heavyweight banner bar repeating bulky badges and text across multiple lines.
+- Recompose `TimelineTab.tsx` into the compact header, nine-field metadata strip, continuous execution
+  rail, prompt rows, assistant block headers, operation cards, disclosure state, and telemetry popovers.
+- Add derived token load to the existing 100-row Timeline roster in `HistoryShell.tsx`.
+- Extend the existing History component tests and synchronize the History Board surface documentation.
 
-6. **Tool Step Execution Cards & Terminal Output:**
-   - *Prototype:* High-density interactive cards with colored left accent borders matching tool categories (`[ READ ]` green, `[ RUN ]` amber, `[ GREP ]` purple, `[ BASH ]` blue, `[ WRITE ]` red, `[ EDIT ]` yellow), monospace target/command title, token breakdown chips (`📥 39.3K in`, `💾 254.2K cache`, `📤 5.0K out`), exit code badges (`[ EXIT_CODE=0 ] 0 errors`), and chevron indicator `›`. Clicking or expanding reveals a dark code container (`bg-[#0d141f]` / terminal view) formatted with monospace output.
-   - *Current Implementation:* Generic cards with flat `#1 READ` tags and a standard `Details` toggle button.
+**Out of scope**
 
-This task completely rebuilds `TimelineTab.tsx` and its supporting timeline components to achieve 1:1 parity with the design prototype while preserving theme adaptability (Dark/Light mode) and pure-token accounting.
+- Changes to oRPC contracts, server/application/domain services, SQLite schema, import semantics, or
+  prototype assets.
+- Changes to Summary, Sessions, Insights, or Sources behavior; new chart helpers; new packages; a new
+  stylesheet; or a new timeline component directory.
+- Currency/cost fields, fabricated error counts, or inferred command/file targets that the DTO does not
+  provide.
 ### Requirements
-- **R1 (Conversation Skeleton Header & Navigation Toolbar):**
-  - **R1.1:** Render the top card header with the exact title `Conversation skeleton` on the left.
-  - **R1.2:** Implement a unified right-side control toolbar containing:
-    - Custom styled session selector combobox/dropdown displaying `id… · Agent · Date · Tokens` (e.g. `1b4bdef8… · OMP · Aug 21 16:49 · 7.7M`).
-    - Sequential stepper buttons `[ ← ]` (Previous) and `[ → ]` (Next) bound to the filtered session roster order, with disabled states at boundaries.
-    - Global toggle button `[ Expand all ]` / `[ Collapse all ]` that toggles all event accordions across all turns in the session.
+- **R1 — Conversation header and roster navigation:** Render one panel headed exactly `Conversation skeleton`.
+  Its toolbar contains a native session selector, Previous/Next icon buttons, and one global
+  `Expand all` / `Collapse all` button. Each roster option is
+  `<first8…last4> · <source> · <UTC month/day time> · <formatted token load>`. Extend the module-local
+  roster projection with `tokenLoad = freshInputTokens + cacheReadTokens + outputTokens`; do not change
+  a transport DTO. Previous/Next follow the existing start-desc roster order without wrapping and are
+  disabled at bounds or when the active session is absent.
 
-- **R2 (8-Column Session Metadata Strip):**
-  - **R2.1:** Render a high-density 8-field horizontal metadata strip below the header with subtle uppercase/muted labels (`.k`) and clear values (`.v`):
-    - `SESSION`: Tail-truncated session ID with hover tooltip (`1b4bdef8…fdc4`).
-    - `AGENT`: Pill badge with agent brand color dot (e.g. `• OMP`, `• Claude Code`).
-    - `MODEL`: Model pill badge with family brand dot (e.g. `• claude-sonnet-4.6`).
-    - `STARTED`: Formatted start timestamp (e.g. `Aug 21 16:49`).
-    - `DURATION`: Formatted duration (e.g. `13m` / `45s`).
-    - `TOTAL TOKENS`: Formatted token count (e.g. `7.7M`).
-    - `CACHE READ`: Formatted cache hit ratio highlighted in cyan `#22d3ee` (e.g. `89.0%`).
-    - `OUTPUT TOKENS`: Formatted output tokens (e.g. `16.3K`).
-    - `TOOL CALLS`: Integer count of tool executions (e.g. `21`).
+- **R2 — Nine-field session metadata:** Below the toolbar render, in this order: `SESSION`, `AGENT`,
+  `MODEL`, `STARTED`, `DURATION`, `TOTAL TOKENS`, `CACHE READ`, `OUTPUT TOKENS`, `TOOL CALLS`.
+  SESSION displays `first8…last4` with the full id in an accessible title; Agent uses the existing
+  `AgentIcon`; Model has a restrained accent dot. `TOTAL TOKENS` is the full token load
+  (`fresh + cache read + output`). `CACHE READ` is
+  `cacheReadTokens / (freshInputTokens + cacheReadTokens) * 100`, formatted to one decimal, with a
+  zero-denominator result of `0.0%`.
 
-- **R3 (Continuous Vertical Timeline Rail & Step Micro-Metrics):**
-  - **R3.1:** Render a continuous vertical timeline rail line running through the entire chronological flow of the session.
-  - **R3.2:** Anchor every step (user prompt, assistant block, tool execution) to the rail line with a distinct color-coded node dot (`tl-node`, `tl-block-node`).
-  - **R3.3:** Render the left-side telemetry cell (`~130px` width) for every step:
-    - For User Prompts: Time clock pill (`16:49:53`) + Input tokens chip (`📥 38.6K in`).
-    - For Tool Steps:
-      - Latency metric row: `⏱ 485ms` + inline duration micro spark bar `█` (turns amber/hot when `durMs >= 5000`).
-      - Token load row: `⚡ 298.5K` + inline token micro spark bar `█` (turns cyan/heavy when `stepTok >= 50000`).
-  - **R3.4:** Add an accessible, rich floating tooltip popover to the left telemetry cell (`data-tl-step-info`) that displays:
-    - Step number header with Agent SVG icon (`Step #N Telemetry`).
-    - Grid of metrics: `Action`, `Agent / Model`, `Latency Cost` (amber), `Total Tokens` (cyan), `Fresh Input`, `Cache Read` (cyan), `Output Tokens`.
+- **R3 — One chronological rail:** Replace per-turn outer cards with one relative stream containing a
+  single continuous vertical rail. At desktop width the rail is fixed at 136 px and every user row,
+  assistant block header, and non-user event has a node centered on it. Reuse the server-supplied block
+  order and `(turnIndex, seq)` event identity; do not regroup or sort transport data in the browser.
+  Tool telemetry shows duration and full token load with the existing `SparkBar`; `>= 5000 ms` is hot
+  amber and `>= 50000` tokens is heavy cyan.
 
-- **R4 (Chat-Mode User Prompt Bubbles):**
-  - **R4.1:** Render user prompt events as chat bubble cards (`.tl-body.user`) connected to the timeline rail.
-  - **R4.2:** Include a dark badge `[ PROMPT ]`, the prompt summary text, and a rotating chevron `›`.
-  - **R4.3:** Display prompt metadata chips: `📥 38.6K input tokens` and `N characters`.
-  - **R4.4:** Clicking the card or using `Expand all` opens the expandable prompt payload drawer displaying full formatted prompt text.
+- **R4 — Prompt rows:** Render `kind === 'user'` as a rail-connected prompt disclosure with a `PROMPT`
+  badge, summary, fresh-input chip, character count, and chevron. The full prompt is trimmed payload
+  when present, otherwise title; the summary is its first non-empty line with visual truncation, and the
+  character count uses the full chosen prompt string. Only a non-empty payload creates an expandable
+  drawer.
 
-- **R5 (Assistant Turn Block Headers):**
-  - **R5.1:** Group consecutive assistant tool operations under a clean, single-line horizontal block header (`tl-block-hdr`).
-  - **R5.2:** Include the turn start timestamp (`16:50:12`), timeline node dot, and a consolidated pill badge container.
-  - **R5.3:** Display inside the pill:
-    - Agent chip with vector SVG icon and brand color (`[ ▷ OMP ]`).
-    - Model chip with brand dot (`• claude-sonnet-4.6`).
-    - Summary text: `N operations · ⏱ {totalDuration} · ⚡ {totalTokens}`.
+- **R5 — Assistant operation blocks:** For each transport block, render one compact block header for
+  its non-user events: UTC clock, rail node, Agent icon/source, model dot/name, operation count, summed
+  duration, and summed full token load. Agent/model identity appears at block level only, not repeated
+  on every operation card. A block containing only user events has no empty assistant header.
 
-- **R6 (Tool Execution Step Cards & Payloads):**
-  - **R6.1:** Render tool operations as sleek dark cards (`.evt.${kind}`) with colored left accent borders matching tool categories:
-    - `READ` (emerald `#10b981`), `RUN` (amber `#f59e0b`), `GREP` (purple `#a855f7`), `BASH` (blue `#3b82f6`), `WRITE` (rose `#f43f5e`), `EDIT` (yellow `#eab308`), `GLOB` (indigo `#6366f1`).
-  - **R6.2:** Card header displays tool kind badge (`[ READ ]`), target path / command in clean monospace font, and rotating expand chevron `›`.
-  - **R6.3:** Card meta row displays:
-    - Exit code chip when applicable: `[ EXIT_CODE=0 ] 0 errors` (green) or `[ EXIT_CODE=N ]` (red).
-    - Token chips: `📥 {tokIn} in`, `💾 {cache} cache` (cyan), `📤 {tokOut} out`.
-  - **R6.4:** Expandable payload drawer (`.tl-detail`) renders code snippets, command stdout/stderr, or file contents in a dark terminal container (`bg-[#0d141f]` / `base-300`) with horizontal scrolling and monospace styling.
+- **R6 — Operation cards and honest payloads:** Render each non-user event as an accent-bordered
+  disclosure button plus metadata row. A module-local presentation map recognizes `glob`, `grep`, and
+  `edit` from `event.title` before falling back to the closed event kind; use indigo, purple, and yellow
+  respectively, with kind fallbacks read/emerald, write/rose, bash/blue, search/purple, run/amber.
+  Display the recognized uppercase badge, the transport title, `[EXIT_CODE=N]` when non-null, and fresh
+  input/cache read/output chips. Do not display a fabricated error count. The drawer renders the
+  transport payload verbatim in a dark, horizontally scrollable monospace surface.
 
-- **R7 (Interactive State, Accessibility, & Theme Parity):**
-  - **R7.1:** Maintain full keyboard navigation (`Enter` / `Space` to toggle cards, `Escape` to close tooltips).
-  - **R7.2:** Ensure seamless light and dark theme compatibility using DaisyUI base tokens with high-contrast borders and data visualization accents.
-  - **R7.3:** Retain pure-token accounting (zero cost/dollar fields).
+- **R7 — State, accessibility, responsiveness, and themes:** Keep disclosure state isolated by session
+  using `(turnIndex, seq)` keys. Global expand/collapse targets only events with non-empty payloads and
+  exposes `aria-pressed`; each disclosure uses a native button with `aria-expanded` and `aria-controls`.
+  Telemetry opens on hover and focus, closes on blur or Escape, and remains screen-reader-associated.
+  At widths below 640 px, move the rail to 8 px, use a single content column, place telemetry above its
+  card, and preserve >=44 px touch targets without horizontal page overflow. Use DaisyUI semantic
+  surfaces/text/borders for both Board themes; hard-coded colors are limited to category telemetry and
+  the terminal surface. Preserve the existing no-currency guard.
+
+- **R8 — Executable evidence and surface synchronization:** Extend
+  `apps/web/tests/modules/history/components.test.tsx` for header/metadata formulas, roster traversal,
+  rail/node structure, prompt and operation disclosures, session-isolated/global expansion, tooltip
+  keyboard behavior, and honest fallbacks. Update `docs/design/history-board-module.md` (including task
+  0634 in its task/workstream metadata) and its `docs/04_DESIGN.md` index summary in the same change.
+  Targeted History tests and the repository quality gates must pass without skips or new dependencies.
 ### Acceptance Criteria
-#### Scenario 1: Conversation Skeleton Header and Session Traversal (R1, R2)
-- **GIVEN** the Timeline tab is rendered at `/board/history`
-- **WHEN** the session loads
-- **THEN** the top card header displays the title `Conversation skeleton`
-- **AND** the right-side toolbar contains a styled session dropdown, `[ ← ]` Previous, `[ → ]` Next stepper buttons, and `[ Expand all ]` / `[ Collapse all ]`
-- **AND** the metadata bar displays all 8 fields (`SESSION`, `AGENT`, `MODEL`, `STARTED`, `DURATION`, `TOTAL TOKENS`, `CACHE READ`, `OUTPUT TOKENS`, `TOOL CALLS`) with tail-truncation on the session ID.
+```gherkin
+Feature: History Board Timeline prototype-parity rebuild
 
-#### Scenario 2: Continuous Timeline Rail and Node Alignment (R3.1, R3.2)
-- **GIVEN** a session containing multiple user prompts and assistant tool turns
-- **WHEN** the timeline stream is rendered
-- **THEN** a single vertical timeline rail line runs continuously down the left side of the conversation
-- **AND** every user prompt, assistant turn header, and tool execution step is anchored with a color-coded node dot along the rail.
-
-#### Scenario 3: Step Micro-Metrics and Rich Telemetry Tooltip (R3.3, R3.4)
-- **GIVEN** tool execution steps in the timeline
-- **WHEN** viewing the left-side telemetry cell
-- **THEN** it displays the latency row (`⏱ {duration}`) with an inline duration progress bar and the token load row (`⚡ {tokens}`) with an inline token progress bar
-- **AND** hovering or focusing the telemetry cell renders a floating popover displaying the full breakdown: `Action`, `Agent / Model`, `Latency Cost`, `Total Tokens`, `Fresh Input`, `Cache Read`, `Output Tokens`.
-
-#### Scenario 4: Chat-Mode User Prompts (R4)
-- **GIVEN** a user message event in the session
-- **WHEN** rendered on the timeline
-- **THEN** it displays as a chat prompt bubble with a dark `[ PROMPT ]` badge, user input summary text, and input token metrics
-- **AND** clicking the prompt card expands the full prompt text.
-
-#### Scenario 5: Assistant Block Header Grouping (R5)
-- **GIVEN** consecutive assistant tool execution steps within a turn
-- **WHEN** the block header renders
-- **THEN** it displays a single-line horizontal header with timestamp, timeline node, and a pill containing the Agent icon, Model badge, operation count, total block duration, and total block tokens.
-
-#### Scenario 6: Tool Execution Step Cards and Terminal Payloads (R6)
-- **GIVEN** a tool call event (e.g. `read`, `run`, `bash`, `grep`)
-- **WHEN** rendered on the timeline
-- **THEN** it appears as a card with a category-colored left accent border, tool kind badge (`[ READ ]`, `[ RUN ]`, etc.), monospace target path/command, exit code badge, and token chips
-- **AND** clicking the card or clicking `Expand all` opens a dark terminal-styled drawer showing the full payload output.
-
-#### Scenario 7: Global Expand All and Stepper Boundary Discipline (R1.2, R7.1)
-- **GIVEN** a session with multiple collapsed events
-- **WHEN** clicking `Expand all`
-- **THEN** all user prompts and tool detail drawers expand simultaneously, and the button changes to `Collapse all`
-- **AND** `[ ← ]` is disabled on the first session in the roster, and `[ → ]` is disabled on the last session.
-### Q&A
-**Q: Why was the timeline previously drifting from the prototype?**
-A: Initial implementation in task 0626 converted the timeline into discrete, turn-based rectangular card containers (`Turn #N` cards) rather than a single unified execution stream. This fractured the continuous vertical rail line, distorted the visual hierarchy of user prompts versus tool execution blocks, and dropped the high-density micro-metrics on the left rail.
-
-**Q: How do we construct the continuous vertical rail line in CSS/React?**
-A: Using a dedicated relative timeline track layout: the parent stream container hosts an absolute vertical line (`before:absolute before:top-0 before:bottom-0 before:left-[140px] before:w-[2px] before:bg-base-content/10`), where each timeline row aligns its node dot (`relative z-10 w-2.5 h-2.5 rounded-full border-2`) exactly over the line, with the left cell holding micro-metrics and the right cell holding the event card.
-
-**Q: Does this change any backend APIs or database schemas?**
-A: No. The backend oRPC endpoint `getTimeline` and contract `HistoryTimelineResponse` already supply `session`, `blocks`, `turnIndex`, `events` with `kind`, `title`, `durationMs`, `tokens`, `freshInputTokens`, `cacheReadTokens`, `outputTokens`, `exitCode`, and `payload`. This task is purely a frontend presentation and component architecture rebuild in `apps/web/src/modules/history/`.
-
-**Q: How is Dark and Light theme switching handled?**
-A: Structural surfaces use Tailwind/DaisyUI semantic tokens (`bg-base-200/50`, `border-base-content/10`, `text-base-content`, `bg-base-100`). Terminal payload drawers use a dark monospace theme (`bg-[#0d141f]` or `bg-base-300`) with high-contrast text to replicate a real terminal experience across both dark and light modes.
-
-**Q: Are there any dollar/cost fields?**
-A: No. Strictly pure-token accounting (`billedTokens`, `cacheSavedTokens`, `freshInputTokens`, `outputTokens`), execution counts, and duration metrics.
-### Design
-The rebuild is contained entirely within `apps/web/src/modules/history/`:
-
-```text
-apps/web/src/modules/history/
-├── TimelineTab.tsx           # Rebuilt: Conversation skeleton, metadata strip, continuous vertical rail, user prompts, assistant blocks, tool cards
-├── AgentIcon.tsx             # Vector SVGs for coding agents
-├── charts.tsx                # Formatting helpers (fmtTok, fmtDur, fmtMs, fmtInt, SparkBar)
-└── HistoryShell.tsx          # Session navigation router
+  @core
+  Scenario: Timeline tab inspects session execution with Agent and Model tags
+    Given a selected session containing a user prompt and multiple tool operations with token telemetry
+    And the session occupies a known position in the filtered start-desc roster
+    When the operator opens the Timeline tab
+    Then one panel titled "Conversation skeleton" contains the session selector, bounded Previous and Next controls, and the global disclosure control
+    And the metadata strip renders SESSION, AGENT, MODEL, STARTED, DURATION, TOTAL TOKENS, CACHE READ, OUTPUT TOKENS, and TOOL CALLS in that order
+    And total token values equal fresh input plus cache read plus output while the cache-read percentage uses cache read divided by fresh input plus cache read
+    And one continuous rail anchors the prompt row, the assistant block header, and every operation row
+    And the assistant header shows Agent and Model identity once with operation count, summed duration, and summed full token load
+    And every operation card shows an honest category badge, title, available exit code, token breakdown, and payload disclosure without fabricated fields
+    And Previous and Next disable at their corresponding roster boundaries and navigation never wraps
+    And Expand all expands only non-empty prompt and operation payloads for the active session
+    And switching sessions does not leak disclosure state into the new session
+    And disclosure buttons expose aria-expanded and aria-controls
+    And telemetry is available by hover and keyboard focus and closes on Escape
+    And the rail and telemetry reflow below 640 pixels without an inner timeline scrollbar or horizontal page overflow
+    And semantic surfaces and text retain readable contrast while tool accents and terminal payloads remain distinguishable
+    And no oRPC, service, database, currency, or new dependency surface is introduced
 ```
+### Q&A
+**Q: Is this a backend or schema task?**
 
-#### Component Architecture:
+A: No. `HistoryTimelineResponse` already supplies session metadata, ordered blocks, event identity,
+token components, exit code, and payload. The existing Sessions response already supplies the roster
+token components. This task changes only the module-local roster projection and Timeline presentation.
 
-1. **`TimelineTab` Root Container:**
-   - **`ConversationSkeletonCard`:**
-     - Title: `Conversation skeleton`
-     - Right Toolbar: Styled Select + Steppers + Expand/Collapse button.
-     - 8-Field Metadata Bar: Tail-truncated Session ID, Agent badge, Model badge, Started, Duration, Total Tokens, Cache Read %, Output Tokens, Tool Calls.
-   - **`TimelineStream`:**
-     - Continuous vertical rail line (`left: 140px` or responsive rail).
-     - Renders flat list of chronological items (`UserRow` | `AssistantBlock`).
+**Q: What does `TOTAL TOKENS` / step token load mean here?**
 
-2. **`TimelineUserRow`:**
-   - Left cell: Timestamp (`fmtClock`) + Input tokens chip (`📥 X in`).
-   - Center node: Violet/Primary colored dot on the vertical rail.
-   - Right body: Chat prompt card with `[ PROMPT ]` badge, summary text, input tokens count, and expandable full payload.
+A: It is processing load: `freshInputTokens + cacheReadTokens + outputTokens`. The transport's
+`tokens`/`totalTokens` fields are billed-token values and intentionally omit cache read, so the Timeline
+must not reuse them for prototype telemetry. `CACHE READ` is a ratio over input only:
+`cache / (fresh + cache)` with zero mapped to `0.0%`.
 
-3. **`TimelineAssistantBlock`:**
-   - **`BlockHeader`:**
-     - Timestamp + Center node dot + Consolidated pill: Agent SVG icon + Model brand dot + Operations count · Duration · Total Tokens.
-   - **`ToolRow` (for each tool event in the block):**
-     - Left cell (`StepTelemetryCell`):
-       - Duration row (`⏱ {duration}`) + duration micro sparkbar (amber if `durationMs >= 5000`).
-       - Token row (`⚡ {tokens}`) + token micro sparkbar (cyan if `tokens >= 50000`).
-       - Hover popover: Full step telemetry breakdown.
-     - Center node: Category-colored dot on the vertical rail.
-     - Right body (`ToolEventCard`):
-       - Category accent line (Emerald `read`, Amber `run`, Purple `grep`, Blue `bash`, Rose `write`, Yellow `edit`).
-       - Tool kind badge + Monospace target path / command + Chevron.
-       - Meta row: Exit code badge + Token chips (`in`, `cache`, `out`).
-       - Expandable drawer: Dark terminal code block (`bg-[#0d141f]` / `base-300`).
+**Q: How can GREP, GLOB, and EDIT have distinct accents when the enum is coarser?**
+
+A: Presentation recognizes those canonical tool names from `event.title` first, then falls back to
+`event.kind`. This is display-only and does not widen or reinterpret the transport contract.
+
+**Q: Does “match prototype” mean importing `history.css` or reproducing fixed pixels?**
+
+A: No. The prototype freezes information hierarchy, density, rail geometry, disclosure behavior, and
+telemetry semantics. React state, Tailwind/DaisyUI tokens, root `DESIGN.md`, current Board themes, and
+responsive behavior remain authoritative for implementation mechanics.
+
+**Q: What happens when roster or payload data is missing?**
+
+A: A session absent from the roster disables both steppers; selector labels use the values already
+present in each roster row. Empty payloads have no disclosure control. Prompt text falls back to title,
+unknown model/source strings render honestly, and no target path, stdout type, or error count is guessed.
+
+**Q: What existing work does this task build on?**
+
+A: Completed task 0626 owns the five-tab React module and task 0634 replaces only its Timeline
+presentation. It must preserve the E8 oRPC seam and all non-Timeline tab behavior. Surface documentation
+is synchronized in this task; there is no dependent WBS handoff.
+### Design
+**WHAT / WHY / WHERE**
+
+Recompose the existing Timeline into the checked-in prototype's compact conversation skeleton so an
+operator can scan chronology, latency, token load, and payloads without disconnected turn cards. The
+implementation stays in the existing React History module and uses current DTOs; no transport or data
+ownership moves.
+
+**Frozen change surface**
+
+| Path | Change |
+| --- | --- |
+| `apps/web/src/modules/history/TimelineTab.tsx` | Rebuild the Timeline composition; keep helpers and small subcomponents local. |
+| `apps/web/src/modules/history/HistoryShell.tsx` | Add `tokenLoad` to `TimelineRosterEntry` and derive it from the existing Sessions item fields. |
+| `apps/web/tests/modules/history/components.test.tsx` | Replace/extend Timeline fixture and behavioral assertions. |
+| `docs/design/history-board-module.md` | Update Timeline surface/mechanism and add 0634 to task/workstream metadata. |
+| `docs/04_DESIGN.md` | Synchronize the History Board satellite index description/version. |
+
+`AgentIcon`, `fmtTok`, `fmtMs`, and `SparkBar` are reuse targets, not new abstractions. Do not modify
+`packages/contracts`, `packages/app`, `packages/domain`, `apps/server`, other History tabs, or prototype
+assets. Do not create a new component directory or stylesheet.
+
+**Frozen local names and formulas**
+
+- Extend `TimelineTabProps.availableSessions` and `HistoryShell`'s `TimelineRosterEntry` with
+  `tokenLoad: number`.
+- Add local pure helpers `tokenLoad(fresh, cache, output)`, `cacheReadPercent(fresh, cache)`,
+  `shortSessionId(id)`, `sessionOptionLabel(row)`, `promptText(event)`, and
+  `toolPresentation(event)` in `TimelineTab.tsx`. They are module-private; no exported API is added.
+- `tokenLoad = freshInputTokens + cacheReadTokens + outputTokens` at event, block, session, and roster
+  levels. Do not display `event.tokens` or `block.totalTokens` as full load.
+- `cacheReadPercent = denominator > 0 ? cacheReadTokens / (freshInputTokens + cacheReadTokens) * 100 : 0`.
+- `shortSessionId` returns the original id when short enough; otherwise `first8…last4` and always keeps
+  the full id in the semantic title.
+- `toolPresentation` checks normalized title for `glob`, `grep`, and `edit` before enum fallback and
+  returns only `{ label, color }`. It must not parse payload content or change event meaning.
+
+**Composition and state algorithm**
+
+1. Preserve the existing loading/error/empty branches and `expandedBySession` state.
+2. Build `expandableKeys` from events whose trimmed payload is non-empty. `allExpanded` and the global
+   toggle operate on that set only; `(turnIndex, seq)` remains the collision-safe key.
+3. Render one semantic panel. Its header owns title, select, bounded steppers, and the global toggle;
+   its second row owns the ordered nine-field metadata strip.
+4. Render one `relative` stream with a single rail. Consume `blocks` in supplied order. For each block,
+   render user events as prompt rows; when non-user events exist, render exactly one assistant header
+   followed by those operation rows. Counts and aggregates use the rendered non-user events.
+5. Each operation row owns a telemetry button, node, and disclosure card. The tooltip stays associated
+   by `aria-describedby`; the disclosure button owns `aria-expanded`/`aria-controls`. Payload text is
+   rendered verbatim, never as HTML.
+
+**Layout and theme contract**
+
+- Desktop: `136px minmax(0, 1fr)` row grid; rail at 136 px; node centered on the rail; telemetry right-
+  aligned in the fixed column; content offset by 20 px. No per-turn outer border/background.
+- Below 640 px: rail at 8 px; one content column with 24 px left offset; telemetry becomes an inline row
+  above the event card; header controls and nine metadata fields wrap; interactive controls retain
+  at least 44 px touch height. The Timeline uses document flow with no fixed height/inner scrollbar.
+- Use DaisyUI `base-*`, `base-content`, `primary`, and semantic border tokens. Tool-category and telemetry
+  colors are the only multi-color accents; the payload drawer may remain fixed dark (`#0d141f`) with
+  explicit high-contrast text. Respect reduced motion and native focus-visible rings.
+
+**Anti-patterns**
+
+- No contract/schema/service change to obtain display-only values.
+- No import or translation of the prototype's imperative JavaScript/CSS.
+- No client-side re-sort/regroup of server blocks, no use of array position as event identity, and no
+  duplicate agent/model chips on operation cards.
+- No fabricated `0 errors`, inferred file target, output type, cost, or currency field.
+- No custom keyboard emulation on native buttons, new dependency, global CSS, or unrelated History-tab cleanup.
+
+**Handoff / authority**
+
+Task 0626 is the completed upstream implementation; 0634 supersedes only its Timeline presentation.
+Feature E8's exact Timeline scenario title remains the traceability anchor. `DESIGN.md` governs shared
+visual/accessibility rules, while `docs/design/history-board-module.md` owns this surface and must be
+updated in the same implementation change (T3). No downstream task inherits unfinished scope.
 ### Plan
-- [ ] **Phase 1 (Header & Metadata Strip Rebuild):** Rebuild the top `Conversation skeleton` container in `TimelineTab.tsx` with the styled session selector, previous/next stepper buttons, `Expand all` toggle, and the 8-field high-density metadata bar (R1, R2).
-- [ ] **Phase 2 (Continuous Rail & Step Micro-Metrics):** Implement the continuous vertical timeline rail line and left telemetry cells with clock pills, duration sparkbars, token load sparkbars, and floating telemetry tooltips (R3).
-- [ ] **Phase 3 (Chat-Mode User Prompts & Assistant Block Headers):** Rebuild user prompt chat bubble rows and single-line assistant block header pills with vector agent icons and model family badges (R4, R5).
-- [ ] **Phase 4 (Tool Step Cards & Terminal Output Drawer):** Rebuild the tool execution cards with category-colored left accent borders, exit code badges, token chips, and expandable dark terminal drawers (R6).
-- [ ] **Phase 5 (Verification & Test Suite):** Update unit tests in `apps/web/tests/modules/history/components.test.tsx` to assert new DOM structure, keyboard accessibility, expand/collapse toggles, and verify full quality gate (`bun run check`).
+- [x] Extend the existing Timeline roster projection and prop shape with derived `tokenLoad`; preserve
+  the start-desc 100-row query, selected-session flow, and all unrelated `HistoryShell` behavior (R1).
+- [x] Add the frozen local formatting/token/presentation helpers and narrow disclosure state to non-empty
+  payload keys; keep `(turnIndex, seq)` identity and per-session isolation (R1, R2, R6, R7).
+- [x] Rebuild the single panel header and ordered nine-field metadata strip, including deterministic
+  session labels, honest token formulas, bounded steppers, and accessible global toggle (R1, R2).
+- [x] Replace per-turn cards with the one-rail stream, responsive desktop/mobile geometry, prompt rows,
+  and non-empty assistant block headers using supplied block order (R3, R4, R5).
+- [x] Rebuild operation telemetry, accessible popovers, category presentation, exit/token metadata, and
+  verbatim dark payload disclosures using existing `AgentIcon` and `SparkBar` (R3, R5, R6, R7).
+- [x] Extend `components.test.tsx` with fixtures containing cache reads, duplicate seq values, empty and
+  non-empty payloads, multiple roster positions, and unknown title/kind fallbacks. Assert formulas,
+  header/metadata order, rail/node counts, bounded navigation, per-session/global disclosures,
+  `aria-*`, focus/Escape telemetry, and absence of fabricated/currency fields (R1–R8).
+- [x] Synchronize the Timeline section/task map in `docs/design/history-board-module.md` and its entry in
+  `docs/04_DESIGN.md`, then compare the live Timeline against `proto-timeline.png` and
+  `proto-timeline-expanded.png` at desktop and below 640 px in both Board themes. Verify no inner
+  timeline scrollbar/horizontal page overflow and retain >=44 px touch targets; do not edit prototype
+  assets or unrelated numbered docs (R3–R8).
+- [x] Run the focused Timeline component test first, then `bun run autofix`, `bun run spur-check`,
+  `bun run test-cf`, `bun run build`, and `bun run corpus-check`; record exact evidence during verify (R8).
 ### Solution
+Curated change-map — one row per changed file, anchored at the primary symbol each change implements.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change | Anchor |
+|--------|--------|
+| `TimelineTab` — rebuilt Conversation skeleton header, nine-field metadata, 136px continuous rail, assistant block headers, prompt rows, tool presentation map, and telemetry popovers | `apps/web/src/modules/history/TimelineTab.tsx:309` |
+| `HistoryShell` — added `tokenLoad` to `TimelineRosterEntry` derived from fresh input + cache read + output tokens | `apps/web/src/modules/history/HistoryShell.tsx:21` |
+| Timeline component tests covering formulas, 9-field metadata, tool category mapping, bounded roster traversal, disclosures, and telemetry | `apps/web/tests/modules/history/components.test.tsx:300` |
+| Synchronized Timeline specification and task mapping in History Board design satellite | `docs/design/history-board-module.md:10` |
+| Synchronized History Board satellite reference in 04_DESIGN.md | `docs/04_DESIGN.md:66` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the Conversation skeleton controls and receives the start-desc roster with full token load; the focused test named 'Timeline prev/next are disabled at roster bounds and options include formatted token load' verifies labels, bounds, traversal, and absent-session behavior. |
+| R2 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the ordered nine-field metadata strip and formulas; the focused test named 'Timeline renders Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations' verifies field order, full load, cache ratio, zero denominator, and pure-token output. |
+| R3 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns the single responsive rail and full-load duration/token meters with hot/heavy thresholds; the focused test named 'Timeline renders compact cards with Sources AgentIcon tooltip, as-is tool badge, UserTokenBadge prompt, and filters' verifies rail geometry and node counts. |
+| R4 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns prompt rows built from trimmed payload/title fallback with disclosure state; the focused telemetry test verifies the badge, summary, character count, accessible drawer, and trimmed full prompt. |
+| R5 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns one assistant header per block with desktop/mobile UTC time, agent, model, operation count, summed duration, and summed full load; the focused telemetry test verifies both headers. |
+| R6 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns title-first glob/grep/edit recognition, closed-kind fallbacks, accent cards, exit/token metadata, and verbatim payloads; the focused honest-badges test verifies mapping, empty payload, exit codes, and honest fields. |
+| R7 | MET | `apps/web/src/modules/history/TimelineTab.tsx:309` owns per-session disclosure state, keyboard telemetry, 44px mobile targets, reduced motion, 8px/136px rail reflow, and semantic surfaces; the focused telemetry test verifies hover/focus/blur/Escape and session isolation. Headless Chrome confirmed both themes, zero page overflow, no inner scrollers or undersized Timeline controls, 136px/8px rail positions, and the visible mobile UTC clock. |
+| R8 | MET | `docs/design/history-board-module.md:10` carries the synchronized Timeline contract and the numbered design index references it. Fresh gates: focused Timeline 4 pass/73 assertions; History components 14 pass/147 assertions; autofix/typecheck clean; spur-check 6232 pass with 99.07% lines/99.20% functions; test-cf 1 pass; build exit 0. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Timeline tab inspects session execution with Agent and Model tags | MET | test | `bun test apps/web/tests/modules/history/components.test.tsx --test-name-pattern Timeline` exited 0: 4 pass, 73 assertions. `bun run spur-check` exited 0: 6232 pass; `bun run test-cf` and `bun run build` exited 0. Headless Chrome at 1440x1000 and 390x844 verified the collapsed/expanded Timeline in light/dark themes with zero page overflow. Static review at `apps/web/src/modules/history/TimelineTab.tsx:309` confirms no contract/service/database/dependency surface was added. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
-
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
-
+- Parent feature: [E8 History Board module](../features/E8_history-board-module-analytics-summary-execution-timeline-sessions-forensic-insights-and-agent-sources-registry.md)
+- Completed upstream task: [0626 History Board web module](./0626_history-board-web-module-5-tab-ui-implementation-with-astro-.md)
+- Surface design: [History Board module](../design/history-board-module.md)
+- Root visual/accessibility SSOT: [DESIGN.md](../../DESIGN.md)
+- Prototype markup/behavior/style:
+  [HTML](../design/prototypes/history-module/spur-board-history.html),
+  [controller](../design/prototypes/history-module/history-app.js), and
+  [CSS](../design/prototypes/history-module/history.css)
+- Visual baselines:
+  [collapsed](../design/prototypes/review-artifacts/proto-timeline.png),
+  [expanded](../design/prototypes/review-artifacts/proto-timeline-expanded.png), and
+  [current live drift](../design/prototypes/review-artifacts/live-timeline.png)
+- Current implementation seams: `apps/web/src/modules/history/TimelineTab.tsx`,
+  `apps/web/src/modules/history/HistoryShell.tsx`, `packages/contracts/src/history.ts`, and
+  `packages/app/src/services/history-board-service.ts`
 ### History
+- 2026-08-23T05:19:13.143Z todo → wip (system)
+- 2026-08-23T05:19:53.771Z wip → testing (system)
+- 2026-08-23T05:19:58.635Z testing → done (system)
