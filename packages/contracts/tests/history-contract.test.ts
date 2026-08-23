@@ -238,14 +238,15 @@ describe('historyContract', () => {
                         events: [
                             {
                                 seq: 1,
-                                kind: 'read',
-                                title: 'Read file',
+                                eventType: 'message',
+                                kind: 'assistant',
+                                title: 'assistant turn',
                                 durationMs: 400,
                                 tokens: 5000,
                                 freshInputTokens: 500,
                                 cacheReadTokens: 4000,
                                 outputTokens: 500,
-                                exitCode: 0,
+                                exitCode: null,
                                 payload: 'File content',
                                 agent: 'claude',
                                 model: 'claude-opus-4.6',

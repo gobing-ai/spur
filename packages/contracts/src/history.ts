@@ -145,13 +145,23 @@ export type HistorySummaryResponse = z.infer<typeof historySummaryResponseSchema
 // ─── Timeline Tab DTOs ───────────────────────────────────────────────────────
 
 /** Kinds of events in session execution timeline. */
-export const historyTimelineEventKindEnum = z.enum(['read', 'write', 'bash', 'search', 'run', 'user']);
+export const historyTimelineEventKindEnum = z.enum([
+    'read',
+    'write',
+    'bash',
+    'search',
+    'run',
+    'user',
+    'assistant',
+    'unknown',
+]);
 /** Inferred type for HistoryTimelineEventKind. */
 export type HistoryTimelineEventKind = z.infer<typeof historyTimelineEventKindEnum>;
 
 /** Single event in session timeline schema. */
 export const historyTimelineEventSchema = z.object({
     seq: z.number(),
+    eventType: z.enum(['message', 'tool']),
     kind: historyTimelineEventKindEnum,
     title: z.string(),
     durationMs: z.number(),

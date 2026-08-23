@@ -148,9 +148,12 @@ function resolveBucket(bucket: string | undefined, range: HistoryRange = '30d'):
     return '1d';
 }
 
-function classifyToolKind(toolName: string | null, role: string): HistoryTimelineEventKind {
-    if (role === 'user') return 'user';
-    if (!toolName) return 'read';
+function classifyTimelineKind(toolName: string | null, role: string): HistoryTimelineEventKind {
+    if (!toolName) {
+        if (role === 'user') return 'user';
+        if (role === 'assistant') return 'assistant';
+        return 'unknown';
+    }
     const lower = toolName.toLowerCase();
     if (
         lower.includes('read') ||
@@ -641,7 +644,8 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
             const event: HistoryTimelineEvent = {
                 seq: ev.seq,
-                kind: classifyToolKind(ev.toolName, ev.role),
+                eventType: ev.eventType,
+                kind: classifyTimelineKind(ev.toolName, ev.role),
                 title: ev.toolName ? `${ev.toolName}` : `${ev.role} turn`,
                 durationMs: dur,
                 tokens: billed,

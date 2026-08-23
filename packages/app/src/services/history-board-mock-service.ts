@@ -532,6 +532,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 events: [
                     {
                         seq: 1,
+                        eventType: 'message' as const,
                         kind: 'user' as const,
                         title: 'User Prompt: Analyze repository architecture and find performance bottlenecks',
                         durationMs: 0,
@@ -546,6 +547,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                     },
                     {
                         seq: 2,
+                        eventType: 'tool' as const,
                         kind: 'search' as const,
                         title: 'Glob: src/**/*.ts',
                         durationMs: 320,
@@ -560,6 +562,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                     },
                     {
                         seq: 3,
+                        eventType: 'tool' as const,
                         kind: 'read' as const,
                         title: 'Read: docs/03_ARCHITECTURE.md',
                         durationMs: 780,
@@ -585,6 +588,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 events: [
                     {
                         seq: 4,
+                        eventType: 'tool' as const,
                         kind: 'bash' as const,
                         title: 'Bash: bun run test',
                         durationMs: 6400,
@@ -599,6 +603,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                     },
                     {
                         seq: 5,
+                        eventType: 'tool' as const,
                         kind: 'write' as const,
                         title: 'Edit: packages/contracts/src/history.ts',
                         durationMs: 2500,

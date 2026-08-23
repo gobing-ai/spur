@@ -110,6 +110,7 @@ const timeline: HistoryTimelineResponse['data'] = {
             events: [
                 {
                     seq: 0,
+                    eventType: 'message',
                     kind: 'user',
                     title: 'Fix the failing bun test',
                     durationMs: 0,
@@ -118,12 +119,13 @@ const timeline: HistoryTimelineResponse['data'] = {
                     cacheReadTokens: 0,
                     outputTokens: 0,
                     exitCode: null,
-                    payload: 'Fix the failing bun test\nand keep coverage green.',
+                    payload: '  Fix the failing bun test\nand keep coverage green.  ',
                     agent: 'agy',
                     model: 'gemini-3-pro',
                 },
                 {
                     seq: 1,
+                    eventType: 'tool',
                     kind: 'bash',
                     title: 'Bash',
                     durationMs: 6_000,
@@ -149,6 +151,7 @@ const timeline: HistoryTimelineResponse['data'] = {
             events: [
                 {
                     seq: 1,
+                    eventType: 'tool',
                     kind: 'read',
                     title: 'Read',
                     durationMs: 1_000,
@@ -294,44 +297,433 @@ describe('History Board components', () => {
         await waitFor(() => expect(view.getByText('Incremental import queued.')).toBeDefined());
     });
 
-    test('Timeline keeps turn-header chips, renders prompt bubbles, and exposes step telemetry via tooltip', () => {
+    test('Timeline renders Conversation panel with filter checkboxes, ordered 9-field metadata, and formula calculations', () => {
         const view = render(<TimelineTab data={timeline} />);
 
-        // Session meta chip + two turn headers.
-        expect(view.getAllByText('agy').length).toBe(3);
-        expect(view.getAllByText('gemini-3-pro').length).toBe(3);
+        // Panel header
+        expect(view.getByText('Conversation')).toBeDefined();
 
-        // User prompt renders as a right-aligned bubble.
-        const bubble = view.getByTestId('timeline-user-event-0-0');
-        expect(bubble.textContent).toContain('Fix the failing bun test');
-        expect(bubble.textContent).toContain('Input 0');
+        // Filter checkboxes (checked by default)
+        const filterAssistant = view.getByTestId('timeline-filter-assistant') as HTMLInputElement;
+        const filterUnknown = view.getByTestId('timeline-filter-unknown') as HTMLInputElement;
+        const filterEmpty = view.getByTestId('timeline-filter-empty') as HTMLInputElement;
+        expect(filterAssistant.checked).toBe(true);
+        expect(filterUnknown.checked).toBe(true);
+        expect(filterEmpty.checked).toBe(true);
+        expect(view.getByText('Hide other empty')).toBeDefined();
+        expect(view.getByRole('button', { name: 'Expand all' }).nextElementSibling?.contains(filterAssistant)).toBe(
+            true,
+        );
 
-        // Duplicate seq across turns does not collide (string keys turnIndex:seq).
-        expect(view.getByTestId('timeline-step-metrics-0-1')).toBeDefined();
-        expect(view.getByTestId('timeline-step-metrics-1-1')).toBeDefined();
+        // 9-field metadata strip in exact order
+        const metaStrip = view.getByTestId('timeline-metadata-strip');
+        const labels = Array.from(metaStrip.querySelectorAll('.uppercase')).map((el) => el.textContent?.trim());
+        expect(labels).toEqual([
+            'SESSION',
+            'AGENT',
+            'MODEL',
+            'STARTED',
+            'DURATION',
+            'TOTAL TOKENS',
+            'CACHE READ',
+            'OUTPUT TOKENS',
+            'TOOL CALLS',
+        ]);
 
-        // Step telemetry tooltip carries the old native-title payload.
-        const metrics = view.getByTestId('timeline-step-metrics-0-1');
-        expect(metrics.textContent).toContain('6.0s');
-        expect(metrics.getAttribute('aria-describedby')).toBe('timeline-step-tooltip-0-1');
-        const tooltip = view.getByTestId('timeline-step-tooltip-0-1');
-        expect(tooltip.getAttribute('role')).toBe('tooltip');
-        expect(tooltip.textContent).toContain('Fresh Input:');
-        expect(tooltip.textContent).toContain('55.0K');
-        expect(tooltip.textContent).toContain('agy · gemini-3-pro');
+        // TOTAL TOKENS formula = 55_000 + 1_000 + 5_000 = 61_000 -> 61.0K
+        expect(metaStrip.textContent).toContain('61.0K');
+        // CACHE READ formula = 1_000 / (55_000 + 1_000) * 100 = 1.785% -> 1.8%
+        expect(metaStrip.textContent).toContain('1.8%');
+        // OUTPUT TOKENS = 5_000 -> 5.0K
+        expect(metaStrip.textContent).toContain('5.0K');
+        // TOOL CALLS = 1
+        expect(metaStrip.textContent).toContain('1');
 
-        // Keyboard focus opens the tooltip (sr-only until open).
-        expect(tooltip.className).toContain('sr-only');
-        fireEvent.focus(metrics);
-        expect(view.getByTestId('timeline-step-tooltip-0-1').className).not.toContain('sr-only');
+        // Zero-denominator cache read maps to 0.0%
+        const zeroCacheTimeline: HistoryTimelineResponse['data'] = {
+            ...timeline,
+            session: {
+                ...timeline.session,
+                tokens: {
+                    billedTokens: 0,
+                    cacheSavedTokens: 0,
+                    cacheReadTokens: 0,
+                    freshInputTokens: 0,
+                    outputTokens: 0,
+                },
+            },
+        };
+        view.rerender(<TimelineTab data={zeroCacheTimeline} />);
+        const zeroMetaStrip = view.getByTestId('timeline-metadata-strip');
+        expect(zeroMetaStrip.textContent).toContain('0.0%');
 
-        // Expand all reveals payloads; switching session resets expansion.
-        expect(view.getAllByRole('button', { name: 'Expand all' })).toHaveLength(1);
-        fireEvent.click(view.getByRole('button', { name: 'Expand all' }));
+        // Zero currency / USD fields
+        expect(view.container.textContent).not.toContain('$');
+        expect(view.container.textContent).not.toContain('USD');
+    });
+
+    test('Timeline renders compact cards with Sources AgentIcon tooltip, as-is tool badge, UserTokenBadge prompt, and filters', () => {
+        const view = render(<TimelineTab data={timeline} />);
+
+        // One responsive rail owns prompt and operation nodes.
+        const rail = view.getByTestId('timeline-rail');
+        expect(rail.className).toContain('sm:before:left-[136px]');
+        expect(rail.className).toContain('before:left-2');
+        expect(rail.querySelectorAll('[data-timeline-node="prompt"]')).toHaveLength(1);
+        expect(rail.querySelectorAll('[data-timeline-node="operation"]')).toHaveLength(2);
+
+        // User prompt renders as a unified card with UserTokenBadge and character count (no redundant USER text), right-aligned at 80% width.
+        const userRow = view.getByTestId('timeline-user-event-0-0');
+        expect(userRow.textContent).toContain('Fix the failing bun test');
+        expect(userRow.textContent).not.toContain('USER');
+        expect(userRow.textContent).toContain('0 in');
+        expect(userRow.textContent).toContain('49 chars');
+        expect(userRow.querySelector('.flex.justify-end')).not.toBeNull();
+        expect(userRow.querySelector('.w-\\[80\\%\\]')).not.toBeNull();
+        // User prompt has UserTokenBadge with hover/focus token breakdown tooltip elevated at z-50
+        const userBadge = view.getByTestId('timeline-user-badge-user-tt-0-0');
+        expect(userBadge).toBeDefined();
+        const userTooltip = view.getByTestId('user-tt-0-0');
+        expect(userTooltip.getAttribute('role')).toBe('tooltip');
+        expect(userTooltip.className).toContain('z-50');
+        for (const label of ['User Prompt Tokens', 'Fresh input:', 'Cache read:', 'Output:', '⚡ Total:']) {
+            expect(userTooltip.textContent).toContain(label);
+        }
+        expect(userTooltip.className).toContain('hidden');
+        fireEvent.focus(userBadge);
+        expect(userTooltip.className).not.toContain('hidden');
+        fireEvent.blur(userBadge);
+        expect(userTooltip.className).toContain('hidden');
+        fireEvent.focus(userBadge);
+        fireEvent.keyDown(userBadge, { key: 'Escape' });
+        expect(userTooltip.className).toContain('hidden');
+        fireEvent.mouseEnter(userBadge);
+        expect(userTooltip.className).not.toContain('hidden');
+        fireEvent.mouseLeave(userBadge);
+        expect(userTooltip.className).toContain('hidden');
+        // Operation row has left alignment and 80% width class
+        const opRow = view.getByTestId('timeline-op-event-0-1');
+        expect(opRow.querySelector('.flex.justify-start')).not.toBeNull();
+        expect(opRow.querySelector('.w-\\[80\\%\\]')).not.toBeNull();
+        // Operation card has AgentIcon with tooltip elevated at z-50
+        const agentBadge = view.getByTestId('timeline-agent-badge-agent-tt-0-1');
+        expect(agentBadge).toBeDefined();
+        const agentTooltip = view.getByTestId('agent-tt-0-1');
+        expect(agentTooltip.getAttribute('role')).toBe('tooltip');
+        expect(agentTooltip.className).toContain('z-50');
+        expect(agentTooltip.textContent).toContain('agy');
+        expect(agentTooltip.textContent).toContain('gemini-3-pro');
+        expect(agentTooltip.textContent).toContain('Timestamp:');
+        expect(agentTooltip.className).toContain('hidden');
+        fireEvent.focus(agentBadge);
+        expect(agentTooltip.className).not.toContain('hidden');
+        fireEvent.keyDown(agentBadge, { key: 'Escape' });
+        expect(agentTooltip.className).toContain('hidden');
+        fireEvent.mouseEnter(agentBadge);
+        expect(agentTooltip.className).not.toContain('hidden');
+        fireEvent.mouseLeave(agentBadge);
+        expect(agentTooltip.className).toContain('hidden');
+
+        // Operation card has tool tag with token breakdown tooltip elevated at z-50
+        const toolBadge = view.getByTestId('timeline-tool-badge-tool-tt-0-1');
+        expect(toolBadge.textContent).toBe('bash');
+        const toolTooltip = view.getByTestId('tool-tt-0-1');
+        expect(toolTooltip.getAttribute('role')).toBe('tooltip');
+        expect(toolTooltip.className).toContain('z-50');
+        expect(toolTooltip.textContent).toContain('55.0K');
+        expect(toolTooltip.textContent).toContain('1.0K');
+        expect(toolTooltip.textContent).toContain('5.0K');
+        expect(toolTooltip.textContent).toContain('61.0K');
+        expect(toolTooltip.textContent).toContain('Fresh input:');
+        expect(toolTooltip.textContent).toContain('Cache read:');
+        expect(toolTooltip.className).toContain('hidden');
+        fireEvent.focus(toolBadge);
+        expect(toolTooltip.className).not.toContain('hidden');
+        fireEvent.blur(toolBadge);
+        expect(toolTooltip.className).toContain('hidden');
+        fireEvent.mouseEnter(toolBadge);
+        expect(toolTooltip.className).not.toContain('hidden');
+        fireEvent.mouseLeave(toolBadge);
+        expect(toolTooltip.className).toContain('hidden');
+
+        // Right-aligned EXIT_CODE badge
+        const exitCode = view.getByText('EXIT_CODE=0');
+        expect(exitCode.parentElement?.className).toContain('shrink-0');
+        expect(exitCode.parentElement?.firstElementChild).toBe(exitCode);
+        expect(exitCode.nextElementSibling?.tagName).toBe('BUTTON');
+        expect(exitCode.nextElementSibling?.getAttribute('aria-label')).toBe('Expand operation payload');
+
+        // Prompt disclosure reveals full text.
+        const promptButton = userRow.querySelector('button[aria-expanded]');
+        expect(promptButton?.getAttribute('aria-label')).toBe('Expand full user prompt');
+        fireEvent.click(promptButton as HTMLButtonElement);
+        const promptDrawerId = promptButton?.getAttribute('aria-controls');
+        const promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
+        expect(promptDrawer?.textContent).toBe('Fix the failing bun test\nand keep coverage green.');
+        expect(view.getByText('49 chars').className).toContain('rounded');
+
+        // Expand all reveals operation payloads.
+        const expandAllBtn = view.getByRole('button', { name: 'Expand all' });
+        expect(expandAllBtn.getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(expandAllBtn);
+        expect(view.getByRole('button', { name: 'Collapse all' }).getAttribute('aria-pressed')).toBe('true');
         expect(view.getByText('bun test')).toBeDefined();
         expect(view.getByText('src/index.ts')).toBeDefined();
-        view.rerender(<TimelineTab data={{ ...timeline, session: { ...timeline.session, id: 'session-2' } }} />);
-        expect(view.queryByText('bun test')).toBeNull();
+
+        // Hide other empty filter test
+        const filterEmpty = view.getByTestId('timeline-filter-empty') as HTMLInputElement;
+        expect(filterEmpty.checked).toBe(true);
+        fireEvent.click(filterEmpty);
+        expect(filterEmpty.checked).toBe(false);
+
+        // Hide assistant filter test
+        const filterAssistant = view.getByTestId('timeline-filter-assistant') as HTMLInputElement;
+        expect(filterAssistant.checked).toBe(true);
+        fireEvent.click(filterAssistant);
+        expect(filterAssistant.checked).toBe(false);
+    });
+
+    test('Timeline filters assistant, unknown, and truly empty events without hiding tool runs or cache-only work', () => {
+        const event = {
+            durationMs: 0,
+            tokens: 0,
+            freshInputTokens: 0,
+            cacheReadTokens: 0,
+            outputTokens: 0,
+            exitCode: null,
+            payload: null,
+            agent: 'codex',
+            model: 'gpt-5.6-sol',
+        } as const;
+        const filterTimeline: HistoryTimelineResponse['data'] = {
+            ...timeline,
+            blocks: [
+                {
+                    turnIndex: 0,
+                    timestamp: '2026-08-21T10:00:00Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 0,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'assistant', title: 'assistant turn' }],
+                },
+                {
+                    turnIndex: 1,
+                    timestamp: '2026-08-21T10:00:01Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 0,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'run', title: 'legacy assistant run' }],
+                },
+                {
+                    turnIndex: 2,
+                    timestamp: '2026-08-21T10:00:02Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 1,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'tool',
+                            kind: 'run',
+                            title: 'run tool',
+                            durationMs: 1,
+                            exitCode: 0,
+                        },
+                    ],
+                },
+                {
+                    turnIndex: 3,
+                    timestamp: '2026-08-21T10:00:03Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 0,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [{ ...event, seq: 0, eventType: 'message', kind: 'unknown', title: 'unknown turn' }],
+                },
+                {
+                    turnIndex: 4,
+                    timestamp: '2026-08-21T10:00:04Z',
+                    source: 'unknown',
+                    model: 'unknown',
+                    totalDurationMs: 1,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'tool',
+                            kind: 'read',
+                            title: 'unknown agent tool',
+                            durationMs: 1,
+                            agent: 'unknown',
+                        },
+                    ],
+                },
+                {
+                    turnIndex: 5,
+                    timestamp: '2026-08-21T10:00:05Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 0,
+                    totalTokens: 0,
+                    operationCount: 1,
+                    events: [{ ...event, seq: 0, eventType: 'tool', kind: 'read', title: 'empty tool event' }],
+                },
+                {
+                    turnIndex: 6,
+                    timestamp: '2026-08-21T10:00:06Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 0,
+                    totalTokens: 10,
+                    operationCount: 1,
+                    events: [
+                        {
+                            ...event,
+                            seq: 0,
+                            eventType: 'tool',
+                            kind: 'read',
+                            title: 'cache-only tool event',
+                            cacheReadTokens: 10,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const view = render(<TimelineTab data={filterTimeline} />);
+        // By default, assistant, unknown, and empty events are already filtered out
+        expect(view.queryByTestId('timeline-op-event-0-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-1-0')).toBeNull();
+        expect(view.getByTestId('timeline-op-event-2-0')).toBeDefined();
+        expect(view.queryByTestId('timeline-op-event-3-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-4-0')).toBeNull();
+        expect(view.queryByTestId('timeline-op-event-5-0')).toBeNull();
+        expect(view.getByTestId('timeline-op-event-6-0')).toBeDefined();
+        expect(view.getByTestId('timeline-rail').children).toHaveLength(2);
+
+        // Unchecking hideAssistant reveals assistant events
+        fireEvent.click(view.getByTestId('timeline-filter-assistant'));
+        expect(view.getByTestId('timeline-op-event-0-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-1-0')).toBeDefined();
+
+        // Unchecking hideUnknown reveals unknown events
+        fireEvent.click(view.getByTestId('timeline-filter-unknown'));
+        expect(view.getByTestId('timeline-op-event-3-0')).toBeDefined();
+        expect(view.getByTestId('timeline-op-event-4-0')).toBeDefined();
+
+        // Unchecking hideEmpty reveals empty tool events
+        fireEvent.click(view.getByTestId('timeline-filter-empty'));
+        expect(view.getByTestId('timeline-op-event-5-0')).toBeDefined();
+    });
+
+    test('Timeline recognizes glob, grep, edit in titles and displays as-is lowercase tool tags', () => {
+        const enrichedTimeline: HistoryTimelineResponse['data'] = {
+            ...timeline,
+            blocks: [
+                {
+                    turnIndex: 0,
+                    timestamp: '2026-08-21T10:00:00Z',
+                    source: 'codex',
+                    model: 'gpt-5.6-sol',
+                    totalDurationMs: 5000,
+                    totalTokens: 20000,
+                    operationCount: 4,
+                    events: [
+                        {
+                            seq: 0,
+                            eventType: 'tool',
+                            kind: 'bash',
+                            title: 'glob files in src',
+                            durationMs: 500,
+                            tokens: 2000,
+                            freshInputTokens: 1500,
+                            cacheReadTokens: 500,
+                            outputTokens: 0,
+                            exitCode: 0,
+                            payload: 'src/**/*.ts',
+                            agent: 'codex',
+                            model: 'gpt-5.6-sol',
+                        },
+                        {
+                            seq: 1,
+                            eventType: 'tool',
+                            kind: 'search',
+                            title: 'ripgrep pattern in tests',
+                            durationMs: 800,
+                            tokens: 4000,
+                            freshInputTokens: 3000,
+                            cacheReadTokens: 1000,
+                            outputTokens: 0,
+                            exitCode: null,
+                            payload: null,
+                            agent: 'codex',
+                            model: 'gpt-5.6-sol',
+                        },
+                        {
+                            seq: 2,
+                            eventType: 'tool',
+                            kind: 'write',
+                            title: 'edit file content at line 10',
+                            durationMs: 1200,
+                            tokens: 6000,
+                            freshInputTokens: 4000,
+                            cacheReadTokens: 1000,
+                            outputTokens: 1000,
+                            exitCode: 1,
+                            payload: 'line edit diff',
+                            agent: 'codex',
+                            model: 'gpt-5.6-sol',
+                        },
+                        {
+                            seq: 3,
+                            eventType: 'tool',
+                            kind: 'run',
+                            title: 'run build command',
+                            durationMs: 2500,
+                            tokens: 8000,
+                            freshInputTokens: 6000,
+                            cacheReadTokens: 1000,
+                            outputTokens: 1000,
+                            exitCode: 0,
+                            payload: 'build output',
+                            agent: 'codex',
+                            model: 'gpt-5.6-sol',
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const view = render(<TimelineTab data={enrichedTimeline} />);
+
+        // As-is lowercase tool tags
+        expect(view.getByText('glob')).toBeDefined();
+        expect(view.getByText('grep')).toBeDefined();
+        expect(view.getByText('edit')).toBeDefined();
+        expect(view.getByText('run')).toBeDefined();
+
+        // Global expansion targets only the three non-empty operation payloads.
+        fireEvent.click(view.getByRole('button', { name: 'Expand all' }));
+        expect(view.container.querySelectorAll('button[aria-expanded="true"]')).toHaveLength(3);
+        expect(view.container.querySelectorAll('button[aria-expanded]')).toHaveLength(3);
+
+        // Exit codes
+        expect(view.getAllByText('EXIT_CODE=0')).toHaveLength(2);
+        expect(view.getByText('EXIT_CODE=1')).toBeDefined();
+
+        // Empty payload (seq 1) does not have disclosure button
+        const grepBadge = view.getByTestId('timeline-tool-badge-tool-tt-0-1');
+        expect(grepBadge.closest('.bg-base-100')?.querySelector('button[aria-expanded]')).toBeNull();
     });
 
     test('Summary KPI cards show no-baseline deltas and the chart/table toggle swaps bucket views', () => {
@@ -468,16 +860,73 @@ describe('History Board components', () => {
         expect(failed.getByText('Failed to load sessions: network down')).toBeDefined();
     });
 
-    test('Timeline prev/next are disabled at roster bounds', () => {
+    test('Timeline prev/next are disabled at roster bounds and options include formatted token load', () => {
+        let selectedId = '';
+        const firstId = '1234567890abcdef';
+        const roster = [
+            { id: firstId, source: 'agy', model: 'gemini-3-pro', start: '2026-08-21T10:00:00Z', tokenLoad: 61000 },
+            { id: 'session-2', source: 'codex', model: 'gpt-5.6-sol', start: '2026-08-21T09:00:00Z', tokenLoad: 30000 },
+            { id: 'session-3', source: 'claude', model: 'sonnet-4', start: '2026-08-21T08:00:00Z', tokenLoad: 15000 },
+        ];
+
+        // Active session is first in roster: Previous disabled, Next enabled
         const view = render(
             <TimelineTab
-                data={timeline}
-                availableSessions={[
-                    { id: 'session-1', source: 'agy', model: 'gemini-3-pro', start: '2026-08-21T10:00:00Z' },
-                ]}
+                data={{ ...timeline, session: { ...timeline.session, id: firstId } }}
+                availableSessions={roster}
+                onSelectSession={(id) => (selectedId = id)}
             />,
         );
 
+        const prevBtn = view.getByRole('button', { name: 'Previous session' });
+        const nextBtn = view.getByRole('button', { name: 'Next session' });
+
+        expect(prevBtn.getAttribute('disabled')).not.toBeNull();
+        expect(nextBtn.getAttribute('disabled')).toBeNull();
+
+        fireEvent.click(nextBtn);
+        expect(selectedId).toBe('session-2');
+
+        // Select options are formatted: <shortId> · <source> · <UTC month/day time> · <formatted token load>
+        const select = view.getByTestId('timeline-session-select');
+        const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+        expect(options[0]).toBe('12345678…cdef · agy · Aug 21 10:00 · 61.0K');
+        expect(options[1]).toBe('session-2 · codex · Aug 21 09:00 · 30.0K');
+        expect(options[2]).toBe('session-3 · claude · Aug 21 08:00 · 15.0K');
+        expect(view.getByTestId('timeline-metadata-strip').querySelector(`[title="${firstId}"]`)?.textContent).toBe(
+            '12345678…cdef',
+        );
+
+        // Middle session: both buttons enabled
+        view.rerender(
+            <TimelineTab
+                data={{ ...timeline, session: { ...timeline.session, id: 'session-2' } }}
+                availableSessions={roster}
+                onSelectSession={(id) => (selectedId = id)}
+            />,
+        );
+        expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).toBeNull();
+        expect(view.getByRole('button', { name: 'Next session' }).getAttribute('disabled')).toBeNull();
+
+        // Last session: Previous enabled, Next disabled
+        view.rerender(
+            <TimelineTab
+                data={{ ...timeline, session: { ...timeline.session, id: 'session-3' } }}
+                availableSessions={roster}
+                onSelectSession={(id) => (selectedId = id)}
+            />,
+        );
+        expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).toBeNull();
+        expect(view.getByRole('button', { name: 'Next session' }).getAttribute('disabled')).not.toBeNull();
+
+        // Absent session: both disabled
+        view.rerender(
+            <TimelineTab
+                data={{ ...timeline, session: { ...timeline.session, id: 'session-unknown' } }}
+                availableSessions={roster}
+                onSelectSession={(id) => (selectedId = id)}
+            />,
+        );
         expect(view.getByRole('button', { name: 'Previous session' }).getAttribute('disabled')).not.toBeNull();
         expect(view.getByRole('button', { name: 'Next session' }).getAttribute('disabled')).not.toBeNull();
     });

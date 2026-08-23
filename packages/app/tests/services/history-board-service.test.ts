@@ -202,6 +202,11 @@ describe('LiveHistoryBoardService', () => {
         expect(timeline.session.toolCallCount).toBe(3);
         expect(timeline.blocks.length).toBe(3);
         expect(timeline.blocks[0]?.events.length).toBe(3);
+        expect(timeline.blocks[0]?.events.map(({ eventType, kind }) => ({ eventType, kind }))).toEqual([
+            { eventType: 'message', kind: 'user' },
+            { eventType: 'message', kind: 'assistant' },
+            { eventType: 'tool', kind: 'bash' },
+        ]);
     });
 
     test('sentinel session ids stay out of navigable session projections', async () => {

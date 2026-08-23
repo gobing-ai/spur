@@ -23,6 +23,7 @@ interface TimelineRosterEntry {
     source: string;
     model: string;
     start: string;
+    tokenLoad: number;
 }
 
 const unionOptions = (
@@ -163,6 +164,7 @@ export const HistoryShell: React.FC = () => {
                         source: s.source,
                         model: s.model,
                         start: s.start,
+                        tokenLoad: s.freshInputTokens + s.cacheReadTokens + s.outputTokens,
                     })),
                 );
             } catch {
@@ -326,7 +328,7 @@ export const HistoryShell: React.FC = () => {
                 <div className="flex items-center gap-3">
                     <span className="text-2xl">📊</span>
                     <div>
-                        <h1 className="text-xl font-bold tracking-tight">History Board</h1>
+                        <h1 className="text-xl font-bold tracking-tight">History</h1>
                         <p className="text-xs text-base-content/60">
                             Transcript telemetry, session traces, and prompt cache analytics
                         </p>
