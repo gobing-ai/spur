@@ -276,46 +276,137 @@ describe('LiveHistoryBoardService', () => {
         expect(res.status).toBe('started');
     });
 
-    test('Performance benchmark: all 6 endpoints respond in <50ms on seeded corpus (50 sessions, 500 messages, 250 tool calls)', async () => {
+    test('fresh-rollup latency regression: median of 5 serial reads <50ms per tab (50 sessions, 500 messages, 252 tool calls incl. 2 skill)', async () => {
         const db = await setupTestDb();
         const stats = await seedCorpus(db, 50, 10);
         expect(stats.messages).toBe(500);
         expect(stats.toolCalls).toBe(250);
+        await seedSkillCalls(db);
+        await refreshHistoryRollups(db);
 
         const svc = new LiveHistoryBoardService({
             db,
             triggerImport: async () => ({ runId: 'history-refresh-benchmark', status: 'started', message: 'queued' }),
         });
 
-        const startSummary = performance.now();
-        await svc.getSummary({ range: '30d' });
-        const summaryDuration = performance.now() - startSummary;
+        const reads: [string, () => Promise<unknown>][] = [
+            ['summary:model', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'model' })],
+            ['summary:source', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'source' })],
+            ['summary:tool', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'tool' })],
+            ['summary:skill', () => svc.getSummary({ range: '30d', bucket: '1d', dimension: 'skill' })],
+            ['timeline', () => svc.getTimeline('sess-1')],
+            ['sessions', () => svc.getSessions({ page: 1, pageSize: 20 })],
+            ['insights', () => svc.getInsights()],
+            ['sources', () => svc.getSources()],
+        ];
+        // triggerImport is excluded from the latency matrix: it is a job enqueue, not a read path.
 
-        const startTimeline = performance.now();
-        await svc.getTimeline('sess-1');
-        const timelineDuration = performance.now() - startTimeline;
+        for (const [name, read] of reads) {
+            await read(); // warm cache/prepared statements once, then sample serially
+            const samples: number[] = [];
+            for (let i = 0; i < 5; i++) {
+                const t0 = performance.now();
+                await read();
+                samples.push(performance.now() - t0);
+            }
+            const mid = median(samples);
+            expect(
+                mid,
+                `${name} median ${mid.toFixed(1)}ms of [${samples.map((s) => s.toFixed(1)).join(', ')}]`,
+            ).toBeLessThan(50);
+        }
+    });
 
-        const startSessions = performance.now();
-        await svc.getSessions({ page: 1, pageSize: 20 });
-        const sessionsDuration = performance.now() - startSessions;
+    test('deterministic access paths: fresh Sessions/Insights/Sources hit only rollups; no tab leaks currency fields', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 6); // raw rows carry cost_usd = 0.001
+        await seedSkillCalls(db);
+        await refreshHistoryRollups(db);
 
-        const startInsights = performance.now();
-        await svc.getInsights();
-        const insightsDuration = performance.now() - startInsights;
+        const queries: string[] = [];
+        let tag = '';
+        const recording: DbAdapter = new Proxy(db, {
+            get(target, prop) {
+                const value = Reflect.get(target, prop, target);
+                if (typeof prop === 'string' && ['queryAll', 'queryFirst', 'run', 'exec'].includes(prop)) {
+                    return (sql: string, ...params: unknown[]) => {
+                        queries.push(`${tag}::${sql}`);
+                        return (value as (...args: unknown[]) => unknown).call(target, sql, ...params);
+                    };
+                }
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
 
-        const startSources = performance.now();
-        await svc.getSources();
-        const sourcesDuration = performance.now() - startSources;
+        const svc = new LiveHistoryBoardService({ db: recording });
+        const responses: Record<string, unknown> = {};
+        const read = async (name: string, fn: () => Promise<unknown>) => {
+            tag = name;
+            try {
+                responses[name] = await fn();
+            } finally {
+                tag = '';
+            }
+        };
+        await read('summary', () => svc.getSummary({ range: '24h', bucket: '10m' }));
+        await read('sessions', () => svc.getSessions({ page: 1, pageSize: 20 }));
+        await read('insights', () => svc.getInsights());
+        await read('sources', () => svc.getSources());
+        await read('timeline', () => svc.getTimeline('sess-1'));
 
-        const startTrigger = performance.now();
-        await svc.triggerImport('incremental');
-        const triggerDuration = performance.now() - startTrigger;
+        // Timeline is the documented indexed raw-read exception; the other four must not
+        // touch history_message/history_tool_call beyond the single-row freshness probe.
+        const rawReads = queries.filter(
+            (entry) =>
+                !entry.startsWith('timeline::') &&
+                /history_message|history_tool_call/.test(entry) &&
+                !entry.includes('ORDER BY rowid DESC LIMIT 1'),
+        );
+        expect(rawReads).toEqual([]);
 
-        expect(summaryDuration).toBeLessThan(50);
-        expect(timelineDuration).toBeLessThan(50);
-        expect(sessionsDuration).toBeLessThan(50);
-        expect(insightsDuration).toBeLessThan(50);
-        expect(sourcesDuration).toBeLessThan(50);
-        expect(triggerDuration).toBeLessThan(50);
+        // Recursively: no Board response key matches cost/currency naming despite cost_usd in raw rows.
+        for (const [tab, response] of Object.entries(responses)) {
+            expect(forbiddenCurrencyKeys(response), `${tab} leaked currency keys`).toEqual([]);
+        }
     });
 });
+
+/** Mixed skill/non-skill tool calls on one shared message (0632 fixture shape, reused for 0633). */
+async function seedSkillCalls(db: DbAdapter): Promise<void> {
+    const ts = new Date(Date.now() - 3600_000).toISOString();
+    await db.run(
+        `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+             role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+             provenance, duration_ms, imported_at)
+         VALUES ('msg-skill-mixed', 'claude', 'test.jsonl', 1, 'sess-1', 99, 50,
+                 'assistant', 'message', 'ok', ?, 'claude-opus-4.6', 300, 90, 100, 'agent', 100, '2026-06-01T00:00:00Z')`,
+        ts,
+    );
+    await db.run(
+        `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+             session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+         VALUES ('tc-benchmark-skill', 'msg-skill-mixed', 'claude', 'test.jsonl', 1, 'sess-1', 3, 'skill', 'hs',
+                 '{"skill": "sp-code-testing"}', 'success', 20, '2026-06-01T00:00:00Z')`,
+    );
+    await db.run(
+        `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+             session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+         VALUES ('tc-benchmark-plain', 'msg-skill-mixed', 'claude', 'test.jsonl', 1, 'sess-1', 4, 'Read', 'hp',
+                 '{"file": "a.ts"}', 'success', 10, '2026-06-01T00:00:00Z')`,
+    );
+}
+
+function median(xs: number[]): number {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)] ?? 0;
+}
+
+function forbiddenCurrencyKeys(value: unknown, path = '$'): string[] {
+    if (Array.isArray(value)) return value.flatMap((v) => forbiddenCurrencyKeys(v, path));
+    if (value !== null && typeof value === 'object') {
+        return Object.entries(value).flatMap(([k, v]) =>
+            /cost|usd|dollar|currency/i.test(k) ? [`${path}.${k}`] : forbiddenCurrencyKeys(v, `${path}.${k}`),
+        );
+    }
+    return [];
+}

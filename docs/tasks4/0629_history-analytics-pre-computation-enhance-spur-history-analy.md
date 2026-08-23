@@ -133,7 +133,7 @@ benchmark. Leaves nothing for a dependent task; E8's board is complete when this
 ### Solution
 #### Seams touched
 
-- `packages/domain/src/migrations.ts:351-365` — `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` adds only the four read models justified by real latency.
+- `packages/domain/src/migrations.ts:379` — `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` adds only the four read models justified by real latency.
 - `packages/domain/src/analytics/history-board-rollup.ts:30-41` — `HISTORY_BOARD_ROLLUP_VERSION` makes freshness sensitive to projection semantics.
 - `packages/domain/src/analytics/history-board-rollup.ts:172-190` — `replaceHistoryBoardRollups` atomically replaces checkpoint-keyed projections.
 - `packages/app/src/services/history-analysis-service.ts:39-58` — `refreshHistoryRollups` reuses the existing forensic analyzers and no-ops on an unchanged corpus.
@@ -146,7 +146,7 @@ benchmark. Leaves nothing for a dependent task; E8's board is complete when this
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | Source-local provenance was apps/cli/src/index.ts with importer 0.4.41; the 1,704,022-message pre-rollup benchmark measured Summary 27,019.49 ms, Timeline 61.42 ms, Sessions 2,648.62 ms, Insights 12,477.92 ms, Sources 5,453.31 ms, and trigger 0.05 ms. |
-| R2 | MET | `packages/domain/src/migrations.ts:351-365`; only measured Summary, Sessions, Insights, and Sources read models were added; Timeline stays live. |
+| R2 | MET | `packages/domain/src/migrations.ts:379`; only measured Summary, Sessions, Insights, and Sources read models were added; Timeline stays live. |
 | R3 | MET | `packages/app/tests/services/history-analysis-service.test.ts:207-306`; refresh, unchanged no-op, stale fallback, and live/materialized equality pass. |
 | R4 | MET | `packages/app/src/services/history-service.ts:518-540`; the existing analyze path refreshes projections with no public surface change. |
 | R5 | MET | `packages/app/tests/services/history-analysis-service.test.ts:207-306`; builder and integration coverage pass in the 134-test matrix. |

@@ -7,6 +7,8 @@ import {
     createMigratedDb,
     type DbAdapter,
     type HistoryArtifact,
+    historyBoardHistoryVersion,
+    historyBoardRollupsFresh,
     RunSessionDao,
 } from '@gobing-ai/spur-domain';
 import { HistoryService, type HistoryServiceContext, writeArtifact } from '../../src/services/history-service';
@@ -187,6 +189,67 @@ describe('HistoryService', () => {
             expect(artifact.coverage).toEqual([]);
             expect(artifact.loops).toEqual([]);
             expect(artifact.warnings).toEqual([]);
+        });
+
+        test('analyze materializes all 11 rollup tables once and stamps the matching history version', async () => {
+            const ctx = makeCtx();
+            await seed(ctx);
+            const db = await ctx.getDb();
+            const svc = new HistoryService(ctx);
+            await svc.analyze(ALL);
+
+            // Single refresh choke point: analyze leaves rollups fresh and version-stamped.
+            expect(await historyBoardRollupsFresh(db)).toBe(true);
+            const version = await historyBoardHistoryVersion(db);
+            const meta = await db.queryFirst<{ history_version: string }>(
+                'SELECT history_version FROM history_board_rollup_meta',
+            );
+            expect(meta?.history_version).toBe(version);
+
+            // Message rollup: every deduped message lands with its tokens.
+            const msg = await db.queryFirst<{ messages: number; input_tokens: number; output_tokens: number }>(
+                'SELECT SUM(messages) AS messages, SUM(fresh_input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens FROM history_board_message_5m',
+            );
+            expect(msg?.messages).toBe(3);
+            expect(msg?.input_tokens).toBe(1500);
+            expect(msg?.output_tokens).toBe(700);
+            // Tool rollup: all three calls, duration preserved.
+            const tool = await db.queryFirst<{ calls: number; duration_ms: number }>(
+                'SELECT SUM(calls) AS calls, SUM(duration_ms) AS duration_ms FROM history_board_tool_5m',
+            );
+            expect(tool?.calls).toBe(3);
+            expect(tool?.duration_ms).toBe(550);
+            // Session/model/source aggregates.
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_session_stats'),
+            ).toMatchObject({ n: 1 });
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_model_stats'),
+            ).toMatchObject({ n: 2 });
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_tool_stats'),
+            ).toMatchObject({ n: 2 }); // Read + Bash
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_source_stats'),
+            ).toMatchObject({ n: 1 });
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_source_daily'),
+            ).toMatchObject({ n: 2 });
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_ranked_steps'),
+            ).toMatchObject({ n: 4 }); // 2 by-tokens + 2 by-duration
+            expect(await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_daily_stats')).toMatchObject({
+                n: 2,
+            });
+            // Legitimate zero count: this fixture has no loops, so loop findings stays empty
+            // while every other table carries its aggregate.
+            expect(
+                await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_loop_findings'),
+            ).toMatchObject({ n: 0 });
+
+            // Re-analyzing the unchanged corpus performs no duplicate refresh work.
+            const { refreshHistoryRollups } = await import('../../src/services/history-analysis-service');
+            expect((await refreshHistoryRollups(db)).status).toBe('unchanged');
         });
 
         test('assembles the artifact from SQL aggregation', async () => {

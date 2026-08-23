@@ -157,7 +157,7 @@ Testing and hand the materialization decision to 0629 — do not add a rollup ta
 - `packages/domain/src/analytics/forensic-query.ts:132-164` — `buildMessageWhereClauses` composes all selector predicates once for sibling queries.
 - `packages/domain/src/analytics/forensic-query.ts:859-919` — `bucketedTokenSeries` provides bounded time and dimension aggregation.
 - `packages/domain/src/analytics/forensic-query.ts:921-984` — `sessionTimeline` uses one indexed query and a hard event ceiling.
-- `packages/domain/src/migrations.ts:332-349` — `HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL` contains only the four indexes justified by measured plans.
+- `packages/domain/src/migrations.ts:360` — `HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL` contains only the four indexes justified by measured plans.
 - `packages/app/src/services/history-board-service.ts:486-494` — `LiveHistoryBoardService` implements the six live projections and explicit materialized fallback policy.
 ### Testing
 **Pipeline verify results**

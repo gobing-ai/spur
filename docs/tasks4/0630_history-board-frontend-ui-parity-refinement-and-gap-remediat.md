@@ -164,12 +164,12 @@ Curated change-map — one row per changed file, anchored at the primary symbol 
 | History Board components regressions | `apps/web/tests/modules/history/components.test.tsx:246` |
 | `historyKpiTrendPointSchema` additive KPI trend shape | `packages/contracts/src/history.ts:65` |
 | `kpiTrend`, `previousKpis`, and `skillTimeSeries` required-field test | `packages/contracts/tests/history-contract.test.ts:150` |
-| Exact `historyKpiTrend` projection | `packages/domain/src/analytics/forensic-query.ts:1103` |
-| `historyBoardKpiTrendFromRollup` projection | `packages/domain/src/analytics/history-board-rollup.ts:882` |
-| `LiveHistoryBoardService` Summary extras and bounded previous window | `packages/app/src/services/history-board-service.ts:486` |
+| Exact `historyKpiTrend` projection | `packages/domain/src/analytics/forensic-query.ts:1107` |
+| `historyBoardKpiTrendFromRollup` projection | `packages/domain/src/analytics/history-board-rollup.ts:887` |
+| `LiveHistoryBoardService` Summary extras and bounded previous window | `packages/app/src/services/history-board-service.ts:488` |
 | Mock Summary trend/skill-series parity | `packages/app/src/services/history-board-mock-service.ts:304` |
-| `LiveHistoryBoardService` regressions | `packages/app/tests/services/history-board-service.test.ts:97` |
-| `historyBoardKpiTrendFromRollup` regressions | `packages/domain/tests/analytics/history-board-rollup.test.ts:930` |
+| `LiveHistoryBoardService` regressions | `packages/app/tests/services/history-board-service.test.ts:98` |
+| `historyBoardKpiTrendFromRollup` regressions | `packages/domain/tests/analytics/history-board-rollup.test.ts:942` |
 
 **Documented implementation deviation (2026-08-22 verify):** Q&A and Design scoped 0630 to
 `apps/web` because they assumed tasks 0627/0628 already exposed every required telemetry field.
