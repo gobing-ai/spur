@@ -1,6 +1,51 @@
 # Changelog
 
-## [0.3.57] — 2026-08-21
+## [0.3.58] - 2026-08-23
+
+### Added
+
+- feat(history): rebuild timeline conversation stream to prototype parity (7eb9d4ad)
+- feat(history): responsive chart widths and sortable model comparison (f3bcbcfd)
+- feat(history): route skill series and previous-window KPIs to rollups (task 0632) (fd2901d3)
+- feat(domain): add migration 0022 history performance indexes (task 0631) (69052c13)
+- feat(web): bring history board to prototype parity across all five tabs (c88f7ad2)
+- feat(app): project kpi trends and loop summary in history board services (98058b36)
+- feat(contracts): add kpi trend, baseline, and last-import fields to history dtos (99109cf9)
+- feat(domain): add history kpi trend query and rollup projection (2a857301)
+- feat(history): add board rollup read models, dimension analytics, and live-plane hardening (0c9ac68d)
+- feat(web): add history board 5-tab module (dee617d8)
+- feat(server): wire history board oRPC handlers and module (5dfc5028)
+- feat(app): add history board mock and live services (d7573558)
+- feat(contracts): add history board oRPC contract and DTO schemas (a7ec8054)
+- feat(domain): add history board analytics query extensions (ae4dfa2d)
+- feat(history): close 0622 data-plane residue (0624) (26103baf)
+- feat(cli): derive parity SSOT from SKILL.md + fix agy import via corruptLinePolicy (task 0623) (50d4c27d)
+
+### Fixed
+
+- fix(cli): converge lifecycle projections on partial sync failures (120ef757)
+- fix(gates): close dogfood residue - lifecycle projections and gates (0625) (11a414b7)
+
+### Changed
+
+- docs(history): record E8 timeline wave 0634-0637 (records, design sync) (18e9e027)
+- docs(tasks): record 0635-0637 timeline tab refinements (E8) (0514360f)
+- docs(tasks): create 0634 history-board timeline tab rebuild (E8) (5e491fb9)
+- docs(history): finalize E9 wrap - task records, design contract, corpus baseline (49057814)
+- docs(feature): E9 done - history plane rollup optimization complete (wrap hop) (75746afd)
+- docs(spur): plan feature E9 history-plane performance (tasks 0631-0633, draft design doc) (5320fff3)
+- docs(tasks): record 0630 history parity remediation and refresh E8 records (aead24b0)
+- docs(design): record additive history telemetry and 0630 parity scope (d27be370)
+- docs(tasks): refresh 0613/0624 record references and timestamps (4ae1428f)
+- docs(history-board): register E8 in the feature tree, ignore prototype assets (d83fb28c)
+- docs(tasks): repair shifted evidence anchors after ADR re-audit (a6d61b04)
+- docs: add E8 History Board module design, feature, and task docs (2d302e37)
+- test(history): rollup materialization proof and median-of-5 latency regression (task 0633) (4f09f793)
+- test(cli): derive parity suite from SKILL.md SSOT; 0623 completion (efa54134)
+- test(cli): capture release-ops output in the 0617 test sibling (c40bbfdf)
+- chore: add contracts dep, drop E8 baseline entries, sync docs (1c6af870)
+
+## [0.3.57] - 2026-08-21
 
 ### Fixed
 
