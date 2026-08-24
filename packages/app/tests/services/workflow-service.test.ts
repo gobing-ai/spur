@@ -1,14 +1,16 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
+import * as loaderModule from '@gobing-ai/spur-config/loader';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
     resolveOutputLogConfig,
+    resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
 } from '../../src/services/workflow-service';
@@ -2570,6 +2572,68 @@ describe('definitionDigest merge on run creation (task 0603)', () => {
             expect(meta.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
         } finally {
             await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('resolveWorkflowFile — two-tier resolution (task 0648)', () => {
+    test('an existing project path wins over the bundled copy', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-resolve-'));
+        const projectFile = join(dir, '.spur', 'workflows', 'basic.yaml');
+        await mkdir(join(dir, '.spur', 'workflows'), { recursive: true });
+        await writeFile(projectFile, 'name: project-copy\nkind: state-machine\n');
+
+        try {
+            const resolved = resolveWorkflowFile(dir, '.spur/workflows/basic.yaml');
+            expect(resolved.path).toBe(projectFile);
+            if (resolved.path !== null) {
+                expect(resolved.source).toBe('project');
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('falls back to the bundled tree when the project path is missing', () => {
+        const bundledRoot = loaderModule.bundledConfigRoot();
+        expect(bundledRoot).not.toBeNull();
+
+        // A project dir with no .spur/workflows/basic.yaml resolves to the bundled copy.
+        const resolved = resolveWorkflowFile('/tmp/nonexistent-project-dir-0648', '.spur/workflows/basic.yaml');
+        expect(resolved.path).not.toBeNull();
+        if (resolved.path !== null) {
+            expect(resolved.source).toBe('bundled');
+            expect(resolved.path).toBe(join(bundledRoot as string, 'workflows', 'basic.yaml'));
+        }
+    });
+
+    test('both tiers missing names both probed paths', () => {
+        const bundledRoot = loaderModule.bundledConfigRoot();
+        expect(bundledRoot).not.toBeNull();
+
+        const cwd = '/tmp/nonexistent-project-dir-0648';
+        const resolved = resolveWorkflowFile(cwd, '.spur/workflows/absent-0648.yaml');
+        expect(resolved.path).toBeNull();
+        if (resolved.path === null) {
+            expect(resolved.probed[0]).toBe(join(cwd, '.spur/workflows/absent-0648.yaml'));
+            expect(resolved.probed[1]).toBe(join(bundledRoot as string, 'workflows', 'absent-0648.yaml'));
+        }
+    });
+
+    test('a null bundled root degrades to a not-found result without throwing', () => {
+        const spy = spyOn(loaderModule, 'bundledConfigRoot').mockReturnValue(null);
+        try {
+            const resolved = resolveWorkflowFile(
+                '/tmp/nonexistent-project-dir-0648',
+                '.spur/workflows/absent-0648.yaml',
+            );
+            expect(resolved.path).toBeNull();
+            if (resolved.path === null) {
+                expect(resolved.probed[0]).toContain('.spur/workflows/absent-0648.yaml');
+                expect(resolved.probed[1]).toBeNull();
+            }
+        } finally {
+            spy.mockRestore();
         }
     });
 });

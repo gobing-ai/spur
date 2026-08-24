@@ -114,14 +114,12 @@ describe('makeLifecycleAdapter', () => {
         });
     });
 
-    describe('Issue C fix (0071 R5) — global ~/.config/spur/workflows/ fallback', () => {
-        // WHY: a compiled binary has no bundled config root, and a project's own
-        // .spur/workflows/ may predate a lifecycle-workflow addition (or was never
-        // fully seeded) even though `spur init` already seeded the file globally to
-        // ~/.config/spur/workflows/ — the same tier RuleService already treats as
-        // authoritative for rules (priority 10). Without this fallback the adapter
-        // silently degrades to the inline `spur task check` gate (task 0071/F5),
-        // even though a real, already-installed workflow YAML is one lookup away.
+    describe('0648 R4 — global ~/.config/spur/workflows/ tier removed', () => {
+        // WHY (task 0648 R4): the global workflow tier was dropped. It existed solely for the
+        // compiled-binary case (task 0071 R5/F5), which is not a shipping target and is already
+        // broken there by other means. `~/.config/spur/` stays authoritative for rules and
+        // config.yaml, but its `workflows/` subtree is no longer read by the lifecycle adapter.
+        // These tests pin the removal: even a seeded global workflow must NOT satisfy the adapter.
         let globalDir: string;
 
         beforeAll(() => {
@@ -138,13 +136,13 @@ describe('makeLifecycleAdapter', () => {
             rmSync(globalDir, { recursive: true, force: true });
         });
 
-        test('returns a LifecycleAdapter when bundled root is null, project-local is missing, and the global seeded YAML exists', (): void => {
+        test('does not consult the global tree — bundled root null + project-local missing ⇒ undefined even with a seeded global workflow', (): void => {
             const nullRootSpy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
             spies.push(nullRootSpy);
 
-            // cwd has no .spur/workflows/ of its own; SPUR_GLOBAL_RULES_DIR redirects
-            // the global lookup to our seeded fixture directory (test isolation, same
-            // override RuleService and commands/init.ts already honor).
+            // SPUR_GLOBAL_RULES_DIR points at a directory containing a seeded
+            // task-lifecycle.yaml under workflows/. If the adapter still read the global
+            // tier, it would resolve here; R4 removed that tier, so it must return undefined.
             const ctx = createCliContext({
                 output: nullOutput(),
                 cwd: join(globalDir, '..'),
@@ -152,10 +150,10 @@ describe('makeLifecycleAdapter', () => {
             });
             const result = makeLifecycleAdapter(ctx, TASK_LIFECYCLE_PROFILE);
 
-            expect(result).toBeInstanceOf(LifecycleAdapter);
+            expect(result).toBeUndefined();
         });
 
-        test('returns undefined when bundled root is null, project-local is missing, and the global override YAML is also missing', (): void => {
+        test('returns undefined when bundled root is null and project-local is missing', (): void => {
             const nullRootSpy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
             spies.push(nullRootSpy);
 

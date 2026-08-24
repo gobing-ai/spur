@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
-import { loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
+import { bundledConfigRoot, loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
@@ -485,11 +485,19 @@ export class WorkflowAppService {
 
     /** Validate a workflow YAML file. Returns a structured result instead of throwing. */
     async validate(file: string, opts: { validateSchema?: boolean } = {}): Promise<WorkflowValidateResult> {
-        const absolute = resolve(this.ctx.cwd, file);
-
-        if (!(await fileExists(absolute))) {
-            return { ok: false, valid: false, file, errors: [`File not found: ${absolute}`] };
+        const resolved = resolveWorkflowFile(this.ctx.cwd, file);
+        if (resolved.path === null) {
+            const [probedProject, probedBundled] = resolved.probed;
+            return {
+                ok: false,
+                valid: false,
+                file,
+                errors: [
+                    `File not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                ],
+            };
         }
+        const absolute = resolved.path;
 
         try {
             const embedded = this.embeddedSchemaOptions();
@@ -575,7 +583,14 @@ export class WorkflowAppService {
         // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
         // diverge on whether schema validation is on (task 0431 R4/R5). Loaded first
         // so YAML-declared extensions can be registered on the host (0533 R1).
-        const absolute = resolve(this.ctx.cwd, file);
+        const resolved = resolveWorkflowFile(this.ctx.cwd, file);
+        if (resolved.path === null) {
+            const [probedProject, probedBundled] = resolved.probed;
+            throw new Error(
+                `Workflow not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+            );
+        }
+        const absolute = resolved.path;
         const embedded = this.embeddedSchemaOptions();
         const workflow = await loadWorkflowDef(absolute, {
             validateSchema: true,
@@ -680,7 +695,9 @@ export class WorkflowAppService {
         // workflow file - nothing to link.
         let workflowName: string | undefined;
         try {
-            const def = await loadWorkflowDef(resolve(this.ctx.cwd, file), { validateSchema: false });
+            const resolved = resolveWorkflowFile(this.ctx.cwd, file);
+            if (resolved.path === null) return;
+            const def = await loadWorkflowDef(resolved.path, { validateSchema: false });
             workflowName = def.name;
         } catch {
             return;
@@ -1420,6 +1437,46 @@ function loadCompositionBaselineFor(workflowFile: string): WorkflowCompositionBa
 async function fileExists(path: string): Promise<boolean> {
     const fs = createNodeFileSystem();
     return await fs.exists(path);
+}
+
+/**
+ * Result of {@link resolveWorkflowFile}: either a resolved path with its source
+ * layer, or a not-found pair of probed absolute paths. `probed[1]` is `null` when
+ * `bundledConfigRoot()` returned `null` (the compiled-binary case).
+ */
+export type ResolveWorkflowFileResult =
+    | { path: string; source: 'project' | 'bundled' }
+    | { path: null; probed: [string, string | null] };
+
+/**
+ * Resolve a workflow path: literal (cwd-relative) first, then the bundled tree.
+ *
+ * The `workflow run` / `validate` / `show` CLI surfaces all call with the same
+ * two-tier rule (task 0648): an existing project path always wins; when it does
+ * not exist the command falls back to the bundled config tree (the same tree
+ * `bundledConfigRoot()` resolves for rules and templates). The bundled lookup is
+ * `join(bundledConfigRoot(), 'workflows', basename(file))` — callers pass
+ * `.spur/workflows/task-pipeline.yaml` and the bundled tree is flat under
+ * `workflows/`.
+ *
+ * Returns the not-found probe pair rather than throwing so the caller owns the
+ * error message and R3's "name both probed paths" is testable without capturing
+ * stderr. `probed[1]` is `null` when `bundledConfigRoot()` is `null`.
+ */
+export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowFileResult {
+    const projectPath = resolve(cwd, file);
+    if (existsSync(projectPath)) {
+        return { path: projectPath, source: 'project' };
+    }
+    const bundledRoot = bundledConfigRoot();
+    if (bundledRoot !== null) {
+        const bundledPath = join(bundledRoot, 'workflows', basename(file));
+        if (existsSync(bundledPath)) {
+            return { path: bundledPath, source: 'bundled' };
+        }
+        return { path: null, probed: [projectPath, bundledPath] };
+    }
+    return { path: null, probed: [projectPath, null] };
 }
 
 /**

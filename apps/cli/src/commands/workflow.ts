@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
@@ -11,6 +11,7 @@ import {
     renderRunPlan,
     renderStepLine,
     resolveOutputLogConfig,
+    resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     type SteeringAck,
     type StepEvent,
@@ -216,6 +217,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             ...(bus
                 ? {
                       observabilityBus: () => bus,
+                      // SAFETY: WorkflowObservabilityBus and SystemEventBus are structurally the same EventBus
+                      // instance; the branded nominal types only differ by name (ADR-044 event bridge).
                       events: () => bus as unknown as SystemEventBus,
                   }
                 : {}),
@@ -420,6 +423,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const runId = options.runId || crypto.randomUUID();
             const humanProgress = !json && !quiet && !silent;
             const bus: WorkflowObservabilityBus = new EventBus();
+            // SAFETY: the same EventBus serves as both the workflow observability bus and the system-event
+            // ledger bridge; the nominal WorkflowObservabilityBus/SystemEventBus types are structurally one.
             const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
             let traceWriter: WorkflowTraceWriter | undefined;
             const heartbeats = new Map<string, ReturnType<typeof setInterval>>();
@@ -433,8 +438,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             let planPreview: string | undefined;
             if (options.plan !== false) {
                 try {
-                    const def = await loadWorkflowDef(resolve(context.cwd, file), { validateSchema: false });
-                    planPreview = renderRunPlan(def);
+                    const resolved = resolveWorkflowFile(context.cwd, file);
+                    if (resolved.path !== null) {
+                        const def = await loadWorkflowDef(resolved.path, { validateSchema: false });
+                        planPreview = renderRunPlan(def);
+                    }
                 } catch {
                     // Preview is advisory — a parse failure must not block the run.
                 }
@@ -508,10 +516,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                           // degrades to undecorated acks (steering must still work).
                           let identity: { workflowName: string; nodeLabels: ReadonlyMap<string, string> } | undefined;
                           try {
-                              const def = await loadWorkflowDef(resolve(context.cwd, file), {
-                                  validateSchema: false,
-                              });
-                              identity = createWorkflowEventIdentity(def);
+                              const resolved = resolveWorkflowFile(context.cwd, file);
+                              if (resolved.path !== null) {
+                                  const def = await loadWorkflowDef(resolved.path, {
+                                      validateSchema: false,
+                                  });
+                                  identity = createWorkflowEventIdentity(def);
+                              }
                           } catch {
                               // steering identity is advisory, never a blocker
                           }
@@ -609,6 +620,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // Resume path shares the 0370 ledger bridge so continued runs also
             // surface workflow.* rows (adapter verb-form + engine-native).
             const bus: WorkflowObservabilityBus = new EventBus();
+            // SAFETY: the same EventBus instance is bridged as the system-event ledger (structurally identical
+            // nominal types; ADR-044 event bridge).
             const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
             const svc = makeSvc(json, bus);
             try {
@@ -760,7 +773,16 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('Render a workflow definition as a mermaid FSM diagram.')
         .argument('<file>', 'Workflow YAML file')
         .action(async (file) => {
-            const filePath = resolve(context.cwd, file);
+            const resolved = resolveWorkflowFile(context.cwd, file);
+            if (resolved.path === null) {
+                const [probedProject, probedBundled] = resolved.probed;
+                context.output.error(
+                    `workflow show: file not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                );
+                context.setExitCode(1);
+                return;
+            }
+            const filePath = resolved.path;
             let def: WorkflowDef;
             try {
                 def = await loadWorkflowDef(filePath, { validateSchema: true });

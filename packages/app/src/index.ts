@@ -478,6 +478,7 @@ export type {
 } from './services/workflow-service';
 export {
     resolveOutputLogConfig,
+    resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
 } from './services/workflow-service';

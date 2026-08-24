@@ -1,44 +1,25 @@
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { LifecycleAdapter, type LifecycleProfile } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { resolveSpurBin } from './resolve-spur-bin';
 
-/** `~/.config/spur` relative to the home directory (mirrors GLOBAL_CONFIG_DIR in commands/init.ts). */
-const GLOBAL_CONFIG_DIR = join('.config', 'spur');
-
 /**
- * Resolve the global config root (`~/.config/spur`), honoring `SPUR_GLOBAL_RULES_DIR`
- * for test isolation — the same override `commands/init.ts` and `RuleService` use for
- * the sibling `rules/` tree, so overriding it in a test redirects workflows too.
- */
-function globalConfigRoot(context: CliContext): string {
-    const override = context.env.SPUR_GLOBAL_RULES_DIR;
-    return override !== undefined && override.length > 0
-        ? resolve(context.cwd, override)
-        : join(homedir(), GLOBAL_CONFIG_DIR);
-}
-
-/**
- * Resolve the workflow YAML for a given profile across the three priority tiers.
+ * Resolve the workflow YAML for a given profile across the two tiers.
  *
  * 1. Bundled config root (built npm or repo root bundled workflows tree in dev).
  * 2. Project-local `.spur/workflows/<name>.yaml`.
- * 3. Global seeded config `~/.config/spur/workflows/<name>.yaml`.
  *
- * The fallback to `~/.config/spur/workflows/` (3) when the bundled root is absent
- * (0071 R5) covers the common case: a compiled binary (no bundled root) running in a
- * project whose `.spur/workflows/` predates a lifecycle-workflow addition or was
- * never fully seeded, but whose `~/.config/spur/workflows/` — seeded once by any
- * `spur init` — already has the file. Without this layer, `RuleService`'s rule
- * lookup already checks the global tier (priority 10) but the lifecycle adapter did
- * not, so the two subsystems silently disagreed about what "installed" means and the
- * adapter fell back to the degraded inline `spur task check` gate (task 0071/F5).
- * Returns `null` only when none of the three locations exist — callers fall back to
- * the schema-only port.
+ * The `~/.config/spur/workflows/` global tier was dropped (task 0648): it existed
+ * solely for the compiled-binary case (task 0071 R5/F5), and that case is not a
+ * shipping target and already lacks bundled rules/templates. Removing it deletes
+ * the staleness problem instead of managing it — `~/.config/spur/` stays
+ * authoritative for rules (`RuleService` priority 10) and `config.yaml` (the A4
+ * layered loader), but its `workflows/` subtree is no longer read by anything.
+ * Returns `null` only when neither tier exists — callers fall back to the
+ * schema-only port.
  */
 function resolveWorkflowPath(context: CliContext, profile: LifecycleProfile): string | null {
     // 1. Bundled config root (source / npm install — works regardless of cwd)
@@ -50,10 +31,6 @@ function resolveWorkflowPath(context: CliContext, profile: LifecycleProfile): st
     // 2. Project-local (.spur/workflows/ seeded by `spur init` — cwd is the project root)
     const projectPath = join(context.cwd, '.spur', 'workflows', `${profile.workflowName}.yaml`);
     if (existsSync(projectPath)) return projectPath;
-    // 3. Global seeded config (~/.config/spur/workflows/ — seeded by `spur init`, same
-    //    tier RuleService already treats as authoritative for rules).
-    const globalPath = join(globalConfigRoot(context), 'workflows', `${profile.workflowName}.yaml`);
-    if (existsSync(globalPath)) return globalPath;
     return null;
 }
 
@@ -64,10 +41,10 @@ function resolveWorkflowPath(context: CliContext, profile: LifecycleProfile): st
  * rehydration (DD-04).
  *
  * The workflow YAML is resolved by {@link resolveWorkflowPath}: bundled config
- * root first, then project-local `.spur/workflows/`, then global
- * `~/.config/spur/workflows/` (all seeded by `spur init`).
- * Returns `undefined` only when none of the three locations contain the YAML —
- * callers fall back to the schema-only port (P3 backstop, task 0130).
+ * root first, then project-local `.spur/workflows/` (task 0648 — the global
+ * `~/.config/spur/workflows/` tier was removed). Returns `undefined` only when
+ * neither tier contains the YAML — callers fall back to the schema-only port
+ * (P3 backstop, task 0130).
  */
 export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProfile): LifecycleAdapter | undefined {
     const workflowPath = resolveWorkflowPath(context, profile);
