@@ -1016,7 +1016,7 @@ export default function SystemEventsTab({
     }
 
     return (
-        <div className="flex flex-col h-full gap-3 overflow-hidden min-h-0" data-system-events-tab>
+        <div className="flex flex-col gap-4" data-system-events-tab>
             {/* Filter Bar (J92 R2/R3/R4) */}
             <ObservabilityFilters
                 timeRange={timeRange}
@@ -1035,7 +1035,7 @@ export default function SystemEventsTab({
                 }
             />
 
-            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 overflow-hidden flex flex-col flex-1 min-h-0">
+            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 overflow-hidden flex flex-col">
                 {sortedPage.length === 0 ? (
                     <div className="p-8 text-sm text-spur-text-muted italic text-center">
                         {page.length === 0
@@ -1043,19 +1043,17 @@ export default function SystemEventsTab({
                             : 'No events match the active filters.'}
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-auto min-h-0">
-                        <SystemEventsTable
-                            rows={sortedPage}
-                            catalog={catalog}
-                            visibleColumns={visibleColumns}
-                            sortState={sortState}
-                            onSortChange={handleSort}
-                        />
-                    </div>
+                    <SystemEventsTable
+                        rows={sortedPage}
+                        catalog={catalog}
+                        visibleColumns={visibleColumns}
+                        sortState={sortState}
+                        onSortChange={handleSort}
+                    />
                 )}
                 {/* Load older affordance - advances the opaque keyset cursor (R1). */}
                 {hasMore && (
-                    <div className="px-4 py-2 border-t border-spur-border bg-base-100/50 shrink-0 flex justify-center">
+                    <div className="px-4 py-2 border-t border-base-content/10 bg-base-200/50 shrink-0 flex justify-center">
                         <button
                             type="button"
                             onClick={loadMore}

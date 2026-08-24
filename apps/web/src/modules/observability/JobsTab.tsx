@@ -316,9 +316,9 @@ export default function JobsTab({ timeRange = '24h' }: ObservabilityTabProps = {
     ] as const;
 
     return (
-        <div className="flex flex-col gap-4 h-full overflow-hidden min-h-0" data-jobs-tab>
+        <div className="flex flex-col gap-4" data-jobs-tab>
             {/* Current Queue State (Live Aggregate) */}
-            <div className="p-4 rounded-xl border border-base-content/10 bg-base-200 shadow-sm space-y-3 shrink-0">
+            <div className="p-4 rounded-xl border border-base-content/10 bg-base-200 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
                         Current Queue State
@@ -340,7 +340,7 @@ export default function JobsTab({ timeRange = '24h' }: ObservabilityTabProps = {
             </div>
 
             {/* Recent Job Events Section */}
-            <div className="rounded-xl border border-base-content/10 bg-base-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="rounded-xl border border-base-content/10 bg-base-200 shadow-sm overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-base-content/10 bg-base-200 shrink-0 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
@@ -360,17 +360,15 @@ export default function JobsTab({ timeRange = '24h' }: ObservabilityTabProps = {
                         scheduler have not processed events in this window.
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto min-h-0 p-3">
-                        <ul className="space-y-2">
-                            {groupJobEvents(state.events).map((item) =>
-                                item.kind === 'thread' ? (
-                                    <JobThreadCard key={`thread-${item.jobId}`} item={item} />
-                                ) : (
-                                    <JobEventCard key={item.row.id} row={item.row} />
-                                ),
-                            )}
-                        </ul>
-                    </div>
+                    <ul className="p-3 space-y-2">
+                        {groupJobEvents(state.events).map((item) =>
+                            item.kind === 'thread' ? (
+                                <JobThreadCard key={`thread-${item.jobId}`} item={item} />
+                            ) : (
+                                <JobEventCard key={item.row.id} row={item.row} />
+                            ),
+                        )}
+                    </ul>
                 )}
             </div>
         </div>
