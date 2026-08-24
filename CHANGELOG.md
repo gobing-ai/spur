@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.59] - 2026-08-24
+
+### Added
+
+- feat(web): features board shell, module header, collapsible tree dock (0643/F84) (74c48019)
+- feat(web): constrained detail canvas, metadata drawer, tiered action bar (0644/F84) (c6cca45f)
+- feat(web): floating agent prompt bar with spirit dock (0645/F84) (ab7595de)
+- feat(history): timeline scrubber, consolidated timeline, telemetry polish (E8 0624-0638) (767ede81)
+- feat(config): layered loader, merge classification, ADR-078 (A4 0639-0642) (ef6f2148)
+- feat(config): ship global config layer and ADR-078 role SSOT (0646-0647) (6cdc2724)
+
+### Fixed
+
+- fix(history): correct 0624 re-audit residue (f1be2514)
+- fix(release): exclude tags from the bump-ver branch push (f5be3ee4)
+- fix(web): guard metadata drawer Escape-close behind open modals (0644 P3) (e4e8c24a)
+
+### Changed
+
+- docs(features): plan F84 board layout refactor (0643-0645) (ae60ccff)
+- docs(task): update task status after refinement (54c83e40)
+- docs(task): flip 0609/0618 after verification; bump ts-* deps (22192c76)
+- docs(task): record 0624 R2/R3 re-audit follow-ups (duration telemetry, etl retirement) (416cdc93)
+- docs(task): disclose 0624 fix artifact (5b3587a4)
+- docs(task): preserve 0624 review ownership (48f1fcc6)
+- chore(history): merge verify/0624-fix — MAX-fold dedup, duration telemetry, request-id index (0023) (67791f98)
+- chore(tasks): 0643 done corpus updates (F84) (d6ee310c)
+- chore(features): F84 done status + INDEX sync (wrapup) (ba877402)
+- chore(tasks): re-key 0643-0645 verify rows R/AC and refresh evidence anchors (F84) (8d3aee0b)
+- chore(spur): wrap-up learnings and metrics for F84 batch (0643-0645) (ec1ae5e3)
+
 ## [0.3.58] - 2026-08-23
 
 ### Added
