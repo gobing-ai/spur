@@ -2,7 +2,7 @@
 export const CLI_CONFIG = {
     binaryName: 'spur',
     binaryLabel: 'spur',
-    binaryVersion: '0.3.59',
+    binaryVersion: '0.3.60',
     configDir: '.spur',
     configFile: '.spur/config.yaml',
     databaseFile: '.spur/spur.db',
