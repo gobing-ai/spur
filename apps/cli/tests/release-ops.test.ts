@@ -94,6 +94,17 @@ describe('builder bump-ver', () => {
         expect(remoteTags(repo)).toContain('@demo/lib-v0.2.0');
     });
 
+    test('--all --push ships only the aggregate tag when push.followTags is set', async () => {
+        // Regression (0.3.59): with push.followTags=true, the single-tag push still bundled
+        // every same-commit trace tag into one push; GitHub drops tag push events when >3
+        // tags arrive at once, so the publish workflow never triggered.
+        const { repo } = mkRepo();
+        sh(repo, ['git', 'config', 'push.followTags', 'true']);
+        await bumpVer(['--all', '0.3.0', '--push'], repo);
+        expect(remoteTags(repo)).toEqual(['@demo/root-v0.3.0', '@demo/root-v0.3.0']); // ref + ^{} peel
+        expect(localTags(repo)).toContain('@demo/lib-v0.3.0');
+    });
+
     test('--all bumps the workspace-pinned set with per-package + aggregate tags', async () => {
         const { repo } = mkRepo();
         await bumpVer(['--all', '0.3.0'], repo);

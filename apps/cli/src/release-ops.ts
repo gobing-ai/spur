@@ -422,7 +422,10 @@ async function bumpVersion(
     // drop every tag push event, so the publish workflow never triggers.
     await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
     output.write(`Pushing release trigger tag ${tag}...`);
-    await git(ctx.repoRoot, ['push', 'origin', tag]);
+    // --no-follow-tags here too: every per-package trace tag points at this same commit,
+    // so push.followTags would bundle them into this single-tag push — recreating the
+    // >3-tags-in-one-push event drop the branch push was fixed for (0.3.59 shipped 6 tags).
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', tag]);
 
     output.write(`\nReleased ${version}. The publish workflow should now be running:`);
     output.write(`  gh run list --workflow=${config.publishWorkflow} --limit ${config.ghRunListLimit}`);
@@ -520,7 +523,9 @@ async function bumpAll(
     // per-package trace tags past GitHub's >3-tags-per-push event limit.
     await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', branch]);
     output.write(`Pushing release trigger tag ${aggregateTag}...`);
-    await git(ctx.repoRoot, ['push', 'origin', aggregateTag]);
+    // --no-follow-tags here too: the trace tags all point at this same commit, so
+    // push.followTags would bundle them into this push and re-trigger the >3-tags drop.
+    await git(ctx.repoRoot, ['push', '--no-follow-tags', 'origin', aggregateTag]);
 
     output.write(`\nReleased ${version}. The publish workflow should now be running:`);
     output.write('  gh run list --workflow=publish.yml --limit 3');
