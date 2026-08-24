@@ -5,7 +5,7 @@
     ├── [done] **A1**: Init scaffold ownership contract ([A1_init-scaffold-ownership-contract.md](./A1_init-scaffold-ownership-contract.md))
     ├── [done] **A2**: Embedded job queue and scheduler ([A2_embedded-job-queue-and-scheduler.md](./A2_embedded-job-queue-and-scheduler.md))
     ├── [done] **A3**: Harness surface governance: workflow composition measures and script-surface placement rules ([A3_harness-surface-governance-workflow-composition-measures-and-script-surface-placement-rules.md](./A3_harness-surface-governance-workflow-composition-measures-and-script-surface-placement-rules.md))
-    └── [active] **A4**: Spur config 1.2: global + project layered configuration ([A4_spur-config-1-2-global-project-layered-configuration.md](./A4_spur-config-1-2-global-project-layered-configuration.md))
+    └── [done] **A4**: Spur config 1.2: global + project layered configuration ([A4_spur-config-1-2-global-project-layered-configuration.md](./A4_spur-config-1-2-global-project-layered-configuration.md))
 [active] **B**: Agent execution ([B_agent-execution.md](./B_agent-execution.md))
     ├── [verifying] **B1**: Agent run hardening ([B1_agent-run-hardening.md](./B1_agent-run-hardening.md))
     ├── [done] **B2**: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept ([B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md](./B2_invocation-agnostic-executor-selection-intention-vocabulary-quality-ordering-and-one-selector-concept.md))

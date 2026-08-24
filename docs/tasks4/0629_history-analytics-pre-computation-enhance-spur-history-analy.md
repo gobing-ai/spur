@@ -4,7 +4,7 @@ name: "History analytics pre-computation: enhance spur history analyze and impor
 status: done
 template: feature-impl
 created_at: 2026-08-21T23:13:31.955Z
-updated_at: "2026-08-22T06:13:22.650Z"
+updated_at: "2026-08-24T20:43:29.593Z"
 feature_id: E8
 dependencies: ["0628"]
 ---
@@ -133,11 +133,11 @@ benchmark. Leaves nothing for a dependent task; E8's board is complete when this
 ### Solution
 #### Seams touched
 
-- `packages/domain/src/migrations.ts:379` — `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` adds only the four read models justified by real latency.
+- `packages/domain/src/migrations.ts:387` — `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL` adds only the four read models justified by real latency.
 - `packages/domain/src/analytics/history-board-rollup.ts:30-41` — `HISTORY_BOARD_ROLLUP_VERSION` makes freshness sensitive to projection semantics.
 - `packages/domain/src/analytics/history-board-rollup.ts:172-190` — `replaceHistoryBoardRollups` atomically replaces checkpoint-keyed projections.
 - `packages/app/src/services/history-analysis-service.ts:39-58` — `refreshHistoryRollups` reuses the existing forensic analyzers and no-ops on an unchanged corpus.
-- `packages/app/src/services/history-service.ts:518-524` — `refreshHistoryRollups` runs from the existing analyze path without a public CLI change.
+- `packages/app/src/services/history-service.ts:549` — `refreshHistoryRollups` runs from the existing analyze path without a public CLI change.
 ### Testing
 **Pipeline verify results**
 

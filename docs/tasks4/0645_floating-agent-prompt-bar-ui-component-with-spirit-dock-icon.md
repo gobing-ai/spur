@@ -4,7 +4,7 @@ name: "Floating agent prompt bar UI component with spirit dock icon and foldable
 status: done
 template: feature-impl
 created_at: 2026-08-23T23:16:46.737Z
-updated_at: "2026-08-24T02:01:57.453Z"
+updated_at: "2026-08-24T20:51:03.843Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "agent-ui"]
@@ -245,9 +245,9 @@ Implemented the foldable floating agent prompt bar UI stub (F84 R6/R7) exactly p
 
 | File | Change |
 | --- | --- |
-| `apps/web/src/modules/features/FloatingAgentBar.tsx:40` | New prop-less default-export component: expanded glassmorphic bar (`fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[75%] max-w-4xl backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl`) with `Badge` agent chip, `Textarea` prompt, Send (disabled on empty), collapse trigger; collapsed round spirit dock (`fixed bottom-6 right-6 z-30 rounded-full`). Submit clears the field and renders the `role="status"` stub notice. State is local (`isOpen`/`prompt`/`notice`); no props, no network. |
-| `apps/web/src/modules/features/FeaturesShell.tsx:327` | Mount `<FloatingAgentBar />` in the returned fragment after `NewFeaturePanel` — no other shell change. |
-| `apps/web/tests/modules/features/components.test.tsx:1088` | `setPromptValue` fiber-props helper (happy-dom + React 19 onChange incompatibility, capricorn86/happy-dom#856, teams/MemberTerminal convention) and a `FloatingAgentBar` describe with 5 behavioural tests. |
+| `apps/web/src/modules/features/FloatingAgentBar.tsx:12-41` | New prop-less default-export component: expanded glassmorphic bar (`fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[75%] max-w-4xl backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl`) with `Badge` agent chip, `Textarea` prompt, Send (disabled on empty), collapse trigger; collapsed round spirit dock (`fixed bottom-6 right-6 z-30 rounded-full`). Submit clears the field and renders the `role="status"` stub notice. State is local (`isOpen`/`prompt`/`notice`); no props, no network. |
+| `apps/web/src/modules/features/FeaturesShell.tsx:342` | Mount `<FloatingAgentBar />` in the returned fragment after `NewFeaturePanel` — no other shell change. |
+| `apps/web/tests/modules/features/components.test.tsx:1130` | `setPromptValue` fiber-props helper (happy-dom + React 19 onChange incompatibility, capricorn86/happy-dom#856, teams/MemberTerminal convention) and a `FloatingAgentBar` describe with 5 behavioural tests. |
 
 **Rationale.** UI-only stub composed exclusively from `@/ui` wrappers (`Badge`, `Button`, `Textarea`); `z-30` keeps the bar under the action-progress toast, new-feature panel (`z-40`) and confirmation modals (`z-50`). Inertness is explicit: Send disabled on empty input; submit clears and states "Agent dispatch is not wired yet — this bar is UI only (F84 R6)." No bare daisyUI class tokens; only the two positioned elements are `fixed` so the canvas stays interactive.
 ### Testing
@@ -259,12 +259,12 @@ Implemented the foldable floating agent prompt bar UI stub (F84 R6/R7) exactly p
 |-------------|--------|----------|
 | R1 | MET | apps/web/src/modules/features/FloatingAgentBar.tsx:40 — viewport-`fixed` glassmorphic bar `backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl` at bottom, expanded by default (`useState(true)` :13). Prop-less default export. Re-read this run. |
 | R2 | MET | Expanded `w-[75%] max-w-4xl` centred (`left-1/2 -translate-x-1/2 bottom-4`) :40 with `Textarea` (`agent-bar-input` :54), static `agent · stub` chip, Send, collapse trigger; collapsed round spirit dock `fixed bottom-6 right-6 z-30 rounded-full` :27 with `data-testid="agent-bar-dock"` :31. |
-| R3 | MET | Mounted `apps/web/src/modules/features/FeaturesShell.tsx:327` as fragment sibling after `NewFeaturePanel` (import :8); `z-30` on both states (:27, :40) — under FloatingActionProgress/NewFeaturePanel `z-40` and modals `z-50`; only the two positioned elements are `fixed`, canvas stays interactive. |
+| R3 | MET | `FloatingAgentBar` is mounted at `apps/web/src/modules/features/FeaturesShell.tsx:342` as fragment sibling after `NewFeaturePanel` (import :8); `z-30` on both states (:27, :40) — under FloatingActionProgress/NewFeaturePanel `z-40` and modals `z-50`; only the two positioned elements are `fixed`, canvas stays interactive. |
 | R4 | MET | Send `disabled` on empty input; `handleSubmit` clears prompt and sets `notice = 'Agent dispatch is not wired yet — this bar is UI only (F84 R6).'` (:20), rendered as inline `role="status"` (:70). No network imports. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — Foldable floating agent prompt bar UI stub | MET | test | apps/web/tests/modules/features/components.test.tsx:1097 FloatingAgentBar describe: expanded default (`agent-bar`), collapse → dock `agent-bar-dock` with `aria-expanded=false` (:1110-1113), re-expand restores bar, Send disabled on empty, submit clears input + `role="status"` note visible — part of 78 pass / 0 fail run this session (`bun test apps/web/tests/modules/features/`, 2026-08-24). |
+| R6 — Foldable floating agent prompt bar UI stub | MET | test | apps/web/tests/modules/features/components.test.tsx:1139 FloatingAgentBar describe: expanded default (`agent-bar`), collapse → dock `agent-bar-dock` with `aria-expanded=false` (:1110-1113), re-expand restores bar, Send disabled on empty, submit clears input + `role="status"` note visible — part of 78 pass / 0 fail run this session (`bun test apps/web/tests/modules/features/`, 2026-08-24). |
 | R7 — Layout responsiveness and empty state resilience | MET | test | 78 pass / 0 fail this run including pre-existing `Select a feature to view details` placeholder tests unchanged; bar tests render at no-selection state. Empty-state placeholder in FeaturesShell untouched (additive-only mount). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review

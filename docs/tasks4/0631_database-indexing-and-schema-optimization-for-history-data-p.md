@@ -4,7 +4,7 @@ name: "Database indexing and schema optimization for History data plane"
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:26.674Z
-updated_at: "2026-08-23T00:52:53.023Z"
+updated_at: "2026-08-24T20:43:26.689Z"
 feature_id: E9
 ---
 
@@ -86,13 +86,13 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 ### Solution
 **Change map:**
 
-- `packages/domain/src/migrations.ts:341` — new `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` with six `CREATE INDEX IF NOT EXISTS` statements (R1/R2):
+- `packages/domain/src/migrations.ts:348` — new `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` with six `CREATE INDEX IF NOT EXISTS` statements (R1/R2):
   - `idx_history_message_source_ts (source, ts)`, `idx_history_message_model_ts (model, ts)` on `history_message`
   - `idx_history_tool_call_session_id_seq (session_id, seq)` on `history_tool_call`
   - `idx_history_board_message_5m_bucket_model (bucket_start, model)`, `idx_history_board_tool_5m_bucket_skill (bucket_start, skill_name)` on the 0021 rollup tables
   - `idx_history_board_session_source_started (source, started_at DESC)` for the source-filtered newest-first session path
-- `packages/domain/src/migrations.ts:610/623/678` — migration list extended to 23 entries with `0022_spur_cli_history_performance_indexes`; sequence doc comment updated. No DDL added to `CLI_SCHEMA_SQL`; `drizzle/_legacy_reference/` untouched.
-- `packages/domain/src/migrations.ts:774` — `historyPerformanceIndexesSkip` guard (same pattern as 0020): journals 0022 without executing on stub/legacy shapes whose `history_message` lacks `ts`/`model` or whose `history_tool_call` is absent, so existing upgrade-path tests keep working.
+- `packages/domain/src/migrations.ts:701` — migration list extended to 23 entries with `0022_spur_cli_history_performance_indexes`; sequence doc comment updated. No DDL added to `CLI_SCHEMA_SQL`; `drizzle/_legacy_reference/` untouched.
+- `packages/domain/src/migrations.ts:797` — `historyPerformanceIndexesSkip` guard (same pattern as 0020): journals 0022 without executing on stub/legacy shapes whose `history_message` lacks `ts`/`model` or whose `history_tool_call` is absent, so existing upgrade-path tests keep working.
 - `drizzle/0022_spur_cli_history_performance_indexes.sql` — top-level mirror, statement-identical to the embedded constant (same leading-newline convention as 0020).
 - `packages/domain/tests/dao/migrations.test.ts` — 23-entry sequence assertion, fresh-DB `PRAGMA index_xinfo` order/direction checks, upgraded(0021)→0022 fresh-vs-upgraded schema convergence, second-apply idempotence, per-index `EXPLAIN QUERY PLAN` assertions, and the R5 checkpoint rejection test. Upgrade-path applied-count expectations bumped (20→21, 21→22, 13→14).
 
@@ -106,11 +106,11 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three required raw-plane indexes at `packages/domain/src/migrations.ts:340`; the targeted migration suite verifies their exact names and order. |
-| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | `idx_history_board_session_source_started` implements the retained `(source, started_at DESC)` access path at `packages/domain/src/migrations.ts:351`; the targeted suite verifies all three rollup/session indexes with `PRAGMA index_xinfo`. |
-| R3 | MET | Migration 0022 is registered at `packages/domain/src/migrations.ts:693`; the source-local byte check reports the embedded SQL and `drizzle/0022_spur_cli_history_performance_indexes.sql` are identical at 672 bytes; every statement is `CREATE INDEX IF NOT EXISTS`. No legacy-reference or `CLI_SCHEMA_SQL` change exists. |
-| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:447` covers idempotent DDL, the 23-entry sequence, fresh/upgraded convergence, exact order/direction, and six representative `EXPLAIN QUERY PLAN` selections. Fresh targeted run: 47 pass, 0 fail, 180 assertions, 100% coverage. |
-| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:577` proves the checkpoint PK already covers the source lookup, the freshness aggregate has no distinct selective path, and the rejected index is absent. |
+| R1 | MET | `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three required raw-plane indexes at `packages/domain/src/migrations.ts:348`; the targeted migration suite verifies their exact names and order. |
+| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | `idx_history_board_session_source_started` implements the retained `(source, started_at DESC)` access path at `packages/domain/src/migrations.ts:359`; the targeted suite verifies all three rollup/session indexes with `PRAGMA index_xinfo`. |
+| R3 | MET | Migration 0022 is registered at `packages/domain/src/migrations.ts:701`; the source-local byte check reports the embedded SQL and `drizzle/0022_spur_cli_history_performance_indexes.sql` are identical at 672 bytes; every statement is `CREATE INDEX IF NOT EXISTS`. No legacy-reference or `CLI_SCHEMA_SQL` change exists. |
+| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:527` covers idempotent DDL, the 23-entry sequence, fresh/upgraded convergence, exact order/direction, and six representative `EXPLAIN QUERY PLAN` selections. Fresh targeted run: 47 pass, 0 fail, 180 assertions, 100% coverage. |
+| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:585` proves the checkpoint PK already covers the source lookup, the freshness aggregate has no distinct selective path, and the rejected index is absent. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

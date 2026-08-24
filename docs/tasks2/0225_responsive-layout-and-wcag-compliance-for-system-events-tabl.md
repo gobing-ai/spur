@@ -12,7 +12,7 @@ priority: P2
 tags: ["observability", "system-events", "responsive", "wcag", "accessibility"]
 dependencies: []
 created_at: "2026-07-07T23:26:15.295Z"
-updated_at: "2026-07-28T00:31:56.941Z"
+updated_at: "2026-08-24T20:43:25.756Z"
 ---
 
 ## 0225. Responsive layout and WCAG compliance for System Events table
@@ -87,10 +87,10 @@ Feature: Observability System Events Table Redesign
 
 ### Solution
 **Files changed.**
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:957-968` — added `useMediaQuery` hook: SSR-safe (defaults `false`), guards `typeof window.matchMedia !== 'function'` for jsdom, returns `boolean` via `matchMedia('(max-width: 639px)')` + `change` listener.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:983-1043` — `SystemEventsTable` reads `isCompact = useMediaQuery('(max-width: 639px)')` and passes via `compact` prop; `<colgroup>` widths shrink Time column to `w-24` on compact; Actor/Prefix/Tier `<col>`/`<th>` conditionally omitted; `<th>` label stays `Event` (compact mode stacks Actor inside the Event cell instead of a separate column).
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:1058-1148` — `EventTableRow` accepts `compact` prop (R1): when true, Actor is rendered inline as `by {event.actor}` at `:1097` below the event name, the dedicated Actor (`:1117`), Prefix (`:1122`), and Tier (`:1127`) columns are skipped, `style.height` is unset, and the expanded detail row's `colSpan` switches from 5 to 2 (`:1133`).
-- `apps/web/tests/modules/observability/components.test.tsx:545-631` — 5 new 0225 tests.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1088-1100` — added `useMediaQuery` hook: SSR-safe (defaults `false`), guards `typeof window.matchMedia !== 'function'` for jsdom, returns `boolean` via `matchMedia('(max-width: 639px)')` + `change` listener.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1106-1217` — `SystemEventsTable` reads `isCompact = useMediaQuery('(max-width: 639px)')` and passes via `compact` prop; `<colgroup>` widths shrink Time column to `w-24` on compact; Actor/Prefix/Tier `<col>`/`<th>` conditionally omitted; `<th>` label stays `Event` (compact mode stacks Actor inside the Event cell instead of a separate column).
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1246-1754` — `EventTableRow` accepts `compact` prop (R1): when true, Actor is rendered inline as `by {event.actor}` at `:1097` below the event name, the dedicated Actor (`:1117`), Prefix (`:1122`), and Tier (`:1127`) columns are skipped, `style.height` is unset, and the expanded detail row's `colSpan` switches from 5 to 2 (`:1133`).
+- `apps/web/tests/modules/observability/components.test.tsx:687-743` — 5 new 0225 tests.
 
 **Rationale.** `useMediaQuery` default-`false` → SSR and first client render both produce the wide layout; the compact layout activates after the `useEffect` mount fires, avoiding a hydration mismatch. The `matchMedia` guard ensures test environments (jsdom without a polyfill) get the wide layout, which covers the existing 0223 R1 test that asserts 5 columns. The "by actor" inline text duplicates the actor information only in compact mode, so there's no loss of semantics — just a layout adaptation.
 ### Testing

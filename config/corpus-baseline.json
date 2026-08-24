@@ -448,6 +448,102 @@
             "since": "2026-08-19"
         },
         {
+            "kind": "feature",
+            "id": "B1",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "B3",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "E5",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "F",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "F31",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "F82",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "G4",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "H11",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "I",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "I4",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "I5",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
+            "kind": "feature",
+            "id": "J",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature remains verifying; direct linked tasks touch self-referential workflow infrastructure, but no dogfood report exists. Accepted as pre-A4 corpus debt only; the strict feature completion gate still requires real dogfood evidence.",
+            "since": "2026-08-24"
+        },
+        {
             "kind": "task",
             "id": "0001",
             "code": "L1.schema-validation",

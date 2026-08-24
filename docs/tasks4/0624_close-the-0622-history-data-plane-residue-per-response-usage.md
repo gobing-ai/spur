@@ -4,7 +4,7 @@ name: "Close the 0622 history data-plane residue: per-response usage dedup, clau
 status: done
 template: standard
 created_at: 2026-08-21T14:23:09.970Z
-updated_at: "2026-08-23T21:47:37.350Z"
+updated_at: "2026-08-24T20:43:28.148Z"
 feature_id: E5
 ---
 
@@ -303,7 +303,7 @@ to read.
 | R1 | Keep the final cumulative row per non-null `request_id` (MAX rowid fold via `MESSAGE_DEDUP`) and add a partial request-id index (migration 0023, renumbered from branch 0020 on merge). | `packages/domain/src/analytics/forensic-query.ts:116` · migration `0023` |
 | R2 | Extract native Claude `toolUseResult.durationMs` / `durationSeconds`, convert seconds to milliseconds, and attach by `tool_use_id`; preserve NULL when timing is absent. | `@gobing-ai/ts-llm-jsonl-importer` upstream mappers / importer; release/update still pending |
 | R3 | Keep migration 0019 and stop schema setup or empty imports from recreating built-in ETL tables; generic/custom ETL targets materialize on first accepted row. External `ts-libs` commit `22f891f` still needs release/update. | `packages/domain/src/migrations.ts:319` |
-| R4 | Preserve the corrected `DEFERRED_SOURCES` semantics and executable classification coverage. | `packages/app/src/services/history-service.ts:252` |
+| R4 | Preserve the corrected `DEFERRED_SOURCES` semantics and executable classification coverage. | `packages/app/src/services/history-service.ts:255` |
 | R5 | Resolve role-named run directories through the run's sole recorded source, import them in the same discovery set, and persist observed sessions as exact mappings before provenance alignment. | `packages/app/src/services/history-service.ts:278` |
 | R5 tests | hermetic augmented-discovery + bypass tests | `packages/app/tests/services/history-service.test.ts` (`run-session discovery augmentation (0624 R5)` block) |
 ### Testing

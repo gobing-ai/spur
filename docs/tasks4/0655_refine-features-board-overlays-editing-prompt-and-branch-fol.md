@@ -4,7 +4,7 @@ name: "Refine Features board overlays, editing, prompt, and branch folding"
 status: done
 template: feature-impl
 created_at: 2026-08-24T06:19:46.037Z
-updated_at: "2026-08-24T18:32:27.335Z"
+updated_at: "2026-08-24T20:49:06.748Z"
 feature_id: F841
 priority: P2
 tags: ["web", "features", "ui", "accessibility"]
@@ -305,47 +305,31 @@ or a prompt-width configuration. Each adds a seam without satisfying an accepted
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1198` |
-| R2 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1228` |
-| R3 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1140` |
-| R4 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1352` |
-| R5 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1442` |
-| R6 | MET | Verified in `apps/web/tests/modules/features/components.test.tsx:1546` |
-| AC-1 | MET | Scenario R1 verified in `apps/web/tests/modules/features/components.test.tsx:1198` |
-| AC-2 | MET | Scenario R2 verified in `apps/web/tests/modules/features/components.test.tsx:1228` |
-| AC-3 | MET | Scenario R3 verified in `apps/web/tests/modules/features/components.test.tsx:1255` |
-| AC-4 | MET | Scenario R4 verified in `apps/web/tests/modules/features/components.test.tsx:1255` |
-| AC-5 | MET | Scenario R5 verified in `apps/web/tests/modules/features/components.test.tsx:1276` |
-| AC-6 | MET | Scenario R6 verified in `apps/web/tests/modules/features/components.test.tsx:1316` |
-| AC-7 | MET | Scenario R7 verified in `apps/web/tests/modules/features/components.test.tsx:1140` |
-| AC-8 | MET | Scenario R8 verified in `apps/web/tests/modules/features/components.test.tsx:1140` |
-| AC-9 | MET | Scenario R9 verified in `apps/web/tests/modules/features/components.test.tsx:1352` |
-| AC-10 | MET | Scenario R10 verified in `apps/web/tests/modules/features/components.test.tsx:1352` |
-| AC-11 | MET | Scenario R11 verified in `apps/web/tests/modules/features/components.test.tsx:1388` |
-| AC-12 | MET | Scenario R12 verified in `apps/web/tests/modules/features/components.test.tsx:1421` |
-| AC-13 | MET | Scenario R13 verified in `apps/web/tests/modules/features/components.test.tsx:1442` |
-| AC-14 | MET | Scenario R14 verified in `apps/web/tests/modules/features/components.test.tsx:1508` |
-| AC-15 | MET | Scenario R15 verified in `apps/web/tests/modules/features/components.test.tsx:1546` |
+| R1 | MET | Feature Tree renders as an absolute overlay leaving the full-width detail workspace geometry unchanged — `apps/web/src/modules/features/FeaturesShell.tsx:168-196` |
+| R2 | MET | Header action cluster renders Edit, or Save then Cancel, immediately before Metadata — `apps/web/src/modules/features/FeatureDetail.tsx:558-600` |
+| R3 | MET | Floating agent prompt initializes folded and expands to a viewport-guttered 84rem cap — `apps/web/src/modules/features/FloatingAgentBar.tsx:13-41` |
+| R4 | MET | Parent nodes expose a keyboard fold button with aria-expanded and aria-controls, omitting collapsed descendants — `apps/web/src/modules/features/FeatureTree.tsx:113-158` |
+| R5 | MET | Same-feature refresh during edit mode preserves the editor buffers via applyFeature body guard — `apps/web/src/modules/features/FeatureDetail.tsx:195-215` |
+| R6 | MET | feature.updated, feature.transitioned, and queue.job.completed still drive the detail refresh key — `apps/web/src/modules/features/FeaturesShell.tsx:105-119` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — Feature Tree opens without resizing the detail workspace | MET | test | `apps/web/tests/modules/features/components.test.tsx:1198` |
-| Scenario: R2 — Metadata opens without resizing the detail workspace | MET | test | `apps/web/tests/modules/features/components.test.tsx:1228` |
-| Scenario: R3 — Preview mode exposes editing only in the detail header | MET | test | `apps/web/tests/modules/features/components.test.tsx:1255` |
-| Scenario: R4 — Edit mode replaces the header Edit action with Save and Cancel | MET | test | `apps/web/tests/modules/features/components.test.tsx:1255` |
-| Scenario: R5 — Saving from the header preserves body-update behavior | MET | test | `apps/web/tests/modules/features/components.test.tsx:1276` |
-| Scenario: R6 — Cancelling from the header discards the body draft | MET | test | `apps/web/tests/modules/features/components.test.tsx:1316` |
+| Scenario: R2 — Metadata opens without resizing the detail workspace | MET | test | `apps/web/tests/modules/features/components.test.tsx:1242` |
+| Scenario: R3 — Preview mode exposes editing only in the detail header | MET | test | `apps/web/tests/modules/features/components.test.tsx:1269` |
+| Scenario: R4 — Edit mode replaces the header Edit action with Save and Cancel | MET | test | `apps/web/tests/modules/features/components.test.tsx:1269` |
+| Scenario: R5 — Saving from the header preserves body-update behavior | MET | test | `apps/web/tests/modules/features/components.test.tsx:1290` |
+| Scenario: R6 — Cancelling from the header discards the body draft | MET | test | `apps/web/tests/modules/features/components.test.tsx:1330` |
 | Scenario: R7 — Agent prompt starts folded | MET | test | `apps/web/tests/modules/features/components.test.tsx:1140` |
 | Scenario: R8 — Expanded agent prompt respects its width cap and viewport gutters | MET | test | `apps/web/tests/modules/features/components.test.tsx:1140` |
-| Scenario: R9 — Parent nodes expose an accessible fold control | MET | test | `apps/web/tests/modules/features/components.test.tsx:1352` |
-| Scenario: R10 — Folding a branch hides every recursive descendant independently | MET | test | `apps/web/tests/modules/features/components.test.tsx:1352` |
-| Scenario: R11 — Reopening a branch restores its preserved nested fold state | MET | test | `apps/web/tests/modules/features/components.test.tsx:1388` |
-| Scenario: R12 — Selecting a parent row does not change its fold state | MET | test | `apps/web/tests/modules/features/components.test.tsx:1421` |
-| Scenario: R13 — Presentation controls preserve existing board state without server calls | MET | test | `apps/web/tests/modules/features/components.test.tsx:1442` |
-| Scenario: R14 — Lifecycle refresh preserves an in-progress body draft | MET | test | `apps/web/tests/modules/features/components.test.tsx:1508` |
-| Scenario: R15 — Existing planning events still refresh the tree and selected detail | MET | test | `apps/web/tests/modules/features/components.test.tsx:1546` |
-
-- Coverage: 77.42% line coverage on features module; full unit suite passes 6332 tests in `bun run test`.
+| Scenario: R9 — Parent nodes expose an accessible fold control | MET | test | `apps/web/tests/modules/features/components.test.tsx:1366` |
+| Scenario: R10 — Folding a branch hides every recursive descendant independently | MET | test | `apps/web/tests/modules/features/components.test.tsx:1366` |
+| Scenario: R11 — Reopening a branch restores its preserved nested fold state | MET | test | `apps/web/tests/modules/features/components.test.tsx:1402` |
+| Scenario: R12 — Selecting a parent row does not change its fold state | MET | test | `apps/web/tests/modules/features/components.test.tsx:1435` |
+| Scenario: R13 — Presentation controls preserve existing board state without server calls | MET | test | `apps/web/tests/modules/features/components.test.tsx:1456` |
+| Scenario: R14 — Lifecycle refresh preserves an in-progress body draft | MET | test | `apps/web/tests/modules/features/components.test.tsx:1522` |
+| Scenario: R15 — Existing planning events still refresh the tree and selected detail | MET | test | `apps/web/tests/modules/features/components.test.tsx:1560` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

@@ -4,7 +4,7 @@ name: "Eliminate raw scan fallback in getSummary by routing skill time series an
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:28.891Z
-updated_at: "2026-08-23T21:47:37.713Z"
+updated_at: "2026-08-24T20:43:29.094Z"
 feature_id: E9
 dependencies: ["0631"]
 ---
@@ -91,11 +91,11 @@ Feature: Eliminate raw scan fallback in getSummary by routing skill time series 
 ### Solution
 | File | Change |
 | --- | --- |
-| packages/domain/src/analytics/history-board-rollup.ts:542 | Route `skill` series (alongside `tool`) to `history_board_tool_5m`; skill key is `r.skill_name`. |
+| packages/domain/src/analytics/history-board-rollup.ts:544 | Route `skill` series (alongside `tool`) to `history_board_tool_5m`; skill key is `r.skill_name`. |
 | packages/domain/src/analytics/history-board-rollup.ts:510 | `buildRollupWhere` gains `skillOnly` option appending `r.skill_name <> ''` so blank skill names are excluded from the rollup skill series. |
-| packages/domain/src/analytics/history-board-rollup.ts:573 | Removed the live `bucketedTokenSeries()` fallback call (and its import) — a fresh unfiltered Summary reads only rollup tables for every dimension. |
-| packages/domain/src/analytics/forensic-query.ts:881 | Live skill fallback now allocates tokens across ALL linked tool calls inside the `linked` CTE and filters `key <> ''` only in the outer select — same canonical order of operations as the rollup materialization. |
-| packages/app/src/services/history-board-service.ts:389 | Previous-window KPIs always call `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')`, reading bounded daily rollups regardless of the active bucket/dimension. |
+| packages/domain/src/analytics/history-board-rollup.ts:582 | Removed the live `bucketedTokenSeries()` fallback call (and its import) — a fresh unfiltered Summary reads only rollup tables for every dimension. |
+| packages/domain/src/analytics/forensic-query.ts:892 | Live skill fallback now allocates tokens across ALL linked tool calls inside the `linked` CTE and filters `key <> ''` only in the outer select — same canonical order of operations as the rollup materialization. |
+| packages/app/src/services/history-board-service.ts:397 | Previous-window KPIs always call `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')`, reading bounded daily rollups regardless of the active bucket/dimension. |
 | docs/design/history-data-processing.md:1 | Corrected to current-tree truth: 10 importer source ids vs 9 Board cards, actual checkpoint/ledger columns, full-mode reconciliation deletes stale rows (raw is curated not immutable), currency boundary limited to Board DTOs (`history_message.cost_usd` retained in forensic storage), single `refreshHistoryRollups` analyze choke point with stale-fallback semantics, canonical all-tool skill allocation, index catalog mirrored to migrations, and every scale/latency number tied to recorded 0632 evidence (draft benchmark matrix removed). |
 | docs/04_DESIGN.md:52 | Registered `history-data-processing.md` in the design-satellite index (implemented, 0632). |
 
@@ -108,8 +108,8 @@ Rationale: the already-materialized `history_board_tool_5m` allocation (tokens /
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | `historyBoardSummaryFromRollup()` routes tool and skill dimensions through `history_board_tool_5m`, selects `r.skill_name`, and excludes blanks at `packages/domain/src/analytics/history-board-rollup.ts:535`; the canonical suite covers the fresh four-dimension path. |
-| R2 | MET | `bucketedTokenSeries()` owns the canonical all-tool allocation and outer skill filter at `packages/domain/src/analytics/forensic-query.ts:890`; the canonical suite proves mixed skill/non-skill parity and blank exclusion. |
-| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:374`. No app-layer SQL or new exported helper was added. |
+| R2 | MET | `bucketedTokenSeries()` owns the canonical all-tool allocation and outer skill filter at `packages/domain/src/analytics/forensic-query.ts:892`; the canonical suite proves mixed skill/non-skill parity and blank exclusion. |
+| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:397`. No app-layer SQL or new exported helper was added. |
 | Comprehensive History Data Processing Architecture Documentation (R4) | MET | The current History data-processing architecture defines the Q1–Q10 forensic query contract at `docs/design/history-data-processing.md:166` and also covers the importer/Board catalogs, checkpoint/ledger truth, refresh/fallback/accounting boundaries, and five-tab gate. |
 | R5 | MET | Domain/app tests cover mixed calls, parity, blanks, all four dimensions, bounded previous-window reads, and SQL-recorded absence of raw scans. Canonical root suite: 6,230 pass, 0 fail, 99.07% lines; production `summary:skill` median: 24.7 ms. |
 

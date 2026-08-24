@@ -4,7 +4,7 @@ name: "Project human-readable System Events table cells including coding-agent i
 status: done
 template: feature-impl
 created_at: 2026-08-19T21:01:14.733Z
-updated_at: "2026-08-19T23:18:32.740Z"
+updated_at: "2026-08-24T20:43:31.025Z"
 feature_id: J91
 priority: P2
 tags: ["system-events", "observability", "presentation"]
@@ -203,7 +203,7 @@ Feature: System Events human-readable table: workflow identity, id-free columns,
 | R3 | MET | `packages/app/src/services/system-event-envelope.ts:392-433` Agent projection routing.executor data.agent metadata.agent actor omit pure engine rows |
 | R4 | MET | `packages/app/src/services/event-names.ts:114-121` SystemEventPresenterSpec retain metadata.agent metadata.role routing.executor |
 | R5 | MET | `packages/app/src/services/system-event-envelope.ts:227-252` projectStoredSystemEventEnvelope re-project presentation without rewriting stored data context ledger |
-| R6 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:1168-1211` R6 SystemEventsTab Time Severity Event Summary Producer Correlation Agent Outcome Action columns |
+| R6 | MET | `ALL_COLUMNS` at `apps/web/src/modules/observability/ColumnCustomizer.tsx:25-106` defines the Time, Severity, Event, Summary, Correlation, Outcome, Agent, Producer, Action, and Actor columns consumed by System Events |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
