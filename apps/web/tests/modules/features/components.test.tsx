@@ -1210,14 +1210,28 @@ describe('F841 Acceptance Criteria', () => {
         expect(detailWorkspace).not.toBeNull();
         expect(detailWorkspace?.contains(treeDock)).toBe(false);
 
+        // The dock is an absolute overlay, not a flex sibling that consumes workspace width
+        expect(treeDock?.className).toContain('absolute');
+        expect(treeDock?.className).not.toContain('shrink-0');
+
+        // The workspace column owns its own width independently of the overlay
+        const workspace = container.querySelector('[data-features-workspace]');
+        expect(workspace).not.toBeNull();
+        expect(workspace?.className).toContain('w-full');
+        expect(workspace?.className).not.toContain('flex-1');
+        const widthClassesWhileOpen = workspace?.className;
+
         // Toggle tree closed via header toggle
         const toggle = getByLabelText('Collapse feature tree');
         fireEvent.click(toggle);
         expect(treeDock?.hasAttribute('hidden')).toBe(true);
+        // Closing the overlay leaves the workspace geometry untouched
+        expect(workspace?.className).toBe(widthClassesWhileOpen);
 
         // Toggle tree open via header toggle
         fireEvent.click(getByLabelText('Expand feature tree'));
         expect(treeDock?.hasAttribute('hidden')).toBe(false);
+        expect(workspace?.className).toBe(widthClassesWhileOpen);
 
         // Preview remains full-width
         const preview = container.querySelector('[data-testid="body-preview"]');

@@ -106,6 +106,7 @@ export default function FeaturesShell() {
                 // Also refresh the detail if a feature is selected and its data may have
                 // changed. `featureId` is unchanged in that case, so the panel needs an
                 // explicit nudge — fetching here instead would just discard the result.
+                // FeaturesShell keeps these three planning-event refresh paths intact (F841 R6)
                 if (
                     selectedId &&
                     (name === 'feature.updated' || name === 'feature.transitioned' || name === 'queue.job.completed')

@@ -110,6 +110,7 @@ function TreeNode({ feature, childrenMap, selectedId, onSelect, collapsedIds, on
                 }`}
                 style={{ paddingLeft: `calc(0.25rem + ${padLeft})` }}
             >
+                {/* FeatureTree parent fold control — keyboard-operable and separate from the row-selection button (F841 R4) */}
                 {hasChildren ? (
                     <button
                         type="button"

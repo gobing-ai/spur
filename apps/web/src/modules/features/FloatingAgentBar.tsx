@@ -10,6 +10,7 @@ import { Badge, Button, Textarea } from '@/ui';
  * is not wired yet. No props, no network — the bar owns its own state.
  */
 export default function FloatingAgentBar() {
+    // FloatingAgentBar starts folded; expanding caps width at 84rem behind 1rem viewport gutters (F841 R3)
     const [isOpen, setIsOpen] = useState(false);
     const [prompt, setPrompt] = useState('');
     const [notice, setNotice] = useState<string | null>(null);

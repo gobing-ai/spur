@@ -555,6 +555,7 @@ export default function FeatureDetail({
                             ))}
                         </div>
                     )}
+                    {/* FeatureDetail header editing slot: Edit, or Save then Cancel, immediately before Metadata (F841 R2) */}
                     {mode === 'preview' ? (
                         <Button
                             variant="ghost"
