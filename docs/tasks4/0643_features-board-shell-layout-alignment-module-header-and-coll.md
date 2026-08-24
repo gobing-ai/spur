@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Features board shell layout alignment, module header, and collapsible left Feature Tree dock"
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-08-23T23:16:46.702Z
-updated_at: "2026-08-24T00:47:16.574Z"
+updated_at: "2026-08-24T00:48:38.810Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "layout"]
@@ -288,3 +288,4 @@ Anti-patterns honored: `h-full`/`min-h-0` inner-scroll kept (History's auto-heig
 ### History
 - 2026-08-24T00:41:00.403Z todo → wip (system)
 - 2026-08-24T00:47:16.574Z wip → testing (system)
+- 2026-08-24T00:48:38.810Z testing → done (system)
