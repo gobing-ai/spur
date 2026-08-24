@@ -8,6 +8,7 @@ import { isWebModule } from '../../../src/modules/discover';
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';
 import FeatureTree from '../../../src/modules/features/FeatureTree';
+import FloatingAgentBar from '../../../src/modules/features/FloatingAgentBar';
 import { module } from '../../../src/modules/features/index';
 import { FEATURE_STATUSES, FeatureStatusIcon } from '../../../src/modules/features/status-icons';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -1077,5 +1078,67 @@ describe('FeaturesShell', () => {
         expect(container.querySelector('[data-filter-menu]')).not.toBeNull();
         fireEvent.mouseDown(document.body);
         expect(container.querySelector('[data-filter-menu]')).toBeNull();
+    });
+});
+/**
+ * Read a node's React fiber props and invoke `onChange` directly — happy-dom +
+ * React 19 do not deliver fireEvent.change to a controlled textarea's onChange
+ * (capricorn86/happy-dom#856); matches the teams/MemberTerminal convention.
+ */
+function setPromptValue(textarea: Element, value: string): void {
+    const holder = textarea as unknown as Record<string, Record<string, unknown> | undefined>;
+    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
+    const props = key ? holder[key] : undefined;
+    const onChange = props?.onChange as ((e: { target: { value: string } }) => void) | undefined;
+    if (!onChange) throw new Error('onChange not found on agent-bar-input');
+    act(() => onChange({ target: { value } }));
+}
+
+describe('FloatingAgentBar', () => {
+    test('expanded by default with glass classes and 75%/max-w-4xl sizing', () => {
+        const { getByTestId } = render(<FloatingAgentBar />);
+        const bar = getByTestId('agent-bar');
+        expect(bar.className).toContain('fixed');
+        expect(bar.className).toContain('backdrop-blur-md');
+        expect(bar.className).toContain('bg-base-100/80');
+        expect(bar.className).toContain('w-[75%]');
+        expect(bar.className).toContain('max-w-4xl');
+        expect(bar.className).toContain('z-30');
+    });
+
+    test('collapse swaps the bar for the spirit dock and back', () => {
+        const { getByTestId, getByLabelText, queryByTestId } = render(<FloatingAgentBar />);
+        fireEvent.click(getByLabelText('Collapse agent prompt bar'));
+        expect(queryByTestId('agent-bar')).toBeNull();
+        const dock = getByTestId('agent-bar-dock');
+        expect(dock.className).toContain('bottom-6');
+        expect(dock.className).toContain('right-6');
+        expect(dock.className).toContain('z-30');
+        fireEvent.click(dock);
+        expect(getByTestId('agent-bar')).not.toBeNull();
+    });
+
+    test('Send is disabled while the prompt is empty, enabled once text is entered', () => {
+        const { getByTestId, getByText } = render(<FloatingAgentBar />);
+        const send = getByText('Send') as HTMLButtonElement;
+        expect(send.disabled).toBe(true);
+        setPromptValue(getByTestId('agent-bar-input'), 'refine this feature');
+        expect((send as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    test('submitting clears the field and surfaces the stub notice', () => {
+        const { getByTestId, getByText, getByRole } = render(<FloatingAgentBar />);
+        const input = getByTestId('agent-bar-input') as HTMLTextAreaElement;
+        setPromptValue(input, 'implement F84');
+        fireEvent.click(getByText('Send'));
+        expect(input.value).toBe('');
+        expect(getByRole('status').textContent).toContain('Agent dispatch is not wired yet');
+    });
+
+    test('renders alongside the shell empty-state placeholder with no feature selected', async () => {
+        setFetchForTesting((async () => jsonResponse({ ok: true, data: [] })) as unknown as typeof fetch);
+        const { getByText, getByTestId } = render(<FeaturesShell />);
+        await waitFor(() => expect(getByText('Select a feature to view details')).toBeDefined());
+        expect(getByTestId('agent-bar')).not.toBeNull();
     });
 });
