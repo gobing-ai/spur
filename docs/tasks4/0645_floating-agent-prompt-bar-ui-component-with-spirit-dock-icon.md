@@ -4,7 +4,7 @@ name: "Floating agent prompt bar UI component with spirit dock icon and foldable
 status: done
 template: feature-impl
 created_at: 2026-08-23T23:16:46.737Z
-updated_at: "2026-08-24T01:27:54.799Z"
+updated_at: "2026-08-24T02:01:57.453Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "agent-ui"]
@@ -257,13 +257,15 @@ Implemented the foldable floating agent prompt bar UI stub (F84 R6/R7) exactly p
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| AC-6 | MET | FloatingAgentBar.tsx:31-33 fixed glassmorphic bar `backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl`, expanded default (`useState(true)` :5); expanded `w-[75%] max-w-4xl` centred (`left-1/2 -translate-x-1/2 bottom-4`) with `Textarea` (:40), static `agent · stub` chip (:41), Send (:45), collapse trigger (:48-51); collapsed round dock `bottom-6 right-6` (:22-25). Mounted FeaturesShell.tsx:337 sibling of NewFeaturePanel, z-30 both states. Send disabled on empty (:45); submit clears prompt and shows inline `role="status"` note (:55-57), no network. |
-| AC-7 | MET | Empty-state placeholder in FeaturesShell untouched (rendered when selectedId null; module header + shell diff is additive-only beyond the bar mount); bar test suite renders standalone with no selected feature and passes; dock/bar remain `fixed` and interaction with canvas behind is preserved (pointer events only on the bar's own bounds). Protected by the 5-test FloatingAgentBar describe (components.test.tsx:1097-1137). |
+| R1 | MET | apps/web/src/modules/features/FloatingAgentBar.tsx:40 — viewport-`fixed` glassmorphic bar `backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl` at bottom, expanded by default (`useState(true)` :13). Prop-less default export. Re-read this run. |
+| R2 | MET | Expanded `w-[75%] max-w-4xl` centred (`left-1/2 -translate-x-1/2 bottom-4`) :40 with `Textarea` (`agent-bar-input` :54), static `agent · stub` chip, Send, collapse trigger; collapsed round spirit dock `fixed bottom-6 right-6 z-30 rounded-full` :27 with `data-testid="agent-bar-dock"` :31. |
+| R3 | MET | Mounted `FeaturesShell.tsx:336` as fragment sibling after `NewFeaturePanel` (import :8); `z-30` on both states (:27, :40) — under FloatingActionProgress/NewFeaturePanel `z-40` and modals `z-50`; only the two positioned elements are `fixed`, canvas stays interactive. |
+| R4 | MET | Send `disabled` on empty input; `handleSubmit` clears prompt and sets `notice = 'Agent dispatch is not wired yet — this bar is UI only (F84 R6).'` (:20), rendered as inline `role="status"` (:70). No network imports. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — Foldable floating agent prompt bar UI stub | MET | test | components.test.tsx FloatingAgentBar describe: expanded default (getByTestId agent-bar), collapse → dock `agent-bar-dock` with aria-expanded=false, re-expand restores bar, Send disabled on empty, submit clears input + role="status" note visible — 5 tests, 52/0 module pass |
-| R7 — Layout responsiveness and empty state resilience | MET | test | Full suite 6285/0 incl. pre-existing `Select a feature to view details` placeholder tests unchanged; bar tests render at no-selection state |
+| R6 — Foldable floating agent prompt bar UI stub | MET | test | apps/web/tests/modules/features/components.test.tsx:1097 FloatingAgentBar describe: expanded default (`agent-bar`), collapse → dock `agent-bar-dock` with `aria-expanded=false` (:1110-1113), re-expand restores bar, Send disabled on empty, submit clears input + `role="status"` note visible — part of 78 pass / 0 fail run this session (`bun test apps/web/tests/modules/features/`, 2026-08-24). |
+| R7 — Layout responsiveness and empty state resilience | MET | test | 78 pass / 0 fail this run including pre-existing `Select a feature to view details` placeholder tests unchanged; bar tests render at no-selection state. Empty-state placeholder in FeaturesShell untouched (additive-only mount). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict: PASS** (2026-08-24, three-dimensional review, inline after subagent 429 rate-limit)

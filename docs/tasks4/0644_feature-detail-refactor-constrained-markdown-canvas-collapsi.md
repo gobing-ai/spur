@@ -4,7 +4,7 @@ name: "Feature detail refactor: constrained markdown canvas, collapsible right m
 status: done
 template: feature-impl
 created_at: 2026-08-23T23:16:46.721Z
-updated_at: "2026-08-24T01:01:13.422Z"
+updated_at: "2026-08-24T02:41:57.236Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "detail"]
@@ -298,15 +298,15 @@ The two existing metadata-related tests must pass **unmodified**.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| AC-3 | MET | Preview cap on inner div `w-full max-w-4xl mx-auto` wrapping MarkdownBody (FeatureDetail.tsx:645-647); editor div `flex-1 min-h-0 w-full max-w-4xl mx-auto` with `data-testid="body-editor"` and `height="100%"` intact (FeatureDetail.tsx:637-644). `bun test apps/web/tests/modules/features/` → 73 pass / 0 fail, including new max-w-4xl assertions in components.test.tsx. |
-| AC-4 | MET | `showMetadata` still `useState(false)` (folded by default); docked trigger `data-testid="metadata-toggle"` with visible `ℹ Metadata` text, `aria-expanded`/`aria-controls` (FeatureDetail.tsx:546-556); aside `#feature-metadata-panel` `absolute inset-y-0 right-0 z-30 w-80` with `translate-x-full`→`translate-x-0` transition, conditional inner render, `aria-hidden` (FeatureDetail.tsx:849-860); Escape-to-close effect guarded on showMetadata (FeatureDetail.tsx:98-106); content (status/dates/tags/file path/child features/linked tasks) moved verbatim with preserved data-testids (`metadata-status`). Drawer folded-by-default/aria-flip/Escape-close and child/linked-task rendering covered by new tests; two pre-existing metadata tests pass unmodified. |
-| AC-5 | MET | `FeatureActionTier` type + `FEATURE_ACTION_TIER` map exported from feature-actions.ts:27-47 (start/verify/complete/unblock=primary; create/link/sync=secondary; block/rework/cancel=hazard); render partitions statusActions with untiered→secondary fallback, primary=`variant="primary"`, secondary=`outline`, hazard=`ghost`+`text-spur-error` behind `border-l` hairline (FeatureDetail.tsx:475-544); FEATURE_STATUS_ACTIONS membership untouched (feature-actions.ts:4-11). Tier invariants (every label and every status-listed action has a tier) asserted in feature-actions.test.ts; per-status primary/hazard rendering asserted in components.test.tsx. |
+| R1 | MET | Editor branch `flex-1 min-h-0 w-full max-w-4xl mx-auto` with `data-testid="body-editor"` and MDEditor `height="100%"` intact — apps/web/src/modules/features/FeatureDetail.tsx:638. Preview cap on inner div `w-full max-w-4xl mx-auto` wrapping MarkdownBody, scroll container full-width — FeatureDetail.tsx:648. Both re-read this run. |
+| R2 | MET | `showMetadata` still `useState(false)` (folded by default); docked trigger `data-testid="metadata-toggle"` with visible `ℹ Metadata` text, `aria-expanded`/`aria-controls="feature-metadata-panel"` — FeatureDetail.tsx:558-559. Aside `#feature-metadata-panel` `absolute inset-y-0 right-0 z-30 w-80`, `translate-x-full`→`translate-x-0`, conditional inner render, `aria-hidden` — FeatureDetail.tsx:852-853. Root gained `relative` (:482). Escape-to-close effect guarded on `showMetadata` (:99-104). Content moved verbatim with preserved `metadata-status` testid. |
+| R3 | MET | `FeatureActionTier` (:28) + `FEATURE_ACTION_TIER` (:31) exported from apps/web/src/modules/features/feature-actions.ts with frozen values (start/verify/complete/unblock=primary; create/link/sync=secondary; block/rework/cancel=hazard); `FEATURE_STATUS_ACTIONS` membership untouched. Render partitions into three tier groups, hazard behind `border-l` hairline, untiered→secondary fallback, handlers/aria unchanged — FeatureDetail.tsx action row re-read this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R3 — Width-constrained Markdown reading and editing area | MET | test | components.test.tsx (0644 R1/R2 tests) assert `max-w-4xl` on both body-editor and body-preview wrappers; targeted suite 73 pass / 0 fail |
-| R4 — Foldable right-side feature metadata panel | MET | test | components.test.tsx 0644 R2 test: panel folded by default (aria-hidden, translate-x-full), trigger click flips aria-expanded, child features + linked tasks render, Escape closes; pre-existing metadata tests pass unmodified |
-| R5 — Refined stage-based dynamic action bar in feature detail | MET | test | feature-actions.test.ts tier-map invariants + components.test.tsx per-status primary/hazard tier assertions; static ref FeatureDetail.tsx:475-544 renders three tier groups with hairline-separated hazard group |
+| R3 — Width-constrained Markdown reading and editing area | MET | test | apps/web/tests/modules/features/ 0644 R1 tests assert `max-w-4xl` on both `body-editor` and `body-preview` wrappers — 78 pass / 0 fail this run (`bun test apps/web/tests/modules/features/`, 2026-08-24). Static anchors FeatureDetail.tsx:638,648. |
+| R4 — Foldable right-side feature metadata panel | MET | test | components.test.tsx 0644 R2 test (:780): panel folded by default (`aria-expanded=false`), trigger click flips to true, child features + linked tasks render, Escape closes (:798) — 78 pass / 0 fail this run; two pre-existing metadata tests pass unmodified. |
+| R5 — Refined stage-based dynamic action bar in feature detail | MET | test | apps/web/tests/modules/features/feature-actions.test.ts tier-map invariants (every `FEATURE_ACTION_LABELS` key tiered; every `FEATURE_STATUS_ACTIONS` action tiered) + components.test.tsx per-status primary/hazard tier assertions — 78 pass / 0 fail this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Reviewed by:** Review0644 subagent (inline driver EA5E9885, stage review). Scope: uncommitted
