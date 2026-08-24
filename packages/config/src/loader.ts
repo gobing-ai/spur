@@ -362,6 +362,16 @@ async function readRawYamlLayer(configPath: string, kind: 'global' | 'project'):
     }
 }
 
+/**
+ * Parse a single config YAML string into a plain object (task 0649 R4).
+ * The loader owns the `yaml` dependency, so callers (e.g. `spur init` global-config
+ * detection) reuse this instead of importing yaml themselves. Throws on unparseable
+ * input; returns `{}` for an empty/null document.
+ */
+export function parseConfigYaml(text: string): Record<string, unknown> {
+    return (parseYaml(text) ?? {}) as Record<string, unknown>;
+}
+
 function isPlainObject(value: unknown): value is RawConfig {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -444,8 +454,12 @@ function mergeByKeyIdentity(
  * Deep-merge two raw layer values per the 0639 strategy table: maps recurse, scalars and
  * plain arrays replace (project wins), by-key arrays merge per item, `*.paths` concats.
  */
-/** A raw YAML value from a config layer before zod parsing (object, array, or scalar). */
-type RawYamlNode = unknown;
+/**
+ * A raw YAML value from a config layer before zod parsing: an object, array, or
+ * scalar. The scalar passthrough (`projectValue`) is cast because the merge
+ * inputs are `unknown` (they come from `RawConfig = Record<string, unknown>`).
+ */
+type RawYamlNode = RawConfig | unknown[] | string | number | boolean | null | undefined;
 
 function mergeDeep(globalValue: unknown, projectValue: unknown, segments: (string | number)[]): RawYamlNode {
     if (isPlainObject(globalValue) && isPlainObject(projectValue)) {
@@ -459,9 +473,9 @@ function mergeDeep(globalValue: unknown, projectValue: unknown, segments: (strin
         if (isConcatPath(segments)) return concatUnique(globalValue, projectValue);
         const identityOf = byKeyIdentityFor(segments);
         if (identityOf !== undefined) return mergeByKeyIdentity(globalValue, projectValue, identityOf, segments);
-        return projectValue;
+        return projectValue as RawYamlNode;
     }
-    return projectValue;
+    return projectValue as RawYamlNode;
 }
 
 /** Merge the two raw layers (project over global). An absent layer contributes `{}`. */

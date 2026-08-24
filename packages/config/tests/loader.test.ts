@@ -20,6 +20,7 @@ import {
     loadSpurConfig,
     loadStructuredSpurConfig,
     type PlanningFolders,
+    parseConfigYaml,
     resolveConfigFile,
     resolvePlanningFolders,
     type TaskFoldersConfig,
@@ -840,5 +841,21 @@ describe('agent.roles JSON schema round-trip (0572)', () => {
         );
         await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
         await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
+    });
+});
+
+describe('parseConfigYaml (task 0649 R4)', () => {
+    test('parses a YAML string into a plain object', () => {
+        const parsed = parseConfigYaml('name: spur-new\nbootstrap:\n  logging: { enabled: true }\n');
+        expect(parsed).toEqual({ name: 'spur-new', bootstrap: { logging: { enabled: true } } });
+    });
+
+    test('returns an empty object for an empty or null document', () => {
+        expect(parseConfigYaml('')).toEqual({});
+        expect(parseConfigYaml('null')).toEqual({});
+    });
+
+    test('throws on unparseable input', () => {
+        expect(() => parseConfigYaml(': : : invalid')).toThrow();
     });
 });

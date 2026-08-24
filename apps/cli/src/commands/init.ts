@@ -1,11 +1,13 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
+import { misplacedGlobalKeys } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
     bundledConfigRoot,
     listBundledConfigFiles,
     listBundledProjectSeedFiles,
+    parseConfigYaml,
 } from '@gobing-ai/spur-config/loader';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
@@ -129,6 +131,18 @@ async function seedGlobalRules(context: CliContext): Promise<number> {
 }
 
 /**
+ * Resolve the user-global config directory `~/.config/spur`, honoring
+ * `SPUR_GLOBAL_RULES_DIR` for test isolation — the same override `RuleService` and
+ * `seedGlobalConfig` use, so tests can redirect the global layer.
+ */
+function resolveGlobalConfigDir(context: CliContext): string {
+    const globalOverride = context.env.SPUR_GLOBAL_RULES_DIR;
+    return globalOverride !== undefined && globalOverride.length > 0
+        ? resolve(context.cwd, globalOverride)
+        : join(homedir(), GLOBAL_CONFIG_DIR);
+}
+
+/**
  * Copy the default config assets bundled with the CLI package (package-root
  * `config/`, or repo-root `config/` in dev) into the user's global config
  * directory on first run. Seeds `rules/`, `workflows/`, and other YAML/JSON
@@ -139,11 +153,7 @@ async function seedGlobalConfig(context: CliContext): Promise<number> {
     const source = bundledConfigRoot();
     if (source === null) return 0;
     // Target is ~/.config/spur/ (same parent as globalRulesRoot, one level up).
-    const globalOverride = context.env.SPUR_GLOBAL_RULES_DIR;
-    const target =
-        globalOverride !== undefined && globalOverride.length > 0
-            ? resolve(context.cwd, globalOverride)
-            : join(homedir(), GLOBAL_CONFIG_DIR);
+    const target = resolveGlobalConfigDir(context);
     // Only create subdirs that have files to seed (rules, workflows).
     let written = 0;
     for (const relPath of listBundledConfigFiles()) {
@@ -177,28 +187,123 @@ export function registerInitCommand(program: Command, context: CliContext, optio
         .option(...SHARED_OPTIONS.nameProjectInit)
         .option(...SHARED_OPTIONS.forceInitRecreate)
         .option('--minimal', 'Only write the minimal .spur scaffold')
+        .option(
+            '--adopt-global-config',
+            'Also rewrite ~/.config/spur/config.yaml from the shipped global default (backed up first)',
+        )
         .option(...SHARED_OPTIONS.json)
         .action(async (options) => {
             const json = options.json === true;
             const force = options.force === true;
             const minimal = options.minimal === true;
+            const adoptGlobal = options.adoptGlobalConfig === true;
             const projectName = options.name ?? 'default';
             const configPath = join(context.cwd, CLI_CONFIG.configFile);
+            const result: ScaffoldResult = { created: [], skipped: [] };
 
-            // Re-init guard: a config that already exists is only overwritten with --force,
-            // so a stray `spur init` cannot silently clobber a configured project.
+            // R4 (task 0649): pre-A4 global-config detection — classify the global
+            // layer's top-level keys against the 0641 project/global split on every
+            // run, opt-in or not. Reports; never auto-fixes (R2 forbids writing the
+            // global config without the operator's opt-in).
+            const globalConfigDir = resolveGlobalConfigDir(context);
+            const globalConfigPath = join(globalConfigDir, GLOBAL_CONFIG_FILE);
+            const globalConfigExists = await context.fs.exists(globalConfigPath);
+            let misplacedKeys: string[] = [];
+            if (globalConfigExists) {
+                try {
+                    const raw = await context.fs.readFile(globalConfigPath);
+                    misplacedKeys = misplacedGlobalKeys(parseConfigYaml(raw));
+                } catch {
+                    // Unreadable/unparseable global config is reported elsewhere, not a blocker.
+                }
+            }
+
+            // Re-init converge (R1/R2): a config that already exists is no longer an
+            // error. Without --force the command converges instead — seeds missing
+            // assets, writes no config, reports drift — and only rewrites the global
+            // config under the explicit --adopt-global-config opt-in (backup first).
             if (!force && (await context.fs.exists(configPath))) {
-                const message = `Already initialized: ${CLI_CONFIG.configFile}. Use --force to overwrite.`;
-                context.output.write(
-                    json
-                        ? toJson({ ok: false, reason: 'already-initialized', config: CLI_CONFIG.configFile })
-                        : message,
-                );
-                context.setExitCode(1);
+                const configRoot = bundledConfigRoot();
+                if (configRoot !== null && !minimal) {
+                    for (const relPath of listBundledProjectSeedFiles()) {
+                        if (relPath.startsWith('templates/docs/')) continue;
+                        const sourcePath = join(configRoot, relPath);
+                        if (!(await context.fs.exists(sourcePath))) continue;
+                        const targetPath = join(context.cwd, CLI_CONFIG.configDir, relPath);
+                        await context.fs.ensureDir(join(targetPath, '..'));
+                        await writeIfNew(context, targetPath, await context.fs.readFile(sourcePath), false, result);
+                    }
+                    for (const entry of SCAFFOLD_MANIFEST) {
+                        const sourcePath = join(configRoot, entry.source);
+                        if (!(await context.fs.exists(sourcePath))) continue;
+                        const baseDir = entry.root === true ? context.cwd : join(context.cwd, CLI_CONFIG.configDir);
+                        const targetPath = join(baseDir, entry.target);
+                        await context.fs.ensureDir(join(targetPath, '..'));
+                        // preserve-marked entries are never overwritten, even on converge
+                        const entryForce = false;
+                        let body = await context.fs.readFile(sourcePath);
+                        if (entry.target === 'AGENTS.md') {
+                            body = substituteAgentsMdTemplate(body, projectName);
+                        }
+                        if (entry.source.startsWith('templates/docs/')) {
+                            body = substituteDocTemplateTokens(body);
+                        }
+                        await writeIfNew(context, targetPath, body, entryForce, result);
+                    }
+                }
+
+                // R3: opted-in global rewrite is preceded by a timestamped backup.
+                let adoptedGlobal = false;
+                if (adoptGlobal && globalConfigExists) {
+                    const backupPath = `${globalConfigPath}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+                    await context.fs.writeFile(backupPath, await context.fs.readFile(globalConfigPath));
+                    const bundledRoot = bundledConfigRoot();
+                    const examplePath = bundledRoot !== null ? join(bundledRoot, GLOBAL_CONFIG_EXAMPLE) : null;
+                    if (examplePath !== null && (await context.fs.exists(examplePath))) {
+                        await context.fs.writeFile(globalConfigPath, await context.fs.readFile(examplePath));
+                        adoptedGlobal = true;
+                    }
+                    result.created.push(backupPath);
+                }
+
+                const rulesSeeded = await seedGlobalRules(context);
+                const configSeeded = await seedGlobalConfig(context);
+
+                const payload = {
+                    ok: true,
+                    converged: true,
+                    config: CLI_CONFIG.configFile,
+                    ...result,
+                    globalRulesSeeded: rulesSeeded,
+                    globalConfigSeeded: configSeeded,
+                    ...(adoptedGlobal ? { adoptGlobalConfig: adoptedGlobal } : {}),
+                    ...(misplacedKeys.length > 0 ? { misplacedGlobalKeys: misplacedKeys } : {}),
+                };
+                if (json) {
+                    context.output.write(toJson(payload));
+                } else {
+                    context.output.write('Already initialized — converged (no project files overwritten)');
+                    for (const path of result.created) context.output.write(`  ✓ ${path}`);
+                    for (const path of result.skipped) context.output.write(`  - ${path} (exists)`);
+                    if (rulesSeeded > 0) {
+                        context.output.write(`  ✓ seeded ${rulesSeeded} rule file(s) to ~/${GLOBAL_RULES_DIR}`);
+                    }
+                    if (configSeeded > 0) {
+                        context.output.write(`  ✓ seeded ${configSeeded} config file(s) to ~/${GLOBAL_CONFIG_DIR}`);
+                    }
+                    if (adoptedGlobal) {
+                        context.output.write('  ✓ adopted global config from bundled default (backup written)');
+                    }
+                    if (misplacedKeys.length > 0) {
+                        context.output.write(
+                            `  ⚠ global config carries project-shaped key(s): ${misplacedKeys.join(', ')}`,
+                        );
+                    }
+                }
+                context.setExitCode(0);
                 return;
             }
 
-            const result: ScaffoldResult = { created: [], skipped: [] };
             // Write a minimal .spur/config.yaml (single surface — ADR-017).
             // The bootstrap block is seeded from config.example.yaml during scaffold below;
             // this minimal stub is enough to mark the project as initialized.

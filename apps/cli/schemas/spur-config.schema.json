@@ -11,7 +11,7 @@
         },
         "version": {
             "type": "string",
-            "description": "Config schema version (string, not integer). Current recommended: '1.1' (ADR-033 executor tiers + planning blocks). '1' remains accepted for backward compatibility."
+            "description": "Config schema version (string, not integer). Current recommended: '1.2' (config-1.2 layered global/project merge, ADR-033 executor tiers + planning blocks). '1' remains accepted for backward compatibility."
         },
         "name": {
             "type": "string",

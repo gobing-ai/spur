@@ -127,8 +127,8 @@ export const EXECUTOR_CAPABILITY_TIERS = ['cheap', 'standard', 'capable-1', 'cap
 /** Executor capability tier (canonical post-0343 values only). */
 export type ExecutorCapabilityTier = (typeof EXECUTOR_CAPABILITY_TIERS)[number];
 
-/** Normalize legacy bare `capable` → `capable-1` before enum validation. */
-function normalizeExecutorTier(value: unknown): unknown {
+/** Normalize legacy bare `capable` → `capable-1` (strings only; callers pass non-strings through). */
+function normalizeExecutorTier(value: string): string {
     return value === 'capable' ? 'capable-1' : value;
 }
 
@@ -138,7 +138,8 @@ function normalizeExecutorTier(value: unknown): unknown {
  */
 export const executorCapabilityTierSchema = z.preprocess((value) => {
     if (value === undefined || value === null) return undefined;
-    return normalizeExecutorTier(value);
+    // Non-strings pass through unchanged so the enum rejects them with a hard error.
+    return typeof value === 'string' ? normalizeExecutorTier(value) : value;
 }, z.enum(EXECUTOR_CAPABILITY_TIERS).optional());
 
 /**
@@ -688,6 +689,37 @@ export const spurConfigSchema = z.object({
 
 /** Inferred type for the unified {@link spurConfigSchema}. */
 export type SpurConfig = z.infer<typeof spurConfigSchema>;
+
+/**
+ * Top-level keys that belong at the project layer, never the global layer, per the
+ * 0641 project/global split (task 0649 R4). These resolve against a project's own
+ * folder structure and have no meaning as a machine-wide default.
+ */
+const PROJECT_SHAPED_GLOBAL_KEYS = ['name', 'bootstrap', 'rules', 'redaction', 'tasks', 'features'] as const;
+
+/**
+ * Classify a parsed global config's top-level keys against the 0641 project/global
+ * split and return every project-shaped key present at the global layer.
+ *
+ * Pure over parsed YAML so it is unit-testable without a filesystem (task 0649 R4).
+ * Detection reports, it never auto-fixes — R2 forbids writing the global config
+ * without the operator's opt-in.
+ *
+ * Global-shaped keys are `agent.default`, `agent.executors`, `agent.roles` and
+ * `workflows`. `agent` itself is global-shaped unless it carries the project-shaped
+ * `agent.team` sub-key, which is reported as `agent.team`.
+ */
+export function misplacedGlobalKeys(parsed: Record<string, unknown>): string[] {
+    const misplaced: string[] = [];
+    for (const key of PROJECT_SHAPED_GLOBAL_KEYS) {
+        if (key in parsed) misplaced.push(key);
+    }
+    const agent = parsed.agent;
+    if (typeof agent === 'object' && agent !== null && 'team' in agent) {
+        misplaced.push('agent.team');
+    }
+    return misplaced;
+}
 
 /** Inferred type for the `agent` config section. */
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

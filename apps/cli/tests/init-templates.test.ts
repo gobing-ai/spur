@@ -83,8 +83,9 @@ describe('spur init template copy', () => {
         const marker = '<!-- IDEMPOTENCE MARKER -->';
         writeFileSync(tmplPath, `${original}\n${marker}`, 'utf-8');
 
-        // Re-init without --force is blocked (config.yaml already exists).
-        expect(await main(['init'], options)).toBe(1);
+        // Re-init without --force converges (task 0649 R1) — it seeds only what is
+        // missing and writes no config, so the modified template is preserved.
+        expect(await main(['init'], options)).toBe(0);
         // Template still has our marker — not overwritten.
         const after = readFileSync(tmplPath, 'utf-8');
         expect(after).toContain(marker);

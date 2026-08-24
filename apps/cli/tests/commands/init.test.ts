@@ -139,17 +139,18 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
     });
 
-    test('re-init without --force is blocked, with --force overwrites', async () => {
+    test('re-init without --force converges; with --force overwrites', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
-        // A second plain init must refuse rather than silently clobber the config.
-        expect(await main(['init'], options)).toBe(1);
+        // A second plain init converges (task 0649 R1) instead of refusing — it
+        // seeds nothing new and writes no config, but exits 0.
+        expect(await main(['init'], options)).toBe(0);
         expect(await main(['init', '--force'], options)).toBe(0);
     });
 
-    test('refused re-init leaves the existing config untouched', async () => {
+    test('converge re-init leaves the existing config untouched', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
         const configPath = join(cwd, '.spur', 'config.yaml');
@@ -157,9 +158,9 @@ describe('init command', () => {
         expect(await main(['init', '--name', 'original'], options)).toBe(0);
         const before = await Bun.file(configPath).text();
 
-        // The guard must halt the whole scaffold — not just set exit 1 and then
-        // overwrite the config it just refused to clobber (regression guard).
-        expect(await main(['init', '--name', 'clobbered'], options)).toBe(1);
+        // A converging re-run must NOT overwrite the project config (R2) — it writes
+        // no config at all, whatever --name is passed.
+        expect(await main(['init', '--name', 'clobbered'], options)).toBe(0);
         const after = await Bun.file(configPath).text();
 
         expect(after).toBe(before);
@@ -188,6 +189,107 @@ describe('init command', () => {
         expect(result.created.length).toBeGreaterThan(0);
         expect(result.globalRulesSeeded).toBeGreaterThan(0);
     });
+
+    test('converge re-init seeds a missing project asset (0649 R1)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+        // Remove a seeded rule file to simulate a partially-converged project.
+        const rulesDir = join(cwd, '.spur', 'rules');
+        const seeded = (await Bun.file(join(rulesDir, 'task.md')).exists()) ? join(rulesDir, 'task.md') : null;
+        if (seeded === null) return; // no rules seeded in this fixture — skip gracefully
+        await Bun.write(seeded, '');
+
+        // A converging re-run seeds the missing asset and exits 0.
+        expect(await main(['init'], options)).toBe(0);
+        expect((await Bun.file(seeded).text()).length).toBeGreaterThan(0);
+    });
+
+    test('--adopt-global-config backs up the global config before rewriting it (0649 R3)', async () => {
+        const cwd = await createTempProject();
+        const { options, globalDir } = await isolatedOptions(cwd);
+        const globalConfigPath = join(globalDir, 'config.yaml');
+
+        expect(await main(['init'], options)).toBe(0);
+        // Simulate an operator-owned pre-A4 global config.
+        await Bun.write(globalConfigPath, 'name: my-machine\nworkflows: {}\n');
+
+        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+
+        // A timestamped backup exists with the previous contents.
+        const backups = (await Bun.$`ls ${globalDir}`.text()).split('\n').filter((p) => p.includes('config.yaml.bak-'));
+        expect(backups.length).toBe(1);
+        expect(await Bun.file(join(globalDir, backups[0] ?? '')).text()).toContain('name: my-machine');
+        // The live global config is now the bundled default (no project-shaped name key).
+        const after = await Bun.file(globalConfigPath).text();
+        expect(after).toContain('workflows:');
+    });
+
+    test('a second adopt keeps the first backup (0649 R3)', async () => {
+        const cwd = await createTempProject();
+        const { options, globalDir } = await isolatedOptions(cwd);
+        const globalConfigPath = join(globalDir, 'config.yaml');
+
+        expect(await main(['init'], options)).toBe(0);
+        await Bun.write(globalConfigPath, 'name: my-machine\n');
+
+        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+        await Bun.write(globalConfigPath, 'name: my-machine\n');
+        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+
+        const backups = (await Bun.$`ls ${globalDir}`.text()).split('\n').filter((p) => p.includes('config.yaml.bak-'));
+        expect(backups.length).toBe(2);
+    });
+
+    test('a pre-A4 global config is reported with its offending keys (0649 R4)', async () => {
+        const cwd = await createTempProject();
+        const messages: string[] = [];
+        const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
+        const options = {
+            cwd,
+            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir },
+            output: { write: (m: string) => messages.push(m), error: () => {} },
+            dbUrl: ':memory:' as const,
+        };
+
+        expect(await main(['init'], options)).toBe(0);
+        // Pre-A4 global config carrying project-shaped keys.
+        await Bun.write(join(globalDir, 'config.yaml'), 'name: my-machine\nbootstrap: {}\nrules: {}\n');
+
+        // Detection reports even without the opt-in flag.
+        expect(await main(['init', '--json'], options)).toBe(0);
+        const result = JSON.parse(messages.at(-1) ?? '{}') as { misplacedGlobalKeys?: string[]; converged?: boolean };
+        expect(result.converged).toBe(true);
+        expect(result.misplacedGlobalKeys).toEqual(['name', 'bootstrap', 'rules']);
+    });
+
+    test('a correctly shaped global config produces no misplaced-key finding (0649 R4)', async () => {
+        const cwd = await createTempProject();
+        const messages: string[] = [];
+        const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
+        const options = {
+            cwd,
+            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir },
+            output: { write: (m: string) => messages.push(m), error: () => {} },
+            dbUrl: ':memory:' as const,
+        };
+
+        expect(await main(['init'], options)).toBe(0);
+        await Bun.write(join(globalDir, 'config.yaml'), 'agent:\n  default: coder\nworkflows: {}\n');
+
+        expect(await main(['init', '--json'], options)).toBe(0);
+        const result = JSON.parse(messages.at(-1) ?? '{}') as { misplacedGlobalKeys?: string[] };
+        expect(result.misplacedGlobalKeys).toBeUndefined();
+    });
+
+    test('the shipped global default carries a top-level workflows key (0649 R5)', async () => {
+        const configRoot = bundledConfigRoot();
+        expect(configRoot).not.toBeNull();
+        const text = await readFile(join(configRoot as string, 'config.global.yaml'), 'utf8');
+        expect(text).toMatch(/^workflows:\s*\{\}/m);
+    });
+
     test('SCAFFOLD_MANIFEST ships exactly one task template per TASK_VARIANTS entry', () => {
         // SSOT alignment invariant (task 0188): every variant the planning layer
         // recognizes must resolve to a scaffolded template, and the manifest must

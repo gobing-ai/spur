@@ -3,6 +3,7 @@ import {
     featuresConfigSchema,
     HistoryConfigSchema,
     HistoryRefreshConfigSchema,
+    misplacedGlobalKeys,
     resolveHistoryRefreshTrigger,
     tasksConfigSchema,
 } from '../src/index';
@@ -80,5 +81,48 @@ describe('historyConfigSchema / resolveHistoryRefreshTrigger (task 0549)', () =>
 
     test('resolveHistoryRefreshTrigger tolerates null config (trigger disabled by default)', () => {
         expect(resolveHistoryRefreshTrigger(null)).toEqual({ onCompletion: false, debounceMs: 600_000 });
+    });
+});
+
+describe('misplacedGlobalKeys (task 0649 R4)', () => {
+    test('returns every project-shaped top-level key present at the global layer', () => {
+        expect(
+            misplacedGlobalKeys({
+                name: 'spur-new',
+                bootstrap: { logging: { level: 'info' } },
+                rules: { paths: ['.spur/rules/**'] },
+                redaction: {},
+                tasks: {},
+                features: {},
+            }),
+        ).toEqual(['name', 'bootstrap', 'rules', 'redaction', 'tasks', 'features']);
+    });
+
+    test('reports agent.team as a project-shaped key without flagging global agent.* keys', () => {
+        expect(
+            misplacedGlobalKeys({
+                agent: {
+                    team: { name: 'x' },
+                    default: 'coder',
+                    executors: [],
+                    roles: {},
+                },
+                workflows: {},
+            }),
+        ).toEqual(['agent.team']);
+    });
+
+    test('a correctly shaped global config produces no finding (agent.default/executors/roles + workflows)', () => {
+        expect(
+            misplacedGlobalKeys({
+                agent: { default: 'coder', executors: [], roles: {} },
+                workflows: { paths: [] },
+            }),
+        ).toEqual([]);
+    });
+
+    test('an empty or global-only config produces no finding', () => {
+        expect(misplacedGlobalKeys({})).toEqual([]);
+        expect(misplacedGlobalKeys({ workflows: {} })).toEqual([]);
     });
 });

@@ -18,6 +18,11 @@
 
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
 
+# Inert label (task 0649 R6 ruling): nothing branches on `version` today,
+# so the label no longer needs to gate anything. Reunified at "1.2" across
+# every shipped artifact (init stamp, JSON Schema description).
+version: "1.2"
+
 agent:
     # `default` is the role used for `--agent auto` when the caller declares
     # nothing (task 0542 R2 — the value domain moved from executor names to
@@ -124,10 +129,10 @@ agent:
 # `workflows.paths` is deliberately NOT set here. Its values are search paths
 # resolved against a project's own root (0639 classifies it project-relative), so
 # a machine-wide value would point every project at a directory that mostly does
-# not exist. The global workflow tree is already reachable without it: the
-# lifecycle adapter resolves bundled → project `.spur/workflows/` →
-# `~/.config/spur/workflows/` on its own (make-lifecycle-adapter.ts:44).
-# Set it per project when a project keeps workflows somewhere non-standard.
-# workflows:
-#     paths:
-#         - .spur/workflows/
+# not exist. The key is present (the A4 goal names it among the shipped global
+# defaults) but empty: `workflow list` falls back to default `.spur/workflows/`
+# discovery, and the lifecycle adapter resolves bundled → project
+# `.spur/workflows/` on its own (make-lifecycle-adapter.ts:24, two tiers since
+# task 0648). Set paths per project when a project keeps workflows somewhere
+# non-standard.
+workflows: {}
