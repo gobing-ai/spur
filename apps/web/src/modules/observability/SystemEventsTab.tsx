@@ -1016,7 +1016,7 @@ export default function SystemEventsTab({
     }
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col h-full gap-3 overflow-hidden min-h-0" data-system-events-tab>
             {/* Filter Bar (J92 R2/R3/R4) */}
             <ObservabilityFilters
                 timeRange={timeRange}
@@ -1035,7 +1035,7 @@ export default function SystemEventsTab({
                 }
             />
 
-            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 overflow-hidden flex flex-col">
+            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 overflow-hidden flex flex-col flex-1 min-h-0">
                 {sortedPage.length === 0 ? (
                     <div className="p-8 text-sm text-spur-text-muted italic text-center">
                         {page.length === 0
@@ -1043,13 +1043,15 @@ export default function SystemEventsTab({
                             : 'No events match the active filters.'}
                     </div>
                 ) : (
-                    <SystemEventsTable
-                        rows={sortedPage}
-                        catalog={catalog}
-                        visibleColumns={visibleColumns}
-                        sortState={sortState}
-                        onSortChange={handleSort}
-                    />
+                    <div className="flex-1 overflow-auto min-h-0">
+                        <SystemEventsTable
+                            rows={sortedPage}
+                            catalog={catalog}
+                            visibleColumns={visibleColumns}
+                            sortState={sortState}
+                            onSortChange={handleSort}
+                        />
+                    </div>
                 )}
                 {/* Load older affordance - advances the opaque keyset cursor (R1). */}
                 {hasMore && (
