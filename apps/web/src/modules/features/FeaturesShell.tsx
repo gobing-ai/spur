@@ -41,6 +41,7 @@ export default function FeaturesShell() {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showNewRootPanel, setShowNewRootPanel] = useState(false);
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [isTreeOpen, setIsTreeOpen] = useState(true);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [error, setError] = useState<string | null>(null);
     /** Bumped to make the detail panel re-fetch the already-selected feature. */
@@ -163,127 +164,165 @@ export default function FeaturesShell() {
 
     return (
         <>
-            <div className="flex h-full overflow-hidden" data-features-shell>
-                {/* Left: tree */}
-                <div className="w-72 shrink-0 border-r border-spur-border overflow-y-auto bg-base-200">
-                    <div className="px-3 py-2 border-b border-spur-border flex items-center justify-between">
-                        <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Features</span>
-                        <div className="flex items-center gap-1">
-                            <div className="relative" ref={filterMenuRef}>
-                                <Button
-                                    variant="ghost"
-                                    size="xs"
-                                    className={`relative text-spur-text-muted hover:text-spur-accent flex items-center gap-1 ${
-                                        statusFilter !== 'all' ? 'text-spur-accent font-semibold' : ''
-                                    }`}
-                                    onClick={() => setShowFilterMenu((prev) => !prev)}
-                                    aria-label="Filter features by status"
-                                    aria-expanded={showFilterMenu}
-                                    title="Filter features by status"
+            <div className="flex flex-col h-full max-w-[1600px] mx-auto w-full p-4 gap-3" data-features-shell>
+                {/* Module header — R1/R2 */}
+                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl" aria-hidden="true">
+                            🎯
+                        </span>
+                        <div>
+                            <h1 className="text-xl font-bold tracking-tight text-spur-text">Features</h1>
+                            <p className="text-xs text-spur-text-muted">
+                                Hierarchical feature roadmap, acceptance criteria, and lifecycle progression
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1" data-features-actions>
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-spur-text-muted hover:text-spur-accent"
+                            onClick={() => setIsTreeOpen((prev) => !prev)}
+                            aria-label={isTreeOpen ? 'Collapse feature tree' : 'Expand feature tree'}
+                            aria-expanded={isTreeOpen}
+                            aria-controls="feature-tree-dock"
+                            title={isTreeOpen ? 'Collapse feature tree' : 'Expand feature tree'}
+                        >
+                            {isTreeOpen ? '◧' : '▶'}
+                        </Button>
+                        <div className="relative" ref={filterMenuRef}>
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className={`relative text-spur-text-muted hover:text-spur-accent flex items-center gap-1 ${
+                                    statusFilter !== 'all' ? 'text-spur-accent font-semibold' : ''
+                                }`}
+                                onClick={() => setShowFilterMenu((prev) => !prev)}
+                                aria-label="Filter features by status"
+                                aria-expanded={showFilterMenu}
+                                title="Filter features by status"
+                            >
+                                <FilterIcon className="w-3.5 h-3.5" />
+                                {statusFilter !== 'all' && (
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full bg-spur-accent shrink-0"
+                                        aria-hidden="true"
+                                    />
+                                )}
+                            </Button>
+                            {showFilterMenu && (
+                                <div
+                                    className="absolute right-0 top-full mt-1 z-20 w-44 rounded-md shadow-lg bg-base-100 border border-spur-border py-1 text-xs"
+                                    data-filter-menu
                                 >
-                                    <FilterIcon className="w-3.5 h-3.5" />
-                                    {statusFilter !== 'all' && (
-                                        <span
-                                            className="w-1.5 h-1.5 rounded-full bg-spur-accent shrink-0"
-                                            aria-hidden="true"
-                                        />
-                                    )}
-                                </Button>
-                                {showFilterMenu && (
-                                    <div
-                                        className="absolute right-0 top-full mt-1 z-20 w-44 rounded-md shadow-lg bg-base-100 border border-spur-border py-1 text-xs"
-                                        data-filter-menu
+                                    <div className="px-2.5 py-1 font-semibold text-spur-text-muted border-b border-spur-border flex items-center justify-between">
+                                        <span>Filter by Status</span>
+                                        {statusFilter !== 'all' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setStatusFilter('all');
+                                                    setShowFilterMenu(false);
+                                                }}
+                                                className="text-[10px] text-spur-accent hover:underline"
+                                            >
+                                                Reset
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setStatusFilter('all');
+                                            setShowFilterMenu(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 ${
+                                            statusFilter === 'all'
+                                                ? 'font-semibold text-spur-accent bg-spur-accent/10'
+                                                : 'text-spur-text'
+                                        }`}
                                     >
-                                        <div className="px-2.5 py-1 font-semibold text-spur-text-muted border-b border-spur-border flex items-center justify-between">
-                                            <span>Filter by Status</span>
-                                            {statusFilter !== 'all' && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setStatusFilter('all');
-                                                        setShowFilterMenu(false);
-                                                    }}
-                                                    className="text-[10px] text-spur-accent hover:underline"
-                                                >
-                                                    Reset
-                                                </button>
-                                            )}
-                                        </div>
+                                        <span className="flex-1">All</span>
+                                        {statusFilter === 'all' && <span>✓</span>}
+                                    </button>
+                                    {FEATURE_STATUSES.map((st) => (
                                         <button
+                                            key={st}
                                             type="button"
                                             onClick={() => {
-                                                setStatusFilter('all');
+                                                setStatusFilter(st);
                                                 setShowFilterMenu(false);
                                             }}
-                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 ${
-                                                statusFilter === 'all'
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 capitalize ${
+                                                statusFilter === st
                                                     ? 'font-semibold text-spur-accent bg-spur-accent/10'
                                                     : 'text-spur-text'
                                             }`}
                                         >
-                                            <span className="flex-1">All</span>
-                                            {statusFilter === 'all' && <span>✓</span>}
+                                            <FeatureStatusIcon status={st} />
+                                            <span className="flex-1 capitalize">{st}</span>
+                                            {statusFilter === st && <span>✓</span>}
                                         </button>
-                                        {FEATURE_STATUSES.map((st) => (
-                                            <button
-                                                key={st}
-                                                type="button"
-                                                onClick={() => {
-                                                    setStatusFilter(st);
-                                                    setShowFilterMenu(false);
-                                                }}
-                                                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 capitalize ${
-                                                    statusFilter === st
-                                                        ? 'font-semibold text-spur-accent bg-spur-accent/10'
-                                                        : 'text-spur-text'
-                                                }`}
-                                            >
-                                                <FeatureStatusIcon status={st} />
-                                                <span className="flex-1 capitalize">{st}</span>
-                                                {statusFilter === st && <span>✓</span>}
-                                            </button>
-                                        ))}
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-spur-text-muted hover:text-spur-accent"
+                            onClick={() => setShowNewRootPanel(true)}
+                            aria-label="Add root feature"
+                            title="Add root feature"
+                        >
+                            +
+                        </Button>
+                    </div>
+                </header>
+
+                {/* Work area — inner scroll, R3 */}
+                <div className="relative flex-1 min-h-0 flex gap-3 overflow-hidden">
+                    <div
+                        id="feature-tree-dock"
+                        className={`shrink-0 overflow-hidden transition-[width] duration-200 ${
+                            isTreeOpen ? 'w-72' : 'w-0'
+                        }`}
+                    >
+                        {isTreeOpen && (
+                            <div className="w-72 h-full overflow-y-auto rounded-lg border border-spur-border bg-base-200 shadow-lg">
+                                {features.length === 0 ? (
+                                    <div className="p-3 text-xs text-spur-text-muted italic">No features found.</div>
+                                ) : filteredFeatures.length === 0 ? (
+                                    <div className="p-3 text-xs text-spur-text-muted italic">
+                                        No features match status filter "{statusFilter}".
                                     </div>
+                                ) : (
+                                    <FeatureTree
+                                        features={filteredFeatures}
+                                        selectedId={selectedId}
+                                        onSelect={setSelectedId}
+                                    />
                                 )}
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="xs"
-                                className="text-spur-text-muted hover:text-spur-accent"
-                                onClick={() => setShowNewRootPanel(true)}
-                                aria-label="Add root feature"
-                                title="Add root feature"
-                            >
-                                +
-                            </Button>
-                        </div>
+                        )}
                     </div>
-                    {features.length === 0 ? (
-                        <div className="p-3 text-xs text-spur-text-muted italic">No features found.</div>
-                    ) : filteredFeatures.length === 0 ? (
-                        <div className="p-3 text-xs text-spur-text-muted italic">
-                            No features match status filter "{statusFilter}".
-                        </div>
-                    ) : (
-                        <FeatureTree features={filteredFeatures} selectedId={selectedId} onSelect={setSelectedId} />
-                    )}
-                </div>
 
-                {/* Right: detail panel */}
-                <div className="flex-1 overflow-y-auto">
-                    {selectedId ? (
-                        <FeatureDetail
-                            featureId={selectedId}
-                            refreshKey={detailRefreshKey}
-                            onClose={() => setSelectedId(null)}
-                            childFeatures={selectedChildren}
-                            onSelectFeature={setSelectedId}
-                        />
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">
-                            Select a feature to view details
-                        </div>
-                    )}
+                    <div className="flex-1 min-w-0 overflow-y-auto rounded-lg border border-spur-border bg-base-100">
+                        {selectedId ? (
+                            <FeatureDetail
+                                featureId={selectedId}
+                                refreshKey={detailRefreshKey}
+                                onClose={() => setSelectedId(null)}
+                                childFeatures={selectedChildren}
+                                onSelectFeature={setSelectedId}
+                            />
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">
+                                Select a feature to view details
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

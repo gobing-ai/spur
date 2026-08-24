@@ -821,6 +821,40 @@ describe('FeaturesShell', () => {
         expect(getByRole('button', { name: 'Open child feature F1: Child' })).toBeDefined();
     });
 
+    test('R1/R2: module header renders icon, title, subtitle, and the action container', async () => {
+        installFeatureFetchMock();
+        const { getByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        expect(container.querySelector('[data-features-actions]')).not.toBeNull();
+        expect(container.textContent).toContain('🎯');
+        expect(getByText('Features')).toBeDefined();
+        expect(getByText('Hierarchical feature roadmap, acceptance criteria, and lifecycle progression')).toBeDefined();
+    });
+
+    test('R3: toggle collapses and re-expands the tree dock and flips aria-expanded', async () => {
+        installFeatureFetchMock();
+        const { getByLabelText, getByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        const toggle = getByLabelText('Collapse feature tree');
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(toggle.getAttribute('aria-controls')).toBe('feature-tree-dock');
+
+        // Collapse: tree buttons leave the DOM entirely (no zero-width keyboard trap).
+        fireEvent.click(toggle);
+        const collapsed = getByLabelText('Expand feature tree');
+        expect(collapsed.getAttribute('aria-expanded')).toBe('false');
+        expect(container.querySelector('#feature-tree-dock button')).toBeNull();
+
+        // Re-expand: tree content returns.
+        fireEvent.click(collapsed);
+        expect(getByLabelText('Collapse feature tree').getAttribute('aria-expanded')).toBe('true');
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+    });
+
     /**
      * Serve the detail endpoint with a status that changes after the first read, so a
      * test can tell an applied refresh from a request whose response was thrown away.

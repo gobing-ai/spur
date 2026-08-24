@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Features board shell layout alignment, module header, and collapsible left Feature Tree dock"
-status: todo
+status: testing
 template: feature-impl
 created_at: 2026-08-23T23:16:46.702Z
-updated_at: "2026-08-24T00:12:25.143Z"
+updated_at: "2026-08-24T00:47:16.574Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "layout"]
@@ -48,20 +48,12 @@ left tree column into a collapsible dock. Covers feature F84 scenarios R1, R2.
   (plus standalone `select`) inside any `className` string under `apps/web/src/**/*.tsx` outside
   `components/ui/`. Tailwind's own `collapse` utility is therefore unusable here.
 ### Requirements
-- [ ] R1. Centre the Features board workspace in a `max-w-[1600px] mx-auto w-full` container while preserving the existing inner-scroll model (`h-full` shell, `min-h-0` work area, independently scrolling tree and detail panes).
+- [x] R1. Centre the Features board workspace in a `max-w-[1600px] mx-auto w-full` container while preserving the existing inner-scroll model (`h-full` shell, `min-h-0` work area, independently scrolling tree and detail panes).
 
-- [ ] R2. Add a unified module header row — module icon `🎯`, `Features` title, one-line subtitle, and a right-aligned action container hosting the tree-dock toggle, the status-filter menu, and the add-root-feature button (both moved out of the tree pane's own header row).
+- [x] R2. Add a unified module header row — module icon `🎯`, `Features` title, one-line subtitle, and a right-aligned action container hosting the tree-dock toggle, the status-filter menu, and the add-root-feature button (both moved out of the tree pane's own header row).
 
-- [ ] R3. Make the left Feature Tree a collapsible dock: expanded `w-72`, collapsed to zero width with an animated width transition, driven by a header toggle that stays reachable in both states and carries `aria-expanded` / `aria-controls`.
+- [x] R3. Make the left Feature Tree a collapsible dock: expanded `w-72`, collapsed to zero width with an animated width transition, driven by a header toggle that stays reachable in both states and carries `aria-expanded` / `aria-controls`.
 
-#### Out of scope
-| Not in this task | Owner / reason |
-| --- | --- |
-| `FeatureDetail.tsx` internals and the markdown canvas width | 0644 — this task only supplies the hosting pane |
-| The floating agent bar | 0645 — this task only leaves the mount seam described in Design |
-| A refresh / sync button in the module header | `docs/design/features-board-layout-refactor.md` §3.1 lists one; F84 R1/R2 do not — do not add it |
-| Module registry icon, name, or route (`modules/features/index.tsx`) | Separate sidebar surface, outside F84 |
-| `FeatureTree.tsx` rendering, `groupFeaturesByParent`, SSE handling, filter semantics, `getFilteredFeatures` | Behaviour is unchanged; this is a layout task |
 ### Acceptance Criteria
 ```gherkin
 Feature: Features board shell layout and collapsible tree dock
@@ -216,34 +208,83 @@ Component tests in `apps/web/tests/modules/features/components.test.tsx` (`Featu
 block). The two existing shell tests must keep passing **unmodified** — that is the regression
 signal that the filter/add-root move preserved their selectors.
 ### Plan
-- [ ] Wrap the shell in the frozen root container and add the module header row with icon, title,
+- [x] Wrap the shell in the frozen root container and add the module header row with icon, title,
       subtitle, and the `data-features-actions` container (R1, R2)
-- [ ] Move the status-filter dropdown and the add-root button verbatim into the header action
+- [x] Move the status-filter dropdown and the add-root button verbatim into the header action
       container and delete the redundant tree-pane header row (R2)
-- [ ] Add `isTreeOpen` state, the header toggle button with `aria-expanded`/`aria-controls`, and the
+- [x] Add `isTreeOpen` state, the header toggle button with `aria-expanded`/`aria-controls`, and the
       width-animated `#feature-tree-dock` wrapper with conditionally rendered inner panel (R3)
-- [ ] Restyle the tree pane and detail pane as bordered/rounded floating panels inside the
+- [x] Restyle the tree pane and detail pane as bordered/rounded floating panels inside the
       `flex-1 min-h-0` work area, keeping both independently scrollable (R1, R3)
-- [ ] Extend the `FeaturesShell` describe block: header renders icon/title/subtitle and the action
+- [x] Extend the `FeaturesShell` describe block: header renders icon/title/subtitle and the action
       container; toggle collapses and re-expands the dock and flips `aria-expanded`; tree buttons
       are absent from the DOM while collapsed (R1–R3)
-- [ ] Confirm the two pre-existing `FeaturesShell` tests still pass **without edits**, then run
+- [x] Confirm the two pre-existing `FeaturesShell` tests still pass **without edits**, then run
       `bun run lint`, `bun test apps/web/tests/modules/features/components.test.tsx`, and
       `spur rule run` for the `no-daisyui-class-leak` gate
 ### Solution
+Restructured `FeaturesShell.tsx`'s returned JSX into the frozen three-region layout (width-limited root → module header → inner-scroll work area) and moved the tree pane behind a width-animated collapsible dock. No logic, hooks, data flow, or child props changed — this is a pure layout/mount-point task.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Location |
+| --- | --- |
+| `isTreeOpen` state, `useState(true)` expanded default | apps/web/src/modules/features/FeaturesShell.tsx:44 |
+| Root container `flex flex-col h-full max-w-[1600px] mx-auto w-full p-4 gap-3`, `data-features-shell` preserved (R1) | apps/web/src/modules/features/FeaturesShell.tsx:167 |
+| Module header: 🎯 icon, `Features` title, one-line subtitle (R2) | apps/web/src/modules/features/FeaturesShell.tsx:170 |
+| `data-features-actions` container hosting toggle + filter + add-root (R2) | apps/web/src/modules/features/FeaturesShell.tsx:183 |
+| Tree-dock toggle Button with `aria-expanded`/`aria-controls`, glyph ◧/▶ (R3) | apps/web/src/modules/features/FeaturesShell.tsx:184 |
+| Status-filter dropdown moved verbatim (same markup, `data-filter-menu`, `aria-label`, outside-click/Escape effect untouched) | apps/web/src/modules/features/FeaturesShell.tsx:202 |
+| Add-root Button moved verbatim | apps/web/src/modules/features/FeaturesShell.tsx:272 |
+| Old tree-pane header row (uppercase `Features` label + nested filter/add controls) deleted | removed (was FeaturesShell.tsx:169-260) |
+| Work area `relative flex-1 min-h-0 flex gap-3 overflow-hidden` — inner-scroll model kept (R1/R3) | apps/web/src/modules/features/FeaturesShell.tsx:288 |
+| `#feature-tree-dock` width-animated wrapper (`transition-[width]`, w-72/w-0) with conditionally rendered inner panel — no keyboard trap when collapsed (R3) | apps/web/src/modules/features/FeaturesShell.tsx:289 |
+| Tree pane restyled as rounded/bordered panel, contents unchanged | apps/web/src/modules/features/FeaturesShell.tsx:295 |
+| Detail pane `flex-1 min-w-0 overflow-y-auto rounded-lg border` — pane handed off to 0644 | apps/web/src/modules/features/FeaturesShell.tsx:316 |
+| New tests: header contents + action container; dock toggle collapse/expand with `aria-expanded` flip and DOM-absent tree buttons while collapsed | apps/web/tests/modules/features/components.test.tsx:824,839 |
 
+Anti-patterns honored: `h-full`/`min-h-0` inner-scroll kept (History's auto-height rejected); `max-w-[1600px]` on shell root only; collapsed panel unmounts (no `w-0`-mounted or `aria-hidden` trap); no `collapse`/daisyUI class tokens (rule gate passes); no refresh button, no registry edit, no localStorage persistence.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| AC-1 | MET | Shell root `flex flex-col h-full max-w-[1600px] mx-auto w-full p-4 gap-3` with `data-features-shell` preserved — apps/web/src/modules/features/FeaturesShell.tsx:167. Work area `relative flex-1 min-h-0 flex gap-3 overflow-hidden` — FeaturesShell.tsx:288. Tree pane `w-72 h-full overflow-y-auto` (FeaturesShell.tsx:295) and detail pane `flex-1 min-w-0 overflow-y-auto` (FeaturesShell.tsx:316) scroll independently; `h-full`/`min-h-0` inner-scroll model kept (History's auto-height correctly not ported). |
+| AC-2 | MET | Module header at FeaturesShell.tsx:170-186: 🎯 icon (`aria-hidden`), `<h1>Features</h1>`, one-line subtitle, `data-features-actions` right-aligned container (FeaturesShell.tsx:183). Status filter moved verbatim (same `data-filter-menu` at :213, `aria-label="Filter features by status"` at :203, outside-click/Escape effect untouched) and add-root button (`aria-label="Add root feature"` at :275). Old tree-pane header row deleted (diff removes was :160-249). No refresh button, registry untouched. |
+| AC-2 | MET | `isTreeOpen` state `useState(true)` — FeaturesShell.tsx:44. Toggle Button (FeaturesShell.tsx:184-195): `aria-expanded={isTreeOpen}`, `aria-controls="feature-tree-dock"`, label flips Collapse/Expand, glyph ◧/▶, stays in header when collapsed. `#feature-tree-dock` wrapper `transition-[width] duration-200` w-72↔w-0 (FeaturesShell.tsx:289-296) with inner panel conditionally rendered (`{isTreeOpen && …}`) — collapsed panel unmounts, no zero-width keyboard trap, no `aria-hidden` workaround, no `collapse` class token (rule gate passes). Detail pane `flex-1 min-w-0` reclaims width. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Verdict: PASS** (2026-08-24, three-dimensional review)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional traceability (vs R1–R3):**
+- R1 ✅ Shell root is `flex flex-col h-full max-w-[1600px] mx-auto w-full p-4 gap-3` with `data-features-shell` preserved; work area is `relative flex-1 min-h-0 flex gap-3 overflow-hidden` with independently scrolling tree (`w-72 h-full overflow-y-auto`) and detail (`flex-1 min-w-0 overflow-y-auto`) panes — inner-scroll model kept, History's auto-height correctly not ported.
+- R2 ✅ Module header (FeaturesShell.tsx:170-283) renders 🎯 icon (`aria-hidden`), `Features` title, one-line subtitle, and `data-features-actions` container hosting tree toggle, filter menu (moved verbatim — same `data-filter-menu`, `aria-label="Filter features by status"`, outside-click/Escape effect untouched), and add-root button (`aria-label="Add root feature"`). Old tree-pane header row deleted.
+- R3 ✅ `isTreeOpen` (`useState(true)`), toggle carries `aria-expanded`/`aria-controls="feature-tree-dock"`, label flips Collapse/Expand; `#feature-tree-dock` wrapper animates `w-72`↔`w-0` (`transition-[width] duration-200`) and unmounts inner panel when collapsed — no zero-width keyboard trap, no `aria-hidden` workaround.
+
+**SECUA quality:** Clean. No new state leaks, no changed props to `FeatureTree`/`FeatureDetail`/`NewFeaturePanel`, no logic touched (data flow, SSE, filtering identical). No daisyUI class tokens (`spur rule run` — 43/43 pass, including `no-daisyui-class-leak`). A11y correct on the new toggle.
+
+**Architecture depth:** Matches the frozen design one-to-one (root/header/work-area, `NewFeaturePanel` stays a fragment sibling → 0645 mount seam intact). Detail pane handed to 0644 as `flex-1 min-w-0 overflow-y-auto` per handoff contract. No competing width caps.
+
+**Verification evidence:**
+- `bun test apps/web/tests/modules/features/components.test.tsx` — 44 pass / 0 fail, including both new tests (header contents + dock toggle collapse/expand with `aria-expanded` flip and DOM-absent tree buttons) and the two pre-existing shell tests unmodified.
+- `spur rule run` — all 43 rules pass.
+
+**Findings:** None blocking. One P4 observation: on collapse the inner panel unmounts instantly so the visible "smooth" transition animates an empty bordered box — this is exactly what the task Design specifies (conditional render, not opacity fade); no action needed.
+
+**Residual risk:** Low. Layout-only change; behavior coverage unchanged by design.
+
+**Disposition:** Approved for verify stage.
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P4 | Collapse transition animates empty wrapper (inner panel unmounts) | FeaturesShell.tsx conditional render, per frozen design | Accepted — matches task Design |
+| P3 | none | — | — |
+| P2 | none | — | — |
+| P1 | none | — | — |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-24T00:41:00.403Z todo → wip (system)
+- 2026-08-24T00:47:16.574Z wip → testing (system)
