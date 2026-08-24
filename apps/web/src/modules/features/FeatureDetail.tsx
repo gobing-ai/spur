@@ -97,14 +97,15 @@ export default function FeatureDetail({
     const paintedIdRef = useRef<string | null>(null);
 
     // Escape closes the metadata panel — non-modal inspector; pane behind stays interactive.
+    // Guarded on the z-50 modals so one Escape press closes the modal first, not both (0644 review P3).
     useEffect(() => {
-        if (!showMetadata) return;
+        if (!showMetadata || showCancelModal || actionModal || inlineModal) return;
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') setShowMetadata(false);
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [showMetadata]);
+    }, [showMetadata, showCancelModal, actionModal, inlineModal]);
 
     // Linked tasks: subscribe to the shared TaskStore
     const { tasks } = useTasks();

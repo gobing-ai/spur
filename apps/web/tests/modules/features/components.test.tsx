@@ -799,6 +799,20 @@ describe('FeatureDetail', () => {
         expect(container.querySelectorAll('#feature-metadata-panel button')).toHaveLength(0);
     });
 
+    test('0644 R2 (P3): Escape with a confirmation modal open leaves the metadata drawer open', async () => {
+        installFeatureFetchMock();
+        const { getByTestId, getByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('active'));
+
+        const toggle = getByTestId('metadata-toggle');
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+        fireEvent.click(getByLabelText('Cancel')); // opens the z-50 cancel confirmation modal
+        fireEvent.keyDown(document, { key: 'Escape' }); // modal-owned key; drawer must not fold
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    });
+
     test('0644 R1: body editor and preview wrappers carry the max-w-4xl reading cap', async () => {
         installFeatureFetchMock();
         const { getByTestId } = render(<FeatureDetail featureId="F" />);
